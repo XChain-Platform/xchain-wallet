@@ -351,11 +351,7 @@ function ChainEndpointBlock({ descriptor, override, onSave }) {
                 placeholder={defaults.hubUrl}
                 onChange={(v) => { setDraft((d) => ({ ...d, hubUrl: v })); setEditing(true); }}
             />
-            {saveError ? (
-                <div role="alert" style={{ ...ROW_HINT, color: 'var(--xc-danger-fg, #c33)' }}>
-                    {saveError}
-                </div>
-            ) : null}
+            {saveError ? <Status text={saveError} tone="error" /> : null}
             {dirty ? (
                 <div style={ROW_HINT}>
                     {t('settings.endpoints.savingPointsThisChainS')}

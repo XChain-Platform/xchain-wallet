@@ -598,7 +598,6 @@ export function Home({ onLocked, onResumeConfirm, onSend, onReceive, onSwap, onE
         showToast({
             message: `${fresh.length} likely-spam token${fresh.length === 1 ? '' : 's'} detected. Bulk-hide?`,
             actionLabel: `Hide ${fresh.length}`,
-            durationMs: 12000,
             onAction: () => {
                 setHiddenTokens((prev) => {
                     const merged = Array.from(new Set([...prev, ...fresh]));

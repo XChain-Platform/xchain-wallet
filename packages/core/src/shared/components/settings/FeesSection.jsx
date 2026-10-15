@@ -38,7 +38,6 @@ import {
 } from '../../utils/amountFormat.js';
 import {
     INPUT,
-    ROW_HINT,
     SELECT,
     STACK,
     SettingsFieldRow,
@@ -207,16 +206,8 @@ export function FeesSection() {
                                 />
                             </SettingsFieldRow>
                         ) : null}
-                        {rateErrors[chainId] ? (
-                            <div id={rateErrorId} role="alert" style={{ ...ROW_HINT, color: 'var(--xc-danger-fg)' }}>
-                                {rateErrors[chainId]}
-                            </div>
-                        ) : null}
-                        {saveErrors[chainId] ? (
-                            <div role="alert" style={{ ...ROW_HINT, color: 'var(--xc-danger-fg)' }}>
-                                {saveErrors[chainId]}
-                            </div>
-                        ) : null}
+                        {rateErrors[chainId] ? <Status id={rateErrorId} text={rateErrors[chainId]} tone="error" /> : null}
+                        {saveErrors[chainId] ? <Status text={saveErrors[chainId]} tone="error" /> : null}
 
                         <ToggleRow
                             label={t('settings.fees.allowFeeBumpReplaceBy')}

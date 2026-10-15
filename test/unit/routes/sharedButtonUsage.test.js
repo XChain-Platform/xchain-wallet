@@ -290,7 +290,11 @@ describe('shared route button usage', () => {
             'packages/core/src/shared/components/settings/WalletModeSection.jsx',
         ), 'utf8');
 
-        expect(primitives).toMatch(/import\s+\{\s*Switch\s*\}\s+from\s+'@xchain-wallet\/core\/ui'/);
+        expect(primitives).toMatch(/import\s+\{[^}]*\bSwitch\b[^}]*\}\s+from\s+'@xchain-wallet\/core\/ui'/);
+        // Settings messages are the shared inline message row.
+        expect(primitives).toMatch(/import\s+\{[^}]*\bStatusMessage\b[^}]*\}\s+from\s+'@xchain-wallet\/core\/ui'/);
+        expect(primitives).toMatch(/<StatusMessage\b/);
+        expect(primitives).not.toMatch(/1px dashed/);
         expect(primitives).toMatch(/<Switch\b/);
         expect(primitives).not.toMatch(/<input\b/);
         expect(walletMode).toMatch(/import\s+\{\s*RadioGroup\s*\}\s+from\s+'@xchain-wallet\/core\/ui'/);

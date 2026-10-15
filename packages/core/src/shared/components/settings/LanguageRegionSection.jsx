@@ -187,11 +187,6 @@ export function LanguageRegionSection() {
                 <div style={ROW_COPY}>
                     <span style={ROW_VALUE}>{t('settings.languageRegion.fiatCurrency')}</span>
                     <span style={ROW_HINT}>{t('settings.languageRegion.showEstimatedWalletValuesIn')}</span>
-                    {unsupportedFiatCurrency ? (
-                        <span role="status" style={ROW_HINT}>
-                            {unsupportedFiatCurrency} {t('settings.languageRegion.isNotSupportedValuesAre')}
-                        </span>
-                    ) : null}
                 </div>
                 <div style={CONTROLS}>
                     <input
@@ -252,6 +247,12 @@ export function LanguageRegionSection() {
                 </div>
             </div>
             {currencyError ? <Status id="fiat-currency-error" text={currencyError} tone="error" /> : null}
+            {unsupportedFiatCurrency ? (
+                <Status
+                    text={t('settings.languageRegion.currencyNotSupported', { currency: unsupportedFiatCurrency })}
+                    tone="warning"
+                />
+            ) : null}
         </div>
     );
 }

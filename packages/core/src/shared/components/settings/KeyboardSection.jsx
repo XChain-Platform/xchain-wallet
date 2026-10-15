@@ -34,7 +34,7 @@ import {
     parseBinding,
     resolveBindings,
 } from '../../keyboard/shortcuts.js';
-import { ROW, ROW_LABEL, STACK, Status, settingsLoadErrorText } from './_settingsPrimitives.jsx';
+import { ROW, ROW_LABEL, STACK, SettingsLoadError, Status } from './_settingsPrimitives.jsx';
 import { t } from '../../../i18n/index.js';
 
 const GROUP_HEADER = {
@@ -181,7 +181,7 @@ export function KeyboardSection() {
     };
 
     if (loading) return <p style={ROW_LABEL}>{t('common.loading')}</p>;
-    if (error) return <p role="alert" style={ROW_LABEL}>{settingsLoadErrorText(error)}</p>;
+    if (error) return <SettingsLoadError error={error} />;
 
     return (
         <div style={STACK}>

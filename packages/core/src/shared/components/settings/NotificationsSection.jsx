@@ -32,7 +32,7 @@
 // SOUND_PREVIEW_EVENT for the shell's notify adapter to pick up.
 
 import { useEffect, useRef, useState } from 'react';
-import { Button, EmptyState, Input, Select, Switch } from '@xchain-wallet/core/ui';
+import { Button, EmptyState, Input, Select, StatusMessage, Switch } from '@xchain-wallet/core/ui';
 import { useSettings } from '../../hooks/useSettings.js';
 import { usePriceAlerts } from '../../hooks/usePriceAlerts.js';
 import { useMessaging } from '../../useMessaging.js';
@@ -307,7 +307,7 @@ export function NotificationsSection({ walletId } = {}) {
 
 function NotificationSaveError({ message }) {
     return message ? (
-        <span role="alert" style={{ ...ROW_HINT, color: 'var(--xc-danger-fg)' }}>{message}</span>
+        <Status text={message} tone="error" />
     ) : null;
 }
 
@@ -584,10 +584,9 @@ function PriceAlertsManager({ walletId, settings, enabled }) {
             {loading ? (
                 <span role="status" style={ROW_HINT}>{t('settings.notifications.loadingPriceAlerts')}</span>
             ) : error ? (
-                <span role="alert" style={{ ...ROW_HINT, color: 'var(--xc-danger-fg)' }}>
-                    {t('settings.notifications.couldNotLoadPriceAlerts')}{' '}
-                    <Button type="button" size="sm" variant="ghost" icon={null} onClick={reload}>{t('common.tryAgain')}</Button>
-                </span>
+                <StatusMessage variant="error" recovery={{ label: t('common.tryAgain'), onAction: reload }}>
+                    {t('settings.notifications.couldNotLoadPriceAlerts')}
+                </StatusMessage>
             ) : alerts.length === 0 ? (
                 <EmptyState title={t('settings.notifications.noPriceAlertsYet')} titleAs="p" body={t('settings.notifications.addOneBelow')} />
             ) : (
@@ -651,7 +650,7 @@ function PriceAlertsManager({ walletId, settings, enabled }) {
                 ))
             )}
 
-            {actionError ? <span role="alert" style={{ ...ROW_HINT, color: 'var(--xc-danger-fg)' }}>{actionError}</span> : null}
+            {actionError ? <Status text={actionError} tone="error" /> : null}
             {!loading && !error ? (
                 <PriceAlertForm
                     key={editingAlert?.id || 'new'}

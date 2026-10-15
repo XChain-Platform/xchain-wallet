@@ -8,42 +8,55 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
+import { useLayoutEffect, useRef } from 'react';
 import styles from './UndoSendToast.module.css';
+import { restingPlacement } from './toastPlacement.js';
 import { t } from '../../i18n/index.js';
 
 /**
- * Props-only countdown toast for a held send. Owns no timer, state or
- * effect: the parent passes the controller status and the whole seconds
- * remaining, and re-renders it each tick.
+ * Props-only countdown toast for a held send. Owns no timer or state: the
+ * parent passes the controller status and the whole seconds remaining, and
+ * re-renders it each tick. Its only effect picks the same resting corner as
+ * the host toast stack.
  *
  * - `counting`: live status line plus a Cancel button.
  * - `cancelled`: live status line, no button.
  * - anything else (`idle`, `elapsed`, unknown): renders nothing.
  */
 export function UndoSendToast({ status, remaining, onCancel }) {
-    if (status !== 'counting' && status !== 'cancelled') return null;
+    const visible = status === 'counting' || status === 'cancelled';
+    const stackRef = useRef(/** @type {HTMLDivElement | null} */ (null));
+    useLayoutEffect(() => {
+        if (stackRef.current) stackRef.current.dataset.placement = restingPlacement();
+    }, [visible]);
+    if (!visible) return null;
     const counting = status === 'counting';
     return (
-        <div className={styles.toast}>
-            <span
-                className={styles.message}
-                role="status"
-                aria-live="polite"
-                aria-atomic="true"
-            >
-                {counting ? t('undoSend.toast.sendingInS', { remaining }) : t('undoSend.toast.sendCancelled')}
-            </span>
-            {counting && (
-                <button
-                    type="button"
-                    className={styles.cancelBtn}
-                    onClick={() => {
-                        if (typeof onCancel === 'function') onCancel();
-                    }}
+        <div ref={stackRef} className={styles.stack}>
+            <div className={styles.toast} data-variant="info">
+                <span className={styles.icon} aria-hidden="true">ℹ</span>
+                <span
+                    className={styles.message}
+                    role="status"
+                    aria-live="polite"
+                    aria-atomic="true"
                 >
-                    {t('common.cancel')}
-                </button>
-            )}
+                    {counting ? t('undoSend.toast.sendingInS', { remaining }) : t('undoSend.toast.sendCancelled')}
+                </span>
+                {counting && (
+                    <div className={styles.controls}>
+                        <button
+                            type="button"
+                            className={styles.cancelBtn}
+                            onClick={() => {
+                                if (typeof onCancel === 'function') onCancel();
+                            }}
+                        >
+                            {t('common.cancel')}
+                        </button>
+                    </div>
+                )}
+            </div>
         </div>
     );
 }

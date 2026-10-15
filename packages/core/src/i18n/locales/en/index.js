@@ -1590,7 +1590,7 @@ export const en = {
     'settings.languageRegion.fiatCurrency': 'Fiat currency',
     'settings.languageRegion.showEstimatedWalletValuesIn':
         'Show estimated wallet values in this currency. Asset balances are unchanged.',
-    'settings.languageRegion.isNotSupportedValuesAre': "isn't supported. Values are shown in USD.",
+    'settings.languageRegion.currencyNotSupported': "{currency} isn't supported. Values are shown in USD.",
     'settings.languageRegion.searchByCodeOrName': 'Search by code or name',
     'settings.languageRegion.supportedFiatCurrencies': 'Supported fiat currencies',
     'settings.languageRegion.noSupportedCurrenciesMatch': 'No supported currencies match.',

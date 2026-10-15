@@ -161,7 +161,6 @@ export function QueuedBroadcastBanner({ walletId, intervalMs = 30_000 }) {
                     });
                 }
             },
-            durationMs: 12_000,
         });
     }, [reachabilityOverall, queue.length, reducedMotion, showToast]);
 
@@ -191,7 +190,7 @@ export function QueuedBroadcastBanner({ walletId, intervalMs = 30_000 }) {
             if (outcome.removed) {
                 // The row is gone, so tell the user in a toast rather than under a list without it.
                 if (!list) setQueue((prev) => prev.filter((entry) => entry.id !== id));
-                showToast({ message: outcome.message, variant: 'error', durationMs: 12_000 });
+                showToast({ message: outcome.message, variant: 'error' });
             } else {
                 setError(outcome.message);
             }
