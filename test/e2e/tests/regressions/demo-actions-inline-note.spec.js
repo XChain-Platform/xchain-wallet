@@ -75,7 +75,7 @@ test('demo Swap and Create token use an inline guard without contacting an encod
         await openPaletteRoute(page, 'Create a token');
         const main = page.getByRole('main');
         await main.getByRole('button', { name: /^Custom/ }).click();
-        await expect(main.getByRole('form', { name: 'Choose token chain' })).toBeVisible();
+        await expect(main.getByRole('form', { name: 'Choose token network' })).toBeVisible();
         await expect(main.getByLabel('Fee paid by', { exact: true }))
             .not.toHaveValue('', { timeout: 15_000 });
         await expectDemoGuard(page, 'Next');

@@ -18,7 +18,7 @@
 // The unit tests next door pin each component in isolation. This one exists
 // because the defect is only dangerous in SITU: the component is fine on its
 // own and ambiguous when a screen carries two of them. `CrossChainSwapForm` is
-// exactly that screen - "Give chain" and "Get chain" side by side, on the one
+// exactly that screen - "Give network" and "Get network" side by side, on the one
 // control pair in the wallet where transposing them sends the money to the
 // wrong chain - so the assertion that matters is made against the real form,
 // not against a fixture.
@@ -96,17 +96,17 @@ test.describe('a11y: chip pickers name the field they answer for', () => {
         // The specific pair this defect was found for. Before the fix both of
         // these announced as the chain they were showing, so a screen reader
         // user could not tell which side of the swap they were editing.
-        expect(names.some((n) => /^Give chain:/.test(n)),
+        expect(names.some((n) => /^Give network:/.test(n)),
             `no picker announced itself as the give-chain field; saw ${JSON.stringify(names)}`)
             .toBe(true);
-        expect(names.some((n) => /^Get chain:/.test(n)),
+        expect(names.some((n) => /^Get network:/.test(n)),
             `no picker announced itself as the get-chain field; saw ${JSON.stringify(names)}`)
             .toBe(true);
 
         // And they must be DISTINCT, which is the whole point: two identical
         // names is the bug, whatever those names happen to be.
-        const give = names.find((n) => /^Give chain:/.test(n));
-        const get = names.find((n) => /^Get chain:/.test(n));
+        const give = names.find((n) => /^Give network:/.test(n));
+        const get = names.find((n) => /^Get network:/.test(n));
         expect(give).not.toBe(get);
     });
 

@@ -9,6 +9,7 @@
 // contact legal@dankest.llc.
 
 import {
+    createWallet,
     dismissIntroCarousel,
     expect,
     test,
@@ -100,11 +101,11 @@ async function expectSameLineHeights(controls, label) {
     ).toBeLessThanOrEqual(2);
 }
 
-// Demo positions are display fixtures, while action forms read the demo
-// wallet's real zero balance. Keeping the debounced balance read unresolved
+// Action forms read the wallet's real XCHAIN balance, which is zero in both a
+// demo and a fresh wallet. Keeping the debounced balance read unresolved
 // exercises the review-only watcher path without signing or inventing a chain
 // result, and the timer is released as soon as the review renders.
-async function holdDemoStakeBalanceLookup(page) {
+async function holdStakeBalanceLookup(page) {
     await page.evaluate(() => {
         const originalSetTimeout = window.setTimeout;
         const heldTimers = [];
@@ -122,12 +123,35 @@ async function holdDemoStakeBalanceLookup(page) {
     });
 }
 
-async function releaseDemoStakeBalanceLookup(page) {
+async function releaseStakeBalanceLookup(page) {
     await page.evaluate(() => window.__restoreStakeBalanceTimers?.());
 }
 
+/** Opens Validator staking from Staking and fills a new stake. */
+async function fillNewStake(page, viewport) {
+    // The page header's action: an empty Staking list repeats it in its body.
+    await page.getByRole('banner').getByRole('button', { name: 'New stake', exact: true }).click();
+    await expectScreenFits(page, 'New stake', `${viewport.name} new stake chooser`);
+
+    await page.getByRole('button', { name: /^Validator staking/ }).click();
+    // Both the demo wallet and a created one hold a single Bitcoin chain, so
+    // Validator staking opens the stake form directly on it.
+    await expect(page.getByRole('form', { name: 'Stake XCHAIN' })).toBeVisible();
+
+    await expectScreenFits(page, 'Stake XCHAIN', `${viewport.name} new stake form`);
+    await expect(page.getByRole('button', { name: 'Network: Bitcoin' }))
+        .toBeVisible();
+
+    const form = page.getByRole('form', { name: 'Stake XCHAIN' });
+    await form.getByLabel('Signing public key', { exact: true }).fill(SIGNING_PUBLIC_KEY);
+    await form.getByRole('textbox', { name: /^Amount/ }).fill(STAKE_AMOUNT);
+    await expect(form.getByRole('radio', { name: 'New stake', exact: true })).toBeChecked();
+    await expectScreenFits(page, 'Stake XCHAIN', `${viewport.name} completed stake form`);
+    return form;
+}
+
 for (const viewport of VIEWPORTS) {
-    test(`staking positions, detail, and stake review fit the ${viewport.name} viewport`, async ({ page }) => {
+    test(`staking positions, detail, and the demo stake form fit the ${viewport.name} viewport`, async ({ page }) => {
         test.slow();
         await page.setViewportSize({ width: viewport.width, height: viewport.height });
         await enterDemoWallet(page, { dismissIntroCarousel, expect, unlockedShell });
@@ -163,26 +187,30 @@ for (const viewport of VIEWPORTS) {
             await expect(page.getByRole('heading', { name: 'Staking', exact: true })).toBeVisible();
         });
 
+        await test.step('new stake form stops at the demo note', async () => {
+            await holdStakeBalanceLookup(page);
+            const form = await fillNewStake(page, viewport);
+            // A demo wallet cannot move funds, so its stake form keeps Preview
+            // disabled under the demo note; the review is walked in a created
+            // wallet below.
+            await expect(form.getByRole('button', { name: 'Preview', exact: true })).toBeDisabled();
+            await expect(page.getByRole('main').getByText(/Demo wallets can.t move funds/)).toBeVisible();
+            await expectScreenFits(page, 'Stake XCHAIN', `${viewport.name} demo stake note`);
+            await releaseStakeBalanceLookup(page);
+        });
+    });
+
+    test(`stake review fits the ${viewport.name} viewport`, async ({ page }) => {
+        test.slow();
+        await page.setViewportSize({ width: viewport.width, height: viewport.height });
+        await createWallet(page);
+        await setWatcherMode(page);
+        await openPaletteItem(page, 'Staking', 'Your staking positions');
+        await expectScreenFits(page, 'Staking', `${viewport.name} empty staking positions`);
+
         await test.step('new stake form', async () => {
-            await holdDemoStakeBalanceLookup(page);
-            await page.getByRole('button', { name: 'New stake', exact: true }).click();
-            await expectScreenFits(page, 'New stake', `${viewport.name} new stake chooser`);
-
-            await page.getByRole('button', { name: /^Validator staking/ }).click();
-            // The demo wallet has one staking chain, so Validator staking opens the
-            // stake form directly on it rather than asking for a network first.
-            await expect(page.getByRole('form', { name: 'Stake XCHAIN' })).toBeVisible();
-
-            await expectScreenFits(page, 'Stake XCHAIN', `${viewport.name} new stake form`);
-            await expect(page.getByRole('button', { name: 'Network: Bitcoin' }))
-                .toBeVisible();
-
-            const form = page.getByRole('form', { name: 'Stake XCHAIN' });
-            await form.getByLabel('Signing public key', { exact: true }).fill(SIGNING_PUBLIC_KEY);
-            await form.getByRole('textbox', { name: /^Amount/ }).fill(STAKE_AMOUNT);
-            await expect(form.getByRole('radio', { name: 'New stake', exact: true })).toBeChecked();
-            await expectScreenFits(page, 'Stake XCHAIN', `${viewport.name} completed stake form`);
-
+            await holdStakeBalanceLookup(page);
+            const form = await fillNewStake(page, viewport);
             const main = page.getByRole('main');
             await main.evaluate((element) => { element.scrollTop = 0; });
             await form.getByRole('button', { name: 'Preview', exact: true })
@@ -191,7 +219,7 @@ for (const viewport of VIEWPORTS) {
 
         await test.step('stake review', async () => {
             await expectScreenFits(page, 'Review stake', `${viewport.name} stake review`);
-            await releaseDemoStakeBalanceLookup(page);
+            await releaseStakeBalanceLookup(page);
 
             const main = page.getByRole('main');
             expect(await main.evaluate((element) => element.scrollTop),

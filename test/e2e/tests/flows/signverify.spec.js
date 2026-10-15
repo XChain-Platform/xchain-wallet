@@ -102,7 +102,7 @@ async function signAndVerify(page, viewportName) {
 
     await openPaletteRoute(page, 'Sign a message', 'Sign message', 'Sign message');
     const signForm = page.getByRole('form', { name: 'Sign message', exact: true });
-    await selectVenueChain(signForm, 'Chain');
+    await selectVenueChain(signForm, 'Network');
     const addressField = signForm.getByLabel('Address', { exact: true });
     const addressOption = addressField.locator('option').filter({ hasText: address });
     await expect(addressOption, 'the sign form does not offer the active address').toHaveCount(1);
@@ -154,7 +154,7 @@ async function signAndVerify(page, viewportName) {
         'Verify signature',
     );
     const verifyForm = page.getByRole('form', { name: 'Verify signature', exact: true });
-    await selectVenueChain(verifyForm, 'Chain');
+    await selectVenueChain(verifyForm, 'Network');
     await verifyForm.getByLabel('Address', { exact: true }).fill(address);
     await verifyForm.getByLabel('Message', { exact: true }).fill(MESSAGE);
     const signatureField = verifyForm.getByLabel('Signature', { exact: true });
