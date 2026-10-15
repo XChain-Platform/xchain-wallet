@@ -31,6 +31,7 @@ import { t } from '../../i18n/index.js';
  * @param {(address: any) => void} props.onPick
  * @param {() => void} props.onBack
  * @param {Array<{ key: string, label: string, sublabel?: string, onSelect: () => void }>} [props.pickerActions]   extra rows above the list (see AddressList)
+ * @param {Record<string, boolean>} [props.addressUsageByKey] chain-and-address keyed receive usage
  * @param {'small' | 'full'} [props.variant]  legacy, unused (AddressList derives its own)
  * @param {any[]} [props.addresses]           legacy, unused
  */
@@ -42,6 +43,7 @@ export function OwnAddressPickerScreen({
     onPick,
     onBack,
     pickerActions,
+    addressUsageByKey,
 }) {
     return (
         <AddressList
@@ -52,6 +54,7 @@ export function OwnAddressPickerScreen({
             title={title}
             onPick={onPick}
             pickerActions={pickerActions}
+            addressUsageByKey={addressUsageByKey}
             networkFilter={chainId ? coinFromChainId(chainId) : 'all'}
         />
     );

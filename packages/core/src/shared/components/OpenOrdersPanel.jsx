@@ -68,6 +68,8 @@ export function OpenOrdersPanel({ walletId, chainId, tick1, tick2 }) {
     const [addressesLoading, setAddressesLoading] = useState(true);
     const [ordersLoading, setOrdersLoading] = useState(true);
     const [loadError, setLoadError] = useState(/** @type {string | null} */ (null));
+    const [addressRetryKey, setAddressRetryKey] = useState(0);
+    const [ordersRetryKey, setOrdersRetryKey] = useState(0);
     const [confirmOrder, setConfirmOrder] = useState(/** @type {any | null} */ (null));
     const [submitting, setSubmitting] = useState(false);
     const [submitError, setSubmitError] = useState(/** @type {string | null} */ (null));
@@ -90,16 +92,30 @@ export function OpenOrdersPanel({ walletId, chainId, tick1, tick2 }) {
     }, [walletId, chainId, tick1, tick2]);
 
     useEffect(() => {
-        let cancelled = false;
         setAddresses([]);
         setOrders([]);
+    }, [walletId, chainId]);
+
+    useEffect(() => {
+        setOrders([]);
+    }, [chainId, tick1, tick2]);
+
+    useEffect(() => {
+        let cancelled = false;
         setAddressesLoading(true);
         setOrdersLoading(true);
         setLoadError(null);
         messaging.getAddressesByChain(walletId)
             .then((byChain) => {
                 if (cancelled) return;
-                setAddresses(byChain?.[chainId] || []);
+                if (!byChain || typeof byChain !== 'object' || Array.isArray(byChain)) {
+                    throw new Error('getAddressesByChain: malformed response');
+                }
+                const nextAddresses = byChain[chainId] || [];
+                if (!Array.isArray(nextAddresses)) {
+                    throw new Error('getAddressesByChain: malformed response');
+                }
+                setAddresses(nextAddresses);
                 setAddressesLoading(false);
             })
             .catch((err) => {
@@ -109,7 +125,7 @@ export function OpenOrdersPanel({ walletId, chainId, tick1, tick2 }) {
                 setOrdersLoading(false);
             });
         return () => { cancelled = true; };
-    }, [messaging, walletId, chainId]);
+    }, [messaging, walletId, chainId, addressRetryKey]);
 
     // PC-16: auto-pay consent records for this wallet+chain, keyed by the
     // order's action index (resolved from the placement txid host-side).
@@ -164,6 +180,7 @@ export function OpenOrdersPanel({ walletId, chainId, tick1, tick2 }) {
         let cancelled = false;
         let requestId = 0;
         setOrdersLoading(true);
+        setLoadError(null);
         const tick = async () => {
             if (cancelled) return;
             if (typeof document !== 'undefined'
@@ -193,7 +210,7 @@ export function OpenOrdersPanel({ walletId, chainId, tick1, tick2 }) {
         if (typeof document === 'undefined' || document.visibilityState !== 'hidden') tick();
         const stopPollInterval = startVisibleInterval(tick, POLL_INTERVAL_MS);
         return () => { cancelled = true; stopPollInterval(); };
-    }, [messaging, chainId, tick1, tick2, addresses, addressesLoading]);
+    }, [messaging, chainId, tick1, tick2, addresses, addressesLoading, ordersRetryKey]);
 
     const rows = useMemo(() => {
         return orders.map((o) => summarizeOrder(o, tick1, tick2)).filter(Boolean);
@@ -293,7 +310,21 @@ export function OpenOrdersPanel({ walletId, chainId, tick1, tick2 }) {
                 <StatusMessage variant="status">{t('components.openOrdersPanel.loadingOpenOrders')}</StatusMessage>
             ) : null}
             {loadError ? (
-                <StatusMessage variant="error">{loadError}</StatusMessage>
+                <StatusMessage
+                    variant="error"
+                    recovery={{
+                        label: t('common.tryAgain'),
+                        onAction: () => {
+                            if (addresses.length === 0) {
+                                setAddressRetryKey((key) => key + 1);
+                            } else {
+                                setOrdersRetryKey((key) => key + 1);
+                            }
+                        },
+                    }}
+                >
+                    {loadError}
+                </StatusMessage>
             ) : null}
             {!loadError && !addressesLoading && !ordersLoading && rows.length === 0 ? (
                 <p style={{
@@ -489,9 +520,8 @@ function summarizeOrder(o, tick1, tick2) {
 }
 
 function extractRows(resp) {
-    if (!resp) return [];
     if (Array.isArray(resp)) return resp;
     if (Array.isArray(resp.data)) return resp.data;
     if (Array.isArray(resp.orders)) return resp.orders;
-    return [];
+    throw new Error('getMarketOrders: malformed response');
 }
