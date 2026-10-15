@@ -135,8 +135,8 @@ describe('PageHeader', () => {
         expect(title).toMatch(/white-space:\s*normal/);
         expect(title).toMatch(/-webkit-line-clamp:\s*1/);
         expect(title).toMatch(/overflow:\s*hidden/);
-        expect(trailingButton).toMatch(/width:\s*var\(--xc-page-header-side\)/);
-        expect(trailingButton).toMatch(/height:\s*var\(--xc-page-header-side\)/);
+        expect(trailingButton).toMatch(/width:\s*var\(--xc-control-h-sm\)/);
+        expect(trailingButton).toMatch(/height:\s*var\(--xc-control-h-sm\)/);
         expect(trailingButton).toMatch(/border-radius:\s*var\(--xc-control-radius\)/);
         expect(trailingButton).toMatch(/--xc-icon-size:\s*var\(--xc-icon-md\)/);
         expect(pageHeaderCss).not.toMatch(/@media/);

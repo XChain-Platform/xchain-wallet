@@ -134,6 +134,19 @@ function panelIn(region) {
 
 afterEach(() => { cleanup(); vi.useRealTimers(); });
 
+
+/**
+ * The decoded output line reading "<amount> to <address>". The address keeps
+ * both ends on screen and the whole value in its title.
+ */
+function outputLine(container, amount, address) {
+    const short = `${address.slice(0, 6)}…${address.slice(-6)}`;
+    return within(container).getAllByRole('listitem').find((li) => (
+        li.textContent.startsWith(`${amount} to ${short}`)
+        && li.querySelector(`[title="${address}"]`)
+    )) || null;
+}
+
 describe('History row labels a pending transaction by state', () => {
     it('never prints the word "unconfirmed" at the user', async () => {
         const { view } = mountHistory({ mempool: [mempoolRow()] });
@@ -191,8 +204,8 @@ describe('History pending detail branch', () => {
         // one output's amount with another output's destination.
         const { view } = mountHistory({ mempool: [mempoolRow()] });
         const region = await openRow(view, 'seen');
-        expect(within(region).getByText(`+100 XCHAIN to ${OURS}`)).toBeTruthy();
-        expect(within(region).getByText(`+7 SPARE to ${THEIRS}`)).toBeTruthy();
+        expect(outputLine(region, `+100 XCHAIN`, OURS)).toBeTruthy();
+        expect(outputLine(region, `+7 SPARE`, THEIRS)).toBeTruthy();
     });
 
     it('shows raw segments for an action it cannot decode, and invents no amounts', async () => {
@@ -216,7 +229,9 @@ describe('History pending detail branch', () => {
             'Taken from this wallet\'s own record of the send. '
             + 'The network hasn\'t reported the transaction data yet.',
         )).toBeTruthy();
-        expect(within(panel).getByText(`-100 XCHAIN to ${THEIRS}`)).toBeTruthy();
+        expect(outputLine(panel, `-100 XCHAIN`, THEIRS)).toBeTruthy();
+        expect(within(outputLine(panel, `-100 XCHAIN`, THEIRS)).getByRole('button', { name: 'Copy address' }))
+            .toHaveTextContent(/^Copy$/);
     });
 
     it('names an incoming transfer Receive in the action chip', async () => {
@@ -429,7 +444,7 @@ describe('History shows a transaction this wallet proved into a block as confirm
         const region = await openRow(view, 'confirmed');
         const panel = within(region).getByRole('region', { name: 'Confirmed transaction' });
         expect(within(panel).getByText('Confirmed on the network')).toBeTruthy();
-        expect(within(panel).getByText(`-30 LTC to ${THEIRS}`)).toBeTruthy();
+        expect(outputLine(panel, `-30 LTC`, THEIRS)).toBeTruthy();
         expect(within(panel).queryByText(/has not reported the transaction data yet/)).toBeNull();
         expect(region.textContent).not.toMatch(/not seen by the network/i);
     });

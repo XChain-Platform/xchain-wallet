@@ -185,8 +185,10 @@ describe('History filters', () => {
             entries: [{ chain: 'litecoin', address: clientAddress }],
         }]);
         await waitFor(() => expect(rowKeys(view)).toHaveLength(2));
-        expect(screen.getByText(clientAddress)).toBeInTheDocument();
-        expect(screen.queryByText(LTC_ADDRESS)).toBeNull();
+        // The row keeps both ends of the counterparty on screen and the
+        // whole address in its title.
+        expect(screen.getByTitle(clientAddress)).toHaveTextContent('mClien…111111');
+        expect(screen.queryByTitle(LTC_ADDRESS)).toBeNull();
 
         const search = screen.getByLabelText('Search history');
         const expectToday = async (query) => {
@@ -225,6 +227,31 @@ describe('History filters', () => {
 
         expect(await screen.findByText('Received at Client invoices')).toBeInTheDocument();
         expect(screen.getAllByText(/Client invoices/)).toHaveLength(1);
+    });
+
+    it('offers one control to clear the search', async () => {
+        mountHistory({
+            [LTC]: [historyRow({ actionIndex: 30, timestamp: secondsAt(0), tick: 'BTC', source: LTC_ADDRESS })],
+        }, { [LTC]: [{ address: LTC_ADDRESS }] });
+        const search = await screen.findByRole('searchbox', { name: 'Search history' });
+        fireEvent.change(search, { target: { value: 'zzz' } });
+        expect(await screen.findByRole('button', { name: 'Clear history search' })).toBeInTheDocument();
+        // A type="search" field also draws the engine's own cancel mark
+        // inside it; with the Clear button beside it that made two.
+        expect(ruleBody(historyCss, '.searchInput::-webkit-search-cancel-button')).toMatch(/display:\s*none/);
+    });
+
+    it('leaves a generated address name off the row, since it only repeats the coin', async () => {
+        const sender = 'mtkxExternalSender1111111111111111111111';
+        const view = mountHistory({
+            [LTC]: [historyRow({ actionIndex: 30, timestamp: secondsAt(0), tick: 'BTC', source: sender })],
+        }, {
+            [LTC]: [{ address: LTC_ADDRESS, label: 'LTC Address #1' }],
+        }).view;
+
+        await waitFor(() => expect(rowKeys(view)).toHaveLength(1));
+        expect(screen.queryByText(/Received at/)).toBeNull();
+        expect(view.container.textContent).not.toContain('LTC Address #1');
     });
 
     it('combines every filter dimension and preserves the controls across a refresh poll', async () => {

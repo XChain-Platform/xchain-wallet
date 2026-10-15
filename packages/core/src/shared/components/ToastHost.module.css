@@ -1,5 +1,8 @@
 /* §37.2 toast viewport. The host pins to the bottom-center of the
- * screen as a stack of cards; each toast slides in from the bottom
+ * screen above the tab bar on phones, and to the bottom-end corner when
+ * the side rail replaces the bar (toastPlacement.js sets data-placement),
+ * as a stack of cards. toastPlacement.js also lifts the stack by
+ * --xc-toast-lift until it clears a screen footer and the focused control; each toast slides in from the bottom
  * with a subtle fade. Animation collapses to an instantaneous swap
  * when the user prefers reduced motion.
  *
@@ -17,6 +20,7 @@
         var(--xc-space-4)
         + var(--xc-bottom-bar-h, 0px)
         + env(safe-area-inset-bottom, 0px)
+        + var(--xc-toast-lift, 0px)
     );
     inset-inline-start: 50%;
     transform: translateX(-50%);
@@ -32,6 +36,12 @@
         - env(safe-area-inset-right, 0px)
         - 2 * var(--xc-space-4)
     ));
+}
+
+.viewport[data-placement='end'] {
+    inset-inline-start: auto;
+    inset-inline-end: calc(var(--xc-space-4) + env(safe-area-inset-right, 0px));
+    transform: none;
 }
 
 .liveAnnouncement {
@@ -54,6 +64,7 @@
         100vh - var(--xc-viewport-h, 100vh)
         - env(safe-area-inset-top, 0px)
         + var(--xc-space-4)
+        + var(--xc-toast-lift, 0px)
     );
 }
 
@@ -102,28 +113,44 @@
     to   { opacity: 1; transform: translateY(0); }
 }
 
+/* The tone tints are translucent, so each one is laid over the opaque raised
+   surface: the toast keeps the inline message colours without letting the
+   page show through it. */
 .variant_info {
     border-color: var(--xc-info);
-    background: var(--xc-info-bg);
+    background: linear-gradient(var(--xc-info-bg), var(--xc-info-bg)), var(--xc-surface-raised);
     color: var(--xc-info-text);
 }
 
 .variant_warning {
     border-color: var(--xc-warning);
-    background: var(--xc-warning-bg);
+    background: linear-gradient(var(--xc-warning-bg), var(--xc-warning-bg)), var(--xc-surface-raised);
     color: var(--xc-warning-text);
 }
 
 .variant_success {
     border-color: var(--xc-success);
-    background: var(--xc-success-bg);
+    background: linear-gradient(var(--xc-success-bg), var(--xc-success-bg)), var(--xc-surface-raised);
     color: var(--xc-success);
 }
 
 .variant_error {
     border-color: var(--xc-danger);
-    background: var(--xc-danger-bg);
+    background: linear-gradient(var(--xc-danger-bg), var(--xc-danger-bg)), var(--xc-surface-raised);
     color: var(--xc-danger-text);
+}
+
+/* Forced colours drop the tint layer; pin the system pair so the card keeps
+   its outline and readable text. */
+@media (forced-colors: active) {
+    .variant_info,
+    .variant_warning,
+    .variant_success,
+    .variant_error {
+        background: Canvas;
+        color: CanvasText;
+        border: 1px solid CanvasText;
+    }
 }
 
 .icon {
@@ -140,8 +167,12 @@
     word-break: break-word;
 }
 
+/* The controls box passes taps through too; only the buttons inside it take
+   them. At 360 wide the box once wrapped onto a full-width row of its own, and
+   that strip swallowed taps on whatever sat under it (Receive's "Switch input
+   to USD"). The toast now stays one row at every width. */
 .controls {
-    pointer-events: auto;
+    pointer-events: none;
     display: inline-flex;
     align-items: center;
     gap: var(--xc-space-1);
@@ -149,6 +180,7 @@
 }
 
 .actionBtn {
+    pointer-events: auto;
     background: transparent;
     border: none;
     color: inherit;
@@ -179,6 +211,7 @@
 }
 
 .dismissBtn {
+    pointer-events: auto;
     background: transparent;
     border: none;
     color: inherit;
@@ -205,15 +238,3 @@
     outline-offset: 2px;
 }
 
-@media (max-width: 360px) {
-    .toast {
-        align-items: stretch;
-        flex-wrap: wrap;
-    }
-
-    .controls {
-        flex: 1 1 100%;
-        min-width: 0;
-        justify-content: flex-end;
-    }
-}

@@ -32,7 +32,7 @@
 // SOUND_PREVIEW_EVENT for the shell's notify adapter to pick up.
 
 import { useEffect, useRef, useState } from 'react';
-import { Button, EmptyState, Input, Select, Switch } from '@xchain-wallet/core/ui';
+import { Button, EmptyState, Input, Select, StatusMessage, Switch } from '@xchain-wallet/core/ui';
 import { useSettings } from '../../hooks/useSettings.js';
 import { usePriceAlerts } from '../../hooks/usePriceAlerts.js';
 import { useMessaging } from '../../useMessaging.js';
@@ -306,7 +306,7 @@ export function NotificationsSection({ walletId } = {}) {
 
 function NotificationSaveError({ message }) {
     return message ? (
-        <span role="alert" style={{ ...ROW_HINT, color: 'var(--xc-danger-fg)' }}>{message}</span>
+        <Status text={message} tone="error" />
     ) : null;
 }
 
@@ -584,10 +584,9 @@ function PriceAlertsManager({ walletId, settings, enabled }) {
             {loading ? (
                 <span role="status" style={ROW_HINT}>Loading price alerts…</span>
             ) : error ? (
-                <span role="alert" style={{ ...ROW_HINT, color: 'var(--xc-danger-fg)' }}>
-                    Could not load price alerts.{' '}
-                    <Button type="button" size="sm" variant="ghost" icon={null} onClick={reload}>Try again</Button>
-                </span>
+                <StatusMessage variant="error" recovery={{ label: 'Try again', onAction: reload }}>
+                    Could not load price alerts.
+                </StatusMessage>
             ) : alerts.length === 0 ? (
                 <EmptyState title="No price alerts yet" titleAs="p" body="Add one below." />
             ) : (
@@ -651,7 +650,7 @@ function PriceAlertsManager({ walletId, settings, enabled }) {
                 ))
             )}
 
-            {actionError ? <span role="alert" style={{ ...ROW_HINT, color: 'var(--xc-danger-fg)' }}>{actionError}</span> : null}
+            {actionError ? <Status text={actionError} tone="error" /> : null}
             {!loading && !error ? (
                 <PriceAlertForm
                     key={editingAlert?.id || 'new'}

@@ -57,8 +57,9 @@ export function StatesSection() {
     Insufficient balance.
 </StatusMessage>
 
-// Action just completed, user has likely moved on: toast
-showToast({ kind: 'success', message: 'Address copied to clipboard.' });`}
+// Action just completed, user has likely moved on: toast. The host owns
+// where it shows and how long it stays; pass only the words and the tone.
+showToast({ variant: 'success', message: 'Address copied to clipboard.' });`}
             </Markup>
 
             <LiveExample label="Skeleton: first paint, shape matches the data">

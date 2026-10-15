@@ -45,6 +45,8 @@ import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
+import { launchGuardedElectron } from '../../e2e/fixtures/electron.js';
+
 const here = dirname(fileURLToPath(import.meta.url));
 const wsRoot = join(here, '..', '..', '..');
 const desktopDir = join(wsRoot, 'packages', 'desktop');
@@ -87,7 +89,8 @@ const { _electron: electron } = await import('@playwright/test');
 // last run left behind.
 const userDataDir = mkdtempSync(join(tmpdir(), 'xc-desktop-renders-'));
 
-const app = await electron.launch({
+// Under the app's test network guard, as every desktop test launch is.
+const app = await launchGuardedElectron(electron, {
     args: ['.', `--user-data-dir=${userDataDir}`],
     cwd: desktopDir,
 });
