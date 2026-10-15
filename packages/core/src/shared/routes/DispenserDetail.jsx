@@ -1102,9 +1102,10 @@ export function DispenserDetail({ walletId, chainId, actionIndex, onBack, onCanc
         payer: buyerAddress?.address,
         amount: totalPayAmount || '',
     }), [dispensersAtBuyDestination, buyerAddress?.address, totalPayAmount]);
+    // The confirm screen already titles itself; its summary needs no third
+    // "Review ..." heading of its own.
     const buyConfirmNotes = (
         <>
-            <p className={styles.successLabel}>Review purchase</p>
             <dl className={styles.detailsList} data-testid="buy-review-summary">
                 <dt className={styles.detailsLabel}>Price per fill</dt>
                 <dd className={styles.detailsValue}>{formatWithThousands(String(getAmount))} {payTick}</dd>
@@ -2279,7 +2280,7 @@ export function DispenserDetail({ walletId, chainId, actionIndex, onBack, onCanc
             {canBuyWithSend ? (
                 <div data-testid="dispenser-buy-form">
                     <FormSection title="Buy from this dispenser" className={local.buySection}>
-                        <p className={styles.hint}>
+                        <p className={styles.hintLeft}>
                             {isTokenPaid
                                 ? `Send ${getAmount} ${getTick} per fill. Tokens dispense when the SEND`
                                 : `Pay ${getAmount} ${payTick} per fill from this wallet. Tokens dispense when the payment`}
@@ -2303,25 +2304,17 @@ export function DispenserDetail({ walletId, chainId, actionIndex, onBack, onCanc
                                 Paying from <AddressText address={buyerAddress.address} />
                             </p>
                         ) : null}
-                        <div className={local.buyFillsRow}>
-                            <Input
-                                label="Fills"
-                                hint={`Whole fills only. Your payment must be a multiple of ${formatWithThousands(String(getAmount))} ${payTick}.`}
-                                inputMode="numeric"
-                                value={fills}
-                                onChange={(e) => setFills(e.target.value)}
-                                autoComplete="off"
-                            />
-                            <Button
-                                type="button"
-                                variant="secondary"
-                                size="sm"
-                                onClick={onMaxFills}
-                                disabled={maxBuyFills == null || maxBuyFills <= 0n}
-                            >
-                                Max
-                            </Button>
-                        </div>
+                        {/* Max and Paste sit inside the field, as on every other
+                            amount; a separate full-width Max button under it
+                            read as a second action on a phone. */}
+                        <AmountField
+                            label="Fills"
+                            hint={`Whole fills only. Your payment must be a multiple of ${formatWithThousands(String(getAmount))} ${payTick}.`}
+                            amount={fills}
+                            onAmountFieldChange={(rawValue) => setFills(String(rawValue).replace(/,/g, ''))}
+                            onMax={onMaxFills}
+                            maxDisabled={maxBuyFills == null || maxBuyFills <= 0n}
+                        />
                         {totalPayAmount && totalReceive ? (
                             <dl className={styles.detailsList} data-testid="buy-totals">
                                 <dt className={styles.detailsLabel}>Price per fill</dt>
@@ -2341,12 +2334,12 @@ export function DispenserDetail({ walletId, chainId, actionIndex, onBack, onCanc
                             <p role="alert" className={styles.warning}>{inventoryError}</p>
                         ) : null}
                         {minFillsNotice ? (
-                            <p className={styles.hint} data-testid="min-fills-notice">{minFillsNotice}</p>
+                            <p className={styles.hintLeft} data-testid="min-fills-notice">{minFillsNotice}</p>
                         ) : null}
                         {buyDustBlock ? (
                             <p role="alert" className={styles.warning} data-testid="buy-dust-block">{buyDustBlock}</p>
                         ) : null}
-                        <p className={styles.hint} data-testid="buy-balance">
+                        <p className={styles.hintLeft} data-testid="buy-balance">
                             {buyBalance == null
                                 ? `Checking your ${String(payTick).toUpperCase()} balance…`
                                 : `${formatWithThousands(buyBalance)} ${String(payTick).toUpperCase()} available`}
@@ -2362,7 +2355,7 @@ export function DispenserDetail({ walletId, chainId, actionIndex, onBack, onCanc
                             <StatusMessage variant="error" className={styles.error}>{buyError}</StatusMessage>
                         ) : null}
                         {ownerLane.isWatcherMode ? (
-                            <p className={styles.hint}>
+                            <p className={styles.hintLeft}>
                                 Watcher mode: this wallet will build an unsigned transaction. Sign it on your
                                 Signer-mode wallet, then broadcast from a Full-mode wallet.
                             </p>
@@ -2390,7 +2383,7 @@ export function DispenserDetail({ walletId, chainId, actionIndex, onBack, onCanc
             {showPayHere ? (
                 <FormSection title="Pay to buy" className={local.buySection}>
                     {canBuyWithSend ? null : listWarnings}
-                    <p className={styles.hint}>
+                    <p className={styles.hintLeft}>
                         This dispenser accepts bare {getCoin} payments.
                         {currentAllowList || currentBlockList
                             ? ''
@@ -2457,7 +2450,7 @@ export function DispenserDetail({ walletId, chainId, actionIndex, onBack, onCanc
                         <dt className={styles.detailsLabel}>You receive per fill</dt>
                         <dd className={styles.detailsValue}>{giveAmount} {giveTick}</dd>
                     </dl>
-                    <p className={styles.hint}>
+                    <p className={styles.hintLeft}>
                         {canBuyWithSend
                             ? `Paying from another ${getCoin} wallet works too: send the amount above to this address.`
                             : isFiatPriced
@@ -2594,7 +2587,6 @@ function OwnerConfirmNotes({
     if (kind === 'refill') {
         return (
             <>
-                <p className={styles.successLabel}>Review refill</p>
                 <dl className={styles.detailsList} data-testid="refill-review-summary">
                     <dt className={styles.detailsLabel}>Dispenser</dt>
                     <dd className={styles.detailsValue}>#{actionIndex}</dd>
@@ -2617,7 +2609,6 @@ function OwnerConfirmNotes({
     }
     return (
         <>
-            <p className={styles.successLabel}>Review edit</p>
             <dl className={styles.detailsList} data-testid="edit-review-summary">
                 <dt className={styles.detailsLabel}>Dispenser</dt>
                 <dd className={styles.detailsValue}>#{actionIndex}</dd>

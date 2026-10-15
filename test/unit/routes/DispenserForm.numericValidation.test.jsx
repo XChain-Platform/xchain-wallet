@@ -239,6 +239,11 @@ describe('DispenserForm numeric validation', () => {
         expect(utils.composeForConfirm).not.toHaveBeenCalled();
     });
 
+    it('titles the screen in sentence case like every other form', async () => {
+        const utils = await mountForm();
+        expect(utils.getByRole('heading', { name: 'Create dispenser' })).toBeInTheDocument();
+    });
+
     it('requires a currency for a fiat amount instead of silently dropping the field', async () => {
         const utils = await mountForm();
         fireEvent.change(utils.getByLabelText(/^Give amount/), { target: { value: '10' } });

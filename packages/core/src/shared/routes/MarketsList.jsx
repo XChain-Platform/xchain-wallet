@@ -597,6 +597,8 @@ function MarketRow({ chainId, selectedTick, tick1, tick2, name1, name2, lastPric
                                 borderRadius: 999,
                                 fontSize: 11,
                                 lineHeight: 1.5,
+                                // A long pair name squeezed the pill into two lines.
+                                whiteSpace: 'nowrap',
                             }}>
                                 depth {depth}
                             </span>
