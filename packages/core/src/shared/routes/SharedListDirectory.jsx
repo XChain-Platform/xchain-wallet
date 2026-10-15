@@ -139,9 +139,15 @@ export function SharedListDirectory({ walletId, chainId, mode, filterType, onSel
         });
     }, [chainId, query, visibleLists]);
 
-    useEffect(() => {
+    // Return to the first page when the listing changes. This is done while
+    // rendering rather than in an effect: an effect runs after paint, so a
+    // Load more click made in that gap queued its update first and the late
+    // reset then overwrote it with a single page.
+    const [pageScope, setPageScope] = useState({ filterType, mode, directory });
+    if (pageScope.filterType !== filterType || pageScope.mode !== mode || pageScope.directory !== directory) {
+        setPageScope({ filterType, mode, directory });
         setVisibleLimit(PAGE_SIZE);
-    }, [filterType, mode, directory]);
+    }
 
     const pagedLists = matchingLists.slice(0, visibleLimit);
     // Chains that did not answer, as badges for the single notice. An unknown

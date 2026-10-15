@@ -79,6 +79,14 @@ export const en = {
     'balanceList.rowChainSpeech': 'on {chain}',
     'createOrder.side.assetType': 'Asset type',
     'common.allNetworks': 'All networks',
+    'dispenserExplorer.loadMoreFor': 'Load more results for {name}',
+    'crossChainSwap.success.giveTxLabel': 'Give network transaction',
+    'crossChainSwap.success.hint':
+        'Your offer is open on the give network. The swap settles atomically when a counterparty fills it on the get network; until then no funds move.',
+    'parallelComposer.summary':
+        '{actions, plural, one {# action} other {# actions}} across {networks, plural, one {# network} other {# networks}}',
+    'parallelComposer.noRollback':
+        "Actions on different networks aren't settled as one unit; only an individual swap completes together.",
     'dispenserExplorer.searchHint.token': 'Ticker name, such as MYTOKEN, or a token reference from the explorer.',
     'dispenserExplorer.searchHint.address': 'Dispenser address or source address.',
     // AmountField appends the unit in brackets, so these labels carry none.

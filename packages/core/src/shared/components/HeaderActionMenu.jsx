@@ -61,6 +61,10 @@ export function HeaderActionMenu({
     platformCurrent,
 }) {
     const [open, setOpen] = useState(false);
+    // The Settings popover is portaled to the body and anchored to its row in
+    // this menu, so the row has to stay mounted. While the popover is up the
+    // panel is hidden (not unmounted) so it does not show through underneath.
+    const [overlayOpen, setOverlayOpen] = useState(false);
     const wrapRef = useRef(null);
     const triggerRef = useRef(null);
     const menuRef = useRef(null);
@@ -115,7 +119,7 @@ export function HeaderActionMenu({
         ? (typeof onPopOut === 'function' ? onPopOut : automaticPopOut())
         : null;
     const settings = isValidElement(settingsControl)
-        ? cloneElement(settingsControl, { onNavigate: close })
+        ? cloneElement(settingsControl, { onNavigate: close, onOpenChange: setOverlayOpen })
         : settingsControl;
     const rows = [
         { id: 'search', label: t('routes.addressList.search'), Icon: Icon.SearchIcon, handler: onCommandPalette, shortcut: 'Cmd/Ctrl+K' },
@@ -161,6 +165,7 @@ export function HeaderActionMenu({
                 <div
                     ref={menuRef}
                     className={styles.actionMenu}
+                    data-overlay-open={overlayOpen ? 'true' : undefined}
                     role="menu"
                     aria-label={t('components.headerActionMenu.headerActions')}
                     onKeyDown={(event) => {

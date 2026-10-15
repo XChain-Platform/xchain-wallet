@@ -16,6 +16,7 @@ import {
 } from '../shared/utils/amountFormat.js';
 import styles from './FeeSelector.module.css';
 import { InfoTip } from './InfoTip.jsx';
+import { FormNotice } from './FormNotice.jsx';
 import { t } from '../i18n/index.js';
 
 const TIER_SPEEDS = ['low', 'normal', 'fast'];
@@ -134,13 +135,21 @@ export function FeeSelector({
         ({ estimate }) => estimate?.source === 'static-placeholder',
     );
 
-    if (!tiers || tierList.length === 0) {
+    // Inside a FormPage the notice is shown at the top of the form with the
+    // others; anywhere else it stays under the selector.
+    const noEstimate = !tiers || tierList.length === 0;
+    let noticeText = null;
+    if (showEstimateNotice) {
+        if (noEstimate) noticeText = t('ui.feeSelector.feeEstimateUnavailableForThis');
+        else if (usesFallbackRates) noticeText = t('ui.feeSelector.liveFeeEstimateUnavailableUsing');
+    }
+    const inlineNotice = <FormNotice variant="warning">{noticeText}</FormNotice>;
+
+    if (noEstimate) {
         return (
             <div className={styles.wrap}>
                 {headerRow()}
-                {showEstimateNotice ? (
-                    <p className={styles.placeholder}>{t('ui.feeSelector.feeEstimateUnavailableForThis')}</p>
-                ) : null}
+                {inlineNotice}
             </div>
         );
     }
@@ -446,11 +455,7 @@ export function FeeSelector({
                     );
                 })() : null}
             </div>
-            {showEstimateNotice && usesFallbackRates ? (
-                <p className={styles.placeholder} aria-live="polite">
-                    {t('ui.feeSelector.liveFeeEstimateUnavailableUsing')}
-                </p>
-            ) : null}
+            {inlineNotice}
         </div>
     );
 }

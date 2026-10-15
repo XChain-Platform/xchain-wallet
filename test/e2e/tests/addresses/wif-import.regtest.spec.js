@@ -206,12 +206,12 @@ async function openImportForm(page) {
  * steps from the cause.
  */
 async function selectImportChain(page) {
-    const trigger = page.getByRole('button', { name: /^Chain:/ });
-    await expect(trigger, 'the import form has no Chain picker').toBeVisible({ timeout: 30_000 });
+    const trigger = page.getByRole('button', { name: /^Network:/ });
+    await expect(trigger, 'the import form has no Network picker').toBeVisible({ timeout: 30_000 });
     if (((await trigger.getAttribute('aria-label')) || '').includes(REGTEST_CHAIN_LABEL)) return;
     await trigger.click();
     await page.getByRole('option', { name: new RegExp(`^${REGTEST_CHAIN_LABEL}\\b`) }).first().click();
-    await expect(trigger, `the Chain picker would not move to ${REGTEST_CHAIN_LABEL}`)
+    await expect(trigger, `the Network picker would not move to ${REGTEST_CHAIN_LABEL}`)
         .toHaveAttribute('aria-label', new RegExp(REGTEST_CHAIN_LABEL), { timeout: 15_000 });
 }
 

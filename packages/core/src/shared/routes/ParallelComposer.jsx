@@ -12,6 +12,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { AddressText, Button, ChainBadge, Checkbox, FeeSelector, FormPage, FormSection, PageHeader, Screen, Select, StatusMessage, Textarea } from '@xchain-wallet/core/ui';
 // A native select cannot middle-truncate, and a full address ran under the
 // chevron at phone width, so options carry the wallet's usual first6...last6 form.
+import { t } from '../../i18n/index.js';
 import { truncateAddress } from '../../ui/AddressText.jsx';
 import { registry as registryLib } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
@@ -576,16 +577,14 @@ export function ParallelComposer({ walletId, onBack, initialRows, hasDexSurface 
                 )}
             >
                 <p className={styles.summary}>
-                    {rows.length} action{rows.length === 1 ? '' : 's'} across{' '}
-                    {new Set(rows.map((r) => r.chainId)).size} chain{new Set(rows.map((r) => r.chainId)).size === 1 ? '' : 's'}
+                    {t('parallelComposer.summary', { actions: rows.length, networks: new Set(rows.map((r) => r.chainId)).size })}
                 </p>
                 <SummaryList rows={rows} addressesByChain={addressesByChain} showDetails />
                 <StatusMessage variant="warning" role={null}>
                     <p id="parallel-no-rollback-warning">
                         <strong>No rollback:</strong> each action signs and broadcasts independently.
                         If a later row fails, successful earlier rows remain broadcast.
-                        Actions on different chains are not settled as one unit;
-                        only an individual swap completes together.
+                        {t('parallelComposer.noRollback')}
                     </p>
                 </StatusMessage>
                 <Checkbox

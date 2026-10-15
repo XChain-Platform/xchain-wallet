@@ -12,6 +12,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { useState } from 'react';
 import { FeeSelector } from '../../../packages/core/src/ui/FeeSelector.jsx';
+import { FormPage } from '../../../packages/core/src/ui/FormPage.jsx';
 
 const estimate = (rateValue, coinAmount, etaMinutes) => ({
     rateValue,
@@ -186,5 +187,18 @@ describe('FeeSelector', () => {
         fireEvent.change(customInput, { target: { value: '7.5' } });
         expect(customInput.value).toBe('7.5');
         expect(screen.getByText(/Custom fees remain available/)).toBeTruthy();
+    });
+
+    it('raises the fallback note at the top of the form it sits in', () => {
+        const { container } = render(
+            <FormPage actions={<button type="submit">Go</button>}>
+                <ControlledSelector tiers={fallbackTiers} initialValue={{ mode: 'normal' }} />
+            </FormPage>,
+        );
+
+        const note = screen.getByText(/Using safe default rates/);
+        const form = container.querySelector('form');
+        expect(form.firstElementChild).toContainElement(note);
+        expect(note.closest('[role="status"]')).toBeTruthy();
     });
 });

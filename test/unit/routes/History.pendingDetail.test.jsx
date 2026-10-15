@@ -249,6 +249,19 @@ describe('History pending detail branch', () => {
         expect(within(panelIn(region)).getByText(/record of the send\./)).toBeTruthy();
     });
 
+    it('swaps an explorer favicon that fails to load for the explorer initial', async () => {
+        const { view } = mountHistory({ mempool: [mempoolRow()] });
+        const region = await openRow(view, 'seen');
+        const favicons = Array.from(region.querySelectorAll('img[class*="detailActionFavicon"]'));
+        expect(favicons.length).toBeGreaterThan(0);
+        const label = favicons[0].closest('a, button').textContent.trim().charAt(0);
+        fireEvent.error(favicons[0]);
+        expect(region.querySelectorAll('img[class*="detailActionFavicon"]').length)
+            .toBe(favicons.length - 1);
+        expect(within(region).getAllByText(label, { selector: 'span[class*="detailActionIcon"]' }).length)
+            .toBeGreaterThan(0);
+    });
+
     it('labels the action by direction only for plain transfers', () => {
         expect(detailActionLabel({ action: 'SEND' }, 'in')).toBe('Receive');
         expect(detailActionLabel({ action: 'SEND' }, 'out')).toBe('Send');
