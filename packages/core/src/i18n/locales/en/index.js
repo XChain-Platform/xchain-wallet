@@ -580,7 +580,7 @@ export const en = {
         "The network accepted your transaction. It's waiting for confirmation, which usually takes a few blocks. You can leave this screen.",
     'send.success.confirmedBody': 'Confirmed on the network.',
     'send.success.failedBody': 'The transaction failed.',
-    'send.contacts.refreshFailed': 'Could not refresh contacts. Saved addresses may be out of date.',
+    'send.contacts.refreshFailed': "Couldn't refresh contacts. Saved addresses may be out of date.",
     'send.success.viewOnExplorer': 'View in block explorer',
     'send.success.sendAnother': 'Send another',
     'send.fields.amount': 'Amount',
