@@ -23,6 +23,7 @@
 // provide one, so a shell can adopt the palette incrementally without
 // surfacing dead entries.
 
+import { t } from '../../i18n/index.js';
 import { Icon } from '../../ui/index.js';
 
 // Categories double as the Tab-cycle groups in the palette (§33.4). Order
@@ -44,6 +45,28 @@ export const COMMAND_CATEGORIES = /** @type {const} */ ([
     'Settings',
     'Help',
 ]);
+
+// Category names double as identity (Tab-cycle groups, the Recent bucket), so
+// they stay English in data and are only localized for display.
+const CATEGORY_LABEL_KEYS = {
+    Suggested: 'palette.category.suggested',
+    Recent: 'ui.addressCombobox.recent',
+    Navigate: 'palette.category.navigate',
+    Tokens: 'home.tabs.tokens',
+    Create: 'palette.category.create',
+    Trade: 'palette.category.trade',
+    Sign: 'send.review.sign',
+    Contacts: 'components.contactsPickerScreen.contacts',
+    Sites: 'palette.category.sites',
+    Wallet: 'settings.thisWallet.wallet',
+    Settings: 'home.settings',
+    Help: 'palette.category.help',
+};
+
+export function categoryLabel(category) {
+    const key = CATEGORY_LABEL_KEYS[category];
+    return key ? t(key) : category;
+}
 
 // §33.3 free-form query grammar. Kept intentionally small: "send"/"pay",
 // a decimal amount, then a ticker. Anchored + whitespace-tolerant so a
@@ -110,8 +133,8 @@ export function parseFreeformCommands(rawQuery, ctx) {
         out.push({
             id: `freeform-send-${tick}-${amount}`,
             category: 'Suggested',
-            title: `Send ${amount} ${tick}`,
-            subtitle: 'Start a send with these details filled in',
+            title: t('uri.intent.sendAmount', { amount, tick }),
+            subtitle: t('palette.freeformSend.subtitle'),
             keywords: ['send', 'pay'],
             Icon: Icon.SendIcon,
             run: () => ctx.composeSend({ amount, tick }),
@@ -126,8 +149,8 @@ export function parseFreeformCommands(rawQuery, ctx) {
         out.push({
             id: 'freeform-history-search',
             category: 'Suggested',
-            title: `Search history for "${query}"`,
-            subtitle: 'Open History filtered to this query',
+            title: t('palette.freeformHistory.title', { query }),
+            subtitle: t('palette.freeformHistory.subtitle'),
             keywords: ['history', 'transaction', 'txid'],
             Icon: Icon.HistoryIcon,
             run: () => ctx.searchHistory(query),
@@ -173,14 +196,14 @@ export function buildCommands(ctx) {
 
     // ---- Navigate: primary surfaces (mirror LeftNav) --------------------
     list.push(
-        { id: 'nav-home', category: 'Navigate', title: 'Home', subtitle: 'Balances and portfolio', keywords: ['balances', 'portfolio', 'tokens', 'overview'], Icon: Icon.HomeIcon, run: go('home') },
-        { id: 'nav-history', category: 'Navigate', title: 'History', subtitle: 'Transaction timeline', keywords: ['transactions', 'activity', 'timeline'], Icon: Icon.HistoryIcon, run: go('history') },
+        { id: 'nav-home', category: 'Navigate', title: t('home.title'), subtitle: t('palette.navHome.subtitle'), keywords: ['balances', 'portfolio', 'tokens', 'overview'], Icon: Icon.HomeIcon, run: go('home') },
+        { id: 'nav-history', category: 'Navigate', title: t('history.title'), subtitle: t('palette.navHistory.subtitle'), keywords: ['transactions', 'activity', 'timeline'], Icon: Icon.HistoryIcon, run: go('history') },
         // The palette reaches every route by name, so gating the nav
         // rails alone would leave Send one Cmd-K away from a wallet whose
         // Wallet Mode screen says the screen is hidden. Signer mode drops both.
         ...(ctx.isSignerMode ? [] : [
-            { id: 'nav-send', category: 'Navigate', title: 'Send', subtitle: 'Send a coin or token', keywords: ['pay', 'transfer', 'spend'], Icon: Icon.SendIcon, run: go('send') },
-            { id: 'nav-receive', category: 'Navigate', title: 'Receive', subtitle: 'Show a receive address', keywords: ['address', 'deposit', 'qr'], Icon: Icon.ReceiveIcon, run: go('receive') },
+            { id: 'nav-send', category: 'Navigate', title: t('send.title'), subtitle: t('palette.navSend.subtitle'), keywords: ['pay', 'transfer', 'spend'], Icon: Icon.SendIcon, run: go('send') },
+            { id: 'nav-receive', category: 'Navigate', title: t('home.receive'), subtitle: t('palette.navReceive.subtitle'), keywords: ['address', 'deposit', 'qr'], Icon: Icon.ReceiveIcon, run: go('receive') },
         ]),
         // The DEX rows are gated on the surface EXISTING in this build,
         // not on anything about the wallet: a build that hides the DEX compiles
@@ -189,24 +212,24 @@ export function buildCommands(ctx) {
         // Spread in place rather than pushed later, so the display order every
         // other build has stays exactly as it was.
         ...(hasDex ? [
-            { id: 'nav-markets', category: 'Navigate', title: 'Open DEX', subtitle: 'Markets and orders', keywords: ['dex', 'market', 'trade', 'exchange', 'orderbook'], Icon: Icon.MarketIcon, run: go('markets') },
-            { id: 'nav-marketplace', category: 'Navigate', title: 'Marketplace', subtitle: 'Dispensers and exchange activity', keywords: ['market', 'activity', 'dispenser', 'orders', 'swaps'], Icon: Icon.LineChartIcon, run: go('market-activity') },
-            { id: 'nav-my-orders', category: 'Navigate', title: 'My orders', subtitle: 'Your open DEX orders', keywords: ['orders', 'open', 'dex', 'cancel', 'edit'], Icon: Icon.MarketIcon, run: go('my-orders') },
-            { id: 'nav-my-swaps', category: 'Navigate', title: 'My swaps', subtitle: 'Your open swaps', keywords: ['swaps', 'open', 'atomic', 'cancel', 'edit'], Icon: Icon.SwapIcon, run: go('my-swaps') },
+            { id: 'nav-markets', category: 'Navigate', title: t('palette.navMarkets.title'), subtitle: t('palette.navMarkets.subtitle'), keywords: ['dex', 'market', 'trade', 'exchange', 'orderbook'], Icon: Icon.MarketIcon, run: go('markets') },
+            { id: 'nav-marketplace', category: 'Navigate', title: t('nav.marketplace'), subtitle: t('palette.navMarketplace.subtitle'), keywords: ['market', 'activity', 'dispenser', 'orders', 'swaps'], Icon: Icon.LineChartIcon, run: go('market-activity') },
+            { id: 'nav-my-orders', category: 'Navigate', title: t('palette.navMyOrders.title'), subtitle: t('palette.navMyOrders.subtitle'), keywords: ['orders', 'open', 'dex', 'cancel', 'edit'], Icon: Icon.MarketIcon, run: go('my-orders') },
+            { id: 'nav-my-swaps', category: 'Navigate', title: t('palette.navMySwaps.title'), subtitle: t('palette.navMySwaps.subtitle'), keywords: ['swaps', 'open', 'atomic', 'cancel', 'edit'], Icon: Icon.SwapIcon, run: go('my-swaps') },
         ] : []),
-        { id: 'nav-dispensers', category: 'Navigate', title: 'Dispensers', subtitle: 'Your dispensers', keywords: ['vending', 'sell'], Icon: Icon.DollarIcon, run: go('dispensers-list') },
+        { id: 'nav-dispensers', category: 'Navigate', title: t('routes.addressList.dispensers'), subtitle: t('palette.navDispensers.subtitle'), keywords: ['vending', 'sell'], Icon: Icon.DollarIcon, run: go('dispensers-list') },
         // The buyer's side. 'Dispensers' above lists the ones this wallet
         // opened; a buyer with no link in hand needs the search, which was
         // reachable only through the Token Actions catalogue.
-        { id: 'nav-browse-dispensers', category: 'Navigate', title: 'Browse dispensers', subtitle: 'Find open dispensers by token or address', keywords: ['browse', 'dispenser', 'buy', 'search', 'vending', 'shop'], Icon: Icon.DollarIcon, run: go('dispenser-explorer') },
-        { id: 'nav-my-tokens', category: 'Navigate', title: 'My tokens', subtitle: 'Tokens you own', keywords: ['issued', 'owned', 'assets', 'manage'], Icon: Icon.TokenIcon, run: go('my-tokens') },
-        { id: 'nav-messaging', category: 'Navigate', title: 'Messaging', subtitle: 'Encrypted inbox', keywords: ['inbox', 'messages', 'chat'], Icon: Icon.MessageIcon, run: go('messaging') },
-        { id: 'nav-addresses', category: 'Navigate', title: 'Addresses', subtitle: 'Manage your addresses', keywords: ['accounts', 'keys'], Icon: Icon.AddressIcon, run: go('addresses') },
-        { id: 'nav-lists', category: 'Navigate', title: 'My lists', subtitle: 'Address and token lists', keywords: ['list', 'roster', 'allowlist', 'blocklist'], Icon: Icon.TokenListIcon, run: go('lists') },
+        { id: 'nav-browse-dispensers', category: 'Navigate', title: t('palette.navBrowseDispensers.title'), subtitle: t('palette.navBrowseDispensers.subtitle'), keywords: ['browse', 'dispenser', 'buy', 'search', 'vending', 'shop'], Icon: Icon.DollarIcon, run: go('dispenser-explorer') },
+        { id: 'nav-my-tokens', category: 'Navigate', title: t('palette.navMyTokens.title'), subtitle: t('palette.navMyTokens.subtitle'), keywords: ['issued', 'owned', 'assets', 'manage'], Icon: Icon.TokenIcon, run: go('my-tokens') },
+        { id: 'nav-messaging', category: 'Navigate', title: t('home.messaging'), subtitle: t('palette.navMessaging.subtitle'), keywords: ['inbox', 'messages', 'chat'], Icon: Icon.MessageIcon, run: go('messaging') },
+        { id: 'nav-addresses', category: 'Navigate', title: t('home.addresses'), subtitle: t('palette.navAddresses.subtitle'), keywords: ['accounts', 'keys'], Icon: Icon.AddressIcon, run: go('addresses') },
+        { id: 'nav-lists', category: 'Navigate', title: t('palette.navLists.title'), subtitle: t('palette.navLists.subtitle'), keywords: ['list', 'roster', 'allowlist', 'blocklist'], Icon: Icon.TokenListIcon, run: go('lists') },
         // Plain-language subtitle, opcode in `keywords` only: 'coinpay' still
         // matches in search, and no palette row renders a raw protocol verb.
-        { id: 'nav-obligations', category: 'Navigate', title: 'Payments due', subtitle: 'Coin payments you still owe', keywords: ['coinpay', 'obligation', 'pay', 'due', 'match', 'deadline'], Icon: Icon.ClockIcon, run: go('obligations') },
-        { id: 'nav-actions', category: 'Navigate', title: 'All actions', subtitle: 'Every action form', keywords: ['more', 'menu', 'catalogue'], Icon: Icon.MoreIcon, run: go('actions') },
+        { id: 'nav-obligations', category: 'Navigate', title: t('nav.paymentsDue'), subtitle: t('palette.navObligations.subtitle'), keywords: ['coinpay', 'obligation', 'pay', 'due', 'match', 'deadline'], Icon: Icon.ClockIcon, run: go('obligations') },
+        { id: 'nav-actions', category: 'Navigate', title: t('palette.navActions.title'), subtitle: t('palette.navActions.subtitle'), keywords: ['more', 'menu', 'catalogue'], Icon: Icon.MoreIcon, run: go('actions') },
     );
     // Contracts follow the VM gate (every chain whose descriptor advertises
     // DEPLOY: BTC, LTC and DOGE today), the same gate Home's Contracts entry
@@ -214,19 +237,19 @@ export function buildCommands(ctx) {
     // A shell that has not wired hasVmAddress yet falls back to the older
     // BTC gate rather than hiding the surface. Staking stays BTC-only.
     if (ctx.hasVmAddress ?? ctx.hasBtcAddress) {
-        list.push({ id: 'nav-contracts', category: 'Navigate', title: 'Contracts', subtitle: 'Smart contracts', keywords: ['vm', 'deploy', 'execute'], Icon: Icon.ContractIcon, run: go('contracts-list') });
+        list.push({ id: 'nav-contracts', category: 'Navigate', title: t('home.contracts'), subtitle: t('palette.navContracts.subtitle'), keywords: ['vm', 'deploy', 'execute'], Icon: Icon.ContractIcon, run: go('contracts-list') });
     }
     if (ctx.hasBtcAddress) {
-        list.push({ id: 'nav-staking', category: 'Navigate', title: 'Staking', subtitle: 'Your staking positions', keywords: ['stake', 'validator', 'rewards'], Icon: Icon.StakeIcon, run: go('staking-dashboard') });
+        list.push({ id: 'nav-staking', category: 'Navigate', title: t('home.staking'), subtitle: t('palette.navStaking.subtitle'), keywords: ['stake', 'validator', 'rewards'], Icon: Icon.StakeIcon, run: go('staking-dashboard') });
         // Multisig is Bitcoin-only (§10.3), so it shares the staking gate. The
         // actions menu already listed both; the palette found neither.
         list.push(
-            { id: 'nav-multisig-create', category: 'Navigate', title: 'Create multisig', subtitle: 'Shared wallet that needs several approvals', keywords: ['multisig', 'cosigner', 'shared', 'xpub', 'fingerprint', 'n-of-m'], Icon: Icon.UsersIcon, run: go('multisig-create') },
-            { id: 'nav-multisig-sign', category: 'Navigate', title: 'Multisig signing', subtitle: 'Add your approval to a shared-wallet payment', keywords: ['multisig', 'cosigner', 'approve', 'psbt'], Icon: Icon.SignIcon, run: go('multisig-sign') },
+            { id: 'nav-multisig-create', category: 'Navigate', title: t('palette.navMultisigCreate.title'), subtitle: t('palette.navMultisigCreate.subtitle'), keywords: ['multisig', 'cosigner', 'shared', 'xpub', 'fingerprint', 'n-of-m'], Icon: Icon.UsersIcon, run: go('multisig-create') },
+            { id: 'nav-multisig-sign', category: 'Navigate', title: t('palette.navMultisigSign.title'), subtitle: t('palette.navMultisigSign.subtitle'), keywords: ['multisig', 'cosigner', 'approve', 'psbt'], Icon: Icon.SignIcon, run: go('multisig-sign') },
         );
     }
     if (ctx.hasGovernanceAddress) {
-        list.push({ id: 'nav-governance', category: 'Navigate', title: 'Governance', subtitle: 'Polls and voting', keywords: ['vote', 'poll', 'proposal'], Icon: Icon.HandshakeIcon, run: go('governance-polls') });
+        list.push({ id: 'nav-governance', category: 'Navigate', title: t('governance.title'), subtitle: t('palette.navGovernance.subtitle'), keywords: ['vote', 'poll', 'proposal'], Icon: Icon.HandshakeIcon, run: go('governance-polls') });
     }
     // Betting, on the DEX pattern: the browse hub plus the two views a user comes
     // back to rather than browses to. Ungated like the actions-menu entry it
@@ -234,25 +257,25 @@ export function buildCommands(ctx) {
     // supports BET; gating here would make the destination silently unfindable
     // instead of explaining itself.
     list.push(
-        { id: 'nav-betting', category: 'Navigate', title: 'Betting', subtitle: 'Browse betting markets', keywords: ['bet', 'market', 'odds', 'wager', 'oracle', 'parimutuel'], Icon: Icon.DollarIcon, run: go('bet-markets') },
-        { id: 'nav-my-bets', category: 'Navigate', title: 'My bets', subtitle: 'Bets you have placed', keywords: ['bet', 'stake', 'wager', 'payout', 'winnings'], Icon: Icon.DollarIcon, run: go('my-bets') },
-        { id: 'nav-bet-oracle-console', category: 'Navigate', title: 'My markets', subtitle: 'Markets you run as oracle: publish a result or cancel', keywords: ['bet', 'oracle', 'resolve', 'market', 'settle', 'publish'], Icon: Icon.DollarIcon, run: go('bet-oracle-console') },
+        { id: 'nav-betting', category: 'Navigate', title: t('palette.navBetting.title'), subtitle: t('palette.navBetting.subtitle'), keywords: ['bet', 'market', 'odds', 'wager', 'oracle', 'parimutuel'], Icon: Icon.DollarIcon, run: go('bet-markets') },
+        { id: 'nav-my-bets', category: 'Navigate', title: t('palette.navMyBets.title'), subtitle: t('palette.navMyBets.subtitle'), keywords: ['bet', 'stake', 'wager', 'payout', 'winnings'], Icon: Icon.DollarIcon, run: go('my-bets') },
+        { id: 'nav-bet-oracle-console', category: 'Navigate', title: t('palette.navBetOracleConsole.title'), subtitle: t('palette.navBetOracleConsole.subtitle'), keywords: ['bet', 'oracle', 'resolve', 'market', 'settle', 'publish'], Icon: Icon.DollarIcon, run: go('bet-oracle-console') },
     );
 
     // ---- Create: authoring forms that open free-entry (no ref needed) ---
     list.push(
-        { id: 'create-token', category: 'Create', title: 'Create a token', subtitle: 'Guided issuance wizard', keywords: ['issue', 'new token', 'mint', 'launch'], Icon: Icon.PlusIcon, run: go('wizard') },
-        { id: 'create-issue', category: 'Create', title: 'Issue token', subtitle: 'Issue a token directly', keywords: ['issue'], Icon: Icon.TokenIcon, run: go('issue') },
-        { id: 'create-mint', category: 'Create', title: 'Mint supply', subtitle: 'Add to an existing token', keywords: ['mint', 'supply'], Icon: Icon.PlusIcon, run: go('mint') },
-        { id: 'create-destroy', category: 'Create', title: 'Destroy tokens', subtitle: 'Burn supply', keywords: ['burn', 'destroy'], Icon: Icon.TrashIcon, run: go('destroy') },
-        { id: 'create-sweep', category: 'Create', title: 'Sweep address', subtitle: 'Move balances, ownerships, and escrow to one destination', keywords: ['sweep', 'migrate', 'move', 'consolidate'], Icon: Icon.SendIcon, run: go('sweep') },
-        { id: 'create-broadcast', category: 'Create', title: 'Broadcast a message', subtitle: 'Post a message on-chain', keywords: ['broadcast', 'announce'], Icon: Icon.BroadcastIcon, run: go('broadcast') },
-        { id: 'create-oracle-price', category: 'Create', title: 'Publish oracle price', subtitle: 'Price a token in a currency so dispensers can sell at that rate', keywords: ['oracle', 'price', 'fiat', 'quote', 'feed'], Icon: Icon.DollarIcon, run: go('oracle') },
-        { id: 'create-dispenser', category: 'Create', title: 'Create dispenser', subtitle: 'Sell a token at a fixed rate', keywords: ['dispenser', 'vending', 'sell'], Icon: Icon.DollarIcon, run: go('dispenser') },
-        { id: 'create-dividend', category: 'Create', title: 'Pay a dividend', subtitle: 'Distribute to holders', keywords: ['dividend', 'distribute'], Icon: Icon.DollarIcon, run: go('dividend') },
-        { id: 'create-airdrop', category: 'Create', title: 'Airdrop', subtitle: 'Send to many recipients', keywords: ['airdrop', 'distribute', 'bulk'], Icon: Icon.SendIcon, run: go('airdrop') },
-        { id: 'create-list', category: 'Create', title: 'Create a list', subtitle: 'Publish an address or token list', keywords: ['list', 'roster', 'allowlist'], Icon: Icon.TokenListIcon, run: go('list-create') },
-        { id: 'create-publish-file', category: 'Create', title: 'Publish file', subtitle: 'Public or token-gated on-chain file', keywords: ['file', 'upload', 'publish', 'gated', 'encrypted', 'content'], Icon: Icon.UploadIcon, run: go('publish-file') },
+        { id: 'create-token', category: 'Create', title: t('palette.createToken.title'), subtitle: t('palette.createToken.subtitle'), keywords: ['issue', 'new token', 'mint', 'launch'], Icon: Icon.PlusIcon, run: go('wizard') },
+        { id: 'create-issue', category: 'Create', title: t('issue.title'), subtitle: t('palette.createIssue.subtitle'), keywords: ['issue'], Icon: Icon.TokenIcon, run: go('issue') },
+        { id: 'create-mint', category: 'Create', title: t('palette.createMint.title'), subtitle: t('palette.createMint.subtitle'), keywords: ['mint', 'supply'], Icon: Icon.PlusIcon, run: go('mint') },
+        { id: 'create-destroy', category: 'Create', title: t('palette.createDestroy.title'), subtitle: t('palette.createDestroy.subtitle'), keywords: ['burn', 'destroy'], Icon: Icon.TrashIcon, run: go('destroy') },
+        { id: 'create-sweep', category: 'Create', title: t('palette.createSweep.title'), subtitle: t('palette.createSweep.subtitle'), keywords: ['sweep', 'migrate', 'move', 'consolidate'], Icon: Icon.SendIcon, run: go('sweep') },
+        { id: 'create-broadcast', category: 'Create', title: t('palette.createBroadcast.title'), subtitle: t('palette.createBroadcast.subtitle'), keywords: ['broadcast', 'announce'], Icon: Icon.BroadcastIcon, run: go('broadcast') },
+        { id: 'create-oracle-price', category: 'Create', title: t('palette.createOraclePrice.title'), subtitle: t('palette.createOraclePrice.subtitle'), keywords: ['oracle', 'price', 'fiat', 'quote', 'feed'], Icon: Icon.DollarIcon, run: go('oracle') },
+        { id: 'create-dispenser', category: 'Create', title: t('palette.createDispenser.title'), subtitle: t('palette.createDispenser.subtitle'), keywords: ['dispenser', 'vending', 'sell'], Icon: Icon.DollarIcon, run: go('dispenser') },
+        { id: 'create-dividend', category: 'Create', title: t('palette.createDividend.title'), subtitle: t('palette.createDividend.subtitle'), keywords: ['dividend', 'distribute'], Icon: Icon.DollarIcon, run: go('dividend') },
+        { id: 'create-airdrop', category: 'Create', title: t('palette.createAirdrop.title'), subtitle: t('palette.createAirdrop.subtitle'), keywords: ['airdrop', 'distribute', 'bulk'], Icon: Icon.SendIcon, run: go('airdrop') },
+        { id: 'create-list', category: 'Create', title: t('palette.createList.title'), subtitle: t('palette.createList.subtitle'), keywords: ['list', 'roster', 'allowlist'], Icon: Icon.TokenListIcon, run: go('list-create') },
+        { id: 'create-publish-file', category: 'Create', title: t('palette.createPublishFile.title'), subtitle: t('palette.createPublishFile.subtitle'), keywords: ['file', 'upload', 'publish', 'gated', 'encrypted', 'content'], Icon: Icon.UploadIcon, run: go('publish-file') },
         // D-153: the ADDRESS-scoped half of the controller form (ADDRESS v1 -
         // a self-imposed gate on this address's own transfers, and the
         // recipient-side gate on what it will accept) had NO entry point at
@@ -260,7 +283,7 @@ export function buildCommands(ctx) {
         // wallet that had never issued a token could not reach it from any
         // screen. Titled for the address subject, since the token subject is
         // already reachable from the token it belongs to.
-        { id: 'create-controller-bind', category: 'Create', title: 'Bind a controller', subtitle: 'Route this address\'s actions through a guard contract', keywords: ['controller', 'guard', 'bind', 'policy', 'gate', 'compliance', 'royalty'], Icon: Icon.LockIcon, run: go('controller-bind') },
+        { id: 'create-controller-bind', category: 'Create', title: t('palette.createControllerBind.title'), subtitle: t('palette.createControllerBind.subtitle'), keywords: ['controller', 'guard', 'bind', 'policy', 'gate', 'compliance', 'royalty'], Icon: Icon.LockIcon, run: go('controller-bind') },
         // The two bridge surfaces. Authoring forms that open free-entry, like
         // their neighbours here: the move form picks its own leg from the
         // chain it is on, and the settings form carries the same token picker
@@ -269,9 +292,9 @@ export function buildCommands(ctx) {
         // and both forms report for themselves when a chain or a token cannot
         // bridge. Filed under Create rather than Trade because a bridge move
         // is not a trade; nobody is on the other side of it.
-        { id: 'create-bridge-move', category: 'Create', title: 'Move a token across chains', subtitle: 'Send a token to another chain and take the credit there', keywords: ['bridge', 'cross chain', 'move', 'chain', 'xbridge', 'migrate', 'port'], Icon: Icon.LinkIcon, run: go('bridge-move') },
-        { id: 'create-bridge-settings', category: 'Create', title: 'Bridge settings', subtitle: 'Choose which chains a token you issued can move to', keywords: ['bridge', 'chains', 'issuer', 'depth', 'confirmations', 'freeze', 'xbridge'], Icon: Icon.LinkIcon, run: go('bridge-settings') },
-        { id: 'create-advanced', category: 'Create', title: 'Advanced action', subtitle: 'Author any action by hand', keywords: ['advanced', 'raw', 'expert'], Icon: Icon.GearIcon, run: go('advanced') },
+        { id: 'create-bridge-move', category: 'Create', title: t('palette.createBridgeMove.title'), subtitle: t('palette.createBridgeMove.subtitle'), keywords: ['bridge', 'cross chain', 'move', 'chain', 'xbridge', 'migrate', 'port'], Icon: Icon.LinkIcon, run: go('bridge-move') },
+        { id: 'create-bridge-settings', category: 'Create', title: t('palette.createBridgeSettings.title'), subtitle: t('palette.createBridgeSettings.subtitle'), keywords: ['bridge', 'chains', 'issuer', 'depth', 'confirmations', 'freeze', 'xbridge'], Icon: Icon.LinkIcon, run: go('bridge-settings') },
+        { id: 'create-advanced', category: 'Create', title: t('palette.createAdvanced.title'), subtitle: t('palette.createAdvanced.subtitle'), keywords: ['advanced', 'raw', 'expert'], Icon: Icon.GearIcon, run: go('advanced') },
     );
 
     // ---- Trade: DEX / cross-chain flows ---------------------------------
@@ -281,50 +304,50 @@ export function buildCommands(ctx) {
     // parallel composer, which every build has.
     list.push(
         ...(hasDex ? [
-            { id: 'trade-swap', category: 'Trade', title: 'Swap', subtitle: 'Trade one token for another, all or nothing', keywords: ['swap', 'order', 'exchange'], Icon: Icon.SwapIcon, run: go('swap') },
-            { id: 'trade-order', category: 'Trade', title: 'Create order', subtitle: 'Trade at the price you set', keywords: ['order', 'limit', 'dex', 'sell', 'buy', 'native'], Icon: Icon.MarketIcon, run: go('create-order') },
+            { id: 'trade-swap', category: 'Trade', title: t('palette.tradeSwap.title'), subtitle: t('palette.tradeSwap.subtitle'), keywords: ['swap', 'order', 'exchange'], Icon: Icon.SwapIcon, run: go('swap') },
+            { id: 'trade-order', category: 'Trade', title: t('palette.tradeOrder.title'), subtitle: t('palette.tradeOrder.subtitle'), keywords: ['order', 'limit', 'dex', 'sell', 'buy', 'native'], Icon: Icon.MarketIcon, run: go('create-order') },
         ] : []),
-        { id: 'trade-coinpay', category: 'Trade', title: 'Pay an order', subtitle: 'Settle a matched order', keywords: ['coinpay', 'pay', 'settle'], Icon: Icon.DollarIcon, run: go('coinpay') },
+        { id: 'trade-coinpay', category: 'Trade', title: t('palette.tradeCoinpay.title'), subtitle: t('palette.tradeCoinpay.subtitle'), keywords: ['coinpay', 'pay', 'settle'], Icon: Icon.DollarIcon, run: go('coinpay') },
         ...(hasDex ? [
-            { id: 'trade-xchain-swap', category: 'Trade', title: 'Cross-chain swap', subtitle: 'Swap across chains', keywords: ['cross chain', 'bridge', 'atomic'], Icon: Icon.LinkIcon, run: go('cross-chain-swap') },
-            { id: 'trade-xchain-order', category: 'Trade', title: 'Cross-chain order', subtitle: 'Limit order across chains', keywords: ['cross chain', 'order', 'limit', 'federation', 'partial'], Icon: Icon.LinkIcon, run: go('cross-chain-order') },
+            { id: 'trade-xchain-swap', category: 'Trade', title: t('palette.tradeXchainSwap.title'), subtitle: t('palette.tradeXchainSwap.subtitle'), keywords: ['cross chain', 'bridge', 'atomic'], Icon: Icon.LinkIcon, run: go('cross-chain-swap') },
+            { id: 'trade-xchain-order', category: 'Trade', title: t('palette.tradeXchainOrder.title'), subtitle: t('palette.tradeXchainOrder.subtitle'), keywords: ['cross chain', 'order', 'limit', 'federation', 'partial'], Icon: Icon.LinkIcon, run: go('cross-chain-order') },
         ] : []),
-        { id: 'trade-xchain-templates', category: 'Trade', title: 'Cross-chain templates', subtitle: 'Prebuilt cross-chain flows', keywords: ['cross chain', 'templates', 'parallel'], Icon: Icon.LinkIcon, run: go('cross-chain-templates') },
+        { id: 'trade-xchain-templates', category: 'Trade', title: t('palette.tradeXchainTemplates.title'), subtitle: t('palette.tradeXchainTemplates.subtitle'), keywords: ['cross chain', 'templates', 'parallel'], Icon: Icon.LinkIcon, run: go('cross-chain-templates') },
     );
 
     // ---- Sign: message / signature / PSBT -------------------------------
     list.push(
-        { id: 'sign-message', category: 'Sign', title: 'Sign a message', subtitle: 'Prove address ownership', keywords: ['sign', 'message', 'attest'], Icon: Icon.SignIcon, run: go('sign-message') },
-        { id: 'sign-verify', category: 'Sign', title: 'Verify a signature', subtitle: 'Check a signed message', keywords: ['verify', 'signature', 'check'], Icon: Icon.VerifyIcon, run: go('verify-signature') },
-        { id: 'sign-psbt', category: 'Sign', title: 'Sign a transaction', subtitle: 'Sign a partially-signed transaction', keywords: ['psbt', 'sign', 'watcher', 'air-gapped'], Icon: Icon.SignIcon, run: go('sign-psbt') },
+        { id: 'sign-message', category: 'Sign', title: t('home.signer.signMessage'), subtitle: t('palette.signMessage.subtitle'), keywords: ['sign', 'message', 'attest'], Icon: Icon.SignIcon, run: go('sign-message') },
+        { id: 'sign-verify', category: 'Sign', title: t('home.signer.verifySignature'), subtitle: t('palette.signVerify.subtitle'), keywords: ['verify', 'signature', 'check'], Icon: Icon.VerifyIcon, run: go('verify-signature') },
+        { id: 'sign-psbt', category: 'Sign', title: t('home.signer.signTransaction'), subtitle: t('palette.signPsbt.subtitle'), keywords: ['psbt', 'sign', 'watcher', 'air-gapped'], Icon: Icon.SignIcon, run: go('sign-psbt') },
     );
 
     // ---- Contacts -------------------------------------------------------
     list.push(
-        { id: 'nav-contacts', category: 'Contacts', title: 'Contacts', subtitle: 'Your saved addresses', keywords: ['address book', 'people'], Icon: Icon.UsersIcon, run: go('contacts') },
+        { id: 'nav-contacts', category: 'Contacts', title: t('components.contactsPickerScreen.contacts'), subtitle: t('palette.navContacts.subtitle'), keywords: ['address book', 'people'], Icon: Icon.UsersIcon, run: go('contacts') },
     );
 
     // ---- Wallet verbs (only when the shell wires the handler) -----------
     if (typeof ctx.scan === 'function') {
-        list.push({ id: 'wallet-scan', category: 'Wallet', title: 'Scan a QR code', subtitle: 'Open the camera scanner', keywords: ['qr', 'camera', 'scan'], Icon: Icon.ScanIcon, run: () => ctx.scan() });
+        list.push({ id: 'wallet-scan', category: 'Wallet', title: t('scan.scannerAlt'), subtitle: t('palette.walletScan.subtitle'), keywords: ['qr', 'camera', 'scan'], Icon: Icon.ScanIcon, run: () => ctx.scan() });
     }
     if (typeof ctx.refresh === 'function') {
-        list.push({ id: 'wallet-refresh', category: 'Wallet', title: 'Refresh', subtitle: 'Reload balances and status', keywords: ['reload', 'sync', 'update'], Icon: Icon.RefreshIcon, run: () => ctx.refresh() });
+        list.push({ id: 'wallet-refresh', category: 'Wallet', title: t('components.tradeHistoryPanel.refresh'), subtitle: t('palette.walletRefresh.subtitle'), keywords: ['reload', 'sync', 'update'], Icon: Icon.RefreshIcon, run: () => ctx.refresh() });
     }
     if (typeof ctx.switchWallet === 'function') {
-        list.push({ id: 'wallet-switch', category: 'Wallet', title: 'Switch wallet', subtitle: 'Choose another wallet', keywords: ['wallet', 'account', 'change'], Icon: Icon.UsersIcon, run: () => ctx.switchWallet() });
+        list.push({ id: 'wallet-switch', category: 'Wallet', title: t('components.bottomTabBar.switchWallet'), subtitle: t('palette.walletSwitch.subtitle'), keywords: ['wallet', 'account', 'change'], Icon: Icon.UsersIcon, run: () => ctx.switchWallet() });
     }
     if (typeof ctx.lock === 'function') {
-        list.push({ id: 'wallet-lock', category: 'Wallet', title: 'Lock wallet', subtitle: 'Lock and require the password', keywords: ['lock', 'logout', 'secure'], Icon: Icon.LockIcon, run: () => ctx.lock() });
+        list.push({ id: 'wallet-lock', category: 'Wallet', title: t('home.lockWallet'), subtitle: t('palette.walletLock.subtitle'), keywords: ['lock', 'logout', 'secure'], Icon: Icon.LockIcon, run: () => ctx.lock() });
     }
     if (typeof ctx.openHelp === 'function') {
-        list.push({ id: 'help-shortcuts', category: 'Wallet', title: 'Keyboard shortcuts', subtitle: 'Show the shortcut cheatsheet', keywords: ['keys', 'hotkeys', 'help', 'cheatsheet', 'shortcuts'], Icon: Icon.InfoIcon, run: () => ctx.openHelp() });
+        list.push({ id: 'help-shortcuts', category: 'Wallet', title: t('keyboard.shortcutHelp.keyboardShortcuts'), subtitle: t('palette.helpShortcuts.subtitle'), keywords: ['keys', 'hotkeys', 'help', 'cheatsheet', 'shortcuts'], Icon: Icon.InfoIcon, run: () => ctx.openHelp() });
     }
 
     // ---- Settings -------------------------------------------------------
     list.push(
-        { id: 'nav-settings', category: 'Settings', title: 'Settings', subtitle: 'Open settings', keywords: ['preferences', 'options', 'config'], Icon: Icon.GearIcon, run: go('settings') },
-        { id: 'nav-connected-sites', category: 'Settings', title: 'Connected sites', subtitle: 'dApp permissions', keywords: ['dapps', 'permissions', 'connections'], Icon: Icon.LinkIcon, run: go('connected-sites') },
+        { id: 'nav-settings', category: 'Settings', title: t('home.settings'), subtitle: t('components.totalBalanceHero.openSettings'), keywords: ['preferences', 'options', 'config'], Icon: Icon.GearIcon, run: go('settings') },
+        { id: 'nav-connected-sites', category: 'Settings', title: t('settings.connectedSites.connectedSites'), subtitle: t('palette.navConnectedSites.subtitle'), keywords: ['dapps', 'permissions', 'connections'], Icon: Icon.LinkIcon, run: go('connected-sites') },
     );
 
     if (ctx.isDemoWallet) {
@@ -362,7 +385,7 @@ export function contactsToCommands(contacts, ctx) {
             id: `contact-${c.id}`,
             category: 'Contacts',
             title: name,
-            subtitle: 'Open in Contacts',
+            subtitle: t('palette.contact.subtitle'),
             keywords: ['contact', ...addresses],
             Icon: Icon.UserIcon,
             run: () => ctx.navigate('contacts'),
@@ -391,7 +414,7 @@ export function balancesToCommands(rows, ctx) {
             id: `token-${row.chainId}-${row.tick}`,
             category: 'Tokens',
             title: row.displayName || row.tick,
-            subtitle: row.chainDisplayName ? `${row.tick} on ${row.chainDisplayName}` : row.tick,
+            subtitle: row.chainDisplayName ? t('palette.token.subtitle', { tick: row.tick, chain: row.chainDisplayName }) : row.tick,
             keywords: ['token', row.tick, row.chainShort].filter(Boolean),
             Icon: Icon.TokenIcon,
             run: () => ctx.openToken(row),
@@ -420,7 +443,7 @@ export function sitesToCommands(sites, ctx) {
             id: `site-${site.id ?? site.origin}`,
             category: 'Sites',
             title: site.appName || site.origin,
-            subtitle: site.appName && site.origin ? `${site.origin} - manage permissions` : 'Manage permissions',
+            subtitle: site.appName && site.origin ? t('palette.site.subtitleWithOrigin', { origin: site.origin }) : t('palette.site.subtitle'),
             keywords: ['site', 'dapp', 'connected', site.origin].filter(Boolean),
             Icon: Icon.LinkIcon,
             run: () => ctx.openConnectedSites(),
@@ -434,22 +457,22 @@ export function sitesToCommands(sites, ctx) {
 // Sections whose visibility is conditional in Settings (accounts-addresses)
 // or that duplicate a dedicated palette entry (connected-sites) are omitted.
 const SETTINGS_SECTIONS = /** @type {const} */ ([
-    { id: 'this-wallet', title: 'This wallet', keywords: ['wallet', 'rename', 'remove'] },
-    { id: 'appearance', title: 'Appearance', keywords: ['theme', 'dark', 'light'] },
-    { id: 'display', title: 'Display', keywords: ['pinned', 'hidden', 'tokens'] },
-    { id: 'keyboard', title: 'Keyboard', keywords: ['shortcuts', 'rebind', 'keys', 'hotkeys'] },
-    { id: 'language-region', title: 'Language & region', keywords: ['language', 'currency', 'fiat'] },
-    { id: 'privacy', title: 'Privacy', keywords: ['tor', 'rotation', 'blur'] },
-    { id: 'safety', title: 'Safety', keywords: ['autolock', 'panic', 'undo'] },
-    { id: 'wallet-mode', title: 'Wallet mode', keywords: ['watcher', 'signer', 'air-gapped'] },
-    { id: 'backup', title: 'Backup', keywords: ['seed', 'phrase', 'restore', 'export'] },
-    { id: 'fees', title: 'Fees', keywords: ['fee', 'rbf', 'strategy'] },
-    { id: 'network', title: 'Network', keywords: ['mainnet', 'testnet', 'regtest'] },
-    { id: 'network-endpoints', title: 'Network & endpoints', keywords: ['explorer', 'encoder', 'hub', 'url'] },
-    { id: 'notifications', title: 'Notifications', keywords: ['alerts', 'notify'] },
-    { id: 'ads', title: 'Donations', keywords: ['donation', 'ads', 'support'] },
-    { id: 'developer', title: 'Developer', keywords: ['dev', 'debug', 'regtest'] },
-    { id: 'about', title: 'About', keywords: ['version', 'license'] },
+    { id: 'this-wallet', get title() { return t('settings.page.thisWallet'); }, keywords: ['wallet', 'rename', 'remove'] },
+    { id: 'appearance', get title() { return t('settings.page.appearance'); }, keywords: ['theme', 'dark', 'light'] },
+    { id: 'display', get title() { return t('settings.page.display'); }, keywords: ['pinned', 'hidden', 'tokens'] },
+    { id: 'keyboard', get title() { return t('settings.page.keyboard'); }, keywords: ['shortcuts', 'rebind', 'keys', 'hotkeys'] },
+    { id: 'language-region', get title() { return t('settings.page.languageRegion'); }, keywords: ['language', 'currency', 'fiat'] },
+    { id: 'privacy', get title() { return t('settings.page.privacy'); }, keywords: ['tor', 'rotation', 'blur'] },
+    { id: 'safety', get title() { return t('settings.page.safety'); }, keywords: ['autolock', 'panic', 'undo'] },
+    { id: 'wallet-mode', get title() { return t('settings.page.walletMode'); }, keywords: ['watcher', 'signer', 'air-gapped'] },
+    { id: 'backup', get title() { return t('settings.page.backup'); }, keywords: ['seed', 'phrase', 'restore', 'export'] },
+    { id: 'fees', get title() { return t('settings.page.fees'); }, keywords: ['fee', 'rbf', 'strategy'] },
+    { id: 'network', get title() { return t('settings.network.label'); }, keywords: ['mainnet', 'testnet', 'regtest'] },
+    { id: 'network-endpoints', get title() { return t('settings.page.networkEndpoints'); }, keywords: ['explorer', 'encoder', 'hub', 'url'] },
+    { id: 'notifications', get title() { return t('alerts.notificationsTitle'); }, keywords: ['alerts', 'notify'] },
+    { id: 'ads', get title() { return t('palette.settings.ads'); }, keywords: ['donation', 'ads', 'support'] },
+    { id: 'developer', get title() { return t('palette.settings.developer'); }, keywords: ['dev', 'debug', 'regtest'] },
+    { id: 'about', get title() { return t('routes.addressList.about'); }, keywords: ['version', 'license'] },
 ]);
 
 /**
@@ -465,8 +488,8 @@ export function settingsSectionsToCommands(ctx) {
     return SETTINGS_SECTIONS.map((s) => ({
         id: `settings-${s.id}`,
         category: 'Settings',
-        title: `Settings → ${s.title}`,
-        subtitle: 'Open this settings section',
+        title: t('palette.settingsSectionTitle', { section: s.title }),
+        subtitle: t('palette.settingsSectionSubtitle'),
         keywords: ['settings', ...s.keywords],
         Icon: Icon.GearIcon,
         run: () => ctx.openSettings(s.id),
@@ -487,13 +510,13 @@ export function helpToCommands(ctx) {
     const out = [];
     if (typeof ctx?.openSettings === 'function') {
         out.push(
-            { id: 'help-backup', category: 'Help', title: 'How do I back up my wallet?', subtitle: 'Opens Settings → Backup', keywords: ['help', 'backup', 'seed', 'recovery'], Icon: Icon.InfoIcon, run: () => ctx.openSettings('backup') },
-            { id: 'help-connect-dapp', category: 'Help', title: 'How do I manage connected sites?', subtitle: 'Opens Settings → Connected sites', keywords: ['help', 'dapp', 'connect', 'permissions'], Icon: Icon.InfoIcon, run: () => ctx.openSettings('connected-sites') },
-            { id: 'help-panic', category: 'Help', title: 'What is panic mode?', subtitle: 'Opens Settings → Safety', keywords: ['help', 'panic', 'emergency', 'lock'], Icon: Icon.InfoIcon, run: () => ctx.openSettings('safety') },
+            { id: 'help-backup', category: 'Help', title: t('palette.helpBackup.title'), subtitle: t('palette.helpBackup.subtitle'), keywords: ['help', 'backup', 'seed', 'recovery'], Icon: Icon.InfoIcon, run: () => ctx.openSettings('backup') },
+            { id: 'help-connect-dapp', category: 'Help', title: t('palette.helpConnectDapp.title'), subtitle: t('palette.helpConnectDapp.subtitle'), keywords: ['help', 'dapp', 'connect', 'permissions'], Icon: Icon.InfoIcon, run: () => ctx.openSettings('connected-sites') },
+            { id: 'help-panic', category: 'Help', title: t('palette.helpPanic.title'), subtitle: t('palette.helpPanic.subtitle'), keywords: ['help', 'panic', 'emergency', 'lock'], Icon: Icon.InfoIcon, run: () => ctx.openSettings('safety') },
         );
     }
     if (typeof ctx?.openHelp === 'function') {
-        out.push({ id: 'help-keys', category: 'Help', title: 'What keyboard shortcuts are there?', subtitle: 'Opens the shortcut cheatsheet', keywords: ['help', 'keys', 'hotkeys', 'shortcuts'], Icon: Icon.InfoIcon, run: () => ctx.openHelp() });
+        out.push({ id: 'help-keys', category: 'Help', title: t('palette.helpKeys.title'), subtitle: t('palette.helpKeys.subtitle'), keywords: ['help', 'keys', 'hotkeys', 'shortcuts'], Icon: Icon.InfoIcon, run: () => ctx.openHelp() });
     }
     return out;
 }
