@@ -570,13 +570,11 @@ const STACK = {
     display: 'flex',
     flexDirection: 'column',
     gap: 'var(--xc-space-2)',
-    marginBlockStart: 'var(--xc-space-3)',
 };
 
 const COPY = {
     color: 'var(--xc-text-muted)',
     fontSize: 'var(--xc-text-sm)',
-    marginBlockEnd: 'var(--xc-space-3)',
 };
 
 const CODE_BOX = {
@@ -601,5 +599,5 @@ const STEP_INDICATOR = {
     color: 'var(--xc-text-muted)',
     fontSize: 'var(--xc-text-xs)',
     fontWeight: 600,
-    margin: '0 0 var(--xc-space-2)',
+    margin: 0,
 };

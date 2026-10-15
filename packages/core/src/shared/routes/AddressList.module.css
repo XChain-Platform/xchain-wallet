@@ -88,7 +88,6 @@
     display: flex;
     width: 100%;
     height: var(--xc-control-h-md);
-    margin-bottom: var(--xc-space-3);
     border: 1px solid var(--xc-border-strong);
     border-radius: var(--xc-control-radius);
     overflow: hidden;
@@ -146,13 +145,6 @@
     width: 100%;
 }
 
-/* Picker-action rows (picker mode only): even space-2 breathing room on
-   both sides (pulling back part of the segmented toggle's space-3
-   margin above). */
-.pickerActionsList {
-    margin-top: calc(-1 * var(--xc-space-1));
-    margin-bottom: var(--xc-space-2);
-}
 
 /* Top line: optional label (left) + address-type bubble (right). */
 .addrTopRow {

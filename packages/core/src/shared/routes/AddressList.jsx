@@ -1507,7 +1507,7 @@ export function AddressList({
 
             {pickerMode && pickerActions.length > 0 ? (
                 /* The kit has no list container, so native list semantics group picker actions. */
-                <ul className={`${local.addrList} ${local.pickerActionsList}`} aria-label={t('routes.addressList.pickerOptions')}>
+                <ul className={local.addrList} aria-label={t('routes.addressList.pickerOptions')}>
                     {pickerActions.map((act) => (
                         <li key={act.key}>
                             <ListRow
