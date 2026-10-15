@@ -976,6 +976,9 @@ select:not([multiple]):not([size]):not(:disabled):not([aria-invalid='true']):hov
 }
 
 select:disabled {
+    background-color: var(--xc-control-disabled-bg);
+    border-color: var(--xc-control-disabled-border);
+    color: var(--xc-control-disabled-text);
     cursor: not-allowed;
 }
 
