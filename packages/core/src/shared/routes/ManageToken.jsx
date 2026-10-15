@@ -603,17 +603,15 @@ export function ManageToken({
                                 ) : null}
                             </span>
                         </div>
-                        <div className={styles.heroSub}>
-                            <span>{descriptor?.displayName || chainId}</span>
-                            {owner ? (
-                                <>
-                                    <span className={styles.heroDot}>·</span>
-                                    <span>{t('routes.manageToken.ownedBy')}</span>
-                                    <AddressText address={owner} className={styles.heroOwner} />
-                                    <CopyButton value={owner} ariaLabel={t('routes.manageToken.copyOwnerAddress')} />
-                                </>
-                            ) : null}
-                        </div>
+                        {/* No chain name here: the icon and its chain overlay
+                            carry the network (operator ruling). */}
+                        {owner ? (
+                            <div className={styles.heroSub}>
+                                <span>{t('routes.manageToken.ownedBy')}</span>
+                                <AddressText address={owner} className={styles.heroOwner} />
+                                <CopyButton value={owner} ariaLabel={t('routes.manageToken.copyOwnerAddress')} />
+                            </div>
+                        ) : null}
                         {description ? (
                             <p className={styles.heroDescription}>{description}</p>
                         ) : null}

@@ -147,7 +147,9 @@ export const FormPage = forwardRef(function FormPage(
                     {description != null ? <p className={styles.description}>{description}</p> : null}
                 </header>
             ) : null}
-            {children != null ? <div className={styles.body}>{children}</div> : null}
+            {/* data-form-stack marks a column the form gap spaces, so a shared row
+                class (an action row, a notice) can drop its own margin inside it. */}
+            {children != null ? <div className={styles.body} data-form-stack="">{children}</div> : null}
             {demoBlocked || status ? <div className={styles.status}>{demoBlocked ? demoGuard.note : status}</div> : null}
             {actions ? <div className={actionClassName}>{demoBlocked ? disableSubmits(actions) : actions}</div> : null}
             {demoBlocked ? demoGuard.dialog : null}

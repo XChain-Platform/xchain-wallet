@@ -276,6 +276,23 @@ describe('CreateBetFeedForm: the live market-cost quote', () => {
         expect(Number(second.args.deadline)).toBe(DEADLINE_UNIX);
         expect(utils.container.textContent).toContain('0.16500000');
     });
+
+    it('says plainly that the estimate is unavailable and keeps the host error text off the screen', async () => {
+        const { messaging } = harness({
+            betProjectFeedCreateFee: () => Promise.reject(
+                new Error('projectBetFeedCreateFee: sdk.betting.projectFeedCreateFee is unavailable'),
+            ),
+        });
+        let utils;
+        await domAct(async () => {
+            utils = mount(CreateBetFeedForm, messaging, { chainId: CHAIN, presetTick: 'PEPECREATURE' });
+            await drain();
+        });
+        await fillMarket(utils);
+
+        expect(utils.getByText("The cost estimate isn't available right now.")).toBeTruthy();
+        expect(utils.container.textContent).not.toMatch(/projectFeedCreateFee|sdk\.|unavailable:/);
+    });
 });
 
 describe('CreateBetFeedForm: compose and submit', () => {
