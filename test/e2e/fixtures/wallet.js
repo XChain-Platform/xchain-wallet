@@ -276,9 +276,9 @@ export function mainButton(page, name) {
 }
 
 /**
- * The nav rail's "Lock" button. The header also carries a "Lock wallet"
- * button, so a substring match on "Lock" resolves to two elements and
- * trips strict mode. Anchor on the exact accessible name.
+ * The nav rail's "Lock" button. Only the phone layout's header carries a
+ * "Lock wallet" button (never beside the rail), but a substring match on
+ * "Lock" would still hit it, so anchor on the exact accessible name.
  */
 export function lockButton(page) {
     return page.getByRole('button', { name: 'Lock', exact: true });
