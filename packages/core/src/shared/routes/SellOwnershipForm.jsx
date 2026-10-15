@@ -672,7 +672,7 @@ export function SellOwnershipForm({ walletId, onBack, chainId: initialChainId, t
                         <StatusMessage variant="error">{validationError}</StatusMessage>
                     ) : null}
                     {feeValidationError ? (
-                        <StatusMessage variant="error" className={styles.error}>{feeValidationError}</StatusMessage>
+                        <StatusMessage variant="error">{feeValidationError}</StatusMessage>
                     ) : null}
                     {formError ? (
                         <StatusMessage variant="error">{formError}</StatusMessage>
