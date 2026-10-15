@@ -398,8 +398,6 @@ export function ContractsList({ walletId, onOpenContract, onDeploy, onBack }) {
                 searchQuery={searchQuery}
                 emptyTitle="No published contracts"
                 emptyText="Published contracts appear here after you publish one."
-                emptyActionLabel={onDeploy ? 'Publish contract' : undefined}
-                onEmptyAction={onDeploy}
                 onRetry={retryContracts}
                 onOpenContract={onOpenContract}
                 renderRow={(row, cid) => <ContractRow row={row} chainId={cid} />}
@@ -453,7 +451,8 @@ function Section({ title, children }) {
  * One section of the page across every chain the wallet can publish on.
  * Chains that are loading, failed, or have rows get their own group; when
  * none of them has anything to show, the section says so once at full
- * width instead of repeating the same empty message under every chain.
+ * width instead of repeating the same empty message under every chain. The
+ * message carries no button: the toolbar's Publish contract is the one way in.
  */
 function ChainSection({
     title,
@@ -462,8 +461,6 @@ function ChainSection({
     searchQuery,
     emptyTitle,
     emptyText,
-    emptyActionLabel,
-    onEmptyAction,
     onRetry,
     onOpenContract,
     renderRow,
@@ -482,8 +479,6 @@ function ChainSection({
                 <EmptyState
                     title={filteredOut ? 'No matching contracts' : emptyTitle}
                     body={filteredOut ? 'Try a different name or number.' : emptyText}
-                    actionLabel={filteredOut ? undefined : emptyActionLabel}
-                    onAction={filteredOut ? undefined : onEmptyAction}
                     titleAs="p"
                 />
             ) : shown.map(({ cid, state, rows }) => (
