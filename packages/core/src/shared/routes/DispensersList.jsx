@@ -324,7 +324,7 @@ export function DispensersList({ walletId, activeAccountId, onOpenDispenser, onC
         <PageHeader
             onBack={onBack}
             backLabel="Back to home"
-            titleIcon={<Icon.TokenIcon />}
+            titleIcon={<Icon.DollarIcon />}
             title="My dispensers"
         />
     );

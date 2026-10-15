@@ -1431,7 +1431,7 @@ export function DispenserDetail({ walletId, chainId, actionIndex, onBack, onCanc
         const header = (
         <PageHeader
             onBack={onBack}
-            titleIcon={<Icon.TokenIcon />}
+            titleIcon={<Icon.DollarIcon />}
             title={cancelStage === 'confirm' || cancelStage === 'submitting'
                     ? 'Confirm close'
                     : refillStage === 'confirm' || refillStage === 'submitting'
