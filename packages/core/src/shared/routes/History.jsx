@@ -3741,7 +3741,7 @@ function RecipientsBlock({ entry }) {
                         ? t('history.recipients.showHolders')
                         : t('history.recipients.showRecipients')}
                 </Button>
-                {error ? <span style={{ color: 'var(--xc-danger-fg)', fontSize: 'var(--xc-text-xs)' }} role="alert">{error}</span> : null}
+                <StatusMessage variant="error">{error}</StatusMessage>
             </div>
         );
     }
@@ -3757,9 +3757,9 @@ function RecipientsBlock({ entry }) {
     if (stage === 'saved') {
         return (
             <div style={blockStyle}>
-                <span style={headingStyle} role="status">
+                <StatusMessage variant="success">
                     {t('history.recipients.saved', { count: recipients.length, name: name.trim() })}
-                </span>
+                </StatusMessage>
             </div>
         );
     }
@@ -3823,9 +3823,7 @@ function RecipientsBlock({ entry }) {
                     </Button>
                 </div>
             ) : null}
-            {error ? (
-                <span style={{ color: 'var(--xc-danger-fg)', fontSize: 'var(--xc-text-xs)' }} role="alert">{error}</span>
-            ) : null}
+            <StatusMessage variant="error">{error}</StatusMessage>
         </div>
     );
 }
@@ -4946,7 +4944,7 @@ function ExportModal({
                     </p>
 
                     {exporting ? (
-                        <p role="status" aria-live="polite" style={{ margin: 0, fontSize: 'var(--xc-text-sm)' }}>
+                        <StatusMessage variant="info">
                             {t('history.export.progress', {
                                 completed: progress.completed,
                                 total: progress.total,
@@ -4954,14 +4952,12 @@ function ExportModal({
                             {operationTime.showElapsed
                                 ? ` ${t('history.export.elapsed', { seconds: operationTime.elapsedSeconds })}`
                                 : ''}
-                        </p>
+                        </StatusMessage>
                     ) : null}
                     {operationTime.timedOut ? (
-                        <p role="alert" style={{ margin: 0, color: 'var(--xc-danger-fg)' }}>
-                            {t('history.export.slow')}
-                        </p>
+                        <StatusMessage variant="warning" role="alert">{t('history.export.slow')}</StatusMessage>
                     ) : null}
-                    {error ? <p role="alert" style={{ margin: 0, color: 'var(--xc-danger-fg)' }}>{error}</p> : null}
+                    <StatusMessage variant="error">{error}</StatusMessage>
                 </div>
 
                 <div style={MODAL_ACTIONS}>
