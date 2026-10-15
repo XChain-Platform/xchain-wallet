@@ -70,6 +70,7 @@ export const INPUT = {
     borderRadius: 'var(--xc-control-radius)',
     boxSizing: 'border-box',
     height: 'var(--xc-control-h-md)',
+    minHeight: 'var(--xc-control-h-md)',
     padding: '0 var(--xc-control-pad-x-md)',
     fontSize: 'var(--xc-control-font-md)',
     lineHeight: 'var(--xc-control-line)',
