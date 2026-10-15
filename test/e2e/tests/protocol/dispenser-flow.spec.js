@@ -128,7 +128,7 @@ async function exerciseDispenserExplorer(page, label) {
     await expect(page.getByLabel('Address', { exact: true })).toBeVisible();
     await byToken.check();
 
-    const chain = page.getByLabel('Chain', { exact: true });
+    const chain = page.getByLabel('Network', { exact: true });
     await chain.selectOption({ index: 1 });
     await page.getByLabel('Token ticker').fill('PEPECASH');
     await expectControlRowAligned([byToken, byAddress], `${label} explorer search modes`);

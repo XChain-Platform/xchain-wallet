@@ -187,6 +187,19 @@ async function clickAndLetItClose(locator) {
     }
 }
 
+// The popup header keeps Search in its action menu; the hero's own search
+// button folds into "Balance actions" at popup width, so the header menu is
+// the one visible route to the palette at every popup size.
+async function openAllActions(page) {
+    await page.getByRole('button', { name: 'Open menu' }).click();
+    await page.getByRole('menu', { name: 'Header actions' }).getByRole('menuitem', { name: /^Search/ }).click();
+    const palette = page.getByRole('dialog', { name: 'Command palette' });
+    await expect(palette).toBeVisible();
+    await palette.getByRole('combobox').fill('All actions');
+    await palette.getByRole('option', { name: /All actions/ }).first().click();
+    await expect(palette).toBeHidden();
+}
+
 test.describe('passive co-signer, in a browser', () => {
 
     test('a dApp co-sign request is approved and returns a partial over OUR sighash', async ({ page, context }) => {
@@ -202,9 +215,7 @@ test.describe('passive co-signer, in a browser', () => {
         // "Agent accounts" is an entry on the All-actions menu rather than a
         // palette command of its own, and it only appears once the wallet is
         // known to hold a Bitcoin address (the feature is BTC-only at launch).
-        await page.getByRole('button', { name: 'Open command palette' }).click();
-        await page.getByRole('dialog', { name: 'Command palette' }).getByRole('combobox').fill('All actions');
-        await page.getByRole('option', { name: /All actions/ }).first().click();
+        await openAllActions(page);
         await page.getByRole('button', { name: /Agent accounts/ }).first().click();
 
         // The list screen offers provisioning; the button wording is the one the
@@ -326,9 +337,7 @@ test.describe('passive co-signer, in a browser', () => {
         // "Agent accounts" is an entry on the All-actions menu rather than a
         // palette command of its own, and it only appears once the wallet is
         // known to hold a Bitcoin address (the feature is BTC-only at launch).
-        await page.getByRole('button', { name: 'Open command palette' }).click();
-        await page.getByRole('dialog', { name: 'Command palette' }).getByRole('combobox').fill('All actions');
-        await page.getByRole('option', { name: /All actions/ }).first().click();
+        await openAllActions(page);
         await page.getByRole('button', { name: /Agent accounts/ }).first().click();
         await page.getByRole('button', { name: /Create agent account|New agent account|Provision/ }).first().click();
         await page.getByLabel("This wallet's key").selectOption({ index: 1 });

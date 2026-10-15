@@ -29,6 +29,7 @@ import { sweepMsgMemoryForWallet } from '../../utils/msgReadMemory.js';
 import { clearRemovedWalletStorage } from '../../utils/wipeWalletStorage.js';
 import { retireBiometricAfterPasswordChange } from '../../../flows/biometricUnlock.js';
 import { SettingsActionRow, Status } from './_settingsPrimitives.jsx';
+import cardStyles from '../../../ui/Card.module.css';
 import styles from './ThisWalletSection.module.css';
 import { t } from '../../../i18n/index.js';
 
@@ -406,7 +407,7 @@ function ChangePasswordRow({ walletId, disabled }) {
             <FormSection
                 title={t('settings.thisWallet.changeWalletPassword')}
                 description={t('settings.thisWallet.useAtLeastCharactersA', { MIN_WALLET_PASSWORD_LENGTH })}
-                className={styles.panel}
+                className={cardStyles.card}
             >
                 <Input
                     ref={currentRef}
@@ -475,7 +476,7 @@ function PublicKeyExport({
         <FormSection
             title={(accountName ? t('settings.thisWallet.extendedPublicKeysFor', { name: accountName }) : t('settings.thisWallet.extendedPublicKeys'))}
             description={t('settings.thisWallet.anExtendedPublicKeyDoes')}
-            className={styles.panel}
+            className={cardStyles.card}
         >
             {stage === 'password' ? (
                 <form onSubmit={onSubmit} className={styles.form}>
@@ -508,7 +509,6 @@ function PublicKeyExport({
                             title={publicKeyTitle(entry)}
                             description={entry.path ? t('settings.thisWallet.accountPath', { path: entry.path }) : undefined}
                             headingLevel="h3"
-                            className={styles.keyPanel}
                         >
                             <div className={styles.xpub}>{entry.xpub}</div>
                             <div className={styles.qr}>
@@ -566,7 +566,7 @@ function RemoveConfirm({ walletName, busy, error, onCancel, onConfirm }) {
                     <strong className={styles.confirmName}>{walletName}</strong> {t('settings.thisWallet.toConfirm')}
                 </>
             )}
-            className={`${styles.panel} ${styles.dangerPanel}`}
+            className={cardStyles.card}
         >
             <Input
                 type="text"

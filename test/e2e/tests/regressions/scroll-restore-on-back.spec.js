@@ -144,7 +144,7 @@ for (const viewport of VIEWPORTS) {
 
             const saved = await wheelScroll(page, 1000);
             expect(saved, 'History did not scroll').toBeGreaterThan(300);
-            const row = await nearestVisible(page, 'button[data-history-row]');
+            const row = await nearestVisible(page, '[data-history-key] button[data-history-row]');
             const key = await row.evaluate((el) => el.closest('[data-history-key]').getAttribute('data-history-key'));
             await row.click();
             const back = page.getByRole('button', { name: 'Back to history', exact: true });

@@ -478,6 +478,13 @@ export function createCrawl(page, {
         }
 
         await openSettings(page);
+        // Through a nav, openSettings returns on the click; the section list
+        // renders a beat later, and reading it at once found no sections at
+        // all on phone widths, so every Settings screen went uncrawled.
+        // Every shell's Settings list shows a Developer mode row (openSettings
+        // waits on it too), so it marks the list as rendered in each venue.
+        await page.locator('main button:visible:not([disabled])').filter({ hasText: /^Developer mode/ }).first()
+            .waitFor({ timeout: 15_000 });
         const sections = await page.locator('main button:visible:not([disabled])').evaluateAll((els) => els
             .map((e) => (e.innerText || e.getAttribute('aria-label') || '').trim().split('\n')[0].trim()));
         await home();

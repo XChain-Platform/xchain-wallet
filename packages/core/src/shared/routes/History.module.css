@@ -316,7 +316,8 @@
 .timeline {
     display: flex;
     flex-direction: column;
-    gap: 0;
+    /* Spaces each day heading from its list card and from the card above. */
+    gap: var(--xc-space-2);
     list-style: none;
     margin: 0;
     padding: 0;
@@ -335,16 +336,27 @@
     font-size: var(--xc-text-sm);
 }
 
+/* A run of rows under one heading is one flush card with dividers between
+   rows, the same list Home shows in its Activity tab. */
+.rowList {
+    composes: flush from '../../ui/Card.module.css';
+    display: flex;
+    flex-direction: column;
+    list-style: none;
+    margin: 0;
+    overflow: hidden;
+}
+
+.rowList > li + li {
+    border-top: 1px solid var(--xc-border);
+}
+
 .row {
     position: relative;
-    border: 1px solid var(--xc-control-border);
-    background: var(--xc-surface-raised);
-    margin: var(--xc-space-1) 0;
 }
 
 .row:hover {
     background: var(--xc-control-bg-hover);
-    border-color: var(--xc-control-selected);
 }
 
 .row:focus-visible {
@@ -352,9 +364,11 @@
     outline-offset: 2px;
 }
 
+/* The selected row keeps its marker inside the list card: a rail on the
+   leading edge in the selected tone, not a border of its own. */
 .rowSelected {
-    border-color: var(--xc-control-selected);
     background: var(--xc-control-bg-hover);
+    box-shadow: inset 3px 0 0 var(--xc-control-selected);
 }
 
 .rowMeta {
@@ -972,9 +986,9 @@
     border-top: 1px solid var(--xc-border);
 }
 
+/* A group is one row of the list: its header and, when expanded, its
+   member rows under a divider, all inside the list's card. */
 .groupCardWrap {
-    composes: flush from '../../ui/Card.module.css';
-    margin: var(--xc-space-1) 0;
     overflow: hidden;
 }
 
