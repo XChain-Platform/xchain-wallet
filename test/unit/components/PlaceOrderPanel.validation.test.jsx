@@ -381,7 +381,7 @@ describe('PlaceOrderPanel validation', () => {
                 <PlaceOrderPanel walletId="wallet-old" chainId={CHAIN} tick1="XCHAIN" tick2="BTC" />
             </MessagingProvider>,
         );
-        expect(await screen.findByText(/Outstanding auto-pay exposure on this chain/)).toBeInTheDocument();
+        expect(await screen.findByText(/Outstanding auto-pay exposure on this network/)).toBeInTheDocument();
 
         view.rerender(
             <MessagingProvider shell="desktop" messaging={messaging}>
@@ -389,7 +389,7 @@ describe('PlaceOrderPanel validation', () => {
             </MessagingProvider>,
         );
 
-        expect(screen.queryByText(/Outstanding auto-pay exposure on this chain/)).toBeNull();
+        expect(screen.queryByText(/Outstanding auto-pay exposure on this network/)).toBeNull();
         expect(getAutopayExposure).toHaveBeenLastCalledWith({ walletId: 'wallet-new' });
     });
 });

@@ -30,4 +30,15 @@ describe('network wording on the swap, composer and dispenser screens', () => {
         expect(t('dispenserExplorer.loadMoreFor', { name: t('send.rbf.thisChain') }))
             .toBe('Load more results for this network');
     });
+
+    it('words the cross-chain order success hint and the shared empty-source line by network', () => {
+        const hint = t('crossChainOrder.success.hint', { tick: 'ABC' });
+        expect(hint).toMatch(/Your ABC is escrowed on the give network.*get network.*both networks/);
+        expect(hint).not.toMatch(/\bchains?\b/i);
+        expect(t('send.source.noAddress')).toBe('No address on this network. Use Receive to generate one first.');
+    });
+
+    it('counts paired networks with correct plurals', () => {
+        expect(t('flows.pairPartner.paired', { count: 1 })).toMatch(/agree on 1 network\./);
+    });
 });

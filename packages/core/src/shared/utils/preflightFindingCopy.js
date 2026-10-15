@@ -113,14 +113,14 @@ export const UNVERIFIED_COPY = Object.freeze({
 
     // Tokens and their rules.
     NOT_OWNER: 'Whether this address owns the token',
-    ISSUE_GAS_TICK: 'Whether this token name is reserved on this chain',
+    ISSUE_GAS_TICK: 'Whether this token name is reserved on this network',
     ISSUE_TICK_NAMESPACE: 'Whether this token name is available',
     ISSUE_TICK_COIN_PREFIX: 'Whether this token name is allowed',
     ISSUE_BRIDGE_ACTIVATION: 'Whether the network supports this bridging option yet',
     ISSUE_LOCK_RATCHETS: 'Whether the token\'s locks allow this change',
     ISSUE_BRIDGE_POLICY_EXCLUSION: 'Whether the token\'s bridging and transfer rules allow this change',
     SEND_RESTRICTIONS: 'Transfer rules on the token and on both addresses',
-    DESTROY_BRIDGE_SUPPLY: 'Whether this token can be destroyed on this chain',
+    DESTROY_BRIDGE_SUPPLY: 'Whether this token can be destroyed on this network',
     DESTROY_RESTRICTIONS: 'Burn rules on the token and on your address',
     CARET_REF_UNRESOLVABLE: 'Which address a short address reference points to',
 

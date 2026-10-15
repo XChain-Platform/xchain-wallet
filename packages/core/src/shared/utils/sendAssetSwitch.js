@@ -53,7 +53,7 @@ export function applySendAssetPick(prev, sel) {
     const sameChain = draft?.chainId === sel.chainId;
     const sameToken = sameChain && sameTick(draft?.tick, sel.tick);
     let assetSwitchNotice;
-    if (draft && !sameChain) assetSwitchNotice = 'Chain changed. Recipient, amount, and fee rate were reset.';
+    if (draft && !sameChain) assetSwitchNotice = 'Network changed. Recipient, amount, and fee rate were reset.';
     else if (draft && !sameToken) assetSwitchNotice = 'Token changed. Amount was reset for the new token precision.';
     return {
         chainId: sel.chainId,

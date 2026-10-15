@@ -222,7 +222,7 @@ export function chainGateErrorMessage(err) {
     m = NOT_ON_BITCOIN_RE.exec(message);
     if (m) {
         return `${actionDisplayLabel(m[1])} version ${m[2]} cannot be sent from a Bitcoin address. `
-            + 'Send it from an address on another chain, or remove that action.';
+            + 'Send it from an address on another network, or remove that action.';
     }
     if (VALIDATOR_LANE_RE.test(message)) {
         return 'Validator staking works only on Bitcoin. Send it from a Bitcoin address.';
