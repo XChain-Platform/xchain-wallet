@@ -66,6 +66,17 @@ describe('NetworkSection', () => {
         expect(updateSpy).not.toHaveBeenCalled();
     });
 
+    it('shows a progress status while a confirmed switch is under way', async () => {
+        setActiveNetworkSpy.mockReturnValueOnce(new Promise(() => {}));
+        render(<NetworkSection activeWallet={{ id: 'wallet-1' }} />);
+        expect(screen.queryByText(/Switching networks/)).not.toBeInTheDocument();
+        fireEvent.change(screen.getByLabelText('Active network'), { target: { value: 'regtest' } });
+        fireEvent.click(screen.getByRole('button', { name: 'Switch network' }));
+
+        expect(await screen.findByText(/Switching networks/)).toBeInTheDocument();
+        expect(screen.getByLabelText('Active network')).toBeDisabled();
+    });
+
     it('shows a failed switch without reloading the selected network', async () => {
         setActiveNetworkSpy.mockRejectedValueOnce(new Error('Wallet is locked.'));
         render(<NetworkSection activeWallet={{ id: 'wallet-1' }} />);

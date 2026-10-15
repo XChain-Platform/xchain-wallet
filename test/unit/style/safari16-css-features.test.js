@@ -119,8 +119,8 @@ function scanCss(source, from = 'fixture.css') {
 // Build output (vite dist, the mobile www copy) and installed packages are not
 // source; a local build must not change what the guard counts.
 // Capacitor's `cap sync` copies www into the native projects; those gitignored
-// copies are build output like www itself.
-const GENERATED_DIR = /(?:^|\/)(?:node_modules|dist|www|ios\/App\/App\/public|android\/app\/src\/main\/assets\/public)\//;
+// copies are build output like www itself, and so are Gradle's intermediates.
+const GENERATED_DIR = /(?:^|\/)(?:node_modules|dist|www|ios\/App\/App\/public|android\/app\/src\/main\/assets\/public|android\/app\/build|ios\/build)\//;
 
 function scanPackages() {
     return cachedSourceFiles(packagesRoot, '**/*.css')
