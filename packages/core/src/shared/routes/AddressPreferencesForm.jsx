@@ -264,7 +264,7 @@ export function AddressPreferencesForm({ walletId, chainId: initialChainId, addr
         </Screen>
     );
 
-    if (loadError) return wrap(<StatusMessage variant="error" className={styles.error}>{loadError}</StatusMessage>);
+    if (loadError) return wrap(<StatusMessage variant="error">{loadError}</StatusMessage>);
     if (!addressesByChain || !chainId || !fromAddress) return wrap(<p className={styles.hint}>Loading…</p>);
 
     if (ownerLane.open) {
@@ -322,7 +322,7 @@ export function AddressPreferencesForm({ walletId, chainId: initialChainId, addr
                 label="Review preferences"
                 onSubmit={handleSubmit}
                 status={submitError ? (
-                    <StatusMessage variant="error" className={styles.error}>{submitError}</StatusMessage>
+                    <StatusMessage variant="error">{submitError}</StatusMessage>
                 ) : null}
                 actions={(
                     <Button
@@ -378,7 +378,7 @@ export function AddressPreferencesForm({ walletId, chainId: initialChainId, addr
             onSubmit={handleReview}
             sectioned
             status={formError ? (
-                <StatusMessage variant="error" className={styles.error}>{formError}</StatusMessage>
+                <StatusMessage variant="error">{formError}</StatusMessage>
             ) : null}
             actions={(
                 <Button type="submit" variant="primary">Review</Button>
@@ -392,7 +392,7 @@ export function AddressPreferencesForm({ walletId, chainId: initialChainId, addr
             </details>
             <FormSection title="Protocol fee handling">
                 {currentError ? (
-                    <StatusMessage variant="error" className={styles.error}>{currentError}</StatusMessage>
+                    <StatusMessage variant="error">{currentError}</StatusMessage>
                 ) : null}
                 {current ? (
                     <dl className={styles.detailsList}>

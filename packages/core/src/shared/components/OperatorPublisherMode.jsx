@@ -360,7 +360,7 @@ function PublisherControls({ coinTicker, fee, submission, lastTxid }) {
                 </p>
             ) : null}
             {submission.error ? (
-                <StatusMessage variant="error" className={formStyles.error}>{submission.error}</StatusMessage>
+                <StatusMessage variant="error">{submission.error}</StatusMessage>
             ) : null}
             {lastTxid ? (
                 <p className={dashStyles.entryDescription}>

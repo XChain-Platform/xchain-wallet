@@ -813,7 +813,7 @@ export function AttachContentForm({ walletId, chainId, tick, issuerAddress = nul
     }
 
     if (loadError) {
-        return wrap(<StatusMessage variant="error" className={styles.error}>{loadError}</StatusMessage>);
+        return wrap(<StatusMessage variant="error">{loadError}</StatusMessage>);
     }
     if (!addressesByChain) {
         return wrap(<p className={styles.hint}>Loading wallet…</p>);
@@ -910,7 +910,7 @@ export function AttachContentForm({ walletId, chainId, tick, issuerAddress = nul
                     it to {tick} and makes it official.
                 </p>
                 {indexLookupError ? (
-                    <StatusMessage variant="error" className={styles.error}>{indexLookupError}</StatusMessage>
+                    <StatusMessage variant="error">{indexLookupError}</StatusMessage>
                 ) : null}
                 {slow ? (
                     <p className={styles.hint}>
@@ -947,7 +947,7 @@ export function AttachContentForm({ walletId, chainId, tick, issuerAddress = nul
                     description at it.
                 </p>
                 {indexLookupError ? (
-                    <StatusMessage variant="error" className={styles.error}>{indexLookupError}</StatusMessage>
+                    <StatusMessage variant="error">{indexLookupError}</StatusMessage>
                 ) : null}
                 <div className={styles.actions}>
                     <Button variant="ghost" onClick={onBack}>Close (keep waiting)</Button>
@@ -963,7 +963,7 @@ export function AttachContentForm({ walletId, chainId, tick, issuerAddress = nul
                 label="Upload token info"
                 onSubmit={handleSignTis}
                 status={hw && submitError ? (
-                    <StatusMessage variant="error" className={styles.error}>{submitError}</StatusMessage>
+                    <StatusMessage variant="error">{submitError}</StatusMessage>
                 ) : null}
                 actions={(
                     <>
@@ -1035,7 +1035,7 @@ export function AttachContentForm({ walletId, chainId, tick, issuerAddress = nul
                 label="Update token description"
                 onSubmit={handleSignDescribe}
                 status={hw && submitError ? (
-                    <StatusMessage variant="error" className={styles.error}>{submitError}</StatusMessage>
+                    <StatusMessage variant="error">{submitError}</StatusMessage>
                 ) : null}
                 actions={(
                     <>
@@ -1103,7 +1103,7 @@ export function AttachContentForm({ walletId, chainId, tick, issuerAddress = nul
                 label="Review artwork upload"
                 onSubmit={handleSignFile}
                 status={hw && submitError ? (
-                    <StatusMessage variant="error" className={styles.error}>{submitError}</StatusMessage>
+                    <StatusMessage variant="error">{submitError}</StatusMessage>
                 ) : null}
                 actions={(
                     <>
@@ -1203,7 +1203,7 @@ export function AttachContentForm({ walletId, chainId, tick, issuerAddress = nul
                 label="Review artwork link"
                 onSubmit={handleSignLink}
                 status={hw && submitError ? (
-                    <StatusMessage variant="error" className={styles.error}>{submitError}</StatusMessage>
+                    <StatusMessage variant="error">{submitError}</StatusMessage>
                 ) : null}
                 actions={(
                     <Button
@@ -1272,7 +1272,7 @@ export function AttachContentForm({ walletId, chainId, tick, issuerAddress = nul
             label="Attach artwork"
             onSubmit={handleReviewFile}
             status={formError ? (
-                <StatusMessage variant="error" className={styles.error}>{formError}</StatusMessage>
+                <StatusMessage variant="error">{formError}</StatusMessage>
             ) : null}
             actions={(
                 <Button

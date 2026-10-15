@@ -525,7 +525,7 @@ export function StakeForm({ walletId, chainId: initialChainId, onBack }) {
     if (loadError) {
         return wrap(
             <>
-                <StatusMessage variant="error" className={styles.error}>{loadError}</StatusMessage>
+                <StatusMessage variant="error">{loadError}</StatusMessage>
             </>,
         );
     }
@@ -573,7 +573,7 @@ export function StakeForm({ walletId, chainId: initialChainId, onBack }) {
                 label="Review stake"
                 onSubmit={handleSubmit}
                 status={(isWatcherMode || isHwSource) && submitError ? (
-                    <StatusMessage variant="error" className={styles.error}>{submitError}</StatusMessage>
+                    <StatusMessage variant="error">{submitError}</StatusMessage>
                 ) : null}
                 actions={(
                     <Button
@@ -704,7 +704,7 @@ export function StakeForm({ walletId, chainId: initialChainId, onBack }) {
             onSubmit={handleReview}
             onChangeCapture={() => { if (formError) setFormError(null); }}
             status={formError ? (
-                <StatusMessage variant="error" className={styles.error}>{formError}</StatusMessage>
+                <StatusMessage variant="error">{formError}</StatusMessage>
             ) : null}
             actions={(
                 <Button

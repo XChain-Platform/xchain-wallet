@@ -181,7 +181,6 @@ export function ListDetail({ walletId, chainId, actionIndex, onBack, onFork, onS
         return wrap(
             <StatusMessage
                 variant="error"
-                className={styles.error}
                 recovery={{ label: 'Try again', onAction: () => setReload((value) => value + 1) }}
             >
                 {loadError}

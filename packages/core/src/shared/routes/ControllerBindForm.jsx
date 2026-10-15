@@ -451,7 +451,7 @@ export function ControllerBindForm({ walletId, chainId: initialChainId, tick, on
     if (loadError) {
         return wrap(
             <>
-                <StatusMessage variant="error" className={styles.error}>{loadError}</StatusMessage>
+                <StatusMessage variant="error">{loadError}</StatusMessage>
             </>,
         );
     }
@@ -499,7 +499,7 @@ export function ControllerBindForm({ walletId, chainId: initialChainId, tick, on
                 label={`Review ${verb.toLowerCase()} controller`}
                 onSubmit={handleSubmit}
                 status={(isWatcherMode || isHwSource) && submitError ? (
-                    <StatusMessage variant="error" className={styles.error}>{submitError}</StatusMessage>
+                    <StatusMessage variant="error">{submitError}</StatusMessage>
                 ) : null}
                 actions={(
                     <Button
@@ -649,7 +649,7 @@ export function ControllerBindForm({ walletId, chainId: initialChainId, tick, on
             label={`${verb} controller`}
             onSubmit={handleReview}
             status={formError ? (
-                <StatusMessage variant="error" className={styles.error}>{formError}</StatusMessage>
+                <StatusMessage variant="error">{formError}</StatusMessage>
             ) : null}
             actions={(
                 <Button

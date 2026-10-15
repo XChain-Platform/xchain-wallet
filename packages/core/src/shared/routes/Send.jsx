@@ -2657,7 +2657,7 @@ export function Send({ walletId, accountId, onBack, prefill = null, onDone, onCh
         );
     }
     if (loadError) {
-        return wrap(<StatusMessage variant="error" className={styles.error}>{loadError}</StatusMessage>);
+        return wrap(<StatusMessage variant="error">{loadError}</StatusMessage>);
     }
     if (!addressesByChain || !chainId) {
         return wrap(<p className={styles.hint}>{t('common.loading')}</p>);
@@ -3398,7 +3398,7 @@ export function Send({ walletId, accountId, onBack, prefill = null, onDone, onCh
                     hint={t('send.source.hint')}
                 />
             ) : (
-                <StatusMessage variant="error" className={styles.error}>
+                <StatusMessage variant="error">
                     {t('send.source.noAddress')}
                 </StatusMessage>
             )}

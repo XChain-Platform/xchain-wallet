@@ -424,7 +424,7 @@ export function ContractFundsForm({ mode, walletId, chainId, contractActionIndex
     if (loadError) {
         return wrap(
             <>
-                <StatusMessage variant="error" className={styles.error}>{loadError}</StatusMessage>
+                <StatusMessage variant="error">{loadError}</StatusMessage>
             </>,
         );
     }
@@ -472,7 +472,7 @@ export function ContractFundsForm({ mode, walletId, chainId, contractActionIndex
                 label={`Review ${verb.toLowerCase()}`}
                 onSubmit={handleSubmit}
                 status={(isWatcherMode || isHwSource) && submitError ? (
-                    <StatusMessage variant="error" className={styles.error}>{submitError}</StatusMessage>
+                    <StatusMessage variant="error">{submitError}</StatusMessage>
                 ) : null}
                 actions={(
                     <Button
@@ -660,12 +660,12 @@ export function ContractFundsForm({ mode, walletId, chainId, contractActionIndex
             status={withdrawRefused || formError ? (
                 <>
                     {withdrawRefused ? (
-                        <StatusMessage variant="error" className={styles.error}>
+                        <StatusMessage variant="error">
                             {OWNER_WITHDRAW_DISABLED_REASON}
                         </StatusMessage>
                     ) : null}
                     {formError ? (
-                        <StatusMessage variant="error" className={styles.error}>{formError}</StatusMessage>
+                        <StatusMessage variant="error">{formError}</StatusMessage>
                     ) : null}
                 </>
             ) : null}

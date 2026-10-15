@@ -9,18 +9,11 @@
         "packages/core/src/shared/components/QueuedResultPanel.module.css | .queuedCard": "The queued-broadcast result panel: an icon, a stage line, a heading and a hint, a result screen body rather than an inline message.",
         "packages/core/src/shared/components/ReachabilityBanner.module.css | .degraded": "The app-wide reachability banner state, with its own retry and detail controls; a banner component, not an inline form message.",
         "packages/core/src/shared/components/ReachabilityBanner.module.css | .offline": "The app-wide reachability banner state, with its own retry and detail controls; a banner component, not an inline form message.",
-        "packages/core/src/shared/routes/CreateWallet.module.css | .error": "A layout class passed as className to <StatusMessage variant=\"error\">, whose compound .row.error selector paints the box over it; no raw element draws this box in this module.",
         "packages/core/src/shared/routes/DispenserDetail.module.css | .dispenseInvalidBadge": "An inline Invalid badge on a dispense row, not a message.",
         "packages/core/src/shared/routes/History.module.css | .pendingLabelWarning": "An inline status label on a history row, not a message.",
         "packages/core/src/shared/routes/History.module.css | .pendingPanelWarning": "The pending-transaction panel on a history row, with a headline, steps and actions; a row detail panel, not an inline message.",
-        "packages/core/src/shared/routes/Home.module.css | .error": "A layout class passed as className to <StatusMessage variant=\"error\">, whose compound .row.error selector paints the box over it; no raw element draws this box in this module.",
-        "packages/core/src/shared/routes/IssueTokenForm.module.css | .error": "Shared by the raw red-text error rows in MessagingInbox, ComposeMessage, PsbtSignForm, SignMessageForm and other forms that import this module, which the inline-error pass converts; every StatusMessage caller only borrows its layout.",
         "packages/core/src/shared/routes/Onboarding.module.css | .licenseParagraphCritical": "An emphasized paragraph inside the license text the user agrees to; part of the legal document, not a message.",
-        "packages/core/src/shared/routes/PairSignerForm.module.css | .error": "A layout class passed as className to <StatusMessage variant=\"error\">, whose compound .row.error selector paints the box over it; no raw element draws this box in this module.",
-        "packages/core/src/shared/routes/Receive.module.css | .error": "A layout class passed as className to <StatusMessage variant=\"error\">, whose compound .row.error selector paints the box over it; no raw element draws this box in this module.",
-        "packages/core/src/shared/routes/Send.module.css | .coinControlDust": "An inline dust badge on a coin-control row, not a message.",
-        "packages/core/src/shared/routes/Send.module.css | .error": "A layout class passed as className to <StatusMessage variant=\"error\">, whose compound .row.error selector paints the box over it; no raw element draws this box in this module.",
-        "packages/core/src/shared/routes/TokenWizard.module.css | .error": "A layout class passed as className to <StatusMessage variant=\"error\">, whose compound .row.error selector paints the box over it; no raw element draws this box in this module."
+        "packages/core/src/shared/routes/Send.module.css | .coinControlDust": "An inline dust badge on a coin-control row, not a message."
     },
     "inline": {
         "packages/core/src/shared/components/WatchOnlyBadge.jsx": {

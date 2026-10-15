@@ -592,7 +592,6 @@ export function MessagingInbox({ walletId, activeAccountId, onCompose, onBack, i
             <ListPage>
                 <StatusMessage
                     variant="error"
-                    className={styles.error}
                     recovery={{
                         label: 'Try again',
                         onAction: () => {
@@ -655,7 +654,7 @@ export function MessagingInbox({ walletId, activeAccountId, onCompose, onBack, i
                 label="Unlock messaging inbox"
                 onSubmit={handleUnlock}
                 status={unlockError ? (
-                    <StatusMessage id="messaging-unlock-error" variant="error" className={styles.error}>
+                    <StatusMessage id="messaging-unlock-error" variant="error">
                         {unlockError}
                     </StatusMessage>
                 ) : null}
