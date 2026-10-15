@@ -147,7 +147,18 @@ async function layoutAudit(page) {
     return page.evaluate(({ interactiveSelector, minHeight, slack }) => {
         const viewportWidth = document.documentElement.clientWidth;
 
+        // Recent Chromium still reports a box for the contents of a closed
+        // <details>, though nothing is drawn or reachable there: a control in
+        // Send's collapsed Advanced section would "overlap" the Send button.
+        const inClosedDetails = (element) => {
+            for (let node = element.parentElement; node; node = node.parentElement) {
+                if (node.tagName === 'DETAILS' && !node.open && !element.closest('summary')) return true;
+            }
+            return false;
+        };
+
         const isRendered = (element) => {
+            if (inClosedDetails(element)) return false;
             const style = getComputedStyle(element);
             const rect = element.getBoundingClientRect();
             return style.display !== 'none'
@@ -278,6 +289,9 @@ async function bottomClearance(page) {
             const style = getComputedStyle(element);
             if (style.display === 'none' || style.visibility === 'hidden') return false;
             if (rect.width === 0 || rect.height === 0 || element.disabled) return false;
+            for (let node = element.parentElement; node; node = node.parentElement) {
+                if (node.tagName === 'DETAILS' && !node.open && !element.closest('summary')) return false;
+            }
             if (element.getAttribute('aria-hidden') === 'true') return false;
             if (element.getAttribute('tabindex') === '-1') return false;
             return element.matches(
