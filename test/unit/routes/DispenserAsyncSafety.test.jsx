@@ -154,7 +154,7 @@ describe('dispenser async safety', () => {
         const first = mount();
         fireEvent.click(await screen.findByLabelText('A token'));
         fireEvent.change(screen.getByLabelText('Payment token'), { target: { value: 'PAY' } });
-        fireEvent.change(screen.getByLabelText('Payment amount (per fill)'), { target: { value: '4.5' } });
+        fireEvent.change(screen.getByLabelText('Payment amount per fill'), { target: { value: '4.5' } });
 
         const key = 'xc:formdraft:dispenser:wallet-draft';
         await waitFor(() => expect(JSON.parse(localStorage.getItem(key)).values).toMatchObject({
@@ -166,7 +166,7 @@ describe('dispenser async safety', () => {
 
         await waitFor(() => expect(screen.getByLabelText('A token')).toBeChecked());
         expect(screen.getByLabelText('Payment token')).toHaveValue('PAY');
-        expect(screen.getByLabelText('Payment amount (per fill)')).toHaveValue('4.5');
+        expect(screen.getByLabelText('Payment amount per fill')).toHaveValue('4.5');
     });
 
     it('runs one identical explorer search while its request is pending', async () => {

@@ -29,6 +29,7 @@ import { PortfolioChart as PortfolioChartBase } from './PortfolioChart.jsx';
 import { RouteErrorBoundary } from './RouteErrorBoundary.jsx';
 import { HomeFilterBar } from './HomeFilterBar.jsx';
 import { BalancesUncheckedState } from './BalancesUncheckedState.jsx';
+import { activityRowAmount } from '../utils/activityAmount.js';
 import { ActivityRow as SharedActivityRow } from './ActivityRow.jsx';
 import {
     isDemoWallet,
@@ -52,7 +53,7 @@ import {
 import { tickerForCoin } from '../../registry/coinTicker.js';
 import { isMainnetChainId } from '../utils/mainnetChain.js';
 import { formatRelativeTime } from '../utils/dateTime.js';
-import { compareDecimalStrings, formatHistoryAmount } from '../utils/amountFormat.js';
+import { compareDecimalStrings } from '../utils/amountFormat.js';
 import { readFailureMessage } from '../utils/readFailureMessage.js';
 import styles from './HomeTabs.module.css';
 import { t } from '../../i18n/index.js';
@@ -928,20 +929,6 @@ function buildTokenLookup(balances) {
     return m;
 }
 
-// Format a base-unit amount string using the tick's divisibility. Plain
-// string math, no BigInt; these are demo values and stay small.
-function formatBaseUnits(raw, divisibility) {
-    const s = String(raw ?? '').trim();
-    if (!s) return '';
-    const div = Number.isFinite(divisibility) ? divisibility : 8;
-    if (div === 0) return s;
-    if (!/^\d+$/.test(s)) return s;
-    const padded = s.padStart(div + 1, '0');
-    const whole = padded.slice(0, -div);
-    const frac = padded.slice(-div).replace(/0+$/, '');
-    return frac ? `${whole}.${frac}` : whole;
-}
-
 const ACTION_ICON = {
     send:       (k) => <Icon.SendIcon key={k} />,
     receive:    (k) => <Icon.ReceiveIcon key={k} />,
@@ -976,17 +963,16 @@ const ActivityEntryRow = memo(function ActivityEntryRow({ entry, walletAddresses
         .replace('LITECOIN', 'LTC')
         .replace('DOGECOIN', 'DOGE');
     const isNative = tick === nativeTicker;
-    const rawAmount = entry.raw?.amount ?? entry.raw?.AMOUNT ?? entry.raw?.quantity ?? entry.raw?.QUANTITY ?? '';
     const label = actionDisplayLabel(kind) || actionDisplayLabel(entry.action) || 'Event';
     const direction = kind === 'send' ? 'out' : kind === 'receive' ? 'in' : null;
-    // A SEND row carries a whole-unit decimal amount, the figure History
-    // prints, so it is shown as-is; reading it as base units showed a 100 BTC
-    // receive as 0.000001 BTC. Other actions carry base units.
-    const isSend = String(entry.action || '').toUpperCase() === 'SEND';
-    const amount = !rawAmount ? ''
-        : isSend ? String(rawAmount) : formatBaseUnits(rawAmount, tokenInfo?.divisibility ?? 8);
+    // One formatter with History: a SEND carries whole units, every other
+    // action base units.
+    const amount = activityRowAmount(entry, {
+        divisibility: tokenInfo?.divisibility ?? 8,
+        direction,
+    });
     const primary = amount
-        ? `${formatHistoryAmount(amount, direction)}${tick ? ` ${tick}` : ''}`
+        ? `${amount}${tick ? ` ${tick}` : ''}`
         : (tick || nativeTicker);
     const displayPrimary = balancesHidden && primary ? '•••••' : primary;
     return (

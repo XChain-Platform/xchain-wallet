@@ -79,7 +79,7 @@ async function fillDispenserAndReject(page, label) {
     await main.getByRole('button', { name: /^Token/ }).click();
     // Picker rows are named "Select <token name> on <chain>, <balance>".
     await page.getByRole('button', { name: /^Select Pepe Cash on / }).first().click();
-    await main.getByLabel('Give amount (per fill)').fill('25');
+    await main.getByLabel('Give amount per fill').fill('25');
     await main.getByLabel('Escrow amount').fill('100');
     await main.getByLabel(/Trigger price/).fill('0.05');
     await expectNoHorizontalOverflow(page, `${label} create dispenser`);
@@ -95,7 +95,7 @@ async function fillDispenserAndReject(page, label) {
 
     await reject.click();
     await expect(confirm).toHaveCount(0);
-    await expect(main.getByLabel('Give amount (per fill)')).toHaveValue('25');
+    await expect(main.getByLabel('Give amount per fill')).toHaveValue('25');
     await expect(main.getByLabel('Escrow amount')).toHaveValue('100');
 }
 

@@ -345,7 +345,7 @@ test.describe(`user-oracle (Mode B) fiat dispensers on ${REGTEST_CHAIN_LABEL}`, 
 
             await gotoPalette(page, 'Create dispenser');
             let main = page.getByRole('main');
-            await expect(main.getByLabel('Give amount (per fill)')).toBeVisible({ timeout: 30_000 });
+            await expect(main.getByLabel('Give amount per fill')).toBeVisible({ timeout: 30_000 });
             await selectVenueChain(main);
             seller = await main.getByRole('textbox', { name: 'Source' }).inputValue();
             expect(seller, `the form has no ${REGTEST_CHAIN_LABEL} address to sign with`)
@@ -362,13 +362,13 @@ test.describe(`user-oracle (Mode B) fiat dispensers on ${REGTEST_CHAIN_LABEL}`, 
 
             await gotoPalette(page, 'Create dispenser');
             main = page.getByRole('main');
-            await expect(main.getByLabel('Give amount (per fill)')).toBeVisible({ timeout: 30_000 });
+            await expect(main.getByLabel('Give amount per fill')).toBeVisible({ timeout: 30_000 });
             await selectVenueChain(main);
 
             await main.getByRole('button', { name: /^Token/ }).click();
             await page.getByText(ORACLE.tick, { exact: true }).first().click();
 
-            await main.getByLabel('Give amount (per fill)').fill(String(GIVE_PER_FILL));
+            await main.getByLabel('Give amount per fill').fill(String(GIVE_PER_FILL));
             await main.getByLabel('Escrow amount').fill(String(ESCROW));
 
             // Mode B: a fiat CODE and an ORACLE, and no fiat AMOUNT. The empty
