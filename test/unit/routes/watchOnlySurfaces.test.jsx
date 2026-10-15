@@ -218,4 +218,55 @@ describe('watch-only route boundaries', () => {
         fireEvent.click(send);
         expect(onSend).toHaveBeenCalledTimes(1);
     });
+
+    it('opens Token Detail in full mode when the settings read fails', async () => {
+        const onSend = vi.fn();
+        const messaging = modeMessaging('watcher', {
+            getSettings: vi.fn().mockRejectedValue(new Error('vault busy')),
+        });
+        mount(messaging, (
+            <TokenDetail
+                walletId="wallet-1"
+                chainId={CHAIN}
+                tick="BTC"
+                kind="native"
+                quantity="100000000"
+                onBack={() => {}}
+                onSend={onSend}
+            />
+        ));
+
+        const row = await screen.findByRole('group', { name: 'Quick actions' });
+        expect(await within(row).findByRole('button', { name: 'Send' })).toBeInTheDocument();
+    });
+
+    it('opens the Send form when the settings read fails', async () => {
+        const messaging = modeMessaging('full', {
+            getSettings: vi.fn().mockRejectedValue(new Error('vault busy')),
+            getAddressesByChain: vi.fn().mockResolvedValue({
+                [CHAIN]: [{
+                    id: 'address-1',
+                    address: ADDRESS,
+                    publicKey: '02ab',
+                    derivationPath: "m/84'/0'/0'/0/0",
+                    source: 'hd',
+                }],
+            }),
+            getActiveAddresses: vi.fn().mockResolvedValue({
+                [CHAIN]: { id: 'address-1', address: ADDRESS },
+            }),
+            getAddressBalances: vi.fn().mockResolvedValue({
+                native: { tick: 'BTC', quantity: '100000000', divisibility: 8 },
+                tokens: [],
+            }),
+            signerReady: vi.fn().mockResolvedValue({ ready: true }),
+            listContacts: vi.fn().mockResolvedValue([]),
+            getRecentDestinations: vi.fn().mockResolvedValue([]),
+            getAddressHistory: vi.fn().mockResolvedValue([]),
+        });
+
+        mount(messaging, <Send walletId="wallet-1" onBack={() => {}} />);
+
+        expect(await screen.findByRole('form', { name: 'Send' })).toBeInTheDocument();
+    });
 });

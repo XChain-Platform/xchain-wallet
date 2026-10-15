@@ -239,8 +239,9 @@ export function Home({ onLocked, onResumeConfirm, onSend, onReceive, onSwap, onE
         ? null
         : (settings.settings?.activeNetwork || 'mainnet');
     // Signing prompts wait for the wallet mode, so a watch-only wallet never
-    // flashes a card it cannot act on.
-    const walletModeReady = !settings.loading && settings.settings !== null;
+    // flashes a card it cannot act on; a failed settings read opens in full
+    // mode.
+    const walletModeReady = !settings.loading;
     const walletMode = settings.settings?.walletMode || WALLET_MODE_DEFAULT;
     const isSignerMode = walletMode === 'signer';
     const isWatcherMode = walletMode === 'watcher';

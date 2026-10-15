@@ -2385,10 +2385,11 @@ export function History({ walletId, accountId, onBack, onReceive, onSelectEntry,
 export function DetailCard({ entry, peerCache, chainTip, indexerWatermark, walletId, showFiatInHistory, fiatCurrency, walletAddresses, onDismissFailed, networkAvailable = true }) {
     const { messaging, shell } = useMessaging();
     const { showToast } = useToast();
-    const { settings } = useSettings();
+    const { settings, loading: settingsLoading } = useSettings();
     // Speed up and Cancel sign a replacement, which a watch-only wallet
-    // cannot do, so they wait for the wallet mode.
-    const walletModeReady = settings !== null;
+    // cannot do, so they wait for the wallet mode; a failed settings read
+    // opens in full mode.
+    const walletModeReady = settings !== null || !settingsLoading;
     const isWatcherMode = settings?.walletMode === 'watcher';
     const [balancesHidden] = useBalancesHidden();
     const rbfConfirm = useConfirmModal();

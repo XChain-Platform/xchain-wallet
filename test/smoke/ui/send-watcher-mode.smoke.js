@@ -137,7 +137,7 @@ assert.match(
 );
 assert.match(
     sendSrc,
-    /const walletModeReady = settings !== null;\s*const isWatcherMode = settings\?\.walletMode === 'watcher';/,
+    /const walletModeReady = settings !== null \|\| !settingsLoading;\s*const isWatcherMode = settings\?\.walletMode === 'watcher';/,
     'waits for and derives watcher mode from the same settings snapshot',
 );
 assert.match(

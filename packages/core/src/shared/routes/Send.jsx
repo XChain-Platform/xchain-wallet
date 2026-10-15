@@ -393,12 +393,12 @@ export function Send({ walletId, accountId, onBack, prefill = null, onDone, onCh
     const signerReady = useSignerReady(walletId);
     const variant = screenVariantFor(shell);
     const { developerMode } = useDeveloperMode();
-    const { settings } = useSettings();
+    const { settings, loading: settingsLoading } = useSettings();
     // Watcher mode still composes unsigned PSBTs, so balance-based Send
     // empty states never replace its form. Mode and readiness come from one
     // settings snapshot, so the signing form never renders before a
-    // watch-only mode is known.
-    const walletModeReady = settings !== null;
+    // watch-only mode is known; a failed settings read opens in full mode.
+    const walletModeReady = settings !== null || !settingsLoading;
     const isWatcherMode = settings?.walletMode === 'watcher';
     const isSignerMode = settings?.walletMode === 'signer';
     // A demo wallet holds fixture balances and cannot move funds: the form

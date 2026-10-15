@@ -128,9 +128,10 @@ function TokenDetailContent({
     onManageToken,
 }) {
     const { messaging, shell } = useMessaging();
-    const { settings, error: settingsError } = useSettings();
+    const { settings, loading: settingsLoading, error: settingsError } = useSettings();
     const fiatCurrency = settings?.fiatCurrency || 'USD';
-    const walletModeReady = settings !== null;
+    // A failed settings read still opens the screen in full mode.
+    const walletModeReady = settings !== null || !settingsLoading;
     const isWatcherMode = settings?.walletMode === 'watcher';
     const browserOnline = useOnlineStatus();
     const { overall: reachabilityOverall } = useReachability({});
