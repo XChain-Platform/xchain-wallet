@@ -124,6 +124,7 @@ export const en = {
     'settings.network.switchMessage':
         'The wallet will reload and show {nextNetwork} networks. Your {currentNetwork} balances and network settings stay unchanged. Unlock the wallet again after it reloads.',
     'settings.network.switchConfirm': 'Switch network',
+    'settings.network.switching': 'Switching networks. This can take a moment.',
     'settings.network.switchError': "Couldn't switch networks. Try again.",
     'settings.undoSend.label': 'Hold signed sends before broadcast',
     'settings.undoSend.hintUnavailable':
