@@ -50,6 +50,9 @@ beforeEach(({ task }) => {
 afterEach(() => {
     console.error = originalConsoleError;
     console.warn = originalConsoleWarn;
+    // Session-scoped UI state (History's remembered filters) would otherwise
+    // carry from one test into the next within a file.
+    try { globalThis.sessionStorage?.clear(); } catch { /* no DOM storage */ }
 
     const unexpected = unexpectedConsoleCalls(
         consoleCalls,

@@ -132,6 +132,7 @@ export function deleteAddressMessage({ record, holdings = [], hidden = false, ac
  * @param {() => void} [props.onReceive]
  * @param {(address: { id: string, address: string, source: string, chain: string, network: string, derivationPath: string | null, label: string }) => void} [props.onShowPrivateKey]   §17.7: when supplied, the detail view exposes a "Secret" affordance for non-multisig rows with a record, handing that address back to the caller (shell wires it to <ViewPrivateKey>)
  * @param {(sel: { chainId: string, address: string }) => void} [props.onEditPreferences]   PC-32: when supplied, the detail view's On-chain preferences card exposes an Edit affordance (shell wires it to <AddressPreferencesForm>)
+ * @param {Record<string, boolean>} [props.addressUsageByKey]   picker mode only: chain-and-address keyed receive usage, so a used address is marked
  * @param {Array<{ key: string, label: string, sublabel?: string, onSelect: () => void }>} [props.pickerActions]   picker mode only: caller-supplied rows rendered above the address list (e.g. Dispenser's "New dispenser address"); unaffected by search/filters
  */
 export function AddressList({
@@ -146,6 +147,7 @@ export function AddressList({
     pickerMode = false,
     onPick,
     pickerActions = [],
+    addressUsageByKey = {},
     title,
 }) {
     const { messaging, shell } = useMessaging();
@@ -1525,6 +1527,7 @@ export function AddressList({
             <ul className={local.addrList} aria-label={t('home.addresses')}>
                 {renderedAddressRows.map((row) => {
                     const d = chainRegistry.get(row.chainId);
+                    const used = addressUsageByKey[`${row.chainId}:${String(row.address || '').toLowerCase()}`] === true;
                     return (
                         <li key={row.key}>
                             <ListRow
@@ -1538,7 +1541,7 @@ export function AddressList({
                                 aria-busy="false"
                                 title={(
                                     <span className={local.addrRowMain}>
-                                        {(row.label || isActiveRow(row) || row.record?.hidden) ? (
+                                        {(row.label || isActiveRow(row) || row.record?.hidden || (pickerMode && used)) ? (
                                             <span className={local.addrTopRow}>
                                                 <span className={local.addrLabel}>{row.label || ''}</span>
                                                 <span className={local.addrBadges}>
@@ -1547,6 +1550,9 @@ export function AddressList({
                                                     ) : null}
                                                     {row.record?.hidden ? (
                                                         <span className={local.addrHidden}>{t('routes.addressList.hidden')}</span>
+                                                    ) : null}
+                                                    {pickerMode && used ? (
+                                                        <span className={local.addrHidden}>{t('routes.addressList.used')}</span>
                                                     ) : null}
                                                 </span>
                                             </span>

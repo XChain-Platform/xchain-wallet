@@ -160,6 +160,48 @@ function openerFor(container) {
     return null;
 }
 
+function pageFocusTarget(closedLayer) {
+    const available = (candidate) => candidate
+        && candidate.isConnected
+        && !closedLayer?.contains(candidate)
+        && !candidate.closest('[inert]')
+        && candidate.getAttribute('aria-hidden') !== 'true';
+    const heading = Array.from(document.querySelectorAll(
+        '#xc-main h1, main h1, [role="main"] h1',
+    )).find(available);
+    if (heading) return heading;
+    return Array.from(document.querySelectorAll('#xc-main, main, [role="main"]'))
+        .find(available) || null;
+}
+
+/**
+ * Returns focus after a transient layer closes without overriding a route or
+ * control that already claimed it. A removed opener falls back to the active
+ * page heading, or its main region when the page has no heading.
+ *
+ * @param {HTMLElement | null} opener
+ * @param {HTMLElement | null} [closedLayer]
+ * @returns {boolean} whether focus moved
+ */
+export function restoreFocusAfterClose(opener, closedLayer = null) {
+    const now = document.activeElement;
+    const unclaimed = !now || now === document.body || !now.isConnected
+        || Boolean(closedLayer?.contains(now));
+    if (!unclaimed) return false;
+
+    const target = opener?.isConnected ? opener : pageFocusTarget(closedLayer);
+    if (!target || typeof target.focus !== 'function') return false;
+    if (!target.matches(FOCUSABLE_SELECTOR) && !target.hasAttribute('tabindex')) {
+        target.tabIndex = -1;
+    }
+    try {
+        target.focus({ preventScroll: true });
+        return document.activeElement === target;
+    } catch {
+        return false;
+    }
+}
+
 /**
  * Trap Tab focus within `containerRef` while `active`. On activate, snapshots
  * the opener and moves focus to `initialFocusRef` (or the first focusable
@@ -242,11 +284,17 @@ export function useFocusTrap(containerRef, {
             // browser refuses focus to a disabled or inert control, so the
             // hand-back fell to the page body. Such an opener is re-enabled in
             // an update just after the one that closes the dialog, so a
-            // blocked opener is retried for a few frames.
+            // blocked opener is retried for a few frames. An opener the close
+            // removed (the dialog's action navigated away) hands focus to the
+            // new page's heading instead of leaving it on the body.
             const restore = (attempt) => {
                 const now = document.activeElement;
                 const unclaimed = !now || now === document.body || !now.isConnected || container.contains(now);
-                if (!unclaimed || !prev || !prev.isConnected || typeof prev.focus !== 'function') return;
+                if (!unclaimed) return;
+                if (!prev || !prev.isConnected || typeof prev.focus !== 'function') {
+                    restoreFocusAfterClose(null, container);
+                    return;
+                }
                 const blocked = prev.disabled || prev.closest?.('[inert]');
                 if (blocked && attempt < RESTORE_RETRY_FRAMES && typeof requestAnimationFrame === 'function') {
                     requestAnimationFrame(() => restore(attempt + 1));

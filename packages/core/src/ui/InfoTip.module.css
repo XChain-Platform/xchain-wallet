@@ -67,7 +67,12 @@
 
 .bubble {
     position: absolute;
+    /* The start edge sits on the trigger centre and --xc-tip-center pulls
+       the bubble back by half its width toward the start side, the physical
+       left in LTR and the physical right in RTL. The measured clamp in
+       InfoTip.jsx is a physical translateX, so it holds in both directions. */
     inset-inline-start: 50%;
+    --xc-tip-center: -50%;
     z-index: var(--xc-z-dropdown);
     box-sizing: border-box;
     min-width: min(180px, calc(100vw - 2 * var(--xc-space-2)));
@@ -86,6 +91,10 @@
     overflow-y: auto;
     pointer-events: none;
     box-shadow: var(--xc-shadow-md);
+}
+
+:global([dir='rtl']) .bubble {
+    --xc-tip-center: 50%;
 }
 
 .placementTop {
