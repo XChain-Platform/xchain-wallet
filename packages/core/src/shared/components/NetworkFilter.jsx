@@ -12,7 +12,9 @@ import { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react'
 import * as branding from '@xchain-wallet/core/branding/branding.js';
 import { Chip, Icon } from '@xchain-wallet/core/ui';
 import { useBackHandler } from '../../ui/backStack.js';
+import { ChevronIcon } from '../../ui/ChainPicker.icons.jsx';
 import styles from './NetworkFilter.module.css';
+import { t } from '../../i18n/index.js';
 
 /**
  * Single-select network filter that scales to N chains. Replaces the
@@ -152,7 +154,7 @@ export function NetworkFilter({
         <div ref={triggerRef} className={`${styles.wrap} ${styles[size] || ''}`.trim()}>
             <Chip
                 pressed={value !== 'all'}
-                className={styles.trigger}
+                className={`${styles.trigger} ${value === 'all' ? styles.idle : ''}`.trim()}
                 onClick={() => {
                     if (open) closeFilter();
                     else openFilter(entries.length > 6 ? 'search' : 'selected');
@@ -179,7 +181,7 @@ export function NetworkFilter({
                     <span className={styles.triggerLabel}>{triggerLabel}</span>
                 </span>
                 <span className={styles.triggerCaret} aria-hidden="true">
-                    {open ? '▴' : '▾'}
+                    <ChevronIcon open={open} />
                 </span>
             </Chip>
             {open ? (
@@ -199,29 +201,29 @@ export function NetworkFilter({
                                 autoCorrect="off"
                                 spellCheck={false}
                                 className={styles.search}
-                                placeholder="Search networks…"
-                                aria-label="Search networks"
+                                placeholder={t('components.networkFilter.searchNetworks')}
+                                aria-label={t('components.networkFilter.searchNetworks2')}
                                 value={query}
                                 onChange={(e) => setQuery(e.target.value)}
                             />
                         </div>
                     ) : null}
-                    <ul id={listboxId} className={styles.list} role="listbox" aria-label="Networks">
+                    <ul id={listboxId} className={styles.list} role="listbox" aria-label={t('extension.connect.chains')}>
                         <li role="presentation">
                             <button
                                 type="button"
                                 role="option"
                                 tabIndex={-1}
-                                aria-label="All networks"
+                                aria-label={t('common.allNetworks')}
                                 aria-selected={value === 'all' ? 'true' : 'false'}
                                 className={`${styles.item} ${value === 'all' ? styles.itemActive : ''}`}
                                 onClick={() => { onChange('all'); closeFilter(true); }}
-                                title="All networks"
+                                title={t('common.allNetworks')}
                             >
                                 <span className={styles.itemIcon} aria-hidden="true">
                                     <Icon.FilterIcon />
                                 </span>
-                                <span className={styles.itemLabel}>All networks</span>
+                                <span className={styles.itemLabel}>{t('common.allNetworks')}</span>
                                 <span className={styles.itemTicker}>{entries.length}</span>
                             </button>
                         </li>
@@ -254,7 +256,7 @@ export function NetworkFilter({
                                 role="option"
                                 aria-disabled="true"
                             >
-                                No matching networks.
+                                {t('components.networkFilter.noMatchingNetworks')}
                             </li>
                         ) : null}
                     </ul>

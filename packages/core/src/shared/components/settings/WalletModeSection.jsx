@@ -18,6 +18,7 @@ import { WALLET_MODES, WALLET_MODE_DEFAULT } from '../../../schemas/settings.js'
 import { SettingsLoadError, Status } from './_settingsPrimitives.jsx';
 import { ConfirmModal } from '../ConfirmModal.jsx';
 import { useBackHandler } from '../../../ui/backStack.js';
+import { t } from '../../../i18n/index.js';
 
 const MODE_OPTIONS = /** @type {const} */ ([
     {
@@ -47,9 +48,9 @@ export function WalletModeSection() {
     const [saveError, setSaveError] = useState(/** @type {string | null} */ (null));
     useBackHandler(pending ? () => setPending(null) : undefined, saving);
 
-    if (loading) return <Status text="Loading…" />;
+    if (loading) return <Status text={t('common.loading')} />;
     if (error) return <SettingsLoadError error={error} />;
-    if (!settings) return <Status text="Settings unavailable." tone="error" />;
+    if (!settings) return <Status text={t('common.settingsUnavailable')} tone="error" />;
 
     const current = WALLET_MODES.includes(settings.walletMode)
         ? settings.walletMode
@@ -96,9 +97,9 @@ export function WalletModeSection() {
             />
             {pendingOption ? (
                 <ConfirmModal
-                    title={`Switch to ${pendingOption.label} mode?`}
+                    title={t('settings.walletMode.switchToMode', { label: pendingOption.label })}
                     message={pendingOption.confirmation}
-                    confirmLabel="Confirm mode change"
+                    confirmLabel={t('settings.walletMode.confirmModeChange')}
                     busy={saving}
                     error={saveError}
                     onConfirm={confirmChange}

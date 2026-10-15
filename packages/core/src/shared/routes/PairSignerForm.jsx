@@ -462,12 +462,12 @@ function isPairingCancellation(err) {
 
 function FirmwareBanner({ verdict, vendor }) {
     if (verdict.status === 'ok') return null;
-    const variantClass = verdict.status === 'vulnerable' || verdict.status === 'unsupported'
-        ? styles.errorBanner
-        : styles.warningBanner;
+    const tone = verdict.status === 'vulnerable' || verdict.status === 'unsupported'
+        ? 'error'
+        : 'warning';
     const updateUrl = safeHttpUrl(verdict.updateUrl);
     return (
-        <StatusMessage variant="error" className={variantClass}>
+        <StatusMessage variant={tone} role="alert">
             <p className={styles.bannerDetail}>
                 {verdict.status === 'unsupported'
                     ? firmwareUpdateAdvice(vendor, verdict.recommended)

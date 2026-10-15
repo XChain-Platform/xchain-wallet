@@ -69,10 +69,7 @@
 }
 
 .wordCountRow {
-    /* 1px keeps the fieldset boundary as a crisp hairline. */
-    border: 1px solid var(--xc-border);
-    border-radius: var(--xc-radius-md);
-    padding: var(--xc-space-2) var(--xc-space-3);
+    composes: card from '../../ui/Card.module.css';
     margin: var(--xc-space-3) 0 0;
     min-width: 0;
     width: 100%;
@@ -130,18 +127,6 @@
 
 .quizRow > :global(*) {
     flex: 1;
-}
-
-.advancedWarning {
-    font-size: var(--xc-text-xs);
-    color: var(--xc-text);
-    background: var(--xc-warning-bg, var(--xc-bg-muted));
-    /* 1px keeps the warning boundary as a crisp hairline. */
-    border: 1px solid var(--xc-warning, var(--xc-border));
-    border-radius: var(--xc-radius-sm);
-    padding: var(--xc-space-2) var(--xc-space-3);
-    margin: 0;
-    line-height: 1.4;
 }
 
 .error {

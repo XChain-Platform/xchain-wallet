@@ -49,9 +49,13 @@
     min-width: 0;
 }
 
+/* --xc-qr-fit-size is the height budget Receive measures from the route
+   scroller, so a short window shrinks the code until the address and the Copy
+   row fit under it. With room to spare the width cap is the smaller, and below a
+   scannable size Receive leaves it unset so the page scrolls instead. */
 .qrSurface {
     width: 100%;
-    max-width: var(--xc-qr-frame-size);
+    max-width: min(var(--xc-qr-frame-size), var(--xc-qr-fit-size, var(--xc-qr-frame-size)));
     min-width: 0;
     margin-inline: auto;
 }
@@ -81,7 +85,7 @@
    its card, address field, and actions continue to share the same edges. */
 @media (orientation: landscape) and (max-height: 480px) {
     .qrSurface {
-        max-width: min(var(--xc-qr-frame-size), calc(var(--xc-viewport-h, 100vh) - 11rem));
+        max-width: min(var(--xc-qr-frame-size), var(--xc-qr-fit-size, var(--xc-qr-frame-size)), calc(var(--xc-viewport-h, 100vh) - 11rem));
     }
 }
 
@@ -178,12 +182,9 @@
 
 /* §17.6 hardware receive-address confirmation block. */
 .hwVerify {
+    composes: card from '../../ui/Card.module.css';
     display: flex;
     flex-direction: column;
     gap: var(--xc-space-2);
     margin-top: var(--xc-space-3);
-    padding: var(--xc-space-3);
-    border: 1px solid var(--xc-border);
-    border-radius: var(--xc-radius-md);
-    background: var(--xc-bg-muted);
 }

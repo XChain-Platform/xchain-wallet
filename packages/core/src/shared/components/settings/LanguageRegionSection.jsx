@@ -26,6 +26,7 @@ import { useState } from 'react';
 import { useSettings } from '../../hooks/useSettings.js';
 import { useBackHandler } from '../../../ui/backStack.js';
 import {
+    INPUT,
     ROW,
     ROW_COPY,
     ROW_HINT,
@@ -36,6 +37,7 @@ import {
     Status,
 } from './_settingsPrimitives.jsx';
 import { availableLocales, setLocale as setI18nLocale } from '../../../i18n/index.js';
+import { t } from '../../../i18n/index.js';
 
 // Friendly display names for known locales; we extend this map as
 // translations land. Unknown registered locales fall back to their
@@ -93,7 +95,7 @@ const CONTROLS = {
     width: 'min(100%, 280px)',
 };
 const CURRENCY_INPUT = {
-    ...SELECT,
+    ...INPUT,
     width: '100%',
 };
 const CURRENCY_LIST = {
@@ -129,9 +131,9 @@ export function LanguageRegionSection() {
 
     useBackHandler(currencyPickerOpen ? () => setCurrencyPickerOpen(false) : undefined);
 
-    if (loading) return <Status text="Loading…" />;
+    if (loading) return <Status text={t('common.loading')} />;
     if (error) return <SettingsLoadError error={error} />;
-    if (!settings) return <Status text="Settings unavailable." tone="error" />;
+    if (!settings) return <Status text={t('common.settingsUnavailable')} tone="error" />;
 
     const selectedCurrency = FIAT_CURRENCIES.find((currency) => currency.code === settings.fiatCurrency);
     const normalizedQuery = currencyQuery.trim().toLocaleLowerCase();
@@ -167,13 +169,13 @@ export function LanguageRegionSection() {
         <div style={STACK}>
             <div style={ROW}>
                 <div style={ROW_COPY}>
-                    <span style={ROW_VALUE}>Language</span>
-                    <span style={ROW_HINT}>Choose the language used for wallet navigation, settings, and messages.</span>
+                    <span style={ROW_VALUE}>{t('settings.languageRegion.language')}</span>
+                    <span style={ROW_HINT}>{t('settings.languageRegion.chooseTheLanguageUsedFor')}</span>
                 </div>
                 <select
                     value={settings.language}
                     onChange={(e) => onLanguageChange(e.target.value)}
-                    aria-label="Language"
+                    aria-label={t('settings.languageRegion.language')}
                     style={SELECT}
                 >
                     {LANGUAGES.map((l) => (
@@ -183,13 +185,8 @@ export function LanguageRegionSection() {
             </div>
             <div style={ROW}>
                 <div style={ROW_COPY}>
-                    <span style={ROW_VALUE}>Fiat currency</span>
-                    <span style={ROW_HINT}>Show estimated wallet values in this currency. Asset balances are unchanged.</span>
-                    {unsupportedFiatCurrency ? (
-                        <span role="status" style={ROW_HINT}>
-                            {unsupportedFiatCurrency} is not supported. Values are shown in USD.
-                        </span>
-                    ) : null}
+                    <span style={ROW_VALUE}>{t('settings.languageRegion.fiatCurrency')}</span>
+                    <span style={ROW_HINT}>{t('settings.languageRegion.showEstimatedWalletValuesIn')}</span>
                 </div>
                 <div style={CONTROLS}>
                     <input
@@ -198,10 +195,10 @@ export function LanguageRegionSection() {
                         aria-autocomplete="list"
                         aria-controls="fiat-currency-options"
                         aria-expanded={currencyPickerOpen}
-                        aria-label="Fiat currency"
+                        aria-label={t('settings.languageRegion.fiatCurrency')}
                         aria-invalid={currencyError ? 'true' : undefined}
                         aria-describedby={currencyError ? 'fiat-currency-error' : undefined}
-                        placeholder="Search by code or name"
+                        placeholder={t('settings.languageRegion.searchByCodeOrName')}
                         value={currencyPickerOpen
                             ? currencyQuery
                             : selectedCurrency ? currencyLabel(selectedCurrency) : ''}
@@ -228,7 +225,7 @@ export function LanguageRegionSection() {
                         style={CURRENCY_INPUT}
                     />
                     {currencyPickerOpen ? (
-                        <div id="fiat-currency-options" role="listbox" aria-label="Supported fiat currencies" style={CURRENCY_LIST}>
+                        <div id="fiat-currency-options" role="listbox" aria-label={t('settings.languageRegion.supportedFiatCurrencies')} style={CURRENCY_LIST}>
                             {filteredCurrencies.map((currency) => (
                                 <button
                                     key={currency.code}
@@ -243,13 +240,19 @@ export function LanguageRegionSection() {
                                 </button>
                             ))}
                             {filteredCurrencies.length === 0 ? (
-                                <Status text="No supported currencies match." />
+                                <Status text={t('settings.languageRegion.noSupportedCurrenciesMatch')} />
                             ) : null}
                         </div>
                     ) : null}
                 </div>
             </div>
             {currencyError ? <Status id="fiat-currency-error" text={currencyError} tone="error" /> : null}
+            {unsupportedFiatCurrency ? (
+                <Status
+                    text={t('settings.languageRegion.currencyNotSupported', { currency: unsupportedFiatCurrency })}
+                    tone="warning"
+                />
+            ) : null}
         </div>
     );
 }

@@ -9,12 +9,15 @@ import balanceSource from '../../../packages/core/src/shared/components/BalanceL
 import homeTabsSource from '../../../packages/core/src/shared/components/HomeTabs.jsx?raw';
 import homeSource from '../../../packages/core/src/shared/routes/Home.jsx?raw';
 import lockedSource from '../../../packages/core/src/shared/routes/Locked.jsx?raw';
-import createWalletSource from '../../../packages/core/src/shared/routes/CreateWallet.jsx?raw';
+import createWalletRawSource from '../../../packages/core/src/shared/routes/CreateWallet.jsx?raw';
 import importWalletSource from '../../../packages/core/src/shared/routes/ImportWallet.jsx?raw';
-import onboardingSource from '../../../packages/core/src/shared/routes/Onboarding.jsx?raw';
+import onboardingRawSource from '../../../packages/core/src/shared/routes/Onboarding.jsx?raw';
+import { withEnglishCopy } from '../../helpers/englishSource.js';
 import carouselSource from '../../../packages/core/src/shared/routes/OnboardingCarousel.jsx?raw';
 import resumeSource from '../../../packages/core/src/shared/routes/ResumeConfirm.jsx?raw';
 
+const onboardingSource = withEnglishCopy(onboardingRawSource);
+const createWalletSource = withEnglishCopy(createWalletRawSource);
 const balanceCss = readFileSync(
     'packages/core/src/shared/components/BalanceList.module.css',
     'utf8',
@@ -59,9 +62,10 @@ describe('onboarding and Home layout guards', () => {
         expect(balanceCss).toMatch(/\.amounts\s*\{[^}]*min-width:\s*0;/s);
         const listRowCss = readFileSync('packages/core/src/ui/ListRow.module.css', 'utf8');
         expect(listRowCss).toMatch(/\.trailing\s*\{[^}]*min-width:\s*0;[^}]*max-width:\s*50%;/s);
-        // The label yields space first. Values that still exceed the row show
-        // an ellipsis and expose the complete string through their title.
-        expect(balanceCss).toMatch(/\.amountFit\s*\{[^}]*overflow:\s*hidden;[^}]*text-overflow:\s*ellipsis;[^}]*white-space:\s*nowrap;/s);
+        // The label yields space first. A value never ends in an ellipsis:
+        // one that does not fit beside the name wraps onto its own line.
+        expect(balanceCss).not.toMatch(/\.amountFit\s*\{[^}]*(text-overflow:\s*ellipsis|overflow:\s*hidden)/s);
+        expect(balanceCss).toMatch(/\.row > \.rowContent\s*\{[^}]*flex-wrap:\s*wrap;/s);
         expect(balanceCss).toMatch(/\.name\s*\{[^}]*text-overflow:\s*ellipsis;/s);
         expect(walletPickerCss).toMatch(/\.rowName\s*\{[^}]*text-overflow:\s*ellipsis;/s);
         // The hero amount takes a full-width grid row of its own below the

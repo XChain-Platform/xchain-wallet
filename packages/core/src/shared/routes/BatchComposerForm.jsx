@@ -37,6 +37,9 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { AddressText, Button, ChainPicker, FeeSelector, FormPage, FormSection, PageHeader, Screen, Select, StatusMessage, Textarea } from '@xchain-wallet/core/ui';
+// A native select cannot middle-truncate, and a full address ran under the
+// chevron at phone width, so options carry the wallet's usual first6...last6 form.
+import { truncateAddress } from '../../ui/AddressText.jsx';
 import { registry as registryLib, flows as flowsLib, decoder as decoderLib } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { useDemoGuard } from '../hooks/useDemoGuard.jsx';
@@ -195,6 +198,9 @@ export function BatchComposerForm({ walletId, onBack, hasDexSurface = true }) {
     const [buildError, setBuildError] = useState(/** @type {string | null} */ (null));
     const [buildErrorDetails, setBuildErrorDetails] = useState('');
     const [rowValidationErrors, setRowValidationErrors] = useState(/** @type {Record<string, string>} */ ({}));
+    // Rows the user has edited, or every row once Review was pressed. A row
+    // with no action picked yet only says so after one of those.
+    const [touchedRows, setTouchedRows] = useState(/** @type {Record<string, boolean>} */ ({}));
     const [preReviewError, setPreReviewError] = useState(/** @type {string | null} */ (null));
     const [validatingRows, setValidatingRows] = useState(false);
     const [password, setPassword] = useState('');
@@ -230,7 +236,7 @@ export function BatchComposerForm({ walletId, onBack, hasDexSurface = true }) {
                 .filter(([, addrs]) => Array.isArray(addrs) && addrs.length > 0)
                 .map(([cid]) => cid);
             if (chains.length === 0) {
-                setLoadError('No addresses on any chain yet. Use Receive to generate one before composing a batch.');
+                setLoadError('No addresses on any network yet. Use Receive to generate one before composing a batch.');
                 return;
             }
             setChainId(chains[0]);
@@ -290,7 +296,7 @@ export function BatchComposerForm({ walletId, onBack, hasDexSurface = true }) {
         // A chain switch keeps queued rows, so every row is checked against
         // the chain that will receive the batch.
         if (!isActionOfferedOnChain(chainRegistry, chainId, pr.row.action)) {
-            return `Step ${i + 1}: ${actionDisplayLabel(pr.row.action)} is not available on the selected chain.`;
+            return `Step ${i + 1}: ${actionDisplayLabel(pr.row.action)} is not available on the selected network.`;
         }
         if (!isActionDataOfferedInBuild({ action: pr.row.action, params: pr.params }, { hasDexSurface })) {
             return `Step ${i + 1}: ${actionDisplayLabel(pr.row.action)} is not available in this build.`;
@@ -315,6 +321,12 @@ export function BatchComposerForm({ walletId, onBack, hasDexSurface = true }) {
         return constraintError;
     }, [parsedRows, rowErrors, constraintError]);
 
+    // The error shown beside each row: an unpicked action waits until the row
+    // is touched or Review is pressed; every other row error shows at once.
+    const shownRowErrors = rows.map((row, i) => (
+        rowErrors[i] && (row.action || touchedRows[row.id]) ? rowErrors[i] : null
+    ));
+
     const draftKey = JSON.stringify({ chainId, fromAddressId, rows });
     const draftKeyRef = useRef(draftKey);
     draftKeyRef.current = draftKey;
@@ -332,6 +344,8 @@ export function BatchComposerForm({ walletId, onBack, hasDexSurface = true }) {
     };
     const updateRow = (i, patch) => {
         clearPreReviewErrors(rows[i]?.id);
+        const id = rows[i]?.id;
+        if (id) setTouchedRows((t) => (t[id] ? t : { ...t, [id]: true }));
         setRows((rs) => rs.map((r, idx) => (idx === i ? { ...r, ...patch } : r)));
     };
     const addRow = () => {
@@ -346,6 +360,7 @@ export function BatchComposerForm({ walletId, onBack, hasDexSurface = true }) {
     const sendTotals = useMemo(() => sendTotalsFor(parsedRows), [parsedRows]);
 
     async function goReview() {
+        setTouchedRows(Object.fromEntries(rows.map((row) => [row.id, true])));
         if (composeError) return;
         const validatedDraftKey = draftKey;
         setValidatingRows(true);
@@ -734,7 +749,7 @@ export function BatchComposerForm({ walletId, onBack, hasDexSurface = true }) {
                 <StatusMessage variant="error" className={styles.error}>{preReviewError || constraintError}</StatusMessage>
             ) : null}
             actions={(
-                <Button type="button" variant="primary" onClick={goReview} loading={validatingRows} disabled={Boolean(composeError) || validatingRows}>
+                <Button type="button" variant="primary" onClick={goReview} loading={validatingRows} disabled={shownRowErrors.some(Boolean) || Boolean(constraintError) || validatingRows}>
                     Review
                 </Button>
             )}
@@ -749,7 +764,7 @@ export function BatchComposerForm({ walletId, onBack, hasDexSurface = true }) {
             </details>
             <FormSection title="Batch settings">
                 <ChainPicker
-                    label="Chain"
+                    label="Network"
                     value={chainId || ''}
                     onChange={(cid) => {
                         clearPreReviewErrors();
@@ -767,7 +782,7 @@ export function BatchComposerForm({ walletId, onBack, hasDexSurface = true }) {
                     onChange={(e) => { clearPreReviewErrors(); setFromAddressId(e.target.value); }}
                 >
                     {(addressesByChain[chainId] || []).map((a) => (
-                        <option key={a.id} value={a.id}>{a.address}</option>
+                        <option key={a.id} value={a.id}>{truncateAddress(a.address)}</option>
                     ))}
                 </Select>
             </FormSection>
@@ -793,9 +808,9 @@ export function BatchComposerForm({ walletId, onBack, hasDexSurface = true }) {
                         placeholder='{"VERSION":"0", ...}'
                         spellCheck={false}
                     />
-                    {rowErrors[i] ? (
+                    {shownRowErrors[i] ? (
                         <StatusMessage variant="error" className={styles.error}>
-                            {rowErrors[i]}
+                            {shownRowErrors[i]}
                         </StatusMessage>
                     ) : null}
                     <div className={styles.actions} style={{ justifyContent: 'flex-end' }}>

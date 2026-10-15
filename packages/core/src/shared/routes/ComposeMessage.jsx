@@ -908,7 +908,7 @@ function ComposeMessageForm({
                 <dl className={styles.detailsList}>
                     {descriptor ? (
                         <>
-                            <dt className={styles.detailsLabel}>Chain</dt>
+                            <dt className={styles.detailsLabel}>Network</dt>
                             <dd className={styles.detailsValue}>
                                 <ChainBadge descriptor={descriptor} size="sm" />
                             </dd>
@@ -1156,25 +1156,16 @@ function ComposeMessageForm({
                 </p>
             ) : null}
             {pubkeyState === 'missing' && encryptionValue !== 'plaintext' ? (
-                <div
-                    role="alert"
-                    style={{
-                        border: '1px solid var(--xc-warning)',
-                        borderRadius: '4px',
-                        padding: '0.5rem',
-                        marginTop: '0.25rem',
-                        fontSize: '0.85rem',
-                    }}
-                >
-                    <p style={{ margin: '0 0 0.5rem' }}>
+                <div>
+                    <StatusMessage variant="warning" role="alert">
                         We don't know the recipient's public key yet, so we can't encrypt. They need to
                         send a transaction first, or pick "Plain text" above.
-                    </p>
+                    </StatusMessage>
                     {handshakeSent ? (
-                        <p style={{ margin: 0 }} role="status">
-                            ✓ Key request sent. Once they respond or send any transaction, you can
+                        <StatusMessage variant="success">
+                            Key request sent. Once they respond or send any transaction, you can
                             message them encrypted.
-                        </p>
+                        </StatusMessage>
                     ) : (
                         <>
                             <Button
@@ -1191,14 +1182,7 @@ function ComposeMessageForm({
                                 nothing on this stage rendered an error before,
                                 so a refused or failed key request looked like a
                                 button that does nothing. */}
-                            {handshakeError ? (
-                                <p
-                                    role="alert"
-                                    style={{ margin: '0.5rem 0 0', color: 'var(--xc-danger-fg)', fontSize: '0.8rem' }}
-                                >
-                                    {handshakeError}
-                                </p>
-                            ) : null}
+                            <StatusMessage variant="error">{handshakeError}</StatusMessage>
                         </>
                     )}
                 </div>

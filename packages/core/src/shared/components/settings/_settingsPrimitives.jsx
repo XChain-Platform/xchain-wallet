@@ -16,21 +16,29 @@
 // other directories shouldn't import from here.
 
 import { cloneElement, useId } from 'react';
-import { Switch } from '@xchain-wallet/core/ui';
+import { StatusMessage, Switch } from '@xchain-wallet/core/ui';
 import { userFacingMessage } from '../../utils/userFacingMessage.js';
+import cardStyles from '../../../ui/Card.module.css';
 
-export const ROW = {
+// A row's layout. The rows below draw their surface with the shared card
+// class (ui/Card.module.css), so a row inside a wide form card flattens.
+export const ROW_LAYOUT = {
     display: 'flex',
     flexDirection: 'row',
     flexWrap: 'wrap',
     alignItems: 'center',
     justifyContent: 'space-between',
-    padding: 'var(--xc-space-2) var(--xc-space-3)',
-    background: 'var(--xc-surface-raised)',
-    border: '1px solid var(--xc-border)',
-    borderRadius: 'var(--xc-radius-md)',
     fontSize: 'var(--xc-text-sm)',
     gap: 'var(--xc-space-3)',
+};
+// The same row as one inline style, drawn from the card tokens, for callers
+// that spread it into their own style object.
+export const ROW = {
+    ...ROW_LAYOUT,
+    padding: 'var(--xc-card-pad)',
+    background: 'var(--xc-card-bg)',
+    border: 'var(--xc-card-border)',
+    borderRadius: 'var(--xc-card-radius)',
 };
 export const STACK = {
     display: 'flex',
@@ -47,14 +55,11 @@ export const ROW_HINT = {
     marginTop: 2,
     lineHeight: 1.3,
 };
+// Settings dropdowns take the shared dropdown look from tokens.css (the
+// Network picker's height, padding, border, surface and chevron), so the
+// inline style only keeps the control inside its row.
 export const SELECT = {
-    background: 'var(--xc-bg)',
-    color: 'var(--xc-text)',
-    border: '1px solid var(--xc-border)',
-    borderRadius: 'var(--xc-radius-sm)',
-    padding: 'var(--xc-space-1) var(--xc-space-2)',
-    fontSize: 'var(--xc-text-sm)',
-    fontFamily: 'inherit',
+    maxWidth: '100%',
 };
 export const INPUT = {
     background: 'var(--xc-bg)',
@@ -111,7 +116,7 @@ export function SettingsFieldRow({ label, hint, children, embedded = false }) {
     });
 
     return (
-        <div style={embedded ? EMBEDDED_ROW : ROW}>
+        <div className={embedded ? undefined : cardStyles.card} style={embedded ? EMBEDDED_ROW : ROW_LAYOUT}>
             <div style={ROW_COPY}>
                 <label htmlFor={controlId} style={ROW_VALUE}>{label}</label>
                 {hint ? <span id={hintId} style={ROW_HINT}>{hint}</span> : null}
@@ -154,7 +159,7 @@ const ACTION_SLOT = {
  */
 export function SettingsActionRow({ label, hint, headingLevel: Heading = 'h2', children }) {
     return (
-        <section style={ROW}>
+        <section className={cardStyles.card} style={ROW_LAYOUT}>
             <div style={ROW_COPY}>
                 <Heading style={ACTION_TITLE}>{label}</Heading>
                 {hint ? <p style={ACTION_HINT}>{hint}</p> : null}
@@ -186,7 +191,7 @@ export function ToggleRow({
     embedded = false,
 }) {
     return (
-        <div style={embedded ? EMBEDDED_ROW : ROW}>
+        <div className={embedded ? undefined : cardStyles.card} style={embedded ? EMBEDDED_ROW : ROW_LAYOUT}>
             <Switch
                 label={label}
                 description={hint}
@@ -200,25 +205,21 @@ export function ToggleRow({
 }
 
 /**
+ * A settings message: the shared StatusMessage row, so a settings error or
+ * status looks like every other inline message in the wallet (it was an
+ * outlined box for errors and a dashed box otherwise).
+ *
  * @param {object} props
  * @param {string} props.text
- * @param {'error'|'muted'} [props.tone]
+ * @param {'error'|'warning'|'success'|'muted'} [props.tone]   muted (the default) is a plain status
  * @param {string} [props.id]
  */
 export function Status({ text, tone, id }) {
+    const variant = tone === 'error' || tone === 'warning' || tone === 'success' ? tone : 'status';
     return (
-        <div id={id} role={tone === 'error' ? 'alert' : undefined} style={{
-            padding: 'var(--xc-space-3) var(--xc-space-4)',
-            background: 'var(--xc-surface-raised)',
-            border: tone === 'error'
-                ? '1px solid var(--xc-danger-fg)'
-                : '1px dashed var(--xc-border)',
-            borderRadius: 'var(--xc-radius-md)',
-            color: tone === 'error' ? 'var(--xc-danger-fg)' : 'var(--xc-text-muted)',
-            fontSize: 'var(--xc-text-sm)',
-        }}>
+        <StatusMessage variant={variant} id={id}>
             {text}
-        </div>
+        </StatusMessage>
     );
 }
 

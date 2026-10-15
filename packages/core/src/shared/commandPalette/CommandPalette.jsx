@@ -29,6 +29,7 @@ import { filterCommands } from './fuzzyMatch.js';
 import styles from './CommandPalette.module.css';
 import { useBackHandler } from '../../ui/backStack.js';
 import { useFocusTrap } from '../utils/focusTrap.js';
+import { t } from '../../i18n/index.js';
 
 /**
  * @param {object} props
@@ -180,14 +181,14 @@ export function CommandPalette({ open, onClose, commands, placeholder, parseQuer
             >
                 <header className={styles.header}>
                     <span className={styles.handle} aria-hidden="true" />
-                    <h2 id="xc-command-palette-title" className={styles.title}>Command palette</h2>
+                    <h2 id="xc-command-palette-title" className={styles.title}>{t('commandPalette.commandPalette.commandPalette')}</h2>
                     <span className={styles.close}>
                         <Button
                             variant="secondary"
                             size="md"
                             icon={<Icon.XIcon />}
                             onClick={onClose}
-                            aria-label="Close command palette"
+                            aria-label={t('commandPalette.commandPalette.closeCommandPalette')}
                             tabIndex={-1}
                         />
                     </span>
@@ -207,8 +208,8 @@ export function CommandPalette({ open, onClose, commands, placeholder, parseQuer
                         value={query}
                         onChange={(e) => { setQuery(e.target.value); setActiveIndex(0); }}
                         onKeyDown={onKeyDown}
-                        placeholder={placeholder || 'Search actions, tokens, contacts…'}
-                        aria-label="Search commands"
+                        placeholder={placeholder || t('commandPalette.commandPalette.searchActionsTokensContacts')}
+                        aria-label={t('commandPalette.commandPalette.searchCommands')}
                         role="combobox"
                         aria-expanded="true"
                         aria-controls="xc-cmd-listbox"
@@ -217,18 +218,18 @@ export function CommandPalette({ open, onClose, commands, placeholder, parseQuer
                         autoCorrect="off"
                         spellCheck={false}
                     />
-                    <kbd className={styles.escHint} aria-hidden="true">Esc</kbd>
+                    <kbd className={styles.escHint} aria-hidden="true">{t('commandPalette.commandPalette.esc')}</kbd>
                 </div>
                 <ul
                     ref={listRef}
                     id="xc-cmd-listbox"
                     className={styles.list}
                     role="listbox"
-                    aria-label="Commands"
+                    aria-label={t('commandPalette.commandPalette.commands')}
                 >
                     {results.length === 0 ? (
                         <li className={styles.empty} role="presentation">
-                            No matches for &ldquo;{query}&rdquo;
+                            {t('commandPalette.commandPalette.noMatchesFor')}{query}&rdquo;
                         </li>
                     ) : (
                         groups.map((group) => (

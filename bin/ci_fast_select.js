@@ -5,6 +5,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { execFileSync, spawnSync } from 'node:child_process';
 import { pathToFileURL } from 'node:url';
+import { smokeEnv, smokeNodeArgs } from '../test/smoke/_smoke-launch.js';
 
 const CONSENSUS = [
     'src/consensus/',
@@ -188,7 +189,10 @@ function runPlan(plan) {
             if (result.status !== 0) failed = true;
         } else {
             for (const file of files) {
-                const result = spawnSync(process.execPath, [file], { stdio: 'inherit', env: process.env });
+                // Same launch as the full smoke runner, English-copy loader included;
+                // a bare `node <smoke>` reads t('key') calls where the smoke expects text.
+                const full = path.resolve(file);
+                const result = spawnSync(process.execPath, smokeNodeArgs(full), { stdio: 'inherit', env: smokeEnv(full) });
                 if (result.status !== 0) failed = true;
             }
         }

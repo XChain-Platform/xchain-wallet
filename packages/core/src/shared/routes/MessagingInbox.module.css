@@ -73,12 +73,6 @@
     gap: var(--xc-space-2);
 }
 
-.requestSent {
-    margin: 0;
-    font-size: var(--xc-text-sm);
-    color: var(--xc-success, var(--xc-text-muted));
-}
-
 /* iMessage-style day separator: a centered, muted date header shown once
    above each day's run of messages in the thread view. */
 .daySeparator {
@@ -156,16 +150,25 @@
 
 /* Docked thread composer: lives in the Screen footer, which flex-pins it to
    the bottom of the screen and supplies the top border + raised background.
-   We pull against the footer's default padding (space-3 vertical / space-4
-   horizontal) with negative margins so the bar reads as a tight, even space-2
-   gutter, without a global footer change. The input and the send button are
+   A negative block margin trims the footer's space-3 vertical padding to a
+   tight space-2; the footer's inline padding is the page gutter, so the bar
+   lines up with the thread above it. The input and the send button are
    joined into one continuous bar (shared border, radius only on the outer
    corners); Enter or the button opens the send-confirmation screen. */
 .composer {
     display: flex;
     flex-direction: row;
     align-items: stretch;
-    margin: calc(var(--xc-space-2) - var(--xc-space-3)) calc(var(--xc-space-2) - var(--xc-space-4));
+    margin-block: calc(var(--xc-space-2) - var(--xc-space-3));
+}
+
+/* Short landscape screens already shrink the footer to space-1 block padding
+   (Screen.module.css), so the pull would put the bar flush against the
+   footer border and the bottom edge. */
+@media (orientation: landscape) and (max-height: 480px) {
+    .composer {
+        margin-block: 0;
+    }
 }
 
 .composer > div {
@@ -218,6 +221,9 @@
     padding: var(--xc-space-3);
     border: none;
     border-bottom: 1px solid var(--xc-border);
+    /* Square: a row separator, not a button outline. The Button radius bent
+       each separator up at both ends. */
+    border-radius: 0;
     background: transparent;
     color: inherit;
     cursor: pointer;
@@ -303,11 +309,9 @@
     color: var(--xc-text);
 }
 
+/* The timestamp keeps its full width ("20 seconds ago"); the name gives way. */
 .convTime {
-    flex: 0 1 auto;
-    min-width: 0;
-    overflow: hidden;
-    text-overflow: ellipsis;
+    flex: 0 0 auto;
     white-space: nowrap;
     font-size: var(--xc-text-xs);
     color: var(--xc-text-muted);

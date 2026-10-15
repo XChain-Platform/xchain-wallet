@@ -22,7 +22,7 @@ describe('governance and staking screen theme colors', () => {
         ['StakingList.module.css', 'var(--xc-on-accent)'],
         ['MyLists.module.css', 'var(--xc-danger-bg)'],
         ['StakeDetail.module.css', 'var(--xc-warning)'],
-        ['StakingList.module.css', 'var(--xc-surface-raised)'],
+        ['StakingList.module.css', "from '../../ui/Card.module.css'"],
     ])('%s uses a palette token for the audited color', (file, token) => {
         expect(route(file)).toContain(token);
     });

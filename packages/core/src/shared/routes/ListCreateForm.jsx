@@ -163,7 +163,7 @@ export function ListCreateForm({ walletId, chainId: initialChainId, initialType,
                 // creation order, so its first key is the wallet's OLDEST chain.
                 const picked = pickDefaultChainId(byChain, { explicitChainId: chainId, settings });
                 if (!chainId && picked) setChainId(picked);
-                if (Object.keys(byChain || {}).length === 0) setLoadError('No addresses on any chain yet. Use Receive to generate one first.');
+                if (Object.keys(byChain || {}).length === 0) setLoadError('No addresses on any network yet. Use Receive to generate one first.');
             })
             .catch((err) => { if (!cancelled) setLoadError(err?.message || 'Failed to load addresses.'); });
         return () => { cancelled = true; };
@@ -402,7 +402,7 @@ export function ListCreateForm({ walletId, chainId: initialChainId, initialType,
     }
 
     function validate() {
-        if (!fromAddress) { setFormError('No signing address available on this chain.'); return false; }
+        if (!fromAddress) { setFormError('No signing address available on this network.'); return false; }
         if (feePick.mode === 'custom' && feePerKb === null) {
             const rate = Number(feePick.customRate);
             setFormError(rate > 0
@@ -610,8 +610,8 @@ export function ListCreateForm({ walletId, chainId: initialChainId, initialType,
             >
                 <p className={styles.summary}>{decoded?.summary}</p>
                 <dl className={styles.detailsList}>
-                    <dt className={styles.detailsLabel}>Chain</dt>
-                    <dd className={styles.detailsValue}>{descriptor ? <ChainBadge descriptor={descriptor} size="sm" showName={false} /> : 'Selected chain'}</dd>
+                    <dt className={styles.detailsLabel}>Network</dt>
+                    <dd className={styles.detailsValue}>{descriptor ? <ChainBadge descriptor={descriptor} size="sm" showName={false} /> : 'Selected network'}</dd>
                     <dt className={styles.detailsLabel}>From</dt>
                     <dd className={styles.detailsValue}><AddressText address={fromAddress.address} /></dd>
                     <dt className={styles.detailsLabel}>Type</dt>
@@ -638,9 +638,9 @@ export function ListCreateForm({ walletId, chainId: initialChainId, initialType,
                     <ul>{items.map((item) => (<li key={item}><code>{item}</code></li>))}</ul>
                 </details>
                 {decoded && decoded.warnings.length > 0 ? (
-                    <div role="alert" className={styles.warnings}>
-                        {decoded.warnings.map((w, i) => (<p key={i} className={styles.warning}>{w}</p>))}
-                    </div>
+                    <StatusMessage variant="warning" role="alert">
+                        {decoded.warnings.map((w, i) => (<p key={i}>{w}</p>))}
+                    </StatusMessage>
                 ) : null}
                 {isWatcherMode ? (
                     <p className={styles.hint}>Watcher mode: this wallet will build an unsigned transaction. Sign it on your Signer-mode wallet, then broadcast from a Full-mode wallet.</p>
@@ -751,7 +751,7 @@ export function ListCreateForm({ walletId, chainId: initialChainId, initialType,
                     iconLabel="Choose source address"
                 />
             ) : (
-                <StatusMessage variant="error" className={styles.error}>No address on this chain. Use Receive to generate one first.</StatusMessage>
+                <StatusMessage variant="error" className={styles.error}>No address on this network. Use Receive to generate one first.</StatusMessage>
             )}
 
             <Select
@@ -828,8 +828,8 @@ export function ListCreateForm({ walletId, chainId: initialChainId, initialType,
                     {/* A real address for a different chain is not a typo;
                         say which chain this list is being published to. */}
                     {recipients.wrongNetwork.length > 0 ? (
-                        <div role="alert" className={styles.warnings}>
-                            <p className={styles.warning}>
+                        <StatusMessage variant="warning" role="alert">
+                            <p>
                                 {recipients.wrongNetwork.length} address
                                 {recipients.wrongNetwork.length === 1 ? ' is' : 'es are'} for another
                                 network and {recipients.wrongNetwork.length === 1 ? 'was' : 'were'} skipped.
@@ -840,10 +840,10 @@ export function ListCreateForm({ walletId, chainId: initialChainId, initialType,
                                 keepAddresses
                                 items={recipients.wrongNetwork.map((address) => ({
                                     subject: address,
-                                    message: 'Does not belong to the selected chain.',
+                                    message: 'Does not belong to the selected network.',
                                 }))}
                             />
-                        </div>
+                        </StatusMessage>
                     ) : null}
                     {/* PC-10: pasted or contact-book addresses become permanent
                         public on-chain data once the list is broadcast. */}
@@ -853,10 +853,10 @@ export function ListCreateForm({ walletId, chainId: initialChainId, initialType,
                     <p className={styles.hint}>
                         These addresses become permanent public on-chain data once the list is published.
                         {editResolutionActive === true
-                            ? ' You can change who is on the list later with Fork & edit, and everything that references this list then uses the edited membership, but the addresses published here stay in the chain\'s history.'
+                            ? ' You can change who is on the list later with Fork & edit, and everything that references this list then uses the edited membership, but the addresses published here stay in the network\'s history.'
                             : editResolutionActive === false
                                 ? ' There\'s no way to edit or delete an address out of a list later; forking (Fork & edit) only creates a new list at a new index.'
-                                : ' Fork & edit can change who is on the list later: where list-edit resolution is active, everything that references this list follows your newest edit; before that, a fork is a separate list at a new index. Either way, the addresses published here stay in the chain\'s history.'}
+                                : ' Fork & edit can change who is on the list later: where list-edit resolution is active, everything that references this list follows your newest edit; before that, a fork is a separate list at a new index. Either way, the addresses published here stay in the network\'s history.'}
                     </p>
                     {/* xchain-token-bridge-policy.md section 8, D9/milestone-1 refusal:
                         an address list is the thing IssueTokenForm/TokenAdminForm point
@@ -878,7 +878,7 @@ export function ListCreateForm({ walletId, chainId: initialChainId, initialType,
                     onChange={(value) => { setTicksText(value); setFormError(null); }}
                     items={tickItems}
                     chainId={chainId}
-                    chainLabel="the selected chain"
+                    chainLabel="the selected network"
                     listCoin={coinTicker}
                     coinQualified={tickCoinSupported}
                     messaging={messaging}
@@ -996,7 +996,7 @@ function ContactAddressPickerScreen({ variant, messaging, chainCoin, onAdd, onBa
     if (loadError) return wrap(<StatusMessage variant="error" className={styles.error}>{loadError}</StatusMessage>);
     if (!contacts) return wrap(<p className={styles.hint}>Loading contacts…</p>);
     if (rows.length === 0) {
-        return wrap(<EmptyState title="No matching contact addresses" body="Matching contact addresses on this chain appear here." />);
+        return wrap(<EmptyState title="No matching contact addresses" body="Matching contact addresses on this network appear here." />);
     }
 
     return wrap(

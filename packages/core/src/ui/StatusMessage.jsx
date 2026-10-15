@@ -9,6 +9,7 @@
 // contact legal@dankest.llc.
 
 import styles from './StatusMessage.module.css';
+import { t } from '../i18n/index.js';
 
 /**
  * §53.3 / G169: shared info / warning / error / success row that every form can
@@ -39,29 +40,43 @@ import styles from './StatusMessage.module.css';
  * @param {string} [props.className]                          appended after the variant class so callers can space-suffix layout adjustments
  * @param {string} [props.details]                            technical text shown only in a collapsed disclosure
  * @param {{ label: string, onAction: () => void | Promise<void>, ariaLabel?: string }} [props.recovery]   one-click fix shown inline with the message
+ * @param {'alert' | 'status' | 'note' | null} [props.role]   overrides the variant's role where the tone and the
+ *   announcement differ: a caution the user must hear at once (warning tone, alert role), or
+ *   a verification verdict that is a result rather than a failure (error tone, status role).
+ *   null drops the role for a message that is part of the page from the first paint, so it is
+ *   not a live region at all. The look always follows the variant, so one tone keeps one style.
+ * @param {string} [props.testId]                             data-testid for tests that find the message by hook
+ *
+ * Children may be several block elements (one `<p>` per line of a multi-line
+ * warning, or a `<ul>`): they stay one box and one announcement.
  */
-export function StatusMessage({ variant = 'status', id, children, className, details, recovery }) {
+export function StatusMessage({ variant = 'status', id, children, className, details, recovery, role: roleOverride, testId }) {
     if (children === null || children === undefined || children === '') return null;
     const presentation = STATUS_PRESENTATION[variant] || STATUS_PRESENTATION.status;
-    const role = presentation.tone === 'error' ? 'alert' : 'status';
-    const live = presentation.tone === 'error' ? 'assertive' : 'polite';
+    const role = roleOverride === null
+        ? undefined
+        : ROLE_LIVE[roleOverride] !== undefined
+            ? roleOverride
+            : (presentation.tone === 'error' ? 'alert' : 'status');
+    const live = role ? ROLE_LIVE[role] || undefined : undefined;
     const variantClass = styles[presentation.tone];
     const classNames = [styles.row, variantClass, className].filter(Boolean).join(' ');
     return (
         <div
             role={role}
             aria-live={live}
-            aria-atomic="true"
+            aria-atomic={live ? 'true' : undefined}
             id={id}
             className={classNames}
             data-variant={presentation.tone}
+            data-testid={testId}
         >
             <span className={styles.icon} aria-hidden="true">{presentation.icon}</span>
             <div className={styles.text}>
-                <span>{children}</span>
+                <div className={styles.body}>{children}</div>
                 {details ? (
                     <details className={styles.details}>
-                        <summary>Technical details</summary>
+                        <summary>{t('pending.detail.technicalDetails')}</summary>
                         <code>{details}</code>
                     </details>
                 ) : null}
@@ -83,6 +98,9 @@ export function StatusMessage({ variant = 'status', id, children, className, det
         </div>
     );
 }
+
+// A note is static context, so it is not a live region at all.
+const ROLE_LIVE = { alert: 'assertive', status: 'polite', note: null };
 
 const STATUS_PRESENTATION = {
     status: { tone: 'info', icon: 'ℹ' },

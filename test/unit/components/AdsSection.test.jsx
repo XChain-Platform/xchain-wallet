@@ -89,10 +89,18 @@ describe('Automatic Donation System settings', () => {
         expect(screen.queryByText(/testnet/i)).toBeNull();
     });
 
+    it('labels its switch as an action instead of repeating the page title', () => {
+        render(<AdsSection />);
+
+        const toggle = screen.getByRole('switch', { name: 'Turn on Automatic Donation System' });
+        expect(toggle.closest('label')).toHaveTextContent(/^Turn on/);
+        expect(screen.queryByText('Automatic Donation System')).toBeNull();
+    });
+
     it('writes the switch and both donation choices', () => {
         render(<AdsSection />);
 
-        fireEvent.click(screen.getByRole('switch', { name: 'Automatic Donation System' }));
+        fireEvent.click(screen.getByRole('switch', { name: 'Turn on Automatic Donation System' }));
         const amount = screen.getByLabelText('Bitcoin per-transaction amount');
         fireEvent.change(amount, { target: { value: '2000' } });
         fireEvent.blur(amount);
@@ -136,8 +144,8 @@ describe('Automatic Donation System settings', () => {
         settings = bitcoinSettings({ enabled: false });
         render(<AdsSection />);
 
-        expect(screen.getByRole('switch', { name: 'Automatic Donation System' }).checked).toBe(false);
-        expect(screen.getByText('Off. New outgoing transactions do not add to the pending donation total.')).toBeTruthy();
+        expect(screen.getByRole('switch', { name: 'Turn on Automatic Donation System' }).checked).toBe(false);
+        expect(screen.getByText('Off. New outgoing transactions don\'t add to the pending donation total.')).toBeTruthy();
         expect(screen.getByLabelText('Bitcoin per-transaction amount').disabled).toBe(true);
         expect(screen.getByLabelText('Bitcoin trigger threshold').disabled).toBe(true);
 

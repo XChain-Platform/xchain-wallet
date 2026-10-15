@@ -86,7 +86,7 @@ function ListTransferFormScreen({ walletId, listRef, onBack, onDone = onBack }) 
             if (cancelled) return;
             setAddressesByChain(byChain || {});
             if (!(byChain?.[chainId] || []).length) {
-                setLoadError('No address on this chain yet. Use Receive to generate one first.');
+                setLoadError('No address on this network yet. Use Receive to generate one first.');
             }
         }).catch((err) => {
             if (!cancelled) setLoadError(err?.message || 'Failed to load addresses.');
@@ -161,7 +161,7 @@ function ListTransferFormScreen({ walletId, listRef, onBack, onDone = onBack }) 
         const candidates = airdropLib.parsePaste(trimmedDestination);
         const classified = airdropLib.classifyRecipients(candidates, descriptor);
         if (candidates.length !== 1 || classified.valid.length !== 1) {
-            setFormError('Destination must be one valid address for the selected chain.');
+            setFormError('Destination must be one valid address for the selected network.');
             return false;
         }
         if (owner && trimmedDestination.toLowerCase() === owner.toLowerCase()) {
@@ -296,9 +296,9 @@ function ListTransferFormScreen({ walletId, listRef, onBack, onDone = onBack }) 
             <dl className={styles.detailsList}>
                 <dt className={styles.detailsLabel}>List</dt>
                 <dd className={styles.detailsValue}>#{listActionIndex}</dd>
-                <dt className={styles.detailsLabel}>Chain</dt>
+                <dt className={styles.detailsLabel}>Network</dt>
                 <dd className={styles.detailsValue}>
-                    {descriptor ? <ChainBadge descriptor={descriptor} size="sm" showName={false} /> : 'Selected chain'}
+                    {descriptor ? <ChainBadge descriptor={descriptor} size="sm" showName={false} /> : 'Selected network'}
                 </dd>
                 <dt className={styles.detailsLabel}>From</dt>
                 <dd className={styles.detailsValue}>
@@ -307,14 +307,14 @@ function ListTransferFormScreen({ walletId, listRef, onBack, onDone = onBack }) 
             </dl>
 
             {ownershipReason ? (
-                <div role="alert" className={styles.warnings}>
-                    <p className={styles.warning}>{ownershipReason}</p>
-                </div>
+                <StatusMessage variant="warning" role="alert">
+                    <p>{ownershipReason}</p>
+                </StatusMessage>
             ) : null}
 
             <Input
                 label="Destination"
-                hint="New owner's address on the selected chain."
+                hint="New owner's address on the selected network."
                 value={destination}
                 onChange={(event) => { setDestination(event.target.value); setFormError(null); }}
                 autoComplete="off"
@@ -332,16 +332,16 @@ function ListTransferFormScreen({ walletId, listRef, onBack, onDone = onBack }) 
                 disabled={sdkSupported !== true || Boolean(ownershipReason)}
             />
 
-            <div className={styles.warnings}>
-                <p className={styles.warning}>
+            <StatusMessage variant="warning" role={null}>
+                <p>
                     From the block this transfer confirms, only the new owner can edit, share, or transfer the list.
                 </p>
-                <p className={styles.warning}>The sender cannot undo the transfer.</p>
-                <p className={styles.warning}>A transfer cannot rescue a list whose owner key is lost.</p>
-                <p className={styles.warning}>
+                <p>The sender cannot undo the transfer.</p>
+                <p>A transfer cannot rescue a list whose owner key is lost.</p>
+                <p>
                     A shared list keeps working on every chain because its versions carry members, never the owner.
                 </p>
-            </div>
+            </StatusMessage>
 
             <Input
                 label="Type TRANSFER to confirm"

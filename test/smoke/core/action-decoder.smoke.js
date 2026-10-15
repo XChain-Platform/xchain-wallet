@@ -631,7 +631,10 @@ const signCss = readFileSync(
     join(ext, 'src', 'approval', 'kinds', 'SignApproval.module.css'),
     'utf8',
 );
-assert.ok(signCss.includes('.warnings'), 'warnings block has a style');
+assert.ok(
+    /<StatusMessage variant="warning" role="alert">\s*<ul>\s*\{decoded\.warnings\.map/.test(sign),
+    'warnings render in the shared warning message',
+);
 assert.ok(signCss.includes('.detailsList'), 'details list has a style');
 
 console.log(

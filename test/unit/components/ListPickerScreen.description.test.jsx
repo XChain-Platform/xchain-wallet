@@ -43,7 +43,7 @@ describe('ListPickerScreen description detail', () => {
         renderPicker([]);
 
         const title = await screen.findByText('No address lists yet');
-        expect(screen.getByText('Address lists published from this chain appear here.')).toBeTruthy();
+        expect(screen.getByText('Address lists published from this network appear here.')).toBeTruthy();
         expect(title.tagName).toBe('P');
         expect(title.parentElement.className).toMatch(/wrap/);
         expect(title.parentElement.parentElement.className).toMatch(/page/);
@@ -80,7 +80,7 @@ describe('ListPickerScreen description detail', () => {
         );
     });
 
-    it('reloads detail for the same action index after the chain changes', async () => {
+    it('reloads detail for the same action index after the network changes', async () => {
         const messaging = {
             getListsForSource: vi.fn().mockResolvedValue([{ action_index: '10', type: '2' }]),
             getListByActionIndex: vi.fn(async ({ chainId }) => (

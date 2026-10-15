@@ -27,11 +27,29 @@ const extensionSources = import.meta.glob(
 const shellSources = import.meta.glob(
     [
         '../../packages/desktop/renderer/**/*.jsx',
-        '../../packages/web/src/App.jsx',
-        '../../packages/web/src/components/**/*.jsx',
+        '../../packages/web/src/**/*.jsx',
+        '!../../packages/web/src/style-guide/**',
     ],
     { query: '?raw', import: 'default', eager: true },
 );
+
+const uiSources = import.meta.glob(
+    '../../packages/core/src/ui/**/*.jsx',
+    { query: '?raw', import: 'default', eager: true },
+);
+
+// The allowlist: files outside the guard because their screens still carry
+// hard-coded copy. Every file under shared/components, core/src/ui, the web
+// shell and the desktop renderer is scanned unless it is named here, so the
+// list may only shrink.
+const UNMIGRATED_FILES = [
+    '/components/NoticeModal.jsx',
+    '/components/ReachabilityBanner.jsx',
+    '/components/UpdateNoticeBanner.jsx',
+];
+
+const isUnmigrated = (file) => [...UNMIGRATED_FILES, ...PARTIAL_COPY_FILES].some((suffix) => file.endsWith(suffix));
+const GUARDED_SHARED_DIRS = /\/shared\/(components|keyboard|commandPalette)\//;
 
 const localizedComponents = [
     'AdsNotice.jsx',
@@ -40,6 +58,33 @@ const localizedComponents = [
     'ConfirmModal.jsx',
     'settings/NetworkSection.jsx',
     'settings/UndoSendRow.jsx',
+    'settings/AboutSection.jsx',
+    'settings/AdsSection.jsx',
+    'settings/AppearanceSection.jsx',
+    'settings/BackupSection.jsx',
+    'settings/BiometricRow.jsx',
+    'settings/ConnectedSitesSection.jsx',
+    'settings/ContactsSection.jsx',
+    'settings/DeveloperModeSection.jsx',
+    'settings/DisplaySection.jsx',
+    'settings/DuressPassphraseRow.jsx',
+    'settings/FeesSection.jsx',
+    'settings/KeyboardSection.jsx',
+    'settings/LanguageRegionSection.jsx',
+    'settings/NetworkEndpointsSection.jsx',
+    'settings/NotificationsSection.jsx',
+    'settings/PanicModeRow.jsx',
+    'settings/PrivacySection.jsx',
+    'settings/SafetySection.jsx',
+    'settings/ThisWalletSection.jsx',
+    'settings/WalletModeSection.jsx',
+    'AppHeader.jsx',
+    'BalanceList.jsx',
+    'HeaderSettingsButton.jsx',
+    'HomeFilterBar.jsx',
+    'HomeTabs.jsx',
+    'TxStatusTimeline.jsx',
+    'UndoSendToast.jsx',
 ];
 
 // Every E-K route is migrated, so each one is scanned even if it stops calling t().
@@ -47,6 +92,11 @@ const ROUTE_E_TO_K = /\/routes\/[E-K][^/]*\.jsx$/;
 
 const localizedRoutes = [
     'AccountPicker.jsx',
+    'CreateWallet.jsx',
+    'Locked.jsx',
+    'Onboarding.jsx',
+    'Receive.jsx',
+    'Settings.jsx',
     'ActionDetail.jsx',
     'ActionsMenu.jsx',
     'AlertsRoute.jsx',
@@ -66,14 +116,14 @@ const localizedRoutes = [
     'WalletPicker.jsx',
 ];
 
-// Files that call t() only for ICU plural count copy and are not yet migrated
-// as screens. Their t() keys are still checked against the dictionary; their
-// remaining literals stay outside the literal guard until the screen migrates.
-const PLURAL_ONLY_FILES = [
-    '/components/BalanceList.jsx',
-    '/components/TxStatusTimeline.jsx',
-    '/routes/AddressList.jsx',
-    '/routes/ManageToken.jsx',
+// Routes that call t() only for single wording fixes. Their t() keys are still
+// checked against the dictionary; their remaining literals stay outside the
+// literal guard until the screen migrates.
+const PARTIAL_COPY_FILES = [
+    '/routes/CreateBetFeedForm.jsx',
+    '/routes/CreateOrderForm.jsx',
+    '/routes/DispenserExplorer.jsx',
+    '/routes/DispenserForm.jsx',
 ];
 
 describe('shipping JSX localization', () => {
@@ -97,20 +147,23 @@ describe('shipping JSX localization', () => {
         const localizedSources = {
             ...Object.fromEntries(
                 Object.entries(sharedSources).filter(([file, source]) => (
-                    /\bt\s*\(/.test(source) || ROUTE_E_TO_K.test(file)
+                    !isUnmigrated(file) && (/\bt\s*\(/.test(source) || ROUTE_E_TO_K.test(file))
                 )),
             ),
             ...Object.fromEntries(
                 Object.entries(extensionSources).filter(([, source]) => /\bt\s*\(/.test(source)),
             ),
-            ...shellSources,
+            ...Object.fromEntries(
+                Object.entries(sharedSources).filter(([file]) => GUARDED_SHARED_DIRS.test(file) && !isUnmigrated(file)),
+            ),
+            ...Object.fromEntries(Object.entries(uiSources).filter(([file]) => !isUnmigrated(file))),
+            ...Object.fromEntries(Object.entries(shellSources).filter(([file]) => !isUnmigrated(file))),
         };
 
         for (const [file, source] of Object.entries(localizedSources)) {
             for (const match of source.matchAll(/\bt\(\s*'([^']+)'/g)) {
                 if (!(match[1] in en)) missingKeys.push(`${file}: ${match[1]}`);
             }
-            if (PLURAL_ONLY_FILES.some((suffix) => file.endsWith(suffix))) continue;
             const ast = parse(source, {
                 sourceType: 'module',
                 plugins: ['jsx', 'estree'],
@@ -122,6 +175,13 @@ describe('shipping JSX localization', () => {
 
         expect(violations).toEqual([]);
         expect(missingKeys).toEqual([]);
+    });
+
+    test('the literal guard allowlist names only files that still exist', () => {
+        const files = Object.keys(sharedSources);
+        for (const suffix of UNMIGRATED_FILES) {
+            expect(files.some((file) => file.endsWith(suffix)), suffix).toBe(true);
+        }
     });
 
     test('migrated routes remain enrolled in the literal guard', () => {

@@ -577,7 +577,7 @@ function TokenDetailContent({
                         {metadataLoading ? (
                             <Skeleton height={38} ariaLabel="Loading token verification" />
                         ) : Array.isArray(assetInfo?.projects) && assetInfo.projects.length > 0 ? (
-                            <p className={styles.officialBanner} role="status">
+                            <StatusMessage variant="success">
                                 This token is an official token in the{' '}
                                 {assetInfo.projects.map((p, i) => (
                                     <span key={p} className={styles.officialBannerProject}>
@@ -585,7 +585,7 @@ function TokenDetailContent({
                                     </span>
                                 ))}
                                 {' '}project{assetInfo.projects.length === 1 ? '' : 's'}.
-                            </p>
+                            </StatusMessage>
                         ) : null}
                     </div>
                 ) : null}
@@ -1193,7 +1193,7 @@ function DetailsPanel({
                 ) : null}
                 <DetailRow label="Type">{kindLabel(kind)}</DetailRow>
                 {descriptor ? (
-                    <DetailRow label="Chain"><ChainBadge descriptor={descriptor} size="sm" /></DetailRow>
+                    <DetailRow label="Network"><ChainBadge descriptor={descriptor} size="sm" /></DetailRow>
                 ) : null}
                 {!isNative ? (
                     <DetailRow label="Divisibility">{detailText(divisibility)}</DetailRow>
@@ -1911,7 +1911,7 @@ function GatedContentPanel({ walletId, chainId, tick, groups, loading, error, pa
                 const usable = list.filter((a) => a.source === 'hd' || a.source === 'imported-wif');
                 setAddresses(usable);
                 if (usable.length === 0) {
-                    setAddressesError('No unlockable addresses for this chain. Holders need an HD or imported-WIF address that holds the token.');
+                    setAddressesError('No unlockable addresses for this network. Holders need an HD or imported-WIF address that holds the token.');
                 }
             })
             .catch((err) => setAddressesError(err?.message || 'Failed to load addresses.'))
@@ -1987,7 +1987,6 @@ function GatedGroupCard({
     ownsToken,
     tokenLabel,
 }) {
-    const unlockErrorId = `${useId()}-unlock-error`;
     const [password, setPassword] = useState('');
     const [unlockError, setUnlockError] = useState(/** @type {string | null} */ (null));
     const [accessError, setAccessError] = useState(/** @type {string | null} */ (null));
@@ -2142,7 +2141,7 @@ function GatedGroupCard({
         event.preventDefault();
         if (submitting || password.length === 0) return;
         if (!Array.isArray(addresses) || addresses.length === 0) {
-            setUnlockError('No usable holding address found for this chain.');
+            setUnlockError('No usable holding address found for this network.');
             return;
         }
         setSubmitting(true);
@@ -2297,23 +2296,7 @@ function GatedGroupCard({
                     );
                 })}
             </ul>
-            {accessError ? (
-                <p
-                    role="alert"
-                    style={{
-                        marginTop: 'var(--xc-space-2)',
-                        padding: 'var(--xc-space-3)',
-                        background: 'var(--xc-bg-muted)',
-                        border: '1px dashed var(--xc-border)',
-                        borderRadius: 'var(--xc-radius-sm)',
-                        fontSize: 'var(--xc-text-sm)',
-                        color: 'var(--xc-text)',
-                        lineHeight: 1.5,
-                    }}
-                >
-                    {accessError}
-                </p>
-            ) : null}
+            <StatusMessage variant="error">{accessError}</StatusMessage>
             {passwordOpen ? (
                 <form onSubmit={handleUnlock} noValidate style={{ marginTop: 'var(--xc-space-3)' }}>
                     {addressesLoading ? (
@@ -2331,19 +2314,8 @@ function GatedGroupCard({
                             if (unlockError) setUnlockError(null);
                         }}
                         autoComplete="current-password"
-                        aria-invalid={unlockError ? true : undefined}
-                        aria-describedby={unlockError ? unlockErrorId : undefined}
+                        error={unlockError || undefined}
                     />
-                    {unlockError ? (
-                        <p
-                            id={unlockErrorId}
-                            role="alert"
-                            className={styles.error}
-                            style={{ marginTop: 'var(--xc-space-1)' }}
-                        >
-                            {unlockError}
-                        </p>
-                    ) : null}
                     <div style={{ display: 'flex', gap: 'var(--xc-space-2)', marginTop: 'var(--xc-space-2)' }}>
                         <Button
                             type="submit"

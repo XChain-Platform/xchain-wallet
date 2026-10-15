@@ -94,7 +94,9 @@ async function openAddWallet() {
 
 async function createWallet() {
     fireEvent.click(await screen.findByRole('button', { name: 'Create new wallet' }));
-    fireEvent.change(await screen.findByLabelText('Wallet name'), { target: { value: 'Second Wallet' } });
+    // Create wallet is a lazy route, and Onboarding no longer warms the core
+    // barrel at startup, so its first import in jsdom can outlast the default wait.
+    fireEvent.change(await screen.findByLabelText('Wallet name', {}, { timeout: 20_000 }), { target: { value: 'Second Wallet' } });
     fireEvent.change(screen.getByLabelText('Password'), { target: { value: PASSWORD } });
     fireEvent.change(screen.getByLabelText('Confirm password'), { target: { value: PASSWORD } });
     fireEvent.click(screen.getByRole('button', { name: 'Next' }));

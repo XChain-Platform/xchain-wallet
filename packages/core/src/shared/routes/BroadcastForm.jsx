@@ -432,7 +432,7 @@ export function BroadcastForm({ walletId, onBack, onDone, initialChainId, initia
                 const first = Object.keys(byChain)[0];
                 if (!first) {
                     setLoadError(
-                        'No addresses on any chain yet. Use Receive to generate one before broadcasting.',
+                        'No addresses on any network yet. Use Receive to generate one before broadcasting.',
                     );
                     return;
                 }
@@ -910,11 +910,11 @@ export function BroadcastForm({ walletId, onBack, onDone, initialChainId, initia
                     />
                 </dl>
                 {decoded && decoded.warnings.length > 0 ? (
-                    <div role="alert" className={styles.warnings}>
+                    <StatusMessage variant="warning" role="alert">
                         {decoded.warnings.map((w, i) => (
-                            <p key={i} className={styles.warning}>{w}</p>
+                            <p key={i}>{w}</p>
                         ))}
-                    </div>
+                    </StatusMessage>
                 ) : null}
                 {isWatcherMode ? (
                     <p className={styles.hint}>

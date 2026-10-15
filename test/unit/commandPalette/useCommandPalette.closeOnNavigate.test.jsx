@@ -43,6 +43,23 @@ describe('useCommandPalette closes on navigation', () => {
         input.remove();
     });
 
+    it('opens while a radio or checkbox holds focus, since neither takes typing', () => {
+        for (const type of ['radio', 'checkbox']) {
+            const { result, unmount } = renderHook(() => useCommandPalette());
+            const input = Object.assign(document.createElement('input'), { type });
+            document.body.append(input);
+            input.focus();
+
+            act(() => input.dispatchEvent(new KeyboardEvent('keydown', {
+                key: 'k', ctrlKey: true, bubbles: true, cancelable: true,
+            })));
+
+            expect(result.current.open, type).toBe(true);
+            input.remove();
+            unmount();
+        }
+    });
+
     it('closes when the shown view changes', () => {
         const { result, rerender } = renderHook(({ view }) => useCommandPalette({ currentView: view }), {
             initialProps: { view: 'settings' },

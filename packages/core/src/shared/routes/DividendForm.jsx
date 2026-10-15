@@ -162,7 +162,7 @@ export function DividendForm({ walletId, onBack, initialChainId, initialTick, in
                 const first = Object.keys(byChain)[0];
                 if (!first) {
                     setLoadError(
-                        'No addresses on any chain yet. Use Receive to generate one before paying dividends.',
+                        'No addresses on any network yet. Use Receive to generate one before paying dividends.',
                     );
                     return;
                 }
@@ -331,14 +331,14 @@ export function DividendForm({ walletId, onBack, initialChainId, initialTick, in
     }, [trimmedDividendTick, chainId, messaging]);
 
     const tickFieldError = tickIsNativeCoin
-        ? nativeCoinTickMessage(coinTicker, 'the active chain')
+        ? nativeCoinTickMessage(coinTicker, 'the active network')
         : tickCheck.verdict === 'missing'
-            ? unknownTickMessage(trimmedTick, 'the active chain')
+            ? unknownTickMessage(trimmedTick, 'the active network')
             : tickCheck.error
                 ? `Couldn't verify this token: ${tickCheck.error}`
                 : undefined;
     const dividendTickFieldError = dividendTickCheck.verdict === 'missing'
-        ? unknownTickMessage(trimmedDividendTick, 'the active chain')
+        ? unknownTickMessage(trimmedDividendTick, 'the active network')
         : dividendTickCheck.error
             ? `Couldn't verify this token: ${dividendTickCheck.error}`
             : undefined;
@@ -592,11 +592,11 @@ export function DividendForm({ walletId, onBack, initialChainId, initialTick, in
             return;
         }
         if (tickIsNativeCoin) {
-            setFormError(nativeCoinTickMessage(coinTicker, 'the active chain'));
+            setFormError(nativeCoinTickMessage(coinTicker, 'the active network'));
             return;
         }
         if (tickCheck.verdict === 'missing') {
-            setFormError(unknownTickMessage(trimmedTick, 'the active chain'));
+            setFormError(unknownTickMessage(trimmedTick, 'the active network'));
             return;
         }
         if (!dividendTick.trim()) {
@@ -609,7 +609,7 @@ export function DividendForm({ walletId, onBack, initialChainId, initialTick, in
             return;
         }
         if (dividendTickCheck.verdict === 'missing') {
-            setFormError(unknownTickMessage(trimmedDividendTick, 'the active chain'));
+            setFormError(unknownTickMessage(trimmedDividendTick, 'the active network'));
             return;
         }
         const amt = String(amount).trim();
@@ -899,7 +899,7 @@ export function DividendForm({ walletId, onBack, initialChainId, initialTick, in
                 <dl className={styles.detailsList}>
                     {descriptor ? (
                         <>
-                            <dt className={styles.detailsLabel}>Chain</dt>
+                            <dt className={styles.detailsLabel}>Network</dt>
                             <dd className={styles.detailsValue}><ChainBadge descriptor={descriptor} size="sm" /></dd>
                         </>
                     ) : null}
@@ -945,11 +945,11 @@ export function DividendForm({ walletId, onBack, initialChainId, initialTick, in
                     />
                 </dl>
                 {decoded && decoded.warnings.length > 0 ? (
-                    <div role="alert" className={styles.warnings}>
+                    <StatusMessage variant="warning" role="alert">
                         {decoded.warnings.map((w, i) => (
-                            <p key={i} className={styles.warning}>{w}</p>
+                            <p key={i}>{w}</p>
                         ))}
-                    </div>
+                    </StatusMessage>
                 ) : null}
                 <p className={styles.hint} data-testid="dividend-review-fee-hint">
                     Paying a dividend has a protocol fee that grows with the number
@@ -1142,11 +1142,11 @@ export function DividendForm({ walletId, onBack, initialChainId, initialTick, in
                 autoComplete="off"
             />
             {gatedDividendNotice.gated ? (
-                <div role="alert" className={styles.warnings}>
-                    <p className={styles.warning}>
+                <StatusMessage variant="warning" role="alert">
+                    <p>
                         {gatedTickWarningCopy(dividendTick, 'dividend recipients')}
                     </p>
-                </div>
+                </StatusMessage>
             ) : null}
 
             {tick.trim() ? (

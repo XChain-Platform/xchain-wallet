@@ -132,7 +132,6 @@ export function useAutoLockPolicy({ sessionState, activeWalletId, onLocked } = {
         showToast({
             id: 'auto-lock-signing-deferred',
             message: 'Auto-lock is waiting for the current signing request to finish.',
-            durationMs: 8000,
         });
     }, [showToast]);
 

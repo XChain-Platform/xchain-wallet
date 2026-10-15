@@ -8,13 +8,14 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-import { forwardRef, useCallback, useId, useMemo, useRef, useState } from 'react';
+import { forwardRef, useCallback, useId, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { Input } from './Input.jsx';
 import { ClipboardPasteButton } from './ClipboardPasteButton.jsx';
 import { UsersIcon, ScanIcon } from './icons/index.jsx';
 import { AddressText } from './AddressText.jsx';
 import { filterSuggestions } from '../flows/recentDestinations.js';
 import styles from './AddressCombobox.module.css';
+import { t } from '../i18n/index.js';
 
 const ICONS = {
     contacts: { Component: UsersIcon, defaultLabel: 'Open address book' },
@@ -33,6 +34,28 @@ function inspectClipboardPaste(value) {
             error: 'Pasted text contains hidden characters. Check it and try again.',
         }
         : { ok: true, value: normalized, error: null };
+}
+
+/**
+ * Keeps `--address-paste-width` on the field equal to the room the in-field
+ * Paste button really takes: its width plus its end inset on both sides,
+ * rounded up. The stylesheet's value is the default-text estimate; Paste
+ * grows with the text size (and with a longer translated label), and the
+ * icon action and the input's text both lay out against this width, so an
+ * estimate alone let the icon run into Paste at large text.
+ *
+ * @param {HTMLElement | null} wrap   the field's wrapper, which owns the property
+ * @param {HTMLElement | null} paste  the Paste button
+ * @returns {number | null} the width written, or null when nothing was measured
+ */
+export function syncPasteWidth(wrap, paste) {
+    if (!wrap || !paste) return null;
+    const width = paste.getBoundingClientRect().width;
+    if (!(width > 0)) return null;
+    const inset = Number.parseFloat(getComputedStyle(paste).insetInlineEnd);
+    const room = Math.ceil(width) + 2 * (Number.isFinite(inset) ? inset : 0);
+    wrap.style.setProperty('--address-paste-width', `${room}px`);
+    return room;
 }
 
 /**
@@ -105,6 +128,17 @@ export const AddressCombobox = /* @__PURE__ */ forwardRef(function AddressCombob
     const [pasteError, setPasteError] = useState('');
     const containerRef = useRef(/** @type {HTMLDivElement | null} */ (null));
     const inputRef = useRef(/** @type {HTMLInputElement | null} */ (null));
+    const pasteSlotRef = useRef(/** @type {HTMLSpanElement | null} */ (null));
+
+    useLayoutEffect(() => {
+        const wrap = containerRef.current;
+        const paste = pasteSlotRef.current?.querySelector('button') ?? null;
+        syncPasteWidth(wrap, paste);
+        if (!paste || typeof ResizeObserver !== 'function') return undefined;
+        const observer = new ResizeObserver(() => syncPasteWidth(wrap, paste));
+        observer.observe(paste);
+        return () => observer.disconnect();
+    }, []);
 
     const filtered = useMemo(
         () => filterSuggestions(suggestions, value),
@@ -179,16 +213,17 @@ export const AddressCombobox = /* @__PURE__ */ forwardRef(function AddressCombob
                 aria-controls={listboxId}
                 aria-autocomplete="list"
                 aria-activedescendant={activeId}
-                placeholder="Address"
+                placeholder={t('verifySignature.address')}
                 label={label}
                 size={size}
                 disabled={disabled}
                 dir="ltr"
                 autoComplete="off"
                 style={{
+                    // Room for Paste, and for the icon action beside it.
                     paddingInlineEnd: IconComponent
-                        ? 'calc((var(--address-control-height) * 2) + var(--xc-space-8))'
-                        : 'calc(var(--address-control-height) + var(--xc-space-8))',
+                        ? 'calc(var(--address-paste-width) + var(--address-control-height))'
+                        : 'var(--address-paste-width)',
                     ...style,
                 }}
                 value={value}
@@ -240,9 +275,10 @@ export const AddressCombobox = /* @__PURE__ */ forwardRef(function AddressCombob
                     <IconComponent />
                 </button>
             ) : null}
-            <span className={styles.pasteAction}>
+            <span className={styles.pasteAction} ref={pasteSlotRef}>
                 <ClipboardPasteButton
                     disabled={disabled}
+                    onMessage={(message) => { if (message) setPasteError(message); }}
                     onPaste={(text) => {
                         const inspected = inspectClipboardPaste(text);
                         if (!inspected.ok) {
@@ -286,7 +322,7 @@ export const AddressCombobox = /* @__PURE__ */ forwardRef(function AddressCombob
                             <span className={styles.label}>
                                 {s.label}
                                 <span className={styles.badge}>
-                                    {s.source === 'contact' ? 'Contact' : 'Recent'}
+                                    {s.source === 'contact' ? t('ui.addressCombobox.contact') : t('ui.addressCombobox.recent')}
                                 </span>
                             </span>
                             {s.sublabel ? (

@@ -191,7 +191,7 @@ export function AttachContentForm({ walletId, chainId, tick, issuerAddress = nul
                 setAddressesByChain(byChain || {});
                 setActiveByChain(active || {});
                 if (!byChain || !(byChain[chainId] || []).length) {
-                    setLoadError('No address on this chain yet. Use Receive to generate one first.');
+                    setLoadError('No address on this network yet. Use Receive to generate one first.');
                 }
             })
             .catch((err) => {
@@ -542,7 +542,7 @@ export function AttachContentForm({ walletId, chainId, tick, issuerAddress = nul
     async function handleReviewFile(event) {
         event.preventDefault();
         if (!fromAddress) {
-            setFormError('No signing address available on this chain.');
+            setFormError('No signing address available on this network.');
             return;
         }
         if (!fileMeta) {
@@ -878,8 +878,8 @@ export function AttachContentForm({ walletId, chainId, tick, issuerAddress = nul
                 ) : null}
                 <p className={styles.hint}>
                     {descTxid
-                        ? `Once everything confirms, ${tick}'s picture and info live entirely on the chain. The explorer and wallets read them with no website involved.`
-                        : `Once the link confirms, the artwork shows up wherever ${tick} is displayed. The explorer and wallets read it straight from the chain.`}
+                        ? `Once everything confirms, ${tick}'s picture and info live entirely on the network. The explorer and wallets read them with no website involved.`
+                        : `Once the link confirms, the artwork shows up wherever ${tick} is displayed. The explorer and wallets read it straight from the network.`}
                 </p>
                 <div className={styles.actions}>
                     <Button variant="primary" onClick={onBack}>Done</Button>
@@ -1237,13 +1237,13 @@ export function AttachContentForm({ walletId, chainId, tick, issuerAddress = nul
                     </dd>
                 </dl>
                 {ownerMismatch ? (
-                    <div role="alert" className={styles.warnings}>
-                        <p className={styles.warning}>
+                    <StatusMessage variant="warning" role="alert">
+                        <p>
                             This wallet isn't signing from the token's owner
                             address ({issuerAddress}). The link will only be
                             honoured if it's signed by the current owner.
                         </p>
-                    </div>
+                    </StatusMessage>
                 ) : null}
                 <SignCredentials
                     unlocked={signerReady}
@@ -1368,13 +1368,13 @@ export function AttachContentForm({ walletId, chainId, tick, issuerAddress = nul
                 disabled={Boolean(fileMeta && !previewUrl)}
             />
             {ownerMismatch ? (
-                <div role="alert" className={styles.warnings}>
-                    <p className={styles.warning}>
+                <StatusMessage variant="warning" role="alert">
+                    <p>
                         This wallet doesn't hold the token's owner address.
                         the final link step will only be honoured if signed
                         by the current owner.
                     </p>
-                </div>
+                </StatusMessage>
             ) : null}
             {feeTiers ? (
                 <FeeSelector

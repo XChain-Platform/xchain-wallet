@@ -24,6 +24,7 @@ import { join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { expect, test, _electron as electron } from '@playwright/test';
 import { createCrawl } from './crawl.js';
+import { launchGuardedElectron } from '../fixtures/electron.js';
 
 const here = fileURLToPath(new URL('.', import.meta.url));
 const repo = resolve(here, '..', '..', '..');
@@ -39,7 +40,7 @@ for (let shard = 0; shard < SHARDS; shard += 1) {
         test.setTimeout(3 * 60 * 60 * 1000);
         const venue = `macos-desktop-${WIDTH}x${HEIGHT}`;
         const requireFromDesktop = createRequire(join(desktopDir, 'package.json'));
-        const app = await electron.launch({
+        const app = await launchGuardedElectron(electron, {
             executablePath: requireFromDesktop('electron'),
             args: ['.', `--user-data-dir=${mkdtempSync(join(tmpdir(), 'xc-click-crawl-'))}`, '--use-mock-keychain'],
             cwd: desktopDir,

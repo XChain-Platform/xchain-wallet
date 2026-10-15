@@ -16,6 +16,7 @@ import { activeNetworkLabel, normalizeActiveNetwork } from '../utils/activeNetwo
 import { useAnchoredPopover } from '../hooks/useViewportClamp.js';
 import { OverlaySurface } from './OverlaySurface.jsx';
 import styles from './NetworkStatusIndicator.module.css';
+import { t } from '../../i18n/index.js';
 
 const chainRegistry = registryLib.defaultRegistry();
 
@@ -77,7 +78,7 @@ export function NetworkStatusIndicator({ onOpenNetworkSettings, activeNetwork })
     const explanation = affectedNames.length > 0
         ? `${label}: ${affectedNames.join(', ')}`
         : state === 'offline'
-            ? `${label}: no selected chain is reachable`
+            ? `${label}: no selected network is reachable`
             : label;
     const networkName = activeNetworkLabel(normalizeActiveNetwork(activeNetwork));
     const triggerLabel = `${networkName}. ${explanation}`;
@@ -124,15 +125,15 @@ export function NetworkStatusIndicator({ onOpenNetworkSettings, activeNetwork })
                 surfaceRef={popoverPlacement.ref}
                 style={popoverPlacement.style}
                 className={styles.popover}
-                aria-label="Network status"
+                aria-label={t('components.networkStatusIndicator.networkStatus')}
                 hidden={!visible}
                 inert={!visible ? '' : undefined}
             >
                 <div className={styles.title}>{label}</div>
                 {state === 'normal' ? (
-                    <div className={styles.detail}>All selected chains are reachable.</div>
+                    <div className={styles.detail}>{t('components.networkStatusIndicator.allSelectedChainsAreReachable')}</div>
                 ) : state === 'unknown' ? (
-                    <div className={styles.detail}>Checking selected chains.</div>
+                    <div className={styles.detail}>{t('components.networkStatusIndicator.checkingSelectedChains')}</div>
                 ) : affected.length > 0 ? (
                     <ul className={styles.chains}>
                         {affected.map((chain, index) => (
@@ -142,14 +143,14 @@ export function NetworkStatusIndicator({ onOpenNetworkSettings, activeNetwork })
                         ))}
                     </ul>
                 ) : (
-                    <div className={styles.detail}>No selected chain is reachable.</div>
+                    <div className={styles.detail}>{t('components.networkStatusIndicator.noSelectedChainIsReachable')}</div>
                 )}
                 <button
                     type="button"
                     className={styles.settings}
                     onClick={() => { closePopover(); onOpenNetworkSettings(); }}
                 >
-                    Network settings
+                    {t('components.networkStatusIndicator.networkSettings')}
                 </button>
             </OverlaySurface>
         </div>

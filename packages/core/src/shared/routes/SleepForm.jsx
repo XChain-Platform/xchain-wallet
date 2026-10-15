@@ -116,7 +116,7 @@ export function SleepForm({ walletId, onBack, mode, initialChainId, initialTick,
         initialFromAddress,
         lockedToken,
         noAddressMessage:
-            'No addresses on any chain yet. Use Receive to generate one first.',
+            'No addresses on any network yet. Use Receive to generate one first.',
     });
 
     const ticker = isTick ? (initialTick || '').toUpperCase() : '';
@@ -568,7 +568,7 @@ export function SleepForm({ walletId, onBack, mode, initialChainId, initialTick,
                 <dl className={styles.detailsList}>
                     {descriptor ? (
                         <>
-                            <dt className={styles.detailsLabel}>Chain</dt>
+                            <dt className={styles.detailsLabel}>Network</dt>
                             <dd className={styles.detailsValue}><ChainBadge descriptor={descriptor} size="sm" /></dd>
                         </>
                     ) : null}
@@ -592,20 +592,20 @@ export function SleepForm({ walletId, onBack, mode, initialChainId, initialTick,
                         from settling. It blocks new actions on the token until it resumes.
                     </p>
                 ) : (
-                    <div role="alert" className={styles.warnings}>
-                        <p className={styles.warning}>
+                    <StatusMessage variant="warning" role="alert">
+                        <p>
                             <strong>This pauses XChain actions from your address.</strong> While it is locked,
                             it cannot create an XChain action, including one to wake itself. This does not
                             lock its native coins or prevent ordinary network transactions. It wakes on its
                             own only when the wake block is reached
                             {resumeMode === 'indefinite' ? ', which for an indefinite lock is NEVER' : ''}.
                         </p>
-                    </div>
+                    </StatusMessage>
                 )}
                 {decoded && decoded.warnings.length > 0 ? (
-                    <div role="alert" className={styles.warnings}>
-                        {decoded.warnings.map((w, i) => <p key={i} className={styles.warning}>{w}</p>)}
-                    </div>
+                    <StatusMessage variant="warning" role="alert">
+                        {decoded.warnings.map((w, i) => <p key={i}>{w}</p>)}
+                    </StatusMessage>
                 ) : null}
                 {isWatcherMode ? (
                     <p className={styles.hint}>
@@ -724,19 +724,19 @@ export function SleepForm({ walletId, onBack, mode, initialChainId, initialTick,
                         swaps, and dispensers can still settle. The token owner can resume it early.
                     </p>
                     {sleepLocked ? (
-                        <div role="alert" className={styles.warnings}>
-                            <p className={styles.warning}>Pausing and resuming are permanently locked for {ticker}.</p>
-                        </div>
+                        <StatusMessage variant="warning" role="alert">
+                            <p>Pausing and resuming are permanently locked for {ticker}.</p>
+                        </StatusMessage>
                     ) : null}
                 </>
             ) : (
-                <div role="alert" className={styles.warnings}>
-                    <p className={styles.warning}>
+                <StatusMessage variant="warning" role="alert">
+                    <p>
                         <strong>Locking an address pauses its XChain actions.</strong> It cannot create a
                         new XChain action, including one to wake itself, but its native coins are not
                         locked. It wakes only when the chosen block arrives; an indefinite lock is permanent.
                     </p>
-                </div>
+                </StatusMessage>
             )}
 
             {stateLine}
@@ -752,7 +752,7 @@ export function SleepForm({ walletId, onBack, mode, initialChainId, initialTick,
                     iconLabel="Choose source address"
                 />
             ) : (
-                <StatusMessage variant="error" className={styles.error}>No address on this chain. Use Receive to generate one first.</StatusMessage>
+                <StatusMessage variant="error" className={styles.error}>No address on this network. Use Receive to generate one first.</StatusMessage>
             )}
 
             <RadioGroup
@@ -783,7 +783,7 @@ export function SleepForm({ walletId, onBack, mode, initialChainId, initialTick,
                     label="Duration (blocks)"
                     hint={calculatedResumeBlock != null
                         ? `Wake block: ${calculatedResumeBlock.toLocaleString('en-US')}.${resumeBlockEstimate ? ` Est. ${resumeBlockEstimate}.` : ''}`
-                        : 'Enter how many blocks the pause or lock lasts. The wake block is calculated from the current chain height.'}
+                        : 'Enter how many blocks the pause or lock lasts. The wake block is calculated from the current network height.'}
                     inputMode="numeric"
                     value={durationBlocksInput}
                     onChange={(e) => setDurationBlocksInput(e.target.value)}

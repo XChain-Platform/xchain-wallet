@@ -279,7 +279,7 @@ test.describe('keyboard form contracts at 1280 by 800', () => {
             await expect(custom).toBeVisible();
             await custom.click();
 
-            const chainForm = page.getByRole('form', { name: 'Choose token chain' });
+            const chainForm = page.getByRole('form', { name: 'Choose token network' });
             await expect(chainForm).toBeVisible();
             const network = chainForm.getByRole('button', { name: /^Network:/ });
             await expect(network).toBeVisible();

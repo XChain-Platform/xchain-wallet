@@ -125,6 +125,7 @@ test('rejects malformed release-gate arguments before contacting GitHub', () => 
 const SERVER = `
 const http = require('node:http');
 const statuses = JSON.parse(process.argv[1]);
+const extra = JSON.parse(process.argv[2] || '{}');
 const routes = {
     ['/repos/${REPO}/actions/runs']: {
         workflow_runs: [{
@@ -137,6 +138,7 @@ const routes = {
         }],
     },
     ['/repos/${REPO}/commits/${SHA}/status']: { statuses },
+    ...extra,
 };
 const server = http.createServer((req, res) => {
     const body = routes[req.url.split('?')[0]];
@@ -148,8 +150,8 @@ server.listen(0, '127.0.0.1', () => {
 });
 `;
 
-function serve(statuses) {
-    const child = spawn(process.execPath, ['-e', SERVER, JSON.stringify(statuses)], {
+function serve(statuses, extra = {}) {
+    const child = spawn(process.execPath, ['-e', SERVER, JSON.stringify(statuses), JSON.stringify(extra)], {
         stdio: ['ignore', 'pipe', 'inherit'],
     });
     return new Promise((resolve, reject) => {
@@ -169,8 +171,8 @@ function serve(statuses) {
     });
 }
 
-async function withStatuses(statuses, callback) {
-    const server = await serve(statuses);
+async function withStatuses(statuses, callback, extra = {}) {
+    const server = await serve(statuses, extra);
     try {
         return callback(runGate(['--sha', SHA, '--repo', REPO], {
             GITHUB_TOKEN: 'test-token',
@@ -197,4 +199,169 @@ test('requires a successful license/cla status in addition to the CI workflow', 
         assert.equal(result.status, 1, result.stdout);
         assert.match(result.stderr, /required status `license\/cla` does not exist/);
     });
+});
+
+const HEAD = 'b'.repeat(40);
+const claStatus = (state) => ({
+    context: 'license/cla',
+    state,
+    updated_at: '2026-10-13T10:00:00Z',
+    target_url: 'https://example.invalid/status/pr-cla',
+});
+const mergedPr = (overrides = {}) => [{
+    number: 77,
+    merged_at: '2026-10-13T09:00:00Z',
+    merge_commit_sha: SHA,
+    head: { sha: HEAD },
+    ...overrides,
+}];
+const prRoutes = (prs, headStatuses) => ({
+    [`/repos/${REPO}/commits/${SHA}/pulls`]: prs,
+    [`/repos/${REPO}/commits/${HEAD}/status`]: { statuses: headStatuses },
+});
+
+test('a license/cla status on the commit itself wins over the PR head', async () => {
+    await withStatuses([{ ...claStatus('failure'), target_url: 'https://example.invalid/own' }], (result) => {
+        assert.equal(result.status, 1, result.stdout);
+        assert.match(result.stderr, /required status `license\/cla` is `failure`/);
+        assert.doesNotMatch(result.stdout, /carried from PR/);
+    }, prRoutes(mergedPr(), [claStatus('success')]));
+});
+
+test('carries a successful license/cla from the merged PR head when the commit has none', async () => {
+    await withStatuses([], (result) => {
+        assert.equal(result.status, 0, result.stderr);
+        assert.match(result.stdout, /license\/cla: state=success carried from PR #77 head bbbbbbb/);
+        assert.match(result.stdout, /status\/pr-cla/);
+    }, prRoutes(mergedPr(), [claStatus('success')]));
+});
+
+test('a failing license/cla on the merged PR head refuses', async () => {
+    await withStatuses([], (result) => {
+        assert.equal(result.status, 1, result.stdout);
+        assert.match(result.stderr, /required status `license\/cla` is `failure`/);
+    }, prRoutes(mergedPr(), [claStatus('failure')]));
+});
+
+test('refuses when no merged PR produced the commit', async () => {
+    for (const prs of [
+        [],
+        mergedPr({ merge_commit_sha: 'c'.repeat(40) }),
+        mergedPr({ merged_at: null }),
+    ]) {
+        await withStatuses([], (result) => {
+            assert.equal(result.status, 1, result.stdout);
+            assert.match(result.stderr, /required status `license\/cla` does not exist/);
+        }, prRoutes(prs, [claStatus('success')]));
+    }
+});
+
+// Waiver tests run a COPY of the gate inside a temp tree whose package.json
+// carries the version under test, so the real script is exercised unmodified
+// and no env override exists that could be abused in production.
+const WAIVER = {
+    version: '9.9.9',
+    workflow: 'ci.yml',
+    jobs: ['e2e-regtest', 'verdict'],
+    reason: 'venue down for test',
+    ruled_by: 'operator (test)',
+    ruled_at: '2026-10-15',
+};
+const claOk = [{ context: 'license/cla', state: 'success', updated_at: '2026-10-13T10:00:00Z' }];
+const job = (name, conclusion) => ({ name, conclusion, steps: [{ name: 's' }] });
+const runRoute = (status, conclusion) => ({
+    workflow_runs: [{
+        id: 42, path: '.github/workflows/ci.yml', status, conclusion,
+        created_at: '2026-10-13T10:00:00Z', html_url: 'https://example.invalid/run/42',
+    }],
+});
+
+async function withWaiver({ jobs, status = 'completed', conclusion = 'failure', version = '9.9.9', cla = claOk }, check) {
+    const root = mkdtempSync(join(tmpdir(), 'release-gate-waiver-'));
+    const toolDir = join(root, 'tools', 'release');
+    mkdirSync(toolDir, { recursive: true });
+    copyFileSync(GATE, join(toolDir, 'verify-validated-commit.mjs'));
+    writeFileSync(join(root, 'package.json'), JSON.stringify({ version }));
+    writeFileSync(join(toolDir, 'gate-waivers.json'), JSON.stringify([WAIVER]));
+    const server = await serve(cla, {
+        [`/repos/${REPO}/actions/runs`]: runRoute(status, conclusion),
+        [`/repos/${REPO}/actions/runs/42/jobs`]: { jobs },
+    });
+    try {
+        const result = spawnSync(process.execPath, [join(toolDir, 'verify-validated-commit.mjs'), '--sha', SHA, '--repo', REPO], {
+            encoding: 'utf8',
+            env: {
+                ...process.env, GITHUB_TOKEN: 'test-token', GITHUB_REPOSITORY: '',
+                GITHUB_API_URL: `http://127.0.0.1:${server.port}`,
+            },
+        });
+        check(result);
+    } finally {
+        server.stop();
+        rmSync(root, { recursive: true, force: true });
+    }
+}
+
+test('waiver: only waived jobs failed -> accepted with waiver evidence and banner', async () => {
+    await withWaiver({ jobs: [job('test', 'success'), job('e2e-regtest', 'failure'), job('verdict', 'failure')] }, (r) => {
+        assert.equal(r.status, 0, r.stderr);
+        assert.match(r.stdout, /ACCEPTED UNDER WAIVER for version 9\.9\.9/);
+        assert.match(r.stdout, /e2e-regtest=failure, verdict=failure/);
+        assert.match(r.stdout, /venue down for test/);
+        assert.match(r.stdout, /operator \(test\) on 2026-10-15/);
+        assert.match(r.stdout, /\*\*\* WAIVER:/);
+    });
+});
+
+test('waiver: a waived job that was cancelled or succeeded still passes', async () => {
+    await withWaiver({ conclusion: 'cancelled', jobs: [job('test', 'success'), job('e2e-regtest', 'cancelled'), job('verdict', 'skipped')] }, (r) => {
+        assert.equal(r.status, 0, r.stderr);
+        assert.match(r.stdout, /WAIVER:/);
+    });
+    await withWaiver({ jobs: [job('test', 'success'), job('e2e-regtest', 'success'), job('verdict', 'failure')] }, (r) => {
+        assert.equal(r.status, 0, r.stderr);
+    });
+});
+
+test('waiver: a non-waived job failing still refuses', async () => {
+    await withWaiver({ jobs: [job('test', 'failure'), job('e2e-regtest', 'failure'), job('verdict', 'failure')] }, (r) => {
+        assert.equal(r.status, 1, r.stdout);
+        assert.match(r.stderr, /concluded `failure`/);
+        assert.doesNotMatch(r.stdout, /WAIVER/);
+    });
+});
+
+test('waiver: a version mismatch refuses', async () => {
+    await withWaiver({ version: '9.9.8', jobs: [job('test', 'success'), job('e2e-regtest', 'failure'), job('verdict', 'failure')] }, (r) => {
+        assert.equal(r.status, 1, r.stdout);
+        assert.doesNotMatch(r.stdout, /WAIVER/);
+    });
+});
+
+test('waiver: an in-progress run is never waived', async () => {
+    await withWaiver({ status: 'in_progress', conclusion: null, jobs: [job('test', 'success'), job('e2e-regtest', 'failure')] }, (r) => {
+        assert.equal(r.status, 1, r.stdout);
+        assert.match(r.stderr, /still in_progress/);
+        assert.doesNotMatch(r.stdout, /WAIVER/);
+    });
+});
+
+test('waiver: never covers commit statuses', async () => {
+    await withWaiver({ cla: [], jobs: [job('test', 'success'), job('e2e-regtest', 'failure'), job('verdict', 'failure')] }, (r) => {
+        assert.equal(r.status, 1, r.stdout);
+        assert.match(r.stderr, /license\/cla/);
+    });
+});
+
+test('waiver: an unfetchable jobs list refuses', async () => {
+    await withWaiver({ jobs: [] }, (r) => {
+        assert.equal(r.status, 1, r.stdout);
+    });
+});
+
+test('the committed gate-waivers.json has exactly the reviewed 0.341.4 entry', () => {
+    const list = JSON.parse(readFileSync(join(HERE, 'gate-waivers.json'), 'utf8'));
+    assert.equal(list.length, 1);
+    assert.equal(list[0].version, '0.341.4');
+    assert.deepEqual(list[0].jobs, ['e2e-regtest', 'verdict']);
 });

@@ -57,10 +57,7 @@
 }
 
 .fee {
-    padding: var(--xc-space-2) var(--xc-space-3);
-    border: 1px solid var(--xc-border);
-    border-radius: var(--xc-radius-sm);
-    background: var(--xc-bg-muted);
+    composes: card from '../../ui/Card.module.css';
     font-size: var(--xc-text-sm);
     font-weight: 700;
     color: var(--xc-text);
@@ -104,18 +101,6 @@
 
 .sourceName {
     font-weight: 600;
-}
-
-/* §5.3.4 in-page error (e.g. a bad password), sitting directly above the
-   credentials it refers to. */
-.error {
-    padding: var(--xc-space-2) var(--xc-space-3);
-    border: 1px solid var(--xc-danger);
-    border-radius: var(--xc-radius-md);
-    background: var(--xc-danger-bg);
-    color: var(--xc-danger-text);
-    font-size: var(--xc-text-sm);
-    overflow-wrap: anywhere;
 }
 
 .credentials {
@@ -164,19 +149,6 @@
     max-block-size: 16rem;
     overflow-y: auto;
     overscroll-behavior: contain;
-}
-
-/* §5.5 fail-closed refusal: the wallet will not sign this at all. Styled
-   as danger (not warning) because there is no override. */
-.refusal {
-    margin: 0;
-    padding: var(--xc-space-2) var(--xc-space-3);
-    border: 1px solid var(--xc-danger);
-    border-radius: var(--xc-radius-md);
-    background: var(--xc-danger-bg);
-    color: var(--xc-danger-text);
-    font-size: var(--xc-text-sm);
-    line-height: 1.4;
 }
 
 .hwNote {

@@ -125,13 +125,13 @@ describe('DeveloperModeSection unavailable actions', () => {
         })).toBeTruthy();
         expect(screen.getByRole('textbox', { name: 'Miner URL' })).toBeTruthy();
 
-        fireEvent.click(await screen.findByRole('button', { name: 'Add custom chain…' }));
+        fireEvent.click(await screen.findByRole('button', { name: 'Add custom network…' }));
 
         expect(screen.getByRole('textbox', {
-            name: 'Custom chain descriptor JSON',
+            name: 'Custom network descriptor JSON',
         })).toBeTruthy();
         expect(screen.getByRole('button', {
-            name: 'Paste custom chain descriptor',
+            name: 'Paste custom network descriptor',
         })).toBeTruthy();
     });
 
@@ -178,16 +178,24 @@ describe('DeveloperModeSection unavailable actions', () => {
         }));
     });
 
+    it('labels its master switch as an action instead of repeating the page title', () => {
+        render(<DeveloperModeSection />);
+
+        const toggle = screen.getByRole('switch', { name: 'Turn on developer mode' });
+        expect(toggle.closest('label')).toHaveTextContent(/^Turn on/);
+        expect(screen.queryByText('Developer Mode')).toBeNull();
+    });
+
     it('hides developer-only controls and endpoint navigation while off', () => {
         settings = { ...settings, developerMode: false, activeNetwork: 'mainnet' };
         render(<DeveloperModeSection />);
 
-        expect(screen.getByRole('switch', { name: 'Developer Mode' })).toBeVisible();
+        expect(screen.getByRole('switch', { name: 'Turn on developer mode' })).toBeVisible();
         expect(screen.getByRole('switch', { name: 'Learn Mode' })).toBeVisible();
         expect(screen.queryByRole('switch', { name: 'Show variant popover' })).toBeNull();
         expect(screen.queryByText('Regtest networks')).toBeNull();
         expect(screen.queryByText('Regtest faucet')).toBeNull();
-        expect(screen.queryByText('Custom chains')).toBeNull();
+        expect(screen.queryByText('Custom networks')).toBeNull();
         expect(screen.queryByRole('switch', { name: 'Auto-approve localhost dApps' })).toBeNull();
         expect(screen.queryByText('Logs and diagnostics console')).toBeNull();
 
@@ -204,7 +212,7 @@ describe('DeveloperModeSection unavailable actions', () => {
             render(<DeveloperModeSection reload={reload} />);
 
             expect(screen.getByText(/Turning it off returns the wallet to Mainnet\./)).toBeVisible();
-            fireEvent.click(screen.getByRole('switch', { name: 'Developer Mode' }));
+            fireEvent.click(screen.getByRole('switch', { name: 'Turn on developer mode' }));
 
             await waitFor(() => expect(update).toHaveBeenCalledWith({
                 developerMode: false,

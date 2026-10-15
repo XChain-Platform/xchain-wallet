@@ -100,7 +100,7 @@ assert.ok(
     'panel branches on manifest.status, not on a bare null permissions',
 );
 assert.ok(
-    /couldn&rsquo;t look up/.test(panelSrc),
+    /couldn(?:&rsquo;|’)t look up/.test(panelSrc),
     'panel states plainly when the wallet could not check',
 );
 assert.ok(

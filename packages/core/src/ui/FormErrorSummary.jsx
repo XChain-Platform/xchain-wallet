@@ -9,6 +9,9 @@
 // contact legal@dankest.llc.
 
 import { useEffect, useMemo, useRef } from 'react';
+import styles from './FormErrorSummary.module.css';
+import statusStyles from './StatusMessage.module.css';
+import { t } from '../i18n/index.js';
 
 /**
  * True when the field label adds something to the message. A message that
@@ -59,50 +62,41 @@ export function FormErrorSummary({ errors, focusKey, recovery }) {
             ref={summaryRef}
             role="alert"
             tabIndex={-1}
-            aria-label="Form errors"
-            style={{
-                padding: 'var(--xc-space-3)',
-                border: '1px solid var(--xc-danger-fg)',
-                borderRadius: 'var(--xc-radius-md)',
-                color: 'var(--xc-danger-fg)',
-            }}
+            aria-label={t('ui.formErrorSummary.formErrors')}
+            className={`${statusStyles.row} ${statusStyles.error}`}
+            data-variant="error"
         >
-            <p style={{ margin: 0, fontWeight: 600 }}>
-                {errors.length === 1 ? 'Fix this field:' : `Fix these ${errors.length} fields:`}
-            </p>
-            <ul style={{ margin: 'var(--xc-help-gap) 0 0', paddingInlineStart: 'var(--xc-space-5)' }}>
-                {errors.map((error, index) => (
-                    <li key={`${error.id || 'form'}-${index}`}>
-                        {error.id ? (
-                            <a
-                                href={`#${error.id}`}
-                                onClick={(event) => focusField(event, error.id)}
-                                style={{ color: 'inherit', textDecoration: 'underline' }}
-                            >
-                                {showsLabel(error) ? <span>{error.label}: </span> : null}
-                                <span>{error.message}</span>
-                            </a>
-                        ) : error.message}
-                    </li>
-                ))}
-            </ul>
-            {recovery ? (
-                <button
-                    type="button"
-                    onClick={() => Promise.resolve(recovery.onAction()).catch(() => {})}
-                    style={{
-                        marginTop: 'var(--xc-help-gap)',
-                        color: 'inherit',
-                        background: 'transparent',
-                        border: 0,
-                        padding: 0,
-                        textDecoration: 'underline',
-                        cursor: 'pointer',
-                    }}
-                >
-                    {recovery.label}
-                </button>
-            ) : null}
+            <span className={statusStyles.icon} aria-hidden="true">✕</span>
+            <div className={statusStyles.text}>
+                <p className={styles.heading}>
+                    {errors.length === 1 ? t('ui.formErrorSummary.fixThisField') : t('ui.formErrorSummary.fixTheseFields', { length: errors.length })}
+                </p>
+                <ul className={styles.list}>
+                    {errors.map((error, index) => (
+                        <li key={`${error.id || 'form'}-${index}`}>
+                            {error.id ? (
+                                <a
+                                    href={`#${error.id}`}
+                                    onClick={(event) => focusField(event, error.id)}
+                                    className={styles.link}
+                                >
+                                    {showsLabel(error) ? <span>{error.label}: </span> : null}
+                                    <span>{error.message}</span>
+                                </a>
+                            ) : error.message}
+                        </li>
+                    ))}
+                </ul>
+                {recovery ? (
+                    <button
+                        type="button"
+                        onClick={() => Promise.resolve(recovery.onAction()).catch(() => {})}
+                        className={styles.recovery}
+                    >
+                        {recovery.label}
+                    </button>
+                ) : null}
+            </div>
         </div>
     );
 }

@@ -31,7 +31,7 @@ assert.match(
 );
 
 // Master toggle
-assert.match(src, /label="Automatic Donation System"/, 'master ON/OFF toggle present');
+assert.match(src, /label=\{t\('settings\.toggle\.turnOn'\)\}\s*accessibleLabel=\{t\('settings\.ads\.switchAccessibleLabel'\)\}/, 'master ON/OFF toggle present');
 assert.match(
     src,
     /update\(\{\s*ads:\s*\{\s*enabled:\s*next\s*\}\s*\}\)/,

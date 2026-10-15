@@ -36,6 +36,7 @@ import { readFailureMessage } from '../utils/readFailureMessage.js';
 import tableStyles from './DataTable.module.css';
 import { startVisibleInterval } from '../utils/visibleInterval.js';
 import styles from './MarketTrading.module.css';
+import { t } from '../../i18n/index.js';
 
 const POLL_INTERVAL_MS = 5000;
 
@@ -98,19 +99,20 @@ export function OrderbookPanel({ chainId, tick1, tick2, demo = false, onPickPric
 
     return (
         <section
-            aria-label="Order book"
+            aria-label={t('components.orderbookPanel.orderBook')}
             aria-busy={loading || undefined}
             style={{
-                border: '1px solid var(--xc-border)',
-                borderRadius: '4px',
-                padding: '0.5rem',
+                border: 'var(--xc-card-border)',
+                background: 'var(--xc-card-bg)',
+                borderRadius: 'var(--xc-card-radius)',
+                padding: 'var(--xc-card-pad)',
             }}
         >
-            <p style={{ margin: '0 0 0.5rem', fontWeight: 600 }}>Order book</p>
+            <p style={{ margin: '0 0 0.5rem', fontWeight: 600 }}>{t('components.orderbookPanel.orderBook')}</p>
             {hasLevels ? (
                 <div className={styles.orderBookGrid}>
                     <LevelsColumn
-                        title="Buy bids"
+                        title={t('components.orderbookPanel.buyBids')}
                         side="bid"
                         levels={book.bids}
                         maxCumulative={book.maxCumulative}
@@ -119,7 +121,7 @@ export function OrderbookPanel({ chainId, tick1, tick2, demo = false, onPickPric
                         tick1={tick1}
                     />
                     <LevelsColumn
-                        title="Sell asks"
+                        title={t('components.orderbookPanel.sellAsks')}
                         side="ask"
                         levels={book.asks}
                         maxCumulative={book.maxCumulative}
@@ -130,13 +132,13 @@ export function OrderbookPanel({ chainId, tick1, tick2, demo = false, onPickPric
                 </div>
             ) : null}
             {loading ? (
-                <StatusMessage variant="status">Loading order book…</StatusMessage>
+                <StatusMessage variant="status">{t('components.orderbookPanel.loadingOrderBook')}</StatusMessage>
             ) : null}
             {loadError ? (
                 <StatusMessage
                     variant="error"
                     recovery={{
-                        label: 'Try again',
+                        label: t('common.tryAgain'),
                         onAction: () => setRetryKey((key) => key + 1),
                     }}
                 >
@@ -145,7 +147,7 @@ export function OrderbookPanel({ chainId, tick1, tick2, demo = false, onPickPric
             ) : null}
             {!loading && !loadError && book.bids.length === 0 && book.asks.length === 0 ? (
                 <p style={{ margin: '0.25rem 0 0', color: 'var(--xc-text-muted)', fontSize: '0.75rem' }}>
-                    No open orders on this market.
+                    {t('components.openOrdersPanel.noOpenOrdersOnThis')}
                 </p>
             ) : null}
         </section>
@@ -157,17 +159,17 @@ function LevelsColumn({ title, side, levels, maxCumulative, onPickPrice, tick1, 
         <div
             className={styles.levelsScroller}
             role="region"
-            aria-label={`${title} order book levels`}
+            aria-label={t('components.orderbookPanel.orderBookLevels', { title })}
             tabIndex={0}
         >
             <div className={styles.levelsTable}>
-                <table className={tableStyles.table}>
+                <table className={`${tableStyles.table} ${tableStyles.keepColumns}`}>
                     <caption className={`${tableStyles.caption} ${tableStyles.compactCaption}`}>{title}</caption>
                     <thead>
                         <tr>
-                            <th className={`${tableStyles.headerCell} ${tableStyles.numeric}`} scope="col">Price ({tick2})</th>
-                            <th className={`${tableStyles.headerCell} ${tableStyles.numeric}`} scope="col">Size ({tick1})</th>
-                            <th className={`${tableStyles.headerCell} ${tableStyles.numeric}`} scope="col">Total ({tick1})</th>
+                            <th className={`${tableStyles.headerCell} ${tableStyles.numeric}`} scope="col">{t('components.orderbookPanel.price')}{tick2})</th>
+                            <th className={`${tableStyles.headerCell} ${tableStyles.numeric}`} scope="col">{t('components.openOrdersPanel.size')}{tick1})</th>
+                            <th className={`${tableStyles.headerCell} ${tableStyles.numeric}`} scope="col">{t('components.orderbookPanel.total')}{tick1})</th>
                         </tr>
                     </thead>
                     <tbody>
@@ -211,7 +213,7 @@ function LevelRow({ level, maxCumulative, side, onPick }) {
                     <button
                         type="button"
                         onClick={onPick}
-                        aria-label={`Pick ${side === 'bid' ? 'buy bid' : 'sell ask'} price ${level.displayPrice}`}
+                        aria-label={t('components.orderbookPanel.pickPrice', { value: side === 'bid' ? 'buy bid' : 'sell ask', displayPrice: level.displayPrice })}
                         className={tableStyles.cellButton}
                     >
                         {formatBookNumber(level.displayPrice)}

@@ -58,6 +58,7 @@ export const TOKEN_GROUPS = [
             color('--xc-control-disabled-bg', 'Disabled control fill'),
             color('--xc-control-disabled-border', 'Disabled control border'),
             color('--xc-control-disabled-text', 'Disabled control text'),
+            token('--xc-select-arrow', 'Arrow on every select, the Network picker chevron'),
         ],
     },
     {
@@ -99,8 +100,11 @@ export const TOKEN_GROUPS = [
             token('--xc-list-row-padding', 'Inset inside a list row', 'length'),
             token('--xc-page-gutter', 'The one inline page inset, 12px at every width, applied only by Screen body', 'length'),
             token('--xc-page-top', 'Top page inset, applied only by Screen body (16px beside the sidebar, 8px on a short landscape phone)', 'length'),
-            token('--xc-card-pad', 'Card interior inset (12px under 480px)', 'length'),
+            token('--xc-card-pad', 'Card interior inset (12px under 480px, 8px under 360px)', 'length'),
             token('--xc-card-radius', 'Card corner radius', 'radius'),
+            token('--xc-card-border', 'The one card border, always solid'),
+            token('--xc-card-bg', 'The one card fill'),
+            token('--xc-form-card-max-width', 'Width of the wide form card'),
         ],
     },
     {

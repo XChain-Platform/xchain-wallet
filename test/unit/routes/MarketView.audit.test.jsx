@@ -288,7 +288,7 @@ describe('MarketView market state', () => {
         widgetFailure.current = failure;
         renderMarket();
 
-        expect(await screen.findByRole('alert')).toHaveTextContent('Could not load this section.');
+        expect(await screen.findByRole('alert')).toHaveTextContent('Couldn\'t load this section.');
         expect(screen.getByRole('tablist', { name: 'Market panels' })).toBeInTheDocument();
         expect(screen.queryByRole('button', { name: 'Reload' })).toBeNull();
 

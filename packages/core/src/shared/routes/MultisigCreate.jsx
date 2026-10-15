@@ -439,7 +439,7 @@ export function MultisigCreate({ walletId, onBack }) {
                 <dl className={styles.detailsList}>
                     <dt className={styles.detailsLabel}>Network</dt>
                     <dd className={styles.detailsValue}>
-                        {descriptor ? <ChainBadge descriptor={descriptor} size="sm" showName={false} /> : 'Selected chain'}
+                        {descriptor ? <ChainBadge descriptor={descriptor} size="sm" showName={false} /> : 'Selected network'}
                     </dd>
                     <dt className={styles.detailsLabel}>Configuration</dt>
                     <dd className={styles.detailsValue}>
@@ -552,7 +552,7 @@ export function MultisigCreate({ walletId, onBack }) {
                 <dl className={styles.detailsList}>
                     <dt className={styles.detailsLabel}>Network</dt>
                     <dd className={styles.detailsValue}>
-                        {descriptor ? <ChainBadge descriptor={descriptor} size="sm" showName={false} /> : 'Selected chain'}
+                        {descriptor ? <ChainBadge descriptor={descriptor} size="sm" showName={false} /> : 'Selected network'}
                     </dd>
                     <dt className={styles.detailsLabel}>Configuration</dt>
                     <dd className={styles.detailsValue}>
@@ -731,11 +731,11 @@ function originLabel(origin) {
 }
 
 const fieldsetStyle = {
-    border: '1px solid var(--xc-border)',
-    borderRadius: 'var(--xc-radius-md)',
-    padding: 'var(--xc-space-3)',
+    border: 'var(--xc-card-border)',
+    borderRadius: 'var(--xc-card-radius)',
+    padding: 'var(--xc-card-pad)',
     margin: '0 0 var(--xc-space-3) 0',
-    background: 'var(--xc-bg-muted)',
+    background: 'var(--xc-card-bg)',
 };
 
 const legendStyle = {

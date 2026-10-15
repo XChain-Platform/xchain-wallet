@@ -165,4 +165,12 @@ describe('wallet identity avatar contrast', () => {
             }
         }
     });
+
+    it('stretches the labelled Signing with card to the full confirm stack width', () => {
+        const css = readFileSync('packages/core/src/shared/components/WalletIdentity.module.css', 'utf8');
+        const context = /\.context \{([^}]*)\}/.exec(css)[1];
+        expect(context).toMatch(/composes: card from/);
+        expect(context).toMatch(/align-self: stretch/);
+        expect(context).not.toMatch(/flex-start/);
+    });
 });

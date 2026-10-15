@@ -79,7 +79,7 @@ export function AddressPreferencesForm({ walletId, chainId: initialChainId, addr
         initialChainId,
         initialFromAddress: address,
         lockedToken: true,
-        noAddressMessage: 'This wallet has no addresses on this chain.',
+        noAddressMessage: 'This wallet has no addresses on this network.',
     });
 
     const coinTicker = descriptor ? PROTOCOL_COIN_TICKER[descriptor.coin] : '';
@@ -397,7 +397,7 @@ export function AddressPreferencesForm({ walletId, chainId: initialChainId, addr
                 {current ? (
                     <dl className={styles.detailsList}>
                         <DetailRow
-                            label="Currently on chain"
+                            label="Currently on the network"
                             value={current.onChain ? 'Custom preferences set' : 'Protocol defaults (never written)'}
                         />
                     </dl>
