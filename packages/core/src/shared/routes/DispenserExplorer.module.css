@@ -59,6 +59,20 @@
     gap: var(--xc-space-2);
 }
 
+/* The kit Button wraps its children in one inline-flex label span, so the
+   column layout has to reach that span too: without it the ticker, the
+   terms and the action number sat side by side and squeezed the terms into
+   a narrow middle column on a phone. */
+.resultRow > span {
+    display: flex;
+    flex-direction: column;
+    align-items: stretch;
+    gap: var(--xc-space-2);
+    width: 100%;
+    min-width: 0;
+    text-align: start;
+}
+
 .resultFacts {
     display: flex;
     flex-direction: column;

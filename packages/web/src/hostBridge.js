@@ -91,6 +91,7 @@ import {
     fakeOwnedTokensFor,
     fakeTokenInfoFor,
     fakeDispensersFor,
+    fakeDispenserByActionIndex,
     fakeOrdersFor,
     fakeSwapsFor,
     fakeHoldersFor,
@@ -350,6 +351,12 @@ const createDevMockSdk = import.meta.env?.PROD ? null : (constructorOpts) => {
                     if (type === 'token' && query) return fakeDispensersFor(query, chainId);
                     return [];
                 };
+            }
+            if (prop === 'getAction') {
+                // The dispenser detail page reads one dispenser by action
+                // index; answer for rows the token-scoped list served, and keep
+                // the empty answer every other lookup got before.
+                return async (actionIndex) => fakeDispenserByActionIndex(actionIndex, chainId) || [];
             }
             if (prop === 'getOrders') {
                 return async (query, type /* , opts */) => {

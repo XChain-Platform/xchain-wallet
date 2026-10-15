@@ -47,6 +47,29 @@
     margin: 0;
 }
 
+/* A labelled row of list buttons (allow-list / block-list) among form
+   fields: the label reads like a field label, and the buttons start under it
+   instead of sitting right-aligned a whole action-row margin below. */
+.choiceGroup {
+    display: flex;
+    flex-direction: column;
+    gap: var(--xc-label-gap);
+    min-width: 0;
+}
+
+.choiceGroupLabel {
+    margin: 0;
+    color: var(--xc-text);
+    font-size: var(--xc-text-sm);
+    font-weight: 600;
+}
+
+.choiceButtons {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--xc-space-2);
+}
+
 .pickerLabel {
     display: flex;
     flex-direction: column;
