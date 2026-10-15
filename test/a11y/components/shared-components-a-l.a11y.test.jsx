@@ -43,6 +43,7 @@ import { KeyQR } from '../../../packages/core/src/shared/components/KeyQR.jsx';
 import { LayoutModeToggle } from '../../../packages/core/src/shared/components/LayoutModeToggle.jsx';
 import { LearnNote } from '../../../packages/core/src/shared/components/LearnNote.jsx';
 import { LeftNav } from '../../../packages/core/src/shared/components/LeftNav.jsx';
+import { ListToolbar } from '../../../packages/core/src/shared/components/ListToolbar.jsx';
 import { ListPickerScreen } from '../../../packages/core/src/shared/components/ListPickerScreen.jsx';
 import { LockedTokenContext } from '../../../packages/core/src/shared/components/LockedTokenContext.jsx';
 import { LogConsole } from '../../../packages/core/src/shared/components/LogConsole.jsx';
@@ -333,6 +334,9 @@ const fixtures = [
             onSelect={noop}
             onBack={noop}
         />
+    )],
+    ['ListToolbar', () => (
+        <ListToolbar query="" onQueryChange={noop} searchLabel="Search items" />
     )],
     ['LockedTokenContext', () => <LockedTokenContext chainId="bitcoin-mainnet" tick="XCHAIN" />],
     ['LogConsole', () => <LogConsole />],

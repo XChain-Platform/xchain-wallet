@@ -1201,7 +1201,7 @@ export function DispenserForm({ walletId, activeAccountId, onBack, initialChainI
             onBack={stage === 'review'
                 ? () => { setSubmitError(null); setStage('form'); }
                 : leaveGuard.guardedOnBack}
-            titleIcon={<Icon.TokenIcon />}
+            titleIcon={<Icon.DollarIcon />}
             title={stage === 'review' || stage === 'submitting'
                     ? 'Review dispenser'
                     : 'Create dispenser'}

@@ -61,6 +61,11 @@
     justify-content: center;
 }
 
+.recovery:disabled {
+    cursor: wait;
+    opacity: 0.7;
+}
+
 .recovery:hover,
 .recovery:focus-visible {
     background: rgba(255, 255, 255, 0.3);

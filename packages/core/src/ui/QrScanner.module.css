@@ -1,0 +1,17 @@
+/* The camera explainer is a card like every other: the shared card surface
+   (Card.module.css) around the text and its Continue button. */
+.rationale {
+    composes: card from './Card.module.css';
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: var(--xc-space-2);
+    font-size: var(--xc-text-sm);
+    color: var(--xc-text);
+    line-height: 1.4;
+    text-align: center;
+}
+
+.rationale p {
+    margin: 0;
+}

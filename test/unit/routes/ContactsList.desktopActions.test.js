@@ -31,9 +31,12 @@ describe('Contacts desktop actions and narrow layout', () => {
 
     it('uses the wrapping list-page toolbar with a full-width phone sort control', () => {
         expect(listPageCss).toMatch(/\.toolbar\s*\{[\s\S]*?flex-wrap:\s*wrap/);
-        expect(contactsCss).toMatch(
-            /@media \(max-width: 420px\)[\s\S]*?\.sort\s*\{[\s\S]*?flex:\s*1 1 100%/,
+        const toolbarCss = readFileSync(
+            resolve(process.cwd(), 'packages/core/src/shared/components/ListToolbar.module.css'),
+            'utf8',
         );
+        // Every control, the sort select included, takes a full row once the toolbar wraps.
+        expect(toolbarCss).toMatch(/\.field\s*\{[\s\S]*?flex:\s*1 1 12rem/);
     });
 
     it('ends a long contact name in an ellipsis inside the row', () => {
