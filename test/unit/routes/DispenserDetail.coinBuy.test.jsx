@@ -172,7 +172,8 @@ describe('coin-paid dispenser: Buy from this wallet', () => {
             from: { address: BUYER },
         });
         expect(screen.getByTestId('confirm-source')).toHaveTextContent(BUYER.slice(0, 6));
-        expect(screen.getByText('Review purchase')).toBeInTheDocument();
+        // The confirm screen's own title is the only review heading.
+        expect(screen.queryByText('Review purchase')).toBeNull();
         const review = screen.getByTestId('buy-review-summary');
         expect(review).toHaveTextContent('Price per fill2.00000000 DOGE');
         expect(review).toHaveTextContent('Fills3');
