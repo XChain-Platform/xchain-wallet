@@ -132,7 +132,7 @@ describe('transaction detail field sources', () => {
         expect(field('Confirmations')).toHaveTextContent('11');
         expect(field('Block')).toHaveTextContent('100');
         // The chain is named; the network kind (regtest) is not.
-        expect(field('Chain')).toHaveTextContent('Bitcoin');
+        expect(field('Network')).toHaveTextContent('Bitcoin');
         expect(within(screen.getByRole('tabpanel')).queryByRole('rowheader', { name: 'Network' })).toBeNull();
         expect(field('Time')).not.toHaveTextContent(/^-$|^$/);
         expect(field('Memo')).not.toHaveTextContent('-');
