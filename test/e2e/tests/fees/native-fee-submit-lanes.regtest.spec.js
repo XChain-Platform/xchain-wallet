@@ -370,9 +370,9 @@ test.describe(`the native-fee flag on each submit lane on ${REGTEST_CHAIN_LABEL}
 
         await gotoPalette(page, 'Advanced action');
         const main = page.getByRole('main');
-        await expect(main.getByLabel('Action')).toBeVisible({ timeout: 30_000 });
+        await expect(main.getByLabel('Action', { exact: true })).toBeVisible({ timeout: 30_000 });
         await selectVenueChain(main);
-        await main.getByLabel('Action').selectOption('SEND');
+        await main.getByLabel('Action', { exact: true }).selectOption('SEND');
         await main.getByRole('textbox', { name: 'TICK', exact: true }).fill(SEND_TICK);
         await main.getByRole('textbox', { name: 'AMOUNT', exact: true })
             .fill(String(SEND_AMOUNT));

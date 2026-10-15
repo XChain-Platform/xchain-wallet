@@ -356,7 +356,7 @@ export async function completeRecoveryPhraseChallenge(page, words) {
  * onboarding walk itself is identical, and keeping one copy of it is the
  * reason this fixture exists at all.
  *
- * Pass `bip39Passphrase` to take the "Add a BIP39 passphrase (advanced)"
+ * Pass `bip39Passphrase` to take the "Use a BIP39 passphrase (advanced)"
  * branch. That produces an ORDINARY wallet: the passphrase typed here is
  * sealed onto the record under the wallet's own master key, and every later
  * unlock pools a signer from the password alone. It is no longer a way to reach
@@ -390,7 +390,7 @@ export async function createWallet(page, options = {}) {
     // below reveals directly underneath it.
     await page.getByLabel(/^Confirm( password)?$/).fill(password);
     if (bip39Passphrase !== null) {
-        await page.getByLabel(/^Add a BIP39 passphrase/).check();
+        await page.getByLabel(/^Use a BIP39 passphrase/).check();
         await page.getByLabel('BIP39 passphrase', { exact: true }).fill(bip39Passphrase);
         await page.getByLabel('Confirm passphrase', { exact: true }).fill(bip39Passphrase);
     }

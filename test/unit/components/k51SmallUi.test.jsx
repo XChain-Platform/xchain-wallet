@@ -28,8 +28,9 @@ describe('K51 small-screen UI', () => {
         const inputCss = source('packages/core/src/ui/Input.module.css');
 
         expect(ads).toMatch(/import \{ InfoTip, Input \} from '@xchain-wallet\/core\/ui'/);
-        expect(ads.match(/<Input\s/g)).toHaveLength(2);
-        expect(ads).toMatch(/const PLACEHOLDER_BOX = \{[\s\S]*?wordBreak: 'normal',[\s\S]*?overflowWrap: 'break-word'/);
+        // The amount fields share one AmountField and the donation address is a
+        // read-only kit Input, so every field takes the kit heights.
+        expect(ads.match(/<Input\s/g)).toHaveLength(3);
         expect(rule(inputCss, '.input:not(textarea)')).toMatch(/height:\s*var\(--xc-control-height\)/);
     });
 

@@ -1,47 +1,14 @@
-/* §49.1 / §49.2 - Compact reachability notice, the first row of the page
-   content below the page header, at the content's full width. */
+/* §49.1 / §49.2 - Reachability notice. StatusMessage draws the box, icon
+   and tone; this file only styles the message line, the Details toggle and
+   the panel inside it. */
 
-.notice {
+.line {
     display: flex;
-    flex-direction: column;
-    min-width: 0;
-    border: 1px solid;
-    border-radius: var(--xc-radius-sm);
-}
-
-.banner {
-    display: flex;
+    flex-wrap: wrap;
     align-items: center;
-    flex-wrap: nowrap;
-    gap: var(--xc-space-2);
-    min-width: 0;
-    min-height: var(--xc-tap-min);
-    padding-inline: var(--xc-space-2);
-    font-size: var(--xc-text-xs);
-    line-height: 1.2;
-    white-space: nowrap;
+    gap: var(--xc-space-1) var(--xc-space-2);
 }
 
-.degraded {
-    background: var(--xc-warning-bg, rgba(255, 196, 0, 0.10));
-    border-color: var(--xc-warning, #d4a017);
-    color: var(--xc-warning-text, #6e520a);
-}
-
-.offline {
-    background: var(--xc-danger-bg, rgba(220, 53, 69, 0.10));
-    border-color: var(--xc-danger, #c33);
-    color: var(--xc-danger-text, #5c1216);
-}
-
-.message {
-    flex: 1 1 auto;
-    min-width: 0;
-    overflow: hidden;
-    text-overflow: ellipsis;
-}
-
-.retry,
 .detailsToggle {
     min-height: var(--xc-tap-min);
     padding: 0 var(--xc-space-1);
@@ -59,23 +26,10 @@
     justify-content: center;
 }
 
-.retry {
-    flex: 0 0 auto;
-}
-
-.retry:disabled {
-    cursor: wait;
-    opacity: 0.7;
-}
-
-.detailsToggle {
-    flex: 0 0 auto;
-}
-
-/* The panel is a row below the notice line: it grows the strip to its
+/* The panel is a row below the message line: it grows the notice to its
    content, so it never scrolls inside itself or overlaps the header. */
 .detailPanel {
-    padding: 0 var(--xc-space-2) var(--xc-space-2);
+    padding: 0;
     font-size: var(--xc-text-xs);
     line-height: 1.2;
 }
@@ -111,7 +65,6 @@
     opacity: 0.3;
 }
 
-.retry:focus-visible,
 .detailsToggle:focus-visible {
     outline: 2px solid var(--xc-focus-ring);
     /* The ring sits two pixels inside the compact strip so it is never clipped; the spacing scale has no negative step. */
@@ -119,7 +72,6 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
-    .retry,
     .detailsToggle {
         transition: none;
     }

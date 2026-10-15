@@ -13,7 +13,6 @@ import { resolve } from 'node:path';
 
 const readCss = (path) => readFileSync(resolve(process.cwd(), path), 'utf8');
 const routeCss = (name) => readCss(`packages/core/src/shared/routes/${name}.module.css`);
-const css = routeCss('ContactsList');
 const source = readFileSync(
     resolve(process.cwd(), 'packages/core/src/shared/routes/ContactsList.jsx'),
     'utf8',
@@ -23,26 +22,27 @@ const listPageCss = readFileSync(
     'utf8',
 );
 
-const phoneRules = css.match(/@media \(max-width: 420px\)\s*\{([\s\S]*?)\n\}/)?.[1] || '';
 
 function rule(text, selector) {
     const escaped = selector.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
     return text.match(new RegExp(`${escaped}\\s*\\{[^}]*\\}`))?.[0] || '';
 }
 
-describe('ContactsList toolbar at phone width', () => {
-    it('applies the route toolbar layout to the controls', () => {
-        expect(source).toMatch(/toolbar=\{\([\s\S]*?<div className=\{picker\.toolbar\}>/);
+const toolbarCss = readCss('packages/core/src/shared/components/ListToolbar.module.css');
+
+describe('list toolbar at phone width', () => {
+    it('puts the contacts search, network filter and sort in the shared ListToolbar', () => {
+        expect(source).toMatch(/toolbar=\{\(\s*<ListToolbar\b[\s\S]*?<NetworkFilterDropdown[\s\S]*?<Select[\s\S]*?<\/ListToolbar>/);
     });
 
     it('lets the toolbar wrap', () => {
-        const rule = listPageCss.match(/\.toolbar\s*\{[^}]*\}/)[0];
-        expect(rule).toMatch(/flex-wrap:\s*wrap/);
+        const pageToolbar = listPageCss.match(/\.toolbar\s*\{[^}]*\}/)[0];
+        expect(pageToolbar).toMatch(/flex-wrap:\s*wrap/);
+        expect(rule(toolbarCss, '.toolbar')).toMatch(/flex-wrap:\s*wrap/);
     });
 
-    it('gives each control its own row at 420px and below', () => {
-        expect(phoneRules).toMatch(/\.search\s*\{[^}]*flex:\s*1 1 100%/);
-        expect(phoneRules).toMatch(/\.sort\s*\{[^}]*flex:\s*1 1 100%/);
+    it('gives each control an equal share that drops to its own row when narrow', () => {
+        expect(rule(toolbarCss, '.field')).toMatch(/flex:\s*1 1 12rem/);
     });
 });
 
@@ -62,16 +62,17 @@ describe('list toolbar control alignment', () => {
         expect(rule(listPage, '.toolbar > div')).toMatch(/margin-bottom:\s*0/);
     });
 
-    it('uses medium control tokens for every route search field', () => {
-        for (const name of ['DispensersList', 'MyLists']) {
-            mediumControl(routeCss(name), '.search');
+    it('uses the shared medium Input for every route search field', () => {
+        const toolbar = readCss('packages/core/src/shared/components/ListToolbar.jsx');
+        expect(toolbar).toMatch(/<Input[\s\S]*?type="search"[\s\S]*?size="md"/);
+        for (const name of ['DispensersList', 'MyLists', 'ContactsList', 'MessagingInbox']) {
+            expect(readCss(`packages/core/src/shared/routes/${name}.jsx`)).toMatch(/<ListToolbar\b/);
         }
         // These toolbars use the shared medium Input, which owns the control tokens.
-        for (const name of ['StakingList', 'MessagingInbox']) {
+        for (const name of ['StakingList']) {
             const route = readCss(`packages/core/src/shared/routes/${name}.jsx`);
             expect(route).toMatch(/<Input\s+type="search"\s+size="md"/);
         }
-        mediumControl(routeCss('ContactsList'), '.search input');
         mediumControl(routeCss('AddressList'), '.searchField input');
     });
 
