@@ -1,5 +1,11 @@
+/* One row of an activity list. The list is the card (a flush card with
+   dividers between rows, on Home and in History alike), so a row draws no
+   border, corner or fill of its own; it keeps the card inset. */
 .row {
-    composes: card from '../../ui/Card.module.css';
+    padding: var(--xc-card-pad);
+    background: transparent;
+    border: 0;
+    border-radius: 0;
     width: 100%;
     min-width: 0;
     min-height: var(--xc-control-h-lg);
@@ -24,7 +30,6 @@
 }
 
 .row:hover {
-    border-color: var(--xc-accent-primary);
     background: var(--xc-bg-muted);
 }
 
@@ -34,7 +39,6 @@
 }
 
 .selected {
-    border-color: var(--xc-accent-primary);
     background: var(--xc-bg-muted);
 }
 
@@ -136,7 +140,6 @@
 @media (max-width: 400px) {
     .row {
         column-gap: var(--xc-space-1);
-        padding: var(--xc-space-2);
     }
 
     .primary,

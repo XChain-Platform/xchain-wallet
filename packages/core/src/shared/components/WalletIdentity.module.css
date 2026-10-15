@@ -7,9 +7,13 @@
     color: var(--xc-text);
 }
 
+/* A labelled identity (the confirm screen's Signing with) is a card in a
+   stack of cards, so it takes the stack's full width like the cards below. */
 .context {
     composes: card from '../../ui/Card.module.css';
-    align-self: flex-start;
+    display: flex;
+    align-self: stretch;
+    max-width: none;
 }
 
 .label {

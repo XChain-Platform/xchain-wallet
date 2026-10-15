@@ -91,11 +91,17 @@ describe('Settings action rows', () => {
         }
     });
 
-    it('frames an opened Backup row like a row', () => {
-        const css = readFileSync(join(SETTINGS_DIR, 'components/settings/BackupSection.module.css'), 'utf8');
-        const section = css.match(/\.formSection\s*\{([^}]*)\}/)[1];
-        // A row and an opened section are both the shared card.
-        expect(section).toMatch(/composes:\s*card from '\.\.\/\.\.\/\.\.\/ui\/Card\.module\.css'/);
+    it('frames an opened Backup or This wallet row with the shared card, like a row', () => {
+        for (const name of ['BackupSection', 'ThisWalletSection']) {
+            const src = readFileSync(join(SETTINGS_DIR, `components/settings/${name}.jsx`), 'utf8');
+            const css = readFileSync(join(SETTINGS_DIR, `components/settings/${name}.module.css`), 'utf8');
+            // A row and an opened section are both the shared card, with no
+            // card styling of the section's own.
+            expect(src, name).toMatch(/className=\{cardStyles\.card\}/);
+            expect(src, name).not.toMatch(/styles\.(formSection|panel|keyPanel)\b/);
+            expect(css, name).not.toMatch(/composes:\s*(card|flush) from/);
+            expect(css, name).not.toMatch(/dangerPanel/);
+        }
     });
 });
 

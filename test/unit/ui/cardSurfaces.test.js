@@ -8,9 +8,10 @@
 // corner radius, inner padding and fill. No product stylesheet draws a dashed
 // or dotted line except a drop zone while a file is dragged over it.
 //
-// Bordered, rounded boxes that are not cards (controls, menus and dialogs,
-// tone notices, code and value boxes) are named one by one in
-// cardSurfaces.allowlist.json with the reason. The list may only shrink: an
+// Bordered or filled, rounded boxes that are not cards (controls, menus and
+// dialogs, tone notices, code and value boxes) are named one by one in
+// cardSurfaces.allowlist.json with the reason, and so are the card rules
+// that still tint or inset the shared card. The lists may only shrink: an
 // entry that no longer matches a rule fails, so a fixed one is taken off.
 
 import { createRequire } from 'node:module';
@@ -27,7 +28,8 @@ const requireFromVite = createRequire(
 const postcss = requireFromVite('postcss');
 
 const SKIP_DIRS = new Set(['node_modules', 'dist', 'build', 'release', 'test-dapp', 'android', 'ios', 'coverage']);
-const SURFACE_PROPS = new Set(['border', 'border-radius', 'padding', 'background', 'background-color']);
+// Any border, corner, inset or fill declaration redraws part of the card.
+const SURFACE_PROP = /^(border|padding|background)(-|$)/;
 const CARD_COMPOSES = /^(card|flush)\s+from\s+['"][^'"]*\/Card\.module\.css['"]$/;
 // The one exception to "no dashed lines": a drop zone while a file is over it.
 const DRAG_OVER = /drag-?over|dropZoneActive/i;
@@ -61,7 +63,15 @@ function isTokenCard(decls) {
         && decls.background === 'var(--xc-card-bg)';
 }
 
-/** Every bordered, rounded rule that draws its own surface, keyed "file | selector". */
+function isOpaqueFill(value) {
+    return !/^(transparent|none|inherit|initial|unset)$/.test(value.trim());
+}
+
+/**
+ * Every rounded rule that draws its own surface, keyed "file | selector": a
+ * bordered box, or a filled and padded box with no border (a filled panel
+ * reads as a box just as a bordered one does).
+ */
 function ownSurfaceRules(sources) {
     const found = [];
     for (const { path, source } of sources) {
@@ -69,28 +79,74 @@ function ownSurfaceRules(sources) {
             const decls = {};
             rule.each((node) => { if (node.type === 'decl') decls[node.prop] = node.value; });
             if (isTokenCard(decls)) return;
-            if (decls.border && decls['border-radius'] && isVisibleBorder(decls.border) && isBoxRadius(decls['border-radius'])) {
-                found.push(`${path} | ${rule.selector.replace(/\s+/g, ' ')}`);
-            }
+            const radius = decls['border-radius'];
+            if (!radius || !isBoxRadius(radius)) return;
+            const bordered = decls.border && isVisibleBorder(decls.border);
+            const fill = decls.background || decls['background-color'];
+            const filled = !decls.border && fill && isOpaqueFill(fill) && decls.padding;
+            if (bordered || filled) found.push(`${path} | ${rule.selector.replace(/\s+/g, ' ')}`);
         });
     }
     return found;
 }
 
-/** Rules that compose the card yet redraw part of its surface. */
+// Interaction states may tint a card that is itself a control (hover,
+// press, the current item); they are not a second card look.
+const STATE = /:(hover|active|focus|focus-visible|focus-within|disabled|checked)\b|\[aria-(current|pressed|selected|expanded)/;
+
+/** The last compound of each selector in a list: the element the rule styles. */
+function subjects(selector) {
+    return selector.split(',').map((part) => part.trim().split(/\s*[>+~]\s*|\s+/).pop());
+}
+
+/** A declaration that removes a surface (flattening a nested card) rather than drawing one. */
+function isReset(value) {
+    return /^(0|none|transparent|0\s+none)$/.test(value.trim());
+}
+
+/**
+ * Rules that redraw part of the surface of a class composing the card: the
+ * composing rule itself, or any other rule in the same file whose styled
+ * element carries that class (a tone modifier such as .panel.danger or a
+ * second rule that changes its inset). Interaction states and rules that
+ * flatten a nested card are not a second look.
+ */
 function cardOverrides(sources) {
     const found = [];
     for (const { path, source } of sources) {
-        postcss.parse(source).walkRules((rule) => {
-            const decls = [];
-            let composesCard = false;
+        const root = postcss.parse(source);
+        const cardClasses = new Set();
+        root.walkRules((rule) => {
             rule.each((node) => {
-                if (node.type !== 'decl') return;
-                if (node.prop === 'composes' && CARD_COMPOSES.test(node.value)) composesCard = true;
-                else if (SURFACE_PROPS.has(node.prop)) decls.push(node.prop);
+                if (node.type !== 'decl' || node.prop !== 'composes' || !CARD_COMPOSES.test(node.value)) return;
+                for (const [, name] of rule.selector.matchAll(/\.([\w-]+)/g)) cardClasses.add(name);
             });
-            if (composesCard && decls.length) found.push(`${path} | ${rule.selector} | ${decls.join(', ')}`);
         });
+        if (!cardClasses.size) continue;
+        root.walkRules((rule) => {
+            const styled = subjects(rule.selector).filter((compound) => !STATE.test(compound));
+            const hit = styled.some((compound) => [...compound.matchAll(/\.([\w-]+)/g)].some(([, name]) => cardClasses.has(name)));
+            if (!hit) return;
+            const decls = [];
+            rule.each((node) => {
+                if (node.type === 'decl' && SURFACE_PROP.test(node.prop) && !isReset(node.value)) decls.push(node.prop);
+            });
+            if (decls.length) found.push(`${path} | ${rule.selector.replace(/\s+/g, ' ')} | ${decls.join(', ')}`);
+        });
+    }
+    return found;
+}
+
+/** JSX that puts the shared card class on an element and redraws its surface inline. */
+function inlineCardOverrides(sources) {
+    const found = [];
+    for (const { path, source } of sources) {
+        const pattern = /className=\{cardStyles\.(?:card|flush)\}[^>]*?style=\{\{([^}]*)\}\}/g;
+        for (const match of source.matchAll(pattern)) {
+            if (/\b(border\w*|background\w*|padding\w*)\s*:/.test(match[1])) {
+                found.push(`${path}:${source.slice(0, match.index).split('\n').length}`);
+            }
+        }
     }
     return found;
 }
@@ -204,10 +260,18 @@ describe('card surfaces', () => {
                 ".bad { composes: card from '../../ui/Card.module.css'; padding: 4px; }",
                 '.rule { border-top: 1px dashed var(--xc-border); }',
                 '.zone.dragOver { outline: 2px dashed var(--xc-accent-primary); }',
+                '.filled { padding: 8px; background: var(--xc-danger-bg); border-radius: 8px; }',
+                '.chip { padding: 2px; background: red; border-radius: var(--xc-radius-pill); }',
+                ".tone { composes: card from '../../ui/Card.module.css'; }",
+                '.tone.danger { border-color: red; }',
+                '.tone > div { gap: 4px; }',
             ].join('\n'),
         }];
-        expect(ownSurfaceRules(fixture)).toEqual(['Fixture.module.css | .panel']);
-        expect(cardOverrides(fixture)).toEqual(['Fixture.module.css | .bad | padding']);
+        expect(ownSurfaceRules(fixture)).toEqual(['Fixture.module.css | .panel', 'Fixture.module.css | .filled']);
+        expect(cardOverrides(fixture)).toEqual([
+            'Fixture.module.css | .bad | padding',
+            'Fixture.module.css | .tone.danger | border-color',
+        ]);
         expect(dashedLines(fixture)).toEqual(['Fixture.module.css | .rule | border-top: 1px dashed var(--xc-border)']);
 
         const inline = [{
@@ -221,6 +285,15 @@ describe('card surfaces', () => {
         }];
         expect(inlineOffCardBoxes(inline)).toEqual({ 'Fixture.jsx': 1 });
         expect(inlineDashedLines(inline)).toEqual(['Fixture.jsx:4']);
+
+        const tinted = [{
+            path: 'Tinted.jsx',
+            source: [
+                '<div className={cardStyles.card} style={{ color: "red" }}>a</div>',
+                '<div className={cardStyles.card} style={{ borderColor: "red", color: "red" }}>b</div>',
+            ].join('\n'),
+        }];
+        expect(inlineCardOverrides(tinted)).toEqual(['Tinted.jsx:2']);
     });
 
     it('draws no dashed or dotted lines outside a drag-over drop zone', () => {
@@ -228,11 +301,19 @@ describe('card surfaces', () => {
         expect(inlineDashedLines(jsx)).toEqual([]);
     });
 
-    it('never redraws the surface of a rule that composes the card', () => {
-        expect(cardOverrides(moduleCss)).toEqual([]);
+    it('never redraws the surface of a rule that composes the card, with the named exceptions only shrinking', () => {
+        const found = cardOverrides(moduleCss);
+        const unlisted = found.filter((key) => !(key in allowlist.overrides));
+        const stale = Object.keys(allowlist.overrides).filter((key) => !found.includes(key));
+        expect(unlisted, 'take the tint, stripe or inset off the card rule').toEqual([]);
+        expect(stale, 'take fixed overrides off cardSurfaces.allowlist.json').toEqual([]);
     });
 
-    it('draws every other bordered, rounded box only where the allowlist names why', () => {
+    it('never tints or redraws the shared card inline', () => {
+        expect(inlineCardOverrides(jsx)).toEqual([]);
+    });
+
+    it('draws every other bordered or filled, rounded box only where the allowlist names why', () => {
         const found = ownSurfaceRules(moduleCss);
         const unlisted = found.filter((key) => !(key in allowlist.rules));
         const stale = Object.keys(allowlist.rules).filter((key) => !found.includes(key));

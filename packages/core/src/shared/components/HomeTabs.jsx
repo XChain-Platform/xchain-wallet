@@ -1053,7 +1053,7 @@ function DemoActivityList({ chainIds, balances, networkFilter, walletId, onSelec
         return <Placeholder title={t('history.empty.noActivityTitle')} body={t('home.tabs.synthesizedDemoActivityWillAppear')} />;
     }
     return (
-        <ul className={styles.demoList}>
+        <ul className={`${styles.demoList} ${styles.activityList}`}>
             {entries.map((e) => (
                 <ActivityEntryRow
                     key={e.key}

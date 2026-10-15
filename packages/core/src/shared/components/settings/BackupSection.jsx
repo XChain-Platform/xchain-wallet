@@ -72,6 +72,7 @@ import { blurNumberInputOnWheel } from '../../utils/formInput.js';
 import { useProtectedScreen } from '../../utils/screenGuard.js';
 import { submitOnlyFromLastField } from '../../../ui/formEnter.js';
 import { ROW_HINT, STACK, SettingsActionRow, Status } from './_settingsPrimitives.jsx';
+import cardStyles from '../../../ui/Card.module.css';
 import styles from './BackupSection.module.css';
 import { t } from '../../../i18n/index.js';
 
@@ -612,7 +613,7 @@ function LabelSyncDueNotice({ changeCount, disabled, onPublish, onDismiss }) {
         <FormSection
             title={t('settings.backup.labelsChangedSinceTheLast')}
             description={t('settings.backup.labelChangeNotice', { count: changeCount })}
-            className={styles.formSection}
+            className={cardStyles.card}
         >
             <div className={styles.actions}>
                 <Button variant="ghost" size="sm" onClick={onDismiss}>
@@ -655,7 +656,7 @@ function UnlockPrompt({ label, hint, busy, error, onCancel, onSubmit }) {
     };
     return (
         <form onSubmit={submit} noValidate>
-            <FormSection title={label} description={hint} className={styles.formSection}>
+            <FormSection title={label} description={hint} className={cardStyles.card}>
                 <Input
                     type="password"
                     revealable
@@ -717,7 +718,7 @@ function RevealedMnemonic({
         <FormSection
             title={t('settings.backup.yourRecoveryPhrase')}
             description={t('settings.backup.writeItOnPaperOr', { RECOVERY_PHRASE_WARNING })}
-            className={`${styles.formSection} ${styles.recoverySheet}`}
+            className={`${cardStyles.card} ${styles.recoverySheet}`}
         >
             <div className={styles.sheetMeta} data-xc-recovery-sheet>{t('settings.backup.wallet')} {walletName}</div>
             {/* The words and the passphrase refuse a copy: the only way out of
@@ -841,7 +842,7 @@ function DryRunForm({ busy, error, onCancel, onSubmit }) {
             <FormSection
                 title={t('settings.backup.testBackup')}
                 description={t('settings.backup.enterTheRecoveryPhraseFrom', { value: gapLimitValid ? gapLimitNumber : 'selected' })}
-                className={styles.formSection}
+                className={cardStyles.card}
             >
                 <Textarea
                     value={mn}
@@ -924,7 +925,7 @@ function DryRunReport({ result, onDone }) {
         ? '✓ Backup matches this wallet on every active network.'
         : '✗ Backup does NOT match this wallet on at least one network.';
     return (
-        <FormSection title={title} className={styles.formSection}>
+        <FormSection title={title} className={cardStyles.card}>
             {perChain.length > 0 ? (
                 <div className={styles.reportList}>
                     {perChain.map((c) => (
@@ -1029,7 +1030,7 @@ function PasswordPrompt({ label, hint, busy, operationTime, error, onCancel, onS
             <FormSection
                 title={t('settings.backup.exportEncryptedBackup')}
                 description={hint}
-                className={styles.formSection}
+                className={cardStyles.card}
             >
                 <Input
                     label={label}
@@ -1111,7 +1112,7 @@ function BackupExportResult({ result, onDone }) {
     };
 
     return (
-        <FormSection title={t('settings.backup.backupFileSaved')} className={styles.formSection}>
+        <FormSection title={t('settings.backup.backupFileSaved')} className={cardStyles.card}>
             <Status text={result.fileName} />
             <div style={ROW_HINT}>
                 {t('settings.backup.yourBrowserSentThisFile')}
@@ -1229,7 +1230,7 @@ function PublishLabelsForm({ walletId, busy, error, password, onPasswordChange, 
         <FormSection
             title={t('settings.backup.publishLabelsOnChain')}
             description={t('settings.backup.theLabelsContactsAreEncrypted')}
-            className={styles.formSection}
+            className={cardStyles.card}
         >
             {chains === null ? (
                 <div style={ROW_HINT}>{t('settings.backup.loadingChains')}</div>
@@ -1290,7 +1291,7 @@ function PublishLabelsReport({ result, onDone }) {
     if (!txid) {
         return (
             <div data-testid="publish-labels-queued">
-                <FormSection title={t('settings.backup.labelsSignedNotBroadcastYet')} className={styles.formSection}>
+                <FormSection title={t('settings.backup.labelsSignedNotBroadcastYet')} className={cardStyles.card}>
                     <div style={ROW_HINT}>
                         {result?.queued
                             ? t('settings.backup.theLabelTransactionIsWaiting')
@@ -1304,7 +1305,7 @@ function PublishLabelsReport({ result, onDone }) {
         );
     }
     return (
-        <FormSection title={t('settings.backup.labelsPublished')} className={styles.formSection}>
+        <FormSection title={t('settings.backup.labelsPublished')} className={cardStyles.card}>
             <dl style={{ display: 'grid', gridTemplateColumns: 'auto 1fr', gap: '4px var(--xc-space-3)', margin: 0 }}>
                 <dt style={ROW_HINT}>{t('send.txid')}</dt>
                 <dd style={{ margin: 0, fontFamily: 'var(--xc-font-mono)', fontSize: 'var(--xc-text-xs)', wordBreak: 'break-all' }}>{txid}</dd>
@@ -1367,7 +1368,7 @@ function RestoreLabelsForm({ walletId, busy, error, onCancel, onSubmit }) {
         <FormSection
             title={t('settings.backup.checkChainForBackedUp')}
             description={t('settings.backup.decryptsTheLabelsContactsFile')}
-            className={styles.formSection}
+            className={cardStyles.card}
         >
             {chains === null ? (
                 <div style={ROW_HINT}>{t('settings.backup.loadingChains')}</div>
@@ -1452,7 +1453,7 @@ function restoreLabelsMessage(result) {
  */
 function RestoreLabelsReport({ result, onDone }) {
     return (
-        <FormSection title={restoreLabelsMessage(result)} className={styles.formSection}>
+        <FormSection title={restoreLabelsMessage(result)} className={cardStyles.card}>
             <div className={styles.actions}>
                 <Button variant="ghost" size="sm" onClick={onDone}>{t('common.done')}</Button>
             </div>
