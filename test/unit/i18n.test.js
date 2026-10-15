@@ -478,6 +478,8 @@ describe('translations', () => {
             // Retrying a desktop update download and retrying a balance load.
             ['desktopUpdate.retry', 'home.retryBalances'],
             ['home.receive', 'uri.intent.receive'],
+            // The Send form's network field and the Settings network row.
+            ['send.fields.chain', 'settings.network.label'],
             ['send.title', 'uri.intent.send'],
         ]);
     });

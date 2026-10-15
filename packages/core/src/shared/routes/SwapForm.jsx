@@ -204,7 +204,7 @@ export function SwapForm({ walletId, onBack, initialChainId, initialGiveTick, in
                 if (!Object.keys(signingByChain)[0]) {
                     setLoadError(hasAnyAddress(byChain)
                         ? WATCH_ONLY_SIGNING_MESSAGE
-                        : 'No addresses on any chain yet. Use Receive to generate one before creating a swap.');
+                        : 'No addresses on any network yet. Use Receive to generate one before creating a swap.');
                     return;
                 }
                 // Don't clobber a caller-seeded chain (ManageToken sell flow).
@@ -695,12 +695,12 @@ export function SwapForm({ walletId, onBack, initialChainId, initialGiveTick, in
                 </p>
                 <dl className={styles.detailsList}>
                     {descriptor ? (
-                        <DetailRow label="Give chain" value={<ChainBadge descriptor={descriptor} size="sm" />} />
+                        <DetailRow label="Give network" value={<ChainBadge descriptor={descriptor} size="sm" />} />
                     ) : null}
                     <DetailRow label="From" value={<AddressText address={fromAddress.address} />} />
                     <DetailRow label="Give amount" value={giveSide} />
                     {descriptor ? (
-                        <DetailRow label="Get chain" value={<ChainBadge descriptor={descriptor} size="sm" />} />
+                        <DetailRow label="Get network" value={<ChainBadge descriptor={descriptor} size="sm" />} />
                     ) : null}
                     <DetailRow label="Get amount" value={getSide} />
                     {!giveOwnership && !getOwnership ? (
@@ -905,10 +905,10 @@ export function SwapForm({ walletId, onBack, initialChainId, initialGiveTick, in
         >
             <FormSection
                 title="Network"
-                description="Both swap legs settle on this chain."
+                description="Both swap legs settle on this network."
             >
                 <ChainPicker
-                    label="Give and get chain"
+                    label="Give and get network"
                     value={chainId}
                     onChange={setChainId}
                     chainIds={chainIds}

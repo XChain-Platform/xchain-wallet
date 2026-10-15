@@ -433,7 +433,7 @@ describe('Send flow with mocked messaging', () => {
         expect(screen.queryByText(/wallet holds none of its unlock keys/i)).not.toBeInTheDocument();
     });
 
-    it('plainly refuses a pasted address from another chain', async () => {
+    it('plainly refuses a pasted address from another network', async () => {
         const messaging = mount();
         const toField = await screen.findByLabelText(/^To$/);
         fireEvent.paste(toField, {
@@ -838,7 +838,7 @@ describe('Send flow with mocked messaging', () => {
         expect(scroller.scrollTop).toBe(0);
         expect(screen.getByRole('heading', { name: 'Review and send' })).toHaveFocus();
         expect(review).toHaveTextContent(`Send ${AMOUNT} BTC on Bitcoin to ${TO}`);
-        expect(review).toHaveTextContent('Chain');
+        expect(review).toHaveTextContent('Network');
         expect(review).toHaveTextContent('Bitcoin');
         expect(review).toHaveTextContent('From');
         expect(review).toHaveTextContent('bc1qse…ndersa');

@@ -54,7 +54,7 @@ describe('Settings search', () => {
 
         expect(screen.getByText('Choose the theme and motion preference.')).toBeTruthy();
         expect(screen.getByText('Choose the interface language and fiat currency.')).toBeTruthy();
-        expect(screen.getByText('Choose Mainnet or Testnet to control which chains the wallet queries and displays; changing the network reloads the page.')).toBeTruthy();
+        expect(screen.getByText('Choose Mainnet or Testnet to control which networks the wallet queries and displays; changing the network reloads the page.')).toBeTruthy();
         expect(screen.getByText('Choose which wallet events trigger notifications, sounds, or price alerts.')).toBeTruthy();
         expect(screen.getByText('Export or import the address book.')).toBeTruthy();
     });
@@ -80,7 +80,7 @@ describe('Settings search', () => {
         ['network endpoint', 'Network & endpoints'],
         ['connected site', 'Connected sites'],
         ['donation', 'Automatic donation system'],
-        ['saved chain filters', 'Display'],
+        ['saved network filters', 'Display'],
         ['quiet hours', 'Notifications'],
         ['localhost auto sign', 'Developer mode'],
         ['Primary Vault', 'This wallet'],

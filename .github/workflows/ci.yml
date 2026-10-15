@@ -328,11 +328,10 @@ jobs:
       cancel-in-progress: false
     env:
       XC_REGTEST_SSH_HOST: ${{ vars.XC_REGTEST_SSH_HOST }}
-      # Which regtest chain the suite drives. Litecoin by default since 2026-10-14:
-      # the BTC regtest indexer halts on a rollcall epoch until the DOGE indexer
-      # replays past it, which left every run waiting to its cap. Set the repo
-      # variable XC_REGTEST_COIN (RBTC, RLTC or RDOGE) to move it without a commit.
-      XC_REGTEST_COIN: ${{ vars.XC_REGTEST_COIN || 'RLTC' }}
+      # Which regtest chain the suite drives (RBTC, RLTC or RDOGE). Bitcoin is the
+      # only live regtest chain on the CI venue; the repo variable XC_REGTEST_COIN
+      # moves a run to another chain without a commit.
+      XC_REGTEST_COIN: ${{ vars.XC_REGTEST_COIN || 'RBTC' }}
       XC_REGTEST_SSH_KEY: ${{ secrets.XC_REGTEST_SSH_KEY }}
     steps:
       - uses: actions/checkout@v4

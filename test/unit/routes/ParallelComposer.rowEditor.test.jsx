@@ -48,11 +48,11 @@ function mount() {
 }
 
 describe('ParallelComposer row editor', () => {
-    it('shows the chain once, in the Chain field, with no trailing badge', async () => {
+    it('shows the network once, in the Network field, with no trailing badge', async () => {
         mount();
         const form = await screen.findByRole('form', { name: 'Compose parallel actions' });
         await screen.findByRole('button', { name: 'Remove' });
-        expect(screen.getByRole('combobox', { name: 'Chain' })).toBeTruthy();
+        expect(screen.getByRole('combobox', { name: 'Network' })).toBeTruthy();
         expect(form.querySelectorAll(`.${badgeStyles.badge}`)).toHaveLength(0);
     });
 });

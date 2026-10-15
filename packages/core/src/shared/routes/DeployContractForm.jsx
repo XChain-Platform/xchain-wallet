@@ -633,7 +633,7 @@ export function DeployContractForm({ walletId, onBack }) {
     function handleReview(event) {
         event.preventDefault();
         if (!chainId || !fromAddress) {
-            setFormError('No address available to publish from on this chain.');
+            setFormError('No address available to publish from on this network.');
             return;
         }
         if (!code.trim()) {
@@ -1024,7 +1024,7 @@ export function DeployContractForm({ walletId, onBack }) {
                 <dl className={styles.detailsList}>
                     {descriptor ? (
                         <>
-                            <dt className={styles.detailsLabel}>Chain</dt>
+                            <dt className={styles.detailsLabel}>Network</dt>
                             <dd className={styles.detailsValue}><ChainBadge descriptor={descriptor} size="sm" /></dd>
                         </>
                     ) : null}

@@ -63,10 +63,10 @@ function ruleBody(css, selector) {
     return new RegExp(`(?:^|\\n)\\s*${escaped}\\s*\\{([^}]*)\\}`).exec(css)?.[1] ?? null;
 }
 
-describe('Bridge settings destination chains', () => {
-    it('renders the chains as one group named by its label', async () => {
+describe('Bridge settings destination networks', () => {
+    it('renders the networks as one group named by its label', async () => {
         mountAdmin({ chainId: DOGE, tick: 'FUFU', locks: {} });
-        const group = await screen.findByRole('group', { name: 'Destination chains' }, WAIT);
+        const group = await screen.findByRole('group', { name: 'Destination networks' }, WAIT);
         expect(group).toHaveClass(styles.checkGroup);
         expect(within(group).getByLabelText('Bitcoin')).toBeTruthy();
         expect(within(group).getByLabelText('Litecoin')).toBeTruthy();

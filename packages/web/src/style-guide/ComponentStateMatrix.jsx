@@ -177,7 +177,7 @@ function ComponentPreview({ name, size, state }) {
     case 'QrScanner':
         return <UI.QrScanner previewState={state === 'error' ? 'denied' : 'unsupported'} onFrame={noop} alt="QR scanner preview" />;
     case 'ChainPicker':
-        return <UI.ChainPicker label="Chain" value="bitcoin-mainnet" onChange={noop} chainIds={chainIds} chainRegistry={chainRegistry} size={nativeSize} disabled={disabled} />;
+        return <UI.ChainPicker label="Network" value="bitcoin-mainnet" onChange={noop} chainIds={chainIds} chainRegistry={chainRegistry} size={nativeSize} disabled={disabled} />;
     case 'NetworkField':
         return <UI.NetworkField value="bitcoin-mainnet" onChange={noop} chainIds={chainIds} chainRegistry={chainRegistry} size={nativeSize} disabled={disabled} />;
     case 'Skeleton':

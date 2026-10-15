@@ -94,7 +94,7 @@ describe('ListShareForm name', () => {
         const nameLabel = await screen.findByText('Name', { selector: 'dt' });
         expect(nameLabel.previousElementSibling.textContent).toBe('#2700');
         expect(nameLabel.nextElementSibling.textContent).toBe('Treasury');
-        expect(nameLabel.nextElementSibling.nextElementSibling.textContent).toBe('Chain');
+        expect(nameLabel.nextElementSibling.nextElementSibling.textContent).toBe('Network');
     });
 
     it.each([
