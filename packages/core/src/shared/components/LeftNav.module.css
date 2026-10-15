@@ -299,10 +299,13 @@
     white-space: nowrap;
 }
 
-/* Unread/attention count pill pinned to the right of a nav row. */
+/* Unread/attention count pill pinned to the right of a nav row. Its block
+   margin cancels the pill's height beyond the icon's, so a row showing the
+   pill keeps the height of every other row. */
 .badge {
     flex: 0 0 auto;
     box-sizing: border-box;
+    margin-block: calc((var(--xc-icon-md) - var(--xc-badge-height-sm)) / 2);
     min-width: var(--xc-badge-height-sm);
     height: var(--xc-badge-height-sm);
     padding: 0 var(--xc-badge-padding-inline-sm);
@@ -408,6 +411,7 @@
    to sit beside. Kept as a readable number, not a bare dot. */
 .layout[data-xc-tier='rail'] .badge {
     position: absolute;
+    margin-block: 0;
     top: 2px;
     inset-inline-end: 6px;
     min-width: var(--xc-badge-height-sm);
