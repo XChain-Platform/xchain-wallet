@@ -39,4 +39,11 @@ describe('field tokens', () => {
             expect(block).not.toMatch(/opacity:\s*0\.55/);
         }
     });
+
+    it('keeps the transparent native input of a Switch and Checkbox transparent when disabled', () => {
+        // tokens.css sets a disabled control's opacity with !important, which
+        // painted a gray native box over a disabled switch's track.
+        expect(rule(css('ui/Switch.module.css'), '.input')).toContain('opacity: 0 !important');
+        expect(rule(css('ui/Checkbox.module.css'), '.input')).toContain('opacity: 0 !important');
+    });
 });
