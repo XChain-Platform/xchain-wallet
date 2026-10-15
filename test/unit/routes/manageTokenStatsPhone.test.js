@@ -13,6 +13,7 @@
 import { createRequire } from 'node:module';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
+import { withEnglishCopy } from '../../helpers/englishSource.js';
 import { describe, expect, it } from 'vitest';
 
 const repoRoot = process.cwd();
@@ -60,7 +61,7 @@ describe('Manage token stats strip', () => {
     });
 
     it('renders supply and holding as the first two cells', () => {
-        const source = readFileSync(jsxPath, 'utf8');
+        const source = withEnglishCopy(readFileSync(jsxPath, 'utf8'));
         const strip = source.slice(source.indexOf('className={styles.statsStrip}'));
         const labels = [...strip.matchAll(/className=\{styles\.statLabel\}>\s*([^<]+?)\s*</g)]
             .map((m) => m[1].trim());

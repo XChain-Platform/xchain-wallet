@@ -46,6 +46,7 @@ import {
 } from '../utils/chainAvailability.js';
 import styles from './Receive.module.css';
 import qrStyles from '../../ui/QrDisplay.module.css';
+import { t } from '../../i18n/index.js';
 
 const chainRegistry = registryLib.defaultRegistry();
 const NATIVE_COIN_DECIMALS = 8;
@@ -901,8 +902,8 @@ export function Receive({ walletId, accountId, prefill = null, onBack, onChangeA
     const header = (
         <PageHeader
             onBack={onBack}
-            backLabel="Back to home"
-            title="Receive"
+            backLabel={t('common.backToHome')}
+            title={t('home.receive')}
             titleIcon={<Icon.ReceiveIcon />}
         />
     );
@@ -912,9 +913,7 @@ export function Receive({ walletId, accountId, prefill = null, onBack, onChangeA
         return (
             <Screen variant={variant} header={header}>
                 <StatusMessage variant="status">
-                    This wallet is in signer mode. It can sign transactions from a
-                    watch-only wallet, but it does not have an address for receiving funds.
-                    To receive on this device, change Wallet mode in Settings.
+                    {t('receive.thisWalletIsInSigner')}
                 </StatusMessage>
             </Screen>
         );
@@ -934,7 +933,7 @@ export function Receive({ walletId, accountId, prefill = null, onBack, onChangeA
                 <EmptyState
                     title={NO_CHAINS_TITLE}
                     body={NO_CHAINS_BODY}
-                    actionLabel="Open network settings"
+                    actionLabel={t('common.openNetworkSettings')}
                     onAction={() => setNetworkSettingsOpen(true)}
                     actionIcon={<Icon.GearIcon />}
                 />
@@ -945,7 +944,7 @@ export function Receive({ walletId, accountId, prefill = null, onBack, onChangeA
         return (
             <OwnAddressPickerScreen
                 variant={variant}
-                title="Choose a receive address"
+                title={t('receive.chooseAReceiveAddress')}
                 walletId={walletId}
                 accountId={accountId}
                 chainId={activeChainId}
@@ -980,9 +979,9 @@ export function Receive({ walletId, accountId, prefill = null, onBack, onChangeA
             loading={generating}
             disabled={generating}
             icon={<Icon.PlusIcon />}
-            aria-label="Generate new address"
+            aria-label={t('receive.generateNewAddress')}
         >
-            New address
+            {t('receive.newAddress')}
         </Button>
     ) : null;
 
@@ -994,9 +993,9 @@ export function Receive({ walletId, accountId, prefill = null, onBack, onChangeA
                 onClick={copyQrImage}
                 disabled={!qrDataUrl}
                 icon={<Icon.CopyIcon />}
-                aria-label={canCopyImages ? 'Copy QR code' : 'Copy payment link'}
+                aria-label={canCopyImages ? t('receive.copyQrCode') : t('receive.copyPaymentLink')}
             >
-                Copy QR
+                {t('receive.copyQr')}
             </Button>
             <Button
                 size="md"
@@ -1004,9 +1003,9 @@ export function Receive({ walletId, accountId, prefill = null, onBack, onChangeA
                 onClick={shareQrImage}
                 disabled={!qrDataUrl}
                 icon={<Icon.UploadIcon />}
-                aria-label="Share QR payment link"
+                aria-label={t('receive.shareQrPaymentLink')}
             >
-                Share QR
+                {t('receive.shareQr')}
             </Button>
             {addressExplorerUrl ? (
                 <a
@@ -1014,9 +1013,9 @@ export function Receive({ walletId, accountId, prefill = null, onBack, onChangeA
                     href={addressExplorerUrl}
                     target="_blank"
                     rel="noopener noreferrer"
-                    aria-label="View address in block explorer"
+                    aria-label={t('receive.viewAddressInBlockExplorer')}
                 >
-                    Explorer <span aria-hidden="true">↗</span>
+                    {t('receive.explorer')} <span aria-hidden="true">↗</span>
                 </a>
             ) : null}
             {generateAddressButton}
@@ -1031,9 +1030,9 @@ export function Receive({ walletId, accountId, prefill = null, onBack, onChangeA
 
             {noAddresses ? (
                 <EmptyState
-                    title="No addresses yet"
-                    body="Generate an address to start receiving."
-                    actionLabel="Generate an address"
+                    title={t('history.empty.noAddressesTitle')}
+                    body={t('receive.generateAnAddressToStart')}
+                    actionLabel={t('receive.generateAnAddress')}
                     onAction={() => setAddAddressOpen(true)}
                     actionIcon={<Icon.PlusIcon />}
                 />
@@ -1042,7 +1041,7 @@ export function Receive({ walletId, accountId, prefill = null, onBack, onChangeA
             {descriptor?.addressTypes?.length > 1 ? (
                 <Select
                     size="md"
-                    label="Address type"
+                    label={t('receive.addressType')}
                     value={addressType}
                     onChange={(event) => changeAddressType(event.target.value)}
                     disabled={generating || !addressType}
@@ -1059,7 +1058,7 @@ export function Receive({ walletId, accountId, prefill = null, onBack, onChangeA
 
             {!address && descriptor && addressType && !generating && !generateError ? (
                 <StatusMessage variant="status">
-                    There is no {addressTypeLabel(addressType)} address yet. Create one to receive funds with this address type.
+                    {t('receive.thereIsNo')} {addressTypeLabel(addressType)} {t('receive.addressYetCreateOneTo')}
                 </StatusMessage>
             ) : null}
 
@@ -1074,14 +1073,14 @@ export function Receive({ walletId, accountId, prefill = null, onBack, onChangeA
                             {qrDataUrl ? (
                                 <img
                                     src={qrDataUrl}
-                                    alt={`QR code for ${address.address}`}
+                                    alt={t('receive.qrCodeFor', { address: address.address })}
                                     width={qrPixelSize}
                                     height={qrPixelSize}
                                     className={styles.qr}
                                 />
                             ) : (
                                 <div className={styles.qrPlaceholder} aria-hidden="true">
-                                    Rendering QR…
+                                    {t('receive.renderingQr')}
                                 </div>
                             )}
                         </div>
@@ -1091,19 +1090,19 @@ export function Receive({ walletId, accountId, prefill = null, onBack, onChangeA
                         // The visible label is the accessible name; the hint says a tap
                         // copies the address. A name about a payment link went stale when
                         // the tap stopped copying one.
-                        label={address.label || 'Address'}
+                        label={address.label || t('verifySignature.address')}
                         icon="addresses"
                         value={address.address}
                         readOnly
                         onChange={() => {}}
                         onClick={copyAddress}
                         onKeyDown={onAddressKeyDown}
-                        title="Tap to copy address"
-                        hint="Tap the address to copy it."
+                        title={t('receive.tapToCopyAddress')}
+                        hint={t('receive.tapTheAddressToCopy')}
                         style={{ cursor: 'text', userSelect: 'text' }}
                         wrapReadOnlyAddress
                         onIconClick={() => setAddressPickerOpen(true)}
-                        iconLabel="Choose receive address"
+                        iconLabel={t('receive.chooseReceiveAddress')}
                     />
                     {qrActionsContent}
                 </div>
@@ -1117,14 +1116,14 @@ export function Receive({ walletId, accountId, prefill = null, onBack, onChangeA
                 <div className={styles.labelEditor}>
                     <Input
                         size="md"
-                        label="Address label"
+                        label={t('receive.addressLabel')}
                         value={labelDraftValue}
                         onChange={(event) => setLabelDraft({
                             addressId: address.id,
                             value: event.target.value,
                         })}
                         onKeyDown={onLabelKeyDown}
-                        placeholder="Add a label"
+                        placeholder={t('receive.addALabel')}
                         autoComplete="off"
                         error={labelError || undefined}
                     />
@@ -1136,7 +1135,7 @@ export function Receive({ walletId, accountId, prefill = null, onBack, onChangeA
                         disabled={labelSaving || labelDraftValue.trim() === (address.label || '')}
                         onClick={saveAddressLabel}
                     >
-                        Save label
+                        {t('receive.saveLabel')}
                     </Button>
                 </div>
             ) : null}
@@ -1153,7 +1152,7 @@ export function Receive({ walletId, accountId, prefill = null, onBack, onChangeA
                         className={styles.assetCard}
                         onClick={onChangeAsset || onBack}
                         // Icon-only control: the accessible name carries the chain the icon overlay shows.
-                        aria-label={`Change asset (currently ${selectedTick} on ${descriptor.displayName})`}
+                        aria-label={t('receive.changeAssetCurrentlyOn', { selectedTick, displayName: descriptor.displayName })}
                     >
                         <TickerIcon chainId={descriptor.id} tick={selectedTick} size={48} />
                     </button>
@@ -1183,28 +1182,26 @@ export function Receive({ walletId, accountId, prefill = null, onBack, onChangeA
                     {isHwAddress ? (
                         <section
                             role="group"
-                            aria-label="Verify this receive address on your hardware wallet"
+                            aria-label={t('receive.verifyThisReceiveAddressOn')}
                             className={styles.hwVerify}
                         >
                             <div className={styles.addressBox}>
                                 <AddressText address={address.address} truncate={false} size="sm" />
-                                <CopyButton value={address.address} label="Copy receive address" />
+                                <CopyButton value={address.address} label={t('receive.copyReceiveAddress')} />
                             </div>
                             {hwVerify.status === 'confirmed' ? (
                                 <p className={styles.hint} role="status">
-                                    ✅ Address verified on your {hwDeviceLabel}. It is safe to share.
+                                    {t('receive.addressVerifiedOnYour')} {hwDeviceLabel}{t('receive.itIsSafeToShare')}
                                 </p>
                             ) : hwVerify.status === 'mismatch' ? (
                                 <StatusMessage variant="error" className={styles.error}>
-                                    Your {hwDeviceLabel} showed a different address. Do not use this address.
-                                    Disconnect and re-pair the device.
+                                    {t('receive.your')} {hwDeviceLabel} {t('receive.showedADifferentAddressDo')}
                                 </StatusMessage>
                             ) : hwVerify.status === 'error' ? (
                                 <StatusMessage variant="error" className={styles.error}>{hwVerify.message}</StatusMessage>
                             ) : (
                                 <p className={styles.hint}>
-                                    Verify this address on your {hwDeviceLabel} before sharing it. This
-                                    protects you if the computer has been compromised.
+                                    {t('receive.verifyThisAddressOnYour')} {hwDeviceLabel} {t('receive.beforeSharingItThisProtects')}
                                 </p>
                             )}
                             <Button
@@ -1213,8 +1210,8 @@ export function Receive({ walletId, accountId, prefill = null, onBack, onChangeA
                                 disabled={hwVerify.status === 'checking'}
                             >
                                 {hwVerify.status === 'checking'
-                                    ? `Check your ${hwDeviceLabel}…`
-                                    : `Verify on your ${hwDeviceLabel}`}
+                                    ? t('receive.checkYour', { hwDeviceLabel })
+                                    : t('receive.verifyOnYour', { hwDeviceLabel })}
                             </Button>
                         </section>
                     ) : null}
@@ -1225,7 +1222,7 @@ export function Receive({ walletId, accountId, prefill = null, onBack, onChangeA
                 <section
                     key={multisig.multisigConfigId}
                     role="group"
-                    aria-label="Multisig receive address"
+                    aria-label={t('receive.multisigReceiveAddress')}
                     style={{
                         marginTop: 'var(--xc-space-3)',
                         padding: 'var(--xc-card-pad)',
@@ -1247,7 +1244,7 @@ export function Receive({ walletId, accountId, prefill = null, onBack, onChangeA
                             <div className={`${qrStyles.frame} ${styles.qrBox}`}>
                                 <img
                                     src={multisigQrs[multisig.multisigConfigId]}
-                                    alt={`Multisig QR code for ${multisig.address}`}
+                                    alt={t('receive.multisigQrCodeFor', { address: multisig.address })}
                                     width={qrPixelSize}
                                     height={qrPixelSize}
                                     className={styles.qr}
@@ -1255,17 +1252,17 @@ export function Receive({ walletId, accountId, prefill = null, onBack, onChangeA
                             </div>
                         ) : (
                             <div className={`${qrStyles.frame} ${styles.qrBox}`} aria-hidden="true">
-                                <div className={styles.qrPlaceholder}>Rendering multisig QR…</div>
+                                <div className={styles.qrPlaceholder}>{t('receive.renderingMultisigQr')}</div>
                             </div>
                         )}
                         <div className={styles.addressBox}>
                             <AddressText address={multisig.address} truncate={false} size="sm" />
-                            <CopyButton value={multisig.address} label="Copy multisignature receive address" />
+                            <CopyButton value={multisig.address} label={t('receive.copyMultisignatureReceiveAddress')} />
                         </div>
                     </div>
                     {multisig.cosignerNames?.length > 0 ? (
                         <p className={styles.hint} style={{ marginTop: 'var(--xc-space-2)' }}>
-                            People who can sign (cosigners): {multisig.cosignerNames.join(' · ')}
+                            {t('receive.peopleWhoCanSignCosigners')} {multisig.cosignerNames.join(' · ')}
                         </p>
                     ) : null}
                 </section>
@@ -1277,7 +1274,7 @@ export function Receive({ walletId, accountId, prefill = null, onBack, onChangeA
     return (
         <Screen variant={variant} header={header}>
             <FormPage
-                label="Receive payment"
+                label={t('receive.receivePayment')}
                 onSubmit={(event) => event.preventDefault()}
                 // The form has no submit button, so Enter in the amount, its last
                 // field, commits the request explicitly; other fields never submit.

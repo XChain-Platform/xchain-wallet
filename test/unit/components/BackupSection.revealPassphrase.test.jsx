@@ -217,7 +217,7 @@ describe('BackupSection reveal: stored 25th-word passphrase', () => {
         await revealSeed();
 
         expect(screen.queryByText('Passphrase (25th word)')).toBeNull();
-        expect(screen.getByText(/has not been stored on this device yet/)).toBeTruthy();
+        expect(screen.getByText(/hasn\x27t been stored on this device yet/)).toBeTruthy();
     });
 });
 

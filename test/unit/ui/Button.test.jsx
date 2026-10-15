@@ -10,6 +10,7 @@
 
 import { describe, it, expect, vi } from 'vitest';
 import { readFileSync } from 'node:fs';
+import { withEnglishCopy } from '../../helpers/englishSource.js';
 import { render, screen, fireEvent } from '@testing-library/react';
 import { Button } from '../../../packages/core/src/ui/Button.jsx';
 import styles from '../../../packages/core/src/ui/Button.module.css';
@@ -46,14 +47,14 @@ describe('<Button>', () => {
     });
 
     it('keeps audited route action labels stable while their kit buttons are busy', () => {
-        const readSource = (path) => readFileSync(`packages/core/src/shared/${path}`, 'utf8');
+        const readSource = (path) => withEnglishCopy(readFileSync(`packages/core/src/shared/${path}`, 'utf8'));
         const order = readSource('components/PlaceOrderPanel.jsx');
         const dispenser = readSource('routes/DispenserForm.jsx');
         const vote = readSource('routes/CreatePollForm.jsx');
         const create = readSource('routes/CreateWallet.jsx');
         const imported = readSource('routes/ImportWallet.jsx');
 
-        expect(order).toMatch(/loading=\{accountLoading \|\| actionConfirm\.composing\}[\s\S]*?\{singleEncode \? `Place \$\{side\} order` : 'Review'\}/);
+        expect(order).toMatch(/loading=\{accountLoading \|\| actionConfirm\.composing\}[\s\S]*?\{singleEncode \? t\('components\.placeOrderPanel\.placeOrder', \{ side \}\) : t\('common\.review'\)\}/);
         expect(dispenser).toMatch(/loading=\{derivingGetAddress \|\| actionConfirm\.composing\}[\s\S]*?>\s*Create\s*<\/Button>/);
         expect(vote).not.toMatch(/actionConfirm\.composing \? 'Preparing review/);
         expect(create).toMatch(/<Button loading icon=\{<Icon\.CheckIcon \/>\}>Create wallet<\/Button>/);

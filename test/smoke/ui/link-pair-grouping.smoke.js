@@ -33,7 +33,7 @@ assert.ok(/'link-pair'/.test(hg),
     'historyGrouping declares the link-pair subkind');
 assert.ok(/linkPairLeaders\b/.test(hg),
     'historyGrouping carries a linkPairLeaders tracker');
-assert.ok(/Cross-chain link\b/.test(hg),
+assert.ok(/Cross-chain link\b|history\.summary\.link/.test(hg),
     'summarizeGroup renders the Cross-chain link prefix');
 
 // Behavior pin via a dynamic import: round-trip a 2-row pair through

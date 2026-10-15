@@ -398,7 +398,7 @@ test.describe('dispenser buy funding gate on regtest', () => {
 
             // AmountField folds the tick into its label once one is selected,
             // hence the prefix match rather than an exact name.
-            await main.getByLabel(/^Give amount \(per fill\)/).fill(GIVE_PER_FILL);
+            await main.getByLabel(/^Give amount per fill/).fill(GIVE_PER_FILL);
             await main.getByLabel(/^Escrow amount/).fill(GIVE_ESCROW);
 
             // THE FIXTURE'S WHOLE POINT: token-priced, not coin-priced. A
@@ -406,7 +406,7 @@ test.describe('dispenser buy funding gate on regtest', () => {
             // funding check, and every assertion below would be vacuous.
             await main.getByRole('radio', { name: 'A token' }).check();
             await main.getByLabel('Payment token', { exact: true }).fill('XCHAIN');
-            await main.getByLabel('Payment amount (per fill)', { exact: true })
+            await main.getByLabel('Payment amount per fill', { exact: true })
                 .fill(PRICE_PER_FILL);
 
             await fillPasswordIfPresent(main);

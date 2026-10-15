@@ -82,10 +82,10 @@ describe('change wallet password errors', () => {
 
         fireEvent.change(next, { target: { value: 'replacement-1' } });
         fireEvent.change(confirm, { target: { value: 'replacement-' } });
-        expect(errorUnder(confirm)).toBe('Passwords do not match.');
+        expect(errorUnder(confirm)).toBe("Passwords don't match.");
         // Still shown after the next keystroke, not dismissed as stale.
         fireEvent.change(confirm, { target: { value: 'replacement-2' } });
-        expect(errorUnder(confirm)).toBe('Passwords do not match.');
+        expect(errorUnder(confirm)).toBe("Passwords don't match.");
         fireEvent.change(confirm, { target: { value: 'replacement-1' } });
         expect(screen.queryByRole('alert')).toBeNull();
     });
@@ -116,7 +116,7 @@ describe('Backup password errors', () => {
         expect(screen.queryByRole('alert')).toBeNull();
 
         fireEvent.change(confirm, { target: { value: 'shortisH' } });
-        expect(errorUnder(confirm)).toBe('Backup passwords do not match.');
+        expect(errorUnder(confirm)).toBe("Backup passwords don't match.");
         expect(screen.getAllByRole('alert')).toHaveLength(1);
     });
 

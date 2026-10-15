@@ -62,7 +62,7 @@ describe('PreflightPanel warning copy (§5.2.4)', () => {
 
     it('groups the unverified check count', () => {
         mount(reportWith({ unverified: Array(1234) }));
-        expect(screen.getByText('Could not verify (1,234)')).toBeTruthy();
+        expect(screen.getByText('Couldn\'t verify (1,234)')).toBeTruthy();
     });
 
     it('leads a warning with plain copy and keeps the SDK sentence as the detail', () => {
@@ -86,7 +86,7 @@ describe('PreflightPanel warning copy (§5.2.4)', () => {
     });
 
     it('never promotes an unmapped warning message to the headline', () => {
-        const f = { code: 'SOME_FUTURE_CODE', severity: 'warning', message: 'FUTURE_FIELD=1 is not supported yet.' };
+        const f = { code: 'SOME_FUTURE_CODE', severity: 'warning', message: 'FUTURE_FIELD=1 isn\'t supported yet.' };
         mount(reportWith({ findings: [f] }));
         const [headline, detail] = screen.getByTestId('preflight-warning-SOME_FUTURE_CODE').querySelectorAll('span');
         expect(headline.textContent).not.toContain('FUTURE_FIELD');

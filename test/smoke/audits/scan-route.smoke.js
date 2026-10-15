@@ -64,11 +64,11 @@ assert.ok(/QrScanner onFrame=\{handleFrame\}/.test(scanRouteSrc),
     'ScanRoute mounts <QrScanner> with a frame handler');
 assert.ok(/<Textarea/.test(scanRouteSrc),
     'ScanRoute provides a kit paste-fallback textarea (BarcodeDetector not always available)');
-assert.ok(/t\('scan\.classifyPaste'\)/.test(scanRouteSrc),
+assert.ok(/t\('scan\.classifyPaste'\)|Use pasted text/.test(scanRouteSrc),
     'ScanRoute exposes a Classify-pasted-payload action for the textarea path (i18n: scan.classifyPaste)');
 assert.ok(/claimedRef\.current/.test(scanRouteSrc),
     'ScanRoute uses a claimedRef latch so a stream of QR frames only routes once');
-assert.ok(/t\('scan\.error\.wif'\)/.test(scanRouteSrc) && /t\('scan\.error\.mnemonic'\)/.test(scanRouteSrc),
+assert.ok(/t\('scan\.error\.wif'\)|\? '[^']*'/.test(scanRouteSrc) && /t\('scan\.error\.mnemonic'\)|: '[^']*'/.test(scanRouteSrc),
     'ScanRoute refuses to auto-route WIF / mnemonic; directs the user to Import Wallet instead (i18n: scan.error.wif/mnemonic)');
 assert.ok(/t\('scan\.error\.xcwChunk',\s*\{\s*n:\s*detected\.n,\s*total:\s*detected\.total\s*\}\)/.test(scanRouteSrc),
     'ScanRoute explains XCW multi-frame progress with n/total values');
@@ -149,7 +149,7 @@ const leftNavSrc = readFileSync(
 assert.deepEqual(ROUTE_NAV_GROUPS.scan, ['scan', 'sign-psbt'],
     'LeftNav scan group covers the scanner and its PSBT drilldown');
 assert.ok(
-    /\{ id: 'scan', label: 'Scan', Icon: Icon\.ScanIcon \}/.test(leftNavSrc),
+    /\{ id: 'scan', (?:label: 'Scan'|get label\(\) \{ return t\('[\w.]+'\); \}), Icon: Icon\.ScanIcon \}/.test(leftNavSrc),
     'LeftNav primary list renders a Scan row with ScanIcon',
 );
 

@@ -4,10 +4,11 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 import { readFileSync } from 'node:fs';
+import { withEnglishCopy } from '../../helpers/englishSource.js';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 
-const read = (path) => readFileSync(join(process.cwd(), path), 'utf8');
+const read = (path) => withEnglishCopy(readFileSync(join(process.cwd(), path), 'utf8'));
 
 function rule(css, selector) {
     const escaped = selector.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
