@@ -25,7 +25,6 @@ const animatedSurfaces = [
     'packages/core/src/shared/components/HeaderActionMenu.module.css',
     'packages/core/src/shared/components/NoticeModal.module.css',
     'packages/core/src/shared/components/ToastHost.module.css',
-    'packages/core/src/shared/components/UndoSendToast.module.css',
     'packages/core/src/ui/Skeleton.module.css',
 ];
 const transitionSurfaces = [
@@ -44,7 +43,6 @@ const motionCssByCategory = {
     ],
     toasts: [
         'packages/core/src/shared/components/ToastHost.module.css',
-        'packages/core/src/shared/components/UndoSendToast.module.css',
     ],
     spinners: [
         'packages/core/src/shared/components/TotalBalanceHero.module.css',

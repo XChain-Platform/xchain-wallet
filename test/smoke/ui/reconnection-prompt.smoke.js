@@ -123,8 +123,8 @@ assert.ok(
     '"Review" action scrolls the banner into view',
 );
 assert.ok(
-    /durationMs: 12_000/.test(effectBody),
-    'toast lingers 12 seconds (long enough to read)',
+    !/durationMs/.test(effectBody),
+    'toast takes the host duration (12 seconds for a toast with an action) instead of its own',
 );
 
 // --- 5. Banner DOM and send action expose the focus targets ------------

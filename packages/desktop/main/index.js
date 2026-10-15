@@ -40,6 +40,10 @@
 //     cache is silently disabled; the user re-enters their password
 //     every launch rather than having the key written insecurely.
 
+// First import on purpose: the test network guard must be in place before
+// any other module evaluates (see networkGuardBoot.js). Off unless a test
+// harness sets XCHAIN_TEST_NETWORK_GUARD or --xchain-test-network-guard.
+import { networkGuard, runNetworkGuardProbeAndExit } from './networkGuardBoot.js';
 import { app, BrowserWindow, Menu, ipcMain, powerMonitor, safeStorage, screen, session, shell, Notification } from 'electron';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -945,6 +949,12 @@ function ensureRendererCspHeaders() {
 
 void runMainTask(async () => {
     await app.whenReady();
+    // Before anything in main can fetch or open a window.
+    networkGuard.attachSession(session.defaultSession, 'default session');
+    if (networkGuard.probe) {
+        await runNetworkGuardProbeAndExit();
+        return;
+    }
     ensureRendererCspHeaders();
 
     windowBoundsStore = new FileWindowBoundsStore(windowBoundsPathFor(app.getPath('userData')));
@@ -1232,6 +1242,11 @@ void runMainTask(async () => {
     });
 }, 'desktop startup', {
     recover: () => {
+        networkGuard.attachSession(session.defaultSession, 'default session');
+        if (networkGuard.probe) {
+            app.exit(1);
+            return;
+        }
         ensureRendererCspHeaders();
         canCreateWindows = true;
         if (liveWindows().length === 0) createWindow();
