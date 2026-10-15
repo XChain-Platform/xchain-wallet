@@ -202,6 +202,9 @@ export function TotalBalanceHero({ rows, walletId, networkFilter, lastSyncedAt, 
     const filterLabel = networkFilter === 'all' ? null : networkFilter.toUpperCase();
     const hasUnpriced = unpriced > 0;
     const stalePriceAsOf = oldestStalePriceTimestamp(rows);
+    // A failed price refresh keeps the last 24h move on screen, so its age
+    // joins the one freshness line instead of reading as current.
+    const staleChangeAsOf = oldestStaleChangeTimestamp(rows, effectivePriceMap);
     // Test networks show no fiat, but a saved balance still says how old it is.
     const portfolioUpdatedAt = testCoinsOnly
         ? oldestFreshnessTimestamp(lastSyncedAt)
@@ -209,6 +212,7 @@ export function TotalBalanceHero({ rows, walletId, networkFilter, lastSyncedAt, 
             lastSyncedAt,
             pricesFetchedAt,
             stalePriceAsOf,
+            staleChangeAsOf,
         );
     const hasUpdate = portfolioUpdatedAt !== null;
     const hasChange = !hidden
@@ -448,6 +452,19 @@ function oldestFreshnessTimestamp(...timestamps) {
         typeof timestamp === 'number' && Number.isFinite(timestamp) && timestamp > 0
     ));
     return valid.length > 0 ? Math.min(...valid) : null;
+}
+
+function oldestStaleChangeTimestamp(rows, priceMap) {
+    let oldest = null;
+    for (const row of rows || []) {
+        if (row?.kind !== 'native' || !row.chainId || fiatValueOf(row) == null) continue;
+        const entry = priceMap?.[row.chainId];
+        if (entry?.stale !== true || !Number.isFinite(entry.change24hPct)) continue;
+        const timestamp = Number(entry.fetchedAt);
+        if (!Number.isFinite(timestamp) || timestamp <= 0) continue;
+        if (oldest === null || timestamp < oldest) oldest = timestamp;
+    }
+    return oldest;
 }
 
 function oldestStalePriceTimestamp(rows) {
