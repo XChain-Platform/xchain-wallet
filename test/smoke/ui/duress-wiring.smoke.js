@@ -95,11 +95,11 @@ assert.match(
     /Passphrases do not match/,
     'mismatch error copy present',
 );
-// Errors surface via <StatusMessage variant="error"> (role="alert"
-// at runtime). The storage-write failure records a "Try again" retry; the
+// Errors surface through SettingsInlineForm, which draws the error
+// StatusMessage (role="alert" at runtime) above the form card. The storage-write failure records a "Try again" retry; the
 // validation messages leave retryRef null so no misleading button renders.
-assert.match(rowSrc, /<StatusMessage\s+variant="error"/, 'errors surface via StatusMessage variant=error (role=alert)');
-assert.match(rowSrc, /label: 'Try again', onAction: retryRef\.current/, 'save-failure error offers a Try again recovery affordance');
+assert.match(rowSrc, /<SettingsInlineForm\s+error=\{error\}/, 'errors surface via the shared inline form error (a StatusMessage variant=error, role=alert)');
+assert.match(rowSrc, /label: (?:'Try again'|t\('common\.tryAgain'\)), onAction: retryRef\.current/, 'save-failure error offers a Try again recovery affordance');
 assert.match(rowSrc, /retryRef\.current = attemptSet/, 'storage-write failure records the set attempt as the retry action');
 assert.match(rowSrc, /autoComplete="new-password"/, 'inputs hint as new-password to managers');
 

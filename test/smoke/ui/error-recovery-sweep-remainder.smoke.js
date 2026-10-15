@@ -105,15 +105,15 @@ assert.ok(
     'BiometricRow records the pairing attempt as the retry action on failure',
 );
 assert.ok(
-    /recovery=\{retryRef\.current \? \{ label: 'Try again', onAction: retryRef\.current \} : undefined\}/.test(biometricSrc),
+    /recovery=\{retryRef\.current \? \{ label: (?:'Try again'|t\('common\.tryAgain'\)), onAction: retryRef\.current \} : undefined\}/.test(biometricSrc),
     'BiometricRow surfaces a Try again recovery affordance',
 );
 
 // --- 3. DuressPassphraseRow ------------------------------------------
 
 assert.ok(
-    /import \{[^}]*StatusMessage[^}]*\} from '@xchain-wallet\/core\/ui'/.test(duressSrc),
-    'DuressPassphraseRow imports StatusMessage',
+    /import \{[^}]*SettingsInlineForm[^}]*\} from '\.\/_settingsPrimitives\.jsx'/.test(duressSrc),
+    'DuressPassphraseRow draws its error through SettingsInlineForm, which renders the StatusMessage',
 );
 // The docstring still mentions role="alert" as documentation; assert there is
 // no hand-rolled JSX `role="alert"` attribute left.
@@ -127,7 +127,7 @@ assert.ok(
     'DuressPassphraseRow records the set attempt as the retry action on storage failure',
 );
 assert.ok(
-    /recovery=\{retryRef\.current \? \{ label: 'Try again', onAction: retryRef\.current \} : undefined\}/.test(duressSrc),
+    /recovery=\{retryRef\.current \? \{ label: (?:'Try again'|t\('common\.tryAgain'\)), onAction: retryRef\.current \} : undefined\}/.test(duressSrc),
     'DuressPassphraseRow surfaces a Try again recovery affordance (storage-failure only)',
 );
 // Validation messages leave retryRef null: they precede the try block and
@@ -157,7 +157,7 @@ assert.ok(
     'AboutSection records the preview action as retry on preview failure',
 );
 assert.ok(
-    /recovery=\{retryRef\.current \? \{ label: 'Try again', onAction: retryRef\.current \} : undefined\}/.test(aboutSrc),
+    /recovery=\{retryRef\.current \? \{ label: (?:'Try again'|t\('common\.tryAgain'\)), onAction: retryRef\.current \} : undefined\}/.test(aboutSrc),
     'AboutSection surfaces a Try again recovery affordance',
 );
 

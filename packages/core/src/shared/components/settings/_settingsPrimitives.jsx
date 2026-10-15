@@ -237,6 +237,27 @@ export function Status({ text, tone, id }) {
     );
 }
 
+/**
+ * The one shape of an inline form on a settings card. A message about a single
+ * field goes under that field (the field's own `error`); a message about the
+ * form as a whole is the first item of the section, above the form's card at
+ * the full width, never a box drawn inside the card. The wrapper is always
+ * there, so a message coming or going never remounts the form being typed in.
+ *
+ * @param {object} props
+ * @param {string | null | undefined} [props.error]   the form-level error, if any
+ * @param {{ label: string, onAction: () => void | Promise<void> }} [props.recovery]   a one-click fix shown with the error
+ * @param {import('react').ReactNode} props.children  the form and its card
+ */
+export function SettingsInlineForm({ error, recovery, children }) {
+    return (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--xc-space-2)' }}>
+            {error ? <StatusMessage variant="error" recovery={recovery}>{error}</StatusMessage> : null}
+            {children}
+        </div>
+    );
+}
+
 export const SETTINGS_LOAD_FALLBACK = 'Settings could not be loaded. Close and reopen the wallet, then try again.';
 
 /**

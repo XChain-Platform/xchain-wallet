@@ -23,21 +23,21 @@
 //                    affordance; the passphrase cannot be recovered
 //                    from storage.
 //
-//   error            `<StatusMessage variant="error">` (role="alert") with a
-//                    one-click "Try again" recovery on storage-write failure.
+//   error            an error message (role="alert") above the form card, via
+//                    SettingsInlineForm, with a one-click "Try again" recovery on storage-write failure.
 //
 // Setup verifies the current wallet password so a duress passphrase cannot
 // equal it. Disable remains available to the unlocked session.
 
 import { useRef, useState } from 'react';
-import { Button, Input, StatusMessage } from '@xchain-wallet/core/ui';
+import { Button, Input } from '@xchain-wallet/core/ui';
 import { useMessaging } from '../../useMessaging.js';
 import {
     isDuressConfigured,
     setDuressPassphrase,
     clearDuressPassphrase,
 } from '../../../flows/duressPassphrase.js';
-import { ROW, ROW_HINT } from './_settingsPrimitives.jsx';
+import { ROW, ROW_HINT, SettingsInlineForm } from './_settingsPrimitives.jsx';
 import { t } from '../../../i18n/index.js';
 
 export function DuressPassphraseRow() {
@@ -124,78 +124,75 @@ export function DuressPassphraseRow() {
 
     if (showForm) {
         return (
-            <form onSubmit={handleSet} style={{ ...ROW, flexDirection: 'column', alignItems: 'stretch' }}>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--xc-space-1)' }}>
-                    <span style={labelStyle}>{t('settings.duress.setDuressPassphrase')}</span>
-                    <span style={ROW_HINT}>
-                        {t('settings.duress.pickAPassphraseThatIs')}
-                    </span>
-                </div>
-                <Input
-                    type="password"
-                    revealable
-                    enterKeyHint="next"
-                    value={currentPassword}
-                    onChange={(e) => { setCurrentPassword(e.target.value); if (error) setError(null); }}
-                    placeholder={t('settings.thisWallet.currentWalletPassword')}
-                    autoComplete="current-password"
-                    aria-label={t('settings.thisWallet.currentWalletPassword')}
-                />
-                <Input
-                    type="password"
-                    revealable
-                    enterKeyHint="next"
-                    value={pass}
-                    onChange={(e) => { setPass(e.target.value); if (error) setError(null); }}
-                    placeholder={t('settings.duress.duressPassphrase')}
-                    autoComplete="new-password"
-                    aria-label={t('settings.duress.duressPassphrase')}
-                />
-                <Input
-                    type="password"
-                    revealable
-                    enterKeyHint="done"
-                    value={confirm}
-                    onChange={(e) => { setConfirm(e.target.value); if (error) setError(null); }}
-                    placeholder={t('settings.duress.confirmPassphrase')}
-                    autoComplete="new-password"
-                    aria-label={t('settings.duress.confirmDuressPassphrase')}
-                />
-                {error ? (
-                    <StatusMessage
-                        variant="error"
-                        recovery={retryRef.current ? { label: t('common.tryAgain'), onAction: retryRef.current } : undefined}
-                    >
-                        {error}
-                    </StatusMessage>
-                ) : null}
-                <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 'var(--xc-space-2)' }}>
-                    <Button
-                        type="button"
-                        size="sm"
-                        variant="ghost"
-                        icon={null}
-                        onClick={() => {
-                            setShowForm(false);
-                            setCurrentPassword('');
-                            setPass('');
-                            setConfirm('');
-                            setError(null);
-                        }}
-                        disabled={busy}
-                    >
-                        {t('common.cancel')}
-                    </Button>
-                    <Button
-                        type="submit"
-                        size="sm"
-                        icon={null}
-                        disabled={busy || currentPassword.length === 0 || pass.length === 0 || confirm.length === 0}
-                    >
-                        {busy ? t('verifySignature.verifying') : t('history.contact.save')}
-                    </Button>
-                </div>
-            </form>
+            <SettingsInlineForm
+                error={error}
+                recovery={retryRef.current ? { label: t('common.tryAgain'), onAction: retryRef.current } : undefined}
+            >
+                <form onSubmit={handleSet} style={{ ...ROW, flexDirection: 'column', alignItems: 'stretch' }}>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--xc-space-1)' }}>
+                        <span style={labelStyle}>{t('settings.duress.setDuressPassphrase')}</span>
+                        <span style={ROW_HINT}>
+                            {t('settings.duress.pickAPassphraseThatIs')}
+                        </span>
+                    </div>
+                    <Input
+                        type="password"
+                        revealable
+                        enterKeyHint="next"
+                        value={currentPassword}
+                        onChange={(e) => { setCurrentPassword(e.target.value); if (error) setError(null); }}
+                        placeholder={t('settings.thisWallet.currentWalletPassword')}
+                        autoComplete="current-password"
+                        aria-label={t('settings.thisWallet.currentWalletPassword')}
+                    />
+                    <Input
+                        type="password"
+                        revealable
+                        enterKeyHint="next"
+                        value={pass}
+                        onChange={(e) => { setPass(e.target.value); if (error) setError(null); }}
+                        placeholder={t('settings.duress.duressPassphrase')}
+                        autoComplete="new-password"
+                        aria-label={t('settings.duress.duressPassphrase')}
+                    />
+                    <Input
+                        type="password"
+                        revealable
+                        enterKeyHint="done"
+                        value={confirm}
+                        onChange={(e) => { setConfirm(e.target.value); if (error) setError(null); }}
+                        placeholder={t('settings.duress.confirmPassphrase')}
+                        autoComplete="new-password"
+                        aria-label={t('settings.duress.confirmDuressPassphrase')}
+                    />
+                    <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 'var(--xc-space-2)' }}>
+                        <Button
+                            type="button"
+                            size="sm"
+                            variant="ghost"
+                            icon={null}
+                            onClick={() => {
+                                setShowForm(false);
+                                setCurrentPassword('');
+                                setPass('');
+                                setConfirm('');
+                                setError(null);
+                            }}
+                            disabled={busy}
+                        >
+                            {t('common.cancel')}
+                        </Button>
+                        <Button
+                            type="submit"
+                            size="sm"
+                            icon={null}
+                            disabled={busy || currentPassword.length === 0 || pass.length === 0 || confirm.length === 0}
+                        >
+                            {busy ? t('verifySignature.verifying') : t('history.contact.save')}
+                        </Button>
+                    </div>
+                </form>
+            </SettingsInlineForm>
         );
     }
 
