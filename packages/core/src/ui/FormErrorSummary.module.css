@@ -1,0 +1,34 @@
+/* The validation summary is an inline error message, so its box is the
+   <StatusMessage variant="error"> row: FormErrorSummary.jsx puts the
+   StatusMessage.module.css row, error, icon and text classes on it. Only the
+   summary's own parts (its heading, the linked list and the recovery link)
+   live here. */
+.heading {
+    margin: 0;
+    font-weight: 600;
+}
+
+.list {
+    margin: var(--xc-help-gap) 0 0;
+    padding-inline-start: var(--xc-space-5);
+}
+
+.link {
+    color: inherit;
+    text-decoration: underline;
+}
+
+.recovery {
+    margin-top: var(--xc-help-gap);
+    color: inherit;
+    background: transparent;
+    border: 0;
+    padding: 0;
+    text-decoration: underline;
+    cursor: pointer;
+    font: inherit;
+    /* The WCAG 2.2 AA 2.5.8 pointer-target floor. */
+    min-height: var(--xc-tap-min);
+    display: inline-flex;
+    align-items: center;
+}

@@ -437,7 +437,6 @@ export function Send({ walletId, accountId, onBack, prefill = null, onDone, onCh
             showToast({
                 message: 'Could not cancel this send. It may still be broadcast.',
                 variant: 'error',
-                durationMs: 12_000,
             });
         };
         try {
@@ -2879,7 +2878,7 @@ export function Send({ walletId, accountId, onBack, prefill = null, onDone, onCh
                                 <AddressText address={txid} className={styles.txid} size="sm" />
                                 <CopyButton
                                     value={txid}
-                                    label={t('send.success.copy')}
+                                    label={t('common.copy')}
                                     ariaLabel={t('common.copyTransactionId')}
                                 />
                             </div>
