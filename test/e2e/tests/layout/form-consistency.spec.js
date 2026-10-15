@@ -223,7 +223,8 @@ function formFaults() {
     }
     for (const btn of buttons) {
         if (btn.closest('[role="tablist"], [role="menu"], nav')) continue;
-        if (!(btn.innerText || '').trim()) continue;
+        // A one-character button (the "?" help tip) is an icon, not a text button.
+        if ((btn.innerText || '').trim().length < 2) continue;
         if (sharedClass(btn, 'link') || btn.closest('li')) continue;
         if ([...boxes.values()].some((box) => box !== btn && contains(rect(box), rect(btn)))) continue;
         rowItems.push({ el: btn, box: btn, r: rect(btn) });
