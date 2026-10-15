@@ -160,6 +160,19 @@ describe('CreateOrderForm coverage', () => {
         })).not.toBeChecked();
     });
 
+    it('keeps the receive address with the get side and names the last section for all it holds', async () => {
+        await renderForm();
+
+        const getSection = screen.getByRole('region', { name: 'You get' });
+        expect(getSection).toContainElement(screen.getByLabelText('Receive at (optional)'));
+        const timing = screen.getByRole('region', { name: 'Timing and fees' });
+        // The section title no longer repeats the Expiration choice right below it.
+        expect(timing).toContainElement(screen.getByRole('group', { name: 'Expiration' }));
+        expect(screen.queryByRole('heading', { name: 'Expiration' })).toBeNull();
+        // Help text among the fields lines up with them instead of centring.
+        expect(screen.getByText(/Both sides of this order settle on the same chain/).className).toMatch(/hintLeft/);
+    });
+
     it('surfaces actionable validation for malformed order fields', async () => {
         await renderForm();
 
