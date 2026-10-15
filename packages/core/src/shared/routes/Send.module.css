@@ -5,6 +5,15 @@
     margin: 0;
 }
 
+/* A line of fact under a field (the amount the Max button left for fees, the
+   memo's byte count): muted and small like the field's own hint, with no
+   default paragraph margin pushing the next control away. */
+.balanceHint {
+    font-size: var(--xc-text-sm);
+    color: var(--xc-text-muted);
+    margin: 0;
+}
+
 .actions {
     display: flex;
     flex-wrap: wrap;

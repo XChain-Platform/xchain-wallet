@@ -320,14 +320,18 @@ export function OracleConsole({ walletId, accountId, onOpenMarket, onDuplicate, 
     }
 
     return wrap(
-        <ListPage toolbar={(
+        <ListPage notices={demoGuard.note || error || formError ? (
+            <>
+                {demoGuard.note}
+                {error ? <StatusMessage variant="error">{error}</StatusMessage> : null}
+                {formError ? <StatusMessage variant="error">{formError}</StatusMessage> : null}
+            </>
+        ) : null} toolbar={(
             <Button type="button" variant="ghost" size="md" disabled={refreshing} onClick={() => load(true)}>
                 {refreshing ? 'Refreshing markets…' : 'Refresh markets'}
             </Button>
         )}>
-            {demoGuard.note}
             {demoGuard.dialog}
-            {error ? <StatusMessage variant="error">{error}</StatusMessage> : null}
             {!rows ? <p>Loading your markets…</p> : null}
             {rows && rows.length === 0 && !error ? (
                 <EmptyState
@@ -335,7 +339,6 @@ export function OracleConsole({ walletId, accountId, onOpenMarket, onDuplicate, 
                     body="Betting markets created by this wallet appear here."
                 />
             ) : null}
-            {formError ? <StatusMessage variant="error">{formError}</StatusMessage> : null}
             {result ? (
                 <div className={styles.listCard} data-testid="oracle-result">
                     <p className={styles.summary}>

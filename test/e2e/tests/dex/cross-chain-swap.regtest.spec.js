@@ -280,7 +280,7 @@ test.describe(`cross-chain SWAP from ${REGTEST_CHAIN_LABEL}`, () => {
 
         let txid;
 
-        await test.step('the wallet reports a give-chain broadcast', async () => {
+        await test.step('the wallet reports a give-network broadcast', async () => {
             const main = page.getByRole('main');
             await expect(main, 'no broadcast screen ever appeared after signing')
                 .toContainText('Cross-chain swap broadcast', { timeout: 180_000 });
@@ -291,7 +291,7 @@ test.describe(`cross-chain SWAP from ${REGTEST_CHAIN_LABEL}`, () => {
             // The offer is open, not settled: the wallet must not claim the
             // counterparty leg has happened, because nothing on the get chain
             // has been driven at all.
-            await expect(main).toContainText(/settles atomically when a counterparty fills it on the get chain/);
+            await expect(main).toContainText(new RegExp(`settles atomically when a counterparty fills it on\\s+the get network`));
         });
 
         await test.step('the GIVE chain records a valid SWAP carrying the counterparty coin', async () => {

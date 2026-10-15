@@ -122,8 +122,10 @@ const localizedRoutes = [
 const PARTIAL_COPY_FILES = [
     '/routes/CreateBetFeedForm.jsx',
     '/routes/CreateOrderForm.jsx',
+    '/routes/CrossChainSwapForm.jsx',
     '/routes/DispenserExplorer.jsx',
     '/routes/DispenserForm.jsx',
+    '/routes/ParallelComposer.jsx',
 ];
 
 describe('shipping JSX localization', () => {

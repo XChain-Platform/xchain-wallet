@@ -2302,7 +2302,7 @@ export function DispenserDetail({ walletId, chainId, actionIndex, onBack, onCanc
                                 ))}
                             </Select>
                         ) : buyerAddress ? (
-                            <p className={styles.entryDescription}>
+                            <p>
                                 Paying from <AddressText address={buyerAddress.address} />
                             </p>
                         ) : null}

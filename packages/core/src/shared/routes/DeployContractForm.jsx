@@ -1358,6 +1358,9 @@ export function DeployContractForm({ walletId, onBack }) {
                                 key={t}
                                 type="button"
                                 variant="ghost"
+                                // A template name is data; the label lookup would
+                                // give "validation" a check icon as if it were chosen.
+                                icon={null}
                                 onClick={() => handleUseTemplate(t)}
                                 loading={toolBusy === `template:${t}`}
                                 disabled={toolBusy !== null}
