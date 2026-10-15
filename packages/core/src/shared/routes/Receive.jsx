@@ -1025,7 +1025,7 @@ export function Receive({ walletId, accountId, prefill = null, onBack, onChangeA
     const body = (
         <>
             {loadError ? (
-                <StatusMessage variant="error" className={styles.error}>{loadError}</StatusMessage>
+                <StatusMessage variant="error">{loadError}</StatusMessage>
             ) : null}
 
             {noAddresses ? (
@@ -1053,7 +1053,7 @@ export function Receive({ walletId, accountId, prefill = null, onBack, onChangeA
             ) : null}
 
             {generateError ? (
-                <StatusMessage variant="error" className={styles.error}>{generateError}</StatusMessage>
+                <StatusMessage variant="error">{generateError}</StatusMessage>
             ) : null}
 
             {!address && descriptor && addressType && !generating && !generateError ? (
@@ -1177,7 +1177,7 @@ export function Receive({ walletId, accountId, prefill = null, onBack, onChangeA
                         />
                     </div>
                     {amountError ? (
-                        <StatusMessage variant="error" className={styles.error}>{amountError}</StatusMessage>
+                        <StatusMessage variant="error">{amountError}</StatusMessage>
                     ) : null}
                     {isHwAddress ? (
                         <section
@@ -1194,11 +1194,11 @@ export function Receive({ walletId, accountId, prefill = null, onBack, onChangeA
                                     {t('receive.addressVerifiedOnYour')} {hwDeviceLabel}{t('receive.itIsSafeToShare')}
                                 </p>
                             ) : hwVerify.status === 'mismatch' ? (
-                                <StatusMessage variant="error" className={styles.error}>
+                                <StatusMessage variant="error">
                                     {t('receive.your')} {hwDeviceLabel} {t('receive.showedADifferentAddressDo')}
                                 </StatusMessage>
                             ) : hwVerify.status === 'error' ? (
-                                <StatusMessage variant="error" className={styles.error}>{hwVerify.message}</StatusMessage>
+                                <StatusMessage variant="error">{hwVerify.message}</StatusMessage>
                             ) : (
                                 <p className={styles.hint}>
                                     {t('receive.verifyThisAddressOnYour')} {hwDeviceLabel} {t('receive.beforeSharingItThisProtects')}
