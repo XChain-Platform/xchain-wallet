@@ -145,3 +145,21 @@
     color: var(--xc-text-muted);
     font-size: var(--xc-text-sm);
 }
+
+/* The tab strip keeps its natural width beside the search field when there is
+   room. On a phone it takes its own full-width row and each tab shares it, so
+   the strip's underline and the selected tab's underline span the row. */
+.marketTabs {
+    flex: 0 0 auto;
+    width: auto;
+}
+
+@media (max-width: 599px) {
+    .marketTabs {
+        flex: 1 1 100%;
+    }
+
+    .marketTabs > * {
+        flex: 1 1 0;
+    }
+}
