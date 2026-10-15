@@ -135,6 +135,11 @@
     margin-bottom: var(--xc-space-3);
 }
 
+/* Inside a form stack the form gap alone spaces the notice. */
+:global([data-form-stack]) > .warnings {
+    margin-bottom: 0;
+}
+
 .warning {
     margin: 0;
     font-size: var(--xc-text-sm);
@@ -151,6 +156,12 @@
     gap: var(--xc-space-2);
     justify-content: flex-end;
     margin-top: var(--xc-space-4);
+}
+
+/* Inside a form stack the form gap spaces the row; the margin above is for
+   result screens, where the row follows plain content. */
+:global([data-form-stack]) > .actions {
+    margin-top: 0;
 }
 
 @media not all and (min-width: 400px) {

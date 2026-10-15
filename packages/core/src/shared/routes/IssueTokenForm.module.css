@@ -231,6 +231,13 @@ select.picker {
     margin-top: var(--xc-space-4);
 }
 
+/* Inside a form stack the form gap spaces the row; the margin above is for
+   result screens, where the row follows plain content. */
+:global([data-form-stack]) > .actions,
+.advancedOptions > .actions {
+    margin-top: 0;
+}
+
 .advancedToggle {
     align-self: flex-start;
 }
@@ -417,6 +424,12 @@ select.picker {
     padding: var(--xc-space-2) var(--xc-space-3);
     border-radius: var(--xc-radius-sm);
     margin-bottom: var(--xc-space-3);
+}
+
+/* Inside a form stack the form gap alone spaces the notice. */
+:global([data-form-stack]) > .warnings,
+.advancedOptions > .warnings {
+    margin-bottom: 0;
 }
 
 .warning {
