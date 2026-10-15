@@ -90,11 +90,6 @@
     gap: var(--xc-space-1);
 }
 
-.heroDot {
-    margin: 0 var(--xc-space-1);
-    color: var(--xc-text-muted);
-}
-
 .heroOwner {
     font-family: var(--xc-font-mono, monospace);
     color: var(--xc-text);

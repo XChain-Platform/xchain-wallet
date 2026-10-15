@@ -43,7 +43,7 @@ export function FormSection({ title, description, headingLevel = 'h2', className
                 description={description}
                 className={styles.sectionHeader}
             />
-            <div className={styles.sectionBody}>{children}</div>
+            <div className={styles.sectionBody} data-form-stack="">{children}</div>
         </section>
     );
 }

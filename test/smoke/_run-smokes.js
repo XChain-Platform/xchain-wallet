@@ -21,23 +21,14 @@
 
 import { existsSync, readdirSync, realpathSync, statSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
-import { fileURLToPath, pathToFileURL } from 'node:url';
+import { fileURLToPath } from 'node:url';
 import { execFileSync, spawnSync } from 'node:child_process';
 import { noteDocsTreeState } from './_docs-repo.js';
 import { noteWorkspaceLinkage } from './_workspace-linkage.js';
+import { smokeEnv, smokeNodeArgs } from './_smoke-launch.js';
 
-// Smokes that audit the t() calls themselves read source untouched; every other
-// smoke reads it with plain t('key') calls swapped for their English text
-// (see _english-source.mjs).
-const RAW_SOURCE_SMOKES = new Set([
-    'audits/history-export-modal.smoke.js',
-    'audits/scan-route.smoke.js',
-    'core/i18n.smoke.js',
-    'ui/ads-onboarding-notice.smoke.js',
-    'ui/demo-disclosure-on-home.smoke.js',
-    'ui/send-autocomplete.smoke.js',
-    'ui/verify-signature.smoke.js',
-]);
+// Smokes start through _smoke-launch.js, which the push gate's changed-test tier
+// shares, so a smoke reads source the same way under both.
 
 const here = dirname(fileURLToPath(import.meta.url));        // .../test/smoke
 const wsRoot = join(here, '..', '..');                        // .../xchain-wallet
@@ -192,14 +183,12 @@ export function runSmokes() {
     for (const fullPath of smokes) {
         const display = fullPath.slice(here.length + 1);
         const start = Date.now();
-        const result = spawnSync(process.execPath, ['--import', pathToFileURL(join(here, '_english-source.mjs')).href, fullPath], {
+        const result = spawnSync(process.execPath, smokeNodeArgs(fullPath), {
             stdio: ['inherit', 'pipe', 'pipe'],
             encoding: 'utf8',
             maxBuffer: 16 * 1024 * 1024,
             cwd: wsRoot,
-            env: RAW_SOURCE_SMOKES.has(display.split('\\').join('/'))
-                ? { ...process.env, XC_SMOKE_RAW_SOURCE: '1' }
-                : process.env,
+            env: smokeEnv(fullPath),
         });
         const ms = Date.now() - start;
         if (result.stdout) process.stdout.write(result.stdout);

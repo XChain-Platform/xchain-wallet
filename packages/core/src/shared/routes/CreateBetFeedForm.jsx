@@ -29,6 +29,7 @@ import { coinFromChainId } from '../components/BalanceList.jsx';
 import { OwnAddressPickerScreen } from '../components/OwnAddressPickerScreen.jsx';
 import { useBetChainIds } from './BetFeedsList.jsx';
 import styles from './IssueTokenForm.module.css';
+import { t } from '../../i18n/index.js';
 import { QueuedResultPanel } from '../components/QueuedResultPanel.jsx';
 import { WatcherResultPanel } from '../components/WatcherResultPanel.jsx';
 import {
@@ -337,18 +338,20 @@ export function CreateBetFeedForm({
     // Live cost quote. Keyed on the REFUND deadline, which is what the protocol
     // charges for, so the figure moves when the refund window moves.
     const [quote, setQuote] = useState(/** @type {any} */ (null));
-    const [quoteError, setQuoteError] = useState(/** @type {string | null} */ (null));
+    // Only whether the quote failed: the host's error text names SDK calls,
+    // which never reach the screen.
+    const [quoteFailed, setQuoteFailed] = useState(false);
     useEffect(() => {
         let cancelled = false;
         setQuote(null);
-        setQuoteError(null);
+        setQuoteFailed(false);
         if (!deadlineUnix || !refundSeconds) return undefined;
         if (typeof messaging.betProjectFeedCreateFee !== 'function') return undefined;
         messaging.betProjectFeedCreateFee({
             chainId, deadline: deadlineUnix, refundWindow: refundSeconds, blockTime: nowSec,
         })
             .then((q) => { if (!cancelled) setQuote(q || null); })
-            .catch((err) => { if (!cancelled) setQuoteError(err?.message || 'Cost unavailable.'); });
+            .catch(() => { if (!cancelled) setQuoteFailed(true); });
         return () => { cancelled = true; };
     }, [chainId, deadlineUnix, refundSeconds, nowSec, messaging]);
 
@@ -583,7 +586,7 @@ export function CreateBetFeedForm({
     }
 
     const quoteBlock = (() => {
-        if (quoteError) return <p className={styles.hint}>Cost estimate unavailable: {quoteError}</p>;
+        if (quoteFailed) return <p className={styles.hint}>{t('betCreate.costUnavailable')}</p>;
         if (!deadlineUnix || !refundSeconds) {
             return (
                 <p className={styles.hint}>
