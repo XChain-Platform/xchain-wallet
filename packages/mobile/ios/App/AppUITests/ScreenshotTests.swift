@@ -919,7 +919,7 @@ extension ScreenshotTests {
     }
 }
 
-// MARK: - Review demo step 4 rehearsal (XC-1285)
+// MARK: - Review demo step 4 rehearsal
 
 import UIKit
 

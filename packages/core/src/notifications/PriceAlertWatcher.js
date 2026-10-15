@@ -170,7 +170,7 @@ export class PriceAlertWatcher {
             // A delivered alert whose stored status has left 'armed' no longer
             // needs the in-memory guard. Dropping it here, and only once the
             // store says so, lets a re-armed alert with the same id fire again
-            // this session while a store that has not caught up still cannot
+            // before the app restarts while a store that has not caught up cannot
             // deliver it twice.
             for (const id of this._fired) {
                 if (!armedIds.has(id) && !this._pendingTriggered.has(id)) this._fired.delete(id);
