@@ -852,23 +852,17 @@
     overflow-x: auto;
 }
 
-/* JSON viewer wrap with a small copy button anchored to the upper-
-   right corner so a user can copy the whole payload without
-   selecting + ctrl-C. The button sits on a translucent background
-   so it stays legible over the JSON text below it. */
+/* JSON viewer wrap: the copy button sits on its own row above the
+   payload, right-aligned, so it never covers the first lines of JSON. */
 .rawJsonWrap {
-    position: relative;
+    display: flex;
+    flex-direction: column;
+    align-items: stretch;
+    gap: var(--xc-space-1);
 }
 
 .rawJsonCopy {
-    position: absolute;
-    top: 0;
-    inset-inline-end: 0;
-    z-index: 1;
-    background: color-mix(in srgb, var(--xc-surface-raised) 88%, transparent);
-    border-radius: var(--xc-radius-sm);
-    -webkit-backdrop-filter: var(--xc-backdrop-filter);
-    backdrop-filter: var(--xc-backdrop-filter);
+    align-self: flex-end;
 }
 
 .actions {
