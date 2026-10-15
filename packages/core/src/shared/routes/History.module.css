@@ -364,8 +364,11 @@
     outline-offset: 2px;
 }
 
+/* The selected row keeps its marker inside the list card: a rail on the
+   leading edge in the selected tone, not a border of its own. */
 .rowSelected {
     background: var(--xc-control-bg-hover);
+    box-shadow: inset 3px 0 0 var(--xc-control-selected);
 }
 
 .rowMeta {
