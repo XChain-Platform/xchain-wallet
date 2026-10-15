@@ -206,6 +206,14 @@ export function BetFeedsList({ walletId, onOpenMarket, onCreate, onMyBets, onMyM
 
     return wrap(
         <ListPage
+            notices={error ? (
+                <StatusMessage
+                    variant="error"
+                    recovery={{ label: 'Try again', onAction: () => setFeedsReload((value) => value + 1) }}
+                >
+                    {error}
+                </StatusMessage>
+            ) : null}
             toolbar={(
                 <div className={local.toolbarRow}>
                     <div className={local.toolbarNetwork}>
@@ -237,14 +245,6 @@ export function BetFeedsList({ walletId, onOpenMarket, onCreate, onMyBets, onMyM
                 </div>
             ) : null}
 
-            {error ? (
-                <StatusMessage
-                    variant="error"
-                    recovery={{ label: 'Try again', onAction: () => setFeedsReload((value) => value + 1) }}
-                >
-                    {error}
-                </StatusMessage>
-            ) : null}
             {chainId && !rows && !error ? (
                 <div role="status" aria-label="Loading betting markets" aria-busy="true">
                     Loading betting markets…
@@ -266,7 +266,7 @@ export function BetFeedsList({ walletId, onOpenMarket, onCreate, onMyBets, onMyM
                         const label = m.label || '(untitled market)';
                         const outcomes = typeof m.outcomes === 'string' ? m.outcomes.split(',') : [];
                         return (
-                            <li key={String(id)} className={local.marketItem}>
+                            <li key={String(id)}>
                                 <Button
                                     type="button"
                                     onClick={() => onOpenMarket(chainId, id)}

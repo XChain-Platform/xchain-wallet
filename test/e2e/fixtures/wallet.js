@@ -29,6 +29,7 @@
 import { test as base, expect } from '@playwright/test';
 import { LICENSE_VERSION } from '../../../packages/core/src/buildInfo.js';
 import { kdfStepTimeout } from '../timeout-budget.js';
+import { stubPriceFeed } from './priceStub.js';
 
 // Every wait below that pays a real Argon2id derivation shares ONE budget,
 // scaled for the machine the run landed on. These were two hand-written
@@ -48,6 +49,8 @@ export const test = base.extend({
     acceptLicense: [true, { option: true }],
 
     page: async ({ page, acceptLicense }, use) => {
+        // No spec reaches the live price service; see priceStub.js.
+        await stubPriceFeed(page.context());
         if (acceptLicense) {
             await page.addInitScript(
                 ([atKey, versionKey, version]) => {

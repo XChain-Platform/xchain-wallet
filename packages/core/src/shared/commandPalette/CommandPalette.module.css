@@ -100,18 +100,40 @@
     flex: 0 0 auto;
 }
 
+/* The search box is a form field like any other, so it carries the shared
+   field border, radius, height and focus ring. */
 .input {
     flex: 1 1 auto;
-    border: none;
+    box-sizing: border-box;
+    border: 1px solid var(--xc-control-border);
+    border-radius: var(--xc-control-radius, 8px);
     outline: none;
-    background: transparent;
+    background: var(--xc-surface);
     color: var(--xc-text);
     font-size: var(--xc-text-md);
     font-family: var(--xc-font-sans);
     min-width: 0;
+    padding-inline: var(--xc-space-3);
     /* The palette's only text entry meets the pointer-target floor because
        it is the first control a touch user reaches for. */
     min-height: var(--xc-tap-min);
+    height: var(--xc-control-h-md);
+    transition: border-color var(--xc-transition), box-shadow var(--xc-transition);
+}
+
+.input:focus {
+    outline: none;
+    border-color: var(--xc-accent-primary);
+    box-shadow: 0 0 0 3px var(--xc-focus-ring);
+}
+
+/* Box-shadow focus rings are not painted in forced-colors mode, so give this
+   control a real outline there. */
+@media (forced-colors: active) {
+    .input:focus {
+        outline: 2px solid Highlight;
+        outline-offset: 2px;
+    }
 }
 
 .input::placeholder { color: var(--xc-text-muted); }
