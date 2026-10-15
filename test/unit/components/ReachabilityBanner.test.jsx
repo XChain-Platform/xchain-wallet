@@ -156,22 +156,28 @@ describe('ReachabilityBanner', () => {
         expect(screen.queryByRole('status')).toBeNull();
     });
 
-    it('keeps the sentence and inline actions in one row at 360 px', () => {
+    it('is a shared StatusMessage with the sentence, Details and Try again in one notice at 360 px', () => {
         const originalWidth = window.innerWidth;
         window.innerWidth = 360;
         try {
             mount({ perChain: [chain()] });
-            const banner = screen.getByRole('status').parentElement;
+            const message = screen.getByRole('status');
+            const notice = message.closest('[data-variant]');
             expect(window.innerWidth).toBe(360);
-            expect(banner.children).toHaveLength(3);
-            expect(banner.children[0]).toHaveTextContent('Some balances may be out of date');
-            expect(banner.children[1]).toHaveTextContent('Try again');
-            expect(banner.children[2]).toHaveTextContent('Details');
-            expect(css).toMatch(/\.banner\s*\{[^}]*display:\s*flex;[^}]*flex-wrap:\s*nowrap;/s);
-            expect(css).toMatch(/\.banner\s*\{[^}]*white-space:\s*nowrap;/s);
+            expect(notice).toHaveAttribute('data-variant', 'warning');
+            expect(notice.querySelector('[aria-hidden="true"]')).toHaveTextContent('⚠');
+            expect(message).toHaveTextContent('Some balances may be out of date');
+            expect(message.parentElement).toContainElement(screen.getByRole('button', { name: 'Details' }));
+            expect(notice).toContainElement(screen.getByRole('button', { name: 'Try again' }));
+            expect(css).not.toMatch(/\.degraded\b|\.offline\b/);
         } finally {
             window.innerWidth = originalWidth;
         }
+    });
+
+    it('takes the error tone when every service is unreachable', () => {
+        mount({ overall: 'offline', perChain: [chain({ mode: 'offline' })] });
+        expect(screen.getByRole('status').closest('[data-variant]')).toHaveAttribute('data-variant', 'error');
     });
 });
 

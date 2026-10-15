@@ -33,7 +33,6 @@
         "packages/core/src/shared/components/RawPsbtViewer.module.css | .copyBtn": "A control (button, field, toggle or picker trigger), not a card; controls keep the control border and radius.",
         "packages/core/src/shared/components/RawPsbtViewer.module.css | .hex": "A monospace value box (code, address, transaction id or raw data) that reads like a read-only field, not a card.",
         "packages/core/src/shared/components/RawPsbtViewer.module.css | .json": "A monospace value box (code, address, transaction id or raw data) that reads like a read-only field, not a card.",
-        "packages/core/src/shared/components/ReachabilityBanner.module.css | .notice": "A tone notice whose coloured border names its state (warning, error, success or info); notices follow the notice pattern, not the card.",
         "packages/core/src/shared/components/ToastHost.module.css | .toast": "A floating surface (menu, popover, dialog, toast or tooltip), not an in-page card; it keeps its overlay geometry and elevation.",
         "packages/core/src/shared/components/TokenField.module.css | .control": "A control (button, field, toggle or picker trigger), not a card; controls keep the control border and radius.",
         "packages/core/src/shared/components/TotalBalanceHero.module.css | .actionMenu": "A floating surface (menu, popover, dialog, toast or tooltip), not an in-page card; it keeps its overlay geometry and elevation.",
@@ -52,7 +51,6 @@
         "packages/core/src/shared/routes/ContactsList.module.css | .quickAction": "A control (button, field, toggle or picker trigger), not a card; controls keep the control border and radius.",
         "packages/core/src/shared/routes/DispenserDetail.module.css | .quickActionLink": "A control (button, field, toggle or picker trigger), not a card; controls keep the control border and radius.",
         "packages/core/src/shared/routes/DispenserDetail.module.css | .quickActionMoreMenu": "A floating surface (menu, popover, dialog, toast or tooltip), not an in-page card; it keeps its overlay geometry and elevation.",
-        "packages/core/src/shared/routes/DispensersList.module.css | .search": "A control (button, field, toggle or picker trigger), not a card; controls keep the control border and radius.",
         "packages/core/src/shared/routes/History.module.css | .chainPickerBtn": "A control (button, field, toggle or picker trigger), not a card; controls keep the control border and radius.",
         "packages/core/src/shared/routes/History.module.css | .chainPickerMenu": "A floating surface (menu, popover, dialog, toast or tooltip), not an in-page card; it keeps its overlay geometry and elevation.",
         "packages/core/src/shared/routes/History.module.css | .detailAction": "A control (button, field, toggle or picker trigger), not a card; controls keep the control border and radius.",
@@ -65,7 +63,6 @@
         "packages/core/src/shared/routes/IssueTokenForm.module.css | .txid": "A monospace value box (code, address, transaction id or raw data) that reads like a read-only field, not a card.",
         "packages/core/src/shared/routes/ManageToken.module.css | .manageMoreMenu": "A floating surface (menu, popover, dialog, toast or tooltip), not an in-page card; it keeps its overlay geometry and elevation.",
         "packages/core/src/shared/routes/ManageToken.module.css | .officialBanner": "A tone notice whose coloured border names its state (warning, error, success or info); notices follow the notice pattern, not the card.",
-        "packages/core/src/shared/routes/MyLists.module.css | .search": "A control (button, field, toggle or picker trigger), not a card; controls keep the control border and radius.",
         "packages/core/src/shared/routes/OnboardingCarousel.module.css | .stackFrame": "Artwork or a camera or QR frame, not a card.",
         "packages/core/src/shared/routes/PairSignerForm.module.css | .code": "A monospace value box (code, address, transaction id or raw data) that reads like a read-only field, not a card.",
         "packages/core/src/shared/routes/Receive.module.css | .addressBox": "A monospace value box (code, address, transaction id or raw data) that reads like a read-only field, not a card.",
@@ -133,10 +130,6 @@
         "packages/core/src/shared/components/settings/AboutSection.jsx": {
             "count": 2,
             "reason": "Monospace license and diagnostic dumps, read like value boxes."
-        },
-        "packages/core/src/shared/components/settings/AdsSection.jsx": {
-            "count": 1,
-            "reason": "A monospace address value box."
         },
         "packages/core/src/shared/components/settings/BackupSection.jsx": {
             "count": 2,

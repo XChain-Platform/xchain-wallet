@@ -9,25 +9,6 @@
  * contact legal@dankest.llc.
  */
 
-/* Inbox toolbar: search + network filter, each 50% wide, matching the
-   addresses page, the contacts list, and the Send address-book picker. */
-.toolbar {
-    display: flex;
-    flex-direction: row;
-    flex-wrap: wrap;
-    align-items: center;
-    gap: var(--xc-space-2);
-    width: 100%;
-    /* The half-grid addition aligns the toolbar with its neighboring route controls. */
-    margin-bottom: calc(var(--xc-space-1) + 2px);
-}
-
-.toolbar > * {
-    flex: 1 1 12rem;
-    min-width: 0;
-    margin-bottom: 0;
-}
-
 /* Encrypted-session requests: counterparties who published their key to one of
    our addresses. Each row offers a "Share my key" reply (format-1 handshake). */
 .requestSection {

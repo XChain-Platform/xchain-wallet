@@ -217,12 +217,9 @@ describe('Settings at a 320px viewport', () => {
         settings = seedSettingsForChains(settings, defaultRegistry(), ['bitcoin-mainnet']);
         const { container } = renderSettings('ads');
         // The visible placeholder is short; the full explanation stays in its accessible description.
-        const placeholder = screen.getByText('Not available yet.');
+        const placeholder = screen.getByDisplayValue('Not available yet.');
         expect(placeholder).toHaveAttribute('aria-description', expect.stringMatching(/A donation address for Bitcoin arrives/));
-
-        expect(placeholder.style.fontFamily).toBe('inherit');
-        expect(placeholder.style.wordBreak).toBe('normal');
-        expect(placeholder.style.overflowWrap).toBe('break-word');
+        expect(placeholder).toHaveAttribute('readonly');
         expect(container).toContainElement(placeholder);
         // The word-count choice is the kit RadioGroup; its option copy wraps instead of overflowing.
         expect(radioGroupCss).toMatch(/\.option\s*\{[^}]*minmax\(0, 1fr\)/s);

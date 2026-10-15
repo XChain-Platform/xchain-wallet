@@ -61,6 +61,11 @@
     justify-content: center;
 }
 
+.recovery:disabled {
+    cursor: wait;
+    opacity: 0.7;
+}
+
 /* A light overlay on a dark notice drags the label below 4.5:1, so the
    hover tint is a faint share of the label's own colour instead. */
 .recovery:hover,
