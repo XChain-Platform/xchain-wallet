@@ -98,6 +98,17 @@
     margin: 0;
 }
 
+/* A status message (StatusMessage or the error summary built on its row) sits
+   in a form stack on the stack's gap alone. Its row carries an 8px block
+   margin for use outside forms, and route modules pass their own margined
+   class; two-part selectors outrank both whatever order the bundle loads
+   them in. */
+.body > [data-variant],
+.sectionBody > [data-variant],
+.status > [data-variant] {
+    margin: 0;
+}
+
 /* The action row closes the form. Buttons share the row and wrap onto a
    new line rather than overflow; each grows so a lone button is full width. */
 .actions {

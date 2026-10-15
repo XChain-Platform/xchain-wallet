@@ -120,6 +120,7 @@ const localizedRoutes = [
 // checked against the dictionary; their remaining literals stay outside the
 // literal guard until the screen migrates.
 const PARTIAL_COPY_FILES = [
+    '/routes/CreateBetFeedForm.jsx',
     '/routes/CreateOrderForm.jsx',
     '/routes/DispenserExplorer.jsx',
     '/routes/DispenserForm.jsx',
