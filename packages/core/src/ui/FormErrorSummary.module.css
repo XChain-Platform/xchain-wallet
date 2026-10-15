@@ -13,6 +13,12 @@
     padding-inline-start: var(--xc-space-5);
 }
 
+/* A form-level failure has no heading above it, so the list starts flush. */
+.listBare {
+    margin: 0;
+    padding-inline-start: var(--xc-space-5);
+}
+
 .link {
     color: inherit;
     text-decoration: underline;

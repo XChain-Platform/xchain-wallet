@@ -29,8 +29,9 @@ function showsLabel(error) {
 }
 
 /**
- * Focusable validation summary. Every field-specific error is a link so the
- * user can move directly from the summary to the control that needs attention.
+ * Focusable error summary. Every field-specific error is a link so the user can
+ * move directly from the summary to the control that needs attention. Errors
+ * without an id describe a form-level failure.
  *
  * @param {object} props
  * @param {{ id?: string, label?: string, message: string }[]} props.errors
@@ -50,6 +51,8 @@ export function FormErrorSummary({ errors, focusKey, recovery }) {
 
     if (!focusKey || errors.length === 0) return null;
 
+    const hasOnlyFieldErrors = errors.every((error) => error.id);
+
     const focusField = (event, id) => {
         event.preventDefault();
         const field = document.getElementById(id);
@@ -68,10 +71,12 @@ export function FormErrorSummary({ errors, focusKey, recovery }) {
         >
             <span className={statusStyles.icon} aria-hidden="true">✕</span>
             <div className={statusStyles.text}>
-                <p className={styles.heading}>
-                    {errors.length === 1 ? t('ui.formErrorSummary.fixThisField') : t('ui.formErrorSummary.fixTheseFields', { length: errors.length })}
-                </p>
-                <ul className={styles.list}>
+                {hasOnlyFieldErrors ? (
+                    <p className={styles.heading}>
+                        {errors.length === 1 ? t('ui.formErrorSummary.fixThisField') : t('ui.formErrorSummary.fixTheseFields', { length: errors.length })}
+                    </p>
+                ) : null}
+                <ul className={hasOnlyFieldErrors ? styles.list : styles.listBare}>
                     {errors.map((error, index) => (
                         <li key={`${error.id || 'form'}-${index}`}>
                             {error.id ? (
