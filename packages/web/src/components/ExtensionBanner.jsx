@@ -9,6 +9,7 @@
 // contact legal@dankest.llc.
 
 import { useState } from 'react';
+import { StatusMessage } from '@xchain-wallet/core/ui';
 import { t } from '../../../core/src/i18n/index.js';
 import { useExtensionWallet } from '../useExtensionWallet.js';
 import styles from './ExtensionBanner.module.css';
@@ -81,15 +82,11 @@ export function ExtensionBanner() {
 
     return (
         <div role="status" className={styles.banner} data-state="offer">
-            <span className={styles.label}>
+            <div className={styles.label}>
                 <strong>{t('extensionBanner.detectedTitle')}</strong>
                 {' '}{t('extensionBanner.detectedBody')}
-                {error ? (
-                    <span role="alert" className={styles.error}>
-                        {' '}{error}
-                    </span>
-                ) : null}
-            </span>
+                <StatusMessage variant="error">{error}</StatusMessage>
+            </div>
             <span className={styles.actions}>
                 <button
                     type="button"

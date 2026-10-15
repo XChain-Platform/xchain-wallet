@@ -14,10 +14,6 @@
     line-height: 1.4;
 }
 
-.error {
-    color: var(--xc-danger-fg, #c0392b);
-}
-
 .actions {
     flex-shrink: 0;
     display: flex;
