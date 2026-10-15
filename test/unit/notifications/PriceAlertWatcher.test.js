@@ -319,6 +319,10 @@ describe('PriceAlertWatcher', () => {
         await watcher.pollOnce();
         expect(notify).toHaveBeenCalledTimes(1);
 
+        // The stored alert is now triggered, so this poll drops the guard.
+        await watcher.pollOnce();
+        expect(notify).toHaveBeenCalledTimes(1);
+
         alerts[0].status = 'armed';
         await watcher.pollOnce();
         expect(notify).toHaveBeenCalledTimes(2);

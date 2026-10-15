@@ -96,7 +96,7 @@ export class PriceAlertWatcher {
         this._log = taggedLogger(logger, 'price-alert');
 
         this._timer = null;
-        /** @type {Set<string>} alert ids with delivery or persistence in progress (guards re-fire before markTriggered persists) */
+        /** @type {Set<string>} alert ids fired this session (guards re-fire before markTriggered persists) */
         this._fired = new Set();
         /** @type {Set<string>} delivered ids whose triggered-state write has not completed */
         this._pendingTriggered = new Set();
@@ -166,6 +166,14 @@ export class PriceAlertWatcher {
                 this._pendingTriggered.delete(id);
                 this._fired.delete(id);
                 this._firedDirty = true;
+            }
+            // A delivered alert whose stored status has left 'armed' no longer
+            // needs the in-memory guard. Dropping it here, and only once the
+            // store says so, lets a re-armed alert with the same id fire again
+            // this session while a store that has not caught up still cannot
+            // deliver it twice.
+            for (const id of this._fired) {
+                if (!armedIds.has(id) && !this._pendingTriggered.has(id)) this._fired.delete(id);
             }
             armed = armed.filter((a) => isOnActiveNetwork(a.chainId, settings?.activeNetwork));
             for (const alert of armed) {
@@ -274,10 +282,6 @@ export class PriceAlertWatcher {
         await this._persistFired();
         if (await this._persistTriggered(alert.id)) {
             this._pendingTriggered.delete(alert.id);
-            // The stored 'triggered' status now prevents a repeat delivery, so
-            // the in-memory guard can go; an edit or re-arm that keeps the same
-            // id then fires again in this session instead of waiting for a new one.
-            this._fired.delete(alert.id);
             this._firedDirty = true;
             await this._persistFired();
         }
