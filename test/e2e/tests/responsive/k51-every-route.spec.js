@@ -155,6 +155,11 @@ async function layoutAudit(page) {
                 && element.getAttribute('aria-hidden') !== 'true'
                 && rect.width > 0
                 && rect.height > 0
+                // Content of a closed <details> keeps a layout box below the
+                // summary but is never painted or hit; checkVisibility()
+                // reports that skipped subtree. Default options only: the
+                // styled switches and checkboxes are opacity 0 on purpose.
+                && element.checkVisibility?.() !== false
                 // A 1px clipped box is the visually hidden pattern (the skip
                 // link): it becomes a target only once it takes focus.
                 && !(rect.width <= 1 && rect.height <= 1);
@@ -278,6 +283,7 @@ async function bottomClearance(page) {
             const style = getComputedStyle(element);
             if (style.display === 'none' || style.visibility === 'hidden') return false;
             if (rect.width === 0 || rect.height === 0 || element.disabled) return false;
+            if (element.checkVisibility?.() === false) return false;
             if (element.getAttribute('aria-hidden') === 'true') return false;
             if (element.getAttribute('tabindex') === '-1') return false;
             return element.matches(
