@@ -9,7 +9,7 @@
 
 import React from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 
 const reach = vi.hoisted(() => ({ overall: 'offline', refresh: vi.fn() }));
 vi.mock('../../../packages/core/src/shared/hooks/useReachability.js', () => ({
@@ -77,10 +77,11 @@ describe('History offline with nothing saved', () => {
         expect(screen.queryByText("Balances couldn't be checked")).toBeNull();
         expect(screen.getAllByRole('status').filter((el) => /offline/i.test(el.textContent))).toHaveLength(1);
 
-        const calls = messaging.getAddressHistory.mock.calls.length;
+        // While the verdict is offline no read can finish, so none starts; the
+        // recheck flips the verdict and the page then loads by itself.
+        expect(messaging.getAddressHistory).not.toHaveBeenCalled();
         fireEvent.click(screen.getByRole('button', { name: 'Try again' }));
         expect(reach.refresh).toHaveBeenCalledTimes(1);
-        await waitFor(() => expect(messaging.getAddressHistory.mock.calls.length).toBeGreaterThan(calls));
     });
 
     it('keeps the unchecked message when services are only degraded', async () => {

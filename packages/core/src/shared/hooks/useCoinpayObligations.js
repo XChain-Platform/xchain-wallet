@@ -157,11 +157,15 @@ function sortKey(expiration) {
  *
  * @param {string | null | undefined} walletId
  * @param {string | null | undefined} [accountId]
- * @param {{ pollMs?: number }} [opts]
+ * @param {{ pollMs?: number, offline?: boolean }} [opts]
+ *        `offline` holds the scan: no reads start while the network is
+ *        unreachable, rows already found stay, and the scan runs again by
+ *        itself when `offline` clears.
  * @returns {{ obligations: PendingObligation[], scanning: boolean, error: string | null, refresh: () => void, payableCount: number }}
  */
 export function useCoinpayObligations(walletId, accountId, opts = {}) {
     const pollMs = opts.pollMs ?? DEFAULT_POLL_MS;
+    const offline = Boolean(opts.offline);
     const identity = `${walletId || ''}::${accountId || ''}`;
     const { messaging } = useMessaging();
     const [obligations, setObligations] = useState(/** @type {PendingObligation[]} */ ([]));
@@ -186,6 +190,13 @@ export function useCoinpayObligations(walletId, accountId, opts = {}) {
         // wallet's fabricated addresses must not spam the explorer.
         if (!walletId || isDemoWallet(walletId)) {
             setObligations([]);
+            setScanning(false);
+            runRef.current = null;
+            return undefined;
+        }
+        // Offline the reads cannot finish and the request layer would retry
+        // each for a minute; nothing is scanning and nothing is claimed.
+        if (offline) {
             setScanning(false);
             runRef.current = null;
             return undefined;
@@ -243,7 +254,7 @@ export function useCoinpayObligations(walletId, accountId, opts = {}) {
                 document.removeEventListener('visibilitychange', onVisible);
             }
         };
-    }, [walletId, accountId, identity, messaging, pollMs]);
+    }, [walletId, accountId, identity, messaging, pollMs, offline]);
 
     const visibleObligations = identityRef.current === identity ? obligations : [];
     const visibleError = identityRef.current === identity ? error : null;

@@ -193,7 +193,7 @@ describe('offline route behavior from reachability', () => {
         expect(screen.getByRole('button', { name: 'Generate new address' })).toBeEnabled();
     });
 
-    it('keeps cached History rows and disables refresh with a reason', async () => {
+    it('shows one offline state for History and disables refresh with a reason', async () => {
         const messaging = messagingWith({
             getAddressesByChain: vi.fn().mockResolvedValue({ [CHAIN]: [{ address: ADDRESS }] }),
             getAddressHistory: vi.fn().mockResolvedValue([{
@@ -219,8 +219,10 @@ describe('offline route behavior from reachability', () => {
 
         renderOffline(messaging, <History walletId={WALLET.id} />);
 
-        expect(await screen.findByRole('button', { name: /Send.*Confirmed/i })).toBeInTheDocument();
-        expectOneOfflineNotice();
+        // Offline, no read starts; with nothing saved the page shows its one
+        // offline state, and saved rows are held by the History offline cache spec.
+        expect(await screen.findByText("You're offline")).toBeInTheDocument();
+        expect(messaging.getAddressHistory).not.toHaveBeenCalled();
         const refresh = screen.getByRole('button', { name: 'Refresh history' });
         expect(refresh).toBeDisabled();
         expect(refresh).toHaveAttribute('title', 'Refreshing history needs a network connection');

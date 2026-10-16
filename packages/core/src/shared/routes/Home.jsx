@@ -16,7 +16,8 @@ import { useMessagingUnread } from '../hooks/useMessagingUnread.js';
 import { useSharedCoinpayObligations } from '../hooks/useCoinpayObligations.js';
 import { useSettings } from '../hooks/useSettings.js';
 import { useEscrowedBalances } from '../hooks/useEscrowedBalances.js';
-import { isNavigatorOnline, useOnlineStatus } from '../hooks/useOnlineStatus.js';
+import { isNavigatorOnline } from '../hooks/useOnlineStatus.js';
+import { useNetworkOffline } from '../hooks/useNetworkOffline.js';
 import { useReachability } from '../hooks/useReachability.js';
 import { HideReachabilityNotice } from '../components/hideReachabilityNotice.js';
 import { useWalletFilters } from '../hooks/useWalletFilters.js';
@@ -209,14 +210,13 @@ export function Home({ onLocked, onResumeConfirm, onSend, onReceive, onSwap, onE
     const { messaging, shell } = useMessaging();
     const variant = screenVariantFor(shell);
     const isFull = variant === 'full';
-    const browserOnline = useOnlineStatus();
     const {
         overall: reachabilityOverall,
         refresh: recheckReachability,
     } = useReachability({});
-    // Treat a corroborated service outage as offline even when the device
-    // still has a live Wi-Fi or Ethernet interface.
-    const offline = !browserOnline || reachabilityOverall === 'offline';
+    // A corroborated service outage is offline even when the device still has
+    // a live Wi-Fi or Ethernet interface.
+    const { offline } = useNetworkOffline();
     const networkActionsAvailable = !offline;
     const { showToast } = useToast();
 

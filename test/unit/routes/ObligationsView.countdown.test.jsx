@@ -17,6 +17,11 @@ vi.mock('../../../packages/core/src/shared/hooks/useCoinpayObligations.js', () =
     }),
 }));
 
+// The countdown owns the only timer under test; the connection verdict is fixed.
+vi.mock('../../../packages/core/src/shared/hooks/useNetworkOffline.js', () => ({
+    useNetworkOffline: () => ({ offline: false, recheck: vi.fn() }),
+}));
+
 import { ObligationsView } from '../../../packages/core/src/shared/routes/ObligationsView.jsx';
 
 afterEach(() => {

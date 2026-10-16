@@ -15,6 +15,8 @@ import {
 import { registry as registryLib } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { useCoinpayObligations } from '../hooks/useCoinpayObligations.js';
+import { useNetworkOffline } from '../hooks/useNetworkOffline.js';
+import { OfflineEmptyState } from '../components/OfflineEmptyState.jsx';
 import {
     classifyObligation,
     countdownText,
@@ -88,11 +90,15 @@ function ScopedObligationsView({ walletId, activeAccountId, onPay, onBack }) {
 
     // Faster poll than the app-level badge: this screen is the user
     // actively watching deadlines.
+    // Offline the scan holds and the screen says so once; it runs again when
+    // the connection returns.
+    const { offline, recheck } = useNetworkOffline({ walletId });
     const { obligations, scanning, error: scanError, refresh } = useCoinpayObligations(
         walletId,
         activeAccountId,
-        { pollMs: 30_000 },
+        { pollMs: 30_000, offline },
     );
+    const showOffline = offline && obligations.length === 0;
 
     // One interval drives every live countdown and clears at the final deadline.
     const [nowSec, setNowSec] = useState(() => Math.floor(Date.now() / 1000));
@@ -147,22 +153,26 @@ function ScopedObligationsView({ walletId, activeAccountId, onPay, onBack }) {
                                 matches manually from this queue.
                             </StatusMessage>
                         ) : null}
-                        {scanError ? (
+                        {scanError && !offline ? (
                             <StatusMessage variant="error" className={styles.hint}>{scanError}</StatusMessage>
                         ) : null}
                     </>
                 )}
-                actions={(
-                    <Button variant="secondary" icon={<Icon.RefreshIcon />} onClick={refresh} disabled={scanning}>
+                actions={showOffline ? null : (
+                    <Button variant="secondary" icon={<Icon.RefreshIcon />} onClick={refresh} disabled={scanning || offline}>
                         Refresh payments
                     </Button>
                 )}
             >
-                {scanning && obligations.length === 0 ? (
+                {showOffline ? (
+                    <OfflineEmptyState body="Payments due load when the connection returns." onRetry={recheck} />
+                ) : null}
+
+                {!showOffline && scanning && obligations.length === 0 ? (
                     <p className={styles.hint}>Scanning for payments due…</p>
                 ) : null}
 
-                {!scanning && !scanError && classified.length === 0 ? (
+                {!showOffline && !scanning && !scanError && classified.length === 0 ? (
                     <EmptyState
                         icon={<Icon.ClockIcon />}
                         title="No payments due"

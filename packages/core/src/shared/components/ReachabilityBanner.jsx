@@ -19,7 +19,12 @@ import { StatusMessage } from '@xchain-wallet/core/ui';
 import { useReachability } from '../hooks/useReachability.js';
 import { chainIconSmallUrl } from '../../branding/branding.js';
 import { defaultRegistry } from '../../registry/index.js';
-import { NoticesRouteContext, ReachabilityNoticeHiddenContext } from './noticesRoute.js';
+import {
+    NoticesRouteContext,
+    ReachabilityNoticeHiddenContext,
+    routeMayShowBalances,
+} from './noticesRoute.js';
+import { t } from '../../i18n/index.js';
 import styles from './ReachabilityBanner.module.css';
 
 const chainRegistry = defaultRegistry();
@@ -46,6 +51,8 @@ export function ReachabilityBanner({ chainIds, intervalMs, confirmMs, startupGra
     // A screen that already says its balances could not be checked takes
     // the place of this notice; the probe keeps running underneath.
     const hiddenByScreen = useContext(ReachabilityNoticeHiddenContext);
+    // Balances are named only on a screen that can show one.
+    const mayShowBalances = routeMayShowBalances(routeKey);
 
     if (hiddenByScreen || (overall !== 'degraded' && overall !== 'offline')) return null;
 
@@ -73,7 +80,11 @@ export function ReachabilityBanner({ chainIds, intervalMs, confirmMs, startupGra
                 {/* Only the state is announced, so a poll that refreshes the
                     last-checked age does not repeat the notice. */}
                 <span role="status" aria-live="polite" aria-atomic="true">
-                    Some balances may be out of date
+                    {mayShowBalances
+                        ? t('reachability.notice.balances')
+                        : t(overall === 'offline'
+                            ? 'reachability.notice.offline'
+                            : 'reachability.notice.degraded')}
                 </span>
                 {hasDetails ? (
                     <button

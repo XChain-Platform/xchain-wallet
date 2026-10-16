@@ -105,6 +105,7 @@ import { RelativeTime } from '../components/RelativeTime.jsx';
 import { useReachability } from '../hooks/useReachability.js';
 import { useNetworkOffline } from '../hooks/useNetworkOffline.js';
 import { OfflineEmptyState } from '../components/OfflineEmptyState.jsx';
+import { useHideReachabilityNotice } from '../components/hideReachabilityNotice.js';
 import { BalancesUncheckedState, useBalancesUnchecked } from '../components/BalancesUncheckedState.jsx';
 import { useLongOperationStatus } from '../hooks/useLongOperationStatus.js';
 import { isNavigatorOnline, useOnlineStatus } from '../hooks/useOnlineStatus.js';
@@ -635,8 +636,13 @@ export function History({ walletId, accountId, onBack, onReceive, onSelectEntry,
     const { overall: reachabilityOverall } = useReachability({});
     const networkOffline = reachabilityOverall === 'offline';
     const { unchecked: balancesUnchecked, recheck: recheckBalances } = useBalancesUnchecked();
-    const browserOnline = useOnlineStatus();
     const { offline: offlineVerdict } = useNetworkOffline({ walletId });
+    // Offline is the device report or the probe's verdict that no service
+    // answers; either way the reads cannot finish, so the page shows its saved
+    // rows or its offline state at once instead of a skeleton that waits them out.
+    const browserOnline = useOnlineStatus() && !offlineVerdict;
+    // Saved rows carry the page's own offline notice, which replaces the shell's.
+    useHideReachabilityNotice(offlineVerdict);
     const rememberedViewRef = useRef(undefined);
     if (rememberedViewRef.current === undefined) {
         rememberedViewRef.current = readHistoryViewState(walletId, accountId, initialSearchQuery);
@@ -985,6 +991,9 @@ export function History({ walletId, accountId, onBack, onReceive, onSelectEntry,
                 setShowingCachedHistory(true);
             }
             setLoadingChains(new Set());
+            // A read that was in flight when the verdict flipped is cancelled and
+            // never lands, so the refresh state is released here.
+            setRefreshing(false);
             setHistoryLoaded(true);
             pollThrottleRef.current.fail();
             return;

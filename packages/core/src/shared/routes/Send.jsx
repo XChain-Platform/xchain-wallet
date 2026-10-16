@@ -218,7 +218,7 @@ import { useScreenShortcuts } from '../keyboard/useScreenShortcuts.js';
 import { useSignerInfo } from '../hooks/useSignerInfo.js';
 import { useUndoSend } from '../hooks/useUndoSend.js';
 import { useReachability } from '../hooks/useReachability.js';
-import { useOnlineStatus } from '../hooks/useOnlineStatus.js';
+import { useNetworkOffline } from '../hooks/useNetworkOffline.js';
 import { BalancesUncheckedState } from '../components/BalancesUncheckedState.jsx';
 import { HideReachabilityNotice } from '../components/hideReachabilityNotice.js';
 import { readBalanceCache } from '../utils/balanceCache.js';
@@ -395,10 +395,9 @@ export function Send({ walletId, accountId, onBack, prefill = null, onDone, onCh
     const { overall: reachabilityOverall, refresh: recheckReachability } = useReachability({
         chainIds: isDemoWallet(walletId) ? [] : undefined,
     });
-    // A device with no network is offline from the first render; the probe's
-    // own verdict lands only after its first check.
-    const browserOnline = useOnlineStatus();
-    const networkOffline = !browserOnline || reachabilityOverall === 'offline';
+    // The shared offline verdict: a device with no network is offline from the
+    // first render, and the probe's all-unreachable verdict counts as well.
+    const { offline: networkOffline } = useNetworkOffline({ walletId });
     // The verdict behind the shell's "Some balances may be out of date".
     const balancesUnchecked = reachabilityOverall === 'degraded' || networkOffline;
     const mountedRef = useRef(true);
