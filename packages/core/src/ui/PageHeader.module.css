@@ -62,19 +62,21 @@
     overflow: hidden;
 }
 
+/* The icon is the first inline item of the title, so a title that wraps keeps
+   it beside the first line instead of floating at the edge of the group. */
 .titleIcon {
     --xc-icon-size: var(--xc-icon-md);
     display: inline-flex;
-    align-items: center;
-    justify-content: center;
+    vertical-align: middle;
     width: max-content;
     height: max-content;
+    margin-inline-end: var(--xc-space-2);
     color: var(--xc-accent-text);
-    flex: 0 0 auto;
 }
 
 .title {
     margin: 0;
+    line-height: 1.25;
     font-size: var(--xc-type-page-title-size);
     font-weight: var(--xc-type-page-title-weight);
     color: var(--xc-text);

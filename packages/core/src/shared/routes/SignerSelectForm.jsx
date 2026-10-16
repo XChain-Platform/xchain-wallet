@@ -125,8 +125,10 @@ export function SignerSelectForm({ walletId, value, onChange, disabled = false }
 
     return (
         <FormPage as="div" sectioned label={t('signerSelect.choose')}>
-            <FormSection title={t('signerSelect.choose')}>
-                <InfoTip label={t('signerSelect.intro')} />
+            <FormSection
+                title={t('signerSelect.choose')}
+                trailing={<InfoTip label={t('signerSelect.intro')} />}
+            >
                 {isWatcherMode ? (
                     <StatusMessage variant="warning" role="note">
                         {t('signerSelect.watcherNote')}

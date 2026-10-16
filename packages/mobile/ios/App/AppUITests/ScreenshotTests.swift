@@ -696,7 +696,7 @@ extension ScreenshotTests {
             let q = query.matching(NSPredicate(format: format, label))
             for i in 0..<min(q.count, 6) {
                 let e = q.element(boundBy: i)
-                if e.exists && e.isHittable { return e }
+                if e.exists && e.frame.width > 1 && app.windows.firstMatch.frame.contains(CGPoint(x: e.frame.midX, y: e.frame.midY)) && e.isHittable { return e }
             }
         }
         return nil
@@ -726,7 +726,7 @@ extension ScreenshotTests {
 
     private func dumpButtons(_ tag: String) {
         let labels = app.buttons.allElementsBoundByIndex.filter { $0.exists }
-            .map { "\($0.label)\($0.isHittable ? "" : "(h-)")" }
+            .map { "\($0.label)" }
         print("BUTTONS \(tag): \(labels.joined(separator: " | "))")
     }
 
@@ -767,7 +767,7 @@ extension ScreenshotTests {
         let ff = field.frame
         print("KEYBOARD \(tag): field '\(field.label)' \(ff) keyboard=\(kf) fieldCovered=\(ff.maxY > kf.minY)")
         probeShot("\(tag)-kb-docked")
-        kb.pinch(withScale: 0.4, velocity: -1)
+        if ProcessInfo.processInfo.environment["SKIP_PINCH"] == nil { kb.pinch(withScale: 0.4, velocity: -1) }
         Thread.sleep(forTimeInterval: 1)
         let fk = app.keyboards.firstMatch.frame
         print("KEYBOARD \(tag): after pinch keyboard=\(fk) fieldCovered=\(field.frame.intersects(fk))")
@@ -1532,10 +1532,13 @@ extension ScreenshotTests {
         if app.keyboards.count > 0 {
             dumpButtons("kb-open")
             let done = app.buttons.matching(NSPredicate(format: "label ==[c] %@ OR label ==[c] %@", "Done", "Hide keyboard")).firstMatch
-            if done.exists && done.isHittable { done.tap() } else {
-                app.windows.firstMatch.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.12)).tap()
-            }
+            if done.exists { done.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).tap() }
             Thread.sleep(forTimeInterval: 0.6)
+            if app.keyboards.count > 0 {
+                app.windows.firstMatch.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.075)).tap()
+                Thread.sleep(forTimeInterval: 0.6)
+            }
+            print("KBAFTER count=\(app.keyboards.count)")
         }
         if let close = hittable("Close more navigation", exact: true) { close.tap(); Thread.sleep(forTimeInterval: 0.6) }
         goHome()
@@ -1558,7 +1561,7 @@ extension ScreenshotTests {
         probeShot("\(o)-00-home")
         for i in 1...3 { swipePage(); probeShot("\(o)-00-home-scrolled\(i)") }
         var n = 1
-        for label in ["History"] {
+        for label in ["History", "Send"] {
             phoneHome()
             // Home carries a quick-action Send as well as the tab: take the lowest match, the tab.
             let matches = app.buttons.matching(NSPredicate(format: "label == %@", label)).allElementsBoundByIndex.filter { $0.exists && $0.isHittable }
@@ -1586,7 +1589,7 @@ extension ScreenshotTests {
             r += 1
         }
         guard openMoreRow("Settings") else { return }
-        for page in 0..<5 { probeShot("\(o)-20-settings-page\(page)"); swipePage() }
+        for page in 0..<16 { probeShot("\(o)-20-settings-page\(page)"); swipePage() }
         var p = 1
         for panel in Self.settingsDrills {
             guard openMoreRow("Settings") else { continue }
@@ -1597,6 +1600,30 @@ extension ScreenshotTests {
             probeShot(String(format: "%@-2%02d-settings-%@-b", o, p, slug(panel)))
             p += 1
         }
+        phoneHome()
+    }
+}
+
+// MARK: - Settings keyboard probe
+
+extension ScreenshotTests {
+
+    /// Raise the keyboard in the Settings inline price-alert form and the Safety number fields.
+    func testSettingsKeyboardProbe() throws {
+        let tag = ProcessInfo.processInfo.environment["IPHONE_TAG"] ?? "k"
+        app.launch()
+        _ = app.staticTexts.firstMatch.waitForExistence(timeout: 30)
+        guard openMoreRow("Settings") else { return }
+        probeKeyboard("\(tag)-set-search", hints: ["Search settings"])
+        phoneHome()
+        guard openMoreRow("Settings") else { return }
+        _ = scrollTo("Price alerts", max: 12)
+        probeKeyboard("\(tag)-set-price", hints: ["Price"])
+        phoneHome()
+        guard openMoreRow("Settings"), let safety = scrollTo("Safety") else { return }
+        safety.tap()
+        probeKeyboard("\(tag)-safety-sats", hints: ["sats", "warning"])
+        probeKeyboard("\(tag)-safety-hold", hints: ["Hold duration", "seconds"])
         phoneHome()
     }
 }

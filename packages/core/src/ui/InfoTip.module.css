@@ -29,6 +29,19 @@
     line-height: 1;
     cursor: help;
     transition: color var(--xc-transition), border-color var(--xc-transition), background var(--xc-transition);
+    position: relative;
+}
+
+/* The help dot keeps its 16px glyph. On a touch screen a transparent layer grows the tap area to 44px, centred on the control, without changing its painted size (the Button .sm pattern). */
+@media (pointer: coarse), (hover: none) {
+    .trigger::before {
+        content: '';
+        position: absolute;
+        inset-block-start: min(0px, calc(50% - var(--xc-control-hit-min, 24px) / 2));
+        inset-inline-start: min(0px, calc(50% - var(--xc-control-hit-min, 24px) / 2));
+        width: max(100%, var(--xc-control-hit-min, 24px));
+        height: max(100%, var(--xc-control-hit-min, 24px));
+    }
 }
 
 .glyph {

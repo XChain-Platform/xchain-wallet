@@ -8,6 +8,8 @@
 // padding and type size. They once used the small radius and the small text
 // size, so they sat beside a dropdown that looked different.
 
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { INPUT, INPUT_DISABLED } from '../../../packages/core/src/shared/components/settings/_settingsPrimitives.jsx';
 
@@ -26,5 +28,14 @@ describe('settings INPUT_DISABLED style', () => {
         expect(INPUT_DISABLED.background).toBe('var(--xc-control-disabled-bg)');
         expect(INPUT_DISABLED.borderColor).toBe('var(--xc-control-disabled-border)');
         expect(INPUT_DISABLED.color).toBe('var(--xc-control-disabled-text)');
+    });
+});
+
+describe('settings INPUT fill', () => {
+    it('shares the dropdown surface so a number box matches the select above it in light and dark', () => {
+        const tokens = readFileSync(resolve(process.cwd(), 'packages/core/src/ui/tokens.css'), 'utf8');
+        const select = tokens.match(/:where\(select\) \{[^}]*background-color:\s*(var\(--xc-surface\))/);
+        expect(select?.[1]).toBe('var(--xc-surface)');
+        expect(INPUT.background).toBe(select[1]);
     });
 });

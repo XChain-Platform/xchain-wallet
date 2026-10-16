@@ -237,6 +237,21 @@
     color: inherit;
     cursor: text;
     border-bottom: 1px solid transparent;
+    position: relative;
+}
+
+/* The editable fee figures keep their size. On a touch screen a transparent layer grows the tap area to 44px, centred on the control, without changing its painted size (the Button .sm pattern). */
+@media (pointer: coarse), (hover: none) {
+    .readoutEdit::before {
+        content: '';
+        position: absolute;
+        /* Grows downward only: the tier stops above already reach into this
+           row, and two grown areas must not overlap. */
+        inset-block-start: 0;
+        inset-inline-start: min(0px, calc(50% - var(--xc-control-hit-min, 24px) / 2));
+        width: max(100%, var(--xc-control-hit-min, 24px));
+        height: max(100%, var(--xc-control-hit-min, 24px));
+    }
 }
 
 .readoutEdit:hover:not(:disabled),

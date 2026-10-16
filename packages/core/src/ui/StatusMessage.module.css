@@ -48,7 +48,8 @@
     border: 1px solid currentColor;
     border-radius: var(--xc-radius-sm);
     padding: 2px var(--xc-space-2);
-    font-size: var(--xc-text-xs);
+    /* The action reads at the notice text size, not a step below it. */
+    font-size: inherit;
     font-weight: 600;
     cursor: pointer;
     line-height: 1.2;
@@ -59,6 +60,19 @@
     display: inline-flex;
     align-items: center;
     justify-content: center;
+    position: relative;
+}
+
+/* The notice action keeps its look. On a touch screen a transparent layer grows the tap area to 44px, centred on the control, without changing its painted size (the Button .sm pattern). */
+@media (pointer: coarse), (hover: none) {
+    .recovery::before {
+        content: '';
+        position: absolute;
+        inset-block-start: min(0px, calc(50% - var(--xc-control-hit-min, 24px) / 2));
+        inset-inline-start: min(0px, calc(50% - var(--xc-control-hit-min, 24px) / 2));
+        width: max(100%, var(--xc-control-hit-min, 24px));
+        height: max(100%, var(--xc-control-hit-min, 24px));
+    }
 }
 
 .recovery:disabled {

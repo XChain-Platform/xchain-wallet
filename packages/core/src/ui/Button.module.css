@@ -171,6 +171,9 @@
     --xc-button-hover-bg: transparent;
     --xc-button-hover-border: transparent;
     color: var(--xc-accent-text);
+    /* An inline link reads at the size of the text around it (a notice, a
+       paragraph), not at the control size, which is 16px on touch screens. */
+    font-size: inherit;
     font-weight: inherit;
     text-decoration: underline;
     text-underline-offset: 0.15em;

@@ -85,11 +85,6 @@ export function PageHeader({
                 <span className={styles.spacer} />
             )}
             <span className={styles.titleGroup}>
-                {titleIcon ? (
-                    <span className={styles.titleIcon} aria-hidden="true">
-                        {titleIcon}
-                    </span>
-                ) : null}
                 {/* The screen's title is its one top-level heading, so a
                     screen reader can jump to it and announce where the user is. */}
                 <h1
@@ -99,6 +94,11 @@ export function PageHeader({
                     title={typeof title === 'string' ? title : undefined}
                     tabIndex={titleRef ? -1 : undefined}
                 >
+                    {titleIcon ? (
+                        <span className={styles.titleIcon} aria-hidden="true">
+                            {titleIcon}
+                        </span>
+                    ) : null}
                     {title}
                 </h1>
             </span>

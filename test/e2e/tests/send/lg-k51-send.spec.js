@@ -95,7 +95,8 @@ test.describe('LG K51 send review', { tag: '@lg-k51' }, () => {
         await createWallet(page);
 
         await gotoSection(page, 'Contacts');
-        await page.getByRole('button', { name: 'Add contact' }).click();
+        // A fresh wallet has no contacts, so the empty list offers the create action.
+        await page.getByRole('button', { name: 'Create first contact' }).click();
         await page.getByRole('textbox', { name: 'Name', exact: true }).fill(CONTACT_NAME);
         await page.getByRole('textbox', { name: 'Address', exact: true }).fill(CONTACT_ADDRESS);
         await page.getByRole('button', { name: 'Save', exact: true }).click();

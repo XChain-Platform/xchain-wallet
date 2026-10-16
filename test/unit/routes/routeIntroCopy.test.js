@@ -37,7 +37,7 @@ describe('route intro copy', () => {
         expect(oracle).toContain('<InfoTip label={`Dispensers can use an oracle');
         expect(pairing).toContain('hint={lane.help}');
         expect(pairing).toContain('<InfoTip label="Pairing codes contain public keys only');
-        expect(roster).toContain('<InfoTip label={`Tokens on ${tick}');
+        expect(roster).toContain('official-token list show an "Official" badge in explorers and wallets');
         expect(signer).toContain('<InfoTip label={t(\'signerSelect.intro\')} />');
     });
 

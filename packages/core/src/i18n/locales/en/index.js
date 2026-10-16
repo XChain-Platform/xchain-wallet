@@ -802,7 +802,7 @@ export const en = {
     'history.refresh': 'Refresh history',
     'history.refreshing': 'Refreshing history',
     'history.offline.cached': 'You are offline. Showing the last saved history. Network actions will be available when your connection returns.',
-    'history.offline.empty': 'You are offline. Connect to load history and use network actions.',
+    'history.offline.emptyBody': 'History loads when the connection returns.',
     'history.offline.refreshFailed': "History didn't refresh. Showing the last saved history.",
     'history.offline.refreshTitle': 'Refreshing history needs a network connection',
     'history.showMore': 'Show more history',

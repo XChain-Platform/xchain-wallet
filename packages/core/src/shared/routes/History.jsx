@@ -103,6 +103,8 @@ import { formatFiatAmountForSpeech } from '../utils/fiatAmountFormat.js';
 import { formatLocalDateTime } from '../utils/dateTime.js';
 import { RelativeTime } from '../components/RelativeTime.jsx';
 import { useReachability } from '../hooks/useReachability.js';
+import { useNetworkOffline } from '../hooks/useNetworkOffline.js';
+import { OfflineEmptyState } from '../components/OfflineEmptyState.jsx';
 import { BalancesUncheckedState, useBalancesUnchecked } from '../components/BalancesUncheckedState.jsx';
 import { useLongOperationStatus } from '../hooks/useLongOperationStatus.js';
 import { isNavigatorOnline, useOnlineStatus } from '../hooks/useOnlineStatus.js';
@@ -634,6 +636,7 @@ export function History({ walletId, accountId, onBack, onReceive, onSelectEntry,
     const networkOffline = reachabilityOverall === 'offline';
     const { unchecked: balancesUnchecked, recheck: recheckBalances } = useBalancesUnchecked();
     const browserOnline = useOnlineStatus();
+    const { offline: offlineVerdict } = useNetworkOffline({ walletId });
     const rememberedViewRef = useRef(undefined);
     if (rememberedViewRef.current === undefined) {
         rememberedViewRef.current = readHistoryViewState(walletId, accountId, initialSearchQuery);
@@ -2028,17 +2031,20 @@ export function History({ walletId, accountId, onBack, onReceive, onSelectEntry,
         );
     }
 
+    // Offline with no saved history, the empty state below says so, and the
+    // page notice stays out of its way so one state shows one message.
+    const offlineWithoutHistory = offlineVerdict && historyLoaded && loadingChains.size === 0
+        && entries.length === 0 && visibleEntries.length === 0;
+
     return wrap(
         <ListPage
-            notices={!browserOnline || showingCachedHistory ? (
+            notices={(!browserOnline || showingCachedHistory) && !offlineWithoutHistory ? (
                 <StatusMessage
                     variant="warning"
                     id="history-offline-action-reason"
                 >
                     {!browserOnline
-                        ? (showingCachedHistory
-                            ? t('history.offline.cached')
-                            : t('history.offline.empty'))
+                        ? t('history.offline.cached')
                         : t('history.offline.refreshFailed')}
                 </StatusMessage>
             ) : null}
@@ -2301,6 +2307,16 @@ export function History({ walletId, accountId, onBack, onReceive, onSelectEntry,
                         body={t('history.empty.noMatchesBody')}
                         actionLabel={t('history.empty.clearFilters')}
                         onAction={clearAllFilters}
+                    />
+                ) : offlineWithoutHistory ? (
+                    // Offline with nothing saved, the empty state is the one message:
+                    // it also steps the shell's reachability notice aside.
+                    <OfflineEmptyState
+                        body={t('history.offline.emptyBody')}
+                        onRetry={() => {
+                            recheckBalances();
+                            setRefreshTick((n) => n + 1);
+                        }}
                     />
                 ) : balancesUnchecked && !crossChainOnly && entries.length === 0 ? (
                     // An empty read while balances could not be checked proves

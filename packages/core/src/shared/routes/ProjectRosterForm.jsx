@@ -9,7 +9,7 @@
 // contact legal@dankest.llc.
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { AddressText, Button, ChainBadge, FeeSelector, FormPage, InfoTip, Input, PageHeader, Screen, StatusMessage, Textarea } from '@xchain-wallet/core/ui';
+import { AddressText, Button, ChainBadge, FeeSelector, FormPage, Input, PageHeader, Screen, StatusMessage, Textarea } from '@xchain-wallet/core/ui';
 import { registry as registryLib } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { useDemoGuard } from '../hooks/useDemoGuard.jsx';
@@ -758,7 +758,9 @@ export function ProjectRosterForm({ walletId, chainId, tick, issuerAddress = nul
                 </Button>
             )}
         >
-            <InfoTip label={`Tokens on ${tick}'s official-token list show an "Official" badge in explorers and wallets. Publishing a new list replaces the old one.`} />
+            <p className={styles.hint}>
+                Tokens on {tick}'s official-token list show an "Official" badge in explorers and wallets. Publishing a new list replaces the old one.
+            </p>
             {rosterChecked && hasRoster ? (
                 <p className={styles.hint}>
                     Current list ({currentRoster.members.length} token{currentRoster.members.length === 1 ? '' : 's'})

@@ -330,7 +330,7 @@ export function PairPartnerWallet({ onBack, onPaired, walletId: existingWalletId
                             This device signs. Pair a watcher
                         </Button>
                     </div>
-                    <InfoTip label="An air-gapped pair uses one recovery phrase on two wallets: an online watcher builds transactions and an offline signer signs them. Write the phrase down once, then type it into each device separately; it never travels between them." />
+                    <p style={COPY}>An air-gapped pair uses one recovery phrase on two wallets: an online watcher builds transactions and an offline signer signs them. Write the phrase down once, then type it into each device separately; it never travels between them.</p>
                 </ListPage>
             </Screen>
         );
@@ -422,8 +422,10 @@ export function PairPartnerWallet({ onBack, onPaired, walletId: existingWalletId
                     )}
                 >
                     <StepIndicator {...step} />
-                    <InfoTip label="Pairing codes contain public keys only: no recovery phrase, no private key, and nothing that can spend." />
-                    <FormSection title="This wallet’s code">
+                    <FormSection
+                        title="This wallet’s code"
+                        trailing={<InfoTip label="Pairing codes contain public keys only: no recovery phrase, no private key, and nothing that can spend." />}
+                    >
                     {localCode ? (
                         <>
                             {localFrames ? (
