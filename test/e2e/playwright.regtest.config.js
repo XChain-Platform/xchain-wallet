@@ -80,7 +80,11 @@ export default defineConfig({
     timeout: 1_800_000,
     expect: { timeout: 30_000 },
     globalSetup: './global-setup.regtest.js',
-    reporter: process.env.CI ? [['github'], ['html', { open: 'never' }]] : 'list',
+    // `list` prints each test as it ends, so a run cut off by the job cap
+    // still shows which tests passed and failed.
+    reporter: process.env.CI
+        ? [['list'], ['github'], ['html', { open: 'never' }]]
+        : 'list',
     use: {
         baseURL: `http://localhost:${PREVIEW_PORT}`,
         trace: 'retain-on-failure',
