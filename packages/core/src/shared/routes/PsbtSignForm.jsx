@@ -1361,6 +1361,19 @@ export function PsbtSignForm({ walletId, onBack, initialPsbt }) {
                         <Input {...drop.pickerProps} aria-label="Upload transaction file" />
                     </span>
                 </div>
+                {visibleError ? (
+                    <FieldNote
+                        variant="error"
+                        testId="psbt-sign-paste-error"
+                        action={pasted && !psbtHex && !error ? (
+                            <Button type="button" variant="link" size="sm" icon={null} onClick={() => { setPasted(''); setError(null); }}>
+                                Clear
+                            </Button>
+                        ) : null}
+                    >
+                        {visibleError}
+                    </FieldNote>
+                ) : null}
                 <div style={{ marginTop: 4, fontSize: 'var(--xc-text-sm)', color: 'var(--xc-text-muted)', display: 'flex', alignItems: 'center', gap: 'var(--xc-space-2)', flexWrap: 'wrap' }}>
                     <span>Or</span>
                     <ClipboardPasteButton
@@ -1396,16 +1409,6 @@ export function PsbtSignForm({ walletId, onBack, initialPsbt }) {
                             </FieldNote>
                         ) : null}
                     </div>
-                ) : null}
-                {visibleError ? (
-                    <>
-                        <FieldNote variant="error">{visibleError}</FieldNote>
-                        {pasted && !psbtHex && !error ? (
-                            <Button type="button" variant="ghost" size="sm" onClick={() => { setPasted(''); setError(null); }}>
-                                Clear
-                            </Button>
-                        ) : null}
-                    </>
                 ) : null}
                 {parsing ? (
                     <div style={{ color: 'var(--xc-text-muted)', fontSize: 'var(--xc-text-sm)', marginTop: 4 }}>

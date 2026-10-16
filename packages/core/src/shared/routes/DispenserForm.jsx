@@ -1742,21 +1742,26 @@ export function DispenserForm({ walletId, activeAccountId, onBack, initialChainI
                     autoComplete="off"
                 />
             )}
-            {/* The price problem sits under the price fields, with its one-click fix as an ordinary button. */}
-            <FieldNote variant="error">{priceNotes.block}</FieldNote>
-            {priceNotes.block && priceNotes.bundle ? (
-                <Button
-                    type="button"
-                    variant="secondary"
-                    size="sm"
-                    onClick={() => {
-                        setGiveAmount(priceNotes.bundle.giveAmount);
-                        setTriggerPrice(priceNotes.bundle.getAmount);
-                    }}
-                >
-                    {`Sell ${priceNotes.bundle.giveAmount} per fill at ${priceNotes.bundle.getAmount} ${coinTicker}`}
-                </Button>
-            ) : null}
+            {/* The price problem sits under the price fields, with its one-click fix as a link action in the note. */}
+            <FieldNote
+                variant="error"
+                action={priceNotes.bundle ? (
+                    <Button
+                        type="button"
+                        variant="link"
+                        size="sm"
+                        icon={null}
+                        onClick={() => {
+                            setGiveAmount(priceNotes.bundle.giveAmount);
+                            setTriggerPrice(priceNotes.bundle.getAmount);
+                        }}
+                    >
+                        {`Sell ${priceNotes.bundle.giveAmount} per fill at ${priceNotes.bundle.getAmount} ${coinTicker}`}
+                    </Button>
+                ) : null}
+            >
+                {priceNotes.block}
+            </FieldNote>
 
             {payWith === 'coin' ? (
                 <Button

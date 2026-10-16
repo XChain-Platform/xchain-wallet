@@ -280,6 +280,17 @@ describe('ListShareForm', () => {
         expect(screen.getByText(/share signed by another address will be refused/i)).toBeTruthy();
     });
 
+    it('puts the owner reason and the list reasons in one warning notice', async () => {
+        mount({ addresses: [ACTIVE_RECORD], detail: baseDetail({ type: 9 }) });
+
+        const owner = await screen.findByText(/current owner.*is not an address in this wallet/i);
+        const notice = owner.closest('[role="alert"]');
+        expect(notice).toBeTruthy();
+        expect(notice.textContent).toMatch(/Only token and address lists can be shared/);
+        expect(document.querySelectorAll('[role="alert"]').length).toBe(1);
+        expect(notice.textContent.indexOf('current owner')).toBeLessThan(notice.textContent.indexOf('Only token'));
+    });
+
     it.each([
         ['false', { share: false, transfer: true, union: true }],
         ['absent', { transfer: true, union: true }],
