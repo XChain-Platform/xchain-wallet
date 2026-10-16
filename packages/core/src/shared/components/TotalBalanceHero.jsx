@@ -237,30 +237,30 @@ export function TotalBalanceHero({ rows, walletId, networkFilter, lastSyncedAt, 
     const actionItems = [
         typeof onRefresh === 'function' ? {
             id: 'refresh',
-            label: refreshing ? 'Refreshing portfolio' : 'Refresh portfolio',
-            title: refreshing ? 'Refreshing portfolio' : 'Refresh portfolio',
+            label: refreshing ? t('components.totalBalanceHero.refreshingPortfolio') : t('components.totalBalanceHero.refreshPortfolio'),
+            title: refreshing ? t('components.totalBalanceHero.refreshingPortfolio') : t('components.totalBalanceHero.refreshPortfolio'),
             Icon: Icon.RefreshIcon,
             handler: onRefresh,
             disabled: refreshing,
             className: refreshing ? styles.refreshing : '',
         } : null,
         typeof onOpenSettings === 'function' ? ({
-            id: 'settings', label: 'Open settings', title: 'Settings', Icon: Icon.GearIcon, handler: onOpenSettings,
+            id: 'settings', label: t('components.totalBalanceHero.openSettings'), title: t('home.settings'), Icon: Icon.GearIcon, handler: onOpenSettings,
         }) : null,
         typeof onCommandPalette === 'function' ? {
-            id: 'search', label: 'Open command palette', title: 'Search (Cmd/Ctrl+K)', Icon: Icon.SearchIcon, handler: onCommandPalette, keyShortcuts: 'Meta+K Control+K',
+            id: 'search', label: t('components.leftNav.openCommandPalette'), title: t('components.leftNav.searchCmdCtrlK'), Icon: Icon.SearchIcon, handler: onCommandPalette, keyShortcuts: 'Meta+K Control+K',
         } : null,
         typeof onToggleFilter === 'function' ? {
-            id: 'filter', label: filterOpen ? 'Hide filters' : 'Show filters', title: filterOpen ? 'Hide filters' : 'Show filters', Icon: Icon.FilterIcon, handler: onToggleFilter, pressed: filterOpen,
+            id: 'filter', label: filterOpen ? t('components.totalBalanceHero.hideFilters') : t('components.totalBalanceHero.showFilters'), title: filterOpen ? t('components.totalBalanceHero.hideFilters') : t('components.totalBalanceHero.showFilters'), Icon: Icon.FilterIcon, handler: onToggleFilter, pressed: filterOpen,
         } : null,
         !testCoinsOnly ? {
-            id: 'chart', label: chartVisible ? 'Hide chart' : 'Show chart', title: chartVisible ? 'Hide chart' : 'Show chart', Icon: Icon.LineChartIcon, handler: toggleChartVisible, pressed: chartVisible,
+            id: 'chart', label: chartVisible ? t('components.totalBalanceHero.hideChart') : t('components.totalBalanceHero.showChart'), title: chartVisible ? t('components.totalBalanceHero.hideChart') : t('components.totalBalanceHero.showChart'), Icon: Icon.LineChartIcon, handler: toggleChartVisible, pressed: chartVisible,
         } : null,
         {
-            id: 'privacy', label: hidden ? 'Show balance' : 'Hide balance', title: hidden ? 'Show balance' : 'Hide balance', Icon: hidden ? Icon.EyeOffIcon : Icon.EyeIcon, handler: toggleHidden,
+            id: 'privacy', label: hidden ? t('components.totalBalanceHero.showBalance') : t('components.totalBalanceHero.hideBalance'), title: hidden ? t('components.totalBalanceHero.showBalance') : t('components.totalBalanceHero.hideBalance'), Icon: hidden ? Icon.EyeOffIcon : Icon.EyeIcon, handler: toggleHidden,
         },
         typeof onLockWallet === 'function' ? {
-            id: 'lock', label: 'Lock wallet', title: 'Lock wallet', Icon: Icon.LockIcon, handler: onLockWallet,
+            id: 'lock', label: t('home.lockWallet'), title: t('home.lockWallet'), Icon: Icon.LockIcon, handler: onLockWallet,
         } : null,
     ].filter(Boolean);
 

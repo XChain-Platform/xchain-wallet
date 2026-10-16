@@ -133,7 +133,7 @@ describe('shared hook lifecycle cleanup', () => {
             { initialProps: { enabled: true } },
         );
 
-        expect(document.title).toBe('Send - XChain Wallet');
+        expect(document.title).toBe('XChain Wallet - Send');
         hook.rerender({ enabled: false });
         expect(document.title).toBe('Host title');
     });

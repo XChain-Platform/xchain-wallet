@@ -15,19 +15,19 @@ afterEach(() => {
 
 it('maps session and route state to stable page titles', () => {
     expect(documentTitleFor({ statusState: 'loading' })).toBe('XChain Wallet');
-    expect(documentTitleFor({ statusState: 'locked' })).toBe('Unlock - XChain Wallet');
+    expect(documentTitleFor({ statusState: 'locked' })).toBe('XChain Wallet - Unlock');
     expect(documentTitleFor({
         statusState: 'no-wallet',
         onboardingStep: 'create',
-    })).toBe('Create Wallet - XChain Wallet');
+    })).toBe('XChain Wallet - Create Wallet');
     expect(documentTitleFor({
         statusState: 'unlocked',
         unlockedView: 'send',
-    })).toBe('Send - XChain Wallet');
+    })).toBe('XChain Wallet - Send');
     expect(documentTitleFor({
         statusState: 'unlocked',
         unlockedView: 'sign-psbt',
-    })).toBe('Sign PSBT - XChain Wallet');
+    })).toBe('XChain Wallet - Sign PSBT');
 });
 
 it('updates the document when the route changes', () => {
@@ -40,9 +40,9 @@ it('updates the document when the route changes', () => {
         { initialProps: { unlockedView: 'home' } },
     );
 
-    expect(document.title).toBe('Home - XChain Wallet');
+    expect(document.title).toBe('XChain Wallet - Home');
     hook.rerender({ unlockedView: 'receive' });
-    expect(document.title).toBe('Receive - XChain Wallet');
+    expect(document.title).toBe('XChain Wallet - Receive');
 });
 
 it('does not expose dynamic values or unknown route text', () => {
@@ -51,7 +51,7 @@ it('does not expose dynamic values or unknown route text', () => {
         unlockedView: 'send',
         walletName: 'Secret Savings',
         amount: '21 BTC',
-    })).toBe('Send - XChain Wallet');
+    })).toBe('XChain Wallet - Send');
     expect(documentTitleFor({
         statusState: 'unlocked',
         unlockedView: 'Secret Savings 21 BTC',
