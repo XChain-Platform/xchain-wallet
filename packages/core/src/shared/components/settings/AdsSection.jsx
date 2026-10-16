@@ -27,7 +27,7 @@ import { useSettings } from '../../hooks/useSettings.js';
 import { ADS_DONATION_ADDRESS_PLACEHOLDER } from '../../../registry/validate.js';
 import { resolveAdsChainConfig } from '../../../schemas/settings.js';
 import { t } from '../../../i18n/index.js';
-import { ROW_HINT, STACK, SettingsLoadError, Status, ToggleRow } from './_settingsPrimitives.jsx';
+import { STACK, SettingsLoadError, Status, ToggleRow } from './_settingsPrimitives.jsx';
 import styles from './AdsSection.module.css';
 
 const chainRegistry = registryLib.defaultRegistry();
@@ -136,12 +136,6 @@ export function AdsSection() {
                 checked={Boolean(settings.ads.enabled)}
                 onChange={onToggleEnabled}
             />
-
-            <div role="status" aria-live="polite" style={{ ...ROW_HINT, padding: '0 var(--xc-space-3)' }}>
-                {settings.ads.enabled
-                    ? t('settings.ads.onNewOutgoingTransactionsAdd')
-                    : t('settings.ads.offNewOutgoingTransactionsDo')}
-            </div>
 
             {sharedSentence ? (
                 <div className={styles.hintRow} style={{ padding: '0 var(--xc-space-3)' }}>

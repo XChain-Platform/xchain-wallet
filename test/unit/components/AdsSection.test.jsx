@@ -133,12 +133,24 @@ describe('Automatic Donation System settings', () => {
         expect(update).not.toHaveBeenCalled();
     });
 
+    it('states what the setting does once, in the toggle card, whether it is on or off', () => {
+        for (const enabled of [true, false]) {
+            settings = bitcoinSettings({ enabled });
+            const { container, unmount } = render(<AdsSection />);
+            expect(screen.getAllByText(/sets aside a small amount when you send a transaction/)).toHaveLength(1);
+            expect(screen.queryByRole('status')).toBeNull();
+            expect(container.textContent).not.toMatch(/New outgoing transactions/);
+            unmount();
+        }
+    });
+
     it('explains the threshold and makes the off state unambiguous', () => {
         settings = bitcoinSettings({ enabled: false });
         render(<AdsSection />);
 
         expect(screen.getByRole('switch', { name: 'Turn on Automatic Donation System' }).checked).toBe(false);
-        expect(screen.getByText('Off. New outgoing transactions don\'t add to the pending donation total.')).toBeTruthy();
+        expect(screen.queryByRole('status')).toBeNull();
+        expect(screen.queryByText(/^(On|Off)\. New outgoing transactions/)).toBeNull();
         expect(screen.getByLabelText('Bitcoin per-transaction amount').disabled).toBe(true);
         expect(screen.getByLabelText('Bitcoin trigger threshold').disabled).toBe(true);
 

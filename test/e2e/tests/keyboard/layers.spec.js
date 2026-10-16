@@ -112,6 +112,9 @@ for (const size of SIZES) {
             await page.keyboard.press('Enter');
             const popover = page.getByRole('dialog', { name: 'Wallet settings' });
             await expect(popover).toBeVisible();
+            // The popover is visible a frame before it moves focus to its first
+            // control; a Tab in between lands on the menu row and closes the menu.
+            await expect(popover.locator(':focus'), 'focus has moved into the popover').toHaveCount(1);
             const stops = [];
             for (let i = 0; i < 12 && await popover.isVisible(); i += 1) {
                 await page.keyboard.press('Tab');

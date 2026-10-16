@@ -1535,10 +1535,6 @@ export const en = {
     'settings.about.reportAProblem': 'Report a problem',
     'settings.ads.itSetsAsideASmall':
         'It sets aside a small amount when you send a transaction and sends it as one donation once it adds up; turning it off stops further set-asides without clearing the pending total.',
-    'settings.ads.onNewOutgoingTransactionsAdd':
-        'On. New outgoing transactions add to the pending donation total.',
-    'settings.ads.offNewOutgoingTransactionsDo':
-        "Off. New outgoing transactions don't add to the pending donation total.",
     'settings.ads.noChainsSetUpFor':
         'No networks set up for donations yet. Each one is added automatically when you activate that network.',
     'settings.ads.setAsidePerOutgoingTransaction': 'Set aside per outgoing transaction (sats)',
