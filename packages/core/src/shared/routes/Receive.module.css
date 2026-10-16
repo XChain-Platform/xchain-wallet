@@ -138,18 +138,19 @@
 /* The "no addresses anywhere" fallback. Centred so the CTA reads
    as the screen's single next step rather than an afterthought. */
 
-/* Four equal secondary buttons in two columns: one height, one-line labels,
-   both outer edges on the form's edges. */
+/* Four equal secondary buttons, two to a row while both labels fit and one to a
+   row when large text makes a pair wider than the form: one height, one-line
+   labels, both outer edges on the form's edges. */
 .qrActions {
-    display: grid;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
+    display: flex;
+    flex-wrap: wrap;
     margin-top: 0;
     align-items: stretch;
 }
 
 .qrActions > * {
-    width: 100%;
-    min-width: 0;
+    flex: 1 1 calc(50% - var(--xc-space-2) / 2);
+    min-width: max-content;
     box-sizing: border-box;
     height: var(--xc-control-h-md);
     min-height: var(--xc-control-h-md);

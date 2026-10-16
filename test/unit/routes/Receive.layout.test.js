@@ -44,12 +44,12 @@ describe('Receive action layout', () => {
         )?.[0] || '';
         expect(viewportWidth).toBeGreaterThanOrEqual(360);
         expect(qrCss).toMatch(/\.actions\s*\{[^}]*display:\s*flex;[^}]*flex-wrap:\s*wrap;/);
-        // Receive overrides the shared row with two equal columns of one height.
+        // Receive keeps the shared wrapping row: two equal buttons of one height per
+        // row, and a pair that large text makes wider than the form wraps whole
+        // instead of clipping its label past the form's edge.
+        expect(css).toMatch(/\.qrActions\s*\{[^}]*display:\s*flex;[^}]*flex-wrap:\s*wrap;/);
         expect(css).toMatch(
-            /\.qrActions\s*\{[^}]*display:\s*grid;[^}]*grid-template-columns:\s*repeat\(2, minmax\(0, 1fr\)\);/,
-        );
-        expect(css).toMatch(
-            /\.qrActions > \*\s*\{[^}]*width:\s*100%;[^}]*height:\s*var\(--xc-control-h-md\);[^}]*white-space:\s*nowrap;/,
+            /\.qrActions > \*\s*\{[^}]*flex:\s*1 1 calc\(50% - var\(--xc-space-2\) \/ 2\);[^}]*min-width:\s*max-content;[^}]*height:\s*var\(--xc-control-h-md\);[^}]*white-space:\s*nowrap;/,
         );
         expect(css).toMatch(/\.qrActions > \* > span\s*\{[^}]*white-space:\s*nowrap;/);
         expect(css).not.toMatch(/\.qrActions\s*\{[^}]*flex-direction:\s*column;/);

@@ -691,7 +691,7 @@ extension ScreenshotTests {
     /// Find the first hittable element of any type whose label starts with `label`: settings
     /// rows carry their summary ("Safety Auto-lock 15 min") and nav rows a badge count.
     private func hittable(_ label: String, exact: Bool = false) -> XCUIElement? {
-        let format = exact ? "label == %@" : "label BEGINSWITH %@"
+        let format = exact ? "label ==[c] %@" : "label BEGINSWITH[c] %@"
         for query in [app.buttons, app.descendants(matching: .any)] {
             let q = query.matching(NSPredicate(format: format, label))
             for i in 0..<min(q.count, 6) {
@@ -1585,7 +1585,13 @@ extension ScreenshotTests {
         for row in ["Receive", "DEX", "Dispensers", "Contracts", "Messaging", "Contacts", "Lists", "Payments due"] {
             guard openMoreRow(row) else { continue }
             probeShot(String(format: "%@-4%02d-more-%@", o, r, slug(row)))
-            if row == "Receive" { probeKeyboard("\(o)-receive", hints: ["Amount", "0.00"]) }
+            if row == "Receive" {
+                swipePage()
+                probeShot(String(format: "%@-4%02d-more-%@-b", o, r, slug(row)))
+                swipePage()
+                probeShot(String(format: "%@-4%02d-more-%@-c", o, r, slug(row)))
+                probeKeyboard("\(o)-receive", hints: ["Amount", "0.00"])
+            }
             r += 1
         }
         guard openMoreRow("Settings") else { return }
@@ -1596,8 +1602,15 @@ extension ScreenshotTests {
             guard let row = scrollTo(panel) else { print("SETTINGS \(o): no row '\(panel)'"); continue }
             row.tap()
             probeShot(String(format: "%@-2%02d-settings-%@", o, p, slug(panel)))
+            let page = app.webViews.firstMatch
+            if page.exists {
+                page.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.75)).press(forDuration: 0.1, thenDragTo: page.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.4)))
+            }
+            probeShot(String(format: "%@-2%02d-settings-%@-m", o, p, slug(panel)))
             swipePage()
             probeShot(String(format: "%@-2%02d-settings-%@-b", o, p, slug(panel)))
+            swipePage()
+            probeShot(String(format: "%@-2%02d-settings-%@-c", o, p, slug(panel)))
             p += 1
         }
         phoneHome()
@@ -1624,6 +1637,133 @@ extension ScreenshotTests {
         safety.tap()
         probeKeyboard("\(tag)-safety-sats", hints: ["sats", "warning"])
         probeKeyboard("\(tag)-safety-hold", hints: ["Hold duration", "seconds"])
+        phoneHome()
+    }
+}
+
+// MARK: - iPhone offline probe
+
+extension ScreenshotTests {
+
+    /// Create a throwaway wallet through the real onboarding, then walk the list and
+    /// form screens with every request to a remote host blocked by the bundle's own
+    /// connect-src policy, one PNG per screen. Run
+    /// `-only-testing:AppUITests/ScreenshotTests/testIPhoneOfflineProbe`; the env
+    /// variables are those of `testIPhoneLayoutProbe`. A demo wallet is never
+    /// offline, so this is the walk that reaches the offline states.
+    func testIPhoneOfflineProbe() throws {
+        let env = ProcessInfo.processInfo.environment
+        let tag = env["IPHONE_TAG"] ?? "o"
+        XCUIDevice.shared.orientation = .portrait
+        app.launch()
+        _ = app.staticTexts.firstMatch.waitForExistence(timeout: 30)
+        guard createThrowawayWallet(tag) else {
+            print("OFFLINE missed: \(missed.joined(separator: "; "))")
+            return
+        }
+        Thread.sleep(forTimeInterval: 6)
+        offlineWalk(tag)
+        print("OFFLINE missed: \(missed.joined(separator: "; "))")
+    }
+
+    private func typeInto(_ field: XCUIElement, _ text: String) {
+        guard field.exists else { return }
+        var scrolls = 0
+        while !field.isHittable && scrolls < 4 { swipePage(); scrolls += 1 }
+        field.tap()
+        var taps = 0
+        while taps < 3 && (field.value(forKey: "hasKeyboardFocus") as? Bool) != true {
+            Thread.sleep(forTimeInterval: 1)
+            field.tap()
+            taps += 1
+        }
+        field.typeText(text)
+    }
+
+    private func tapScrolled(_ el: XCUIElement, _ what: String) -> Bool {
+        var scrolls = 0
+        while el.exists && !el.isHittable && scrolls < 5 { swipePage(); scrolls += 1 }
+        return tap(el, what)
+    }
+
+    private func createThrowawayWallet(_ tag: String) -> Bool {
+        acceptTerms()
+        advanceIntroCarousel()
+        guard let create = button(anyOf: ["Create new wallet"]), tap(create, "Create new wallet") else { return false }
+        _ = reach(app.secureTextFields.firstMatch, "create password field", timeout: 20)
+        let password = "Sweep-" + UUID().uuidString.replacingOccurrences(of: "-", with: "").prefix(12) + "!"
+        let fields = app.secureTextFields.allElementsBoundByIndex
+        print("OFFLINE create: secure fields=\(fields.count)")
+        guard fields.count >= 2 else { missed.append("create form has no two password fields"); return false }
+        typeInto(fields[0], password)
+        app.typeText("\t")
+        Thread.sleep(forTimeInterval: 1)
+        app.typeText(password)
+        probeShot("\(tag)-off-00-create-form")
+        app.typeText("\n")
+        Thread.sleep(forTimeInterval: 2)
+        guard let reveal = button(anyOf: ["Reveal recovery phrase", "Reveal"]), tapScrolled(reveal, "reveal phrase") else { return false }
+        Thread.sleep(forTimeInterval: 1)
+        var words: [Int: String] = [:]
+        let cells = app.descendants(matching: .any).matching(NSPredicate(format: "label MATCHES %@", "^[0-9]+\\. [a-z]+$"))
+        for i in 0..<cells.count {
+            let label = cells.element(boundBy: i).label
+            let parts = label.components(separatedBy: ". ")
+            if parts.count == 2, let n = Int(parts[0]) { words[n] = parts[1] }
+        }
+        print("OFFLINE create: read \(words.count) phrase words")
+        guard words.count >= 12 else { missed.append("could not read the phrase words"); return false }
+        let saved = app.descendants(matching: .any).matching(NSPredicate(format: "label CONTAINS[c] %@", "I have saved my recovery")).firstMatch
+        var savedScrolls = 0
+        while saved.exists && !saved.isHittable && savedScrolls < 5 { swipePage(); savedScrolls += 1 }
+        if saved.exists { saved.coordinate(withNormalizedOffset: CGVector(dx: 0.05, dy: 0.5)).tap() }
+        guard let verify = button(anyOf: ["Verify recovery phrase"]), tapScrolled(verify, "Verify recovery phrase") else { return false }
+        Thread.sleep(forTimeInterval: 1.5)
+        let quiz = app.textFields.matching(NSPredicate(format: "label BEGINSWITH %@", "Word "))
+        print("OFFLINE create: quiz fields=\(quiz.count)")
+        var answers: [String] = []
+        for i in 0..<quiz.count {
+            let label = quiz.element(boundBy: i).label
+            if let n = Int(label.replacingOccurrences(of: "Word ", with: "")), let w = words[n] { answers.append(w) }
+        }
+        if let first = answers.first {
+            typeInto(quiz.element(boundBy: 0), first)
+            for w in answers.dropFirst() {
+                app.typeText("\t")
+                Thread.sleep(forTimeInterval: 0.5)
+                app.typeText(w)
+            }
+        }
+        app.typeText("\n")
+
+        Thread.sleep(forTimeInterval: 8)
+        probeShot("\(tag)-off-01-after-create")
+        if let proceed = button(anyOf: ["Continue"]), proceed.isHittable {
+            proceed.tap()
+            Thread.sleep(forTimeInterval: 4)
+        }
+        return true
+    }
+
+    private func offlineWalk(_ o: String) {
+        phoneHome()
+        probeShot("\(o)-off-10-home")
+        for i in 1...2 { swipePage(); probeShot("\(o)-off-10-home-scrolled\(i)") }
+        var n = 11
+        for label in ["History", "Send"] {
+            phoneHome()
+            let matches = app.buttons.matching(NSPredicate(format: "label == %@", label)).allElementsBoundByIndex.filter { $0.exists && $0.isHittable }
+            guard let b = matches.max(by: { $0.frame.minY < $1.frame.minY }) else { print("NAV \(o): no '\(label)'"); continue }
+            b.tap()
+            probeShot("\(o)-off-\(n)-nav-\(slug(label))")
+            n += 1
+        }
+        var r = 1
+        for row in ["Receive", "DEX", "Dispensers", "Contracts", "Messaging", "Contacts", "Lists", "Payments due", "Settings"] {
+            guard openMoreRow(row) else { continue }
+            probeShot(String(format: "%@-off-2%02d-more-%@", o, r, slug(row)))
+            r += 1
+        }
         phoneHome()
     }
 }
