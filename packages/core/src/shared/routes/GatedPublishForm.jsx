@@ -9,7 +9,7 @@
 // contact legal@dankest.llc.
 
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { AddressText, Button, ChainBadge, Checkbox, EmptyState, FeeSelector, FormPage, Input, PageHeader, RadioGroup, Screen, StatusMessage } from '@xchain-wallet/core/ui';
+import { AddressText, Button, ChainBadge, Checkbox, EmptyState, FeeSelector, FieldNote, FormPage, Input, PageHeader, RadioGroup, Screen, StatusMessage } from '@xchain-wallet/core/ui';
 import { registry as registryLib, flows as flowsLib } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { useDemoGuard } from '../hooks/useDemoGuard.jsx';
@@ -636,21 +636,22 @@ export function GatedPublishForm({ walletId, chainId, tick, issuerAddress = null
             label={t('gatedPublish.gatedContent')}
             onSubmit={handleReview}
             noValidate
-            status={formError ? <StatusMessage variant="error">{formError}</StatusMessage> : null}
+            status={[
+                formError ? <StatusMessage variant="error">{formError}</StatusMessage> : null,
+                ownerMissing ? (
+                    <StatusMessage variant="error">
+                        {t('gatedPublish.ownerMissing.beforeAddress')}
+                        {' '}(<AddressText address={issuerAddress} />){' '}
+                        {t('gatedPublish.ownerMissing.afterAddress', { tick })}
+                    </StatusMessage>
+                ) : null,
+            ]}
             actions={(
                 <Button type="submit" variant="primary">
                     {t('common.review')}
                 </Button>
             )}
         >
-            {ownerMissing ? (
-                <StatusMessage variant="error">
-                    {t('gatedPublish.ownerMissing.beforeAddress')}
-                    {' '}(<AddressText address={issuerAddress} />){' '}
-                    {t('gatedPublish.ownerMissing.afterAddress', { tick })}
-                </StatusMessage>
-            ) : null}
-
             <Input
                 type="file"
                 label={t('gatedPublish.fileLimit', {
@@ -752,7 +753,7 @@ export function GatedPublishForm({ walletId, chainId, tick, issuerAddress = null
             {packs === null ? (
                 <p className={styles.hint}>{t('gatedPublish.pack.loading')}</p>
             ) : packsError ? (
-                <StatusMessage variant="error">{packsError}</StatusMessage>
+                <FieldNote variant="error">{packsError}</FieldNote>
             ) : packs.length === 0 ? (
                 <EmptyState title={t('gatedPublish.pack.emptyTitle')} titleAs="p" body={t('gatedPublish.pack.empty')} />
             ) : null}

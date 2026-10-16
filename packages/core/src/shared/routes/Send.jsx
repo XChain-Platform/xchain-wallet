@@ -21,6 +21,8 @@ import {
     ChainBadge,
     AddressText,
     FeeSelector,
+    FieldNote,
+    FormNotice,
     FormPage,
     EmptyState,
     Icon,
@@ -1826,6 +1828,15 @@ export function Send({ walletId, accountId, onBack, prefill = null, onDone, onCh
             ) : null}
         </div>
     ) : null;
+    // On the review form the same state is one notice above the card: the
+    // summary leads, and any refusal warning raises it to a warning.
+    const dispenserReviewNotice = dispenserNotice ? (
+        <FormNotice
+            variant={dispenserNotice.warnings.length > 0 ? 'warning' : 'status'}
+            role={dispenserNotice.warnings.length > 0 ? 'alert' : undefined}
+            lines={[dispenserNotice.summary, ...dispenserNotice.warnings]}
+        />
+    ) : null;
 
     async function handleGatedScan(event) {
         event.preventDefault();
@@ -3231,7 +3242,7 @@ export function Send({ walletId, accountId, onBack, prefill = null, onDone, onCh
                 id="send-review-form"
                 label={t('send.reviewLabel')}
                 onSubmit={handleSubmit}
-                status={submitError ? (
+                status={[submitError ? (
                     <StatusMessage
                         variant="error"
                         recovery={
@@ -3251,7 +3262,7 @@ export function Send({ walletId, accountId, onBack, prefill = null, onDone, onCh
                             {t('send.offline.body')}
                         </StatusMessage>
                     </>
-                ) : null}
+                ) : null, testSendGateBanner]}
                 actions={(
                     <Button
                         type="submit"
@@ -3284,7 +3295,7 @@ export function Send({ walletId, accountId, onBack, prefill = null, onDone, onCh
                 )}
             >
                 <p className={styles.summary}>{decoded?.summary}</p>
-                {dispenserNoticeBlock}
+                {dispenserReviewNotice}
                 <BalanceChanges
                     result={previewResult}
                     loading={previewBalances.loading}
@@ -3295,9 +3306,9 @@ export function Send({ walletId, accountId, onBack, prefill = null, onDone, onCh
                     allowCoingeckoFallback={settings?.privacy?.priceDataEnabled !== false}
                 />
                 {multiTickPreviewGap ? (
-                    <StatusMessage variant="status">
+                    <FieldNote variant="info">
                         {t('send.review.multiTokenPreview')}
-                    </StatusMessage>
+                    </FieldNote>
                 ) : null}
                 <details className={styles.details}>
                     <summary className={styles.detailsToggle}>
@@ -3332,14 +3343,11 @@ export function Send({ walletId, accountId, onBack, prefill = null, onDone, onCh
                     </dl>
                 </details>
                 {decoded && decoded.warnings.length > 0 ? (
-                    <StatusMessage variant="warning" role="alert">
-                        {decoded.warnings.map((w, i) => (
-                            <p key={i}>{w}</p>
-                        ))}
-                    </StatusMessage>
+                    <FormNotice variant="warning" role="alert" lines={decoded.warnings} />
                 ) : null}
-                {unusualSendWarningBlock}
-                {testSendGateBanner}
+                {unusualSendWarnings.length > 0 ? (
+                    <FormNotice variant="warning" role="alert" lines={unusualSendWarnings} />
+                ) : null}
                 <RawPsbtViewer
                     developerMode={developerMode}
                     actionFields={isMultiSend ? {
@@ -3363,13 +3371,13 @@ export function Send({ walletId, accountId, onBack, prefill = null, onDone, onCh
                             {t('send.watcherMode')}
                         </p>
                         {isHwSource ? (
-                            <StatusMessage variant="status">
+                            <FormNotice variant="status">
                                 {t('send.watcherHardware', {
                                     device: fromAddress.source === 'trezor'
                                         ? t('send.device.trezor')
                                         : t('send.device.ledger'),
                                 })}
-                            </StatusMessage>
+                            </FormNotice>
                         ) : null}
                     </>
                 ) : isHwSource ? (
@@ -3541,7 +3549,7 @@ export function Send({ walletId, accountId, onBack, prefill = null, onDone, onCh
                 if (formError) setFormError(null);
                 if (submitError) setSubmitError(null);
             }}
-            status={isDemo ? (
+            status={[isDemo ? (
                 <StatusMessage
                     variant="info"
                     recovery={{
@@ -3572,7 +3580,13 @@ export function Send({ walletId, accountId, onBack, prefill = null, onDone, onCh
                         {t('send.offline.body')}
                     </StatusMessage>
                 </>
-            ) : null}
+            ) : null, testSendGateBanner, draftBanner, requestMessage ? (
+                <StatusMessage variant="status">
+                    {t('send.paymentRequestMessage')} <span data-testid="payment-request-message">
+                        {requestMessage}
+                    </span>
+                </StatusMessage>
+            ) : null]}
             actions={(
                 <Button
                     type="submit"
@@ -3593,16 +3607,8 @@ export function Send({ walletId, accountId, onBack, prefill = null, onDone, onCh
               * Duress-armed freezes render nothing here, by design.
               */}
             {!isWatcherMode ? <PanicFreezeNotice surface="send" /> : null}
-            {draftBanner}
-            {requestMessage ? (
-                <StatusMessage variant="status">
-                    {t('send.paymentRequestMessage')} <span data-testid="payment-request-message">
-                        {requestMessage}
-                    </span>
-                </StatusMessage>
-            ) : null}
             {assetSwitchNotice ? (
-                <StatusMessage variant="status">{assetSwitchNotice}</StatusMessage>
+                <FormNotice variant="status">{assetSwitchNotice}</FormNotice>
             ) : null}
             <SelectedTokenHero
                 chainId={chainId}
@@ -3648,9 +3654,9 @@ export function Send({ walletId, accountId, onBack, prefill = null, onDone, onCh
                     hint={t('send.source.hint')}
                 />
             ) : (
-                <StatusMessage variant="error">
+                <FormNotice variant="error">
                     {t('send.source.noAddress')}
-                </StatusMessage>
+                </FormNotice>
             )}
             <AddressCombobox
                 size="md"
@@ -3684,14 +3690,10 @@ export function Send({ walletId, accountId, onBack, prefill = null, onDone, onCh
                 </div>
             ) : null}
             {pasteWarning ? (
-                <StatusMessage variant="warning" role="alert">
-                    <p>{pasteWarning}</p>
-                </StatusMessage>
+                <FieldNote variant="warning" role="alert">{pasteWarning}</FieldNote>
             ) : null}
             {lookalikeWarning ? (
-                <StatusMessage variant="warning" role="alert">
-                    <p>{lookalikeWarning}</p>
-                </StatusMessage>
+                <FieldNote variant="warning" role="alert">{lookalikeWarning}</FieldNote>
             ) : null}
             {!onChangeAsset ? (
                 <Input
@@ -3740,6 +3742,12 @@ export function Send({ walletId, accountId, onBack, prefill = null, onDone, onCh
             />
             {maxNote ? (
                 <p className={styles.balanceHint} role="status">{maxNote}</p>
+            ) : null}
+            {/* Say it while the amount field still has focus, not only on Send.
+                Suppressed once Send has already pushed the same sentence into formError,
+                so the user is not shown it twice. */}
+            {dustBlock && formError !== dustBlock ? (
+                <FieldNote variant="warning" role="alert">{dustBlock}</FieldNote>
             ) : null}
             {/* PC-52: extra recipients. Each row is another leg of the SAME
                 transaction (SEND v1, or v2 when the rows carry their own
@@ -3824,27 +3832,13 @@ export function Send({ walletId, accountId, onBack, prefill = null, onDone, onCh
                 </div>
             ) : null}
             {sourceLacksTick ? (
-                <StatusMessage variant="warning" role="alert">
-                    <p>{sourceLacksTick}</p>
-                </StatusMessage>
-            ) : null}
-            {/* Say it while the amount field still has focus, not only on Send.
-                Suppressed once Send has already pushed the same sentence into formError,
-                so the user is not shown it twice. */}
-            {dustBlock && formError !== dustBlock ? (
-                <StatusMessage variant="warning" role="alert">
-                    <p>{dustBlock}</p>
-                </StatusMessage>
+                <FormNotice variant="warning" role="alert">{sourceLacksTick}</FormNotice>
             ) : null}
             {nativeMultiSendBlock ? (
-                <StatusMessage variant="warning" role="alert">
-                    <p>{nativeMultiSendBlock}</p>
-                </StatusMessage>
+                <FormNotice variant="warning" role="alert">{nativeMultiSendBlock}</FormNotice>
             ) : null}
             {gatedMultiSendBlock ? (
-                <StatusMessage variant="warning" role="alert">
-                    <p>{gatedMultiSendBlock}</p>
-                </StatusMessage>
+                <FormNotice variant="warning" role="alert">{gatedMultiSendBlock}</FormNotice>
             ) : null}
             {/* Hidden for a native send (no multi-leg form exists) and at the
                 cap, where another row could not be composed anyway. */}
@@ -3863,34 +3857,34 @@ export function Send({ walletId, accountId, onBack, prefill = null, onDone, onCh
                 </p>
             ) : null}
             {gatedInfo && gatedInfo.state === 'ready' ? (
-                <StatusMessage variant="status">
+                <FormNotice variant="status">
                     {t('send.gated.ready')}
-                </StatusMessage>
+                </FormNotice>
             ) : null}
             {gatedInfo && gatedInfo.state === 'partial' ? (
-                <StatusMessage variant="warning" role="alert">
-                    <p>
-                        {t('send.gated.partial', {
-                            total: gatedInfo.groups.length,
-                            available: gatedInfo.groups.filter((g) => g.haveKey).length,
-                            missingCount: gatedInfo.groups.filter((g) => !g.haveKey).length,
-                            missing: gatedInfo.groups.filter((g) => !g.haveKey)
-                                .map((g) => g.keyHash.slice(0, 12)).join(', '),
-                        })}
-                    </p>
-                </StatusMessage>
+                <FormNotice variant="warning" role="alert">
+                    {t('send.gated.partial', {
+                        total: gatedInfo.groups.length,
+                        available: gatedInfo.groups.filter((g) => g.haveKey).length,
+                        missingCount: gatedInfo.groups.filter((g) => !g.haveKey).length,
+                        missing: gatedInfo.groups.filter((g) => !g.haveKey)
+                            .map((g) => g.keyHash.slice(0, 12)).join(', '),
+                    })}
+                </FormNotice>
             ) : null}
+            {/* The blocked state is one notice above the form; the key recovery
+                it offers stays here as an ordinary password field and button. */}
             {gatedInfo && gatedInfo.state === 'blocked' ? (
-                <StatusMessage variant="warning" role="alert">
-                    <p>
-                        {t('send.gated.blocked')}
-                    </p>
-                    {(isWatcherMode || isHwSource) ? (
-                        <p>
-                            {t('send.gated.softwareSigner')}
-                        </p>
-                    ) : (
-                        <div style={{ marginTop: 'var(--xc-space-2)' }}>
+                <>
+                    <FormNotice
+                        variant="warning"
+                        role="alert"
+                        lines={(isWatcherMode || isHwSource)
+                            ? [t('send.gated.blocked'), t('send.gated.softwareSigner')]
+                            : [t('send.gated.blocked')]}
+                    />
+                    {(isWatcherMode || isHwSource) ? null : (
+                        <>
                             <Input
                                 type="password"
                                 label={t('send.gated.passwordLabel')}
@@ -3900,11 +3894,9 @@ export function Send({ walletId, accountId, onBack, prefill = null, onDone, onCh
                                     setGatedScanPassword(e.target.value);
                                     if (gatedScanError) setGatedScanError(null);
                                 }}
+                                error={gatedScanError || undefined}
                                 autoComplete="current-password"
                             />
-                            {gatedScanError ? (
-                                <p>{gatedScanError}</p>
-                            ) : null}
                             <Button
                                 type="button"
                                 variant="secondary"
@@ -3914,9 +3906,9 @@ export function Send({ walletId, accountId, onBack, prefill = null, onDone, onCh
                             >
                                 {t('send.gated.recover')}
                             </Button>
-                        </div>
+                        </>
                     )}
-                </StatusMessage>
+                </>
             ) : null}
             {feeTiers ? (
                 <FeeSelector
@@ -4119,7 +4111,6 @@ export function Send({ walletId, accountId, onBack, prefill = null, onDone, onCh
                     onChange={(e) => setRbfEnabled(e.target.checked)}
                 />
             </details>
-            {testSendGateBanner}
         </FormPage>,
     );
 }
@@ -4145,7 +4136,7 @@ function AssetIconPicker({ chainId, tick, label, onOpen, error }) {
                 aria-invalid={error ? 'true' : undefined}
                 icon={chainId && tick ? <TickerIcon chainId={chainId} tick={tick} size={40} /> : <Icon.TokenIcon />}
             />
-            {error ? <StatusMessage variant="error">{error}</StatusMessage> : null}
+            <FieldNote variant="error">{error || null}</FieldNote>
         </div>
     );
 }

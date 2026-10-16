@@ -13,7 +13,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { NativeFeeToggle } from '../components/NativeFeeToggle.jsx';
 import { NATIVE_FEE_WARNING } from '../../sdk/nativeFeePreflight.js';
 import { submitFailureMessage } from '../utils/submitFailureMessage.js';
-import { AddressField, AddressText, Button, ChainPicker, FeeSelector, FormPage, Icon, Input, PageHeader, Screen, Select, StatusMessage, Textarea } from '@xchain-wallet/core/ui';
+import { AddressField, AddressText, Button, ChainPicker, FeeSelector, FieldNote, FormNotice, FormPage, Icon, Input, PageHeader, Screen, Select, StatusMessage, Textarea } from '@xchain-wallet/core/ui';
 import {
     registry as registryLib,
     decoder as decoderLib,
@@ -678,16 +678,10 @@ export function AdvancedActionsForm({ walletId, onBack, hasDexSurface = true }) 
                     />
                 </dl>
                 {payFeeInNativeCoin ? (
-                    <StatusMessage variant="warning" role="alert">
-                        <p>{NATIVE_FEE_WARNING}</p>
-                    </StatusMessage>
+                    <FormNotice variant="warning" role="alert">{NATIVE_FEE_WARNING}</FormNotice>
                 ) : null}
                 {decoded && decoded.warnings.length > 0 ? (
-                    <StatusMessage variant="warning" role="alert">
-                        {decoded.warnings.map((w, i) => (
-                            <p key={i}>{w}</p>
-                        ))}
-                    </StatusMessage>
+                    <FormNotice variant="warning" role="alert" lines={decoded.warnings} />
                 ) : null}
                 {isWatcherMode ? (
                     <p className={styles.hint}>
@@ -792,9 +786,9 @@ export function AdvancedActionsForm({ walletId, onBack, hasDexSurface = true }) 
                     iconLabel="Choose source address"
                 />
             ) : (
-                <StatusMessage variant="error">
+                <FormNotice variant="error">
                     {t('send.source.noAddress')}
-                </StatusMessage>
+                </FormNotice>
             )}
 
             <Select
@@ -815,22 +809,22 @@ export function AdvancedActionsForm({ walletId, onBack, hasDexSurface = true }) 
             </Select>
 
             {action === 'SEND' || action === 'BATCH' ? (
-                <StatusMessage variant="warning" role="alert">
-                    <p>
-                        Token-gated content rule: a SEND of a tick with active gated files is
-                        REJECTED by the network unless it rides in a BATCH with a MESSAGE v2
-                        handing the unlock key to the same destination. This raw form composes
-                        exactly what you type and does not add that pairing; use the Send form
-                        for gated tokens unless you are building the BATCH yourself.
-                    </p>
-                    {gatedRawNotice.gated ? (
-                        <p>
-                            {String(values.TICK || '').trim().toUpperCase()} HAS active gated
-                            content ({gatedRawNotice.packCount} pack{gatedRawNotice.packCount === 1 ? '' : 's'}):
-                            a bare SEND of it will be rejected.
-                        </p>
-                    ) : null}
-                </StatusMessage>
+                <FormNotice
+                    variant="warning"
+                    role="alert"
+                    lines={[
+                        'Token-gated content rule: a SEND of a tick with active gated files is '
+                            + 'REJECTED by the network unless it rides in a BATCH with a MESSAGE v2 '
+                            + 'handing the unlock key to the same destination. This raw form composes '
+                            + 'exactly what you type and does not add that pairing; use the Send form '
+                            + 'for gated tokens unless you are building the BATCH yourself.',
+                        ...(gatedRawNotice.gated
+                            ? [`${String(values.TICK || '').trim().toUpperCase()} HAS active gated content `
+                                + `(${gatedRawNotice.packCount} pack${gatedRawNotice.packCount === 1 ? '' : 's'}): `
+                                + 'a bare SEND of it will be rejected.']
+                            : []),
+                    ]}
+                />
             ) : null}
 
             {action && formats && Object.keys(formats).length > 1 ? (
@@ -890,13 +884,7 @@ export function AdvancedActionsForm({ walletId, onBack, hasDexSurface = true }) 
             })}
 
             {validation && !validation.valid && validation.errors.length > 0 ? (
-                <StatusMessage variant="warning" role="alert">
-                    {validation.errors.map((err, i) => (
-                        <p key={i}>
-                            {formatValidationError(err)}
-                        </p>
-                    ))}
-                </StatusMessage>
+                <FieldNote variant="warning" role="alert" lines={validation.errors.map((err) => formatValidationError(err))} />
             ) : null}
 
             {feeTiers ? (

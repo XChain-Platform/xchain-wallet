@@ -88,7 +88,7 @@ export const SECTIONS = [
     { id: 'icons',                 label: 'Icon catalog',           Component: IconsSection, primitives: ['Icon'] },
     { id: 'page-templates',        label: 'Page templates',         Component: PageTemplatesSection, primitives: ['Screen'] },
     { id: 'form-page',             label: 'Form page',              Component: FormPageSection, primitives: ['FormPage'] },
-    { id: 'form-error-summary',    label: 'Form error summary',     Component: FormErrorSummarySection, primitives: ['FormErrorSummary', 'FormNotice'] },
+    { id: 'form-error-summary',    label: 'Form error summary',     Component: FormErrorSummarySection, primitives: ['FormErrorSummary', 'FormNotice', 'FieldNote'] },
     { id: 'form-section',          label: 'Form section',           Component: FormSectionSection, primitives: ['FormSection'] },
     { id: 'list-page',             label: 'List page',              Component: ListPageSection, primitives: ['ListPage'] },
     { id: 'list-row',              label: 'List row',               Component: ListRowSection, primitives: ['ListRow'] },

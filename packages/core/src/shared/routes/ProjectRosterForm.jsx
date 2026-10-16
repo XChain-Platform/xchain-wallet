@@ -9,7 +9,7 @@
 // contact legal@dankest.llc.
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { AddressText, Button, ChainBadge, FeeSelector, FormPage, Input, PageHeader, Screen, StatusMessage, Textarea } from '@xchain-wallet/core/ui';
+import { AddressText, Button, ChainBadge, FeeSelector, FormNotice, FormPage, Input, PageHeader, Screen, StatusMessage, Textarea } from '@xchain-wallet/core/ui';
 import { registry as registryLib } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { useDemoGuard } from '../hooks/useDemoGuard.jsx';
@@ -712,13 +712,9 @@ export function ProjectRosterForm({ walletId, chainId, tick, issuerAddress = nul
                     </dd>
                 </dl>
                 {ownerMismatch ? (
-                    <StatusMessage variant="warning" role="alert">
-                        <p>
-                            This wallet isn't signing from the project's owner
-                            address ({issuerAddress}). The link will only be
-                            honoured if it's signed by the current owner.
-                        </p>
-                    </StatusMessage>
+                    <FormNotice variant="warning" role="alert">
+                        {`This wallet isn't signing from the project's owner address (${issuerAddress}). The link will only be honoured if it's signed by the current owner.`}
+                    </FormNotice>
                 ) : null}
                 <SignCredentials
                     unlocked={signerReady}
@@ -803,13 +799,11 @@ export function ProjectRosterForm({ walletId, chainId, tick, issuerAddress = nul
                 autoComplete="off"
             />
             {ownerMismatch ? (
-                <StatusMessage variant="warning" role="alert">
-                    <p>
+                <FormNotice variant="warning" role="alert">
                         This wallet doesn't hold the project's owner address.
                         the final link step will only be honoured if signed
                         by the current owner.
-                    </p>
-                </StatusMessage>
+                </FormNotice>
             ) : null}
             {feeTiers ? (
                 <FeeSelector

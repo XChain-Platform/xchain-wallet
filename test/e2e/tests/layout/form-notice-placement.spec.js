@@ -17,7 +17,10 @@
 // page content: at 600px and wider none of them may sit inside a bordered
 // card. Failures that need the host to refuse (a load, a generate, a hardware
 // check, a password change) are forced through the web messaging seam, the
-// same route-and-patch the async boundary spec uses. Set FORM_NOTICE_SHOTS to a directory to keep a screenshot per form
+// same route-and-patch the async boundary spec uses. A forced state that is
+// about the whole form (`notice`) must show as a notice; one about a single
+// field or summary item (`fieldNote`) must show as a note beside it and never
+// as a notice box. Set FORM_NOTICE_SHOTS to a directory to keep a screenshot per form
 // and size.
 
 import { mkdirSync } from 'node:fs';
@@ -219,6 +222,94 @@ const ALL_FORMS = [
             await main.getByRole('button', { name: 'Activate', exact: true }).click();
         },
     },
+    // A native amount under the dust floor is a note under the amount field, not a notice.
+    { label: 'Send dust amount', open: (page) => gotoSection(page, 'Send'), trigger: sendDustAmount, fieldNote: /too small to send/ },
+    // A destination this wallet does not own is a note under the destination field.
+    {
+        label: 'Sweep foreign destination',
+        open: (page) => palette(page, 'Sweep address'),
+        trigger: async (page) => {
+            const field = page.getByRole('main').getByLabel('Destination address', { exact: true });
+            await field.fill(EXTERNAL_ADDRESS);
+            await field.press('Tab');
+        },
+        fieldNote: /Not your address/,
+    },
+    // A well-formed recipient for another network is a note under the recipients field.
+    {
+        label: 'Airdrop wrong-network recipient',
+        open: (page) => palette(page, 'Airdrop'),
+        trigger: async (page) => {
+            const field = page.getByRole('main').getByLabel('Recipients', { exact: true });
+            await field.fill(OTHER_NETWORK_ADDRESS);
+            await field.press('Tab');
+        },
+        fieldNote: /for\s+another network/,
+    },
+    {
+        label: 'List create wrong-network address',
+        open: (page) => palette(page, 'Create a list'),
+        trigger: async (page) => {
+            const field = page.getByRole('main').getByLabel('Addresses', { exact: true });
+            await field.fill(OTHER_NETWORK_ADDRESS);
+            await field.press('Tab');
+        },
+        fieldNote: /for another\s+network/,
+    },
+    // A union states what it follows from the moment it opens.
+    {
+        label: 'Union list',
+        open: async (page) => {
+            await gotoSection(page, 'Lists');
+            await page.getByRole('main').getByRole('button', { name: 'Create union list', exact: true }).click();
+        },
+        trigger: async () => {},
+        notice: /A union follows each member/,
+    },
+    // Coin on both sides is a state of the whole order, so it is a notice above the card.
+    {
+        label: 'Create order coin for coin',
+        open: (page) => palette(page, 'Create order'),
+        trigger: async (page) => {
+            await page.getByRole('main').getByRole('radio', { name: /^Native / }).first().check();
+        },
+        notice: /At least one side must be a token/,
+    },
+    // Source that exports no name is a note under the source field; the host
+    // read of the source is answered through the fault seam.
+    {
+        label: 'Publish contract without meta',
+        fault: { reply: { 'contracts.getExportedMeta': { status: 'absent' } } },
+        open: (page) => openFromList(page, 'Contracts', /Publish contract/),
+        trigger: async (page) => {
+            const field = page.getByRole('main').getByLabel('Code source', { exact: true });
+            await field.fill('export function main() { return 1; }');
+            await field.press('Tab');
+        },
+        fieldNote: /exports no name or description/,
+    },
+    // A paste that is not a PSBT is a note under the paste field.
+    {
+        label: 'Sign transaction unreadable paste',
+        open: (page) => palette(page, 'Sign a transaction'),
+        trigger: async (page) => {
+            const field = page.getByRole('main').getByLabel('Unsigned transaction (hex or base64)', { exact: true });
+            await field.fill('deadbeef');
+            await field.press('Tab');
+        },
+        fieldNote: /is not a PSBT/,
+    },
+    // A raw SEND states the token-gated rule for the whole action.
+    {
+        label: 'Advanced action raw send',
+        // The host's action list is answered through the fault seam.
+        fault: { reply: { 'sdk.listActions': ['SEND'] } },
+        open: (page) => palette(page, 'Advanced action'),
+        trigger: async (page) => {
+            await page.getByRole('main').getByLabel('Action', { exact: true }).selectOption('SEND');
+        },
+        notice: /Token-gated content rule/,
+    },
     // Last: an edited multisig form holds the page until its changes are dealt with.
     { label: 'Create multisig', open: (page) => palette(page, 'Create multisig'), trigger: multisigComposeError },
 ];
@@ -325,6 +416,20 @@ async function receiveAmountError(page) {
     await amount.press('Tab');
 }
 
+/** An address no wallet in the run owns. */
+const EXTERNAL_ADDRESS = 'bc1qar0srrr7xfkvy5l643lydnw9re59gtzzwf5mdq';
+/** A well-formed address for a network the run's wallet does not use. */
+const OTHER_NETWORK_ADDRESS = 'tb1qw508d6qejxtdg4y5r3zarvary0c5xw7kxpjzsx';
+
+/** Send to an outside address with one satoshi, under every chain's dust floor. */
+async function sendDustAmount(page) {
+    const main = page.getByRole('main');
+    await main.locator('#send-destination').fill(EXTERNAL_ADDRESS);
+    const amount = main.locator('#send-amount');
+    await amount.fill('0.00000001');
+    await amount.press('Tab');
+}
+
 /** Create multisig reports a key it cannot read once a field is edited. */
 async function multisigComposeError(page) {
     const key = page.getByRole('main').getByLabel(/Public key/).first();
@@ -374,6 +479,7 @@ function measureNotices() {
             const cs = getComputedStyle(main);
             const column = main.clientWidth - parseFloat(cs.paddingLeft) - parseFloat(cs.paddingRight);
             return {
+                full: (el.innerText || '').replace(/\s+/g, ' ').trim(),
                 text: (el.innerText || '').replace(/\s+/g, ' ').trim().slice(0, 60),
                 width: Math.round(el.getBoundingClientRect().width),
                 column: Math.round(column),
@@ -381,6 +487,15 @@ function measureNotices() {
                 inForm: !!el.closest('form'),
             };
         });
+}
+
+/** Runs in the page. The text of every visible field note (FieldNote) in the page content. */
+function measureFieldNotes() {
+    const main = document.querySelector('main');
+    if (!main) return [];
+    return [...main.querySelectorAll('[data-field-note]')]
+        .filter((el) => el.getBoundingClientRect().height > 1 && !el.closest('[role="dialog"]'))
+        .map((el) => (el.innerText || '').replace(/\s+/g, ' ').trim());
 }
 
 const shots = process.env.FORM_NOTICE_SHOTS;
@@ -410,7 +525,18 @@ for (const viewport of VIEWPORTS) {
                     continue;
                 }
                 const notices = await page.evaluate(measureNotices);
-                seen.push(`${form.label}: ${notices.length} notice(s)${notices.map((n) => `\n    "${n.text}" ${n.width}/${n.column}px${n.card ? ` in ${n.card}` : ''}${n.inForm ? ' (in form)' : ''}`).join('')}`);
+                const fieldNotes = await page.evaluate(measureFieldNotes);
+                seen.push(`${form.label}: ${notices.length} notice(s)${notices.map((n) => `\n    "${n.text}" ${n.width}/${n.column}px${n.card ? ` in ${n.card}` : ''}${n.inForm ? ' (in form)' : ''}`).join('')}${fieldNotes.map((text) => `\n    field note "${text.slice(0, 60)}"`).join('')}`);
+                // A forced state must show: a page-level state as a notice, a
+                // field-level one as a note under its field and never as a notice.
+                if (form.notice && !notices.some((n) => form.notice.test(n.full))) {
+                    faults.push(`${form.label}: no notice matching ${form.notice}`);
+                }
+                if (form.fieldNote) {
+                    if (!fieldNotes.some((text) => form.fieldNote.test(text))) faults.push(`${form.label}: no field note matching ${form.fieldNote}`);
+                    const boxed = notices.find((n) => form.fieldNote.test(n.full));
+                    if (boxed) faults.push(`${form.label}: a field note is drawn as a notice ("${boxed.text}")`);
+                }
                 if (shots) {
                     await page.screenshot({ path: `${shots}/${form.label.replace(/\W+/g, '-').toLowerCase()}-${size}.png` });
                 }

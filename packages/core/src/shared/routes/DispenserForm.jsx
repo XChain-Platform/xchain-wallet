@@ -10,8 +10,10 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
+    FieldNote,
     Screen,
     PageHeader,
+    FormNotice,
     FormPage,
     Button,
     Input,
@@ -690,16 +692,14 @@ export function DispenserForm({ walletId, activeAccountId, onBack, initialChainI
     // Scope of the unused-address memory: one per wallet, account and chain.
     const dispenserAddressScope = { walletId, accountId: activeAccountId, chainId: chainId || '' };
     const allowListWarningNode = allowListSelfWarning ? (
-        <StatusMessage variant="warning" role="alert">
-            <p>{allowListSelfWarning}</p>
-        </StatusMessage>
+        <FieldNote variant="warning" role="alert">{allowListSelfWarning}</FieldNote>
     ) : null;
     // Confirm-time reminder for an outside dispenser address: buyers pay that
     // address, not SOURCE, and the escrow goes back to whichever of the two
     // closes the dispenser (dispenser.md Rules), which may not be this wallet.
     const outsideAddressNote = addressMode === 'other' && outsideTrimmed
         && outsideVerdict?.allowed && outsideVerdict.kind !== 'self' ? (
-            <StatusMessage variant="warning" role="note" testId="outside-address-note">
+            <FieldNote variant="warning" role={null} testId="outside-address-note">
                 <p>
                     Dispenser address: <AddressText address={outsideTrimmed} truncate={false} />
                 </p>
@@ -708,7 +708,7 @@ export function DispenserForm({ walletId, activeAccountId, onBack, initialChainI
                     address or your source can close the dispenser, and the unsold escrow
                     returns to whichever one closes it.
                 </p>
-            </StatusMessage>
+            </FieldNote>
         ) : null;
 
     // Resolve the SOURCE address's balance of the entered ticker for the
@@ -1327,19 +1327,15 @@ export function DispenserForm({ walletId, activeAccountId, onBack, initialChainI
                     />
                 </dl>
                 {payFeeInNativeCoin ? (
-                    <StatusMessage variant="warning" role="alert">
-                        <p>{NATIVE_FEE_WARNING}</p>
-                    </StatusMessage>
+                    <FormNotice variant="warning" role="alert">{NATIVE_FEE_WARNING}</FormNotice>
                 ) : null}
                 {decoded && decoded.warnings.length > 0 ? (
-                    <StatusMessage variant="warning" role="alert">
-                        {decoded.warnings.map((w, i) => (
-                            <p key={i}>{w}</p>
-                        ))}
-                    </StatusMessage>
+                    <FormNotice variant="warning" role="alert" lines={decoded.warnings} />
                 ) : null}
                 {outsideAddressNote}
-                {allowListWarningNode}
+                {allowListSelfWarning ? (
+                    <FormNotice variant="warning" role="alert">{allowListSelfWarning}</FormNotice>
+                ) : null}
                 {isWatcherMode ? (
                     <p className={styles.hint}>
                         Watcher mode: this wallet will build an unsigned transaction.
@@ -1557,7 +1553,7 @@ export function DispenserForm({ walletId, activeAccountId, onBack, initialChainI
             label="Create dispenser"
             onSubmit={handleReview}
             onChangeCapture={() => { if (formError) setFormError(null); }}
-            status={<FormErrorSummary errors={dispenserErrors} focusKey={validationAttempt} />}
+            status={[<FormErrorSummary key="errors" errors={dispenserErrors} focusKey={validationAttempt} />, draftBanner]}
             actions={(
                 <Button
                     type="submit"
@@ -1569,7 +1565,6 @@ export function DispenserForm({ walletId, activeAccountId, onBack, initialChainI
                 </Button>
             )}
         >
-            {draftBanner}
             {lockedToken && chainId ? (
                 <LockedTokenContext chainId={chainId} tick={ticker} />
             ) : (
@@ -1614,16 +1609,16 @@ export function DispenserForm({ walletId, activeAccountId, onBack, initialChainI
                     {/* The pre-flight verdict for an outside address, beside the
                         field it judges, so a refusal is seen before Create. */}
                     {outsideVerdictLoading ? (
-                        <StatusMessage variant="status">
+                        <FieldNote variant="info" role="status">
                             Checking whether this address accepts your dispenser…
-                        </StatusMessage>
+                        </FieldNote>
                     ) : null}
                     {addressMode === 'other' && outsideVerdict ? (
-                        <StatusMessage variant={outsideVerdict.allowed ? 'status' : 'error'}>
+                        <FieldNote variant={outsideVerdict.allowed ? 'info' : 'error'} role={outsideVerdict.allowed ? 'status' : 'alert'}>
                             <span data-testid="outside-address-verdict" data-verdict={outsideVerdict.kind}>
                                 {outsideVerdict.message}
                             </span>
-                        </StatusMessage>
+                        </FieldNote>
                     ) : null}
 
                     {/* Source: which address funds and signs the action. */}
@@ -1638,9 +1633,9 @@ export function DispenserForm({ walletId, activeAccountId, onBack, initialChainI
                     />
                 </>
             ) : (
-                <StatusMessage variant="error">
+                <FormNotice variant="error">
                     {t('send.source.noAddress')}
-                </StatusMessage>
+                </FormNotice>
             )}
 
             {lockedToken ? null : (
@@ -1652,11 +1647,9 @@ export function DispenserForm({ walletId, activeAccountId, onBack, initialChainI
                 />
             )}
             {gatedGiveNotice.gated ? (
-                <StatusMessage variant="warning" role="alert">
-                    <p>
-                        {gatedTickWarningCopy(ticker, 'buyers dispensed this token')}
-                    </p>
-                </StatusMessage>
+                <FormNotice variant="warning" role="alert">
+                    {gatedTickWarningCopy(ticker, 'buyers dispensed this token')}
+                </FormNotice>
             ) : null}
             <AmountField
                 id="dispenser-give"
@@ -1733,9 +1726,9 @@ export function DispenserForm({ walletId, activeAccountId, onBack, initialChainI
                     />
                 </>
             ) : oracleAddress.trim() ? (
-                <StatusMessage>
+                <FieldNote variant="info" role="status">
                     The oracle sets the native coin price when each fill occurs.
-                </StatusMessage>
+                </FieldNote>
             ) : (
                 <Input
                     id="dispenser-trigger-price"
@@ -1749,18 +1742,21 @@ export function DispenserForm({ walletId, activeAccountId, onBack, initialChainI
                     autoComplete="off"
                 />
             )}
-            <StatusMessage
-                variant="error"
-                recovery={priceNotes.bundle ? {
-                    label: `Sell ${priceNotes.bundle.giveAmount} per fill at ${priceNotes.bundle.getAmount} ${coinTicker}`,
-                    onAction: () => {
+            {/* The price problem sits under the price fields, with its one-click fix as an ordinary button. */}
+            <FieldNote variant="error">{priceNotes.block}</FieldNote>
+            {priceNotes.block && priceNotes.bundle ? (
+                <Button
+                    type="button"
+                    variant="secondary"
+                    size="sm"
+                    onClick={() => {
                         setGiveAmount(priceNotes.bundle.giveAmount);
                         setTriggerPrice(priceNotes.bundle.getAmount);
-                    },
-                } : undefined}
-            >
-                {priceNotes.block}
-            </StatusMessage>
+                    }}
+                >
+                    {`Sell ${priceNotes.bundle.giveAmount} per fill at ${priceNotes.bundle.getAmount} ${coinTicker}`}
+                </Button>
+            ) : null}
 
             {payWith === 'coin' ? (
                 <Button
@@ -1804,7 +1800,7 @@ export function DispenserForm({ walletId, activeAccountId, onBack, initialChainI
                         )}
                         autoComplete="off"
                     />
-                    <StatusMessage>{priceNotes.fiatWarning}</StatusMessage>
+                    <FieldNote variant="info" role="status">{priceNotes.fiatWarning}</FieldNote>
                     <AddressField
                         id="dispenser-oracle"
                         label="Oracle address (optional)"

@@ -10,7 +10,7 @@
 
 import { t } from '../../i18n/index.js';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { AddressField, AddressText, Button, ChainBadge, ChainPicker, FeeSelector, FormPage, Icon, Input, PageHeader, Screen, StatusMessage } from '@xchain-wallet/core/ui';
+import { AddressField, AddressText, Button, ChainBadge, ChainPicker, FeeSelector, FormNotice, FormPage, Icon, Input, PageHeader, Screen, StatusMessage } from '@xchain-wallet/core/ui';
 import {
     registry as registryLib,
     decoder as decoderLib,
@@ -954,11 +954,7 @@ export function DividendForm({ walletId, onBack, initialChainId, initialTick, in
                     />
                 </dl>
                 {decoded && decoded.warnings.length > 0 ? (
-                    <StatusMessage variant="warning" role="alert">
-                        {decoded.warnings.map((w, i) => (
-                            <p key={i}>{w}</p>
-                        ))}
-                    </StatusMessage>
+                    <FormNotice variant="warning" role="alert" lines={decoded.warnings} />
                 ) : null}
                 <p className={styles.hint} data-testid="dividend-review-fee-hint">
                     Paying a dividend has a protocol fee that grows with the number
@@ -1108,9 +1104,9 @@ export function DividendForm({ walletId, onBack, initialChainId, initialTick, in
                     iconLabel="Choose source address"
                 />
             ) : (
-                <StatusMessage variant="error">
+                <FormNotice variant="error">
                     {t('send.source.noAddress')}
-                </StatusMessage>
+                </FormNotice>
             )}
 
             {lockedToken ? null : (
@@ -1152,11 +1148,9 @@ export function DividendForm({ walletId, onBack, initialChainId, initialTick, in
                 autoComplete="off"
             />
             {gatedDividendNotice.gated ? (
-                <StatusMessage variant="warning" role="alert">
-                    <p>
-                        {gatedTickWarningCopy(dividendTick, 'dividend recipients')}
-                    </p>
-                </StatusMessage>
+                <FormNotice variant="warning" role="alert">
+                    {gatedTickWarningCopy(dividendTick, 'dividend recipients')}
+                </FormNotice>
             ) : null}
 
             {tick.trim() ? (

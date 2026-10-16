@@ -766,11 +766,7 @@ export function CallbackForm({ walletId, onBack, initialChainId, initialTick, in
                 {previewBlock}
                 {dustNote}
                 {decoded && decoded.warnings.length > 0 ? (
-                    <StatusMessage variant="warning" role="alert">
-                        {decoded.warnings.map((w, i) => (
-                            <p key={i}>{w}</p>
-                        ))}
-                    </StatusMessage>
+                    <FormNotice variant="warning" role="alert" lines={decoded.warnings} />
                 ) : null}
                 {isWatcherMode ? (
                     <p className={styles.hint}>
@@ -887,8 +883,8 @@ export function CallbackForm({ walletId, onBack, initialChainId, initialTick, in
                 </Button>
             )}
         >
-            <FormNotice variant="warning" role="alert">
-                {`Callback recalls everything. Every unit of ${ticker || 'this token'} returns to your address, and each holder is paid the configured amount. This cannot be undone.`}
+            <FormNotice variant="warning" role="alert" lead="Callback recalls everything.">
+                {`Every unit of ${ticker || 'this token'} returns to your address, and each holder is paid the configured amount. This cannot be undone.`}
             </FormNotice>
 
             {lockedToken && chainId ? (
@@ -907,28 +903,22 @@ export function CallbackForm({ walletId, onBack, initialChainId, initialTick, in
                     iconLabel="Choose source address"
                 />
             ) : (
-                <StatusMessage variant="error">
+                <FormNotice variant="error">
                     {t('send.source.noAddress')}
-                </StatusMessage>
+                </FormNotice>
             )}
 
             {previewBlock}
             {summaryLoading ? <p className={styles.hint}>Loading holder preview…</p> : null}
             {!configComplete ? (
-                <StatusMessage variant="warning" role="alert">
-                    <p>
-                        {ticker} has no callback configured. Set the callback token, payout, and
-                        block in Callback settings before you can recall.
-                    </p>
-                </StatusMessage>
+                <FormNotice variant="warning" role="alert">
+                    {`${ticker} has no callback configured. Set the callback token, payout, and block in Callback settings before you can recall.`}
+                </FormNotice>
             ) : !blockReached ? (
-                <StatusMessage variant="warning" role="alert">
-                    <p>
-                        Callback is not allowed yet. It becomes available at block{' '}
-                        {cbBlock?.toLocaleString('en-US')}
-                        {currentHeight != null ? ` (network is at ${currentHeight.toLocaleString('en-US')})` : ''}.
-                    </p>
-                </StatusMessage>
+                <FormNotice variant="warning" role="alert">
+                    {`Callback is not allowed yet. It becomes available at block ${cbBlock?.toLocaleString('en-US') ?? ''}`
+                        + `${currentHeight != null ? ` (network is at ${currentHeight.toLocaleString('en-US')})` : ''}.`}
+                </FormNotice>
             ) : null}
             {dustNote}
 

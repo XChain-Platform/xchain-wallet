@@ -28,7 +28,7 @@
 // hook so the parent can gate Submit on `status === 'available'`.
 
 import { useCallback, useEffect, useRef } from 'react';
-import { StatusMessage } from '@xchain-wallet/core/ui';
+import { FieldNote } from '@xchain-wallet/core/ui';
 import { useSignerStatus } from '../hooks/useSignerStatus.js';
 import { userFacingMessage } from '../utils/userFacingMessage.js';
 import { DerivationPathCrossCheck } from './DerivationPathCrossCheck.jsx';
@@ -88,9 +88,9 @@ export function HwSignBlock({
         <div className={styles.root}>
             {signerInfo ? <HwFirmwareBanner signerInfo={signerInfo} /> : null}
             {requireExplicitConfirm && requireExplicitConfirmReason ? (
-                <StatusMessage variant="warning" role="status">
+                <FieldNote variant="warning" role="status">
                     {requireExplicitConfirmReason}
-                </StatusMessage>
+                </FieldNote>
             ) : null}
             <DerivationPathCrossCheck
                 signerKind={signerKind}

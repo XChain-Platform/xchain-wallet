@@ -17,7 +17,10 @@ import { createContext } from 'react';
 // renders in place.
 //
 //   report(id, entry)  show `entry` for notice `id`; pass null to withdraw it
-//   entry              { text, variant, role } with text a plain string
+//   entry              { text, variant, role, lead, testId, lines } with text a plain string;
+//                      lines, when present, are its paragraphs (text joined by
+//                      newlines, so equal lines compare equal by text) and lead
+//                      an optional bold lead-in, also a plain string
 export const FormNotices = createContext(
-    /** @type {{ report: (id: string, entry: { text: string, variant: string, role?: 'alert' | 'status' | 'note' | null } | null) => void } | null} */ (null),
+    /** @type {{ report: (id: string, entry: { text: string, variant: string, role?: 'alert' | 'status' | 'note' | null, lead?: string, testId?: string, lines?: string[] } | null) => void } | null} */ (null),
 );

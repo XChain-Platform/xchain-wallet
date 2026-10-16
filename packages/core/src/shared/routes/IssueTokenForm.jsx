@@ -839,16 +839,10 @@ export function IssueTokenForm({ walletId, onBack }) {
                     />
                 </dl>
                 {payFeeInNativeCoin ? (
-                    <StatusMessage variant="warning" role="alert">
-                        <p>{NATIVE_FEE_WARNING}</p>
-                    </StatusMessage>
+                    <FormNotice variant="warning" role="alert">{NATIVE_FEE_WARNING}</FormNotice>
                 ) : null}
                 {decoded && decoded.warnings.length > 0 ? (
-                    <StatusMessage variant="warning" role="alert">
-                        {decoded.warnings.map((w, i) => (
-                            <p key={i}>{w}</p>
-                        ))}
-                    </StatusMessage>
+                    <FormNotice variant="warning" role="alert" lines={decoded.warnings} />
                 ) : null}
                 {isWatcherMode ? (
                     <p className={styles.hint}>
@@ -972,7 +966,7 @@ export function IssueTokenForm({ walletId, onBack }) {
             label={t('issue.title')}
             onSubmit={handleReview}
             onChangeCapture={() => { if (formError) setFormError(null); }}
-            status={<FormErrorSummary errors={issueErrors} focusKey={validationAttempt} />}
+            status={[<FormErrorSummary key="errors" errors={issueErrors} focusKey={validationAttempt} />, draftBanner]}
             actions={(
                 <Button
                     type="submit"
@@ -984,7 +978,6 @@ export function IssueTokenForm({ walletId, onBack }) {
                 </Button>
             )}
         >
-            {draftBanner}
             <ChainPicker label={t('settings.network.label')} value={chainId} onChange={setChainId} chainIds={chainsWithAddresses.length ? chainsWithAddresses : (chainId ? [chainId] : [])} chainRegistry={chainRegistry} />
 
             {fromAddress ? (
@@ -998,9 +991,9 @@ export function IssueTokenForm({ walletId, onBack }) {
                     iconLabel={t('send.source.choose')}
                 />
             ) : (
-                <StatusMessage variant="error">
+                <FormNotice variant="error">
                     {t('send.source.noAddress')}
-                </StatusMessage>
+                </FormNotice>
             )}
 
             <Input

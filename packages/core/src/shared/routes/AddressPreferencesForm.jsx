@@ -20,7 +20,7 @@
 // the shared confirm then dry-runs and signs the exact composed transaction.
 
 import { useEffect, useRef, useState, useMemo } from 'react';
-import { AddressText, Button, FeeSelector, FormPage, FormSection, Input, PageHeader, RadioGroup, Screen, StatusMessage } from '@xchain-wallet/core/ui';
+import { AddressText, Button, FeeSelector, FieldNote, FormPage, FormSection, Input, PageHeader, RadioGroup, Screen, StatusMessage } from '@xchain-wallet/core/ui';
 import { registry as registryLib } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { useDemoGuard } from '../hooks/useDemoGuard.jsx';
@@ -395,7 +395,7 @@ export function AddressPreferencesForm({ walletId, chainId: initialChainId, addr
             </details>
             <FormSection title="Protocol fee handling">
                 {currentError ? (
-                    <StatusMessage variant="error">{currentError}</StatusMessage>
+                    <FieldNote variant="error">{currentError}</FieldNote>
                 ) : null}
                 {current ? (
                     <dl className={styles.detailsList}>

@@ -46,11 +46,12 @@ import { t } from '../i18n/index.js';
  *   null drops the role for a message that is part of the page from the first paint, so it is
  *   not a live region at all. The look always follows the variant, so one tone keeps one style.
  * @param {string} [props.testId]                             data-testid for tests that find the message by hook
+ * @param {string} [props.lead]                               bold lead-in sentence before the text, such as "Destroy is irreversible."
  *
  * Children may be several block elements (one `<p>` per line of a multi-line
  * warning, or a `<ul>`): they stay one box and one announcement.
  */
-export function StatusMessage({ variant = 'status', id, children, className, details, recovery, role: roleOverride, testId }) {
+export function StatusMessage({ variant = 'status', id, children, className, details, recovery, role: roleOverride, testId, lead }) {
     if (children === null || children === undefined || children === '') return null;
     const presentation = STATUS_PRESENTATION[variant] || STATUS_PRESENTATION.status;
     const role = roleOverride === null
@@ -73,7 +74,10 @@ export function StatusMessage({ variant = 'status', id, children, className, det
         >
             <span className={styles.icon} aria-hidden="true">{presentation.icon}</span>
             <div className={styles.text}>
-                <div className={styles.body}>{children}</div>
+                <div className={styles.body}>
+                    {lead ? <><strong>{lead}</strong>{' '}</> : null}
+                    {children}
+                </div>
                 {details ? (
                     <details className={styles.details}>
                         <summary>{t('pending.detail.technicalDetails')}</summary>

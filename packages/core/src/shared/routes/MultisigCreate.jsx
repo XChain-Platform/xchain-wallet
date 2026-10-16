@@ -9,7 +9,7 @@
 // contact legal@dankest.llc.
 
 import { useEffect, useMemo, useState } from 'react';
-import { Button, ChainBadge, ChainPicker, FormPage, FormSection, Input, ListPage, PageHeader, RadioGroup, Screen, Select, StatusMessage, Textarea } from '@xchain-wallet/core/ui';
+import { Button, ChainBadge, ChainPicker, FieldNote, FormPage, FormSection, Input, ListPage, PageHeader, RadioGroup, Screen, Select, StatusMessage, Textarea } from '@xchain-wallet/core/ui';
 import { registry as registryLib } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { userFacingMessage } from '../utils/userFacingMessage.js';
@@ -670,7 +670,7 @@ function CosignerRow({ index, row, addresses, networkKind, onChange, onRemove, c
                     >
                         Import shared setup
                     </Button>
-                    {row.shareError ? <StatusMessage variant="error">{row.shareError}</StatusMessage> : null}
+                    {row.shareError ? <FieldNote variant="error">{row.shareError}</FieldNote> : null}
                     <Input
                         label="xpub"
                         value={row.xpub}

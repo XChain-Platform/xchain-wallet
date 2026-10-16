@@ -9,7 +9,7 @@
 // contact legal@dankest.llc.
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { AddressText, Button, ChainBadge, ChainPicker, Checkbox, EmptyState, FeeSelector, FormPage, Input, PageHeader, Screen, StatusMessage } from '@xchain-wallet/core/ui';
+import { AddressText, Button, ChainBadge, ChainPicker, Checkbox, EmptyState, FeeSelector, FieldNote, FormPage, Input, PageHeader, Screen, StatusMessage } from '@xchain-wallet/core/ui';
 import { registry as registryLib, flows as flowsLib } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { useDemoGuard } from '../hooks/useDemoGuard.jsx';
@@ -799,7 +799,7 @@ export function PublishFileForm({ walletId, onBack }) {
                     {ownedTokens === null ? (
                         <p className={styles.hint}>Looking up tokens you own…</p>
                     ) : ownedTokensError && ownedTokens.length === 0 ? (
-                        <StatusMessage variant="error">{ownedTokensError}</StatusMessage>
+                        <FieldNote variant="error">{ownedTokensError}</FieldNote>
                     ) : ownedTokens.length === 0 ? (
                         <EmptyState
                             title="No owned tokens"
@@ -809,7 +809,7 @@ export function PublishFileForm({ walletId, onBack }) {
                     ) : (
                         <>
                             {ownedTokensError ? (
-                                <StatusMessage variant="error">{ownedTokensError}</StatusMessage>
+                                <FieldNote variant="error">{ownedTokensError}</FieldNote>
                             ) : null}
                             <p className={styles.hint}>
                                 Pick the token whose holders can unlock the file:

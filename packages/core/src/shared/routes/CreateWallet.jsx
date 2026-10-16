@@ -11,7 +11,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { useProtectedScreen } from '../utils/screenGuard.js';
 import { RECOVERY_PHRASE_WARNING } from '../utils/securityMomentCopy.js';
-import { Button, Checkbox, FormErrorSummary, FormPage, Icon, InfoTip, Input, PageHeader, RadioGroup, Screen, StatusMessage, Switch } from '@xchain-wallet/core/ui';
+import { Button, Checkbox, FieldNote, FormErrorSummary, FormPage, Icon, InfoTip, Input, PageHeader, RadioGroup, Screen, StatusMessage, Switch } from '@xchain-wallet/core/ui';
 import * as branding from '@xchain-wallet/core/branding/branding.js';
 import { crypto as cryptoLib, flows as flowsLib } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
@@ -635,9 +635,9 @@ export function CreateWallet({ onBack, onCreated: handleCreated, mode = 'fresh' 
                 </div>
                 {showPassphrase ? (
                     <>
-                        <StatusMessage variant="warning" role={null}>
+                        <FieldNote variant="warning" role={null}>
                             {t('createWallet.saveThisPassphraseSeparatelyFrom')}
-                        </StatusMessage>
+                        </FieldNote>
                         <Input
                             id="create-bip39-passphrase"
                             type="password"

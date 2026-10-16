@@ -396,9 +396,10 @@ export function PairSignerForm({
         <FormPage
             label="Confirm hardware signer"
             onSubmit={handleSave}
-            status={error ? (
-                <StatusMessage variant="error">{error}</StatusMessage>
-            ) : null}
+            status={[
+                error ? <StatusMessage variant="error">{error}</StatusMessage> : null,
+                verdict ? <FirmwareBanner key="firmware" verdict={verdict} vendor={pairingInfo?.vendor} /> : null,
+            ]}
             actions={(
                 <>
                     <Button variant="ghost" onClick={handleCancel} disabled={stage === 'saving'}>
@@ -432,7 +433,6 @@ export function PairSignerForm({
                     <code className={styles.code}>{pairingInfo?.deviceIdentifier}</code>
                 </dd>
             </dl>
-            {verdict ? <FirmwareBanner verdict={verdict} vendor={pairingInfo?.vendor} /> : null}
             <Input
                 label="Label"
                 hint="Shows wherever this signer appears in the UI."

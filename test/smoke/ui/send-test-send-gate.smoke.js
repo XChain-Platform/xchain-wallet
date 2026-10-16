@@ -106,9 +106,11 @@ assert.match(
 );
 const formRender = sendSrc.slice(sendSrc.indexOf('id="send-form"'));
 assert.ok(formRender.length > 0, 'compose form found');
+// The banner is one of the compose form's status notices, so it leads the page
+// content above the form card.
 assert.match(
     formRender,
-    /\{testSendGateBanner\}/,
+    /status=\{\[[\s\S]*?,\s*testSendGateBanner\s*[,\]]/,
     'banner renders on the compose form',
 );
 assert.match(

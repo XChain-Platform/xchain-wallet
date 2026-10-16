@@ -31,7 +31,9 @@ describe('error notices render through StatusMessage', () => {
             expect(source).not.toMatch(/styles\.error\b/);
             expect(source).not.toMatch(/<(div|p|span)[^>]*role="alert"[^>]*className=\{styles\.error/);
             expect(css).not.toMatch(/^\.error\b/m);
-            expect(source).toContain('StatusMessage');
+            // A shared primitive draws the message: a StatusMessage notice, or a
+            // FieldNote for a message about one item in a summary.
+            expect(source).toMatch(/\b(?:StatusMessage|FieldNote)\b/);
         });
     }
 });

@@ -10,7 +10,7 @@
 
 import { t } from '../../i18n/index.js';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { AddressField, AddressText, Button, ChainBadge, ChainPicker, CopyButton, FeeSelector, FormPage, Input, PageHeader, RadioGroup, Screen, StatusMessage, Switch, Textarea } from '@xchain-wallet/core/ui';
+import { AddressField, AddressText, Button, ChainBadge, ChainPicker, CopyButton, FeeSelector, FormNotice, FormPage, Input, PageHeader, RadioGroup, Screen, StatusMessage, Switch, Textarea } from '@xchain-wallet/core/ui';
 import {
     registry as registryLib,
     decoder as decoderLib,
@@ -305,9 +305,9 @@ function RawTransactionBroadcast({
                     </p>
                 ) : null}
                 {broadcastTime.timedOut ? (
-                    <StatusMessage variant="error">
+                    <FormNotice variant="error">
                         The relay has not responded. Check History or a block explorer before trying again. Closing this screen does not cancel a transaction the relay already received.
-                    </StatusMessage>
+                    </FormNotice>
                 ) : null}
             </FormPage>
         );
@@ -911,11 +911,7 @@ export function BroadcastForm({ walletId, onBack, onDone, initialChainId, initia
                     />
                 </dl>
                 {decoded && decoded.warnings.length > 0 ? (
-                    <StatusMessage variant="warning" role="alert">
-                        {decoded.warnings.map((w, i) => (
-                            <p key={i}>{w}</p>
-                        ))}
-                    </StatusMessage>
+                    <FormNotice variant="warning" role="alert" lines={decoded.warnings} />
                 ) : null}
                 {isWatcherMode ? (
                     <p className={styles.hint}>
@@ -1031,9 +1027,9 @@ export function BroadcastForm({ walletId, onBack, onDone, initialChainId, initia
                     iconLabel="Choose source address"
                 />
             ) : (
-                <StatusMessage variant="error">
+                <FormNotice variant="error">
                     {t('send.source.noAddress')}
-                </StatusMessage>
+                </FormNotice>
             )}
 
             <Input

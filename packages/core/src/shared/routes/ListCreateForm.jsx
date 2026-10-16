@@ -9,7 +9,7 @@
 // contact legal@dankest.llc.
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { AddressField, AddressText, Button, ChainBadge, ChainPicker, Checkbox, EmptyState, FeeSelector, FormPage, Input, ListPage, PageHeader, Screen, Select, StatusMessage, Textarea } from '@xchain-wallet/core/ui';
+import { AddressField, AddressText, Button, ChainBadge, ChainPicker, Checkbox, EmptyState, FeeSelector, FieldNote, FormNotice, FormPage, Input, ListPage, PageHeader, Screen, Select, StatusMessage, Textarea } from '@xchain-wallet/core/ui';
 import { registry as registryLib, decoder as decoderLib, airdrop as airdropLib } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { useDemoGuard } from '../hooks/useDemoGuard.jsx';
@@ -638,9 +638,7 @@ export function ListCreateForm({ walletId, chainId: initialChainId, initialType,
                     <ul>{items.map((item) => (<li key={item}><code>{item}</code></li>))}</ul>
                 </details>
                 {decoded && decoded.warnings.length > 0 ? (
-                    <StatusMessage variant="warning" role="alert">
-                        {decoded.warnings.map((w, i) => (<p key={i}>{w}</p>))}
-                    </StatusMessage>
+                    <FormNotice variant="warning" role="alert" lines={decoded.warnings} />
                 ) : null}
                 {isWatcherMode ? (
                     <p className={styles.hint}>Watcher mode: this wallet will build an unsigned transaction. Sign it on your Signer-mode wallet, then broadcast from a Full-mode wallet.</p>
@@ -751,7 +749,7 @@ export function ListCreateForm({ walletId, chainId: initialChainId, initialType,
                     iconLabel="Choose source address"
                 />
             ) : (
-                <StatusMessage variant="error">No address on this network. Use Receive to generate one first.</StatusMessage>
+                <FormNotice variant="error">No address on this network. Use Receive to generate one first.</FormNotice>
             )}
 
             <Select
@@ -828,7 +826,7 @@ export function ListCreateForm({ walletId, chainId: initialChainId, initialType,
                     {/* A real address for a different chain is not a typo;
                         say which chain this list is being published to. */}
                     {recipients.wrongNetwork.length > 0 ? (
-                        <StatusMessage variant="warning" role="alert">
+                        <FieldNote variant="warning" role="alert">
                             <p>
                                 {recipients.wrongNetwork.length} address
                                 {recipients.wrongNetwork.length === 1 ? ' is' : 'es are'} for another
@@ -843,7 +841,7 @@ export function ListCreateForm({ walletId, chainId: initialChainId, initialType,
                                     message: 'Does not belong to the selected network.',
                                 }))}
                             />
-                        </StatusMessage>
+                        </FieldNote>
                     ) : null}
                     {/* PC-10: pasted or contact-book addresses become permanent
                         public on-chain data once the list is broadcast. */}

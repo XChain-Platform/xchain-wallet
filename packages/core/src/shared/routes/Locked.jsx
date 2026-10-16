@@ -541,11 +541,14 @@ export function Locked({ onUnlocked }) {
             label={t('locked.unlockWallet')}
             className={styles.unlockForm}
             onSubmit={handleSubmit}
-            status={busy && !inCaptureStep && showUnlockingNote ? (
-                <p className={styles.unlockingNote} aria-live="polite">
-                    {t('locked.unlockingYourWalletSecurelyThis')}
-                </p>
-            ) : null}
+            status={[
+                busy && !inCaptureStep && showUnlockingNote ? (
+                    <p key="unlocking" className={styles.unlockingNote} aria-live="polite">
+                        {t('locked.unlockingYourWalletSecurelyThis')}
+                    </p>
+                ) : null,
+                lockoutBanner,
+            ]}
             actions={(
                 <div className={styles.unlockActions}>
                     {/* During a lockout the banner says how long to wait and the
@@ -689,7 +692,6 @@ export function Locked({ onUnlocked }) {
             )}
         >
             {hero}
-            {lockoutBanner}
             <input
                 type="text"
                 name="username"

@@ -25,6 +25,7 @@
 import { useCallback, useId, useMemo, useRef, useState } from 'react';
 import {
     Button,
+    FieldNote,
     FormPage,
     Icon,
     PageHeader,
@@ -322,7 +323,7 @@ export function ScanRoute({ onClassified, onBack, chainRegistry, embedded = fals
                 {!stopped ? (
                     <QrScanner onFrame={handleFrame} alt={t('scan.scannerAlt')} />
                 ) : (
-                    <StatusMessage variant="success">{t('scan.routing')}</StatusMessage>
+                    <FieldNote variant="success">{t('scan.routing')}</FieldNote>
                 )}
                 <Textarea
                     label={t('scan.pasteLabel')}

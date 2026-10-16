@@ -30,6 +30,8 @@ import {
     Button,
     Checkbox,
     EmptyState,
+    FieldNote,
+    FormNotice,
     FormPage,
     Input,
     SegmentedControl,
@@ -714,7 +716,7 @@ export function PlaceOrderPanel({ walletId, chainId, tick1, tick2, prefillPrice,
                     <dd style={ddStyle}>{feeDisplay}</dd>
                 </dl>
                 {payFeeInNativeCoin ? (
-                    <StatusMessage variant="warning" role="alert">{NATIVE_FEE_WARNING}</StatusMessage>
+                    <FormNotice variant="warning" role="alert">{NATIVE_FEE_WARNING}</FormNotice>
                 ) : null}
                 {isWatcherMode ? (
                     <p style={{ margin: '0 0 var(--xc-space-2)', color: 'var(--xc-text-muted)', fontSize: '0.75rem' }}>
@@ -737,7 +739,7 @@ export function PlaceOrderPanel({ walletId, chainId, tick1, tick2, prefillPrice,
                     />
                 )}
                 {submitError && (isWatcherMode || hw) ? (
-                    <StatusMessage variant="error">{submitError}</StatusMessage>
+                    <FormNotice variant="error">{submitError}</FormNotice>
                 ) : null}
             </FormPage>
         );
@@ -790,7 +792,7 @@ export function PlaceOrderPanel({ walletId, chainId, tick1, tick2, prefillPrice,
             )}
         >
             {accountLoading ? (
-                <StatusMessage variant="status">{t('components.placeOrderPanel.loadingWalletBalances')}</StatusMessage>
+                <FormNotice variant="status">{t('components.placeOrderPanel.loadingWalletBalances')}</FormNotice>
             ) : null}
             <dl style={{
                 margin: '0 0 var(--xc-space-2)',
@@ -880,12 +882,12 @@ export function PlaceOrderPanel({ walletId, chainId, tick1, tick2, prefillPrice,
                 mandatory={nativeFeeMandatory}
             />
             {payFeeInNativeCoin ? (
-                <StatusMessage variant="warning" role="alert">{NATIVE_FEE_WARNING}</StatusMessage>
+                <FieldNote variant="warning" role="alert">{NATIVE_FEE_WARNING}</FieldNote>
             ) : null}
             {gatedGiveNotice.gated ? (
-                <StatusMessage variant="warning" role="alert">
+                <FormNotice variant="warning" role="alert">
                     {gatedTickWarningCopy(side === 'sell' ? tick1 : tick2, 'the order counterparty')}
-                </StatusMessage>
+                </FormNotice>
             ) : null}
             {giveIsNative ? (
                 <div style={{

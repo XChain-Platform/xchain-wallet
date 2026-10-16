@@ -10,7 +10,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import QRCode from 'qrcode';
-import { AddressField, AddressText, Button, CopyButton, EmptyState, FormPage, Icon, Input, MultisigBadge, PageHeader, Screen, Select, StatusMessage } from '@xchain-wallet/core/ui';
+import { AddressField, AddressText, Button, CopyButton, EmptyState, FormNotice, FormPage, Icon, Input, MultisigBadge, PageHeader, Screen, Select, StatusMessage } from '@xchain-wallet/core/ui';
 import {
     registry as registryLib,
     uri as uriLib,
@@ -1184,9 +1184,9 @@ export function Receive({ walletId, accountId, prefill = null, onBack, onChangeA
             ) : null}
 
             {!address && descriptor && addressType && !generating && !generateError ? (
-                <StatusMessage variant="status">
-                    {t('receive.thereIsNo')} {addressTypeLabel(addressType)} {t('receive.addressYetCreateOneTo')}
-                </StatusMessage>
+                <FormNotice variant="status">
+                    {`${t('receive.thereIsNo')} ${addressTypeLabel(addressType)} ${t('receive.addressYetCreateOneTo')}`}
+                </FormNotice>
             ) : null}
 
             {address ? (

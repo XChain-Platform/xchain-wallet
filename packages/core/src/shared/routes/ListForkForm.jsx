@@ -9,7 +9,7 @@
 // contact legal@dankest.llc.
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { AddressText, Button, ChainBadge, Checkbox, FeeSelector, FormPage, Input, PageHeader, Screen, StatusMessage, Textarea } from '@xchain-wallet/core/ui';
+import { AddressText, Button, ChainBadge, Checkbox, FeeSelector, FieldNote, FormPage, Input, PageHeader, Screen, StatusMessage, Textarea } from '@xchain-wallet/core/ui';
 import { registry as registryLib, decoder as decoderLib, airdrop as airdropLib } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { useDemoGuard } from '../hooks/useDemoGuard.jsx';
@@ -1126,9 +1126,9 @@ function ListForkFormScreen({ walletId, listRef, onBack, onDone, repointHandlers
                 {toRemove.length + toAdd.length === 0 ? ' (no changes yet)' : ''}
             </p>
             {additions.invalid.length > 0 ? (
-                <StatusMessage variant="warning" role="alert">
+                <FieldNote variant="warning" role="alert">
                     Invalid {isTick ? 'token names' : 'addresses'}: {additions.invalid.join(', ')}
-                </StatusMessage>
+                </FieldNote>
             ) : null}
             {!isTick ? (
                 <p className={styles.hint}>

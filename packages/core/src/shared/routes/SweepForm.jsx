@@ -10,7 +10,7 @@
 
 import { t } from '../../i18n/index.js';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { AddressField, AddressText, Button, ChainBadge, ChainPicker, Checkbox, FeeSelector, FormPage, FormSection, Input, PageHeader, Screen, StatusMessage } from '@xchain-wallet/core/ui';
+import { AddressField, AddressText, Button, ChainBadge, ChainPicker, Checkbox, FeeSelector, FieldNote, FormNotice, FormPage, FormSection, Input, PageHeader, Screen, StatusMessage } from '@xchain-wallet/core/ui';
 import {
     registry as registryLib,
     decoder as decoderLib,
@@ -695,6 +695,23 @@ export function SweepForm({
             ) : null}
         </>
     );
+    // The review form shows the same facts as notices above its card.
+    const sweepReviewNotices = (
+        <>
+            {thirdPartyDestination ? (
+                <FormNotice variant="warning" role="alert" lead="This destination is not one of this wallet's addresses.">
+                    {"Everything selected - balances, ownerships, and released escrow - will belong to that address's owner. Triple-check it before signing."}
+                </FormNotice>
+            ) : null}
+            {!migrateLane && gatedTicks.length > 0 ? (
+                <FormNotice
+                    variant="warning"
+                    role="alert"
+                    lines={gatedTicks.map((tick) => gatedTickWarningCopy(tick, 'sweep recipients'))}
+                />
+            ) : null}
+        </>
+    );
 
     if (stage === 'review' || stage === 'submitting') {
         return wrap(
@@ -759,13 +776,9 @@ export function SweepForm({
                     />
                 </dl>
                 {decoded && decoded.warnings.length > 0 ? (
-                    <StatusMessage variant="warning" role="alert">
-                        {decoded.warnings.map((w, i) => (
-                            <p key={i}>{w}</p>
-                        ))}
-                    </StatusMessage>
+                    <FormNotice variant="warning" role="alert" lines={decoded.warnings} />
                 ) : null}
-                {sweepWarnings}
+                {sweepReviewNotices}
                 {isWatcherMode ? (
                     <p className={styles.hint}>
                         Watcher mode: this wallet will build an unsigned transaction.
@@ -950,9 +963,9 @@ export function SweepForm({
                     iconLabel={migrateLane ? undefined : 'Choose source address'}
                 />
             ) : (
-                <StatusMessage variant="error">
+                <FormNotice variant="error">
                     {t('send.source.noAddress')}
-                </StatusMessage>
+                </FormNotice>
             )}
 
             {migrateLane ? (
@@ -980,13 +993,11 @@ export function SweepForm({
                 />
             )}
             {thirdPartyDestination ? (
-                <StatusMessage variant="warning" role="alert">
-                    <p>
-                        <strong>Not your address.</strong> This wallet does not own
-                        the destination; everything swept will belong to whoever
-                        controls it.
-                    </p>
-                </StatusMessage>
+                <FieldNote variant="warning" role="alert">
+                    <strong>Not your address.</strong> This wallet does not own
+                    the destination; everything swept will belong to whoever
+                    controls it.
+                </FieldNote>
             ) : null}
             </FormSection>
 
@@ -1033,10 +1044,10 @@ export function SweepForm({
                     {(gateRows || []).map((r) => (
                         <div key={r.tick}>
                             {r.missingCount > 0 ? (
-                                <StatusMessage variant="warning" role={null}>
+                                <FieldNote variant="warning" role={null}>
                                     {r.tick}: {r.packCount - r.missingCount}/{r.packCount} unlock
                                     key{r.packCount === 1 ? '' : 's'} in the vault - missing
-                                </StatusMessage>
+                                </FieldNote>
                             ) : (
                                 <p className={styles.hint}>
                                     {r.tick}: {r.packCount}/{r.packCount} unlock
@@ -1089,12 +1100,9 @@ export function SweepForm({
                         </>
                     ) : null}
                     {(isHwSource || isWatcherMode) && gateMissingTicks.length > 0 ? (
-                        <StatusMessage variant="warning" role={null}>
-                            This signer cannot run the key recovery scan
-                            ({isWatcherMode ? 'watch-only' : 'hardware'} addresses
-                            hold no exportable key). Unlock keys for{' '}
-                            {gateMissingTicks.join(', ')} may be lost after migration.
-                        </StatusMessage>
+                        <FormNotice variant="warning" role={null}>
+                            {`This signer cannot run the key recovery scan (${isWatcherMode ? 'watch-only' : 'hardware'} addresses hold no exportable key). Unlock keys for ${gateMissingTicks.join(', ')} may be lost after migration.`}
+                        </FormNotice>
                     ) : null}
                     {gateMissingTicks.length > 0 ? (
                         <Checkbox
@@ -1117,13 +1125,11 @@ export function SweepForm({
 
             <FormSection title="Transaction details">
             {!migrateLane && gatedTicks.length > 0 ? (
-                <StatusMessage variant="warning" role="alert">
-                    {gatedTicks.map((tick) => (
-                        <p key={tick}>
-                            {gatedTickWarningCopy(tick, 'sweep recipients')}
-                        </p>
-                    ))}
-                </StatusMessage>
+                <FormNotice
+                    variant="warning"
+                    role="alert"
+                    lines={gatedTicks.map((tick) => gatedTickWarningCopy(tick, 'sweep recipients'))}
+                />
             ) : null}
 
             <Input

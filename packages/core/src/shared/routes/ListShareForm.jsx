@@ -356,17 +356,11 @@ function ListShareFormScreen({ walletId, listRef, onBack, onDone = onBack }) {
             </dl>
 
             {ownershipReason ? (
-                <StatusMessage variant="warning" role="alert">
-                    <p>{ownershipReason}</p>
-                </StatusMessage>
+                <FormNotice variant="warning" role="alert">{ownershipReason}</FormNotice>
             ) : null}
 
             {eligibility.reasons.length > 0 ? (
-                <StatusMessage variant="warning" role="alert">
-                    {eligibility.reasons.map((reason) => (
-                        <p key={reason.code}>{reason.text}</p>
-                    ))}
-                </StatusMessage>
+                <FormNotice variant="warning" role="alert" lines={eligibility.reasons.map((reason) => reason.text)} />
             ) : null}
 
             <Input
@@ -378,11 +372,15 @@ function ListShareFormScreen({ walletId, listRef, onBack, onDone = onBack }) {
                 disabled={formDisabled}
             />
 
-            <FormNotice variant="warning" role={null}>
-                {'Sharing is permanent. A shared list cannot be unshared. '
-                    + 'The hubs carry every later edit to this list to every chain. '
-                    + 'Each later edit costs LIST_SHARED_EDIT_BASE plus LIST_SHARED_EDIT_PER_ITEM for every item added or removed.'}
-            </FormNotice>
+            <FormNotice
+                variant="warning"
+                role={null}
+                lines={[
+                    'Sharing is permanent. A shared list cannot be unshared.',
+                    'The hubs carry every later edit to this list to every chain.',
+                    'Each later edit costs LIST_SHARED_EDIT_BASE plus LIST_SHARED_EDIT_PER_ITEM for every item added or removed.',
+                ]}
+            />
 
             <NativeFeeToggle
                 {...nativeFee.toggleProps}

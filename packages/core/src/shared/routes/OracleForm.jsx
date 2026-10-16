@@ -9,7 +9,7 @@
 // contact legal@dankest.llc.
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { AddressField, AddressText, Button, ChainBadge, ChainPicker, FeeSelector, FormPage, FormSection, InfoTip, Input, PageHeader, Screen, Select, StatusMessage } from '@xchain-wallet/core/ui';
+import { AddressField, AddressText, Button, ChainBadge, ChainPicker, FeeSelector, FieldNote, FormNotice, FormPage, FormSection, InfoTip, Input, PageHeader, Screen, Select, StatusMessage } from '@xchain-wallet/core/ui';
 import {
     registry as registryLib,
     decoder as decoderLib,
@@ -561,9 +561,7 @@ export function OracleForm({ walletId, onBack, initialChainId, initialFromAddres
                 {publishNotes}
 
                 {decoded && decoded.warnings.length > 0 ? (
-                    <StatusMessage variant="warning" role="alert">
-                        {decoded.warnings.map((w, i) => <p key={i}>{w}</p>)}
-                    </StatusMessage>
+                    <FormNotice variant="warning" role="alert" lines={decoded.warnings} />
                 ) : null}
 
                 <p className={styles.hint}>
@@ -646,13 +644,13 @@ export function OracleForm({ walletId, onBack, initialChainId, initialFromAddres
                     iconLabel="Choose publishing address"
                 />
             ) : (
-                <StatusMessage variant="error">No address on this network. Use Receive to generate one first.</StatusMessage>
+                <FormNotice variant="error">No address on this network. Use Receive to generate one first.</FormNotice>
             )}
 
             {feeds == null ? (
                 <p className={styles.hint}>Loading…</p>
             ) : feedsError ? (
-                <StatusMessage variant="error">{feedsError}</StatusMessage>
+                <FieldNote variant="error">{feedsError}</FieldNote>
             ) : feeds.length === 0 ? (
                 <p className={styles.hint}>
                     This address has not published any prices yet. The first one you publish starts

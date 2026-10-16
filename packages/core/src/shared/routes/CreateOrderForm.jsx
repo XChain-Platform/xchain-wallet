@@ -9,7 +9,7 @@
 // contact legal@dankest.llc.
 
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { AddressField, AddressText, Button, ChainBadge, Checkbox, FeeSelector, FormPage, FormSection, Icon, Input, NetworkField, PageHeader, RadioGroup, Screen, StatusMessage, Switch } from '@xchain-wallet/core/ui';
+import { AddressField, AddressText, Button, ChainBadge, Checkbox, FeeSelector, FormNotice, FormPage, FormSection, Icon, Input, NetworkField, PageHeader, RadioGroup, Screen, StatusMessage, Switch } from '@xchain-wallet/core/ui';
 import {
     registry as registryLib,
     decoder as decoderLib,
@@ -663,9 +663,7 @@ export function CreateOrderForm({ walletId, onBack, initialChainId, initialFromA
                     </p>
                 ) : null}
                 {decoded && decoded.warnings.length > 0 ? (
-                    <StatusMessage variant="warning" role="alert">
-                        {decoded.warnings.map((w, i) => <p key={i}>{w}</p>)}
-                    </StatusMessage>
+                    <FormNotice variant="warning" role="alert" lines={decoded.warnings} />
                 ) : null}
                 {isWatcherMode ? (
                     <p className={styles.hint}>
@@ -745,7 +743,7 @@ export function CreateOrderForm({ walletId, onBack, initialChainId, initialFromA
                         iconLabel="Choose source address"
                     />
                 ) : (
-                    <StatusMessage variant="error">No address on this network. Use Receive to generate one first.</StatusMessage>
+                    <FormNotice variant="error">No address on this network. Use Receive to generate one first.</FormNotice>
                 )}
 
                 <SideEditor
@@ -793,9 +791,9 @@ export function CreateOrderForm({ walletId, onBack, initialChainId, initialFromA
                 />
 
                 {giveType === 'coin' && getType === 'coin' ? (
-                    <StatusMessage variant="warning" role="alert">
-                        <p>At least one side must be a token. Coin-for-coin is a regular payment, not an order.</p>
-                    </StatusMessage>
+                    <FormNotice variant="warning" role="alert">
+                        At least one side must be a token. Coin-for-coin is a regular payment, not an order.
+                    </FormNotice>
                 ) : null}
 
                 <AddressField

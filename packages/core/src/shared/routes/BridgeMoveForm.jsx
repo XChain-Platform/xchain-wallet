@@ -9,7 +9,7 @@
 // contact legal@dankest.llc.
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { AddressField, AddressText, Button, ChainBadge, ChainPicker, FeeSelector, FormPage, Input, PageHeader, Screen, StatusMessage } from '@xchain-wallet/core/ui';
+import { AddressField, AddressText, Button, ChainBadge, ChainPicker, FeeSelector, FormNotice, FormPage, Input, PageHeader, Screen, StatusMessage } from '@xchain-wallet/core/ui';
 import { registry as registryLib } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { useDemoGuard } from '../hooks/useDemoGuard.jsx';
@@ -752,7 +752,7 @@ export function BridgeMoveForm({ walletId, accountId, initialChainId, initialTic
             ) : null}
 
             {noDestinationAccount ? (
-                <StatusMessage variant="error">
+                <FormNotice variant="error">
                     {leg.fixedDestination
                         ? 'You have no address on the required destination network in this wallet yet.'
                             + ' Use Receive to create one first: this bridged copy can only move back to its origin network,'
@@ -760,12 +760,12 @@ export function BridgeMoveForm({ walletId, accountId, initialChainId, initialTic
                         : 'You have no address on another network yet.'
                             + ' Use Receive to create one first: a bridge transfer credits an address you control,'
                             + ' and the credit cannot be redirected once it applies.'}
-                </StatusMessage>
+                </FormNotice>
             ) : requiredDestinationMissing ? (
-                <StatusMessage variant="error">
+                <FormNotice variant="error">
                     This bridge route is unavailable because this wallet has no address on
                     the required destination chain. Use Receive there to create one first.
-                </StatusMessage>
+                </FormNotice>
             ) : (
                 <>
                     <ChainPicker

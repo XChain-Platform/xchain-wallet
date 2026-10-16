@@ -9,7 +9,7 @@
 // contact legal@dankest.llc.
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { AddressField, AddressText, Button, ChainBadge, ChainPicker, Checkbox, FeeSelector, FormPage, FormSection, Icon, Input, PageHeader, RadioGroup, Screen, StatusMessage } from '@xchain-wallet/core/ui';
+import { AddressField, AddressText, Button, ChainBadge, ChainPicker, Checkbox, FeeSelector, FieldNote, FormNotice, FormPage, FormSection, Icon, Input, PageHeader, RadioGroup, Screen, StatusMessage } from '@xchain-wallet/core/ui';
 import { registry as registryLib } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { useDemoGuard } from '../hooks/useDemoGuard.jsx';
@@ -736,9 +736,7 @@ export function SwapForm({ walletId, onBack, initialChainId, initialGiveTick, in
                     are not refunded.
                 </p>
                 {payFeeInNativeCoin ? (
-                    <StatusMessage variant="warning" role="alert">
-                        <p>{NATIVE_FEE_WARNING}</p>
-                    </StatusMessage>
+                    <FormNotice variant="warning" role="alert">{NATIVE_FEE_WARNING}</FormNotice>
                 ) : null}
                 {isWatcherMode ? (
                     <p className={styles.hint}>
@@ -939,11 +937,9 @@ export function SwapForm({ walletId, onBack, initialChainId, initialGiveTick, in
                     onOpenPicker={() => setGivePickerOpen(true)}
                 />
                 {gatedGiveNotice.gated && !giveOwnership ? (
-                    <StatusMessage variant="warning" role="alert">
-                        <p>
-                            {gatedTickWarningCopy(giveTick, 'the swap counterparty')}
-                        </p>
-                    </StatusMessage>
+                    <FormNotice variant="warning" role="alert">
+                        {gatedTickWarningCopy(giveTick, 'the swap counterparty')}
+                    </FormNotice>
                 ) : null}
                 {giveOwnership ? null : (
                     <AmountField
@@ -1029,7 +1025,7 @@ export function SwapForm({ walletId, onBack, initialChainId, initialGiveTick, in
                     onChange={(e) => setExpInput(e.target.value)}
                 />
             ) : null}
-            {expError ? <StatusMessage variant="error">{expError}</StatusMessage> : null}
+            {expError ? <FieldNote variant="error">{expError}</FieldNote> : null}
 
             <dl className={styles.detailsList}>
                 <DetailRow label="Rate" value={rateText} />

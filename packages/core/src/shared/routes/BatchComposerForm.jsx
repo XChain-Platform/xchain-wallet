@@ -36,7 +36,7 @@
 // targets power users comfortable typing action params by hand.
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { AddressText, Button, ChainPicker, FeeSelector, FormPage, FormSection, PageHeader, Screen, Select, StatusMessage, Textarea } from '@xchain-wallet/core/ui';
+import { AddressText, Button, ChainPicker, FeeSelector, FieldNote, FormPage, FormSection, PageHeader, Screen, Select, StatusMessage, Textarea } from '@xchain-wallet/core/ui';
 // A native select cannot middle-truncate, and a full address ran under the
 // chevron at phone width, so options carry the wallet's usual first6...last6 form.
 import { truncateAddress } from '../../ui/AddressText.jsx';
@@ -809,9 +809,9 @@ export function BatchComposerForm({ walletId, onBack, hasDexSurface = true }) {
                         spellCheck={false}
                     />
                     {shownRowErrors[i] ? (
-                        <StatusMessage variant="error">
+                        <FieldNote variant="error">
                             {shownRowErrors[i]}
-                        </StatusMessage>
+                        </FieldNote>
                     ) : null}
                     <div className={styles.actions} style={{ justifyContent: 'flex-end' }}>
                         <Button type="button" variant="ghost" onClick={() => removeRow(i)} disabled={rows.length <= 1}>

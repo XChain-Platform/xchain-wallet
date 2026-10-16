@@ -9,7 +9,7 @@
 // contact legal@dankest.llc.
 
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { AddressText, Button, ChainBadge, ChainPicker, Checkbox, CopyButton, EmptyState, FormPage, FormSection, Icon, InfoTip, Input, ListPage, ListRow, MultisigBadge, PageHeader, Screen, Select, Skeleton, StatusMessage } from '@xchain-wallet/core/ui';
+import { AddressText, Button, ChainBadge, ChainPicker, Checkbox, CopyButton, EmptyState, FormNotice, FormPage, FormSection, Icon, InfoTip, Input, ListPage, ListRow, MultisigBadge, PageHeader, Screen, Select, Skeleton, StatusMessage } from '@xchain-wallet/core/ui';
 import { registry as registryLib, flows as flowsLib } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { isDemoWallet } from '../../flows/demoMode.js';
@@ -934,10 +934,9 @@ export function AddressList({
                             disabled={wifBusy}
                         />
                         )}
-                        <StatusMessage variant="warning" role={null}>
-                            <strong>{t('routes.addressList.notCoveredByYourRecovery')}</strong>{' '}
+                        <FormNotice variant="warning" role={null} lead={t('routes.addressList.notCoveredByYourRecovery')}>
                             {t('routes.addressList.keepACopyOfThe')}
-                        </StatusMessage>
+                        </FormNotice>
                         <Checkbox
                             className={wifStyles.wifAck}
                             label={t('routes.addressList.iUnderstandThisKeyIs')}

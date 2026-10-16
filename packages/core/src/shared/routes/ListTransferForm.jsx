@@ -308,9 +308,7 @@ function ListTransferFormScreen({ walletId, listRef, onBack, onDone = onBack }) 
             </dl>
 
             {ownershipReason ? (
-                <StatusMessage variant="warning" role="alert">
-                    <p>{ownershipReason}</p>
-                </StatusMessage>
+                <FormNotice variant="warning" role="alert">{ownershipReason}</FormNotice>
             ) : null}
 
             <Input
@@ -333,12 +331,16 @@ function ListTransferFormScreen({ walletId, listRef, onBack, onDone = onBack }) 
                 disabled={sdkSupported !== true || Boolean(ownershipReason)}
             />
 
-            <FormNotice variant="warning" role={null}>
-                {'From the block this transfer confirms, only the new owner can edit, share, or transfer the list. '
-                    + 'The sender cannot undo the transfer. '
-                    + 'A transfer cannot rescue a list whose owner key is lost. '
-                    + 'A shared list keeps working on every chain because its versions carry members, never the owner.'}
-            </FormNotice>
+            <FormNotice
+                variant="warning"
+                role={null}
+                lines={[
+                    'From the block this transfer confirms, only the new owner can edit, share, or transfer the list.',
+                    'The sender cannot undo the transfer.',
+                    'A transfer cannot rescue a list whose owner key is lost.',
+                    'A shared list keeps working on every chain because its versions carry members, never the owner.',
+                ]}
+            />
 
             <Input
                 label="Type TRANSFER to confirm"

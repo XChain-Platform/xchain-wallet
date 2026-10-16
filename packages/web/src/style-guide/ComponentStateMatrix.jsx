@@ -22,6 +22,7 @@ const componentSizes = {
     FormPage: FIXED_SIZE,
     FormErrorSummary: FIXED_SIZE,
     FormNotice: FIXED_SIZE,
+    FieldNote: FIXED_SIZE,
     FormSection: FIXED_SIZE,
     ListPage: FIXED_SIZE,
     EmptyState: FIXED_SIZE,
@@ -117,6 +118,8 @@ function ComponentPreview({ name, size, state }) {
         return <UI.FormErrorSummary errors={[{ message: 'Check this value' }]} />;
     case 'FormNotice':
         return <UI.FormNotice variant={statusVariant === 'error' ? 'error' : 'warning'}>Check the fee before you continue.</UI.FormNotice>;
+    case 'FieldNote':
+        return <UI.FieldNote variant={statusVariant === 'error' ? 'error' : 'warning'}>This address looks like one of your contacts.</UI.FieldNote>;
     case 'FormSection':
         return <UI.FormSection title="Details" description="Supporting information">Section body</UI.FormSection>;
     case 'ListPage':

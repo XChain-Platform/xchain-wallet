@@ -286,7 +286,7 @@ for (const cls of [
     );
 }
 assert.ok(!/^\.warnings\s*\{/m.test(css), 'IssueTokenForm warnings render through StatusMessage, not a route box');
-assert.ok(src.includes('<StatusMessage variant="warning" role="alert">'), 'IssueTokenForm warnings use the shared warning message');
+assert.ok(/<(?:StatusMessage|FormNotice) variant="warning" role="alert"/.test(src), 'IssueTokenForm warnings use the shared warning message');
 assert.ok(src.includes('<FormPage'), 'IssueTokenForm delegates its page card to FormPage');
 assert.ok(!/(^|\n)\.card\s*\{/.test(css), 'IssueTokenForm has no route-level page card');
 

@@ -104,6 +104,13 @@ describe('<StatusMessage>', () => {
         expect(message).toHaveTextContent('Second line');
     });
 
+    it('opens the message with a bold lead-in sentence', () => {
+        render(<StatusMessage variant="warning" lead="Locking is permanent.">Each flag is a one-way switch.</StatusMessage>);
+        const lead = screen.getByText('Locking is permanent.');
+        expect(lead.tagName).toBe('STRONG');
+        expect(lead.closest('[data-variant]')).toHaveTextContent('Locking is permanent. Each flag is a one-way switch.');
+    });
+
     it.each([null, undefined, ''])('renders nothing for empty content %#', (children) => {
         const { container } = render(<StatusMessage>{children}</StatusMessage>);
         expect(container).toBeEmptyDOMElement();

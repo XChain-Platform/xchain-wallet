@@ -10,6 +10,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
+    FieldNote,
     Screen, PageHeader, Button, FormPage, FormSection, Input, Textarea, Icon,
     ListPage, StatusMessage, QrScanner, AnimatedQrFrames, CopyButton, InfoTip,
 } from '@xchain-wallet/core/ui';
@@ -439,17 +440,17 @@ export function PairPartnerWallet({ onBack, onPaired, walletId: existingWalletId
                                         // One text node on purpose: a sentence split across JSX
                                         // children renders as several text nodes, and both this
                                         // spec's unit matcher and a screen reader see it in pieces.
-                                        <StatusMessage>
+                                        <FieldNote variant="info" role="status">
                                             {`This code is too long for one QR, so it cycles through ${frameCount} frames. `
                                                 + 'Point the other wallet’s camera at it and hold still until it has them all.'}
-                                        </StatusMessage>
+                                        </FieldNote>
                                     ) : null}
                                 </>
                             ) : (
-                                <StatusMessage variant="error">
+                                <FieldNote variant="error">
                                     This wallet&rsquo;s pairing code could not be drawn as a QR.
                                     Copy the text below instead.
-                                </StatusMessage>
+                                </FieldNote>
                             )}
                             <div style={CODE_BOX}>{localCode}</div>
                             <CopyButton value={localCode} label="Copy pairing code" />
@@ -460,7 +461,7 @@ export function PairPartnerWallet({ onBack, onPaired, walletId: existingWalletId
                             ) : null}
                         </>
                     ) : (
-                        <StatusMessage>{busy ? 'Building this wallet\'s pairing code…' : 'No pairing code yet.'}</StatusMessage>
+                        <FieldNote variant="info" role="status">{busy ? 'Building this wallet\'s pairing code…' : 'No pairing code yet.'}</FieldNote>
                     )}
                     </FormSection>
 
@@ -469,10 +470,10 @@ export function PairPartnerWallet({ onBack, onPaired, walletId: existingWalletId
                         <>
                             <QrScanner onFrame={handleScanFrame} />
                             {partnerCollector.total ? (
-                                <StatusMessage>
+                                <FieldNote variant="info" role="status">
                                     Pairing frames received: {partnerCollector.receivedCount} of
                                     {' '}{partnerCollector.total}
-                                </StatusMessage>
+                                </FieldNote>
                             ) : null}
                         </>
                     ) : null}

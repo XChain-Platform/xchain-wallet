@@ -8,9 +8,8 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-import { StatusMessage } from '@xchain-wallet/core/ui';
+import { FormNotice } from '@xchain-wallet/core/ui';
 import { OWNER_WITHDRAW_WARNING } from '../routes/contractResponseShape.js';
-import styles from './OwnerWithdrawWarning.module.css';
 import { t } from '../../i18n/index.js';
 
 /**
@@ -18,7 +17,8 @@ import { t } from '../../i18n/index.js';
  * details and on the forms that send tokens into it, when the explorer says
  * the deployer can still WITHDRAW the contract's custody. Renders nothing for
  * false (consensus refuses the withdrawal) and for null (an explorer that does
- * not serve the field), so an unknown answer never produces a warning.
+ * not serve the field), so an unknown answer never produces a warning. On a
+ * form it is one of the form's notices, above the form card.
  *
  * @param {object} props
  * @param {boolean | null} props.ownerWithdraw   contractOwnerWithdraw(row)
@@ -26,11 +26,13 @@ import { t } from '../../i18n/index.js';
 export function OwnerWithdrawWarning({ ownerWithdraw }) {
     if (ownerWithdraw !== true) return null;
     return (
-        <StatusMessage variant="warning" role="note" testId="owner-withdraw-warning">
-            <strong className={styles.headline}>{t('components.ownerWithdrawWarning.deployerCanWithdraw')}</strong>
-            <p className={styles.detail}>
-                {OWNER_WITHDRAW_WARNING} {t('components.ownerWithdrawWarning.onlySendTokensHereIf')}
-            </p>
-        </StatusMessage>
+        <FormNotice
+            variant="warning"
+            role="note"
+            testId="owner-withdraw-warning"
+            lead={t('components.ownerWithdrawWarning.deployerCanWithdraw')}
+        >
+            {`${OWNER_WITHDRAW_WARNING} ${t('components.ownerWithdrawWarning.onlySendTokensHereIf')}`}
+        </FormNotice>
     );
 }

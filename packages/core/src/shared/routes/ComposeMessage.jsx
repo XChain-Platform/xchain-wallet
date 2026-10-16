@@ -9,7 +9,7 @@
 // contact legal@dankest.llc.
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { AddressField, AddressText, Button, ChainBadge, FeeSelector, FormPage, Icon, IconSelect, Input, PageHeader, Screen, StatusMessage, Textarea } from '@xchain-wallet/core/ui';
+import { AddressField, AddressText, Button, ChainBadge, FeeSelector, FieldNote, FormPage, Icon, IconSelect, Input, PageHeader, Screen, StatusMessage, Textarea } from '@xchain-wallet/core/ui';
 import { registry as registryLib, flows as flowsLib } from '@xchain-wallet/core';
 import { chainIconSmallUrl } from '../../branding/branding.js';
 import { isValidAddressAnyNetwork, detectAddressCoin } from '../utils/addressValidation.js';
@@ -1157,15 +1157,15 @@ function ComposeMessageForm({
             ) : null}
             {pubkeyState === 'missing' && encryptionValue !== 'plaintext' ? (
                 <div>
-                    <StatusMessage variant="warning" role="alert">
+                    <FieldNote variant="warning" role="alert">
                         We don't know the recipient's public key yet, so we can't encrypt. They need to
                         send a transaction first, or pick "Plain text" above.
-                    </StatusMessage>
+                    </FieldNote>
                     {handshakeSent ? (
-                        <StatusMessage variant="success">
+                        <FieldNote variant="success">
                             Key request sent. Once they respond or send any transaction, you can
                             message them encrypted.
-                        </StatusMessage>
+                        </FieldNote>
                     ) : (
                         <>
                             <Button
@@ -1182,15 +1182,15 @@ function ComposeMessageForm({
                                 nothing on this stage rendered an error before,
                                 so a refused or failed key request looked like a
                                 button that does nothing. */}
-                            <StatusMessage variant="error">{handshakeError}</StatusMessage>
+                            <FieldNote variant="error">{handshakeError}</FieldNote>
                         </>
                     )}
                 </div>
             ) : null}
             {pubkeyState === 'error' && encryptionValue !== 'plaintext' ? (
-                <StatusMessage variant="error">
+                <FieldNote variant="error">
                     {pubkeyError}
-                </StatusMessage>
+                </FieldNote>
             ) : null}
 
             {/* 4. Delivery network */}

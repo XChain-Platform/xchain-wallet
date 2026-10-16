@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-import { FormErrorSummary, FormNotice, FormPage, Input } from '@xchain-wallet/core/ui';
+import { FieldNote, FormErrorSummary, FormNotice, FormPage, Input } from '@xchain-wallet/core/ui';
 import { Section, Guidance, Markup, LiveExample } from '../StyleGuidePage.jsx';
 
 export function FormErrorSummarySection() {
@@ -48,7 +48,7 @@ export function FormErrorSummarySection() {
                 <Input id="sg-summary-amount" label="Amount" error="Amount must be a positive number." onChange={() => {}} />
             </LiveExample>
             <Guidance
-                what={<>FormNotice: a plain-string notice written in the middle of a form body that FormPage shows with its other notices as the first item of the page content. Props: <code>variant</code> (default warning), <code>role</code>, and the text as children.</>}
+                what={<>FormNotice: a plain-string notice written in the middle of a form body that FormPage shows with its other notices as the first item of the page content. Props: <code>variant</code> (default warning), <code>role</code>, <code>lead</code> (a bold lead-in sentence, such as "Destroy is irreversible."), <code>testId</code>, and the text as children, or <code>lines</code> (an array of strings) for one message of several paragraphs, such as a decoder's warnings.</>}
                 when={<>A fact about the whole form that a field or control knows only once it renders, such as the fee selector's fallback-rate note.</>}
                 whenNot={<>A field problem (the field's own <code>error</code>) · text that is not a plain string, which renders in place.</>}
                 sizing={<>The StatusMessage row, at full content width, first in the page content (above the card when wide), with the form gap between stacked notices.</>}
@@ -59,6 +59,20 @@ export function FormErrorSummarySection() {
                 <FormPage as="div">
                     <Input id="sg-notice-amount" label="Amount" onChange={() => {}} />
                     <FormNotice variant="warning">Live fee estimate unavailable. Using safe default rates.</FormNotice>
+                </FormPage>
+            </LiveExample>
+            <Guidance
+                what={<>FieldNote: a toned line under one field, or beside one item of a review summary, drawn like a field error (a glyph and small toned text) with no box. Props: <code>variant</code> (warning, error or info; default warning), <code>role</code> (alert by default for warning and error), <code>id</code> for the field's <code>aria-describedby</code>, and the text as children or <code>lines</code>.</>}
+                when={<>A caution about one field's value that is not a validation error (a pasted or lookalike address) · a note about one decoded item in a review list.</>}
+                whenNot={<>A message about the whole form or its context, such as a wrong network or a missing owner address (FormNotice) · a validation error on an Input (its own <code>error</code>).</>}
+                sizing={<>The field help line: <code>--xc-text-xs</code>, <code>--xc-help-gap</code> above, the prose width.</>}
+                doRule={<>✓ Place it directly under the field or item it is about</>}
+                dontRule={<>✗ Use it for a page-level state · put a StatusMessage box in its place</>}
+            />
+            <LiveExample label="Under the field it is about">
+                <FormPage as="div">
+                    <Input id="sg-field-note-to" label="To" onChange={() => {}} />
+                    <FieldNote>This address looks like one of your contacts. Check every character.</FieldNote>
                 </FormPage>
             </LiveExample>
         </Section>

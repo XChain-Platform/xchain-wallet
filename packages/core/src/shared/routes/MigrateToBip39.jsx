@@ -12,6 +12,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { useProtectedScreen } from '../utils/screenGuard.js';
 import { userFacingMessage } from '../utils/userFacingMessage.js';
 import {
+    FieldNote,
     Screen,
     PageHeader,
     FormPage,
@@ -518,7 +519,7 @@ export function MigrateToBip39({ legacyWalletId, onBack, onMigrated, onSweepChai
                 }}
                 autoComplete="new-password"
             />
-            {error ? <StatusMessage variant="error">{error}</StatusMessage> : null}
+            {error ? <FieldNote variant="error">{error}</FieldNote> : null}
             <p style={explainParagraphStyle}>
                 This password encrypts only the new wallet on this device. Your
                 legacy wallet password is not needed. Next, you will save

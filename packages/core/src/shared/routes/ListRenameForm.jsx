@@ -13,6 +13,7 @@ import {
     AddressText,
     Button,
     ChainBadge,
+    FormNotice,
     FormPage,
     Input,
     PageHeader,
@@ -374,12 +375,9 @@ function ListRenameFormScreen({ walletId, listRef, onBack, onDone = onBack }) {
             </dl>
 
             {missingOwner ? (
-                <StatusMessage variant="warning" role="alert">
-                    <p>
-                        The current owner, {shortAddress(owner)}, is not an address in this wallet.
-                        A rename signed by another address will be refused by the network.
-                    </p>
-                </StatusMessage>
+                <FormNotice variant="warning" role="alert">
+                    {`The current owner, ${shortAddress(owner)}, is not an address in this wallet. A rename signed by another address will be refused by the network.`}
+                </FormNotice>
             ) : null}
 
             <Input

@@ -384,9 +384,10 @@ export function SignMessageForm({ walletId, onBack }) {
         <FormPage
             label="Sign message"
             onSubmit={handleSubmit}
-            status={error ? (
-                <StatusMessage variant="error">{error}</StatusMessage>
-            ) : null}
+            status={[
+                error ? <StatusMessage variant="error">{error}</StatusMessage> : null,
+                draftBanner,
+            ]}
             actions={(
                 <Button
                     type="submit"
@@ -398,7 +399,6 @@ export function SignMessageForm({ walletId, onBack }) {
                 </Button>
             )}
         >
-            {draftBanner}
             <div style={{ marginBottom: 'var(--xc-space-3)' }}>
                 <ChainPicker
                     chainIds={chainIds}

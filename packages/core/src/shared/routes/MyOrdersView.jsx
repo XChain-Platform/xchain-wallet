@@ -28,7 +28,7 @@
 // Cancel/edit are offered only while an order is open.
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { AddressText, Button, ChainBadge, EmptyState, FormPage, Icon, Input, ListPage, PageHeader, Screen, SectionHeader, Skeleton, StatusMessage, Switch } from '@xchain-wallet/core/ui';
+import { AddressText, Button, ChainBadge, EmptyState, FormNotice, FormPage, Icon, Input, ListPage, PageHeader, Screen, SectionHeader, Skeleton, StatusMessage, Switch } from '@xchain-wallet/core/ui';
 import { flows as flowsLib, registry as registryLib } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { useDemoGuard } from '../hooks/useDemoGuard.jsx';
@@ -772,7 +772,7 @@ function OrderActionPanel({
                     Signer-mode wallet, then broadcast from a Full-mode wallet.
                 </p>
             ) : null}
-            {error ? <StatusMessage variant="error">{error}</StatusMessage> : null}
+            {error ? <FormNotice variant="error">{error}</FormNotice> : null}
 
         </FormPage>,
     );

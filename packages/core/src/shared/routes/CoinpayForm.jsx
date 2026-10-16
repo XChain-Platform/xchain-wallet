@@ -11,6 +11,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import {
     AddressText, Button, ChainBadge, EmptyState, FeeSelector, FormPage, Icon,
+    FormNotice,
     ListPage, PageHeader, Screen, SectionHeader, StatusMessage,
 } from '@xchain-wallet/core/ui';
 import { registry as registryLib } from '@xchain-wallet/core';
@@ -554,7 +555,7 @@ function ScopedCoinpayForm({
                     <DetailRow label="Network fee rate" value={feeRateLabel} />
                 </dl>
 
-                <StatusMessage>{EXPIRY_LOSS_WARNING}</StatusMessage>
+                <FormNotice variant="status">{EXPIRY_LOSS_WARNING}</FormNotice>
 
                 {ownerLane.isWatcherMode ? (
                     <p className={styles.hint}>

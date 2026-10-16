@@ -44,6 +44,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
+    FieldNote,
     Screen,
     Button,
     Input,
@@ -1388,23 +1389,23 @@ export function PsbtSignForm({ walletId, onBack, initialPsbt }) {
                     <div style={{ marginTop: 'var(--xc-space-2)' }}>
                         <QrScanner onFrame={handleScannerFrame} alt="Transaction QR scanner" />
                         {scanProgress ? (
-                            <StatusMessage variant="info">
+                            <FieldNote variant="info" role="status">
                                 {scanProgress.format === 'UR'
                                     ? `UR decoding progress: ${scanProgress.percent}%`
                                     : `${scanProgress.format} frames received: ${scanProgress.received} of ${scanProgress.total}`}
-                            </StatusMessage>
+                            </FieldNote>
                         ) : null}
                     </div>
                 ) : null}
                 {visibleError ? (
-                    <StatusMessage
-                        variant="error"
-                        recovery={pasted && !psbtHex && !error
-                            ? { label: 'Clear', onAction: () => { setPasted(''); setError(null); } }
-                            : undefined}
-                    >
-                        {visibleError}
-                    </StatusMessage>
+                    <>
+                        <FieldNote variant="error">{visibleError}</FieldNote>
+                        {pasted && !psbtHex && !error ? (
+                            <Button type="button" variant="ghost" size="sm" onClick={() => { setPasted(''); setError(null); }}>
+                                Clear
+                            </Button>
+                        ) : null}
+                    </>
                 ) : null}
                 {parsing ? (
                     <div style={{ color: 'var(--xc-text-muted)', fontSize: 'var(--xc-text-sm)', marginTop: 4 }}>

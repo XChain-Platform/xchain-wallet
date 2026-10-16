@@ -34,7 +34,7 @@
 //   />
 
 import { useCallback } from 'react';
-import { Input, StatusMessage } from '../../ui/index.js';
+import { Input, FieldNote } from '../../ui/index.js';
 import { HwSignBlock } from './HwSignBlock.jsx';
 import { SigningReadyNote } from '../safety/PanicFreezeNotice.jsx';
 import { t } from '../../i18n/index.js';
@@ -134,7 +134,7 @@ export function SignCredentials({
                     </p>
                 </SigningReadyNote>
                 {submitError ? (
-                    <StatusMessage variant="error">{submitError}</StatusMessage>
+                    <FieldNote variant="error">{submitError}</FieldNote>
                 ) : null}
             </>
         );

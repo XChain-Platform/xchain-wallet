@@ -9,7 +9,7 @@
 // contact legal@dankest.llc.
 
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { AddressText, Button, ChainBadge, Checkbox, FeeSelector, FormPage, FormSection, PageHeader, Screen, Select, StatusMessage, Textarea } from '@xchain-wallet/core/ui';
+import { AddressText, Button, ChainBadge, Checkbox, FeeSelector, FieldNote, FormPage, FormSection, PageHeader, Screen, Select, StatusMessage, Textarea } from '@xchain-wallet/core/ui';
 // A native select cannot middle-truncate, and a full address ran under the
 // chevron at phone width, so options carry the wallet's usual first6...last6 form.
 import { t } from '../../i18n/index.js';
@@ -580,13 +580,11 @@ export function ParallelComposer({ walletId, onBack, initialRows, hasDexSurface 
                     {t('parallelComposer.summary', { actions: rows.length, networks: new Set(rows.map((r) => r.chainId)).size })}
                 </p>
                 <SummaryList rows={rows} addressesByChain={addressesByChain} showDetails />
-                <StatusMessage variant="warning" role={null}>
-                    <p id="parallel-no-rollback-warning">
+                <FieldNote id="parallel-no-rollback-warning" variant="warning" role={null}>
                         <strong>No rollback:</strong> each action signs and broadcasts independently.
                         If a later row fails, successful earlier rows remain broadcast.
                         {t('parallelComposer.noRollback')}
-                    </p>
-                </StatusMessage>
+                </FieldNote>
                 <Checkbox
                     className={parallelStyles.acknowledgement}
                     label="I understand successful actions cannot be rolled back if a later action fails."

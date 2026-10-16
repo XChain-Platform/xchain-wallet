@@ -20,7 +20,7 @@
 //     while this view is open
 
 import { useEffect, useState } from 'react';
-import { StatusMessage } from '../../ui/index.js';
+import { FormNotice, StatusMessage } from '../../ui/index.js';
 import { getPanicModeState } from '../../flows/panicMode.js';
 import { PANIC_SURFACE_HOME, panicFreezeNotice } from './panicNotice.js';
 
@@ -83,19 +83,19 @@ export function usePanicFreeze(surface = PANIC_SURFACE_HOME) {
 /**
  * Banner stating the freeze, for surfaces the user reaches BEFORE composing a
  * transaction. Renders nothing when signing is allowed, and nothing when the
- * freeze was duress-armed.
+ * freeze was duress-armed. Inside a form it is one of the form's notices, the
+ * first item of the page content; elsewhere it renders in place.
  *
  * @param {object} props
  * @param {'home'|'send'|'sign'} [props.surface]
- * @param {string} [props.className]
  */
-export function PanicFreezeNotice({ surface = PANIC_SURFACE_HOME, className }) {
+export function PanicFreezeNotice({ surface = PANIC_SURFACE_HOME }) {
     const notice = usePanicFreeze(surface);
     if (!notice || !notice.disclose) return null;
     return (
-        <StatusMessage variant="error" className={className}>
-            <strong>{notice.title}</strong>{' '}{notice.detail}
-        </StatusMessage>
+        <FormNotice variant="error" lead={notice.title}>
+            {notice.detail}
+        </FormNotice>
     );
 }
 

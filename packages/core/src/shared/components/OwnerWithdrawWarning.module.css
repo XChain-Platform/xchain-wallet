@@ -1,12 +1,1 @@
-.headline {
-    font-weight: 700;
-    font-size: var(--xc-text-sm);
-    color: inherit;
-}
-
-.detail {
-    margin: 0;
-    font-size: var(--xc-text-xs);
-    color: var(--xc-text-muted);
-    line-height: 1.4;
-}
+/* OwnerWithdrawWarning draws through FormNotice and has no local rules. */

@@ -325,7 +325,7 @@ for (const cls of [
     );
 }
 assert.ok(!/^\.warnings\s*\{/m.test(css), 'TokenWizard warnings render through StatusMessage, not a route box');
-assert.ok(src.includes('<StatusMessage variant="warning" role="alert">'), 'TokenWizard warnings use the shared warning message');
+assert.ok(/<(?:StatusMessage|FormNotice) variant="warning" role="alert"/.test(src), 'TokenWizard warnings use the shared warning message');
 assert.ok(src.includes('<FormPage'), 'TokenWizard delegates its page card to FormPage');
 assert.ok(
     /<ListRow[\s\S]*?styles\.templateCard[\s\S]*?title={t\.name}[\s\S]*?subtitle={t\.tagline}/.test(src),

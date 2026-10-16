@@ -9,7 +9,7 @@
 // contact legal@dankest.llc.
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { AddressField, AddressText, Button, ChainBadge, FeeSelector, FormPage, Icon, Input, PageHeader, Screen, Select, StatusMessage } from '@xchain-wallet/core/ui';
+import { AddressField, AddressText, Button, ChainBadge, FeeSelector, FormNotice, FormPage, Icon, Input, PageHeader, Screen, Select, StatusMessage } from '@xchain-wallet/core/ui';
 import { registry as registryLib } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { useDemoGuard } from '../hooks/useDemoGuard.jsx';
@@ -857,10 +857,7 @@ export function ExecuteContractForm({ walletId, chainId, contractActionIndex, in
                     PSBT leaves for a signer wallet, so the forfeiture terms are
                     stated here rather than only on the confirm page. */}
                 {nativeFee.payFeeInNativeCoin ? (
-                    <StatusMessage variant="warning" role="alert">
-                        <p>{NATIVE_FEE_WARNING}</p>
-                        <p>{NATIVE_FEE_UNVERIFIED_NOTICE}</p>
-                    </StatusMessage>
+                    <FormNotice variant="warning" role="alert" lines={[NATIVE_FEE_WARNING, NATIVE_FEE_UNVERIFIED_NOTICE]} />
                 ) : null}
                 {isWatcherMode ? (
                     <p className={styles.hint}>

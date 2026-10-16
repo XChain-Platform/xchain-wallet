@@ -104,7 +104,7 @@ describe('onboarding and Home layout guards', () => {
         expect(carouselCss).toMatch(/\.nav\s*\{[^}]*flex:\s*0 0 auto;/s);
         expect(carouselCss).toMatch(/\.actions\s*\{[^}]*flex:\s*0 0 auto;/s);
         expect(lockedSource).toContain('<FormPage');
-        expect(resumeSource).toContain('<FormPage label={title}>');
+        expect(resumeSource).toMatch(/<FormPage\s+label=\{title\}/);
         expect(resumeSource).not.toMatch(/<button\b/);
     });
 

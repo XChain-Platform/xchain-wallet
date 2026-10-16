@@ -1114,19 +1114,13 @@ export function TokenAdminForm({ walletId, mode, onBack, initialChainId, initial
                     />
                 </dl>
                 {decoded && decoded.warnings.length > 0 ? (
-                    <StatusMessage variant="warning" role="alert">
-                        {decoded.warnings.map((w, i) => (
-                            <p key={i}>{w}</p>
-                        ))}
-                    </StatusMessage>
+                    <FormNotice variant="warning" role="alert" lines={decoded.warnings} />
                 ) : null}
                 {mode === 'transfer' ? (
-                    <StatusMessage variant="warning" role="alert">
-                        <p>
+                    <FormNotice variant="warning" role="alert">
                             Transferring ownership cannot be undone. After confirmation,
                             only the new owner can administer this token.
-                        </p>
-                    </StatusMessage>
+                    </FormNotice>
                 ) : null}
                 {isWatcherMode ? (
                     <p className={styles.hint}>
@@ -1355,9 +1349,9 @@ export function TokenAdminForm({ walletId, mode, onBack, initialChainId, initial
                     iconLabel="Choose source address"
                 />
             ) : (
-                <StatusMessage variant="error">
+                <FormNotice variant="error">
                     {t('send.source.noAddress')}
-                </StatusMessage>
+                </FormNotice>
             )}
 
             {lockedToken ? null : (
@@ -1399,8 +1393,8 @@ export function TokenAdminForm({ walletId, mode, onBack, initialChainId, initial
 
             {mode === 'lock' ? (
                 <>
-                    <FormNotice variant="warning" role="alert">
-                        Locking is permanent. Each flag below is a one-way switch: once checked and submitted, it can never be unlocked or reversed.
+                    <FormNotice variant="warning" role="alert" lead="Locking is permanent.">
+                        Each flag below is a one-way switch: once checked and submitted, it can never be unlocked or reversed.
                     </FormNotice>
                     {allLocksSet ? (
                         <p className={styles.hint}>

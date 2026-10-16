@@ -10,7 +10,7 @@
 
 import { t } from '../../i18n/index.js';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { AddressField, AddressText, Button, ChainBadge, ChainPicker, FeeSelector, FormPage, Icon, Input, ListPage, PageHeader, Screen, StatusMessage, Textarea } from '@xchain-wallet/core/ui';
+import { AddressField, AddressText, Button, ChainBadge, ChainPicker, FeeSelector, FieldNote, FormNotice, FormPage, Icon, Input, ListPage, PageHeader, Screen, StatusMessage, Textarea } from '@xchain-wallet/core/ui';
 import { registry as registryLib } from '@xchain-wallet/core';
 import { normalizeConstructorParams } from '../../flows/deployChunked.js';
 import { indexerWaitMessage } from '../../flows/deployLegWait.js';
@@ -1110,21 +1110,18 @@ export function DeployContractForm({ walletId, onBack }) {
                     PSBT leaves for a signer wallet, so the forfeiture terms are
                     stated here rather than only on the confirm page. */}
                 {nativeFee.payFeeInNativeCoin ? (
-                    <StatusMessage variant="warning" role="alert">
-                        <p>{NATIVE_FEE_WARNING}</p>
-                        <p>{NATIVE_FEE_UNVERIFIED_NOTICE}</p>
-                    </StatusMessage>
+                    <FormNotice variant="warning" role="alert" lines={[NATIVE_FEE_WARNING, NATIVE_FEE_UNVERIFIED_NOTICE]} />
                 ) : null}
                 {/* Lint advisories are already written for a contract author
                     (line number, symbol, prescribed fix), so deployDiagnostic
                     passes them through and rewrites only the ones stated in SDK
                     internals. */}
                 {validation?.warnings && validation.warnings.length > 0 ? (
-                    <StatusMessage variant="warning" role="alert">
-                        {validation.warnings.map((w, i) => (
-                            <p key={i}>{humanizeDeployDiagnostic(w).message}</p>
-                        ))}
-                    </StatusMessage>
+                    <FormNotice
+                        variant="warning"
+                        role="alert"
+                        lines={validation.warnings.map((w) => humanizeDeployDiagnostic(w).message)}
+                    />
                 ) : null}
                 {isWatcherMode ? (
                     <p className={styles.hint}>
@@ -1218,9 +1215,69 @@ export function DeployContractForm({ walletId, onBack }) {
             demoGuard={demoGuard}
             label="Publish contract"
             onSubmit={handleReview}
-            status={formError ? (
-                <StatusMessage variant="error">{formError}</StatusMessage>
-            ) : null}
+            status={[
+                formError ? <StatusMessage variant="error">{formError}</StatusMessage> : null,
+                // PC-38: resume an interrupted chunked deploy. Those chunks are
+                // already on chain and already paid for; restarting re-pays.
+                resumable.length > 0 ? (
+                    <StatusMessage variant="warning" role={null}>
+                        {resumable.map((r) => {
+                            // Count a chunk as SENT on its txid, not only on
+                            // its action_index. The index is written after the
+                            // indexer answers; the txid at broadcast. Counting
+                            // indexes alone made the banner read "0 of 2" over a
+                            // run whose first chunk was on chain and paid for -
+                            // measured live - which is the one number a user reads
+                            // to decide between finishing and starting over.
+                            // "Sent" rather than "on chain" because a broadcast that
+                            // never confirmed is still only sent; the resumed run
+                            // re-checks each one against the chain and re-sends
+                            // whatever is genuinely missing.
+                            const done = (r.chunks || []).filter((c) => c.actionIndex || c.txid).length;
+                            return (
+                                <div key={r.id}>
+                                    <p>
+                                        Unfinished publish{r.name ? ` of "${r.name}"` : ''}: {done} of{' '}
+                                        {r.totalChunks} chunk transactions have already been sent. Finishing
+                                        costs only the remaining ones; starting over pays for all of them again.
+                                    </p>
+                                    <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
+                                        <Button
+                                            type="button"
+                                            variant="secondary"
+                                            onClick={() => {
+                                                setCode(r.code);
+                                                setResumeId(r.id);
+                                                setValidation(null);
+                                                setSizeInfo(null);
+                                                // Restore the rest of the plan, not just the
+                                                // source. The flow assembles phase 2 from the
+                                                // record, so leaving these fields blank would show a
+                                                // review screen that disagrees with the transaction
+                                                // about to be signed - measured: the gas field came
+                                                // back empty against an original 50000. `assembleParams`
+                                                // is the record's copy of exactly these values.
+                                                restoreAssembleFields(r.assembleParams);
+                                            }}
+                                        >
+                                            Resume publishing
+                                        </Button>
+                                        <Button
+                                            type="button"
+                                            variant="danger"
+                                            onClick={() => handleDiscardPending(r.id)}
+                                            loading={toolBusy === `discard:${r.id}`}
+                                            disabled={toolBusy !== null}
+                                        >
+                                            Discard
+                                        </Button>
+                                    </div>
+                                </div>
+                            );
+                        })}
+                    </StatusMessage>
+                ) : null,
+            ]}
             actions={(
                 <Button
                     type="submit"
@@ -1245,9 +1302,9 @@ export function DeployContractForm({ walletId, onBack }) {
                     iconLabel="Choose source address"
                 />
             ) : (
-                <StatusMessage variant="error">
+                <FormNotice variant="error">
                     {t('send.source.noAddress')}
-                </StatusMessage>
+                </FormNotice>
             )}
 
             {/* Contract identity, READ-ONLY, off the source below. Nothing is
@@ -1282,72 +1339,12 @@ export function DeployContractForm({ walletId, onBack }) {
                 </p>
             ) : null}
             {metaAbsent ? (
-                <StatusMessage variant="error">
+                <FieldNote variant="error">
                     This contract exports no name or description. The network rejects publication
                     without them, so add a meta block to the source before publishing.
-                </StatusMessage>
+                </FieldNote>
             ) : null}
 
-            {/* PC-38: resume an interrupted chunked deploy. Those chunks are
-                already on chain and already paid for; restarting re-pays. */}
-            {resumable.length > 0 ? (
-                <StatusMessage variant="warning" role={null}>
-                    {resumable.map((r) => {
-                        // Count a chunk as SENT on its txid, not only on
-                        // its action_index. The index is written after the
-                        // indexer answers; the txid at broadcast. Counting
-                        // indexes alone made the banner read "0 of 2" over a
-                        // run whose first chunk was on chain and paid for -
-                        // measured live - which is the one number a user reads
-                        // to decide between finishing and starting over.
-                        // "Sent" rather than "on chain" because a broadcast that
-                        // never confirmed is still only sent; the resumed run
-                        // re-checks each one against the chain and re-sends
-                        // whatever is genuinely missing.
-                        const done = (r.chunks || []).filter((c) => c.actionIndex || c.txid).length;
-                        return (
-                            <div key={r.id}>
-                                <p>
-                                    Unfinished publish{r.name ? ` of "${r.name}"` : ''}: {done} of{' '}
-                                    {r.totalChunks} chunk transactions have already been sent. Finishing
-                                    costs only the remaining ones; starting over pays for all of them again.
-                                </p>
-                                <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
-                                    <Button
-                                        type="button"
-                                        variant="secondary"
-                                        onClick={() => {
-                                            setCode(r.code);
-                                            setResumeId(r.id);
-                                            setValidation(null);
-                                            setSizeInfo(null);
-                                            // Restore the rest of the plan, not just the
-                                            // source. The flow now assembles phase 2 from the
-                                            // record, so leaving these fields blank would show a
-                                            // review screen that disagrees with the transaction
-                                            // about to be signed - measured: the gas field came
-                                            // back empty against an original 50000. `assembleParams`
-                                            // is the record's copy of exactly these values.
-                                            restoreAssembleFields(r.assembleParams);
-                                        }}
-                                    >
-                                        Resume publishing
-                                    </Button>
-                                    <Button
-                                        type="button"
-                                        variant="danger"
-                                        onClick={() => handleDiscardPending(r.id)}
-                                        loading={toolBusy === `discard:${r.id}`}
-                                        disabled={toolBusy !== null}
-                                    >
-                                        Discard
-                                    </Button>
-                                </div>
-                            </div>
-                        );
-                    })}
-                </StatusMessage>
-            ) : null}
 
             {/* PC-38: the SDK ships audited scaffolds; the wallet had no path to them. */}
             {templates && (templates.templates?.length || templates.patterns?.length) ? (
@@ -1434,17 +1431,17 @@ export function DeployContractForm({ walletId, onBack }) {
 
             {/* PC-38: how many transactions this deploy actually costs. */}
             {planError ? (
-                <StatusMessage variant="error">{planError}</StatusMessage>
+                <FieldNote variant="error">{planError}</FieldNote>
             ) : plan && plan.single ? (
                 <p className={styles.summary}>Fits in a single transaction.</p>
             ) : plan ? (
-                <StatusMessage variant="warning" role={null}>
+                <FieldNote variant="warning" role={null}>
                     {`Too large for one transaction: publishing requires ${plan.totalChunks} chunk `
                         + `transactions plus 1 assembling transaction (${plan.totalChunks + 1} total, `
                         + 'each paying its own network fee). They are signed one at a time, and each '
                         + 'must confirm before the next is built, so keep the wallet open until it finishes. '
                         + 'If it is interrupted you can resume without re-paying for the chunks already sent.'}
-                </StatusMessage>
+                </FieldNote>
             ) : null}
 
             {/* PC-38: the run is host-side and does not stream per-leg events
@@ -1457,10 +1454,10 @@ export function DeployContractForm({ walletId, onBack }) {
                     {validation.ok ? (
                         <p className={styles.summary}>{renderValidationSummary(validation)}</p>
                     ) : (
-                        <StatusMessage variant="error" role={null}>
+                        <FieldNote variant="error" role={null}>
                             <p>{renderValidationSummary(validation)}</p>
                             {validation.errors.length > 0 ? renderDiagnosticList(validation.errors, 'error') : null}
-                        </StatusMessage>
+                        </FieldNote>
                     )}
                     {validation.ok ? renderDiagnostics(validation.errors, 'error') : null}
                     {renderDiagnostics(validation.warnings, 'warning')}
@@ -1472,7 +1469,7 @@ export function DeployContractForm({ walletId, onBack }) {
                         {sizeInfo.bytes} bytes (within 64KB limit)
                     </p>
                 ) : (
-                    <StatusMessage variant="error">{sizeInfo.bytes} bytes (exceeds 64KB limit)</StatusMessage>
+                    <FieldNote variant="error">{sizeInfo.bytes} bytes (exceeds 64KB limit)</FieldNote>
                 )
             ) : null}
             {suggestedGas !== null ? (

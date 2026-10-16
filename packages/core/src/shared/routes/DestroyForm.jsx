@@ -517,11 +517,7 @@ export function DestroyForm({ walletId, onBack, initialChainId, initialTick, ini
                     />
                 </dl>
                 {decoded && decoded.warnings.length > 0 ? (
-                    <StatusMessage variant="warning" role="alert">
-                        {decoded.warnings.map((w, i) => (
-                            <p key={i}>{w}</p>
-                        ))}
-                    </StatusMessage>
+                    <FormNotice variant="warning" role="alert" lines={decoded.warnings} />
                 ) : null}
                 {isWatcherMode ? (
                     <p className={styles.hint}>
@@ -653,8 +649,8 @@ export function DestroyForm({ walletId, onBack, initialChainId, initialTick, ini
                 </Button>
             )}
         >
-            <FormNotice variant="warning" role="alert">
-                Destroy is irreversible. The burned amount cannot be recovered.
+            <FormNotice variant="warning" role="alert" lead="Destroy is irreversible.">
+                The burned amount cannot be recovered.
             </FormNotice>
 
             {lockedToken && chainId ? (
@@ -674,9 +670,9 @@ export function DestroyForm({ walletId, onBack, initialChainId, initialTick, ini
                     iconLabel="Choose source address"
                 />
             ) : (
-                <StatusMessage variant="error">
+                <FormNotice variant="error">
                     {t('send.source.noAddress')}
-                </StatusMessage>
+                </FormNotice>
             )}
 
             {lockedToken ? null : (

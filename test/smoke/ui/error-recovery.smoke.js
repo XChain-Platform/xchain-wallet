@@ -56,7 +56,8 @@ assert.ok(/submitErrorCause\s*===\s*'insufficient_funds'/.test(sendSrc),
 // 3. PsbtSignForm offers a "Clear" recovery for unrecognized paste.
 assert.ok(/StatusMessage/.test(psbtSrc),
     'PsbtSignForm imports StatusMessage');
-assert.ok(/label: 'Clear'/.test(psbtSrc),
+// The paste error is a note under the field, with Clear as an ordinary button beside it.
+assert.ok(/setPasted\(''\); setError\(null\);[\s\S]{0,80}Clear/.test(psbtSrc),
     'PsbtSignForm wires a Clear recovery');
 assert.ok(/setPasted\(''\)/.test(psbtSrc),
     'PsbtSignForm Clear recovery wipes the textarea');

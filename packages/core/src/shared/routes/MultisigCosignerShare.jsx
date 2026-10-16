@@ -11,6 +11,7 @@
 import { useEffect, useState } from 'react';
 import {
     CopyButton,
+    FieldNote,
     FormPage,
     FormSection,
     StatusMessage,
@@ -113,7 +114,7 @@ export function MultisigCosignerShare({ walletId, addresses, networkKind }) {
                     ))}
                 </select>
             </label>
-            {error ? <StatusMessage variant="error">{error}</StatusMessage> : null}
+            {error ? <FieldNote variant="error">{error}</FieldNote> : null}
             {selectedInfo ? (
                 <>
                     <div style={payloadStyle}>

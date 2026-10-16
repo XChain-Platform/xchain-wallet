@@ -13,6 +13,7 @@ import {
     Button,
     Checkbox,
     EmptyState,
+    FormNotice,
     FormPage,
     FormSection,
     Input,
@@ -372,7 +373,7 @@ export function UnionListForm({ walletId, chainId: initialChainId, activeAccount
             {fromAddress ? (
                 <AddressField label="From" value={fromAddress.address} readOnly onChange={() => {}} />
             ) : (
-                <StatusMessage variant="error">No address on this network. Use Receive to generate one first.</StatusMessage>
+                <FormNotice variant="error">No address on this network. Use Receive to generate one first.</FormNotice>
             )}
             </FormSection>
 
@@ -425,12 +426,14 @@ export function UnionListForm({ walletId, chainId: initialChainId, activeAccount
                     </p>
                 </div>
             ) : null}
-            <StatusMessage variant="warning" role={null}>
-                <p>
-                    A union follows each member's edits, including a shared list's new versions.
-                </p>
-                <p>A union cannot itself be shared in this release.</p>
-            </StatusMessage>
+            <FormNotice
+                variant="warning"
+                role={null}
+                lines={[
+                    "A union follows each member's edits, including a shared list's new versions.",
+                    'A union cannot itself be shared in this release.',
+                ]}
+            />
             </FormSection>
 
         </FormPage>,

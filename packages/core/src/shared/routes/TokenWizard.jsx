@@ -10,7 +10,7 @@
 
 import { t } from '../../i18n/index.js';
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { AddressField, AddressText, Button, ChainBadge, ChainPicker, Checkbox, CopyButton, FormPage, FormSection, Input, ListPage, ListRow, PageHeader, Screen, SectionHeader, StatusMessage, Switch } from '@xchain-wallet/core/ui';
+import { AddressField, AddressText, Button, ChainBadge, ChainPicker, Checkbox, CopyButton, FormNotice, FormPage, FormSection, Input, ListPage, ListRow, PageHeader, Screen, SectionHeader, StatusMessage, Switch } from '@xchain-wallet/core/ui';
 import {
     registry as registryLib,
     decoder as decoderLib,
@@ -892,16 +892,10 @@ export function TokenWizard({ walletId, onBack }) {
                     />
                 </dl>
                 {payFeeInNativeCoin ? (
-                    <StatusMessage variant="warning" role="alert">
-                        <p>{NATIVE_FEE_WARNING}</p>
-                    </StatusMessage>
+                    <FormNotice variant="warning" role="alert">{NATIVE_FEE_WARNING}</FormNotice>
                 ) : null}
                 {decoded && decoded.warnings.length > 0 ? (
-                    <StatusMessage variant="warning" role="alert">
-                        {decoded.warnings.map((w, i) => (
-                            <p key={i}>{w}</p>
-                        ))}
-                    </StatusMessage>
+                    <FormNotice variant="warning" role="alert" lines={decoded.warnings} />
                 ) : null}
             </FormPage>
         </>,
@@ -1248,9 +1242,9 @@ function renderChainStage({
                         : undefined}
                 />
             ) : (
-                <StatusMessage variant="error">
+                <FormNotice variant="error">
                     {t('send.source.noAddress')}
-                </StatusMessage>
+                </FormNotice>
             )}
         </FormPage>
     );
@@ -1672,11 +1666,7 @@ function AdvancedIssuePanel({
                     </FormSection>
 
                     {warnings.length > 0 ? (
-                        <StatusMessage variant="warning" role="alert">
-                            {warnings.map((w) => (
-                                <p key={w}>{w}</p>
-                            ))}
-                        </StatusMessage>
+                        <FormNotice variant="warning" role="alert" lines={warnings} />
                     ) : null}
                 </div>
             )}

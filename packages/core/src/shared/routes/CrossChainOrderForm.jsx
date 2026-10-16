@@ -10,7 +10,7 @@
 
 import { t } from '../../i18n/index.js';
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { AddressField, AddressText, Button, ChainBadge, ChainPicker, Checkbox, CopyButton, FeeSelector, FormPage, FormSection, Input, ListPage, PageHeader, RadioGroup, Screen, SectionHeader, StatusMessage } from '@xchain-wallet/core/ui';
+import { AddressField, AddressText, Button, ChainBadge, ChainPicker, Checkbox, CopyButton, FeeSelector, FormNotice, FormPage, FormSection, Input, ListPage, PageHeader, RadioGroup, Screen, SectionHeader, StatusMessage } from '@xchain-wallet/core/ui';
 import { registry as registryLib } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { useDemoGuard } from '../hooks/useDemoGuard.jsx';
@@ -678,7 +678,7 @@ export function CrossChainOrderForm({ walletId, onBack, initialChainId, initialF
                             iconLabel="Choose source address"
                         />
                     ) : (
-                        <StatusMessage variant="error">No address on this network. Use Receive to generate one first.</StatusMessage>
+                        <FormNotice variant="error">No address on this network. Use Receive to generate one first.</FormNotice>
                     )}
                     <Input
                         label="Give token"

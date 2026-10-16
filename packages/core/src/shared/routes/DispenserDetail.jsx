@@ -11,8 +11,10 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
     AddressText, Button, ChainBadge, CopyButton, EmptyState, FeeSelector, FormPage,
+    FieldNote,
     FormSection, Icon, Input, ListPage, ListRow, PageHeader, Screen, SectionHeader, Select,
     StatusMessage,
+    FormNotice,
 } from '@xchain-wallet/core/ui';
 import {
     registry as registryLib,
@@ -1594,9 +1596,9 @@ export function DispenserDetail({ walletId, chainId, actionIndex, onBack, onCanc
                   * transaction the chain always rejects.
                   */}
                 {refillCount.remaining <= 0 && refillCount.exact ? (
-                    <StatusMessage variant="error">
+                    <FormNotice variant="error">
                         {refillCeilingMessage(refillCount)}
-                    </StatusMessage>
+                    </FormNotice>
                 ) : (
                     <p className={styles.hint}>{refillCeilingMessage(refillCount)}</p>
                 )}
@@ -1752,12 +1754,10 @@ export function DispenserDetail({ walletId, chainId, actionIndex, onBack, onCanc
                     dispenser's own address too, so a list without it refuses
                     every buyer. Same check and copy as the create form. */}
                 {editAllowSelfWarning ? (
-                    <StatusMessage variant="warning" role="alert">
-                        <p>{editAllowSelfWarning}</p>
-                    </StatusMessage>
+                    <FieldNote variant="warning" role="alert">{editAllowSelfWarning}</FieldNote>
                 ) : null}
                 {editListConflictText && editListConflictText !== editError ? (
-                    <StatusMessage variant="error">{editListConflictText}</StatusMessage>
+                    <FieldNote variant="error">{editListConflictText}</FieldNote>
                 ) : null}
                 {feeSelector}
                 {/* Off Bitcoin this is mandatory, so the toggle renders
@@ -1842,11 +1842,7 @@ export function DispenserDetail({ walletId, chainId, actionIndex, onBack, onCanc
                     ))}
                 </dl>
                 {decodedCancel && decodedCancel.warnings.length > 0 ? (
-                    <StatusMessage variant="warning" role="alert">
-                        {decodedCancel.warnings.map((w, i) => (
-                            <p key={i}>{w}</p>
-                        ))}
-                    </StatusMessage>
+                    <FormNotice variant="warning" role="alert" lines={decodedCancel.warnings} />
                 ) : null}
                 {closeEscrowNote}
                 {feeSelector}

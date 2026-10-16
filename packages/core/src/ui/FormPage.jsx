@@ -10,6 +10,7 @@
 
 import { Children, cloneElement, forwardRef, isValidElement, useCallback, useMemo, useState } from 'react';
 import { FormNotices } from './formNoticeSlot.js';
+import { NoticeLines } from './FormNotice.jsx';
 import { StatusMessage } from './StatusMessage.jsx';
 import { submitOnlyFromLastField } from './formEnter.js';
 import styles from './FormPage.module.css';
@@ -58,7 +59,7 @@ function disableSubmits(node) {
  * @param {object} props
  * @param {(e: import('react').FormEvent<HTMLFormElement>) => void} [props.onSubmit]
  * @param {import('react').ReactNode} [props.actions]   the action row: primary last, so it ends up on the right
- * @param {import('react').ReactNode} [props.status]    a StatusMessage or error summary, the first item of the page content: above the form (its card, when wide) at the full content width on a plain form, below the form's own logo or title when it draws one
+ * @param {import('react').ReactNode | import('react').ReactNode[]} [props.status]    a StatusMessage or error summary, or a list of them (empty entries dropped), the first item of the page content: above the form (its card, when wide) at the full content width on a plain form, below the form's own logo or title when it draws one
  * @param {import('react').ReactNode} [props.intro]     one muted paragraph above the first field
  * @param {import('react').ReactNode} [props.title]     centred page title for onboarding and other focused forms
  * @param {import('react').ReactNode} [props.description] supporting copy below `title`
@@ -132,7 +133,7 @@ export const FormPage = forwardRef(function FormPage(
         report: (id, entry) => setControlNotices((prev) => {
             const had = prev[id];
             if (!entry && !had) return prev;
-            if (entry && had && had.text === entry.text && had.variant === entry.variant && had.role === entry.role) return prev;
+            if (entry && had && had.text === entry.text && had.variant === entry.variant && had.role === entry.role && had.lead === entry.lead && had.testId === entry.testId) return prev;
             const next = { ...prev };
             if (entry) next[id] = entry; else delete next[id];
             return next;
@@ -147,12 +148,18 @@ export const FormPage = forwardRef(function FormPage(
     // A form that draws its own logo or title is the page header; any other form
     // sits under the screen's PageHeader and its notice leads the content.
     const ownsHeading = title != null || visual != null;
-    const statusNode = demoBlocked || status || controlNoticeList.length > 0
+    // A list of notices drops its empty entries, so a form can pass each
+    // state's notice in one place and an all-empty list shows nothing.
+    const statusContent = Array.isArray(status) ? Children.toArray(status.filter(Boolean)) : status;
+    const hasStatus = Array.isArray(statusContent) ? statusContent.length > 0 : !!statusContent;
+    const statusNode = demoBlocked || hasStatus || controlNoticeList.length > 0
         ? (
             <div className={styles.status}>
-                {demoBlocked ? demoGuard.note : status}
+                {demoBlocked ? demoGuard.note : (hasStatus ? statusContent : null)}
                 {!demoBlocked ? controlNoticeList.map(([id, entry]) => (
-                    <StatusMessage key={id} variant={entry.variant} role={entry.role}>{entry.text}</StatusMessage>
+                    <StatusMessage key={id} variant={entry.variant} role={entry.role} lead={entry.lines ? undefined : entry.lead} testId={entry.testId}>
+                        {entry.lines ? <NoticeLines lead={entry.lead} lines={entry.lines} /> : entry.text}
+                    </StatusMessage>
                 )) : null}
             </div>
         )
