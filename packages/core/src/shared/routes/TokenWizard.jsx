@@ -53,7 +53,8 @@ import { isValidAddressForChain } from '../utils/addressValidation.js';
 import { estimateNativeSendFee } from '../../flows/feeEstimate.js';
 import { useFeeFiat } from '../hooks/useFeeFiat.js';
 import { useSettings } from '../hooks/useSettings.js';
-import { useOnlineStatus } from '../hooks/useOnlineStatus.js';
+import { useNetworkOffline } from '../hooks/useNetworkOffline.js';
+import { useHideReachabilityNotice } from '../components/hideReachabilityNotice.js';
 
 const chainRegistry = registryLib.defaultRegistry();
 
@@ -103,7 +104,9 @@ function isValidIssueAddress(value, descriptor) {
 export function TokenWizard({ walletId, onBack }) {
     const { messaging, shell } = useMessaging();
     const demoGuard = useDemoGuard(walletId, { onBack });
-    const networkAvailable = useOnlineStatus();
+    const { offline: networkOffline } = useNetworkOffline({ walletId });
+    const networkAvailable = !networkOffline;
+    useHideReachabilityNotice(networkOffline);
     const variant = screenVariantFor(shell);
     const { isWatcherMode } = useWalletMode();
     const { settings } = useSettings();

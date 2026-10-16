@@ -3078,7 +3078,7 @@ export function DetailCard({ entry, peerCache, chainTip, indexerWatermark, walle
                 More button in the action row; recipient bulk-save
                 stays here because it's a per-row affordance for
                 DIVIDEND / AIRDROP entries with its own UI. */}
-            <RecipientsBlock entry={entry} />
+            <RecipientsBlock entry={entry} walletId={walletId} />
             {detachAvailable ? (
                 <Button
                     type="button"
@@ -3837,11 +3837,12 @@ function explorerLinksFor(entry, settings) {
  * matches the data model best (one DIVIDEND / AIRDROP = one address
  * book).
  *
- * @param {{ entry: any }} props
+ * @param {{ entry: any, walletId?: string | null }} props
  */
-function RecipientsBlock({ entry }) {
+function RecipientsBlock({ entry, walletId }) {
     const { messaging } = useMessaging();
-    const networkAvailable = useOnlineStatus();
+    const { offline: networkOffline } = useNetworkOffline({ walletId });
+    const networkAvailable = !networkOffline;
     const action = String(entry?.action || '').toUpperCase();
     const isDividend = action === 'DIVIDEND';
     const isAirdrop = action === 'AIRDROP';

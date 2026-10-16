@@ -19,7 +19,8 @@ import { actionDisplayLabel } from '../utils/actionDisplayLabel.js';
 import { normalizeHistoryRow } from '../utils/historyRow.js';
 import { useActionProofVerification } from '../hooks/useProofVerification.js';
 import { useSettings } from '../hooks/useSettings.js';
-import { useOnlineStatus } from '../hooks/useOnlineStatus.js';
+import { useNetworkOffline } from '../hooks/useNetworkOffline.js';
+import { useHideReachabilityNotice } from '../components/hideReachabilityNotice.js';
 import { userFacingMessage } from '../utils/userFacingMessage.js';
 import styles from './History.module.css';
 
@@ -37,7 +38,9 @@ const OFFLINE_ACTION_REASON = 'This action needs a network connection.';
 export function ActionDetail({ entry: entryProp, walletId, chainTip, indexerWatermark, onBack }) {
     const { messaging, shell } = useMessaging();
     const variant = screenVariantFor(shell);
-    const browserOnline = useOnlineStatus();
+    const { offline: networkOffline } = useNetworkOffline({ walletId });
+    const browserOnline = !networkOffline;
+    useHideReachabilityNotice(networkOffline);
 
     // M2.3: the shells hand this page a SNAPSHOT of the row the user clicked
     // and never revisit it, which is harmless for a confirmed action and wrong
