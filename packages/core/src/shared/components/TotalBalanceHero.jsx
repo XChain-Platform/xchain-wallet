@@ -275,11 +275,18 @@ export function TotalBalanceHero({ rows, walletId, networkFilter, lastSyncedAt, 
             setActionsOpen(false);
             actionsTriggerRef.current?.focus();
         };
+        // Tabbing out of the menu closes it, as the header menu does, so no
+        // menu stays open while focus sits on the page behind it.
+        const onFocusIn = (event) => {
+            if (!actionsWrapRef.current?.contains(event.target)) setActionsOpen(false);
+        };
         window.addEventListener('mousedown', onPointerDown);
         window.addEventListener('keydown', onKeyDown);
+        window.addEventListener('focusin', onFocusIn);
         return () => {
             window.removeEventListener('mousedown', onPointerDown);
             window.removeEventListener('keydown', onKeyDown);
+            window.removeEventListener('focusin', onFocusIn);
         };
     }, [actionsOpen]);
 
