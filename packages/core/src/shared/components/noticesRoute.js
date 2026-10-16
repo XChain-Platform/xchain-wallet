@@ -48,6 +48,9 @@ const VIEWS_WITHOUT_BALANCES = new Set([
     'dispensers-list', 'contracts-list', 'markets', 'connected-sites',
     'alerts', 'addresses', 'address-preferences', 'advanced',
     'wallet-details', 'wallet-picker', 'account-picker', 'access-lists',
+    'add-wallet', 'add-account', 'wallet-rename', 'account-rename',
+    'sign-message', 'verify-signature', 'view-private-key', 'migrate-bip39',
+    'pair-signer', 'dispenser-explorer', 'market-activity',
 ]);
 
 /**

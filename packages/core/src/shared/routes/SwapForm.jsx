@@ -1094,6 +1094,9 @@ export function SwapForm({ walletId, onBack, initialChainId, initialGiveTick, in
                     value={feePick}
                     onChange={setFeePick}
                     customEstimate={feePick.mode === 'custom' ? feeCustomEstimate : null}
+                    // Offline already says swapping is blocked, so a fee-source
+                    // notice would be a second message for the same state.
+                    showEstimateNotice={networkAvailable}
                 />
             ) : null}
 

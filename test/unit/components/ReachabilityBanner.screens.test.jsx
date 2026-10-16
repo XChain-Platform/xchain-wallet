@@ -33,7 +33,12 @@ function mount(overall, routeKey) {
 afterEach(() => { cleanup(); useReachability.mockReset(); });
 
 describe('ReachabilityBanner copy by screen', () => {
-    it.each(['receive', 'contacts', 'obligations', 'settings', 'scan', 'markets'])(
+    it.each([
+        'receive', 'contacts', 'obligations', 'settings', 'scan', 'markets',
+        'add-wallet', 'add-account', 'wallet-rename', 'account-rename', 'sign-message',
+        'verify-signature', 'view-private-key', 'migrate-bip39', 'pair-signer',
+        'dispenser-explorer', 'market-activity',
+    ])(
         'says the screen may be out of date, not its balances, on %s while offline',
         (view) => {
             mount('offline', `${view}:1`);

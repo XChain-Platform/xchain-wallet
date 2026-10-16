@@ -166,6 +166,7 @@ describe.each([
         expect(await screen.findByText(message)).toBeInTheDocument();
         expect(screen.getAllByText(message)).toHaveLength(1);
         expect(screen.queryByText(BANNER)).toBeNull();
+        expect(screen.queryByText(/fee estimate unavailable/i)).toBeNull();
     });
 
     it('shows no offline message when the probe is healthy', async () => {
