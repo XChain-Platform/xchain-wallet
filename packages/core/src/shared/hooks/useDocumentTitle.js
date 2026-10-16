@@ -1,7 +1,7 @@
 // Copyright (c) 2025-2026 Dankest, LLC
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-import { useEffect } from 'react';
+import { useEffect, useSyncExternalStore } from 'react';
 
 const APP_TITLE = 'XChain Wallet';
 
@@ -97,20 +97,59 @@ function labelForRoute(route) {
         .join(' ');
 }
 
-export function documentTitleFor({ statusState, onboardingStep, unlockedView }) {
+// A screen with sub-screens of its own (Settings) names the one it is showing
+// here, so the window reads as the heading on screen. Only the view that owns
+// the sub-screens uses it.
+const SECTIONED_VIEWS = new Set(['settings']);
+const MAX_SECTION_LENGTH = 60;
+let activeSection = null;
+const sectionListeners = new Set();
+
+function setActiveSection(label) {
+    if (label === activeSection) return;
+    activeSection = label;
+    sectionListeners.forEach((listener) => listener());
+}
+
+function subscribeToSection(listener) {
+    sectionListeners.add(listener);
+    return () => { sectionListeners.delete(listener); };
+}
+
+const readActiveSection = () => activeSection;
+
+/**
+ * Names the sub-screen a view is showing for as long as it is mounted.
+ *
+ * @param {string | null | undefined} label  the heading the sub-screen shows
+ */
+export function useDocumentTitleSection(label) {
+    useEffect(() => {
+        if (typeof label !== 'string' || !label.trim()) return undefined;
+        setActiveSection(label.trim().slice(0, MAX_SECTION_LENGTH));
+        return () => setActiveSection(null);
+    }, [label]);
+}
+
+export function documentTitleFor({ statusState, onboardingStep, unlockedView, section = null }) {
     let label = null;
     if (statusState === 'locked') label = 'Unlock';
     if (statusState === 'no-wallet') label = ONBOARDING_LABELS[onboardingStep] || 'Welcome';
     if (statusState === 'error') label = 'Error';
-    if (statusState === 'unlocked') label = labelForRoute(unlockedView);
+    if (statusState === 'unlocked') {
+        label = SECTIONED_VIEWS.has(unlockedView) && typeof section === 'string' && section
+            ? section
+            : labelForRoute(unlockedView);
+    }
     return label ? `${APP_TITLE} - ${label}` : APP_TITLE;
 }
 
 export function useDocumentTitle({ statusState, onboardingStep, unlockedView, enabled = true }) {
+    const section = useSyncExternalStore(subscribeToSection, readActiveSection, readActiveSection);
     useEffect(() => {
         if (!enabled || typeof document === 'undefined') return undefined;
         const previousTitle = document.title;
-        document.title = documentTitleFor({ statusState, onboardingStep, unlockedView });
+        document.title = documentTitleFor({ statusState, onboardingStep, unlockedView, section });
         return () => { document.title = previousTitle; };
-    }, [enabled, onboardingStep, statusState, unlockedView]);
+    }, [enabled, onboardingStep, section, statusState, unlockedView]);
 }

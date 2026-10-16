@@ -50,6 +50,7 @@
 // and nothing is published at all during the wallet's own cold start, when
 // TLS, DNS, the shell's host and every preflight are cold at once. Good
 // news still publishes immediately: clearing a banner early is always safe.
+// So does an offline verdict whose every failure was an outright refusal.
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useMessaging } from '../useMessaging.js';
@@ -274,6 +275,21 @@ export function useReachability(opts = {}) {
                 // Good news needs no second opinion. Publishing a recovery
                 // immediately is always safe, and it means a chain that comes
                 // back stops nagging on the very next poll.
+                provisionalRef.current = null;
+                if (confirmRef.current) {
+                    clearTimeout(confirmRef.current);
+                    confirmRef.current = null;
+                }
+                publish(verdict, rows, Date.now());
+                return;
+            }
+
+            // Offline because every request was refused outright (connection
+            // refused, DNS failure, abort) needs no second opinion: a slow or
+            // lossy link times out instead, and a cold host fails the
+            // round-trip itself rather than answering. The first full failed
+            // round is the verdict.
+            if (verdict === 'offline' && result?.failedFast === true) {
                 provisionalRef.current = null;
                 if (confirmRef.current) {
                     clearTimeout(confirmRef.current);

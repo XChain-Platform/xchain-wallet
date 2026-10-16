@@ -9,7 +9,7 @@
 // contact legal@dankest.llc.
 
 import { useEffect, useState } from 'react';
-import { Button, EmptyState, ListPage, NetworkField, PageHeader, Screen, StatusMessage } from '@xchain-wallet/core/ui';
+import { Button, EmptyState, Icon, ListPage, NetworkField, PageHeader, Screen, StatusMessage } from '@xchain-wallet/core/ui';
 import { registry as registryLib } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { useChainIdsWithAction } from '../hooks/useSupportedChains.js';
@@ -204,8 +204,25 @@ export function BetFeedsList({ walletId, onOpenMarket, onCreate, onMyBets, onMyM
         );
     }
 
+    // This screen is the whole betting family's entry point, so the two personal
+    // views hang off it rather than each needing its own slot in the actions
+    // menu. The actions sit in the actions row like every other list screen's. Every button is secondary: the status filter below says which
+    // side is on with aria-pressed, so nothing here competes as the primary.
+    const actions = onCreate || onMyBets || onMyMarkets ? (
+        <>
+            {onCreate ? (
+                <Button type="button" variant="secondary" icon={<Icon.PlusIcon />} onClick={() => onCreate(chainId)}>
+                    Create market
+                </Button>
+            ) : null}
+            {onMyBets ? <Button type="button" variant="secondary" onClick={onMyBets}>My bets</Button> : null}
+            {onMyMarkets ? <Button type="button" variant="secondary" onClick={onMyMarkets}>My markets</Button> : null}
+        </>
+    ) : null;
+
     return wrap(
         <ListPage
+            actions={actions}
             notices={error ? (
                 <StatusMessage
                     variant="error"
@@ -226,25 +243,14 @@ export function BetFeedsList({ walletId, onOpenMarket, onCreate, onMyBets, onMyM
                         />
                     </div>
                     <div className={`${styles.betActions} ${local.toolbarActions}`}>
-                        {/* A two-way filter: the colour shows the active side, and
+                        {/* A two-way filter: the pressed ring shows the active side, and
                             aria-pressed says the same to a screen reader. */}
-                        <Button size="md" variant={openOnly ? 'primary' : 'ghost'} aria-pressed={openOnly} onClick={() => setOpenOnly(true)}>Taking bets</Button>
-                        <Button size="md" variant={openOnly ? 'ghost' : 'primary'} aria-pressed={!openOnly} onClick={() => setOpenOnly(false)}>All markets</Button>
-                        {onCreate ? <Button size="md" variant="ghost" onClick={() => onCreate(chainId)}>Create market</Button> : null}
+                        <Button size="md" variant="secondary" aria-pressed={openOnly} onClick={() => setOpenOnly(true)}>Taking bets</Button>
+                        <Button size="md" variant="secondary" aria-pressed={!openOnly} onClick={() => setOpenOnly(false)}>All markets</Button>
                     </div>
                 </div>
             )}
         >
-            {/* This screen is the whole family's entry point (the GovernancePolls
-                pattern), so the two personal views hang off it rather than each
-                needing its own slot in the actions menu. */}
-            {onMyBets || onMyMarkets ? (
-                <div className={styles.betActions}>
-                    {onMyBets ? <Button size="md" variant="ghost" onClick={onMyBets}>My bets</Button> : null}
-                    {onMyMarkets ? <Button size="md" variant="ghost" onClick={onMyMarkets}>My markets</Button> : null}
-                </div>
-            ) : null}
-
             {chainId && !rows && !error ? (
                 <div role="status" aria-label="Loading betting markets" aria-busy="true">
                     Loading betting markets…

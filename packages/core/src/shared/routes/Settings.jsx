@@ -16,6 +16,7 @@ import { useSettings } from '../hooks/useSettings.js';
 import { shellCapabilities } from '../shellCapabilities.js';
 import { resolveBindings } from '../keyboard/shortcuts.js';
 import { WALLET_VERSION } from '../../buildInfo.js';
+import { useDocumentTitleSection } from '../hooks/useDocumentTitle.js';
 import { AboutSection } from '../components/settings/AboutSection.jsx';
 import { AdsSection } from '../components/settings/AdsSection.jsx';
 import { AppearanceSection } from '../components/settings/AppearanceSection.jsx';
@@ -565,6 +566,9 @@ export function Settings({
     }, [sections, query]);
 
     // ─── Subpage view ─────────────────────────────────────────────
+
+    const shownSubpage = sections.find((s) => s.id === subpageId && s.visible !== false);
+    useDocumentTitleSection(shownSubpage?.kind === 'internal-drill' && shownSubpage.Component ? shownSubpage.title : null);
 
     if (subpageId) {
         const section = sections.find((s) => s.id === subpageId && s.visible !== false);
