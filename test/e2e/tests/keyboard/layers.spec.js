@@ -161,3 +161,45 @@ for (const size of SIZES) {
         }
     });
 }
+
+// A sidebar-linked screen has no Back button, and a screen opened from a
+// control that unmounts must still take focus on its heading, never the page body.
+test.describe('keyboard focus on wide layouts at 1440x900', () => {
+    test.beforeEach(async ({ page }) => {
+        await page.setViewportSize({ width: 1440, height: 900 });
+        await enterDemoWallet(page, { dismissIntroCarousel, expect, unlockedShell });
+    });
+
+    test('a sidebar-linked screen without Back keeps focus off the page body', async ({ page }) => {
+        const sidebarButton = page.getByRole('navigation', { name: 'Primary navigation' }).getByRole('button', { name: 'History', exact: true });
+        await sidebarButton.focus();
+        await page.keyboard.press('Enter');
+        const heading = page.getByRole('heading', { level: 1, name: 'History', exact: true });
+        await expect(heading).toBeVisible();
+        await expect(page.getByRole('button', { name: 'Back to previous screen' }), 'no Back beside the sidebar').toHaveCount(0);
+        expect(await page.evaluate(() => document.activeElement === document.body), 'focus is on a control').toBe(false);
+    });
+
+    test('the Receive address picker opened by keyboard puts focus on its heading', async ({ page }) => {
+        await gotoSection(page, 'Receive');
+        const opener = page.getByRole('button', { name: /address/i }).first();
+        await opener.focus();
+        await page.keyboard.press('Enter');
+        const heading = page.getByRole('heading', { level: 1, name: 'Choose a receive address' });
+        await expect(heading).toBeVisible();
+        await expect(heading, 'focus does not fall to the page body').toBeFocused();
+    });
+
+    test('the command palette finds Receive by name and opens it', async ({ page }) => {
+        await page.keyboard.press('ControlOrMeta+k');
+        const palette = page.getByRole('dialog', { name: 'Command palette' });
+        await expect(palette).toBeVisible();
+        await page.keyboard.type('Receive');
+        await expect(palette.getByText('No matches')).toHaveCount(0);
+        await expect(palette.getByRole('option', { name: /Receive/ }).first()).toBeVisible();
+        await page.keyboard.press('Enter');
+        const heading = page.getByRole('heading', { level: 1, name: 'Receive', exact: true });
+        await expect(heading).toBeVisible();
+        expect(await page.evaluate(() => document.activeElement === document.body), 'focus is not lost to the page body').toBe(false);
+    });
+});

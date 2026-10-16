@@ -283,16 +283,16 @@ describe('buildCommands', () => {
 
         expect(ids).toEqual(expect.arrayContaining(['create-token', 'create-dispenser', 'trade-swap']));
         expect(ids).not.toEqual(expect.arrayContaining([
-            'nav-send',
-            'nav-receive',
             'nav-actions',
             'nav-multisig-create',
             'nav-multisig-sign',
             'sign-message',
             'sign-psbt',
-            'wallet-scan',
         ]));
         expect(ids).toEqual(expect.arrayContaining([
+            'nav-send',
+            'nav-receive',
+            'wallet-scan',
             'nav-home',
             'nav-history',
             'nav-markets',

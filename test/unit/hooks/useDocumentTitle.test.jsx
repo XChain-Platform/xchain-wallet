@@ -2,10 +2,11 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 import { afterEach, expect, it } from 'vitest';
-import { cleanup, renderHook } from '@testing-library/react';
+import { act, cleanup, renderHook } from '@testing-library/react';
 import {
     documentTitleFor,
     useDocumentTitle,
+    useDocumentTitleSection,
 } from '../../../packages/core/src/shared/hooks/useDocumentTitle.js';
 
 afterEach(() => {
@@ -83,4 +84,42 @@ it('titles screens with the heading the screen shows', () => {
     expect(titleOf('dispenser')).toBe('XChain Wallet - Create dispenser');
     expect(titleOf('compose-message')).toBe('XChain Wallet - New message');
     expect(titleOf('account-picker')).toBe('XChain Wallet - Accounts');
+});
+
+it('titles a sub-screen of Settings with its own heading', () => {
+    expect(documentTitleFor({ statusState: 'unlocked', unlockedView: 'settings' }))
+        .toBe('XChain Wallet - Settings');
+    expect(documentTitleFor({ statusState: 'unlocked', unlockedView: 'settings', section: 'Display' }))
+        .toBe('XChain Wallet - Display');
+    // Only a view that owns sub-screens takes one.
+    expect(documentTitleFor({ statusState: 'unlocked', unlockedView: 'send', section: 'Display' }))
+        .toBe('XChain Wallet - Send');
+    expect(documentTitleFor({ statusState: 'locked', section: 'Display' }))
+        .toBe('XChain Wallet - Unlock');
+});
+
+it('follows the sub-screen the view reports and falls back when it leaves', () => {
+    const title = renderHook(() => useDocumentTitle({
+        statusState: 'unlocked',
+        onboardingStep: 'welcome',
+        unlockedView: 'settings',
+    }));
+    expect(document.title).toBe('XChain Wallet - Settings');
+
+    const section = renderHook(({ label }) => useDocumentTitleSection(label), {
+        initialProps: { label: 'Display' },
+    });
+    expect(document.title).toBe('XChain Wallet - Display');
+
+    section.rerender({ label: 'Backup' });
+    expect(document.title).toBe('XChain Wallet - Backup');
+
+    section.rerender({ label: null });
+    expect(document.title).toBe('XChain Wallet - Settings');
+
+    section.rerender({ label: 'Fees' });
+    expect(document.title).toBe('XChain Wallet - Fees');
+    act(() => { section.unmount(); });
+    expect(document.title).toBe('XChain Wallet - Settings');
+    title.unmount();
 });

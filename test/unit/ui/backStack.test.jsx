@@ -122,13 +122,13 @@ describe('back stack', () => {
     });
 
     it('expires the first Home Back press after the exit window', async () => {
-        vi.spyOn(Date, 'now')
-            .mockReturnValueOnce(10_000)
-            .mockReturnValueOnce(12_001);
+        let now = 10_000;
+        vi.spyOn(Date, 'now').mockImplementation(() => now);
         render(<><NativeBackRoot /><PageHeader title="Home" /></>);
         await settle();
 
         nativeBack({ canGoBack: false });
+        now = 12_001;
         nativeBack({ canGoBack: false });
 
         expect(capacitorApp.minimizeApp).not.toHaveBeenCalled();
