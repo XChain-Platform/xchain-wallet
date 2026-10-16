@@ -227,6 +227,7 @@ export function measureInPage(opts = {}) {
                 topGap: round(fr.top - mr.top + main.scrollTop - main.clientTop),
             } : null,
             headerLeft: hr ? round(hr.left - frameLeft) : null,
+            tier: main.closest('[data-xc-tier]')?.getAttribute('data-xc-tier') ?? null,
         };
     }
 
@@ -603,7 +604,9 @@ export const PAGE_GUTTER_PX = 12;
 /** Returns the route labels and layout-contract failures from a completed sweep. */
 export function layoutSweepFailures(screens) {
     const failures = [];
-    const topGaps = { form: new Set(), list: new Set() };
+    // The sidebar layout sets its own top gap per tier, so form and list gaps
+    // are only comparable inside one shell: onboarding screens sit outside it.
+    const gapsByShell = new Map();
     const close = (actual, expected) => Math.abs(actual - expected) <= 1;
     for (const screen of screens) {
         const rootFailure = rootFontFailure(screen);
@@ -639,9 +642,12 @@ export function layoutSweepFailures(screens) {
         if (first.rightGap + 1 < gutter) {
             failures.push(`${label}: first content right gap ${first.rightGap}px, expected at least ${gutter}px`);
         }
-        topGaps[first.kind].add(first.topGap);
+        const shell = layout.tier ?? 'none';
+        if (!gapsByShell.has(shell)) gapsByShell.set(shell, { form: new Set(), list: new Set() });
+        gapsByShell.get(shell)[first.kind].add(first.topGap);
     }
-    if (topGaps.form.size && topGaps.list.size) {
+    for (const topGaps of gapsByShell.values()) {
+        if (!topGaps.form.size || !topGaps.list.size) continue;
         const forms = [...topGaps.form].sort((a, b) => a - b);
         const lists = [...topGaps.list].sort((a, b) => a - b);
         if (forms.length !== lists.length || forms.some((gap, i) => !close(gap, lists[i]))) {

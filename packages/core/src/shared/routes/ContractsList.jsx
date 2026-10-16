@@ -13,6 +13,8 @@ import { AddressText, Button, ChainBadge, EmptyState, Input, ListPage, PageHeade
 import { registry as registryLib } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { isDemoWallet } from '../../flows/demoMode.js';
+import { OfflineEmptyState } from '../components/OfflineEmptyState.jsx';
+import { useNetworkOffline } from '../hooks/useNetworkOffline.js';
 import { useChainIdsWithAction } from '../hooks/useSupportedChains.js';
 import { actionDisplayLabel } from '../utils/actionDisplayLabel.js';
 import { contractDisplayLabel, contractMetaOf } from './contractResponseShape.js';
@@ -141,6 +143,9 @@ export function ContractsList({ walletId, onOpenContract, onDeploy, onBack }) {
     // A demo wallet lists no contracts of its own: a demo wallet's addresses
     // never go to an explorer (issue #82).
     const isDemo = isDemoWallet(walletId);
+    // Offline the explorer reads cannot finish: the sections wait, the page
+    // shows its offline state, and the reads run when the connection returns.
+    const { offline, recheck } = useNetworkOffline({ walletId });
 
     // Phase 2: "My contracts" (deployed by one of my addresses on the
     // chain). Fan out one sdk.getContracts(addr, 'source') per address
@@ -148,9 +153,10 @@ export function ContractsList({ walletId, onOpenContract, onDeploy, onBack }) {
     useEffect(() => {
         if (!addressesByChain) return;
         if (activeChains.length === 0 || isDemo) {
-            setMyByChain({});
+            setMyByChain(settledEmpty(isDemo ? activeChains : []));
             return;
         }
+        if (offline) return;
         const initial = {};
         for (const cid of activeChains) initial[cid] = { loading: true, rows: [], error: null };
         setMyByChain(initial);
@@ -192,7 +198,7 @@ export function ContractsList({ walletId, onOpenContract, onDeploy, onBack }) {
             });
         }
         return () => { cancelled = true; };
-    }, [addressesByChain, activeChains, messaging, contractsReload, isDemo]);
+    }, [addressesByChain, activeChains, messaging, contractsReload, isDemo, offline]);
 
     // Phase 3: "My interactions": union of deposits + withdrawals
     // scoped to the user's addresses. Returns the set of distinct
@@ -202,9 +208,10 @@ export function ContractsList({ walletId, onOpenContract, onDeploy, onBack }) {
     useEffect(() => {
         if (!addressesByChain) return;
         if (activeChains.length === 0 || isDemo) {
-            setInteractionsByChain({});
+            setInteractionsByChain(settledEmpty(isDemo ? activeChains : []));
             return;
         }
+        if (offline) return;
         const initial = {};
         for (const cid of activeChains) initial[cid] = { loading: true, rows: [], error: null };
         setInteractionsByChain(initial);
@@ -287,13 +294,14 @@ export function ContractsList({ walletId, onOpenContract, onDeploy, onBack }) {
             });
         }
         return () => { cancelled = true; };
-    }, [addressesByChain, activeChains, messaging, contractsReload, isDemo]);
+    }, [addressesByChain, activeChains, messaging, contractsReload, isDemo, offline]);
 
     useEffect(() => {
-        if (activeChains.length === 0) {
-            setBrowseByChain({});
+        if (activeChains.length === 0 || isDemo) {
+            setBrowseByChain(settledEmpty(isDemo ? activeChains : []));
             return;
         }
+        if (offline) return;
         const initial = {};
         for (const cid of activeChains) initial[cid] = { loading: true, rows: [], error: null };
         setBrowseByChain(initial);
@@ -320,7 +328,7 @@ export function ContractsList({ walletId, onOpenContract, onDeploy, onBack }) {
                 });
         }
         return () => { cancelled = true; };
-    }, [activeChains, messaging, contractsReload]);
+    }, [activeChains, messaging, contractsReload, isDemo, offline]);
 
         const header = (
         <PageHeader
@@ -394,6 +402,17 @@ export function ContractsList({ walletId, onOpenContract, onDeploy, onBack }) {
         </>
     );
 
+    // Offline with nothing loaded, the page says so once in place of three
+    // sections waiting on reads that cannot run.
+    const anyContractRows = [myByChain, interactionsByChain, browseByChain]
+        .some((byChain) => Object.values(byChain).some((state) => state.rows?.length > 0));
+    if (offline && !anyContractRows) {
+        return wrap(
+            <OfflineEmptyState body="Contracts load when the connection returns." onRetry={recheck} />,
+            toolbar,
+        );
+    }
+
     return wrap(
         <>
             <ChainSection
@@ -441,6 +460,17 @@ export function ContractsList({ walletId, onOpenContract, onDeploy, onBack }) {
         </>,
         toolbar,
     );
+}
+
+/**
+ * Every chain marked loaded with nothing in it. A chain missing from a
+ * section's map reads as still loading, so a demo wallet (whose addresses
+ * never go to an explorer) settles each chain to its empty state instead.
+ *
+ * @param {string[]} chains
+ */
+function settledEmpty(chains) {
+    return Object.fromEntries(chains.map((cid) => [cid, { loading: false, rows: [], error: null }]));
 }
 
 function Section({ title, children }) {

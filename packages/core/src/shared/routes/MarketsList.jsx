@@ -12,7 +12,8 @@ import { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react'
 import { Button, Chip, EmptyState, Icon, Input, ListPage, ListRow, PageHeader, Screen, Skeleton, StatusMessage, Tabs } from '@xchain-wallet/core/ui';
 import { registry as registryLib, flows as flowsLib } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
-import { useReachability } from '../hooks/useReachability.js';
+import { useNetworkOffline } from '../hooks/useNetworkOffline.js';
+import { OfflineEmptyState } from '../components/OfflineEmptyState.jsx';
 import { DispenserBadge } from '../components/DispenserBadge.jsx';
 import { TickerIcon } from '../components/TickerIcon.jsx';
 import { AssetMark } from '../../ui/AssetMark.jsx';
@@ -55,8 +56,7 @@ export function MarketsList({
 }) {
     const { messaging, shell } = useMessaging();
     const variant = screenVariantFor(shell);
-    const { overall: reachabilityOverall } = useReachability({});
-    const networkOffline = reachabilityOverall === 'offline';
+    const { offline: networkOffline, recheck: recheckNetwork } = useNetworkOffline({ walletId });
     const tabsId = useId();
 
     const [markets, setMarkets] = useState(/** @type {Array<{ tick1: string, tick2: string, lastPrice?: string, change24h?: string, depth?: number }>} */ ([]));
@@ -149,7 +149,8 @@ export function MarketsList({
                 }
             });
         return () => { cancelled = true; };
-    }, [selectedAsset, messaging, walletId, marketsReload]);
+    // The connection coming back reads the markets again.
+    }, [selectedAsset, messaging, walletId, marketsReload, networkOffline]);
 
     const selectedAssetKey = selectedAsset
         ? `${selectedAsset.chainId}:${selectedAsset.tick}`
@@ -281,7 +282,11 @@ export function MarketsList({
         : 'Select coin or token';
     // The load error is a page notice, shown first; the results region below
     // renders nothing in its place.
-    const showLoadError = !!selectedAsset && !(marketsLoading && !hasCachedMarkets) && !!loadError;
+    // Offline, the results region's offline state is the page's one message.
+    const showLoadError = !!selectedAsset && !(marketsLoading && !hasCachedMarkets) && !!loadError
+        && !networkOffline;
+    const showOffline = !!selectedAsset && networkOffline
+        && ((marketsLoading && !hasCachedMarkets) || !!loadError);
     return (
         <Screen variant={variant} header={header}>
             <ListPage
@@ -383,7 +388,7 @@ export function MarketsList({
                     role={selectedAsset ? 'tabpanel' : undefined}
                     aria-labelledby={selectedAsset ? `${tabsId}-tab-${tab}` : undefined}
                 >
-                    <div role="region" aria-label="Markets results" aria-busy={marketsLoading || undefined}>
+                    <div role="region" aria-label="Markets results" aria-busy={(marketsLoading && !showOffline) || undefined}>
                         {!selectedAsset ? (
                             <EmptyState
                                 title="No asset selected"
@@ -392,6 +397,8 @@ export function MarketsList({
                                 onAction={onChangeAsset}
                                 actionIcon={<Icon.MarketIcon />}
                             />
+                        ) : showOffline ? (
+                            <OfflineEmptyState body="Markets load when the connection returns." onRetry={recheckNetwork} />
                         ) : marketsLoading && !hasCachedMarkets ? (
                             <div role="status" aria-label="Loading markets">
                                 <Skeleton.List rows={5} rowHeight={60} avatarSize={36} />

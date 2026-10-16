@@ -116,10 +116,15 @@ describe('Send empty state and the balance check', () => {
         expect(onReceive).toHaveBeenCalledTimes(1);
     });
 
-    it('treats an offline verdict the same way', async () => {
+    it('shows the form with its one offline notice on an offline verdict, without a balance read', async () => {
+        // Offline the read cannot finish, so the form does not wait on it.
         reachability.overall = 'offline';
-        mount('0');
-        expect(await screen.findByRole('heading', { name: "Balances couldn't be checked" })).toBeInTheDocument();
+        const { messaging } = mount('0', { inShell: true });
+        expect(await screen.findByRole('form', { name: 'Send' })).toBeInTheDocument();
+        expect(messaging.getWalletBalances).not.toHaveBeenCalled();
+        expect(screen.getByText(/Sending needs a network connection/)).toBeInTheDocument();
+        expect(screen.queryByText('Some balances may be out of date')).toBeNull();
+        expect(screen.queryByRole('heading', { name: "Balances couldn't be checked" })).toBeNull();
     });
 
     it('keeps the form when the wallet holds coin, whatever the check says', async () => {

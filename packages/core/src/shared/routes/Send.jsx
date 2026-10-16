@@ -218,7 +218,10 @@ import { useScreenShortcuts } from '../keyboard/useScreenShortcuts.js';
 import { useSignerInfo } from '../hooks/useSignerInfo.js';
 import { useUndoSend } from '../hooks/useUndoSend.js';
 import { useReachability } from '../hooks/useReachability.js';
+import { useOnlineStatus } from '../hooks/useOnlineStatus.js';
 import { BalancesUncheckedState } from '../components/BalancesUncheckedState.jsx';
+import { HideReachabilityNotice } from '../components/hideReachabilityNotice.js';
+import { readBalanceCache } from '../utils/balanceCache.js';
 import { useFormLeaveGuard } from '../hooks/useFormLeaveGuard.js';
 import { useDispenserDestination, dispenserDestinationNotice } from '../hooks/useDispenserDestination.js';
 import {
@@ -390,7 +393,10 @@ export function Send({ walletId, accountId, onBack, prefill = null, onDone, onCh
     const { overall: reachabilityOverall, refresh: recheckReachability } = useReachability({
         chainIds: isDemoWallet(walletId) ? [] : undefined,
     });
-    const networkOffline = reachabilityOverall === 'offline';
+    // A device with no network is offline from the first render; the probe's
+    // own verdict lands only after its first check.
+    const browserOnline = useOnlineStatus();
+    const networkOffline = !browserOnline || reachabilityOverall === 'offline';
     // The verdict behind the shell's "Some balances may be out of date".
     const balancesUnchecked = reachabilityOverall === 'degraded' || networkOffline;
     const mountedRef = useRef(true);
@@ -1631,6 +1637,16 @@ export function Send({ walletId, accountId, onBack, prefill = null, onDone, onCh
             setPreviewBalances({ loading: false, error: null, sdkShape: null });
             return undefined;
         }
+        // Offline the read cannot finish (the request layer retries it for up
+        // to a minute), so the hint shows Home's saved copy of this address
+        // when there is one and says the balance is unavailable when not.
+        if (networkOffline && !isDemo) {
+            const saved = (readBalanceCache(walletId, accountId, settings?.activeNetwork || 'mainnet')
+                ?.balances?.[chainId] || [])
+                .find((row) => row?.address === fromAddress.address);
+            setPreviewBalances({ loading: false, error: null, sdkShape: saved?.balances || null });
+            return undefined;
+        }
         let cancelled = false;
         setPreviewBalances({ loading: true, error: null, sdkShape: null });
         if (isDemo) {
@@ -1653,7 +1669,7 @@ export function Send({ walletId, accountId, onBack, prefill = null, onDone, onCh
                 });
             });
         return () => { cancelled = true; };
-    }, [stage, chainId, fromAddress, messaging, isDemo, addressesByChain]);
+    }, [stage, chainId, fromAddress, messaging, isDemo, addressesByChain, networkOffline, walletId, accountId, settings?.activeNetwork]);
 
     // Set once the first balance check settles; see the loading gate below.
     const balanceGateSettledRef = useRef(false);
@@ -1667,7 +1683,10 @@ export function Send({ walletId, accountId, onBack, prefill = null, onDone, onCh
         // Until the address map and chain are known the status stays at its
         // loading default, so the form never flashes before the check runs.
         if (!chainId || !addressesByChain) return undefined;
-        if (isWatcherMode || isSignerMode || isDemo) {
+        // Offline the read cannot finish (the request layer retries it for up
+        // to a minute), so the form shows at once and the check runs again
+        // when the connection returns.
+        if (isWatcherMode || isSignerMode || isDemo || networkOffline) {
             setChainBalanceState({ chainId, status: 'unknown' });
             return undefined;
         }
@@ -1704,7 +1723,7 @@ export function Send({ walletId, accountId, onBack, prefill = null, onDone, onCh
                 if (!cancelled) setChainBalanceState({ chainId, status: 'unknown' });
             });
         return () => { cancelled = true; };
-    }, [walletId, accountId, chainId, addressesByChain, messaging, isWatcherMode, isSignerMode, isDemo, balanceRecheck]);
+    }, [walletId, accountId, chainId, addressesByChain, messaging, isWatcherMode, isSignerMode, isDemo, balanceRecheck, networkOffline]);
 
     // PC-26 gated-send readiness. A tick with active gated content can
     // only be sent as BATCH(SEND, MESSAGE-with-key); the host guard
@@ -3210,9 +3229,14 @@ export function Send({ walletId, accountId, onBack, prefill = null, onDone, onCh
                         {submitError}
                     </StatusMessage>
                 ) : networkOffline ? (
-                    <StatusMessage variant="warning">
-                        {t('send.offline.body')}
-                    </StatusMessage>
+                    <>
+                        {/* This notice is the page's one offline message, so
+                            the shell's reachability notice steps aside. */}
+                        <HideReachabilityNotice />
+                        <StatusMessage variant="warning">
+                            {t('send.offline.body')}
+                        </StatusMessage>
+                    </>
                 ) : null}
                 actions={(
                     <Button
@@ -3526,9 +3550,14 @@ export function Send({ walletId, accountId, onBack, prefill = null, onDone, onCh
                     }
                 />
             ) : networkOffline ? (
-                <StatusMessage variant="warning">
-                    {t('send.offline.body')}
-                </StatusMessage>
+                <>
+                    {/* This notice is the page's one offline message, so the
+                        shell's reachability notice steps aside. */}
+                    <HideReachabilityNotice />
+                    <StatusMessage variant="warning">
+                        {t('send.offline.body')}
+                    </StatusMessage>
+                </>
             ) : null}
             actions={(
                 <Button
@@ -3682,6 +3711,8 @@ export function Send({ walletId, accountId, onBack, prefill = null, onDone, onCh
                         ? t('common.loading')
                         : previewBalances.error
                             ? t('send.balance.unavailable', { error: previewBalances.error })
+                            : networkOffline && !isDemo && !previewBalances.sdkShape
+                                ? t('send.balance.unknown')
                             : sourceBalance
                                 ? t('send.balance.available', {
                                     amount: formatWithThousands(sourceBalance.amount),

@@ -23,6 +23,8 @@ import { ActionConfirmScreen } from '../components/ActionConfirmScreen.jsx';
 import { WatcherResultPanel } from '../components/WatcherResultPanel.jsx';
 import { ListToolbar } from '../components/ListToolbar.jsx';
 import { NetworkFilterDropdown } from '../components/NetworkFilterDropdown.jsx';
+import { OfflineEmptyState } from '../components/OfflineEmptyState.jsx';
+import { useNetworkOffline } from '../hooks/useNetworkOffline.js';
 import { RelativeTime } from '../components/RelativeTime.jsx';
 import { coinFromChainId } from '../components/BalanceList.jsx';
 import {
@@ -69,6 +71,7 @@ const chainRegistry = registryLib.defaultRegistry();
 export function MessagingInbox({ walletId, activeAccountId, onCompose, onBack, initialCounterparty }) {
     const { messaging, shell } = useMessaging();
     const variant = screenVariantFor(shell);
+    const { offline, recheck } = useNetworkOffline({ walletId });
     const scope = `${walletId}:${activeAccountId || 'default'}`;
     // Whether the session can sign without a per-action password. The shared
     // confirmation screen uses this to either show the unlocked note or ask
@@ -308,6 +311,9 @@ export function MessagingInbox({ walletId, activeAccountId, onCompose, onBack, i
         if (autoOpenedRef.current) return undefined;
         if (stage !== 'pick') return undefined;
         if (!addressesByChain || sweepAddrs.length === 0) return undefined;
+        // Offline the inbox read cannot finish; it opens when the connection
+        // returns.
+        if (offline) return undefined;
         autoOpenedRef.current = true;
         if (flowsLib.isDemoWallet(walletId)) { void fetchInbox(null); return undefined; }
         if (typeof messaging.signerReady !== 'function') { setStage('password'); return undefined; }
@@ -321,7 +327,7 @@ export function MessagingInbox({ walletId, activeAccountId, onCompose, onBack, i
             .catch(() => { if (!cancelled) setStage('password'); });
         return () => { cancelled = true; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [stage, addressesByChain, sweepAddrs, walletId, messaging]);
+    }, [stage, addressesByChain, sweepAddrs, walletId, messaging, offline]);
 
     // MESSAGE format-0/1 rows are ECDH key-exchange handshakes (a published
     // pubkey, no body), not conversation messages: keep them out of the chat
@@ -625,6 +631,16 @@ export function MessagingInbox({ walletId, activeAccountId, onCompose, onBack, i
         return wrap(
             <ListPage actions={actionsFor()}>
                 <EmptyState title="No messaging addresses" body="Messaging requires an address that can receive messages." />
+            </ListPage>,
+        );
+    }
+
+    // Offline before the inbox has loaded, the page says so once instead of
+    // loading a sweep, or asking for a password to unlock one, that cannot run.
+    if (offline && (stage === 'pick' || stage === 'submitting' || stage === 'password')) {
+        return wrap(
+            <ListPage actions={actionsFor()}>
+                <OfflineEmptyState body="Your messages load when the connection returns." onRetry={recheck} />
             </ListPage>,
         );
     }

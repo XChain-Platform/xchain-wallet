@@ -93,6 +93,25 @@ test('layout gutter assertion contract', () => {
     ]);
 });
 
+test('top gaps compare form and list only inside one shell', () => {
+    const layout = (kind, topGap, tier) => ({
+        contentLeft: 12,
+        contentRightGap: 12,
+        headerLeft: 12,
+        tier,
+        first: { kind, left: 12, rightGap: 12, topGap },
+    });
+    // Onboarding sits outside the sidebar layout, which adds its own top gap.
+    expect(layoutSweepFailures([
+        { label: 'onboarding', vw: 834, layout: layout('form', 12, null) },
+        { label: 'nav', vw: 834, layout: layout('list', 16, 'full') },
+    ])).toEqual([]);
+    expect(layoutSweepFailures([
+        { label: 'form', vw: 834, layout: layout('form', 12, 'full') },
+        { label: 'nav', vw: 834, layout: layout('list', 16, 'full') },
+    ])).toEqual(['form top gaps [12] do not match list top gaps [16]']);
+});
+
 test('clip measurement skips text nobody can see', async ({ page, browserName }) => {
     await page.setContent(`
         <style>

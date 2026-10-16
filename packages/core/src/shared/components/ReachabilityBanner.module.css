@@ -9,9 +9,13 @@
     gap: var(--xc-space-1) var(--xc-space-2);
 }
 
+/* No inline padding: when the link wraps under the message its word starts
+   where the message starts. min-width keeps the tap target, with the word
+   held at the start rather than centred inside it. */
 .detailsToggle {
     min-height: var(--xc-tap-min);
-    padding: 0 var(--xc-space-1);
+    min-width: var(--xc-tap-min);
+    padding: 0;
     border: 0;
     background: transparent;
     color: inherit;
@@ -23,7 +27,7 @@
     text-underline-offset: 2px;
     display: inline-flex;
     align-items: center;
-    justify-content: center;
+    justify-content: flex-start;
 }
 
 /* The panel is a row below the message line: it grows the notice to its

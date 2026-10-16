@@ -15,6 +15,8 @@ import * as branding from '../../branding/branding.js';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { ListToolbar } from '../components/ListToolbar.jsx';
 import { NetworkFilterDropdown } from '../components/NetworkFilterDropdown.jsx';
+import { OfflineEmptyState } from '../components/OfflineEmptyState.jsx';
+import { useNetworkOffline } from '../hooks/useNetworkOffline.js';
 import { coinFromChainId } from '../components/BalanceList.jsx';
 import { listLabel } from '../utils/listLabel.js';
 import styles from './ActionsMenu.module.css';
@@ -55,6 +57,7 @@ export function MyLists(props) {
 function MyListsScreen({ walletId, activeAccountId, onOpenList, onCreateList, onCreateUnionList, onOpenSharedLists, onBack }) {
     const { messaging, shell } = useMessaging();
     const variant = screenVariantFor(shell);
+    const { offline, recheck } = useNetworkOffline({ walletId });
 
     const [addressesByChain, setAddressesByChain] = useState(
         /** @type {Record<string, any[]> | null} */ (null),
@@ -88,6 +91,9 @@ function MyListsScreen({ walletId, activeAccountId, onOpenList, onCreateList, on
         if (!addressesByChain) return;
         const chains = Object.keys(addressesByChain);
         if (chains.length === 0) return;
+        // Offline the reads cannot finish; rows already shown stay, and the
+        // lists load again when the connection returns.
+        if (offline) return;
 
         const initial = {};
         for (const cid of chains) initial[cid] = { loading: true, rows: [], error: null };
@@ -136,7 +142,7 @@ function MyListsScreen({ walletId, activeAccountId, onOpenList, onCreateList, on
             });
         }
         return () => { cancelled = true; };
-    }, [addressesByChain, messaging, listsReload]);
+    }, [addressesByChain, messaging, listsReload, offline]);
 
     const allRows = useMemo(() => {
         /** @type {any[]} */
@@ -258,7 +264,8 @@ function MyListsScreen({ walletId, activeAccountId, onOpenList, onCreateList, on
         </ListToolbar>
     );
 
-    const notices = loadErrors.length > 0 ? (
+    // Offline, the screen's one message is its offline state below.
+    const notices = loadErrors.length > 0 && !offline ? (
         <StatusMessage
             variant="error"
             className={styles.entryDescription}
@@ -279,7 +286,9 @@ function MyListsScreen({ walletId, activeAccountId, onOpenList, onCreateList, on
 
     return wrap(
         <>
-            {anyLoading && visibleRows.length === 0 ? (
+            {offline && allRows.length === 0 ? (
+                <OfflineEmptyState body="Your lists load when the connection returns." onRetry={recheck} />
+            ) : anyLoading && visibleRows.length === 0 ? (
                 <div role="status" aria-label="Loading lists">
                     <Skeleton.List rows={5} />
                 </div>

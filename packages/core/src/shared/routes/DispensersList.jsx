@@ -15,6 +15,8 @@ import * as branding from '../../branding/branding.js';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { ListToolbar } from '../components/ListToolbar.jsx';
 import { NetworkFilterDropdown } from '../components/NetworkFilterDropdown.jsx';
+import { OfflineEmptyState } from '../components/OfflineEmptyState.jsx';
+import { useNetworkOffline } from '../hooks/useNetworkOffline.js';
 import { coinFromChainId, isAssetImageSourceAllowed, tickerColor } from '../components/BalanceList.jsx';
 import { useOracleFeeds } from '../hooks/useOracleFeeds.js';
 import { useSettings } from '../hooks/useSettings.js';
@@ -58,6 +60,7 @@ export function DispensersList({ walletId, activeAccountId, onOpenDispenser, onC
     const { messaging, shell } = useMessaging();
     const variant = screenVariantFor(shell);
     const isDemo = flowsLib.isDemoWallet(walletId);
+    const { offline, recheck } = useNetworkOffline({ walletId });
     const { settings } = useSettings();
     const allowRemoteImages = Boolean(settings)
         && settings.privacy?.metadataFetchEnabled !== false;
@@ -90,12 +93,12 @@ export function DispensersList({ walletId, activeAccountId, onOpenDispenser, onC
     // standard wallet cadence lets an open row become closing or terminal as
     // soon as the explorer indexes the owner transaction.
     useEffect(() => {
-        if (!addressesByChain || flowsLib.isDemoWallet(walletId)) return undefined;
+        if (!addressesByChain || flowsLib.isDemoWallet(walletId) || offline) return undefined;
         return startVisibleInterval(
             () => setDispensersReload((value) => value + 1),
             DISPENSER_REFRESH_MS,
         );
-    }, [addressesByChain, walletId]);
+    }, [addressesByChain, walletId, offline]);
 
     useEffect(() => {
         let cancelled = false;
@@ -142,6 +145,9 @@ export function DispensersList({ walletId, activeAccountId, onOpenDispenser, onC
         if (!addressesByChain) return;
         const chains = chainsWithAddresses;
         if (chains.length === 0) return;
+        // Offline the reads cannot finish; rows already shown stay, and the
+        // dispensers load again when the connection returns.
+        if (offline) return;
 
         setDispensersByChain((previous) => {
             const initial = {};
@@ -243,7 +249,7 @@ export function DispensersList({ walletId, activeAccountId, onOpenDispenser, onC
             });
         }
         return () => { cancelled = true; };
-    }, [addressesByChain, chainsWithAddresses, messaging, isDemo, dispensersReload]);
+    }, [addressesByChain, chainsWithAddresses, messaging, isDemo, dispensersReload, offline]);
     // Re-render once a minute while any closing row shows a countdown, and
     // re-read the protocol time of each chain with one, at most once per
     // CHAIN_TIME_REFRESH_MS. The key is a sorted list so it only changes when
@@ -391,7 +397,8 @@ export function DispensersList({ walletId, activeAccountId, onOpenDispenser, onC
     const emptyOffersCreate = !anyLoading && !hasLoadErrors && allRows.length === 0;
     return wrap(
         <ListPage
-            notices={hasLoadErrors ? (
+            // Offline, the screen's one message is its offline state below.
+            notices={hasLoadErrors && !offline ? (
                 <StatusMessage
                     variant="error"
                     className={styles.entryDescription}
@@ -417,7 +424,9 @@ export function DispensersList({ walletId, activeAccountId, onOpenDispenser, onC
                 </ListToolbar>
             )}
         >
-            {anyLoading && visibleRows.length === 0 ? (
+            {offline && allRows.length === 0 ? (
+                <OfflineEmptyState body="Your dispensers load when the connection returns." onRetry={recheck} />
+            ) : anyLoading && visibleRows.length === 0 ? (
                 <div role="status" aria-label="Loading dispensers">
                     <Skeleton.List rows={5} />
                 </div>
