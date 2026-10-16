@@ -162,41 +162,6 @@
     margin: 0 0 var(--xc-space-3);
 }
 
-/* Unboxed, like the plain EmptyState. */
-.placeholder {
-    padding: var(--xc-space-5) var(--xc-space-4);
-    text-align: center;
-}
-
-.placeholderTitle {
-    font-size: var(--xc-type-card-title-size);
-    font-weight: var(--xc-type-card-title-weight);
-    color: var(--xc-text);
-    margin-bottom: var(--xc-space-2);
-}
-
-.placeholderBody {
-    font-size: var(--xc-type-body-size);
-    font-weight: var(--xc-type-body-weight);
-    color: var(--xc-text-muted);
-    line-height: 1.5;
-    margin: 0;
-    text-align: center;
-}
-
-.placeholderAction {
-    display: flex;
-    justify-content: center;
-    margin-top: var(--xc-space-3);
-}
-
-.firstFundingActions {
-    display: flex;
-    flex-wrap: wrap;
-    justify-content: center;
-    gap: var(--xc-space-2);
-}
-
 /* Demo activity / defi list: single rounded card with row dividers,
    matching the Tokens / Coins list layout so all five tabs share the
    same visual rhythm. */

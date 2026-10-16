@@ -9,7 +9,7 @@
 // contact legal@dankest.llc.
 
 import { memo, useCallback, useEffect, useId, useMemo, useState } from 'react';
-import { Button, Icon, Tabs } from '@xchain-wallet/core/ui';
+import { EmptyState, Icon, Tabs } from '@xchain-wallet/core/ui';
 import * as branding from '@xchain-wallet/core/branding/branding.js';
 import {
     BalanceList,
@@ -552,34 +552,17 @@ export const HomeTabs = memo(function HomeTabs({ chainRegistry, balances, active
                 {active === 'coins' && showUnchecked && (showFirstFunding || coins.length === 0) ? uncheckedState : null}
                 {active === 'coins' && !(showUnchecked && (showFirstFunding || coins.length === 0)) ? (
                     showFirstFunding ? (
-                        <Placeholder
+                        <EmptyState
                             title={t('home.tabs.fundYourWallet')}
                             body={hasAddresses
                                 ? t('home.tabs.receiveCoinsFromAnotherWallet')
                                 : t('home.tabs.generateAReceivingAddressThen')}
-                            action={(
-                                <div className={styles.firstFundingActions}>
-                                    <Button
-                                        variant="primary"
-                                        size="sm"
-                                        onClick={hasAddresses ? onReceive : onAddAddress}
-                                        disabled={hasAddresses ? !onReceive : !onAddAddress}
-                                        icon={hasAddresses ? <Icon.ReceiveIcon /> : <Icon.PlusIcon />}
-                                    >
-                                        {hasAddresses ? t('home.receive') : t('receive.generateAnAddress')}
-                                    </Button>
-                                    {onBuy ? (
-                                        <Button
-                                            variant="secondary"
-                                            size="sm"
-                                            onClick={onBuy}
-                                            icon={<Icon.MarketIcon />}
-                                        >
-                                            {t('home.tabs.buyCoins')}
-                                        </Button>
-                                    ) : null}
-                                </div>
-                            )}
+                            actionLabel={hasAddresses ? t('home.receive') : t('receive.generateAnAddress')}
+                            onAction={hasAddresses ? onReceive : onAddAddress}
+                            actionIcon={hasAddresses ? <Icon.ReceiveIcon /> : <Icon.PlusIcon />}
+                            secondaryActionLabel={onBuy ? t('home.tabs.buyCoins') : undefined}
+                            onSecondaryAction={onBuy}
+                            secondaryActionIcon={<Icon.MarketIcon />}
                         />
                     ) : (
                         <BalanceList
@@ -733,19 +716,11 @@ export const HomeTabs = memo(function HomeTabs({ chainRegistry, balances, active
                             allowRemoteImages={allowRemoteImages}
                         />
                     ) : (
-                        <Placeholder
+                        <EmptyState
                             title={t('home.tabs.yourActivityIsInHistory')}
                             body={t('home.tabs.everySendReceiveAndOther')}
-                            action={(
-                                <Button
-                                    variant="secondary"
-                                    size="sm"
-                                    onClick={onHistory}
-                                    disabled={!onHistory}
-                                >
-                                    {t('home.tabs.openHistory')}
-                                </Button>
-                            )}
+                            actionLabel={t('home.tabs.openHistory')}
+                            onAction={onHistory}
                         />
                     )
                 ) : null}
@@ -760,7 +735,7 @@ export const HomeTabs = memo(function HomeTabs({ chainRegistry, balances, active
                             allowRemoteImages={allowRemoteImages}
                         />
                     ) : (
-                        <Placeholder
+                        <EmptyState
                             title={t('home.tabs.noDefiPositionsYet')}
                             body={t('home.tabs.stakingDispensersContractBalancesAnd')}
                         />
@@ -874,16 +849,6 @@ function useOwnedTokens(balances, enabled) {
         return () => { cancelled = true; };
     }, [enabled, addressKey, messaging]);
     return owned;
-}
-
-function Placeholder({ title, body, action = null }) {
-    return (
-        <div className={styles.placeholder}>
-            <div className={styles.placeholderTitle}>{title}</div>
-            <p className={styles.placeholderBody}>{body}</p>
-            {action ? <div className={styles.placeholderAction}>{action}</div> : null}
-        </div>
-    );
 }
 
 function hasNonZeroQuantity(row) {
@@ -1052,7 +1017,7 @@ function DemoActivityList({ chainIds, balances, networkFilter, walletId, onSelec
     }, [entries]);
 
     if (entries.length === 0) {
-        return <Placeholder title={t('history.empty.noActivityTitle')} body={t('home.tabs.synthesizedDemoActivityWillAppear')} />;
+        return <EmptyState title={t('history.empty.noActivityTitle')} body={t('home.tabs.synthesizedDemoActivityWillAppear')} />;
     }
     return (
         <ul className={`${styles.demoList} ${styles.activityList}`}>
@@ -1110,7 +1075,7 @@ function DemoDefiList({ networkFilter, balances, chainRegistry, onSelectEntry, a
     const assetLookup = useMemo(() => buildTokenLookup(balances), [balances]);
 
     if (positions.length === 0) {
-        return <Placeholder title={t('home.tabs.noDefiPositions')} body={t('home.tabs.noDemoPositionsOnThe')} />;
+        return <EmptyState title={t('home.tabs.noDefiPositions')} body={t('home.tabs.noDemoPositionsOnThe')} />;
     }
     return (
         <ul className={styles.demoList}>
