@@ -1523,7 +1523,9 @@ const SUBMIT_FAILURES = [
 function expectFailureBesideAction(utils, spec, shown, hidden) {
     const message = utils.getByText(shown);
     const action = utils.getByRole('button', { name: spec.actionLabel });
-    expect(message.closest('form')).toBe(action.closest('form'));
+    // The failure leads the action's form page: the notice slot just above the
+    // form (its card, when wide), never a box inside it or another form's.
+    expect(action.closest('form').previousElementSibling).toContainElement(message);
     expect(utils.container.textContent || '').not.toContain(hidden);
     spec.expectValues(utils);
 }

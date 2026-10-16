@@ -135,8 +135,8 @@ export function FeeSelector({
         ({ estimate }) => estimate?.source === 'static-placeholder',
     );
 
-    // Inside a FormPage the notice is shown at the top of the form with the
-    // others; anywhere else it stays under the selector.
+    // Inside a FormPage the notice leads the page content with the form's
+    // others (above the card when wide); anywhere else it stays under the selector.
     const noEstimate = !tiers || tierList.length === 0;
     let noticeText = null;
     if (showEstimateNotice) {

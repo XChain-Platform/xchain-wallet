@@ -29,6 +29,21 @@
     line-height: 20px;
 }
 
+/* The input is forced left to right so an address always reads in order, which
+   makes its logical sides run opposite to the wrapper's in an RTL app. The
+   actions sit at the wrapper's end edge (the physical left in RTL), so the room
+   for them is reserved on whichever side of the input that is. */
+.wrap input {
+    min-width: 0;
+    padding-inline-end: var(--address-end-room, var(--xc-control-pad-x-md, 12px));
+}
+
+:global([dir='rtl']) .wrap input {
+    padding-inline-start: var(--address-end-room, var(--xc-control-pad-x-md, 12px));
+    padding-inline-end: var(--xc-control-pad-x-md, 12px);
+    text-align: end;
+}
+
 .iconButton {
     /* The pointer target never drops below the WCAG 2.5.8 floor; a later
        min-height or height here may raise it. */
@@ -81,10 +96,6 @@
 .pasteAction [role='alert'] {
     display: block;
     margin-block-start: var(--xc-help-gap);
-}
-
-.wrap input {
-    min-width: 0;
 }
 
 .noLabel .iconButton {

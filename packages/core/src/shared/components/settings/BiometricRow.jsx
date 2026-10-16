@@ -44,7 +44,7 @@ import {
     clearBiometricCredential,
     registerBiometricCredential,
 } from '../../../flows/biometricUnlock.js';
-import { ROW, ROW_HINT } from './_settingsPrimitives.jsx';
+import { ROW, ROW_HINT, SettingsInlineForm } from './_settingsPrimitives.jsx';
 import { t } from '../../../i18n/index.js';
 
 export function BiometricRow() {
@@ -191,52 +191,49 @@ export function BiometricRow() {
     if (enrolAction !== null) {
         const isReenrol = enrolAction === 'reenrol';
         return (
-            <form onSubmit={handleEnable} style={{ ...ROW, flexDirection: 'column', alignItems: 'stretch' }}>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--xc-space-1)' }}>
-                    <span style={labelStyle}>{isReenrol ? t('settings.biometric.reEnrol') : t('settings.biometric.enable')} {t('settings.biometric.biometricUnlock2')}</span>
-                    <span style={ROW_HINT}>
-                        {t('settings.biometric.confirmYourCurrentWalletPassword')} {description.wrapNote}
-                    </span>
-                </div>
-                <Input
-                    type="password"
-                    revealable
-                    enterKeyHint="go"
-                    value={password}
-                    onChange={(e) => { setPassword(e.target.value); if (error) setError(null); }}
-                    placeholder={t('send.gated.passwordLabel')}
-                    autoComplete="current-password"
-                    aria-label={t('send.gated.passwordLabel')}
-                />
-                {error ? (
-                    <StatusMessage
-                        variant="error"
-                        recovery={retryRef.current ? { label: t('common.tryAgain'), onAction: retryRef.current } : undefined}
-                    >
-                        {error}
-                    </StatusMessage>
-                ) : null}
-                <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 'var(--xc-space-2)' }}>
-                    <Button
-                        type="button"
-                        size="sm"
-                        variant="ghost"
-                        icon={null}
-                        onClick={() => { setEnrolAction(null); setPassword(''); setError(null); }}
-                        disabled={busy}
-                    >
-                        {t('common.cancel')}
-                    </Button>
-                    <Button
-                        type="submit"
-                        size="sm"
-                        icon={null}
-                        disabled={busy || password.length === 0}
-                    >
-                        {busy ? t('settings.biometric.pairing') : (isReenrol ? t('settings.biometric.reEnrol') : t('settings.biometric.enable'))}
-                    </Button>
-                </div>
-            </form>
+            <SettingsInlineForm
+                error={error}
+                recovery={retryRef.current ? { label: t('common.tryAgain'), onAction: retryRef.current } : undefined}
+            >
+                <form onSubmit={handleEnable} style={{ ...ROW, flexDirection: 'column', alignItems: 'stretch' }}>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--xc-space-1)' }}>
+                        <span style={labelStyle}>{isReenrol ? t('settings.biometric.reEnrol') : t('settings.biometric.enable')} {t('settings.biometric.biometricUnlock2')}</span>
+                        <span style={ROW_HINT}>
+                            {t('settings.biometric.confirmYourCurrentWalletPassword')} {description.wrapNote}
+                        </span>
+                    </div>
+                    <Input
+                        type="password"
+                        revealable
+                        enterKeyHint="go"
+                        value={password}
+                        onChange={(e) => { setPassword(e.target.value); if (error) setError(null); }}
+                        placeholder={t('send.gated.passwordLabel')}
+                        autoComplete="current-password"
+                        aria-label={t('send.gated.passwordLabel')}
+                    />
+                    <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 'var(--xc-space-2)' }}>
+                        <Button
+                            type="button"
+                            size="sm"
+                            variant="ghost"
+                            icon={null}
+                            onClick={() => { setEnrolAction(null); setPassword(''); setError(null); }}
+                            disabled={busy}
+                        >
+                            {t('common.cancel')}
+                        </Button>
+                        <Button
+                            type="submit"
+                            size="sm"
+                            icon={null}
+                            disabled={busy || password.length === 0}
+                        >
+                            {busy ? t('settings.biometric.pairing') : (isReenrol ? t('settings.biometric.reEnrol') : t('settings.biometric.enable'))}
+                        </Button>
+                    </div>
+                </form>
+            </SettingsInlineForm>
         );
     }
 

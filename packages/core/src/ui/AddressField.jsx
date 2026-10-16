@@ -169,7 +169,7 @@ export const AddressField = /* @__PURE__ */ forwardRef(function AddressField(
                 autoCorrect="off"
                 spellCheck={false}
                 style={endRoom ? {
-                    paddingInlineEnd: endRoom,
+                    '--address-end-room': endRoom,
                     ...style,
                 } : style}
                 title={showReadOnlyAddress ? value : undefined}

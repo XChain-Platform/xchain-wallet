@@ -72,7 +72,7 @@ export function documentTitleFor({ statusState, onboardingStep, unlockedView }) 
     if (statusState === 'no-wallet') label = ONBOARDING_LABELS[onboardingStep] || 'Welcome';
     if (statusState === 'error') label = 'Error';
     if (statusState === 'unlocked') label = labelForRoute(unlockedView);
-    return label ? `${label} - ${APP_TITLE}` : APP_TITLE;
+    return label ? `${APP_TITLE} - ${label}` : APP_TITLE;
 }
 
 export function useDocumentTitle({ statusState, onboardingStep, unlockedView, enabled = true }) {

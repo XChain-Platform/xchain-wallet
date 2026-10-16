@@ -512,12 +512,15 @@ export function Receive({ walletId, accountId, prefill = null, onBack, onChangeA
         };
     }, [address?.id, activeChainId, loadError, generateError]);
 
-    // The error sits first in the page content, but New address is lower down:
-    // bring the error into view so a failed tap is not silent on a phone.
+    // The error sits first in the page content, but New address and the device
+    // check are lower down: bring the error into view so a failed tap is not
+    // silent on a phone.
+    const hwVerifyFailed = hwVerify.status === 'mismatch' || hwVerify.status === 'error';
     useEffect(() => {
-        if (!generateError) return;
-        document.getElementById('receive-generate-error')?.scrollIntoView?.({ block: 'nearest' });
-    }, [generateError]);
+        if (!generateError && !hwVerifyFailed) return;
+        const id = generateError ? 'receive-generate-error' : 'receive-hw-verify-error';
+        document.getElementById(id)?.scrollIntoView?.({ block: 'nearest' });
+    }, [generateError, hwVerifyFailed]);
 
     const verifyOnDevice = useCallback(async () => {
         if (!address || !activeChainId) return;
@@ -1137,16 +1140,25 @@ export function Receive({ walletId, accountId, prefill = null, onBack, onChangeA
         </div>
     ) : null;
 
+    // One page-level error at a time, drawn as the first item of the page content
+    // (above the card when wide): the load failure, then a failed New address,
+    // then a hardware-wallet verification failure. The amount error stays under
+    // its field.
+    const hwVerifyNotice = isHwAddress && address
+        ? (hwVerify.status === 'mismatch'
+            ? `${t('receive.your')} ${hwDeviceLabel} ${t('receive.showedADifferentAddressDo')}`
+            : hwVerify.status === 'error' ? hwVerify.message : null)
+        : null;
+    const pageNotice = loadError
+        ? <StatusMessage variant="error">{loadError}</StatusMessage>
+        : generateError
+            ? <StatusMessage variant="error" id="receive-generate-error">{generateError}</StatusMessage>
+            : hwVerifyNotice
+                ? <StatusMessage variant="error" id="receive-hw-verify-error">{hwVerifyNotice}</StatusMessage>
+                : null;
+
     const body = (
         <>
-            {loadError ? (
-                <StatusMessage variant="error">{loadError}</StatusMessage>
-            ) : null}
-
-            {generateError ? (
-                <StatusMessage variant="error" id="receive-generate-error">{generateError}</StatusMessage>
-            ) : null}
-
             {noAddresses ? (
                 <EmptyState
                     title={t('history.empty.noAddressesTitle')}
@@ -1290,11 +1302,9 @@ export function Receive({ walletId, accountId, prefill = null, onBack, onChangeA
                             onAmountFieldChange={onAmountFieldChange}
                             toggleAmountInputMode={toggleAmountInputMode}
                             inputRef={amountInputRef}
+                            error={amountError || undefined}
                         />
                     </div>
-                    {amountError ? (
-                        <StatusMessage variant="error">{amountError}</StatusMessage>
-                    ) : null}
                     {isHwAddress ? (
                         <section
                             role="group"
@@ -1309,12 +1319,6 @@ export function Receive({ walletId, accountId, prefill = null, onBack, onChangeA
                                 <p className={styles.hint} role="status">
                                     {t('receive.addressVerifiedOnYour')} {hwDeviceLabel}{t('receive.itIsSafeToShare')}
                                 </p>
-                            ) : hwVerify.status === 'mismatch' ? (
-                                <StatusMessage variant="error">
-                                    {t('receive.your')} {hwDeviceLabel} {t('receive.showedADifferentAddressDo')}
-                                </StatusMessage>
-                            ) : hwVerify.status === 'error' ? (
-                                <StatusMessage variant="error">{hwVerify.message}</StatusMessage>
                             ) : (
                                 <p className={styles.hint}>
                                     {t('receive.verifyThisAddressOnYour')} {hwDeviceLabel} {t('receive.beforeSharingItThisProtects')}
@@ -1385,6 +1389,7 @@ export function Receive({ walletId, accountId, prefill = null, onBack, onChangeA
         <Screen variant={variant} header={header}>
             <FormPage
                 label={t('receive.receivePayment')}
+                status={pageNotice}
                 onSubmit={(event) => event.preventDefault()}
                 // The form has no submit button, so Enter in the amount, its last
                 // field, commits the request explicitly; other fields never submit.

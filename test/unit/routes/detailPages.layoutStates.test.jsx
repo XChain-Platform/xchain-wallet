@@ -89,6 +89,7 @@ function expectCompactCanvas(container) {
     expect(viewport.style.width).toBe('412px');
     expect(main).toHaveClass(screenStyles.body);
     expect(main.firstElementChild.classList.contains(listPageStyles.page)
+        || main.firstElementChild.classList.contains(formPageStyles.page)
         || main.firstElementChild.classList.contains(formPageStyles.form)).toBe(true);
 }
 

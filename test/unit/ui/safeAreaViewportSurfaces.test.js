@@ -117,7 +117,15 @@ describe('viewport surfaces keep content inside device safe areas', () => {
         const sheetRules = computedClassRules(sheet, overlayStyles, overlayCss);
         const sheetSurfaceRules = computedClassRules(sheet.firstElementChild, overlayStyles, overlayCss);
         expect(sheetRules).toMatch(new RegExp(inset('right')));
-        expect(sheetSurfaceRules).toMatch(new RegExp(`padding-bottom:[\\s\\S]*${inset('bottom')}`));
+        // The inset pads the scrolling list, never the surface around it: a
+        // surface band under the scroller cut the last row above the home
+        // indicator, while padding inside the scroller lets the list reach the
+        // sheet edge and its end rest above the inset.
+        expect(sheetSurfaceRules).toMatch(/padding-bottom:\s*0\s*;/);
+        expect(sheetSurfaceRules).not.toMatch(/safe-area-inset-bottom/);
+        const sheetBody = sheet.querySelector(`.${overlayStyles.body}`);
+        const sheetBodyRules = computedClassRules(sheetBody, overlayStyles, overlayCss);
+        expect(sheetBodyRules).toMatch(new RegExp(`padding-bottom:[\\s\\S]*${inset('bottom')}`));
         expect(sheetRules).toMatch(new RegExp(inset('left')));
     });
 

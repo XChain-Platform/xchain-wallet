@@ -40,6 +40,13 @@ function disableSubmits(node) {
  * Screen owns the page gutter and top spacing. The wide card centres within
  * that content box without adding its own top margin.
  *
+ * Notices (`status`, the demo-wallet note and any FormNotice raised from the
+ * body) lead the page content. A plain form draws them just above itself, so
+ * on a wide screen they sit above the card at the full content width instead
+ * of a box inside it, and on a narrow screen, where the form is bare, they
+ * lead the fields exactly as before. A form that owns its title puts them
+ * under that title instead.
+ *
  * Pass `sectioned` when the children are FormSections. The sections share
  * the form's wide card and are divided from one another at every width.
  * The action row always closes the form, below the last field or section,
@@ -51,7 +58,7 @@ function disableSubmits(node) {
  * @param {object} props
  * @param {(e: import('react').FormEvent<HTMLFormElement>) => void} [props.onSubmit]
  * @param {import('react').ReactNode} [props.actions]   the action row: primary last, so it ends up on the right
- * @param {import('react').ReactNode} [props.status]    a StatusMessage or error summary, the first item of the form content: above the first field, below the form's own logo or title when it draws one (a demo-wallet note on a plain form sits above the form card instead)
+ * @param {import('react').ReactNode} [props.status]    a StatusMessage or error summary, the first item of the page content: above the form (its card, when wide) at the full content width on a plain form, below the form's own logo or title when it draws one
  * @param {import('react').ReactNode} [props.intro]     one muted paragraph above the first field
  * @param {import('react').ReactNode} [props.title]     centred page title for onboarding and other focused forms
  * @param {import('react').ReactNode} [props.description] supporting copy below `title`
@@ -149,11 +156,13 @@ export const FormPage = forwardRef(function FormPage(
             </div>
         )
         : null;
-    // On a wide screen the form is a card, and the demo-wallet note drawn inside it
-    // would be a box in a box. A plain form therefore lifts that note out above the
-    // card, at the full content width, as the first item of the page content. A form
-    // that owns its title, fills the screen or is a nested fragment keeps it inside.
-    const noticeAboveCard = demoBlocked && !ownsHeading && !fill && Root === 'form';
+    // On a wide screen the form is a card, and a notice drawn inside it would be a
+    // box in a box. A plain form therefore draws its notices just above itself, at
+    // the full content width, as the first item of the page content. A form that
+    // owns its title, fills the screen or is a nested fragment keeps them inside.
+    // The wrapper is there whether or not a notice shows, so a notice coming or
+    // going never remounts the form and the field being typed in keeps its focus.
+    const noticeAboveCard = !ownsHeading && !fill && Root === 'form';
     const form = (
         <Root
             ref={ref}

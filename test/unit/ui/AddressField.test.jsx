@@ -47,7 +47,7 @@ describe('<AddressField>', () => {
 
         const input = screen.getByRole('combobox', { name: 'To' });
         const paste = screen.getByRole('button', { name: 'Paste from clipboard' });
-        expect(input.style.paddingInlineEnd).toContain('--address-control-height');
+        expect(input.style.getPropertyValue('--address-end-room')).toContain('--address-control-height');
         expect(paste.textContent).toBe('Paste');
         expect(addressComboboxStyles).toMatch(
             /--address-paste-width:\s*calc\(var\(--address-control-height\) \+ var\(--xc-space-8\)\)/,

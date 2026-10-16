@@ -310,8 +310,8 @@ const PAGE_TEMPLATE_USAGE = Object.freeze({
 
 export const TEMPLATE_VIEWS = Object.freeze([
     { id: 'compact', label: 'Compact', width: 360, note: '12px gutter' },
-    { id: 'rail', label: 'Rail', width: 768, note: '16px gutter' },
-    { id: 'full', label: 'Full', width: 1024, note: '24px gutter' },
+    { id: 'rail', label: 'Rail', width: 768, note: '12px gutter' },
+    { id: 'full', label: 'Full', width: 1024, note: '12px gutter' },
 ]);
 
 export function Guidance({

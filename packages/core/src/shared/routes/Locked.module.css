@@ -1,14 +1,16 @@
 /* The unlock form sits in the middle of the screen's height at every width,
    the way it sits in the middle of the width. Auto block margins give way to
    zero when the form is taller than the screen, so a short landscape phone or
-   a long lockout message still scrolls from the top instead of being cut off. */
+   a long lockout message still scrolls from the top instead of being cut off.
+   The child is the form template's page column (its notice, then the form),
+   not the form itself, so the selectors name the child, not the form. */
 .centre {
     display: flex;
     flex-direction: column;
     min-height: 100%;
 }
 
-.centre > form {
+.centre > * {
     margin-block: auto;
 }
 
@@ -167,7 +169,7 @@
 
 /* With the keyboard open the form keeps to the top, right under the visible
    area's edge, so the password field and its action stay above the keyboard. */
-:global(html[data-xc-keyboard='open']) .centre > form {
+:global(html[data-xc-keyboard='open']) .centre > * {
     margin-block: 0;
 }
 

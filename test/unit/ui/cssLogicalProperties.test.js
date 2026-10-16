@@ -347,6 +347,20 @@ describe('wallet CSS logical properties', () => {
         expect(value(route('MarketActivity', ":global([dir='rtl']) .marketSelectorChevron"), 'transform')).toBe('scaleX(-1)');
         expect(value(route('MySwapsView', ":global([dir='rtl']) .side + .side::before"), 'transform')).toBe('scaleX(-1)');
         expect(value(route('OnboardingCarousel', ":global([dir='rtl']) .frame"), '--xc-frame-enter-offset')).toBe('calc(-1 * var(--xc-space-4))');
+        expect(value(route('History', ":global([dir='rtl']) .rowSelected"), 'box-shadow')).toBe('inset -3px 0 0 var(--xc-control-selected)');
+        expect(value(route('MessagingInbox', '.convName'), 'unicode-bidi')).toBe('plaintext');
+        expect(value(route('MessagingInbox', '.convPreview'), 'unicode-bidi')).toBe('plaintext');
+    });
+
+    it('flips the navigation rail and reserves address-field room on the side the actions occupy', () => {
+        const value = (rule, property) => rule?.nodes.find((node) => node.type === 'decl' && node.prop === property)?.value;
+        expect(value(ruleFor('packages/core/src/ui/tokens.css', ":root[dir='rtl']"), '--xc-shadow-nav-indicator'))
+            .toBe('inset -3px 0 0 var(--xc-accent-primary, var(--xc-text))');
+        for (const name of ['AddressField', 'AddressCombobox']) {
+            const rtlInput = ruleFor(`packages/core/src/ui/${name}.module.css`, ":global([dir='rtl']) .wrap input");
+            expect(value(rtlInput, 'padding-inline-start'), name).toMatch(/^var\(--address-end-room,/);
+            expect(value(rtlInput, 'text-align'), name).toBe('end');
+        }
     });
 
     it('mirrors shell affordances and isolates machine-readable values', () => {
