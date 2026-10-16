@@ -93,6 +93,45 @@ for (const size of SIZES) {
             await expect(help).toBeHidden();
         });
 
+        test('balance actions menu closes when Tab leaves it', async ({ page }) => {
+            const trigger = page.getByRole('button', { name: 'Balance actions' });
+            test.skip(await trigger.count() === 0, 'Home shows its actions inline at this width');
+            await trigger.focus();
+            await page.keyboard.press('Enter');
+            const menu = page.getByRole('menu', { name: 'Balance actions' });
+            await expect(menu).toBeVisible();
+            for (let i = 0; i < 12 && await menu.isVisible(); i += 1) await page.keyboard.press('Tab');
+            await expect(menu, 'Tab past the last item closes the menu instead of leaving it open behind focus').toBeHidden();
+        });
+
+        test('wallet settings popover closes at its last control and returns focus to the opener', async ({ page }) => {
+            await page.getByRole('button', { name: 'Open menu' }).focus();
+            await page.keyboard.press('Enter');
+            const opener = page.getByRole('menuitem', { name: 'Settings' });
+            await opener.focus();
+            await page.keyboard.press('Enter');
+            const popover = page.getByRole('dialog', { name: 'Wallet settings' });
+            await expect(popover).toBeVisible();
+            const stops = [];
+            for (let i = 0; i < 12 && await popover.isVisible(); i += 1) {
+                await page.keyboard.press('Tab');
+                if (await popover.isVisible()) stops.push(await page.evaluate(() => Boolean(document.activeElement?.closest('[role="dialog"]'))));
+            }
+            await expect(popover, 'Tab off the last control closes the popover').toBeHidden();
+            expect(stops.every(Boolean), 'focus stays inside the popover until it closes').toBe(true);
+            await expect(opener, 'focus returns to the control that opened it').toBeFocused();
+        });
+
+        test('opening a detail screen by keyboard puts focus on its heading', async ({ page }) => {
+            await gotoSection(page, 'Dispensers');
+            const row = page.getByRole('button', { name: /^Open .* dispenser #/ }).first();
+            await row.focus();
+            await page.keyboard.press('Enter');
+            const heading = page.getByRole('heading', { level: 1, name: 'Dispenser detail' });
+            await expect(heading).toBeVisible();
+            await expect(heading, 'focus does not fall to the page body').toBeFocused();
+        });
+
         for (const route of ['Send', 'Receive', 'Settings']) {
             test(`${route} is fully reachable by Tab with visible focus`, async ({ page }) => {
                 await gotoSection(page, route);

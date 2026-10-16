@@ -137,13 +137,30 @@ export function HeaderSettingsButton({
         const onFocusIn = (event) => {
             if (event.target.closest?.('#xc-main')) setOpen(false);
         };
+        // The panel is portaled to the end of the body, so Tab off its last
+        // control (or Shift+Tab off its first) would walk the page behind it
+        // or leave the document. Either end closes it and returns to the gear.
+        const onKeyDown = (event) => {
+            if (event.key !== 'Tab') return;
+            const panel = popoverRef.current;
+            if (!panel?.contains(document.activeElement)) return;
+            const stops = Array.from(panel.querySelectorAll(
+                'button:not([disabled]), select:not([disabled]), input:not([disabled]), [tabindex]:not([tabindex="-1"])',
+            ));
+            const edge = event.shiftKey ? stops[0] : stops.at(-1);
+            if (document.activeElement !== edge) return;
+            event.preventDefault();
+            closePopover();
+        };
         window.addEventListener('mousedown', onClick);
         window.addEventListener('focusin', onFocusIn);
+        window.addEventListener('keydown', onKeyDown);
         return () => {
             window.removeEventListener('mousedown', onClick);
             window.removeEventListener('focusin', onFocusIn);
+            window.removeEventListener('keydown', onKeyDown);
         };
-    }, [closePopover, open]);
+    }, [closePopover, open, popoverRef]);
 
     // The Network section needs all four pieces to render anything
     // useful; NetworkFilter dereferences the registry and maps over the

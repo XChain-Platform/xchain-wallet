@@ -1,31 +1,8 @@
-.headPopup {
-    margin-bottom: var(--xc-space-3);
-}
-
-.headFull {
-    text-align: center;
-    margin-bottom: var(--xc-space-5);
-}
-
 .logo {
     /* 96px preserves the brand artwork's intended display width. */
     width: 96px;
     height: auto;
     margin-bottom: var(--xc-space-3);
-}
-
-.subtitlePopup {
-    font-size: var(--xc-text-xs);
-    color: var(--xc-text-muted);
-    line-height: 1.4;
-    margin: 0;
-}
-
-.subtitleFull {
-    font-size: var(--xc-text-sm);
-    color: var(--xc-text-muted);
-    line-height: 1.5;
-    margin: 0;
 }
 
 .copyHint {
@@ -52,20 +29,6 @@
 .confirmRow > span {
     min-width: 0;
     overflow-wrap: anywhere;
-}
-
-.actionsPopup {
-    display: flex;
-    gap: var(--xc-space-2);
-    justify-content: flex-end;
-    margin-top: var(--xc-space-3);
-}
-
-.actionsFull {
-    display: flex;
-    gap: var(--xc-space-2);
-    justify-content: flex-end;
-    margin-top: var(--xc-space-5);
 }
 
 .wordCountRow {
@@ -131,11 +94,6 @@
 
 /* 520px targets short landscape viewports without a matching layout token. */
 @media (max-height: 520px) {
-    .headPopup,
-    .headFull {
-        margin-bottom: var(--xc-space-2);
-    }
-
     .logo {
         /* 64px preserves the compact artwork size in short viewports. */
         width: 64px;

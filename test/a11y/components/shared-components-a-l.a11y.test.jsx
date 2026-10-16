@@ -132,7 +132,7 @@ const fixtures = [
             </li>
         </ul>
     )],
-    ['AdsNotice', () => <AdsNotice onContinue={noop} isFull />],
+    ['AdsNotice', () => <AdsNotice onContinue={noop} />],
     ['AlertsOverlay', () => (
         <AlertsOverlay
             alerts={[{

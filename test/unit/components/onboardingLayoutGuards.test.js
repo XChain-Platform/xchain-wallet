@@ -13,6 +13,7 @@ import createWalletRawSource from '../../../packages/core/src/shared/routes/Crea
 import importWalletSource from '../../../packages/core/src/shared/routes/ImportWallet.jsx?raw';
 import onboardingRawSource from '../../../packages/core/src/shared/routes/Onboarding.jsx?raw';
 import { withEnglishCopy } from '../../helpers/englishSource.js';
+import adsNoticeSource from '../../../packages/core/src/shared/components/AdsNotice.jsx?raw';
 import carouselSource from '../../../packages/core/src/shared/routes/OnboardingCarousel.jsx?raw';
 import resumeSource from '../../../packages/core/src/shared/routes/ResumeConfirm.jsx?raw';
 
@@ -136,5 +137,22 @@ describe('onboarding and Home layout guards', () => {
         expect(portfolioCss).toContain('color: var(--xc-on-accent);');
         expect(totalBalanceCss).not.toMatch(/#[0-9a-f]{3,8}|rgba?\(/i);
         expect(homeTabsCss).not.toMatch(/#[0-9a-f]{3,8}|rgba?\(/i);
+    });
+
+    it('ends create and import on the same donation notice page', () => {
+        const adsNoticeCss = readFileSync(
+            'packages/core/src/shared/components/AdsNotice.module.css',
+            'utf8',
+        );
+        // The list is a shared card that flattens inside the wide form card; an
+        // inline surface would draw a box in a box there.
+        expect(adsNoticeSource).not.toMatch(/border|background|borderRadius/);
+        expect(adsNoticeCss).toMatch(/\.list\s*\{[^}]*composes:\s*card from '\.\.\/\.\.\/ui\/Card\.module\.css'/s);
+        expect(adsNoticeSource).toMatch(/<Button[^>]*\bblock\b/s);
+        // Both routes hold it in a FormPage, so neither draws it bare and off centre.
+        const importAds = importWalletSource.slice(importWalletSource.indexOf('if (adsNotice) {'));
+        expect(importAds.slice(0, importAds.indexOf('<AdsNotice'))).toContain('<FormPage');
+        expect(importAds.slice(0, importAds.indexOf('</Screen>'))).not.toContain('ListPage');
+        expect(createWalletSource).toMatch(/<FormPage[^>]*>\s*\{noticeBody\}/s);
     });
 });

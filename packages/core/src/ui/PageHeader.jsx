@@ -8,6 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
+import { useEffect, useRef } from 'react';
 import { useRouteIsNavDestination } from '../shared/components/navSurface.js';
 import { useBackHandler } from './backStack.js';
 import { Button } from './Button.jsx';
@@ -67,11 +68,24 @@ export function PageHeader({
     useBackHandler(onBack, backDisabled, 'route');
     const reachableFromNav = useRouteIsNavDestination();
     const showBack = Boolean(onBack) && !(reachableFromNav && !nested);
+    const headerRef = useRef(null);
+    // A screen opened from a control on another screen (a detail, a picker)
+    // unmounts that control, and focus would fall to <body> and restart Tab at
+    // the top of the page. A Back-bearing screen takes it on its heading.
+    useEffect(() => {
+        if (!showBack) return;
+        const active = document.activeElement;
+        if (active && active !== document.body) return;
+        const heading = headerRef.current?.querySelector('h1');
+        if (!heading) return;
+        heading.tabIndex = -1;
+        heading.focus({ preventScroll: true });
+    }, [showBack]);
     const accessibleBackLabel = backLabel.trim().toLowerCase() === 'back'
         ? 'Back to previous screen'
         : backLabel;
     return (
-        <div className={styles.header}>
+        <div ref={headerRef} className={styles.header}>
             {showBack ? (
                 <Button
                     size="sm"
