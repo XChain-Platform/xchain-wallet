@@ -70,3 +70,17 @@ it('leaves compact extension surfaces unchanged when disabled', () => {
 
     expect(document.title).toBe('XChain Wallet');
 });
+
+it('titles screens with the heading the screen shows', () => {
+    const titleOf = (unlockedView) => documentTitleFor({ statusState: 'unlocked', unlockedView });
+    expect(titleOf('obligations')).toBe('XChain Wallet - Payments due');
+    expect(titleOf('contracts-list')).toBe('XChain Wallet - Contracts');
+    expect(titleOf('lists')).toBe('XChain Wallet - My lists');
+    expect(titleOf('staking-dashboard')).toBe('XChain Wallet - Staking');
+    expect(titleOf('markets')).toBe('XChain Wallet - Decentralized exchange');
+    expect(titleOf('market-activity')).toBe('XChain Wallet - Marketplace');
+    expect(titleOf('dispensers-list')).toBe('XChain Wallet - My dispensers');
+    expect(titleOf('dispenser')).toBe('XChain Wallet - Create dispenser');
+    expect(titleOf('compose-message')).toBe('XChain Wallet - New message');
+    expect(titleOf('account-picker')).toBe('XChain Wallet - Accounts');
+});

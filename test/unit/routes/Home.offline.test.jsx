@@ -185,4 +185,25 @@ describe('Home offline behavior', () => {
         await waitFor(() => expect(messaging.getWalletBalances).toHaveBeenCalledTimes(1));
         expect(screen.queryByText(/Showing cached balances/)).toBeNull();
     });
+
+    it('drops a balance error that failed before the offline verdict arrived', async () => {
+        setNavigatorOnline(true);
+        const messaging = {
+            listWallets: vi.fn().mockResolvedValue([WALLET]),
+            listAccounts: vi.fn().mockResolvedValue([]),
+            getWalletBalances: vi.fn().mockRejectedValue(new Error('Failed to fetch')),
+            getActiveAddresses: vi.fn().mockResolvedValue({}),
+            getSettings: vi.fn().mockResolvedValue({}),
+            getAddressesByChain: vi.fn().mockResolvedValue({}),
+        };
+        mountHome(messaging, vi.fn());
+
+        await screen.findByText(/Couldn't load balances/);
+
+        setNavigatorOnline(false);
+        act(() => { window.dispatchEvent(new Event('offline')); });
+
+        await screen.findByText('You are offline. Connect to load balances and use network actions.');
+        expect(screen.queryByText(/Couldn't load balances/)).toBeNull();
+    });
 });
