@@ -328,9 +328,6 @@ export function CreateWallet({ onBack, onCreated: handleCreated, mode = 'fresh' 
         }
     }
 
-    const headClass = isFull ? styles.headFull : styles.headPopup;
-    const subtitleClass = isFull ? styles.subtitleFull : styles.subtitlePopup;
-    const actionsClass = isFull ? styles.actionsFull : styles.actionsPopup;
 
     const headerTitle = stage === 'password'
         ? (isFull ? 'Create a new wallet' : 'Create wallet')
@@ -355,10 +352,6 @@ export function CreateWallet({ onBack, onCreated: handleCreated, mode = 'fresh' 
         const noticeBody = (
             <AdsNotice
                 onContinue={onCreated}
-                isFull={isFull}
-                headClass={headClass}
-                subtitleClass={subtitleClass}
-                actionsClass={actionsClass}
             />
         );
         return (

@@ -19,7 +19,6 @@ import {
     Input,
     Textarea,
     Icon,
-    ListPage,
     PageHeader,
     QrScanner,
     StatusMessage,
@@ -711,9 +710,6 @@ export function ImportWallet({
         }
     }
 
-    const headClass = isFull ? styles.headFull : styles.headPopup;
-    const subtitleClass = isFull ? styles.subtitleFull : styles.subtitlePopup;
-    const actionsClass = isFull ? styles.actionsFull : styles.actionsPopup;
     const backupSourceMessage = backupDrop.isDragOver
         ? 'Drop the backup file here.'
         : backupFileName
@@ -1372,22 +1368,14 @@ export function ImportWallet({
     };
 
     if (adsNotice) {
-        const noticeBody = (
-            <>
-                <AdsNotice
-                    onContinue={continueAfterNotice}
-                    isFull={isFull}
-                    headClass={headClass}
-                    subtitleClass={subtitleClass}
-                    actionsClass={actionsClass}
-                    busy={continuing}
-                />
-                {noticeError ? <StatusMessage variant="error">{noticeError}</StatusMessage> : null}
-            </>
-        );
         return (
             <Screen variant={variant} header={screenHeader}>
-                <ListPage>{noticeBody}</ListPage>
+                <FormPage
+                    label={t('adsNotice.title')}
+                    status={noticeError ? <StatusMessage variant="error">{noticeError}</StatusMessage> : null}
+                >
+                    <AdsNotice onContinue={continueAfterNotice} busy={continuing} />
+                </FormPage>
             </Screen>
         );
     }

@@ -62,14 +62,7 @@ describe('Automatic Donation System settings', () => {
         render(
             <>
                 <AdsSection />
-                <AdsNotice
-                    onContinue={() => {}}
-                    isFull={false}
-                    headClass=""
-                    titleClass=""
-                    subtitleClass=""
-                    actionsClass=""
-                />
+                <AdsNotice onContinue={() => {}} />
             </>,
         );
 
