@@ -25,9 +25,10 @@ import styles from './FieldNote.module.css';
  * @param {string} [props.id]                               so the field can name it in aria-describedby
  * @param {string} [props.testId]
  * @param {readonly import('react').ReactNode[] | null} [props.lines]
+ * @param {import('react').ReactNode} [props.action]   a small link-style recovery control (such as Clear) drawn in the note, under its text
  * @param {import('react').ReactNode} [props.children]
  */
-export function FieldNote({ variant = 'warning', role, id, testId, lines, children }) {
+export function FieldNote({ variant = 'warning', role, id, testId, lines, action, children }) {
     const list = Array.isArray(lines) ? lines.filter((line) => line != null && line !== '') : null;
     if (list ? list.length === 0 : (children == null || children === '' || children === false)) return null;
     const tone = TONES[variant] ? variant : 'warning';
@@ -37,6 +38,7 @@ export function FieldNote({ variant = 'warning', role, id, testId, lines, childr
             <span className={styles.glyph} aria-hidden="true">{TONES[tone]}</span>
             <div className={styles.text}>
                 {list ? list.map((line, i) => <p key={i}>{line}</p>) : children}
+                {action ? <div className={styles.action} data-field-note-action>{action}</div> : null}
             </div>
         </div>
     );

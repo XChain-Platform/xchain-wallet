@@ -46,3 +46,7 @@
 .success {
     color: var(--xc-success);
 }
+
+.action {
+    margin-block-start: var(--xc-space-1);
+}

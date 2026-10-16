@@ -311,6 +311,8 @@ function ListShareFormScreen({ walletId, listRef, onBack, onDone = onBack }) {
         : !ownerRecord
             ? `The current owner, ${shortAddress(owner)}, is not an address in this wallet. A share signed by another address will be refused by the network, so this wallet cannot share it.`
             : null;
+    // Why the form cannot be submitted, in one notice: the owner first, then the list itself.
+    const blockers = [ownershipReason, ...eligibility.reasons.map((reason) => reason.text)].filter(Boolean);
     const formDisabled = sdkSupported !== true || !eligibility.ok || Boolean(ownershipReason);
     return wrap(
         <FormPage
@@ -355,12 +357,8 @@ function ListShareFormScreen({ walletId, listRef, onBack, onDone = onBack }) {
                 </dd>
             </dl>
 
-            {ownershipReason ? (
-                <FormNotice variant="warning" role="alert">{ownershipReason}</FormNotice>
-            ) : null}
-
-            {eligibility.reasons.length > 0 ? (
-                <FormNotice variant="warning" role="alert" lines={eligibility.reasons.map((reason) => reason.text)} />
+            {blockers.length > 0 ? (
+                <FormNotice variant="warning" role="alert" lines={blockers} />
             ) : null}
 
             <Input

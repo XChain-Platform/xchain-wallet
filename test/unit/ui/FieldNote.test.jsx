@@ -42,4 +42,11 @@ describe('<FieldNote>', () => {
         expect(screen.queryByRole('alert')).toBeNull();
         expect(screen.getByText('Static')).toBeInTheDocument();
     });
+
+    it('draws a recovery action inside the note, under its text', () => {
+        render(<FieldNote variant="error" action={<button type="button">Clear</button>}>Unreadable</FieldNote>);
+        const note = screen.getByRole('alert');
+        expect(note).toContainElement(screen.getByRole('button', { name: 'Clear' }));
+        expect(note).toHaveTextContent('Unreadable');
+    });
 });
