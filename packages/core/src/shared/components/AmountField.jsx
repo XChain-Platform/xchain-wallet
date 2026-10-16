@@ -203,6 +203,16 @@ export function AmountField({
             : `≈ ${formatFiat('0', fiatCcy)} ${otherUnit}${priceSourceLabel}`;
     }
 
+    // Paste and Max sit at the end of the field, and the digits stop short of
+    // them by this much. The input is left to right, so its own inline end is
+    // the right edge; --amount-end-room lets the stylesheet put the same room
+    // on the left edge when the page reads right to left.
+    const actionsEndRoom = onMax
+        ? (pasteLane
+            ? `max(calc(var(--amount-action-width) + ${pasteLane}), var(--amount-actions-room, 0px))`
+            : 'max(calc(var(--amount-action-width) * 2), var(--amount-actions-room, 0px))')
+        : 'max(calc(var(--amount-action-width) + var(--xc-space-2)), var(--amount-actions-room, 0px))';
+
     return (
         <div className={styles.amountBlock}>
             <div
@@ -230,13 +240,7 @@ export function AmountField({
                     // clear both at default text; a 320px field keeps 120px for
                     // digits. Larger text widens the actions, and the measured
                     // room (syncAmountActionsRoom) then holds the digits clear.
-                    style={{
-                        paddingInlineEnd: onMax
-                            ? (pasteLane
-                                ? `max(calc(var(--amount-action-width) + ${pasteLane}), var(--amount-actions-room, 0px))`
-                                : 'max(calc(var(--amount-action-width) * 2), var(--amount-actions-room, 0px))')
-                            : 'max(calc(var(--amount-action-width) + var(--xc-space-2)), var(--amount-actions-room, 0px))',
-                    }}
+                    style={{ paddingInlineEnd: actionsEndRoom, '--amount-end-room': actionsEndRoom }}
                 />
                 <span className={styles.pasteAction} ref={pasteSlotRef}>
                     <ClipboardPasteButton

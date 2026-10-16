@@ -107,6 +107,17 @@
     min-width: 0;
 }
 
+/* The input stays left to right, so its inline end is the right edge even on
+   a page that reads right to left, where Paste and Max sit at the left. In
+   that case the room for them moves to the input's inline start, and the
+   digits align to the field's start edge (the right). The inline padding is
+   written by the component, hence the override. */
+:global(html[dir='rtl']) .amountFieldWrap input {
+    padding-inline-start: var(--amount-end-room);
+    padding-inline-end: var(--xc-control-padding-x, 12px) !important;
+    text-align: end;
+}
+
 .amountFooter {
     display: flex;
     justify-content: space-between;
