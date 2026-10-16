@@ -114,7 +114,7 @@
    written by the component, hence the override. */
 :global(html[dir='rtl']) .amountFieldWrap input {
     padding-inline-start: var(--amount-end-room);
-    padding-inline-end: var(--xc-control-padding-x, 12px) !important;
+    padding-inline-end: var(--xc-control-padding-x) !important;
     text-align: end;
 }
 
