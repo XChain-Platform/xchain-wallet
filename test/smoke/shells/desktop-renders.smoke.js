@@ -110,29 +110,36 @@ try {
     // The mount is asynchronous, so poll rather than sleep a fixed amount:
     // a fixed wait is either flaky or slow, and this failure mode is
     // permanent - a blank page stays blank.
+    //
+    // The mount and the first readable text are separate events: a React tree
+    // can commit a non-empty skeleton (a Suspense fallback, an icon-only shell)
+    // before any text exists, and under load the gap is wide enough to be
+    // read. One deadline covers both, so a blank window still fails because it
+    // never produces either.
     const deadline = Date.now() + 20000;
     let html = '';
+    let text = '';
     while (Date.now() < deadline) {
         // eslint-disable-next-line no-await-in-loop
-        html = await win.evaluate(
-            () => (document.getElementById('root') || document.body).innerHTML,
-        );
-        if (html.length > 200) break;
+        ({ html, text } = await win.evaluate(() => ({
+            html: (document.getElementById('xchain-desktop-root') || document.body).innerHTML,
+            text: document.body.innerText,
+        })));
+        if (html.length > 200 && text.trim().length > 0) break;
         // eslint-disable-next-line no-await-in-loop
         await new Promise((r) => { setTimeout(r, 250); });
     }
 
     assert.ok(
         html.length > 200,
-        'the desktop renderer mounted nothing: #root is '
+        'the desktop renderer mounted nothing: #xchain-desktop-root is '
         + `${html.length} characters after 20s, which is the blank white window `
         + `a user would see. Page errors: ${pageErrors.join(' | ') || '(none)'}`,
     );
 
-    const text = await win.evaluate(() => document.body.innerText);
     assert.ok(
         text.trim().length > 0,
-        'the desktop app rendered a DOM with no readable text at all; '
+        'the desktop app rendered a DOM with no readable text at all after 20s; '
         + `page errors: ${pageErrors.join(' | ') || '(none)'}`,
     );
 
