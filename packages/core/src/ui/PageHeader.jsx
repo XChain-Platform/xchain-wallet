@@ -71,16 +71,16 @@ export function PageHeader({
     const headerRef = useRef(null);
     // A screen opened from a control on another screen (a detail, a picker)
     // unmounts that control, and focus would fall to <body> and restart Tab at
-    // the top of the page. A Back-bearing screen takes it on its heading.
+    // the top of the page. Every screen takes it on its heading, with or
+    // without a Back button, unless focus is still on a live control.
     useEffect(() => {
-        if (!showBack) return;
         const active = document.activeElement;
         if (active && active !== document.body) return;
         const heading = headerRef.current?.querySelector('h1');
         if (!heading) return;
         heading.tabIndex = -1;
         heading.focus({ preventScroll: true });
-    }, [showBack]);
+    }, []);
     const accessibleBackLabel = backLabel.trim().toLowerCase() === 'back'
         ? 'Back to previous screen'
         : backLabel;

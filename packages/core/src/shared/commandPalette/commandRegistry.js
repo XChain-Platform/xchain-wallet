@@ -84,18 +84,16 @@ const SEND_QUERY_RE = /^(?:send|pay)\s+(\d+(?:\.\d+)?)\s+([a-z0-9]{1,32})\s*$/i;
 const TXID_QUERY_RE = /^[0-9a-f]{8,64}$/i;
 const DATE_QUERY_RE = /^\d{4}(?:-\d{2}(?:-\d{2})?)?$/;
 
-// Demo wallets keep discovery, inspection and the create and trade forms
-// (each shows the inline demo note and never composes), while the send
-// shortcuts and signing tools stay out of the palette.
+// Demo wallets keep discovery, inspection, the sidebar destinations (Send,
+// Receive and Scan show the inline demo note) and the create and trade forms
+// (each shows the inline demo note and never composes), while the actions
+// catalogue and signing tools stay out of the palette.
 const DEMO_UNAVAILABLE_COMMAND_IDS = new Set([
-    'nav-send',
-    'nav-receive',
     'nav-actions',
     'nav-multisig-create',
     'nav-multisig-sign',
     'sign-message',
     'sign-psbt',
-    'wallet-scan',
 ]);
 
 // Watch-only wallets can author unsigned transactions, but they cannot use
