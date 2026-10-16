@@ -19,6 +19,8 @@
 
 import { flows as flowsLib } from '@xchain-wallet/core';
 import { t } from '../../i18n/index.js';
+import { Button } from '../../ui/Button.jsx';
+import styles from './ResumeConfirmCard.module.css';
 
 /**
  * @param {object} props
@@ -46,27 +48,35 @@ export function ResumeConfirmCard({ sessions, onResume, onDiscard, className }) 
                     : '';
                 return (
                     <div key={info.id} className={className} data-testid="resume-confirm-card">
-                        <button
+                        <Button
                             type="button"
+                            variant="primary"
+                            block
+                            icon={null}
                             onClick={() => onResume(info.id)}
                             data-testid={`resume-confirm-${info.id}`}
                         >
-                            <span>{t('components.resumeConfirmCard.finish')} {info.label}</span>
-                            <span>{t('components.resumeConfirmCard.notSentYetApproveTo')}</span>
-                            {actionString ? (
-                                <span data-testid={`resume-confirm-action-${info.id}`}>
-                                    {t('components.resumeConfirmCard.actionToSubmit')} <code>{actionString}</code>
-                                </span>
-                            ) : null}
-                        </button>
-                        <button
+                            <span className={styles.content}>
+                                <span>{t('components.resumeConfirmCard.finish')} {info.label}</span>
+                                <span>{t('components.resumeConfirmCard.notSentYetApproveTo')}</span>
+                                {actionString ? (
+                                    <span data-testid={`resume-confirm-action-${info.id}`}>
+                                        {t('components.resumeConfirmCard.actionToSubmit')} <code>{actionString}</code>
+                                    </span>
+                                ) : null}
+                            </span>
+                        </Button>
+                        <Button
                             type="button"
+                            variant="ghost"
+                            size="sm"
+                            icon={null}
                             onClick={() => onDiscard(info.id)}
                             aria-label={t('components.resumeConfirmCard.discardUnfinished', { label: info.label })}
                             data-testid={`discard-confirm-${info.id}`}
                         >
                             {t('send.draft.discard')}
-                        </button>
+                        </Button>
                     </div>
                 );
             })}

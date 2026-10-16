@@ -126,7 +126,7 @@
     justify-content: center;
     color: var(--xc-text-muted);
     cursor: pointer;
-    border-radius: var(--xc-radius-sm);
+    border-radius: var(--xc-control-radius);
 }
 
 .rowWrap .rowMenuBtn:hover {

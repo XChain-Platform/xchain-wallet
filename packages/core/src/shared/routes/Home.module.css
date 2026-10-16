@@ -7,8 +7,11 @@
    to the hero. */
 .quickActions {
     display: grid;
-    /* Keep action labels usable when all four actions share one row. */
-    grid-template-columns: repeat(auto-fit, minmax(76px, 1fr));
+    /* One row of equal tracks, whatever the tile count. A fixed minimum
+       track width wrapped four tiles 3+1 at 360 once the gaps were counted,
+       so the row sizes the tracks instead. */
+    grid-auto-flow: column;
+    grid-auto-columns: minmax(0, 1fr);
     gap: var(--xc-space-2);
     margin-top: calc(var(--xc-space-2) - var(--xc-space-3));
 }
@@ -57,9 +60,16 @@
     overflow-wrap: anywhere;
 }
 
+/* Below 360 four tiles do not fit one row: two columns, and an odd last
+   tile spans both so no tile sits alone beside an empty cell. */
 @media not all and (min-width: 360px) {
     .quickActions {
+        grid-auto-flow: row;
         grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    .quickActions > :last-child:nth-child(odd) {
+        grid-column: 1 / -1;
     }
 }
 

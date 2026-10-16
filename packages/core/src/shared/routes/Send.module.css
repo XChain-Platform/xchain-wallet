@@ -207,7 +207,6 @@
     align-items: flex-start;
     gap: var(--xc-space-2);
     padding: var(--xc-space-2) 0;
-    cursor: pointer;
 }
 
 .coinControlList {

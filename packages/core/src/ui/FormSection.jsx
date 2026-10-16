@@ -25,11 +25,12 @@ import styles from './FormPage.module.css';
  * @param {object} props
  * @param {import('react').ReactNode} props.title
  * @param {import('react').ReactNode} [props.description]   one muted line under the title
+ * @param {import('react').ReactNode} [props.trailing]       inline affordance beside the title, such as an InfoTip
  * @param {'h2' | 'h3'} [props.headingLevel]                default h2
  * @param {string} [props.className]
  * @param {import('react').ReactNode} props.children
  */
-export function FormSection({ title, description, headingLevel = 'h2', className, children }) {
+export function FormSection({ title, description, trailing, headingLevel = 'h2', className, children }) {
     const headingId = useId();
     return (
         <section
@@ -41,6 +42,7 @@ export function FormSection({ title, description, headingLevel = 'h2', className
                 id={headingId}
                 title={title}
                 description={description}
+                trailing={trailing}
             />
             <div className={styles.sectionBody} data-form-stack="">{children}</div>
         </section>

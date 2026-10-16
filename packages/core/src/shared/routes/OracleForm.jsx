@@ -616,9 +616,10 @@ export function OracleForm({ walletId, onBack, initialChainId, initialFromAddres
             )}
         >
 
-            <InfoTip label={`Dispensers can use an oracle's token price in traditional currency so buyers pay the equivalent in ${priceCoin || 'the chain coin'}. Anyone can publish prices, and the publisher can set a usage fee below.`} />
-
-            <FormSection title="My published prices">
+            <FormSection
+                title="My published prices"
+                trailing={<InfoTip label={`Dispensers can use an oracle's token price in traditional currency so buyers pay the equivalent in ${priceCoin || 'the chain coin'}. Anyone can publish prices, and the publisher can set a usage fee below.`} />}
+            >
             {/*
               * Pick the PUBLISHING chain: it decides which address signs, pays
               * the fee and becomes the oracle's identity. The priced token's

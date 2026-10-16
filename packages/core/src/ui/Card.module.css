@@ -39,10 +39,16 @@
 }
 
 /* The form template draws a card on wide screens only (FormPage composes
-   formCard), so cards inside a form flatten only where that card exists. */
+   formCard), so cards inside a form flatten only where that card exists.
+   A full-width form draws no card, so it composes cardless and the cards
+   inside it keep their own surface. */
+.cardless {
+    --xc-form-cardless: 1;
+}
+
 @media (min-width: 600px) {
-    .formCard .card,
-    .formCard .flush {
+    .formCard:not(.cardless) .card,
+    .formCard:not(.cardless) .flush {
         padding: 0;
         background: transparent;
         border: 0;
