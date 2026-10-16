@@ -37,8 +37,9 @@ const chainRegistry = registryLib.defaultRegistry();
  * release default again (§36.6); anything that is not a whole number snaps
  * back to the current value.
  */
-function AmountField({ label, ariaLabel, current, disabled, onCommit, hint, tip }) {
-    const hintId = useId();
+function AmountField({ label, ariaLabel, current, disabled, onCommit, hint, tip, describedBy }) {
+    const ownHintId = useId();
+    const hintId = hint ? ownHintId : describedBy;
     return (
         <div>
             <Input
@@ -63,7 +64,7 @@ function AmountField({ label, ariaLabel, current, disabled, onCommit, hint, tip 
                 }}
                 onKeyDown={(e) => { if (e.key === 'Enter') e.currentTarget.blur(); }}
                 aria-label={ariaLabel}
-                aria-describedby={hint ? hintId : undefined}
+                aria-describedby={hintId}
                 disabled={disabled}
             />
             {hint ? (
@@ -78,6 +79,7 @@ function AmountField({ label, ariaLabel, current, disabled, onCommit, hint, tip 
 
 export function AdsSection() {
     const { settings, loading, error, update } = useSettings();
+    const sharedHintId = useId();
     if (loading) return <Status text={t('common.loading')} />;
     if (error) return <SettingsLoadError error={error} />;
     if (!settings) return <Status text={t('common.settingsUnavailable')} tone="error" />;
@@ -90,6 +92,23 @@ export function AdsSection() {
         return registryLib.isChainVisibleToUser(d, settings)
             && flowsLib.filterChainIdsByActiveNetwork([cid], settings, chainRegistry).length > 0;
     }).sort();
+
+    // Every network reads the same default, so the threshold sentence is said once
+    // above the cards. A network with its own amounts keeps its own sentence.
+    const thresholdSentence = (chainId) => {
+        const resolved = resolveAdsChainConfig(settings.ads.perChain[chainId], chainRegistry.get(chainId));
+        return resolved.perTxAmountSats > 0
+            ? t('settings.ads.transactionsToThreshold', { count: Math.ceil(resolved.triggerAmountSats / resolved.perTxAmountSats) })
+            : t('settings.ads.noPendingAmountIsAdded');
+    };
+    const thresholdTip = (
+        <InfoTip
+            aria={t('settings.ads.triggerThresholdHelpLabel')}
+            label={t('settings.ads.aSatIsTheSmallest')}
+        />
+    );
+    const sentences = chainIds.map(thresholdSentence);
+    const sharedSentence = chainIds.length > 1 && sentences.every((x) => x === sentences[0]) ? sentences[0] : null;
 
     const onToggleEnabled = async (next) => {
         try { await update({ ads: { enabled: next } }); } catch (err) {
@@ -124,6 +143,13 @@ export function AdsSection() {
                     : t('settings.ads.offNewOutgoingTransactionsDo')}
             </div>
 
+            {sharedSentence ? (
+                <div className={styles.hintRow} style={{ padding: '0 var(--xc-space-3)' }}>
+                    <span id={sharedHintId}>{sharedSentence}</span>
+                    {thresholdTip}
+                </div>
+            ) : null}
+
             {chainIds.length === 0 ? (
                 <Status text={t('settings.ads.noChainsSetUpFor')} />
             ) : null}
@@ -137,9 +163,6 @@ export function AdsSection() {
                 const resolved = resolveAdsChainConfig(chainState, descriptor);
                 const perTxIsDefault = chainState.perTxAmountSats == null;
                 const triggerIsDefault = chainState.triggerAmountSats == null;
-                const transactionsToThreshold = resolved.perTxAmountSats > 0
-                    ? Math.ceil(resolved.triggerAmountSats / resolved.perTxAmountSats)
-                    : null;
                 const displayName = descriptor?.displayName || chainId;
                 const donationAddress = descriptor?.adsDonationAddress || '';
                 const isPlaceholder = donationAddress === ADS_DONATION_ADDRESS_PLACEHOLDER;
@@ -162,15 +185,9 @@ export function AdsSection() {
                             current={resolved.triggerAmountSats}
                             disabled={!settings.ads.enabled}
                             onCommit={(value) => onChainPatch(chainId, { triggerAmountSats: value })}
-                            hint={transactionsToThreshold === null
-                                ? t('settings.ads.noPendingAmountIsAdded')
-                                : t('settings.ads.transactionsToThreshold', { count: transactionsToThreshold })}
-                            tip={(
-                                <InfoTip
-                                    aria={t('settings.ads.triggerThresholdHelpLabel')}
-                                    label={t('settings.ads.aSatIsTheSmallest')}
-                                />
-                            )}
+                            hint={sharedSentence ? undefined : thresholdSentence(chainId)}
+                            describedBy={sharedSentence ? sharedHintId : undefined}
+                            tip={sharedSentence ? undefined : thresholdTip}
                         />
 
                         {isPlaceholder ? (

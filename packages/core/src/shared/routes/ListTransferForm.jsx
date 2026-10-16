@@ -13,6 +13,7 @@ import {
     AddressText,
     Button,
     ChainBadge,
+    FormNotice,
     FormPage,
     Input,
     PageHeader,
@@ -332,16 +333,12 @@ function ListTransferFormScreen({ walletId, listRef, onBack, onDone = onBack }) 
                 disabled={sdkSupported !== true || Boolean(ownershipReason)}
             />
 
-            <StatusMessage variant="warning" role={null}>
-                <p>
-                    From the block this transfer confirms, only the new owner can edit, share, or transfer the list.
-                </p>
-                <p>The sender cannot undo the transfer.</p>
-                <p>A transfer cannot rescue a list whose owner key is lost.</p>
-                <p>
-                    A shared list keeps working on every chain because its versions carry members, never the owner.
-                </p>
-            </StatusMessage>
+            <FormNotice variant="warning" role={null}>
+                {'From the block this transfer confirms, only the new owner can edit, share, or transfer the list. '
+                    + 'The sender cannot undo the transfer. '
+                    + 'A transfer cannot rescue a list whose owner key is lost. '
+                    + 'A shared list keeps working on every chain because its versions carry members, never the owner.'}
+            </FormNotice>
 
             <Input
                 label="Type TRANSFER to confirm"

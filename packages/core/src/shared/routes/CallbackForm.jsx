@@ -10,7 +10,7 @@
 
 import { t } from '../../i18n/index.js';
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { AddressField, AddressText, Button, FeeSelector, FormPage, Input, ListPage, PageHeader, Screen, StatusMessage } from '@xchain-wallet/core/ui';
+import { AddressField, AddressText, Button, FeeSelector, FormNotice, FormPage, Input, ListPage, PageHeader, Screen, StatusMessage } from '@xchain-wallet/core/ui';
 import {
     registry as registryLib,
     decoder as decoderLib,
@@ -887,13 +887,9 @@ export function CallbackForm({ walletId, onBack, initialChainId, initialTick, in
                 </Button>
             )}
         >
-            <StatusMessage variant="warning" role="alert">
-                <p>
-                    <strong>Callback recalls everything.</strong> Every unit of {ticker || 'this token'}
-                    {' '}returns to your address, and each holder is paid the configured amount. This
-                    cannot be undone.
-                </p>
-            </StatusMessage>
+            <FormNotice variant="warning" role="alert">
+                {`Callback recalls everything. Every unit of ${ticker || 'this token'} returns to your address, and each holder is paid the configured amount. This cannot be undone.`}
+            </FormNotice>
 
             {lockedToken && chainId ? (
                 <LockedTokenContext chainId={chainId} tick={ticker} />

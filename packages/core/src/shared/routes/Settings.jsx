@@ -925,10 +925,10 @@ function UpdateCheckPanel() {
     }, []);
 
     const message = {
-        checking: 'Checking for updates…',
-        current: 'You are up to date.',
-        available: version ? `Version ${version} is available.` : 'A new version is available.',
-        error: 'Could not check for updates. Try again later.',
+        checking: t('desktopUpdate.checking'),
+        current: t('desktopUpdate.current'),
+        available: version ? t('desktopUpdate.availableVersion', { version }) : t('desktopUpdate.available'),
+        error: t('desktopUpdate.checkError'),
     }[state];
 
     return (

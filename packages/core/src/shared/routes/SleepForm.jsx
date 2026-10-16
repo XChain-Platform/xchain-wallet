@@ -9,7 +9,7 @@
 // contact legal@dankest.llc.
 
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { AddressField, AddressText, Button, ChainBadge, ChainPicker, FeeSelector, FormPage, Input, PageHeader, RadioGroup, Screen, StatusMessage } from '@xchain-wallet/core/ui';
+import { AddressField, AddressText, Button, ChainBadge, ChainPicker, FeeSelector, FormNotice, FormPage, Input, PageHeader, RadioGroup, Screen, StatusMessage } from '@xchain-wallet/core/ui';
 import {
     registry as registryLib,
     decoder as decoderLib,
@@ -724,19 +724,15 @@ export function SleepForm({ walletId, onBack, mode, initialChainId, initialTick,
                         swaps, and dispensers can still settle. The token owner can resume it early.
                     </p>
                     {sleepLocked ? (
-                        <StatusMessage variant="warning" role="alert">
-                            <p>Pausing and resuming are permanently locked for {ticker}.</p>
-                        </StatusMessage>
+                        <FormNotice variant="warning" role="alert">
+                            {`Pausing and resuming are permanently locked for ${ticker}.`}
+                        </FormNotice>
                     ) : null}
                 </>
             ) : (
-                <StatusMessage variant="warning" role="alert">
-                    <p>
-                        <strong>Locking an address pauses its XChain actions.</strong> It cannot create a
-                        new XChain action, including one to wake itself, but its native coins are not
-                        locked. It wakes only when the chosen block arrives; an indefinite lock is permanent.
-                    </p>
-                </StatusMessage>
+                <FormNotice variant="warning" role="alert">
+                    Locking an address pauses its XChain actions. It cannot create a new XChain action, including one to wake itself, but its native coins are not locked. It wakes only when the chosen block arrives; an indefinite lock is permanent.
+                </FormNotice>
             )}
 
             {stateLine}

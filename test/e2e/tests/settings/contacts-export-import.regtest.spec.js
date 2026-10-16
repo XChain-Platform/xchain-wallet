@@ -134,7 +134,8 @@ test.describe('Settings: contacts export / import', () => {
 
             await test.step('a contact exists to export', async () => {
                 await gotoContacts(page);
-                await page.getByRole('button', { name: 'Add contact' }).click();
+                // An empty list offers "Create first contact"; a list with entries offers "Add contact".
+                await page.getByRole('button', { name: /^(Add contact|Create first contact)$/ }).click();
                 // `getByLabel` matches accessible names, and the app bar's
                 // "Scan and addresses" button carries one containing "Address".
                 // Ask for the TEXTBOX, exactly, or this is a strict-mode

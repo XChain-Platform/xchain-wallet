@@ -72,6 +72,8 @@ const ALL_FORMS = [
     { label: 'Broadcast a message', open: (page) => palette(page, 'Broadcast a message') },
     { label: 'Compose message', open: (page) => openFromList(page, 'Messaging', 'New message') },
     { label: 'Publish contract', open: (page) => openFromList(page, 'Contracts', /Publish contract/) },
+    // Destroy states its irreversibility the moment it opens, before any input.
+    { label: 'Destroy', open: (page) => palette(page, 'Destroy'), trigger: async () => {} },
     { label: 'Sweep address', open: (page) => palette(page, 'Sweep address') },
     {
         label: 'Settings change password',

@@ -257,6 +257,8 @@ import { MAX_MEMO_LENGTH, MEMO_HINT, memoLengthError, utf8ByteLength } from '../
 // form with a calm "Transaction cancelled." toast instead of a red error.
 const USER_CANCEL_RE = /cancel|reject|denied/i;
 
+// How long the first balance check may hold the Send form back.
+const FIRST_BALANCE_GATE_MS = 1500;
 const chainRegistry = registryLib.defaultRegistry();
 
 // Descriptor.coin is the long-form coin name ('bitcoin' / 'litecoin' /
@@ -1673,6 +1675,18 @@ export function Send({ walletId, accountId, onBack, prefill = null, onDone, onCh
 
     // Set once the first balance check settles; see the loading gate below.
     const balanceGateSettledRef = useRef(false);
+    // The first balance check holds the form back for a moment only. A read
+    // that hangs (services unreachable while the device reports a network)
+    // would otherwise keep "Loading" up until the reachability probe decides
+    // offline, so the form shows after the wait and its balance hint says the
+    // balance is unavailable until the read returns.
+    const [balanceGateWaived, setBalanceGateWaived] = useState(false);
+    useEffect(() => {
+        const timer = setTimeout(() => {
+            if (!balanceGateSettledRef.current) setBalanceGateWaived(true);
+        }, FIRST_BALANCE_GATE_MS);
+        return () => clearTimeout(timer);
+    }, []);
     // Bumped by Try again so the empty-chain check runs again.
     const [balanceRecheck, setBalanceRecheck] = useState(0);
     const [chainBalanceState, setChainBalanceState] = useState(
@@ -2876,7 +2890,8 @@ export function Send({ walletId, accountId, onBack, prefill = null, onDone, onCh
     // Only the first balance check holds the form back. A later chain switch
     // (a pasted payment request, the asset picker) sets the new chain to
     // loading too, and the form must stay mounted through that as well.
-    if (!isWatcherMode && selectedChainBalanceStatus === 'loading' && !balanceGateSettledRef.current) {
+    if (!isWatcherMode && selectedChainBalanceStatus === 'loading'
+        && !balanceGateSettledRef.current && !balanceGateWaived) {
         return wrap(<p className={styles.hint}>{t('common.loading')}</p>);
     }
     if (!isWatcherMode && selectedChainBalanceStatus === 'empty' && balancesUnchecked) {
@@ -3708,7 +3723,7 @@ export function Send({ walletId, accountId, onBack, prefill = null, onDone, onCh
                 maxBusy={maxBusy}
                 balanceText={
                     previewBalances.loading
-                        ? t('common.loading')
+                        ? (balanceGateWaived ? t('send.balance.unknown') : t('common.loading'))
                         : previewBalances.error
                             ? t('send.balance.unavailable', { error: previewBalances.error })
                             : networkOffline && !isDemo && !previewBalances.sdkShape

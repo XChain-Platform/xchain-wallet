@@ -39,3 +39,21 @@ describe('settings INPUT fill', () => {
         expect(INPUT.background).toBe(select[1]);
     });
 });
+
+describe('settings INPUT fill matches the shared Input', () => {
+    const css = readFileSync('packages/core/src/ui/Input.module.css', 'utf8');
+    const fillOf = (selector) => {
+        const start = css.indexOf(`${selector} {`);
+        const body = css.slice(start, css.indexOf('}', start));
+        return body.match(/background:\s*([^;]+);/)?.[1];
+    };
+
+    it('paints enabled fields with the same fill token as Input, Select and Textarea', () => {
+        expect(fillOf('.input')).toBe('var(--xc-surface)');
+        expect(INPUT.background).toBe(fillOf('.input'));
+    });
+
+    it('paints disabled fields with the same disabled fill token as Input', () => {
+        expect(css).toContain(`background: ${INPUT_DISABLED.background};`);
+    });
+});

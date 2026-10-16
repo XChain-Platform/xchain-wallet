@@ -60,7 +60,8 @@ describe('PriceAlertForm', () => {
         expect(action).toBeDisabled();
         expect(action.getAttribute('aria-describedby')).toBe(target.getAttribute('aria-describedby'));
         const reason = document.getElementById(target.getAttribute('aria-describedby'));
-        expect(reason).toBe(screen.getByRole('status'));
+        expect(reason).toHaveClass('sr-only');
+        expect(screen.queryByRole('status')).toBeNull();
         expect(reason).toHaveTextContent('Enter a target price to continue.');
     });
 

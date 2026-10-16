@@ -53,7 +53,7 @@ describe('Settings check for updates', () => {
         });
         expect(bridge.install).toHaveBeenCalledWith('check');
         bridge.emit({ type: 'not-available', userInitiated: true });
-        expect(screen.getByText(/you are up to date/i)).toBeTruthy();
+        expect(screen.getByText(/is up to date/i)).toBeTruthy();
     });
 
     it('shows an available version only when it is plain semver', async () => {
@@ -75,7 +75,7 @@ describe('Settings check for updates', () => {
             screen.getByRole('button', { name: /check for updates/i }).click();
             await Promise.resolve();
         });
-        expect(screen.getByText(/could not check for updates/i)).toBeTruthy();
+        expect(screen.getByText(/couldn.t check for updates/i)).toBeTruthy();
         expect(screen.queryByText(/remote text/)).toBeNull();
     });
 });

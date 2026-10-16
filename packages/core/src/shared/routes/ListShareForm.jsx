@@ -13,6 +13,7 @@ import {
     AddressText,
     Button,
     ChainBadge,
+    FormNotice,
     FormPage,
     Input,
     ListPage,
@@ -377,16 +378,11 @@ function ListShareFormScreen({ walletId, listRef, onBack, onDone = onBack }) {
                 disabled={formDisabled}
             />
 
-            <StatusMessage variant="warning" role={null}>
-                <p>Sharing is permanent. A shared list cannot be unshared.</p>
-                <p>
-                    The hubs carry every later edit to this list to every chain.
-                </p>
-                <p>
-                    Each later edit costs LIST_SHARED_EDIT_BASE plus LIST_SHARED_EDIT_PER_ITEM
-                    {' '}for every item added or removed.
-                </p>
-            </StatusMessage>
+            <FormNotice variant="warning" role={null}>
+                {'Sharing is permanent. A shared list cannot be unshared. '
+                    + 'The hubs carry every later edit to this list to every chain. '
+                    + 'Each later edit costs LIST_SHARED_EDIT_BASE plus LIST_SHARED_EDIT_PER_ITEM for every item added or removed.'}
+            </FormNotice>
 
             <NativeFeeToggle
                 {...nativeFee.toggleProps}

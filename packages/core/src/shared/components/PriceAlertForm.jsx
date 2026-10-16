@@ -196,7 +196,10 @@ export function PriceAlertForm({
                     </Button>
                 ) : null}
             </div>
-            <StatusMessage id={disabledReasonId} variant="info">{disabledReason}</StatusMessage>
+            {/* Why the button is off is said to assistive tech only: sighted users see an empty
+                field and a disabled button, and a notice here would sit inside the indented
+                alert block instead of at the content width. */}
+            {disabledReason ? <span id={disabledReasonId} className="sr-only">{disabledReason}</span> : null}
             {alreadyMet ? (
                 <StatusMessage variant="info">
                     {coinLabelForChain(chainId)} {t('components.priceAlertForm.isAlready')} {direction === 'above' ? t('components.priceAlertForm.above') : t('components.priceAlertForm.below')} {t('components.priceAlertForm.thatPriceThisAlertWill')}

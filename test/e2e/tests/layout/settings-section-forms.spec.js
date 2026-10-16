@@ -86,6 +86,27 @@ for (const size of SIZES) {
             // Alerts are off: the reason is the one message, not an empty-list line too.
             await expect(page.getByText(/Turn on Price alerts above/)).toBeVisible();
             await expect(page.getByText('No price alerts yet', { exact: true })).toHaveCount(0);
+
+            // An empty target is not a notice: the add button is just off. A notice here
+            // sat inside the indented alert block, narrower than the content column.
+            await expect(page.getByRole('main').locator('[data-variant]:visible')).toHaveCount(0);
+        });
+
+        test('Automatic donation says its threshold sentence once, above the network cards', async ({ page }) => {
+            await createWallet(page);
+            await openSettings(page);
+            const back = page.getByRole('button', { name: 'Back to settings' }).filter({ visible: true }).first();
+            if (await back.count()) await back.click();
+            await page.getByRole('main').getByRole('button', { name: /^Automatic donation/ }).first().click();
+            await expect(page.getByRole('main').getByRole('heading').nth(1)).toBeVisible();
+
+            // Every network carries the same default amounts, so one sentence covers them all.
+            const sentence = page.getByRole('main').getByText(/outgoing transactions? to reach the threshold/);
+            await expect(sentence).toHaveCount(1);
+            const sentenceBox = await sentence.boundingBox();
+            const firstCard = await page.getByRole('main').getByRole('heading', { level: 3 }).first().boundingBox();
+            expect(sentenceBox.y, 'the sentence sits above the first network card').toBeLessThan(firstCard.y);
+            await expectNoSidewaysScroll(page, `${size.name} Automatic donation`);
         });
 
         test('Network & endpoints fields are bordered, labelled and one height', async ({ page }) => {

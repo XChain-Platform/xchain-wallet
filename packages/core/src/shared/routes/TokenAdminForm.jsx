@@ -10,7 +10,7 @@
 
 import { t } from '../../i18n/index.js';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { AddressField, AddressText, Button, ChainBadge, ChainPicker, Checkbox, FeeSelector, FormPage, Input, PageHeader, Screen, StatusMessage } from '@xchain-wallet/core/ui';
+import { AddressField, AddressText, Button, ChainBadge, ChainPicker, Checkbox, FeeSelector, FormNotice, FormPage, Input, PageHeader, Screen, StatusMessage } from '@xchain-wallet/core/ui';
 import {
     registry as registryLib,
     decoder as decoderLib,
@@ -1399,13 +1399,9 @@ export function TokenAdminForm({ walletId, mode, onBack, initialChainId, initial
 
             {mode === 'lock' ? (
                 <>
-                    <StatusMessage variant="warning" role="alert">
-                        <p>
-                            <strong>Locking is permanent.</strong> Each flag below is a
-                            one-way switch: once checked and submitted, it can never be
-                            unlocked or reversed.
-                        </p>
-                    </StatusMessage>
+                    <FormNotice variant="warning" role="alert">
+                        Locking is permanent. Each flag below is a one-way switch: once checked and submitted, it can never be unlocked or reversed.
+                    </FormNotice>
                     {allLocksSet ? (
                         <p className={styles.hint}>
                             Every lock is already permanently set for {ticker}.
@@ -1438,43 +1434,29 @@ export function TokenAdminForm({ walletId, mode, onBack, initialChainId, initial
             {mode === 'mint-settings' ? (
                 <>
                     {nothingMintEditable ? (
-                        <StatusMessage variant="warning" role="alert">
-                            <p>
-                                Every mint setting for {ticker} is permanently locked.
-                                There is nothing left to edit here.
-                            </p>
-                        </StatusMessage>
+                        <FormNotice variant="warning" role="alert">
+                            {`Every mint setting for ${ticker} is permanently locked. There is nothing left to edit here.`}
+                        </FormNotice>
                     ) : (
                         <>
                             {mintDeadLocked ? (
-                                <StatusMessage variant="warning" role="alert">
-                                    <p>
-                                        Minting is permanently locked for {ticker}.
-                                        The mint window, max mint per transaction, and per-address
-                                        cap below can no longer take effect.
-                                    </p>
-                                </StatusMessage>
+                                <FormNotice variant="warning" role="alert">
+                                    {`Minting is permanently locked for ${ticker}. The mint window, max mint per transaction, and per-address cap below can no longer take effect.`}
+                                </FormNotice>
                             ) : maxMintLocked ? (
-                                <StatusMessage variant="warning" role="alert">
-                                    <p>
-                                        Max mint per transaction is permanently locked for {ticker}.
-                                    </p>
-                                </StatusMessage>
+                                <FormNotice variant="warning" role="alert">
+                                    {`Max mint per transaction is permanently locked for ${ticker}.`}
+                                </FormNotice>
                             ) : null}
                             {mintSupplyLocked ? (
-                                <StatusMessage variant="warning" role="alert">
-                                    <p>
-                                        Minting supply now is permanently locked for {ticker}.
-                                    </p>
-                                </StatusMessage>
+                                <FormNotice variant="warning" role="alert">
+                                    {`Minting supply now is permanently locked for ${ticker}.`}
+                                </FormNotice>
                             ) : null}
                             {maxSupplyLockedInfo ? (
-                                <StatusMessage variant="warning" role="alert">
-                                    <p>
-                                        Max supply is also permanently locked for {ticker}.
-                                        That is a separate token setting, not part of Mint settings.
-                                    </p>
-                                </StatusMessage>
+                                <FormNotice variant="warning" role="alert">
+                                    {`Max supply is also permanently locked for ${ticker}. That is a separate token setting, not part of Mint settings.`}
+                                </FormNotice>
                             ) : null}
                         </>
                     )}
@@ -1555,21 +1537,13 @@ export function TokenAdminForm({ walletId, mode, onBack, initialChainId, initial
                         before any supply is distributed.
                     </p>
                     {callbackLocked ? (
-                        <StatusMessage variant="warning" role="alert">
-                            <p>
-                                Callback settings are permanently locked for {ticker}.
-                                They can no longer be changed.
-                            </p>
-                        </StatusMessage>
+                        <FormNotice variant="warning" role="alert">
+                            {`Callback settings are permanently locked for ${ticker}. They can no longer be changed.`}
+                        </FormNotice>
                     ) : callbackDistributed ? (
-                        <StatusMessage variant="warning" role="alert">
-                            <p>
-                                {ticker} already has holders
-                                {distribution?.holderCount ? ` (${distribution.holderCount.toLocaleString('en-US')})` : ''},
-                                so its callback settings are frozen. They can only be set before any
-                                supply leaves your address.
-                            </p>
-                        </StatusMessage>
+                        <FormNotice variant="warning" role="alert">
+                            {`${ticker} already has holders${distribution?.holderCount ? ` (${distribution.holderCount.toLocaleString('en-US')})` : ''}, so its callback settings are frozen. They can only be set before any supply leaves your address.`}
+                        </FormNotice>
                     ) : null}
                     <Input
                         label="Callback token"
@@ -1676,17 +1650,16 @@ export function TokenAdminForm({ walletId, mode, onBack, initialChainId, initial
                         chain again.
                     </p>
                     {bridgeFrozen ? (
-                        <StatusMessage variant="status">
-                            These settings are frozen for good: this token's bridge
-                            configuration was locked and can never change again.
-                        </StatusMessage>
+                        <FormNotice variant="status">
+                            These settings are frozen for good: this token's bridge configuration was locked and can never change again.
+                        </FormNotice>
                     ) : null}
                     {bridgePolicyBound ? (
-                        <StatusMessage variant="status">
+                        <FormNotice variant="status">
                             {`${ticker || 'This token'} is bound to an address list, and a bridged copy `
                                 + 'would carry none of that policy on the other network. It cannot be '
                                 + 'opened to the bridge. Detach the policy list first.'}
-                        </StatusMessage>
+                        </FormNotice>
                     ) : null}
                     {currentBridgeChains === null && assetInfo ? (
                         <p className={styles.hint}>
@@ -1696,13 +1669,13 @@ export function TokenAdminForm({ walletId, mode, onBack, initialChainId, initial
                         </p>
                     ) : null}
                     {currentBridgeChains && reachableBridgeChains.length < currentBridgeChains.length ? (
-                        <StatusMessage variant="status">
+                        <FormNotice variant="status">
                             {`The current setting names ${currentBridgeChains.filter((c) => !isReachableBridgeChain(c)).map((c) => `"${c}"`).join(', ')}, `
                                 + 'a spelling the network does not accept, so it opens no network. '
                                 + (bridgeFrozen
                                     ? 'The settings are frozen, so it cannot be corrected.'
                                     : 'Check the networks you mean and apply to correct it.')}
-                        </StatusMessage>
+                        </FormNotice>
                     ) : null}
                     {/* One group, so the label sits a label gap above its chains
                         instead of a form gap plus its own margin, and the
@@ -1742,11 +1715,9 @@ export function TokenAdminForm({ walletId, mode, onBack, initialChainId, initial
                         />
                     ) : null}
                     {bridgeLock ? (
-                        <StatusMessage variant="status">
-                            Freezing is one-way. Neither the chain list nor the minimum
-                            confirmations can ever be changed again, by you or by a future
-                            owner. That is the assurance a holder has against both.
-                        </StatusMessage>
+                        <FormNotice variant="status">
+                            Freezing is one-way. Neither the chain list nor the minimum confirmations can ever be changed again, by you or by a future owner. That is the assurance a holder has against both.
+                        </FormNotice>
                     ) : null}
                 </>
             ) : null}

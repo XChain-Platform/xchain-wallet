@@ -10,7 +10,7 @@
 
 import { t } from '../../i18n/index.js';
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { AddressField, AddressText, Button, ChainBadge, ChainPicker, FeeSelector, FormPage, Icon, Input, PageHeader, Screen, StatusMessage } from '@xchain-wallet/core/ui';
+import { AddressField, AddressText, Button, ChainBadge, ChainPicker, FeeSelector, FormNotice, FormPage, Icon, Input, PageHeader, Screen, StatusMessage } from '@xchain-wallet/core/ui';
 import {
     registry as registryLib,
     decoder as decoderLib,
@@ -653,11 +653,9 @@ export function DestroyForm({ walletId, onBack, initialChainId, initialTick, ini
                 </Button>
             )}
         >
-            <StatusMessage variant="warning" role="alert">
-                <p>
-                    <strong>Destroy is irreversible.</strong> The burned amount cannot be recovered.
-                </p>
-            </StatusMessage>
+            <FormNotice variant="warning" role="alert">
+                Destroy is irreversible. The burned amount cannot be recovered.
+            </FormNotice>
 
             {lockedToken && chainId ? (
                 <LockedTokenContext chainId={chainId} tick={ticker} />
