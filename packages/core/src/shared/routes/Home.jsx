@@ -1286,9 +1286,13 @@ export function Home({ onLocked, onResumeConfirm, onSend, onReceive, onSwap, onE
     const loadErrorText = rateLimitRetryAt === null
         ? loadError
         : `Couldn't ${BALANCES_VERB}. ${rateLimitedMessage(rateLimitSecondsLeft)}`;
-    const balanceStatusText = balanceLoadFailed && balances && loadErrorText
-        ? `${loadErrorText} Showing saved balances from the last successful sync.`
-        : loadErrorText;
+    // Offline, the offline message above is the one message: a read that
+    // failed before the offline verdict arrived says the same thing again.
+    let balanceStatusText = loadErrorText;
+    if (offline) balanceStatusText = null;
+    else if (balanceLoadFailed && balances && loadErrorText) {
+        balanceStatusText = `${loadErrorText} Showing saved balances from the last successful sync.`;
+    }
     const retryBalanceLoad = () => {
         setRateLimitRetryAt(null);
         setHomeReloadKey((key) => key + 1);

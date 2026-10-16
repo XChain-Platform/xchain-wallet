@@ -19,6 +19,8 @@ import { TickerIcon } from '../components/TickerIcon.jsx';
 import { RelativeTime } from '../components/RelativeTime.jsx';
 import { TokenPicker } from './TokenPicker.jsx';
 import { useOracleFeeds } from '../hooks/useOracleFeeds.js';
+import { useNetworkOffline } from '../hooks/useNetworkOffline.js';
+import { OfflineEmptyState } from '../components/OfflineEmptyState.jsx';
 import {
     dispenserRateLabel,
     enrichOfferRows,
@@ -97,6 +99,7 @@ export function MarketActivity({ walletId, accountId, onBack, onOpenDispenser })
         [chains],
     );
 
+    const { offline, recheck } = useNetworkOffline({ walletId });
     const [selected, setSelected] = useState(FEATURED_MARKET);
     const [picking, setPicking] = useState(false);
     const [loading, setLoading] = useState(true);
@@ -159,6 +162,13 @@ export function MarketActivity({ walletId, accountId, onBack, onOpenDispenser })
                 loadedMarketKeyRef.current = marketKey;
                 setLoading(false);
             }
+            return () => { cancelled = true; };
+        }
+
+        // Offline the feeds cannot be read; the screen says so once and
+        // loads again when the connection returns.
+        if (offline) {
+            setLoading(false);
             return () => { cancelled = true; };
         }
 
@@ -228,7 +238,7 @@ export function MarketActivity({ walletId, accountId, onBack, onOpenDispenser })
             setLoading(false);
         });
         return () => { cancelled = true; };
-    }, [tick, walletId, messaging, chains, reload]);
+    }, [tick, walletId, messaging, chains, reload, offline]);
 
     // A Mode B offer carries no price on this lane; it comes from its oracle.
     const oracleFeedsFor = useOracleFeeds(messaging, offers);
@@ -301,6 +311,10 @@ export function MarketActivity({ walletId, accountId, onBack, onOpenDispenser })
                 toolbar={marketSelector}
             >
                 <div className={styles.activity} role="region" aria-label="Marketplace activity" aria-busy={loading || undefined}>
+                    {offline && offers === null ? (
+                        <OfflineEmptyState body="Marketplace activity loads when the connection returns." onRetry={recheck} />
+                    ) : null}
+
                     {loading && offers === null ? (
                         <div className={styles.list} role="status" aria-label="Loading marketplace activity">
                             <Skeleton height={56} />
