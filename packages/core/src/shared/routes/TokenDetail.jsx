@@ -30,8 +30,7 @@ import { RouteErrorBoundary } from '../components/RouteErrorBoundary.jsx';
 import { useSettings } from '../hooks/useSettings.js';
 import { useBalancesHidden } from '../hooks/useBalancesHidden.js';
 import { usePortfolioChartVisible } from '../hooks/usePortfolioChartVisible.js';
-import { useOnlineStatus } from '../hooks/useOnlineStatus.js';
-import { useReachability } from '../hooks/useReachability.js';
+import { useNetworkOffline } from '../hooks/useNetworkOffline.js';
 import { coinFromChainId, formatFiat } from '../components/BalanceList.jsx';
 import { BridgeOriginTick } from './BridgeOriginBadge.jsx';
 import { parseBridgedTick, bridgeDisplayTick, coinDisplay } from './BridgeTick.js';
@@ -133,9 +132,8 @@ function TokenDetailContent({
     // A failed settings read still opens the screen in full mode.
     const walletModeReady = settings !== null || !settingsLoading;
     const isDemo = isDemoWallet(walletId);
-    const browserOnline = useOnlineStatus();
-    const { overall: reachabilityOverall } = useReachability({ chainIds: isDemo ? [] : undefined });
-    const networkActionsAvailable = browserOnline && reachabilityOverall !== 'offline';
+    const { offline: networkOffline } = useNetworkOffline({ walletId });
+    const networkActionsAvailable = !networkOffline;
     const variant = screenVariantFor(shell);
     const tabsId = useId();
     const [resolvedQuantity, setResolvedQuantity] = useState(

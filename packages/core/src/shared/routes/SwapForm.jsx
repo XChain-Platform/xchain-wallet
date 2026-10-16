@@ -29,7 +29,8 @@ import { SignCredentials, isHwSource } from '../components/SignCredentials.jsx';
 import { useSignerReady } from '../hooks/useSignerReady.js';
 import { WatcherResultPanel } from '../components/WatcherResultPanel.jsx';
 import { useWalletMode } from '../hooks/useWalletMode.js';
-import { useOnlineStatus } from '../hooks/useOnlineStatus.js';
+import { useNetworkOffline } from '../hooks/useNetworkOffline.js';
+import { useHideReachabilityNotice } from '../components/hideReachabilityNotice.js';
 import { useSignerInfo } from '../hooks/useSignerInfo.js';
 import { actionDisplayLabel } from '../utils/actionDisplayLabel.js';
 import { NativeFeeToggle } from '../components/NativeFeeToggle.jsx';
@@ -131,7 +132,9 @@ function withFormattedExpiration(confirmAction) {
 export function SwapForm({ walletId, onBack, initialChainId, initialGiveTick, initialGiveOwnership }) {
     const { messaging, shell } = useMessaging();
     const demoGuard = useDemoGuard(walletId, { onBack });
-    const networkAvailable = useOnlineStatus();
+    const { offline: networkOffline } = useNetworkOffline({ walletId });
+    const networkAvailable = !networkOffline;
+    useHideReachabilityNotice(networkOffline);
     const signerReady = useSignerReady(walletId);
     const variant = screenVariantFor(shell);
 

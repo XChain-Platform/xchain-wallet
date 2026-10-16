@@ -207,7 +207,7 @@ const historySrc = readFileSync(
     join(wsRoot, 'packages/core/src/shared/routes/History.jsx'),
     'utf8',
 );
-assert.match(historySrc, /<RecipientsBlock entry=\{entry\} \/>/, 'RecipientsBlock mounted');
+assert.match(historySrc, /<RecipientsBlock entry=\{entry\} walletId=\{walletId\} \/>/, 'RecipientsBlock mounted');
 assert.match(historySrc, /function RecipientsBlock\(/, 'RecipientsBlock component declared');
 assert.match(historySrc, /messaging\.getDividendRecipients/, 'consumes getDividendRecipients');
 assert.match(historySrc, /messaging\.getAirdropRecipients/, 'consumes getAirdropRecipients');

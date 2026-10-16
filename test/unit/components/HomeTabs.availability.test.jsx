@@ -7,7 +7,7 @@
 
 import React from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, within } from '@testing-library/react';
 import { readFileSync } from 'node:fs';
 
 const tabsCss = readFileSync(
@@ -189,9 +189,21 @@ describe('HomeTabs empty states', () => {
         expect(screen.getByText('No DeFi positions yet')).toBeTruthy();
     });
 
-    it('does not justify placeholder body text', () => {
-        const rule = tabsCss.match(/\.placeholderBody\s*\{[^}]*\}/)[0];
-        expect(rule).not.toMatch(/text-align:\s*justify/);
+    it.each([
+        ['Coins', 'Fund your wallet'],
+        ['DeFi', 'No DeFi positions yet'],
+        ['Activity', 'Your activity is in History'],
+    ])('draws the %s empty state with the shared empty state', (tab, heading) => {
+        mount('real-wallet', { onHistory: vi.fn() });
+        fireEvent.click(screen.getByRole('tab', { name: tab }));
+
+        const state = screen.getByRole('status');
+        expect(within(state).getByRole('heading', { level: 2, name: heading })).toBeTruthy();
+        expect(state.closest('[role="tabpanel"]')).not.toBeNull();
+    });
+
+    it('keeps tab empty states free of hand-made placeholder rules', () => {
+        expect(tabsCss).not.toMatch(/\.placeholder/);
     });
 
     it.each([

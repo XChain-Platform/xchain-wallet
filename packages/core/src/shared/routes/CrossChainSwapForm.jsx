@@ -34,7 +34,8 @@ import { useSignerReady } from '../hooks/useSignerReady.js';
 import { WatcherResultPanel } from '../components/WatcherResultPanel.jsx';
 import { QueuedResultPanel } from '../components/QueuedResultPanel.jsx';
 import { useWalletMode } from '../hooks/useWalletMode.js';
-import { useOnlineStatus } from '../hooks/useOnlineStatus.js';
+import { useNetworkOffline } from '../hooks/useNetworkOffline.js';
+import { useHideReachabilityNotice } from '../components/hideReachabilityNotice.js';
 import { activeSourceId, externalIndexOf } from '../addressSelection.js';
 import { useActionConfirmFlow, useConfirmSubmit, isUserRejection } from '../hooks/useActionConfirmFlow.js';
 import { ActionConfirmScreen } from '../components/ActionConfirmScreen.jsx';
@@ -101,7 +102,9 @@ function expirationValidationError(mode, input, nowSec = Math.floor(Date.now() /
 export function CrossChainSwapForm({ walletId, onBack }) {
     const { messaging, shell } = useMessaging();
     const demoGuard = useDemoGuard(walletId, { onBack });
-    const networkAvailable = useOnlineStatus();
+    const { offline: networkOffline } = useNetworkOffline({ walletId });
+    const networkAvailable = !networkOffline;
+    useHideReachabilityNotice(networkOffline);
     const signerReady = useSignerReady(walletId);
     const variant = screenVariantFor(shell);
 
