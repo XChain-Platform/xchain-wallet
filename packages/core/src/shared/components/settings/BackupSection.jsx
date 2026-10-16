@@ -1230,55 +1230,57 @@ function PublishLabelsForm({ walletId, busy, error, password, onPasswordChange, 
     const canSubmit = !busy && !loadingChains;
 
     return (
-        <FormSection
-            title={t('settings.backup.publishLabelsOnChain')}
-            description={t('settings.backup.theLabelsContactsAreEncrypted')}
-            className={cardStyles.card}
-        >
-            {chains === null ? (
-                <div style={ROW_HINT}>{t('settings.backup.loadingChains')}</div>
-            ) : chains.length === 0 ? (
-                <EmptyState
-                    title={t('settings.backup.noChainsWithAddresses')}
-                    body={chainsError || t('settings.backup.noChainsHaveAddressesOn')}
-                    titleAs="h3"
-                    role={chainsError ? 'alert' : 'status'}
+        <SettingsInlineForm error={error && error !== INCORRECT_PASSWORD ? error : null}>
+            <FormSection
+                title={t('settings.backup.publishLabelsOnChain')}
+                description={t('settings.backup.theLabelsContactsAreEncrypted')}
+                className={cardStyles.card}
+            >
+                {chains === null ? (
+                    <div style={ROW_HINT}>{t('settings.backup.loadingChains')}</div>
+                ) : chains.length === 0 ? (
+                    <EmptyState
+                        title={t('settings.backup.noChainsWithAddresses')}
+                        body={chainsError || t('settings.backup.noChainsHaveAddressesOn')}
+                        titleAs="h3"
+                        role={chainsError ? 'alert' : 'status'}
+                    />
+                ) : (
+                    <Select
+                        label={t('send.fields.chain')}
+                        value={chainId}
+                        onChange={(e) => setChainId(e.target.value)}
+                        aria-label={t('settings.backup.publishChain')}
+                    >
+                        {/* Native options are the required children of the style guide Select. */}
+                        {chains.map((cid) => (
+                            <option key={cid} value={cid}>{chainDisplayName(cid)}</option>
+                        ))}
+                    </Select>
+                )}
+                <Input
+                    type="password"
+                    revealable
+                    placeholder={t('send.gated.passwordLabel')}
+                    value={password}
+                    onChange={(e) => onPasswordChange(e.target.value)}
+                    autoFocus
+                    autoComplete="current-password"
+                    aria-label={t('send.gated.passwordLabel')}
+                    error={error === INCORRECT_PASSWORD ? error : undefined}
                 />
-            ) : (
-                <Select
-                    label={t('send.fields.chain')}
-                    value={chainId}
-                    onChange={(e) => setChainId(e.target.value)}
-                    aria-label={t('settings.backup.publishChain')}
-                >
-                    {/* Native options are the required children of the style guide Select. */}
-                    {chains.map((cid) => (
-                        <option key={cid} value={cid}>{chainDisplayName(cid)}</option>
-                    ))}
-                </Select>
-            )}
-            <Input
-                type="password"
-                revealable
-                placeholder={t('send.gated.passwordLabel')}
-                value={password}
-                onChange={(e) => onPasswordChange(e.target.value)}
-                autoFocus
-                autoComplete="current-password"
-                aria-label={t('send.gated.passwordLabel')}
-            />
-            {error ? <Status text={error} tone="error" /> : null}
-            <div className={styles.actions}>
-                <Button variant="ghost" size="sm" onClick={onCancel} disabled={busy}>{t('common.cancel')}</Button>
-                <Button
-                    size="sm"
-                    onClick={() => onSubmit({ chainId, password })}
-                    disabled={!canSubmit}
-                >
-                    {busy ? t('settings.backup.publishing') : loadingChains ? t('settings.backup.loadingChains') : t('gatedPublish.review.summary.beforeFile')}
-                </Button>
-            </div>
-        </FormSection>
+                <div className={styles.actions}>
+                    <Button variant="ghost" size="sm" onClick={onCancel} disabled={busy}>{t('common.cancel')}</Button>
+                    <Button
+                        size="sm"
+                        onClick={() => onSubmit({ chainId, password })}
+                        disabled={!canSubmit}
+                    >
+                        {busy ? t('settings.backup.publishing') : loadingChains ? t('settings.backup.loadingChains') : t('gatedPublish.review.summary.beforeFile')}
+                    </Button>
+                </div>
+            </FormSection>
+        </SettingsInlineForm>
     );
 }
 
@@ -1368,55 +1370,57 @@ function RestoreLabelsForm({ walletId, busy, error, onCancel, onSubmit }) {
     const canSubmit = !!chainId && password.length > 0 && !busy;
 
     return (
-        <FormSection
-            title={t('settings.backup.checkChainForBackedUp')}
-            description={t('settings.backup.decryptsTheLabelsContactsFile')}
-            className={cardStyles.card}
-        >
-            {chains === null ? (
-                <div style={ROW_HINT}>{t('settings.backup.loadingChains')}</div>
-            ) : chains.length === 0 ? (
-                <EmptyState
-                    title={t('settings.backup.noChainsWithAddresses')}
-                    body={chainsError || t('settings.backup.noChainsHaveAddressesOn')}
-                    titleAs="h3"
-                    role={chainsError ? 'alert' : 'status'}
+        <SettingsInlineForm error={error && error !== INCORRECT_PASSWORD ? error : null}>
+            <FormSection
+                title={t('settings.backup.checkChainForBackedUp')}
+                description={t('settings.backup.decryptsTheLabelsContactsFile')}
+                className={cardStyles.card}
+            >
+                {chains === null ? (
+                    <div style={ROW_HINT}>{t('settings.backup.loadingChains')}</div>
+                ) : chains.length === 0 ? (
+                    <EmptyState
+                        title={t('settings.backup.noChainsWithAddresses')}
+                        body={chainsError || t('settings.backup.noChainsHaveAddressesOn')}
+                        titleAs="h3"
+                        role={chainsError ? 'alert' : 'status'}
+                    />
+                ) : (
+                    <Select
+                        label={t('send.fields.chain')}
+                        value={chainId}
+                        onChange={(e) => setChainId(e.target.value)}
+                        aria-label={t('settings.backup.restoreChain')}
+                    >
+                        {/* Native options are the required children of the style guide Select. */}
+                        {chains.map((cid) => (
+                            <option key={cid} value={cid}>{chainDisplayName(cid)}</option>
+                        ))}
+                    </Select>
+                )}
+                <Input
+                    type="password"
+                    revealable
+                    placeholder={t('send.gated.passwordLabel')}
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    autoFocus
+                    autoComplete="current-password"
+                    aria-label={t('send.gated.passwordLabel')}
+                    error={error === INCORRECT_PASSWORD ? error : undefined}
                 />
-            ) : (
-                <Select
-                    label={t('send.fields.chain')}
-                    value={chainId}
-                    onChange={(e) => setChainId(e.target.value)}
-                    aria-label={t('settings.backup.restoreChain')}
-                >
-                    {/* Native options are the required children of the style guide Select. */}
-                    {chains.map((cid) => (
-                        <option key={cid} value={cid}>{chainDisplayName(cid)}</option>
-                    ))}
-                </Select>
-            )}
-            <Input
-                type="password"
-                revealable
-                placeholder={t('send.gated.passwordLabel')}
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                autoFocus
-                autoComplete="current-password"
-                aria-label={t('send.gated.passwordLabel')}
-            />
-            {error ? <Status text={error} tone="error" /> : null}
-            <div className={styles.actions}>
-                <Button variant="ghost" size="sm" onClick={onCancel} disabled={busy}>{t('common.cancel')}</Button>
-                <Button
-                    size="sm"
-                    onClick={() => onSubmit({ chainId, password })}
-                    disabled={!canSubmit}
-                >
-                    {busy ? t('settings.backup.checking') : t('settings.backup.check2')}
-                </Button>
-            </div>
-        </FormSection>
+                <div className={styles.actions}>
+                    <Button variant="ghost" size="sm" onClick={onCancel} disabled={busy}>{t('common.cancel')}</Button>
+                    <Button
+                        size="sm"
+                        onClick={() => onSubmit({ chainId, password })}
+                        disabled={!canSubmit}
+                    >
+                        {busy ? t('settings.backup.checking') : t('settings.backup.check2')}
+                    </Button>
+                </div>
+            </FormSection>
+        </SettingsInlineForm>
     );
 }
 
