@@ -11,8 +11,8 @@
 // Window lifecycle in the real desktop app on the machine it runs on: close
 // keeps the app running, the dock (macOS) brings the window back, a second
 // window closes for real, quit with nothing pending exits, and quit while a
-// wallet message is still being handled waits, shows the window, and exits on
-// the next request once the message settles. Every launch goes through
+// signing send is still pending waits, shows the window, and exits at the
+// 15 s deadline. Every launch goes through
 // fixtures/electron.js, which keeps the app off every non-local host.
 //
 //     pnpm --filter @xchain-wallet/desktop build:renderer
@@ -24,6 +24,8 @@ import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { expect, test, _electron as electron } from '@playwright/test';
+import { LICENSE_VERSION } from '../../../packages/core/src/buildInfo.js';
+import { LICENSE_ACCEPTED_AT_KEY, LICENSE_ACCEPTED_VERSION_KEY, dismissIntroCarousel, unlockedShell } from '../fixtures/wallet.js';
 import {
     FIRST_WINDOW_TEXT, GUARD_ON_TEXT, closeElectron, launchGuardedElectron, readNetworkGuard,
 } from '../fixtures/electron.js';
@@ -100,46 +102,66 @@ test('close, reopen, a second window, and a quit with nothing pending', async ()
     }
 });
 
-test('quit waits for a wallet message in flight, then exits on the next request', async () => {
+test('quit waits for a pending signing send, then exits at the 15 s deadline', async () => {
     test.setTimeout(3 * 60 * 1000);
     const app = await launch();
     let exited = false;
     try {
-        // Stands in for a send between signing and saving: the wallet message
-        // handler counts the message the moment it is called, and the quit
-        // request lands while that call is still outstanding.
+        const win = await app.firstWindow();
+        // Demo mode builds the message host, so a message can stay in flight.
+        await win.addInitScript(([atKey, versionKey, version]) => {
+            window.localStorage.setItem(atKey, new Date().toISOString());
+            window.localStorage.setItem(versionKey, version);
+        }, [LICENSE_ACCEPTED_AT_KEY, LICENSE_ACCEPTED_VERSION_KEY, LICENSE_VERSION]);
+        await win.reload();
+        await dismissIntroCarousel(win);
+        await win.getByRole('button', { name: 'Try in demo mode' }).click();
+        await unlockedShell(win).waitFor({ state: 'visible', timeout: 120_000 });
+
+        // Stands in for a send between signing and saving. Quit only counts
+        // a message whose type signs and broadcasts, and the counted check
+        // reads the type from inside isQuitDeferringMessage, so the type
+        // reads as action.send there and as a host call that never answers
+        // (chainRegistry.refresh, whose fetch is held) everywhere else.
         const deferred = await app.evaluate(({ app: electronApp, BrowserWindow, ipcMain }) => {
             const handler = ipcMain._invokeHandlers?.get('xchain-wallet:message');
             if (typeof handler !== 'function') return { error: 'no wallet message handler' };
             const win = BrowserWindow.getAllWindows()[0];
+            globalThis.fetch = () => new Promise(() => {});
+            const message = { request: {} };
+            Object.defineProperty(message, 'type', {
+                enumerable: true,
+                get() {
+                    return new Error().stack.includes('isQuitDeferringMessage') ? 'action.send' : 'chainRegistry.refresh';
+                },
+            });
+            globalThis.__lifecyclePending = handler(
+                { senderFrame: win.webContents.mainFrame, sender: win.webContents },
+                message,
+            );
             win.hide();
             let quitEventDefaultPrevented = null;
             electronApp.once('before-quit', (event) => {
                 setImmediate(() => { quitEventDefaultPrevented = event.defaultPrevented; });
             });
-            const pending = handler(
-                { senderFrame: win.webContents.mainFrame, sender: win.webContents },
-                { type: 'session.status', request: {} },
-            );
             electronApp.quit();
-            globalThis.__lifecyclePending = pending;
             return new Promise((done) => setTimeout(() => done({
                 quitEventDefaultPrevented,
                 visible: win.isVisible(),
             }), 1_000));
         });
         expect(deferred.error).toBeUndefined();
-        expect(deferred.quitEventDefaultPrevented, 'quit waits for the message').toBe(true);
+        expect(deferred.quitEventDefaultPrevented, 'quit waits for the signing send').toBe(true);
         expect(deferred.visible, 'and the window comes back').toBe(true);
 
-        const settled = await app.evaluate(async () => {
-            const response = await globalThis.__lifecyclePending;
-            return Boolean(response && typeof response === 'object');
-        });
-        expect(settled).toBe(true);
-
-        exited = await quitAndWait(app, 20_000);
-        expect(exited, 'a second quit exits once nothing is pending').toBe(true);
+        // The send never settles, so quit ends at the 15 s deadline.
+        const started = Date.now();
+        exited = await app.waitForEvent('close', { timeout: 25_000 }).then(() => true, () => false);
+        const waited = Date.now() - started;
+        console.log(`quit with a pending signing send took ${waited + 1_000} ms`);
+        expect(exited, 'quit completes although the send never settles').toBe(true);
+        expect(waited + 1_000, 'quit does not wait much longer than 15 s').toBeLessThan(20_000);
+        expect(waited + 1_000, 'quit does wait for the send').toBeGreaterThan(10_000);
     } finally {
         if (!exited) await closeElectron(app);
     }

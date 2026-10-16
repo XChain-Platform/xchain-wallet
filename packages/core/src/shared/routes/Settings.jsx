@@ -932,8 +932,8 @@ function UpdateCheckPanel() {
     }[state];
 
     return (
-        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start' }}>
-            <Button variant="ghost" size="sm" onClick={check} disabled={state === 'checking'}>
+        <div style={{ display: 'flex', flexDirection: 'column' }}>
+            <Button variant="ghost" size="sm" style={{ alignSelf: 'flex-start' }} onClick={check} disabled={state === 'checking'}>
                 {t('settings.page.checkForUpdates')}
             </Button>
             <StatusMessage variant={UPDATE_CHECK_VARIANT[state] || 'status'}>{message}</StatusMessage>
