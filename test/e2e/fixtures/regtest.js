@@ -62,6 +62,7 @@ import { expect } from '@playwright/test';
 import { openSettings, gotoSection, unlockedShell } from './wallet.js';
 import { kdfStepTimeout } from '../timeout-budget.js';
 import { rateLimitDelayMs, venueVerdict } from './venueHealth.js';
+import { compareDecimal, subtractDecimal } from '../../../packages/core/src/shared/utils/mintHeadroom.js';
 import {
     MIN_SEED_MARGIN_SECONDS,
     XCHAIN_PAIR,
@@ -1439,6 +1440,52 @@ export async function expectConfirmModal(page, what = 'this action', timeoutMs =
 }
 
 /**
+ * XCHAIN the venue must still let anyone mint before a run starts. A whole run
+ * mints tens of thousands; below this the suite cannot fund its gas.
+ */
+export const GAS_HEADROOM_FLOOR = '1000000';
+
+/**
+ * How much more XCHAIN the venue lets anyone mint: MAX_SUPPLY minus the supply
+ * in existence. Null when the gas token is not issued yet or is uncapped, both
+ * of which leave room.
+ *
+ * @param {{ fetchImpl?: typeof fetch }} [opts]
+ * @returns {Promise<string | null>}
+ */
+export async function readGasHeadroom({ fetchImpl = fetch } = {}) {
+    const res = await fetchImpl(`${EXPLORER_URL}/${REGTEST_COIN}/api/token/XCHAIN`, {
+        signal: AbortSignal.timeout(30_000),
+    });
+    // 404 is a not-yet-issued token; any other refusal leaves nothing to judge,
+    // and the gas probe and confirm screen report their own errors.
+    if (!res.ok) return null;
+    const row = await res.json().catch(() => null);
+    const max = row?.supply?.max;
+    const current = row?.supply?.current;
+    if (max == null || current == null) return null;
+    return subtractDecimal(String(max), String(current));
+}
+
+/**
+ * Throws a venue-state error when the venue cannot mint `needed` more XCHAIN.
+ * Without it every spec reaches a confirm screen that correctly refuses the
+ * mint and waits out its whole timeout on a disabled Approve.
+ *
+ * @param {string | number} needed
+ * @param {{ fetchImpl?: typeof fetch }} [opts]
+ */
+export async function assertGasHeadroom(needed, opts) {
+    const headroom = await readGasHeadroom(opts);
+    if (headroom === null || compareDecimal(headroom, String(needed)) !== -1) return;
+    throw new Error(
+        `the venue's XCHAIN gas token has ${headroom} of mint headroom left, short of ${needed}; `
+        + 'its MAX_SUPPLY is nearly all minted, so this is venue state and not a wallet defect. '
+        + 'Restore headroom on the venue (re-issue with a higher cap, or a fresh regtest chain).',
+    );
+}
+
+/**
  * Mints `amount` XCHAIN to the active address and waits for the balance.
  *
  * XCHAIN is free-mintable on regtest and testnet by any address, so this is
@@ -1452,6 +1499,7 @@ export async function expectConfirmModal(page, what = 'this action', timeoutMs =
  * the wallet holds none of.
  */
 export async function mintXchain(page, amount) {
+    await assertGasHeadroom(amount);
     await page.keyboard.press('ControlOrMeta+k');
     // Scoped to the palette DIALOG, not to the page. A bare
     // `getByRole('combobox').first()` picks up any <select> on the screen
