@@ -63,6 +63,11 @@ const SHELL_ONLY = {
             kind: 'intended',
             reason: 'The web shell owns the address-list token query in route state.',
         },
+        'AccountPicker.backLabel': {
+            shells: ['web'],
+            kind: 'known-gap',
+            reason: 'Only the web shell labels the account picker back button when it was opened from Settings.',
+        },
         'AdvancedActionsForm.hasDexSurface': {
             shells: ['web'],
             kind: 'intended',
@@ -77,16 +82,6 @@ const SHELL_ONLY = {
             shells: ['web'],
             kind: 'intended',
             reason: 'The web shell header presents account context that other shells place in their native layout.',
-        },
-        'AppHeader.activeNetwork': {
-            shells: ['web'],
-            kind: 'intended',
-            reason: 'The web shell header owns its network selector.',
-        },
-        'AppHeader.activeWallet': {
-            shells: ['web'],
-            kind: 'intended',
-            reason: 'The web shell header presents wallet context that other shells place in their native layout.',
         },
         'AppHeader.chainRegistry': {
             shells: ['web'],
@@ -555,7 +550,7 @@ describe('shell route parity', () => {
     });
 
     it('reports a prop removed from one shell', () => {
-        const mutatedDesktopSource = desktopAppSource.replace(/\n\s+demoBannerInHeader\n/, '\n');
+        const mutatedDesktopSource = desktopAppSource.replace(/\n\s+onAddAccount=\{[^\n]*\n/, '\n');
         expect(mutatedDesktopSource).not.toBe(desktopAppSource);
         const { flattened } = sharedComponentProps({
             web: SHELLS.web.routeSources,
@@ -563,7 +558,7 @@ describe('shell route parity', () => {
             extension: SHELLS.extension.routeSources,
         });
         expect(parityFailures(flattened, SHELL_ONLY.props)).toContain(
-            'Home.demoBannerInHeader: present in extension, web without a reasoned allowlist entry',
+            'AccountPicker.onAddAccount: present in extension, web without a reasoned allowlist entry',
         );
     });
 
