@@ -32,7 +32,7 @@ test('prints help and rejects a missing file argument', () => {
     assert.match(missing.stderr, /Usage: node manifest-diff\.mjs/);
 });
 
-test('ignores only the configured top-level store fields', (t) => {
+test('ignores only update_url by default and still reports key', (t) => {
     const { oursPath, theirsPath } = fixture(t,
         { name: 'Wallet', version: '1.2.3', nested: { enabled: true } },
         {
@@ -41,8 +41,14 @@ test('ignores only the configured top-level store fields', (t) => {
         });
 
     const defaults = run([oursPath, theirsPath]);
-    assert.equal(defaults.status, 0, defaults.stderr);
-    assert.match(defaults.stdout, /ignored keys: update_url, key/);
+    assert.equal(defaults.status, 1);
+    assert.match(defaults.stderr, /key: missing on our side/);
+    assert.doesNotMatch(defaults.stderr, /update_url: missing on our side/);
+    assert.match(defaults.stderr, /ignored keys: update_url/);
+
+    const override = run([oursPath, theirsPath, '--ignore', 'key,update_url']);
+    assert.equal(override.status, 0, override.stderr);
+    assert.match(override.stdout, /ignored keys: key, update_url/);
 
     const strict = run([oursPath, theirsPath, '--ignore', 'key']);
     assert.equal(strict.status, 1);
