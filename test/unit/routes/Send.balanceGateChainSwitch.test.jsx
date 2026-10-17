@@ -35,6 +35,7 @@ vi.mock('@xchain-wallet/core/ui', async (importOriginal) => {
 
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
 import { Send } from '../../../packages/core/src/shared/routes/Send.jsx';
+import { SendPicker } from '../../../packages/core/src/shared/routes/SendPicker.jsx';
 
 const BTC = 'bitcoin-mainnet';
 const DOGE = 'dogecoin-mainnet';
@@ -47,6 +48,31 @@ const balance = (tick, quantity) => ({
     tokens: [],
 });
 
+function ChainPickerHarness({ messaging }) {
+    const [prefill, setPrefill] = React.useState({ chainId: BTC, tick: 'BTC' });
+    const [pickerOpen, setPickerOpen] = React.useState(false);
+    return (
+        <MessagingProvider shell="web" messaging={messaging}>
+            <Send
+                walletId="w"
+                prefill={prefill}
+                onBack={() => {}}
+                onChangeAsset={() => setPickerOpen(true)}
+            />
+            {pickerOpen ? (
+                <SendPicker
+                    walletId="w"
+                    onBack={() => setPickerOpen(false)}
+                    onSelect={(selection) => {
+                        setPrefill({ chainId: selection.chainId, tick: selection.tick });
+                        setPickerOpen(false);
+                    }}
+                />
+            ) : null}
+        </MessagingProvider>
+    );
+}
+
 function mount() {
     let finishDogeAddressRead = () => {};
     const btcBalance = balance('BTC', '100000000');
@@ -58,6 +84,10 @@ function mount() {
     const getWalletBalances = vi.fn()
         .mockResolvedValueOnce({
             [BTC]: [{ address: BTC_FROM, balances: btcBalance, error: null }],
+        })
+        .mockResolvedValueOnce({
+            [BTC]: [{ address: BTC_FROM, balances: btcBalance, error: null }],
+            [DOGE]: [{ address: DOGE_FROM, balances: dogeBalance, error: null }],
         })
         .mockImplementation(() => new Promise(() => {}));
     const base = {
@@ -90,11 +120,7 @@ function mount() {
         },
     });
 
-    render(
-        <MessagingProvider shell="web" messaging={messaging}>
-            <Send walletId="w" onBack={() => {}} />
-        </MessagingProvider>,
-    );
+    render(<ChainPickerHarness messaging={messaging} />);
     return { messaging, finishDogeAddressRead: () => finishDogeAddressRead() };
 }
 
@@ -111,12 +137,12 @@ describe('Send balance gate during a chain switch', () => {
         await screen.findByText('1 BTC available');
         emptyStateTitles.length = 0;
 
-        fireEvent.paste(screen.getByLabelText(/^To$/), {
-            clipboardData: { getData: () => 'xchain://dogecoin-mainnet/DOGE' },
-        });
+        fireEvent.click(screen.getByRole('button', { name: /Change asset/ }));
+        expect(screen.getByRole('form', { name: 'Send' })).toBe(form);
+        fireEvent.click(await screen.findByRole('button', { name: /^Select Dogecoin\b/ }));
 
         expect(screen.getByRole('form', { name: 'Send' })).toBe(form);
-        await waitFor(() => expect(messaging.getWalletBalances).toHaveBeenCalledTimes(2));
+        await waitFor(() => expect(messaging.getWalletBalances).toHaveBeenCalledTimes(3));
         expect(messaging.getAddressBalances).toHaveBeenCalledWith(DOGE, DOGE_FROM);
         expect(screen.getByRole('form', { name: 'Send' })).toBe(form);
         expect(screen.queryByText(EMPTY_TITLE)).toBeNull();
