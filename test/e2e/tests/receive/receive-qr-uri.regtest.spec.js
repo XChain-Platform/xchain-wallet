@@ -9,7 +9,7 @@
 // contact legal@dankest.llc.
 
 // Campaign coverage map, "Receive" -> the ⬜ residual open since SESSION 1:
-// "Exact URI contents, token switch, fee-slider effect on the request,
+// "Exact URI contents, token switch, request contents,
 // Copy/Share correctness (DOM read blocked by privacy filter; verify from
 // source or Copy paste)."
 //
@@ -25,7 +25,7 @@
 // payer scans the code.
 //
 // Receive emits the coin's BIP21-style scheme for every network. Optional
-// parameters preserve the exact network and fee preference for XChain while
+// parameters preserve the exact network for XChain while
 // external wallets can still read the standard address and amount fields.
 //
 // NOT COVERED HERE, and left honestly rather than quietly: the token switch
@@ -166,44 +166,20 @@ test.describe('Receive: the request the payer actually scans', () => {
             expect(uri.address, 'the address changed when an amount was typed').toBe(ownAddress);
         });
 
-        await test.step('the fee slider is part of the REQUEST, not just decoration', async () => {
-            const before = parsePaymentUri(await decodeReceiveQr(page))?.params?.feePriority;
-            expect(before,
-                'the Receive QR carries no fee preference at all, so the slider on this screen '
-                + 'changes nothing a payer will ever see')
-                .toBeTruthy();
-
-            // THE SLIDER, not the tick buttons beside it. `FeeSelector` puts
-            // its Low/Normal/Fast ticks inside a container marked
-            // `aria-hidden="true"`, so they are absent from the accessibility
-            // tree and no role query can ever reach them - a click on them
-            // waits out its full budget. The `<input type="range">` carries
-            // `aria-label="Network fee"` and is the control an assistive-tech
-            // user drives, so it is the right one to drive here too.
-            const slider = page.getByRole('main').getByRole('slider', { name: 'Network fee' });
-            await expect(slider,
-                'the fee slider never rendered, so this screen offers no fee preference at all')
-                .toBeVisible({ timeout: 30_000 });
-            await expect(slider,
-                'the fee slider is DISABLED, which means the tiers never estimated - the request '
-                + 'below would be asserting against a control the user cannot move either')
-                .toBeEnabled();
-
-            await slider.focus();
-            await page.keyboard.press(before === 'fast' ? 'ArrowLeft' : 'ArrowRight');
-
-            const raw = await expectQr(page,
-                (v) => {
-                    const p = parsePaymentUri(v)?.params?.feePriority;
-                    return p !== undefined && p !== before;
-                },
-                `the QR still asks for "${before}" after the fee slider was moved, so the control `
-                + 'changes nothing the payer will ever see');
-            const uri = parsePaymentUri(raw);
-            expect(uri.params.feePriority).not.toBe(before);
-            // Everything else must survive the move. A re-encode that drops the
-            // amount is the kind of bug a fee assertion alone cannot see.
-            expect(uri.address).toBe(ownAddress);
+        await test.step('Receive offers no fee preference, and the code carries none', async () => {
+            // Receive requests a payment; the payer's wallet prices its own
+            // transaction. A fee slider here, or a feePriority in the code,
+            // would be a preference the payer is asked to honour for a fee the
+            // receiver never pays.
+            await expect(page.getByRole('main').getByRole('slider', { name: 'Network fee' }),
+                'Receive shows a fee slider, so the screen offers a fee preference again')
+                .toHaveCount(0);
+            const uri = parsePaymentUri(await decodeReceiveQr(page));
+            expect(uri?.params?.feePriority,
+                'the Receive QR carries a fee preference the screen no longer offers')
+                .toBeUndefined();
+            expect(uri?.params?.amount, 'the amount did not survive the fee check').toBe(REQUEST_AMOUNT);
+            expect(uri?.address).toBe(ownAddress);
         });
     });
 
@@ -213,6 +189,7 @@ test.describe('Receive: the request the payer actually scans', () => {
     // a superseded request - and the campaign's Session-1 note only ever
     // established that the image re-renders, never that its CONTENT changed.
     test('the code is re-encoded when the request changes, not merely repainted', async ({ page }) => {
+        await openVenueReceive(page);
         const bare = await expectQr(
             page,
             (v) => v.startsWith(`${URI_SCHEME}:`),

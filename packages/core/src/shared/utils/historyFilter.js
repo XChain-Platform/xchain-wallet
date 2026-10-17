@@ -125,6 +125,23 @@ export function classifyEntryStatus(entry, nowMs = Date.now()) {
 }
 
 /**
+ * `classifyEntryStatus` for a screen that holds no mempool read of its own,
+ * such as the Send done card. "Dropped" means a mempool listed the transaction
+ * and no longer does; with no current read that claim has nothing behind it,
+ * and a send still waiting for its block would read as failed 90 seconds after
+ * its first sighting. Such an entry stays pending. A failed local record and an
+ * explorer row marked invalid still read as failed.
+ *
+ * @param {HistoryEntry} entry
+ * @param {number} [nowMs]
+ */
+export function classifyEntryStatusWithoutMempool(entry, nowMs = Date.now()) {
+    const status = classifyEntryStatus(entry, nowMs);
+    if (status !== 'failed' || !entry?.pending) return status;
+    return pendingDisplayState(entry, nowMs) === 'dropped' ? 'pending' : status;
+}
+
+/**
  * Apply all four §28.6 filters in one pass. Each parameter is optional;
  * an empty / null value disables that filter so callers can supply only
  * the dimensions the user has actually touched.

@@ -48,7 +48,7 @@
 // only variable between free and priced - a market's life includes that window,
 // which is a real cost hiding in a field users read as a safety margin.
 
-import { createWallet, expect, test } from '../../fixtures/wallet.js';
+import { createWallet, expect, openPaletteCommand, test } from '../../fixtures/wallet.js';
 import {
     encoderRpc,
     expectConfirmModal,
@@ -155,19 +155,6 @@ async function projectedProtocolFeeSats(page) {
     return coin === undefined ? null : Math.round(Number(coin) * 1e8);
 }
 
-async function gotoPalette(page, title) {
-    await page.keyboard.press('ControlOrMeta+k');
-    const dialog = page.getByRole('dialog', { name: 'Command palette' });
-    await expect(dialog, 'the command palette did not open').toBeVisible({ timeout: 15_000 });
-    const combobox = dialog.getByRole('combobox').first();
-    await expect(combobox).toBeEditable({ timeout: 15_000 });
-    await combobox.fill(title);
-    const row = page.getByRole('option', { name: new RegExp(`^${title}\\b`) }).first();
-    await expect(row, `no palette command matching "${title}"`).toBeVisible();
-    await row.click();
-    await expect(dialog).toBeHidden({ timeout: 15_000 });
-}
-
 function toLocalDateTimeInput(unixSec) {
     const d = new Date(unixSec * 1000);
     const pad = (n) => String(n).padStart(2, '0');
@@ -183,7 +170,7 @@ function toLocalDateTimeInput(unixSec) {
  * deadline is the only thing that differs between the two legs.
  */
 async function composeMarket(page, { label, daysOut }) {
-    await gotoPalette(page, 'Betting');
+    await openPaletteCommand(page, 'Betting');
     await page.getByRole('button', { name: 'Create market', exact: true }).click();
     const main = page.getByRole('main');
 
@@ -248,7 +235,7 @@ test.describe(`what opening a market costs on ${REGTEST_CHAIN_LABEL}`, () => {
             await createWallet(page, { password: PASSWORD, name: 'Market Fee Wallet' });
             await switchToRegtest(page, PASSWORD);
 
-            await gotoPalette(page, 'Betting');
+            await openPaletteCommand(page, 'Betting');
             await page.getByRole('button', { name: 'Create market', exact: true }).click();
             const main = page.getByRole('main');
             await selectVenueChain(main);
@@ -264,7 +251,7 @@ test.describe(`what opening a market costs on ${REGTEST_CHAIN_LABEL}`, () => {
             // the first combobox on the page - so the fixture tries to type
             // into that instead and fails with "Element is not an <input>".
             // Cost a run.
-            await gotoPalette(page, 'Home');
+            await openPaletteCommand(page, 'Home');
 
             // XCHAIN is the WAGER tick here, not the fee: on this chain the fee
             // is paid in coin whatever the market is denominated in. It is

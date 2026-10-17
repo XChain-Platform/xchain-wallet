@@ -47,7 +47,7 @@ import bitcoin from 'bitcoinjs-lib';
 import wifCodec from 'wif';
 import * as ecc from 'tiny-secp256k1';
 
-import { createWallet, expect, test } from '../../fixtures/wallet.js';
+import { createWallet, expect, openPaletteCommand, test } from '../../fixtures/wallet.js';
 import {
     REGTEST_ADDRESS_RE,
     REGTEST_CHAIN_LABEL,
@@ -56,19 +56,6 @@ import {
 } from '../../fixtures/regtest.js';
 
 const PASSWORD = 'regtestpassword123';
-
-async function gotoPalette(page, title) {
-    await page.keyboard.press('ControlOrMeta+k');
-    const dialog = page.getByRole('dialog', { name: 'Command palette' });
-    await expect(dialog, 'the command palette did not open').toBeVisible({ timeout: 15_000 });
-    const combobox = dialog.getByRole('combobox').first();
-    await expect(combobox).toBeEditable({ timeout: 15_000 });
-    await combobox.fill(title);
-    const row = page.getByRole('option', { name: new RegExp(`^${title}\\b`) }).first();
-    await expect(row, `no palette command matching "${title}"`).toBeVisible();
-    await row.click();
-    await expect(dialog).toBeHidden({ timeout: 15_000 });
-}
 
 /**
  * Does this WIF control this address, on any of the encodings the wallet
@@ -140,7 +127,7 @@ test.describe('revealing an address private key', () => {
                 // point 3), so "the row that looks like this chain's" is
                 // ambiguous by construction. With the address in hand the row is
                 // addressed by its exact accessible name.
-                await gotoPalette(page, 'Issue token');
+                await openPaletteCommand(page, 'Issue token');
                 const form = page.getByRole('main');
                 await expect(form.getByLabel('Ticker')).toBeVisible({ timeout: 30_000 });
                 await selectVenueChain(form);
@@ -148,7 +135,7 @@ test.describe('revealing an address private key', () => {
                 expect(address, `no ${REGTEST_CHAIN_LABEL} address in this wallet`)
                     .toMatch(REGTEST_ADDRESS_RE);
 
-                await gotoPalette(page, 'Addresses');
+                await openPaletteCommand(page, 'Addresses');
                 const main = page.getByRole('main');
                 const row = main.getByRole('button', { name: `View address ${address}` });
                 await expect(row, 'the address list has no row for this venue address')

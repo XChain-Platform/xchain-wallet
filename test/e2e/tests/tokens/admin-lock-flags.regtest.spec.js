@@ -14,7 +14,7 @@
 // consensus fee quotes must refuse the protected edits, and the wallet must
 // disable the same controls when the forms are reopened.
 
-import { createWallet, expect, test } from '../../fixtures/wallet.js';
+import { createWallet, expect, openPaletteCommand, test } from '../../fixtures/wallet.js';
 import {
     explorerJson,
     expectConfirmModal,
@@ -37,24 +37,16 @@ const FUNDING = 2;
 const XCHAIN_MINT = 40;
 const STAMP = Date.now().toString().slice(-6);
 const TICK = `ALF${STAMP}`;
+/**
+ * Artwork URL for the limited-edition template, which refuses to review an
+ * edition without one. Any stable https URL serves: nothing here reads it back.
+ */
+const IMAGE_URL = 'https://example.com/art/admin-lock-flags.png';
 const EDITION_SIZE = 100;
 const MAX_MINT = 10;
 
-async function gotoPalette(page, title) {
-    await page.keyboard.press('ControlOrMeta+k');
-    const dialog = page.getByRole('dialog', { name: 'Command palette' });
-    await expect(dialog, 'the command palette did not open').toBeVisible({ timeout: 15_000 });
-    const combobox = dialog.getByRole('combobox').first();
-    await expect(combobox).toBeEditable({ timeout: 15_000 });
-    await combobox.fill(title);
-    const row = dialog.getByRole('option', { name: new RegExp(`^${title}\\b`) }).first();
-    await expect(row, `no palette command matching "${title}"`).toBeVisible();
-    await row.click();
-    await expect(dialog).toBeHidden({ timeout: 15_000 });
-}
-
 async function reloadToHome(page) {
-    await gotoPalette(page, 'Home');
+    await openPaletteCommand(page, 'Home');
     await page.reload();
     await unlockAfterReload(page, PASSWORD);
 }
@@ -78,7 +70,7 @@ async function approveAndGetTxid(page) {
 
 async function openTokenAdmin(page, item, tick = TICK) {
     await reloadToHome(page);
-    await gotoPalette(page, 'My Tokens');
+    await openPaletteCommand(page, 'My tokens');
     const main = page.getByRole('main');
     const row = main.getByRole('button').filter({ hasText: tick }).first();
     await expect(row, `${tick} is on chain but My Tokens does not list it`)
@@ -142,7 +134,7 @@ test.describe(`admin lock flags on ${REGTEST_CHAIN_LABEL}`, () => {
             await unlockAfterReload(page, PASSWORD);
             await seedPrices();
 
-            await gotoPalette(page, 'Create a token');
+            await openPaletteCommand(page, 'Create a token');
             const main = page.getByRole('main');
             await main.getByRole('button', { name: /^Limited edition/ }).click();
             await selectVenueChain(main);
@@ -151,6 +143,7 @@ test.describe(`admin lock flags on ${REGTEST_CHAIN_LABEL}`, () => {
             await main.getByLabel('Token name (ticker)').fill(TICK);
             await main.getByLabel('Edition size').fill(String(EDITION_SIZE));
             await main.getByLabel('Copies per mint').fill(String(MAX_MINT));
+            await main.getByLabel('Image URL').fill(IMAGE_URL);
             await main.getByRole('button', { name: 'Review token', exact: true }).click();
             await main.getByRole('button', { name: 'Continue to confirmation', exact: true }).click();
 

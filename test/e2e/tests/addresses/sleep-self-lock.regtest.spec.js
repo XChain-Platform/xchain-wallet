@@ -1,4 +1,5 @@
-import { createWallet, expect, test } from '../../fixtures/wallet.js';
+import { readShownTxid } from '../../fixtures/pendingHistory.js';
+import { createWallet, expect, openPaletteCommand, test } from '../../fixtures/wallet.js';
 import {
     explorerJson,
     fundAddress,
@@ -15,23 +16,10 @@ const PASSWORD = 'regtestpassword123';
 const XCHAIN_AMOUNT = 20;
 const MEMO = `SLA${Date.now().toString().slice(-8)}`;
 
-async function gotoPalette(page, title) {
-    await page.keyboard.press('ControlOrMeta+k');
-    const dialog = page.getByRole('dialog', { name: 'Command palette' });
-    await expect(dialog).toBeVisible({ timeout: 15_000 });
-    const combobox = dialog.getByRole('combobox').first();
-    await expect(combobox).toBeEditable({ timeout: 15_000 });
-    await combobox.fill(title);
-    const row = dialog.getByRole('option', { name: new RegExp(`^${title}\\b`) }).first();
-    await expect(row, `no palette command matching "${title}"`).toBeVisible();
-    await row.click();
-    await expect(dialog).toBeHidden({ timeout: 15_000 });
-}
-
 async function readTxid(page) {
     const main = page.getByRole('main');
     await expect(main).toContainText(/[0-9a-f]{64}/, { timeout: 180_000 });
-    const txid = (await main.innerText()).match(/\b[0-9a-f]{64}\b/)?.[0];
+    const txid = await readShownTxid(main);
     expect(txid, 'the self-lock result showed no transaction id').toBeTruthy();
     return txid;
 }
@@ -55,7 +43,7 @@ test.describe(`SLEEP v0 address self-lock on ${REGTEST_CHAIN_LABEL}`, () => {
         });
 
         await test.step('approve the address-mode form with its typed safety gate', async () => {
-            await gotoPalette(page, 'All actions');
+            await openPaletteCommand(page, 'All actions');
             const main = page.getByRole('main');
             await main.getByText('Lock this address', { exact: true }).first().click();
             // The screen title sits in the page banner, outside main.
@@ -66,10 +54,11 @@ test.describe(`SLEEP v0 address self-lock on ${REGTEST_CHAIN_LABEL}`, () => {
             await main.getByLabel('Memo (optional)').fill(MEMO);
             await main.getByRole('button', { name: 'Preview', exact: true }).click();
 
-            await expect(main).toContainText('This locks your own address.');
+            await expect(main).toContainText('This pauses XChain actions from your address.');
             await main.getByLabel('Type LOCK to confirm').fill('LOCK');
             const approve = main.getByRole('button', {
-                name: `Lock address on ${REGTEST_CHAIN_LABEL}`,
+                name: 'Lock address',
+                exact: true,
             });
             await expect(approve).toBeEnabled({ timeout: 30_000 });
             await approve.click();

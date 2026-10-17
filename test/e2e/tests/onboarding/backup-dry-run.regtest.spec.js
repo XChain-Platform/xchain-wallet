@@ -54,7 +54,7 @@
 //   cd test/e2e && XC_REGTEST_COIN=RLTC npx playwright test \
 //       --config=playwright.regtest.config.js tests/onboarding/backup-dry-run.regtest.spec.js
 
-import { createWallet, expect, test } from '../../fixtures/wallet.js';
+import { createWallet, expect, openPaletteCommand, test } from '../../fixtures/wallet.js';
 import { switchToRegtest } from '../../fixtures/regtest.js';
 
 const PASSWORD = 'regtestpassword123';
@@ -73,19 +73,12 @@ const FOREIGN_MNEMONIC =
 /** Any non-empty passphrase produces a different seed from the same words. */
 const A_PASSPHRASE = 'not-the-one-used-at-creation';
 
-const MATCH_TEXT = /Backup matches this wallet on every active chain/i;
+const MATCH_TEXT = /Backup matches this wallet on every active network/i;
 const MISMATCH_TEXT = /Backup does NOT match this wallet/i;
 
 /** Opens Settings -> Backup and reveals the dry-run form. */
 async function openDryRunForm(page) {
-    await page.keyboard.press('ControlOrMeta+k');
-    const dialog = page.getByRole('dialog', { name: 'Command palette' });
-    await expect(dialog).toBeVisible({ timeout: 15_000 });
-    const combobox = dialog.getByRole('combobox').first();
-    await expect(combobox).toBeEditable({ timeout: 15_000 });
-    await combobox.fill('Settings');
-    await page.getByRole('option', { name: /^Settings\b/ }).first().click();
-    await expect(dialog).toBeHidden({ timeout: 15_000 });
+    await openPaletteCommand(page, 'Settings');
 
     const main = page.getByRole('main');
     await main.getByRole('button', { name: /^Backup/ }).first().click();

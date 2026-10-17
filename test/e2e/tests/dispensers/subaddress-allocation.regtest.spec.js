@@ -36,7 +36,7 @@
 // last row": the list sorts for the reader, not for this spec, and onboarding
 // has already put an address in it before the first step runs.
 
-import { createWallet, expect, test } from '../../fixtures/wallet.js';
+import { createWallet, expect, openPaletteCommand, test } from '../../fixtures/wallet.js';
 import { switchToRegtest } from '../../fixtures/regtest.js';
 
 const PASSWORD = 'regtestpassword123';
@@ -62,14 +62,7 @@ function pathTail(derivationPath) {
 }
 
 async function openAddresses(page) {
-    await page.keyboard.press('ControlOrMeta+k');
-    const dialog = page.getByRole('dialog', { name: 'Command palette' });
-    await expect(dialog, 'the command palette did not open').toBeVisible({ timeout: 15_000 });
-    const combobox = dialog.getByRole('combobox').first();
-    await expect(combobox).toBeEditable({ timeout: 15_000 });
-    await combobox.fill('Addresses');
-    await page.getByRole('option', { name: /^Addresses\b/ }).first().click();
-    await expect(dialog).toBeHidden({ timeout: 15_000 });
+    await openPaletteCommand(page, 'Addresses');
 }
 
 /**

@@ -40,6 +40,14 @@ const WIRE_TEXT = /https?:\/\/|(?:\/[A-Za-z0-9_-]+)?\/api(?:\/|\b)|(?:^|\n)\s*at
 const SERIALIZED_DATA = /(?:^|:\s*)[{[]\s*["'][^\n]*[}\]]/;
 const ENCODER_REFUSAL_PREFIX = /^Encoder RPC error:\s*/i;
 const MAX_REFUSAL_REASON_LENGTH = 500;
+// Codes on errors the wallet itself raises with a sentence written for the user
+// (the confirm page's refusals); the code names the case and is not developer
+// output, so it must not hide that sentence.
+const USER_COPY_CODES = new Set(['NATIVE_FEE_CHANGED', 'INPUTS_SPENT']);
+// The encoder's coin-selection shortfall is a build failure, not a rule the
+// node enforced, so it keeps the encoder copy that says nothing was signed or
+// sent instead of being shown as a bare reason.
+const COIN_SELECTION_SHORTFALL = /^insufficient funds: (?:selected inputs total|all \d+ candidate input)/i;
 
 /**
  * True when text contains a machine error code or an internal error type.
@@ -103,7 +111,7 @@ export function protocolRefusalReason(err) {
     const message = errorText(err);
     if (!ENCODER_REFUSAL_PREFIX.test(message)) return null;
     const reason = message.replace(ENCODER_REFUSAL_PREFIX, '').trim();
-    if (!reason || INTERNALS.test(reason) || WIRE_TEXT.test(reason) || SERIALIZED_DATA.test(reason)) {
+    if (!reason || COIN_SELECTION_SHORTFALL.test(reason) || INTERNALS.test(reason) || WIRE_TEXT.test(reason) || SERIALIZED_DATA.test(reason)) {
         return null;
     }
     return reason.slice(0, MAX_REFUSAL_REASON_LENGTH).trimEnd();
@@ -139,7 +147,7 @@ export function isDeveloperMessage(err) {
         if (/^SDK[A-Za-z]*Error$/.test(String(e.name || ''))) return true;
         if (RUNTIME_ERROR_NAMES.has(String(e.name || ''))) return true;
         if (isPlatformException(e)) return true;
-        if (typeof e.code === 'string' && /^[A-Z][A-Z0-9_]+$/.test(e.code)) return true;
+        if (typeof e.code === 'string' && !USER_COPY_CODES.has(e.code) && /^[A-Z][A-Z0-9_]+$/.test(e.code)) return true;
     }
     return DEV_PREFIX.test(text) || INTERNALS.test(text)
         || containsInternalErrorIdentifier(text)

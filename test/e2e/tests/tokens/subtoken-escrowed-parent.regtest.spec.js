@@ -42,7 +42,8 @@
 // If a leg times out, compare `last_block` against `chain_tip` - NOT
 // `decoder_health`, which reads "healthy" straight through a wedge.
 
-import { createWallet, expect, test } from '../../fixtures/wallet.js';
+import { waitForShownTxid } from '../../fixtures/pendingHistory.js';
+import { createWallet, expect, openPaletteCommand, test } from '../../fixtures/wallet.js';
 import {
     EXPLORER_URL,
     REGTEST_ADDRESS_RE,
@@ -50,17 +51,26 @@ import {
     REGTEST_COIN,
     fundAddress,
     minerRpc,
+    mintXchain,
     seedPrices,
     selectVenueChain,
     switchToRegtest,
     tokenBalance,
     unlockAfterReload,
+    waitForTokenBalance,
     expectConfirmModal as sharedConfirmModal,
 } from '../../fixtures/regtest.js';
 
 const PASSWORD = 'regtestpassword123';
 /** A parent ISSUE, a child ISSUE and an ORDER, each paying a real coin fee. */
 const FUNDING = 4;
+/**
+ * XCHAIN held for protocol fees on Bitcoin, where ISSUE and the other paid
+ * actions here charge theirs in XCHAIN rather than in the coin, and the review
+ * refuses a wallet holding none. Off Bitcoin the fee rides the coin lane and
+ * FUNDING covers it.
+ */
+const MINT_XCHAIN = 20;
 const STAMP = Date.now().toString().slice(-6);
 
 const PARENT = `ESC${STAMP}`;
@@ -149,21 +159,8 @@ async function waitForQuote(tick, source, pattern, timeoutMs = 180_000) {
     throw new Error(`the venue never quoted ${tick} matching ${pattern} (last=${last})`);
 }
 
-async function gotoPalette(page, title) {
-    await page.keyboard.press('ControlOrMeta+k');
-    const dialog = page.getByRole('dialog', { name: 'Command palette' });
-    await expect(dialog, 'the command palette did not open').toBeVisible({ timeout: 15_000 });
-    const combobox = dialog.getByRole('combobox').first();
-    await expect(combobox).toBeEditable({ timeout: 15_000 });
-    await combobox.fill(title);
-    const row = page.getByRole('option', { name: new RegExp(`^${title}\\b`) }).first();
-    await expect(row, `no palette command matching "${title}"`).toBeVisible();
-    await row.click();
-    await expect(dialog).toBeHidden({ timeout: 15_000 });
-}
-
 async function reloadToHome(page) {
-    await gotoPalette(page, 'Home');
+    await openPaletteCommand(page, 'Home');
     await page.reload();
     await unlockAfterReload(page, PASSWORD);
 }
@@ -192,10 +189,12 @@ async function approveAndGetTxid(page) {
     const approve = page.getByTestId('confirm-approve');
     await expect(approve).toBeEnabled({ timeout: 120_000 });
     await approve.click();
-    const main = page.getByRole('main');
-    await expect(main, 'no transaction id ever appeared after Approve')
-        .toContainText(/[0-9a-f]{64}/, { timeout: 180_000 });
-    return (await main.innerText()).match(/[0-9a-f]{64}/)?.[0];
+    // Success screens may draw the id truncated; waitForShownTxid reads the
+    // full id from its accessible name, and from the text where it is whole.
+    return waitForShownTxid(page.getByRole('main'), {
+        timeout: 180_000,
+        message: 'no transaction id ever appeared after Approve',
+    });
 }
 
 /**
@@ -206,7 +205,7 @@ async function approveAndGetTxid(page) {
  */
 async function fillSubtoken(page, { parent, child, supply }) {
     await reloadToHome(page);
-    await gotoPalette(page, 'Create a token');
+    await openPaletteCommand(page, 'Create a token');
 
     const main = page.getByRole('main');
     await main.getByRole('button', { name: /^Subtoken/ }).click();
@@ -235,7 +234,7 @@ test.describe(`subtoken under an escrowed parent on ${REGTEST_CHAIN_LABEL}`, () 
             await createWallet(page, { password: PASSWORD, name: 'Escrow Parent Wallet' });
             await switchToRegtest(page, PASSWORD);
 
-            await gotoPalette(page, 'Issue token');
+            await openPaletteCommand(page, 'Issue token');
             const probe = page.getByRole('main');
             await expect(probe.getByLabel('Ticker')).toBeVisible({ timeout: 30_000 });
             await selectVenueChain(probe);
@@ -246,9 +245,15 @@ test.describe(`subtoken under an escrowed parent on ${REGTEST_CHAIN_LABEL}`, () 
             await fundAddress(owner, FUNDING);
             await page.reload();
             await unlockAfterReload(page, PASSWORD);
+            if (REGTEST_COIN === 'RBTC') {
+                await mintXchain(page, MINT_XCHAIN);
+                await waitForTokenBalance(owner, 'XCHAIN', MINT_XCHAIN);
+                await page.reload();
+                await unlockAfterReload(page, PASSWORD);
+            }
             await seedPrices();
 
-            await gotoPalette(page, 'Issue token');
+            await openPaletteCommand(page, 'Issue token');
             const form = page.getByRole('main');
             await expect(form.getByLabel('Ticker')).toBeVisible({ timeout: 30_000 });
             await selectVenueChain(form);
@@ -284,7 +289,7 @@ test.describe(`subtoken under an escrowed parent on ${REGTEST_CHAIN_LABEL}`, () 
             // Scoped to `main`, because the shell's own chrome carries
             // same-named controls.
             await reloadToHome(page);
-            await gotoPalette(page, 'My Tokens');
+            await openPaletteCommand(page, 'My tokens');
             const main = page.getByRole('main');
             const row = main.getByRole('button').filter({ hasText: PARENT }).first();
             await expect(row, `${PARENT} is on chain but My Tokens does not list it`)

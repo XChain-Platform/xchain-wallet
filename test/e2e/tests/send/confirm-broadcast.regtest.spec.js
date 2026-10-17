@@ -27,10 +27,12 @@
 // asserted below are checked for SHAPE against the chain's own values
 // rather than against constants the app also computes.
 
+import { readShownTxid } from '../../fixtures/pendingHistory.js';
 import { createWallet, expect, gotoSection, mainButton, test } from '../../fixtures/wallet.js';
 import {
     assertNoActionRecorded,
     expectConfirmModal,
+    expectIntentSentence,
     failBroadcast,
     fundAddress,
     readReceiveAddress,
@@ -46,6 +48,8 @@ import {
 const PASSWORD = 'regtestpassword123';
 const FUNDING_BTC = 1;
 const SEND_BTC = '0.01';
+/** The intent sentence up to its recipient, which it draws truncated. */
+const INTENT_WORDS = `Send ${SEND_BTC} ${REGTEST_TICKER} on ${REGTEST_CHAIN_LABEL} to `;
 
 function toField(page) {
     return page.getByLabel('To', { exact: true });
@@ -84,8 +88,7 @@ test.describe('confirm -> broadcast on regtest', () => {
 
         // §5.2.1-2: what the user is authorizing, from the PARSED composed
         // action string rather than from form state.
-        await expect(confirm)
-            .toContainText(`Send ${SEND_BTC} ${REGTEST_TICKER} on ${REGTEST_CHAIN_LABEL} to ${REGTEST_DESTINATION}`);
+        await expectIntentSentence(page, INTENT_WORDS, REGTEST_DESTINATION);
         await expect(page.getByTestId('confirm-chain-badge')).toHaveText(REGTEST_CHAIN_LABEL);
 
         // §5.2.5: an EXACT fee off the composed PSBT, not the form's rate
@@ -141,7 +144,7 @@ test.describe('confirm -> broadcast on regtest', () => {
         // this exact txid for this exact amount. A transaction that was signed
         // over a tampered or mis-composed output set reaches "Broadcast
         // pending" just fine and fails right here.
-        const txid = (await page.getByRole('main').innerText()).match(/\b[0-9a-f]{64}\b/)?.[0];
+        const txid = await readShownTxid(page.getByRole('main'));
         expect(txid, 'success screen showed no transaction id').toBeTruthy();
 
         const utxo = await waitForConfirmedUtxo(REGTEST_DESTINATION, txid);
@@ -178,8 +181,7 @@ test.describe('confirm -> broadcast on regtest', () => {
         // it gated behind the override for native sends.)
         await mainButton(page, 'Send').click();
         await expectConfirmModal(page, 'this action', 30_000);
-        await expect(page.getByTestId('action-intent'))
-            .toContainText(`Send ${SEND_BTC} ${REGTEST_TICKER} on ${REGTEST_CHAIN_LABEL} to ${REGTEST_DESTINATION}`);
+        await expectIntentSentence(page, INTENT_WORDS, REGTEST_DESTINATION);
         await expect(page.getByTestId('confirm-approve')).toBeEnabled();
     });
 

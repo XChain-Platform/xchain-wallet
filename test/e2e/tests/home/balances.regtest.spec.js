@@ -64,13 +64,10 @@ import { createWallet, expect, gotoSection, test, unlockedShell } from '../../fi
 import {
     EXPLORER_URL,
     REGTEST_COIN,
-    explorerJson,
     fundAddress,
-    priceFamilyRefusal,
     switchToRegtest,
     unlockAfterReload,
 } from '../../fixtures/regtest.js';
-import { VENUE_PRICE } from '../../fixtures/priceSeed.js';
 import { kdfStepTimeout } from '../../timeout-budget.js';
 
 const PASSWORD = 'regtestpassword123';
@@ -115,32 +112,6 @@ async function chainConfirmed(coin, address) {
         `explorer ${coin} reported no confirmed balance for ${address}: ${JSON.stringify(body).slice(0, 300)}`,
     ).toBe('string');
     return String(confirmed);
-}
-
-/**
- * The venue's own finalized COIN/USD oracle price, read over the same public
- * endpoint `flows/priceLookup.js` reads.
- *
- * Read rather than taken from the fixture constant so the fiat expectation
- * below is derived from what this venue actually publishes; the fixture value
- * is only used to catch a venue that is publishing something else entirely.
- */
-async function venueCoinUsdPrice() {
-    const pair = VENUE_PRICE[REGTEST_COIN].coinPair;
-    // Through the fixture reader, which THROWS on a refusal. The line under it
-    // read `Array.isArray(body?.data) ? body.data : []`, so this endpoint
-    // answering HTTP 500 in one millisecond produced "the venue publishes no
-    // finalized round" and sent two runs to look at seeding. On RLTC it is
-    // still 500ing: `No co-located hub DB configured for coin RLTC`, which is a
-    // venue configuration gap and answers fine on RDOGE.
-    const body = await explorerJson('price_snapshots/FINALIZED/status?limit=25');
-    const rows = Array.isArray(body?.data) ? body.data : [];
-    const row = rows.find((r) => r && r.coin_pair === pair);
-    expect(row, `the venue publishes no finalized ${pair} round; global setup seeds one, so this is venue state`)
-        .toBeTruthy();
-    const price = Number(row.price);
-    expect(Number.isFinite(price) && price > 0, `unusable ${pair} price: ${row.price}`).toBe(true);
-    return price;
 }
 
 /** `BalanceList.formatAmount` for an 8-decimal coin, from a decimal string. */
@@ -201,20 +172,22 @@ async function receiveAddressFor(page, chain) {
     await expect(field, 'Receive rendered no Address field').toBeVisible({ timeout: 30_000 });
     await expect(field).toHaveValue(/^[a-zA-Z0-9]{20,}$/, { timeout: 30_000 });
 
-    const tokenField = page.getByRole('button', { name: /^Token: / });
-    await expect(tokenField, 'Receive rendered no Token field to pick a chain with')
+    // Receive's asset control is the hero icon button, named
+    // "Change asset (currently <tick> on <chain>)".
+    const assetButton = page.getByRole('main').getByRole('button', { name: /^Change asset \(currently / });
+    await expect(assetButton, 'Receive rendered no Change asset button to pick a chain with')
         .toBeVisible({ timeout: 30_000 });
 
-    if (!((await tokenField.getAttribute('aria-label')) || '').includes(`on ${chain.label}`)) {
+    if (!((await assetButton.getAttribute('aria-label')) || '').endsWith(`on ${chain.label})`)) {
         const before = await field.inputValue();
-        await tokenField.click();
+        await assetButton.click();
 
         const pick = coinRow(page, chain);
         await expect(pick, `the receive picker offered no ${chain.tick} row on ${chain.label}`)
             .toBeVisible({ timeout: 30_000 });
-        await pick.click();
+        await pick.getByRole('button', { name: /^Select / }).first().click();
 
-        await expect(tokenField).toHaveAttribute('aria-label', new RegExp(`on ${chain.label}$`), { timeout: 30_000 });
+        await expect(assetButton).toHaveAttribute('aria-label', new RegExp(`on ${chain.label}\\)$`), { timeout: 30_000 });
         // The address is fetched per chain AFTER the switch lands, so reading
         // it too early hands back the previous chain's address - the wrong-chain
         // funding failure above, arrived at from the other direction. Every
@@ -226,12 +199,10 @@ async function receiveAddressFor(page, chain) {
     return field.inputValue();
 }
 
-/** Builds one funded Home state and returns its chain facts. */
+/**
+ * Builds one funded Home state and returns its chain facts.
+ */
 async function openFundedHome(page) {
-    const priceGap = await priceFamilyRefusal();
-    test.skip(!!priceGap, `the venue refuses the oracle-price family here. ${priceGap}`);
-    const coinUsd = await venueCoinUsdPrice();
-
     await createWallet(page, { password: PASSWORD });
     await switchToRegtest(page, PASSWORD);
 
@@ -246,7 +217,7 @@ async function openFundedHome(page) {
     await page.reload();
     await unlockAfterReload(page, PASSWORD);
     await expect(unlockedShell(page)).toBeVisible({ timeout: kdfStepTimeout() });
-    return { address, coinUsd };
+    return { address };
 }
 
 test.describe('Home balances against the chain', () => {
@@ -255,11 +226,9 @@ test.describe('Home balances against the chain', () => {
     // Every test here pays for a full onboarding (Argon2id), a network switch, a
     // per-chain receive-address walk, a funding that waits on a real block, and a
     // reload that re-derives the vault - and on a busy shared venue that measured
-    // 7 minutes on 2026-09-02, against a body that then took 22 seconds. Worse,
-    // the fiat test below is `test.fail()`: an assertion failure there is the
-    // expected outcome, but a TIMEOUT is not, so a slow venue turns the pinned
-    // defect into a red with a message about setup. Sized like the rest of the
-    // chain-bound specs in this suite rather than to a measurement.
+    // 7 minutes on 2026-09-02, against a body that then took 22 seconds. Sized
+    // like the rest of the chain-bound specs in this suite rather than to a
+    // measurement.
     test.setTimeout(900_000);
 
     test('the funded coin row states the chain\'s balance, to the satoshi', async ({ page }) => {
@@ -336,57 +305,28 @@ test.describe('Home balances against the chain', () => {
             .toBeCloseTo(FUNDING_DOGE, 8);
     });
 
-    // PINNED KNOWN DEFECT - expected to FAIL, and it flips this suite red the
-    // moment somebody fixes it, which is the signal wanted.
-    //
-    // Home's hero reads "$0.00 USD" over a funded wallet, and the campaign's
-    // residual attributes that to the regtest venue having no coin/USD quote.
-    // That diagnosis is wrong, and the difference matters because it says the
-    // hero is broken on MAINNET too:
-    //
-    //   * The venue DOES price this coin. `venueCoinUsdPrice()` above reads a
-    //     finalized DOGE/USD round off the same public endpoint
-    //     `flows/priceLookup.js` uses, and setup fails if it is absent.
-    //   * The hero is `sumFiatValue(rows)` over `buildBalanceRows`, which takes
-    //     each row's rate from `balances.native.fiatRate` /
-    //     `balances.tokens[].fiatRate`. NOTHING on the real balance path ever
-    //     sets that field: `flows/balances.js` builds `{ tick, quantity,
-    //     divisibility }` from `/address/` and `{ tick, quantity, divisibility,
-    //     displayName, imageUrl }` from `/balances/`. The only producers of a
-    //     non-null `fiatRate` in the tree are `flows/demoFixtures.js` and
-    //     `packages/web/src/devFakeBalances.js`.
-    //   * So every row is unpriced, the sum is 0, and `formatFiatAmount(0)`
-    //     renders "$0.00" - a confident statement that the wallet is empty,
-    //     rather than the "no price data" the state actually is. The wallet has
-    //     a working rate source (`useFiatRate` / `priceLookup`) and Send,
-    //     Receive and History all use it; Home is simply not wired to it.
-    //
-    // Asserted here as the CORRECT behaviour (hero = balance x the venue's own
-    // published rate) so this becomes the acceptance test for the fix rather
-    // than a description of the bug.
-    test.fail('the fiat total is derived from the balance and the published price', async ({ page }) => {
-        const { address, coinUsd } = await openFundedHome(page);
-        const onChain = Number(await chainConfirmed(VENUE_CHAIN.coin, address));
-        const expectedUsd = onChain * coinUsd;
-        // `formatFiat`'s shape: 2 decimals, thousands-grouped.
-        const expected = `$${expectedUsd.toLocaleString('en-US', {
-            minimumFractionDigits: 2,
-            maximumFractionDigits: 2,
-        })}`;
+    // A funded wallet on a test network states no money value at all. The
+    // wallet prices only mainnet rows (useFiatRate's priceNativeRows) and its
+    // rate source is the mainnet oracle with a CoinGecko fallback, never this
+    // venue, so the only honest hero over regtest coins is the "Test coins
+    // have no value" sentence. A "$0.00" there would claim an empty wallet,
+    // and a dollar figure would put a mainnet price on coins that have none.
+    // The funding is asserted first so the sentence is not the empty-wallet case.
+    test('the hero over a funded regtest balance states test coins have no value', async ({ page }) => {
+        const { address } = await openFundedHome(page);
+        const onChain = await chainConfirmed(VENUE_CHAIN.coin, address);
+        expect(Number(onChain), 'the funding never reached the chain').toBeCloseTo(FUNDING_DOGE, 8);
+        await expect
+            .poll(() => displayedQuantity(page, rowKey(VENUE_CHAIN)), {
+                timeout: 90_000,
+                message: `Home never displayed the funded balance ${formatCoin(onChain)} for ${address}`,
+            })
+            .toBe(formatCoin(onChain));
 
         const hero = unlockedShell(page);
-        // The shell is the far side of a derivation whichever name it is held
-        // under, so it takes the shared KDF budget like the two waits above.
-        // The poll that follows is a different wait: by then the shell has
-        // painted and what is outstanding is a price round trip.
         await expect(hero).toBeVisible({ timeout: kdfStepTimeout() });
-
-        await expect
-            .poll(async () => ((await hero.innerText()).match(/\$[\d,]+\.\d{2}/) || [null])[0], {
-                timeout: 60_000,
-                message: `hero never showed a fiat total; expected ${expected} `
-                    + `(${onChain} ${VENUE_CHAIN.tick} x ${coinUsd} USD)`,
-            })
-            .toBe(expected);
+        await expect(hero.locator('[aria-label="Test coins have no value"]')).toBeVisible({ timeout: 60_000 });
+        expect((await hero.innerText()).match(/\$[\d,]+\.\d{2}/)?.[0] ?? null,
+            'the hero put a dollar value on regtest coins').toBeNull();
     });
 });

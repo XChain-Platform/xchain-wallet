@@ -260,4 +260,18 @@ describe('handshake and recipient query branches', () => {
         })).resolves.toBe(PUBKEY);
         expect(sdk.getPublicKey).toHaveBeenCalledWith('address');
     });
+
+    it('reads an explorer 404 as no key yet and still throws every other failure', async () => {
+        const lookup = (err) => getRecipientPubkey({
+            sdkRegistry: { get: () => ({ getPublicKey: vi.fn(async () => { throw err; }) }) },
+            chainId: 'chain',
+            address: 'address',
+        });
+        await expect(lookup(Object.assign(new Error('HTTP 404'), { code: 'EXPLORER_HTTP_404' })))
+            .resolves.toBeNull();
+        await expect(lookup(Object.assign(new Error('HTTP 404'), { details: { status: 404 } })))
+            .resolves.toBeNull();
+        await expect(lookup(Object.assign(new Error('HTTP 500'), { code: 'EXPLORER_HTTP_500' })))
+            .rejects.toThrow('HTTP 500');
+    });
 });

@@ -35,7 +35,7 @@
 // user actually walks when their wallet was closed. Auto-pay's own arming is
 // left to a spec that can watch it in isolation.
 
-import { createWallet, expect, test } from '../../fixtures/wallet.js';
+import { createWallet, expect, openPaletteCommand, test, addWallet } from '../../fixtures/wallet.js';
 import {
     encoderRpc,
     expectConfirmModal,
@@ -177,19 +177,6 @@ async function waitForBalanceAtLeast(address, tick, min, timeoutMs = 180_000) {
     throw new Error(`${tick} balance never reached ${min} for ${address} (last=${last})`);
 }
 
-async function gotoPalette(page, title) {
-    await page.keyboard.press('ControlOrMeta+k');
-    const dialog = page.getByRole('dialog', { name: 'Command palette' });
-    await expect(dialog, 'the command palette did not open').toBeVisible({ timeout: 15_000 });
-    const combobox = dialog.getByRole('combobox').first();
-    await expect(combobox).toBeEditable({ timeout: 15_000 });
-    await combobox.fill(title);
-    const row = page.getByRole('option', { name: new RegExp(`^${title}\\b`) }).first();
-    await expect(row, `no palette command matching "${title}"`).toBeVisible();
-    await row.click();
-    await expect(dialog).toBeHidden({ timeout: 15_000 });
-}
-
 async function approveAndGetTxid(page) {
     await page.getByTestId('confirm-approve').click();
     const main = page.getByRole('main');
@@ -200,7 +187,7 @@ async function approveAndGetTxid(page) {
 
 /** Opens Create order on the venue chain and returns the form scope + source. */
 async function openCreateOrder(page) {
-    await gotoPalette(page, 'Create order');
+    await openPaletteCommand(page, 'Create order');
     const main = page.getByRole('main');
     await expect(main.getByLabel('From address')).toBeVisible({ timeout: 30_000 });
     await selectVenueChain(main);
@@ -246,19 +233,7 @@ test.describe(`ORDER match + CoinPay on ${REGTEST_CHAIN_LABEL}`, () => {
         });
 
         await test.step('wallet B is a second wallet and offers the coin', async () => {
-            await gotoPalette(page, 'Switch wallet');
-            await page.getByRole('button', { name: 'Add wallet' }).click();
-            // navigate:false - this add-wallet flow starts at the onboarding
-            // welcome INSIDE the unlocked shell, and a goto would throw the
-            // session away and land back on wallet A.
-            await createWallet(page, { password: PASSWORD, name: 'Taker Wallet', navigate: false });
-            // Adding a wallet does not switch to it (the sibling bet spec paid
-            // for this lesson); switch explicitly or B's address reads as A's.
-            await gotoPalette(page, 'Switch wallet');
-            await page.getByRole('button', { name: /Taker Wallet/ }).first().click();
-            await expect(page.getByRole('button', { name: /Taker Wallet/ }).first(),
-                'the app did not switch to the newly added wallet')
-                .toBeVisible({ timeout: 30_000 });
+            await addWallet(page, { name: 'Taker Wallet', password: PASSWORD });
 
             ({ source: taker } = await openCreateOrder(page));
             expect(taker, 'wallet B derived the same address as wallet A').not.toBe(maker);
@@ -297,7 +272,7 @@ test.describe(`ORDER match + CoinPay on ${REGTEST_CHAIN_LABEL}`, () => {
             // A native GIVE is the only shape that can arm auto-pay, and this
             // spec wants the MANUAL queue. Turning it off also removes the
             // web-shell acknowledgement the armed path would demand.
-            const autopay = main.getByRole('checkbox', { name: /Enable CoinPay auto-pay/ });
+            const autopay = main.getByRole('switch', { name: /Enable CoinPay auto-pay/ });
             await expect(autopay,
                 'the native-coin GIVE side offers no auto-pay control, so PC-16 never armed')
                 .toBeVisible();
@@ -455,13 +430,7 @@ test.describe(`ORDER match + CoinPay on ${REGTEST_CHAIN_LABEL}`, () => {
         });
 
         await test.step('wallet B mirrors it with auto-pay ARMED', async () => {
-            await gotoPalette(page, 'Switch wallet');
-            await page.getByRole('button', { name: 'Add wallet' }).click();
-            await createWallet(page, { password: PASSWORD, name: 'Autopay Taker', navigate: false });
-            await gotoPalette(page, 'Switch wallet');
-            await page.getByRole('button', { name: /Autopay Taker/ }).first().click();
-            await expect(page.getByRole('button', { name: /Autopay Taker/ }).first())
-                .toBeVisible({ timeout: 30_000 });
+            await addWallet(page, { name: 'Autopay Taker', password: PASSWORD });
 
             ({ source: taker } = await openCreateOrder(page));
             expect(taker, 'wallet B derived the same address as wallet A').not.toBe(maker);
@@ -478,7 +447,7 @@ test.describe(`ORDER match + CoinPay on ${REGTEST_CHAIN_LABEL}`, () => {
 
             // Left ON this time, and the web shell's acknowledgement taken: this
             // is the arming the rest of the test depends on.
-            await expect(main.getByRole('checkbox', { name: /Enable CoinPay auto-pay/ })).toBeChecked();
+            await expect(main.getByRole('switch', { name: /Enable CoinPay auto-pay/ })).toBeChecked();
             await main.getByRole('checkbox', { name: /only auto-pays while it is open/ }).check();
 
             await main.getByRole('button', { name: /^Place order/ }).click();

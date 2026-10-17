@@ -41,7 +41,7 @@
 //       --config=playwright.regtest.config.js tests/scan/psbt-multiframe-scan.regtest.spec.js
 
 import {
-    createWallet, expect, test,
+    createWallet, expect, openPaletteCommand, test,
     LICENSE_ACCEPTED_AT_KEY, LICENSE_ACCEPTED_VERSION_KEY,
 } from '../../fixtures/wallet.js';
 import { launchWithQrCamera } from '../../fixtures/qrCamera.js';
@@ -76,12 +76,9 @@ async function signPanelFacing(frames) {
     await page.goto(BASE_URL);
     await createWallet(page, { password: PASSWORD, name: 'Signer Wallet', navigate: false });
 
-    await page.keyboard.press('ControlOrMeta+k');
-    const dialog = page.getByRole('dialog', { name: 'Command palette' });
-    await expect(dialog).toBeVisible({ timeout: 15_000 });
-    await dialog.getByRole('combobox').first().fill('psbt');
-    await page.getByRole('option', { name: /^Sign a transaction/ }).first().click();
-    await expect(dialog).toBeHidden({ timeout: 15_000 });
+    // Found by its keyword, not its title: "psbt" is what a user who knows the
+    // format types.
+    await openPaletteCommand(page, 'psbt', { option: /^Sign a transaction/ });
 
     const box = page.getByLabel('Unsigned transaction (hex or base64)');
     await expect(box, 'the Sign panel did not open').toBeVisible({ timeout: 30_000 });

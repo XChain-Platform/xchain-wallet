@@ -29,23 +29,27 @@
 //   cd test/e2e && XC_REGTEST_COIN=RLTC npx playwright test \
 //       --config=playwright.regtest.config.js tests/dex/order-autopay-arming.regtest.spec.js
 
-import { createWallet, expect, test } from '../../fixtures/wallet.js';
+import { createWallet, expect, openPaletteCommand, test } from '../../fixtures/wallet.js';
 import {
     expectConfirmModal,
     EXPLORER_URL,
     fundAddress,
     minerRpc,
+    mintXchain,
     REGTEST_ADDRESS_RE,
     REGTEST_CHAIN_LABEL,
     REGTEST_COIN,
     selectVenueChain,
     switchToRegtest,
     unlockAfterReload,
+    waitForTokenBalance,
 } from '../../fixtures/regtest.js';
 
 const PASSWORD = 'regtestpassword123';
 const FUNDING = 2;
 const SUPPLY = '1000';
+/** XCHAIN minted for the ISSUE protocol fee. */
+const GAS_XCHAIN = 10;
 const STAMP = Date.now().toString().slice(-6);
 /** The GET side: this run's own token, so nothing on the venue can cross it. */
 const TICK = `APY${STAMP}`;
@@ -83,19 +87,6 @@ async function waitForIndexedAction(txid, timeoutMs = 300_000) {
         + `${status?.decoder_lag_blocks?.[REGTEST_COIN]}.`);
 }
 
-async function gotoPalette(page, title) {
-    await page.keyboard.press('ControlOrMeta+k');
-    const dialog = page.getByRole('dialog', { name: 'Command palette' });
-    await expect(dialog, 'the command palette did not open').toBeVisible({ timeout: 15_000 });
-    const combobox = dialog.getByRole('combobox').first();
-    await expect(combobox).toBeEditable({ timeout: 15_000 });
-    await combobox.fill(title);
-    const row = page.getByRole('option', { name: new RegExp(`^${title}\\b`) }).first();
-    await expect(row, `no palette command matching "${title}"`).toBeVisible();
-    await row.click();
-    await expect(dialog).toBeHidden({ timeout: 15_000 });
-}
-
 async function approveAndGetTxid(page) {
     await page.getByTestId('confirm-approve').click();
     const main = page.getByRole('main');
@@ -126,7 +117,7 @@ test.describe(`PC-16 auto-pay arming on ${REGTEST_CHAIN_LABEL}`, () => {
             await createWallet(page, { password: PASSWORD, name: 'Autopay Wallet' });
             await switchToRegtest(page, PASSWORD);
 
-            await gotoPalette(page, 'Issue token');
+            await openPaletteCommand(page, 'Issue token');
             const main = page.getByRole('main');
             await expect(main.getByLabel('Ticker')).toBeVisible({ timeout: 30_000 });
             await selectVenueChain(main);
@@ -138,7 +129,12 @@ test.describe(`PC-16 auto-pay arming on ${REGTEST_CHAIN_LABEL}`, () => {
             await page.reload();
             await unlockAfterReload(page, PASSWORD);
 
-            await gotoPalette(page, 'Issue token');
+            // The ISSUE protocol fee is charged in XCHAIN; a fresh wallet holds none, and the
+            // confirm screen then refuses with "insufficient funds (FEE)" and keeps Approve off.
+            await mintXchain(page, GAS_XCHAIN);
+            await waitForTokenBalance(source, 'XCHAIN', GAS_XCHAIN);
+
+            await openPaletteCommand(page, 'Issue token');
             const form = page.getByRole('main');
             await expect(form.getByLabel('Ticker')).toBeVisible({ timeout: 30_000 });
             await selectVenueChain(form);
@@ -155,7 +151,7 @@ test.describe(`PC-16 auto-pay arming on ${REGTEST_CHAIN_LABEL}`, () => {
         });
 
         await test.step('the arming gate refuses to proceed unacknowledged', async () => {
-            await gotoPalette(page, 'Create order');
+            await openPaletteCommand(page, 'Create order');
             const main = page.getByRole('main');
             await expect(main.getByLabel('From address')).toBeVisible({ timeout: 30_000 });
             await selectVenueChain(main);
@@ -163,7 +159,7 @@ test.describe(`PC-16 auto-pay arming on ${REGTEST_CHAIN_LABEL}`, () => {
 
             // Auto-pay is offered ON by default, and only on this shape: a
             // token GIVE escrows instead, and there is nothing to pay later.
-            const autopay = main.getByRole('checkbox', { name: /Enable CoinPay auto-pay/ });
+            const autopay = main.getByRole('switch', { name: /Enable CoinPay auto-pay/ });
             await expect(autopay, 'a native-coin GIVE offers no auto-pay control, so PC-16 never arms')
                 .toBeVisible();
             await expect(autopay, 'auto-pay is not the default on the shape that can use it')
@@ -214,7 +210,7 @@ test.describe(`PC-16 auto-pay arming on ${REGTEST_CHAIN_LABEL}`, () => {
         });
 
         await test.step('the consent is attached to THAT order, and can be revoked', async () => {
-            await gotoPalette(page, 'My orders');
+            await openPaletteCommand(page, 'My orders');
             const main = page.getByRole('main');
             const row = main.getByRole('listitem').filter({ hasText: `#${orderIndex}` });
             await expect(row, `the order (#${orderIndex}) is not in My orders`)
@@ -223,7 +219,7 @@ test.describe(`PC-16 auto-pay arming on ${REGTEST_CHAIN_LABEL}`, () => {
             // The consent record is keyed by txid at broadcast and only gains its
             // orderActionIndex when a later pass resolves it, so this toggle
             // appearing at all is the backfill working end to end.
-            const toggle = row.getByRole('checkbox', { name: /CoinPay auto-pay/ });
+            const toggle = row.getByRole('switch', { name: /CoinPay auto-pay/ });
             await expect(toggle,
                 'the armed order carries no auto-pay control in My orders, so the consent cannot be '
                 + 'seen or withdrawn from the surface that lists it')
@@ -231,7 +227,7 @@ test.describe(`PC-16 auto-pay arming on ${REGTEST_CHAIN_LABEL}`, () => {
             await expect(row, 'the row does not say the order is armed').toContainText(/auto-pay on/);
             await expect(toggle).toBeChecked();
 
-            // click(), NOT uncheck(): the checkbox is CONTROLLED by the consent
+            // click(), NOT uncheck(): the switch is CONTROLLED by the consent
             // record and the flip is an async round trip to the host. A user click
             // sets the DOM checked to false, React re-renders it back to true from
             // unchanged state, and only when the write returns does it settle on
@@ -247,7 +243,7 @@ test.describe(`PC-16 auto-pay arming on ${REGTEST_CHAIN_LABEL}`, () => {
             // an in-memory-only "off" would silently re-arm.
             await page.reload();
             await unlockAfterReload(page, PASSWORD);
-            await gotoPalette(page, 'My orders');
+            await openPaletteCommand(page, 'My orders');
             const reloaded = page.getByRole('main').getByRole('listitem')
                 .filter({ hasText: `#${orderIndex}` });
             await expect(reloaded, `#${orderIndex} vanished from My orders after a reload`)

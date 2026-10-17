@@ -59,7 +59,7 @@
 // Runs on Litecoin (XC_REGTEST_COIN=RLTC) for the reasons §3.5 records: Bitcoin
 // regtest is the contended chain.
 
-import { createWallet, expect, test } from '../../fixtures/wallet.js';
+import { createWallet, expect, openPaletteCommand, test } from '../../fixtures/wallet.js';
 import {
     REGTEST_ADDRESS_RE,
     fundAddress,
@@ -92,18 +92,6 @@ const RUN = String(Date.now()).slice(-6);
 const TICK_SHORT = `WCS${RUN}`;
 const TICK_LONG = `WCL${RUN}`;
 
-async function gotoPalette(page, title) {
-    await page.keyboard.press('Control+k');
-    const dialog = page.getByRole('dialog');
-    await expect(dialog).toBeVisible({ timeout: 15_000 });
-    const combobox = dialog.getByRole('combobox');
-    await combobox.fill(title);
-    const row = page.getByRole('option', { name: new RegExp(`^${title}\\b`) }).first();
-    await expect(row, `no palette command matching "${title}"`).toBeVisible();
-    await row.click();
-    await expect(dialog).toBeHidden({ timeout: 15_000 });
-}
-
 /**
  * Puts the wallet into watcher mode and waits for the write to land.
  *
@@ -112,8 +100,8 @@ async function gotoPalette(page, title) {
  */
 async function setWalletMode(page, mode) {
     const label = mode === 'watcher' ? /^Watcher/ : /^Full/;
-    await gotoPalette(page, 'Settings');
-    await page.getByRole('button', { name: /^Wallet Mode/ }).click();
+    await openPaletteCommand(page, 'Settings');
+    await page.getByRole('button', { name: /^Wallet mode\b/ }).click();
     const radio = page.getByRole('radio', { name: label });
     await expect(radio).toBeVisible({ timeout: 30_000 });
     await radio.click();
@@ -122,7 +110,7 @@ async function setWalletMode(page, mode) {
 
 /** Fills the issue form and leaves it at the review stage, ready to build. */
 async function stageIssue(page, tick, description) {
-    await gotoPalette(page, 'Issue token');
+    await openPaletteCommand(page, 'Issue token');
     const main = page.getByRole('main');
     await expect(main.getByLabel('Ticker')).toBeVisible({ timeout: 30_000 });
     // §3.5: every form carries its own chain picker and the wallet defaults to
@@ -135,7 +123,7 @@ async function stageIssue(page, tick, description) {
     // Watcher mode is the branch that gets a review stage at all: full mode
     // composes straight onto the confirm screen (single-encode).
     await main.getByRole('button', { name: 'Preview', exact: true }).click();
-    await expect(main.getByRole('button', { name: 'Create unsigned transaction', exact: true }),
+    await expect(main.getByRole('button', { name: 'Create transaction for signing', exact: true }),
         'the form did not reach the watcher review stage')
         .toBeVisible({ timeout: 30_000 });
     return main;
@@ -154,7 +142,7 @@ test.describe('the watcher lane and an action the encoder chunks', () => {
             await createWallet(page, { password: PASSWORD, name: 'Watcher Chunk Wallet' });
             await switchToRegtest(page, PASSWORD);
 
-            await gotoPalette(page, 'Issue token');
+            await openPaletteCommand(page, 'Issue token');
             const main = page.getByRole('main');
             await expect(main.getByLabel('Ticker')).toBeVisible({ timeout: 30_000 });
             await selectVenueChain(main, 'Network');
@@ -173,7 +161,7 @@ test.describe('the watcher lane and an action the encoder chunks', () => {
 
         await test.step('CONTROL: a short payload still exports an unsigned transaction', async () => {
             const main = await stageIssue(page, TICK_SHORT, SHORT_DESCRIPTION);
-            await main.getByRole('button', { name: 'Create unsigned transaction', exact: true }).click();
+            await main.getByRole('button', { name: 'Create transaction for signing', exact: true }).click();
 
             const hex = hexBox(page);
             await expect(hex, 'the watcher lane produced no unsigned transaction for a payload that '
@@ -196,7 +184,7 @@ test.describe('the watcher lane and an action the encoder chunks', () => {
             // stay on its result screen (D-117's shape).
             await page.getByRole('button', { name: 'Build another', exact: true }).click();
             const main = await stageIssue(page, TICK_LONG, LONG_DESCRIPTION);
-            await main.getByRole('button', { name: 'Create unsigned transaction', exact: true }).click();
+            await main.getByRole('button', { name: 'Create transaction for signing', exact: true }).click();
 
             const alert = page.getByRole('main').getByRole('alert')
                 .filter({ hasText: /too large for one transaction/i }).first();

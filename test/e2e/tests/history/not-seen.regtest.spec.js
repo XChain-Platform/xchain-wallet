@@ -69,7 +69,6 @@ import {
     mempoolRowFor,
     pendingRowFor,
     pickAssetByChainAndTick,
-    readOwnAddress,
     searchForTx,
 } from '../../fixtures/pendingHistory.js';
 import {
@@ -77,6 +76,7 @@ import {
     fundAddress,
     minerRpc,
     mintXchain,
+    readReceiveAddress,
     REGTEST_CHAIN_ID,
     REGTEST_CHAIN_LABEL,
     REGTEST_DESTINATION,
@@ -134,7 +134,7 @@ test.describe(`A send the network never reports, on ${REGTEST_CHAIN_LABEL} regte
         await test.step(`onboard onto ${REGTEST_CHAIN_LABEL} regtest, fund, and mint ${TICK}`, async () => {
             await createWallet(page, { password: PASSWORD });
             await switchToRegtest(page, PASSWORD);
-            own = await readOwnAddress(page);
+            own = await readReceiveAddress(page);
             expect(own, 'the throwaway destination is this wallet\'s own address')
                 .not.toBe(REGTEST_DESTINATION);
             await fundAddress(own, FUNDING);

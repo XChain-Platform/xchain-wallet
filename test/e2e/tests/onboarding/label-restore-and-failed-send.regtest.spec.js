@@ -45,10 +45,12 @@ import {
     LICENSE_ACCEPTED_AT_KEY,
     LICENSE_ACCEPTED_VERSION_KEY,
     mainButton,
+    openPaletteCommand,
     test,
     unlockedShell,
 } from '../../fixtures/wallet.js';
 import {
+    approveConfirm,
     expectConfirmModal,
     failBroadcast,
     fundAddress,
@@ -89,19 +91,6 @@ async function freshContext(browser) {
     return context;
 }
 
-async function gotoPalette(page, title) {
-    await page.keyboard.press('ControlOrMeta+k');
-    const dialog = page.getByRole('dialog', { name: 'Command palette' });
-    await expect(dialog, 'the command palette did not open').toBeVisible({ timeout: 15_000 });
-    const combobox = dialog.getByRole('combobox').first();
-    await expect(combobox).toBeEditable({ timeout: 15_000 });
-    await combobox.fill(title);
-    const row = page.getByRole('option', { name: new RegExp(`^${title}\\b`) }).first();
-    await expect(row, `no palette command matching "${title}"`).toBeVisible();
-    await row.click();
-    await expect(dialog).toBeHidden({ timeout: 15_000 });
-}
-
 /** The words typed, the name given, nothing else: the tester's re-import. */
 async function importFromPhrase(page, words, name) {
     await page.goto(BASE_URL);
@@ -137,8 +126,8 @@ test.describe(`contacts restore on import and failed sends in History, on ${REGT
         });
 
         await test.step('add a contact; the Contacts screen says it is only on this device and opens Backup', async () => {
-            await gotoPalette(page, 'Contacts');
-            await page.getByLabel('Add contact').first().click();
+            await openPaletteCommand(page, 'Contacts');
+            await page.getByRole('button', { name: /^(Add contact|Create first contact)$/ }).click();
             await page.getByRole('textbox', { name: 'Name' }).fill(CONTACT_CANARY);
             await page.getByRole('textbox', { name: 'Address' }).fill(owner);
             await page.getByRole('button', { name: 'Save', exact: true }).first().click();
@@ -162,11 +151,16 @@ test.describe(`contacts restore on import and failed sends in History, on ${REGT
         await test.step('publish the labels from Backup and wait for the chain to accept the FILE', async () => {
             const main = page.getByRole('main');
             await main.getByRole('button', { name: 'Publish now…', exact: true }).click();
-            const chain = page.getByLabel('Publish chain');
+            const chain = page.getByLabel('Publish network');
             await expect(chain, 'the publish form has no chain picker').toBeVisible({ timeout: 30_000 });
             await chain.selectOption(REGTEST_CHAIN_ID);
             await page.getByLabel('Wallet password').fill(PASSWORD);
             await page.getByRole('button', { name: 'Publish', exact: true }).click();
+            // The publish signs through the shared confirm screen, which opens
+            // in place of the form. When it never opens, the fixture reports
+            // the error the form put above it instead of a missing locator.
+            await expectConfirmModal(page, 'the label publish', 120_000);
+            await approveConfirm(page, 'the label publish');
             await expect(main.getByText('✓ Labels published'), 'the publish never reported success')
                 .toBeVisible({ timeout: 180_000 });
             publishTxid = (await main.innerText()).match(/[0-9a-f]{64}/)?.[0];
@@ -188,7 +182,7 @@ test.describe(`contacts restore on import and failed sends in History, on ${REGT
                     'the import did not announce the restored contact')
                     .toBeVisible({ timeout: 20_000 });
 
-                await gotoPalette(restored, 'Contacts');
+                await openPaletteCommand(restored, 'Contacts');
                 await expect(restored.getByText(CONTACT_CANARY).first(),
                     'the contact published under this seed did not come back on import')
                     .toBeVisible({ timeout: 60_000 });
@@ -212,7 +206,7 @@ test.describe(`contacts restore on import and failed sends in History, on ${REGT
                 .toBeVisible({ timeout: 120_000 });
             await page.unroute(/.*/);
 
-            await gotoPalette(page, 'History');
+            await openPaletteCommand(page, 'History');
             const failedRow = page.locator('[data-pending-state="failed"]').first();
             await expect(failedRow, 'History shows no failed row for the rejected send')
                 .toBeVisible({ timeout: 60_000 });

@@ -9,6 +9,20 @@ const KIND_STATUS_FIELD = Object.freeze({
     dispenser: 'dispenser_status',
 });
 
+/**
+ * Name of the error this module raises about the referenced offer. Its message
+ * is written for the user, and the name is what survives the messaging boundary
+ * (MessageHost.serializeError keeps only name, message and code), so a submit
+ * surface can show the sentence as written instead of a generic line.
+ */
+export const OFFER_LIFECYCLE_REFUSAL = 'OfferLifecycleRefusal';
+
+function offerRefusal(message) {
+    const err = new Error(message);
+    err.name = OFFER_LIFECYCLE_REFUSAL;
+    return err;
+}
+
 function finiteNumber(value) {
     if (value == null || value === '') return null;
     const number = Number(value);
@@ -180,10 +194,10 @@ export async function assertReferencedOfferActionable({ sdkRegistry, chainId, ac
     try {
         detail = await sdk.getAction(String(actionIndex));
     } catch {
-        throw new Error(`Could not verify whether this ${ref.kind} has expired. Try again.`);
+        throw offerRefusal(`Could not verify whether this ${ref.kind} has expired. Try again.`);
     }
     if (marketLifecycleStatusOf(detail, ref.kind) === 'expired') {
-        throw new Error(`This ${ref.kind} has expired.`);
+        throw offerRefusal(`This ${ref.kind} has expired.`);
     }
 
     const expiration = marketExpirationOf(detail);
@@ -191,7 +205,7 @@ export async function assertReferencedOfferActionable({ sdkRegistry, chainId, ac
     const clock = await readMarketExpiryClock(sdk);
     if (!Number.isFinite(clock.blockTime)) {
         const reason = clock.stale ? 'the chain height is still syncing' : 'the current chain height is unavailable';
-        throw new Error(`Could not verify whether this ${ref.kind} has expired because ${reason}. Try again.`);
+        throw offerRefusal(`Could not verify whether this ${ref.kind} has expired because ${reason}. Try again.`);
     }
-    if (expiration <= clock.blockTime) throw new Error(`This ${ref.kind} has expired.`);
+    if (expiration <= clock.blockTime) throw offerRefusal(`This ${ref.kind} has expired.`);
 }

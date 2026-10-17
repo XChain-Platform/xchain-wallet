@@ -39,7 +39,7 @@
 // this venue's own chain id - selects it directly with no dependency on how
 // `chainRegistry` formats a display name.
 
-import { createWallet, expect, test } from '../../fixtures/wallet.js';
+import { createWallet, expect, openPaletteCommand, test } from '../../fixtures/wallet.js';
 import {
     ENCODER_URL,
     REGTEST_ADDRESS_RE,
@@ -62,20 +62,6 @@ const shortAddress = (address) => `${address.slice(0, 6)}…${address.slice(-6)}
 const PASSWORD = 'regtestpassword123';
 const FUNDING = 1;
 const STAMP = Date.now().toString().slice(-6);
-
-/** Opens the command palette and runs the first matching entry. */
-async function gotoPalette(page, title) {
-    await page.keyboard.press('ControlOrMeta+k');
-    const dialog = page.getByRole('dialog', { name: 'Command palette' });
-    await expect(dialog, 'the command palette did not open').toBeVisible({ timeout: 15_000 });
-    const combobox = dialog.getByRole('combobox').first();
-    await expect(combobox).toBeEditable({ timeout: 15_000 });
-    await combobox.fill(title);
-    const row = page.getByRole('option', { name: new RegExp(`^${title}\\b`) }).first();
-    await expect(row, `no palette command matching "${title}"`).toBeVisible();
-    await row.click();
-    await expect(dialog).toBeHidden({ timeout: 15_000 });
-}
 
 /**
  * Onboards a fresh wallet, funds its address on this run's chain, and
@@ -100,7 +86,7 @@ async function onboardFundedWallet(page, walletName, { utxos = 1 } = {}) {
     await createWallet(page, { password: PASSWORD, name: walletName });
     await switchToRegtest(page, PASSWORD);
 
-    await gotoPalette(page, 'Issue token');
+    await openPaletteCommand(page, 'Issue token');
     const main = page.getByRole('main');
     await expect(main.getByLabel('Ticker')).toBeVisible({ timeout: 30_000 });
     await selectVenueChain(main);
@@ -120,13 +106,12 @@ async function onboardFundedWallet(page, walletName, { utxos = 1 } = {}) {
 // accessible name is just the span, so match on role plus exact name.
 const picker = (scope, name) => scope.getByRole('combobox', { name, exact: true });
 const paramsBox = (scope) => scope.getByRole('textbox', { name: 'Params (JSON object)', exact: true });
-const batchStep = (scope, number) => scope.getByRole('group', { name: `Step ${number}`, exact: true });
+const batchStep = (scope, number) => scope.getByRole('region', { name: `Step ${number}`, exact: true });
 const parallelRow = (scope, number) => scope.getByRole('region', { name: `Row ${number}`, exact: true });
 
-/** Opens the catch-all Actions page ("More actions", off the pancake menu). */
+/** Opens the catch-all Actions page through the command palette ("All actions"). */
 async function gotoMoreActions(page) {
-    await page.getByRole('button', { name: 'Open menu' }).click();
-    await page.getByRole('button', { name: 'More actions', exact: true }).click();
+    await openPaletteCommand(page, 'All actions');
 }
 
 // Each catalogue entry's accessible name is its label immediately followed
@@ -359,14 +344,14 @@ test.describe(`Batch and Parallel composers on ${REGTEST_CHAIN_LABEL}`, () => {
             await main.getByRole('checkbox').check();
             await main.getByRole('button', { name: 'Sign all', exact: true }).click();
 
-            await expect(main.getByText('Signing action 1 of 2'),
+            await expect(main.getByText(/^Action 1 of 2\./),
                 'the composer never entered the sequential signing stage')
                 .toBeVisible({ timeout: 30_000 });
             await signParallelRow(main);
             await approveConfirm(page, 'parallel row 1');
             const txidOne = await settledTxid(txids, 0);
 
-            await expect(main.getByText('Signing action 2 of 2'),
+            await expect(main.getByText(/^Action 2 of 2\./),
                 'row 1 did not succeed and advance to row 2')
                 .toBeVisible({ timeout: 60_000 });
             await signParallelRow(main);

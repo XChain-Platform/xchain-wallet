@@ -481,5 +481,13 @@ export async function getRecipientPubkey({ sdkRegistry, chainId, address }) {
         throw new Error('getRecipientPubkey: address is required');
     }
     const sdk = sdkRegistry.get(chainId);
-    return sdk.getPublicKey(address);
+    try {
+        return await sdk.getPublicKey(address);
+    } catch (err) {
+        // The explorer answers HTTP 404 for an address that has never revealed a
+        // key, which is the "no key yet" state the compose form handles, not a
+        // failed lookup. Every other failure (network, timeout, 5xx) still throws.
+        if (err?.code === 'EXPLORER_HTTP_404' || err?.details?.status === 404) return null;
+        throw err;
+    }
 }

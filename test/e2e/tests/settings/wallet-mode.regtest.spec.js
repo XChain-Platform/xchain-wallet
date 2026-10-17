@@ -64,7 +64,7 @@ async function openWalletMode(page) {
     // Scoped to `main`: the primary navigation is full of buttons and an
     // unmatched or mis-matched click HANGS for the whole test budget rather
     // than failing (Playwright has no default action timeout).
-    const row = page.getByRole('main').getByRole('button', { name: /^Wallet Mode/ });
+    const row = page.getByRole('main').getByRole('button', { name: /^Wallet mode\b/ });
     await expect(row, 'Settings has no Wallet Mode row').toBeVisible({ timeout: 30_000 });
     await row.click();
     await expect(page.getByRole('radio', { name: /^Signer/ }),

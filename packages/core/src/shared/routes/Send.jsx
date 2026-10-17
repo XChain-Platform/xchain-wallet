@@ -239,7 +239,7 @@ import { dustThresholdForCoin } from '../../sdk/nativeFeePreflight.js';
 import styles from './Send.module.css';
 import { normalizeHistoryRow } from '../utils/historyRow.js';
 import { pendingTxToEntry } from '../utils/pendingHistory.js';
-import { classifyEntryStatus } from '../utils/historyFilter.js';
+import { classifyEntryStatusWithoutMempool } from '../utils/historyFilter.js';
 import { startVisibleInterval } from '../utils/visibleInterval.js';
 import { BALANCE_POLL_INTERVAL_MS } from '../../flows/balances.js';
 import {
@@ -1513,7 +1513,9 @@ export function Send({ walletId, accountId, onBack, prefill = null, onDone, onCh
             }
             if (!entry) return;
 
-            const status = classifyEntryStatus(entry);
+            // This poll reads no mempool, so a send still waiting for its
+            // block must not be called dropped.
+            const status = classifyEntryStatusWithoutMempool(entry);
             const blockIndex = Number(entry.blockIndex || entry.pending?.confirmedBlockIndex || 0);
             const watermark = Number(watermarkResult?.watermark || 0);
             const chainTip = Math.max(blockIndex, Number.isFinite(watermark) ? watermark : 0);

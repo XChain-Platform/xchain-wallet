@@ -99,10 +99,10 @@
 //   - `tx_hash` on that tab is SHORTENED to `first16…last8` (U+2026), so the
 //     full txid never appears as text; assert the shortened form.
 //   - The Send form has no chain picker (D-140): it follows the SELECTED
-//     ASSET's chain. A native row is named for its CHAIN ("Open Litecoin
-//     details"), and the same token on three chains produces three rows with
-//     an IDENTICAL accessible name - `data-balance-key="<chainId>:<tick>"`
-//     (BalanceList) is the only thing that tells them apart.
+//     ASSET's chain. The picker names a row "Select <name> on <chain>", and
+//     the chain's display name reads the same on mainnet and regtest -
+//     `data-balance-key="<chainId>:<tick>"` (BalanceList) is the only thing
+//     that tells them apart.
 //   - The amount field's label carries the active unit ("Amount (XCHAIN)"),
 //     which is the cheapest available proof the form is composing on the asset
 //     and chain this run intends.
@@ -114,12 +114,13 @@
 
 import { randomBytes } from 'node:crypto';
 
-import { createWallet, expect, gotoSection, mainButton, test } from '../../fixtures/wallet.js';
+import { createWallet, expect, gotoSection, mainButton, openPaletteCommand, test } from '../../fixtures/wallet.js';
 import {
     expectConfirmModal,
     EXPLORER_URL,
     fundAddress,
     mintXchain,
+    readReceiveAddress,
     REGTEST_CHAIN_ID,
     REGTEST_CHAIN_LABEL,
     REGTEST_COIN,
@@ -130,6 +131,7 @@ import {
     waitForTokenBalance,
     waitForValidAction,
 } from '../../fixtures/regtest.js';
+import { pickAssetByChainAndTick, waitForShownTxid } from '../../fixtures/pendingHistory.js';
 
 const PASSWORD = 'regtestpassword123';
 /** Native coin, to pay miner fees for both broadcasts. */
@@ -160,9 +162,6 @@ const DESTINATIONS = {
     RLTC: 'rltc1q94wew2dxt8psxdx670k2yc9620ljmd4w847rcl',
 };
 const DESTINATION = DESTINATIONS[REGTEST_COIN];
-
-/** The venue's native ticker, e.g. RLTC -> LTC. */
-const COIN = REGTEST_COIN.replace(/^R/, '');
 
 /* ───── venue reads ────────────────────────────────────────────────── */
 
@@ -202,20 +201,6 @@ async function chainHistoryRow(address, txid, timeoutMs = 90_000) {
 
 /* ───── wallet walks ───────────────────────────────────────────────── */
 
-/** Opens a command-palette entry by its visible title. */
-async function gotoPalette(page, title) {
-    await page.keyboard.press('ControlOrMeta+k');
-    const dialog = page.getByRole('dialog', { name: 'Command palette' });
-    await expect(dialog, 'the command palette did not open').toBeVisible({ timeout: 15_000 });
-    const combobox = dialog.getByRole('combobox').first();
-    await expect(combobox).toBeEditable({ timeout: 15_000 });
-    await combobox.fill(title);
-    const row = page.getByRole('option', { name: new RegExp(`^${title}\\b`) }).first();
-    await expect(row, `no palette command matching "${title}"`).toBeVisible();
-    await row.click();
-    await expect(dialog).toBeHidden({ timeout: 15_000 });
-}
-
 /** Reloads onto a clean, unlocked Home so the next form opens with fresh state. */
 async function reloadToHome(page) {
     await page.goto('/');
@@ -249,84 +234,18 @@ async function approveAndGetTxid(page) {
     // success screen shows a txid and a Done button. Waiting on the txid also
     // removes the gap the old shape carried, where the heading could arrive a
     // beat before the id the next line reads.
-    await expect(page.getByRole('main'),
-        'no success screen appeared after Approve: no transaction id ever reached the screen')
-    //
-    // THE CONTRADICTION IS SOLVED, AND IT WAS THE WORD BOUNDARIES.
-    //
-    // The record of the hunt, because the wrong answers cost more than the
-    // right one: raising the bound was a wrong inference (a 300s drive failed
-    // the same way at 5.4 minutes with the txid and Done button in its
-    // snapshot), and the two suspects named next - a second `main` landmark, or
-    // a late mount - were wrong too. The success screen really was on screen
-    // the whole time.
-    //
-    // `toContainText` matches against textContent, which CONCATENATES adjacent
-    // nodes with no separator, so the screen reads
-    // "…Transaction IDd1a97d03…aae634b4Copy…". `\b` needs a word/non-word
-    // transition: `D`→`d` is not one, and `4`→`C` is not one, so the anchored
-    // pattern could not match a 64-character txid that was plainly there.
-    // Proven against the exact failing string: with the anchors `false`,
-    // without them `true`, hex run exactly 64.
-    //
-    // The sibling reads below and in the send/ lane keep their anchors and are
-    // correct to: they call `.innerText()`, which inserts the line breaks
-    // textContent omits, which is why only this assertion ever failed.
-        .toContainText(/[0-9a-f]{64}/, { timeout: 180_000 });
+    // Success screens draw the id truncated ("c636a6…127c71"), so a text match
+    // on 64 hex characters can never succeed; the full id is the element's
+    // accessible name, which waitForShownTxid reads.
+    const txid = await waitForShownTxid(page.getByRole('main'), {
+        timeout: 180_000,
+        message: 'no success screen appeared after Approve: no transaction id ever reached the screen',
+    });
     await expect(page.getByRole('button', { name: 'Done' }),
         'a transaction id is on screen but this is not the success screen, so the walk would '
         + 'read an id off some other surface')
         .toBeVisible({ timeout: 30_000 });
-    // Anchor-free for the same reason as the assertion above. `innerText` DOES
-    // insert the separators textContent omits, so `\b` works here and the
-    // send/ lane's identical reads are green on it - but a read that returns
-    // `undefined` when it silently stops matching hands the next line an
-    // undefined txid, and this campaign has paid for enough absent-field-read-
-    // as-a-verdict failures to not leave a second copy of the same hazard.
-    const txid = (await page.getByRole('main').innerText()).match(/[0-9a-f]{64}/)?.[0];
-    expect(txid, 'the success screen showed no transaction id to read').toBeTruthy();
-    expect(txid, 'the success screen showed no transaction id').toBeTruthy();
     return txid;
-}
-
-/**
- * Picks an asset in the Send form's picker by its (chainId, tick) pair.
- *
- * NOT by accessible name. `BalanceList` labels every row `Open <name> details`,
- * which is IDENTICAL for the same token on all three regtest chains, and
- * picking the wrong one silently re-targets the form's network. `pinKey`
- * (`<chainId>:<tick>`) is the only per-row discriminator in the DOM.
- */
-async function pickAssetByChainAndTick(page, searchText, chainId, tick) {
-    await page.getByRole('button', { name: /Change asset/ }).click();
-    await page.getByLabel('Search coins or tokens').fill(searchText);
-    const row = page.locator(`[data-balance-key="${chainId}:${tick}"]`).first();
-    await expect(row, `the Send picker offered no ${tick} row on ${chainId} for "${searchText}"`)
-        .toBeVisible({ timeout: 30_000 });
-    await row.click();
-    // No amount-label check here on purpose. `data-balance-key` is already a
-    // strictly stronger discriminator than the label, and this helper also runs
-    // BEFORE funding (to read the source address), where the amount field's
-    // presence on a zero-balance asset is not something this spec should be
-    // betting on. Where the amount is actually filled, the label carries the
-    // unit and an unmatched locator is the assertion.
-}
-
-/**
- * This wallet's own address on the venue chain, read off the Send form.
- *
- * Not `readReceiveAddress`: the Receive screen opens on whichever chain the
- * wallet lists first (Bitcoin), so off Bitcoin it hands back the wrong chain's
- * address and the fixture's own address-shape assertion times out. Picking the
- * NATIVE asset is what selects the chain on the Send surface, and the form then
- * states the source address it will spend from.
- */
-async function readOwnAddress(page) {
-    await gotoSection(page, 'Send');
-    await pickAssetByChainAndTick(page, REGTEST_CHAIN_LABEL, REGTEST_CHAIN_ID, COIN);
-    const address = await page.getByRole('main').getByLabel('From', { exact: true }).inputValue();
-    expect(address, `the Send form named no source address on ${REGTEST_CHAIN_LABEL}`).toBeTruthy();
-    return address;
 }
 
 /* ───── History screen ─────────────────────────────────────────────── */
@@ -423,7 +342,7 @@ test.describe(`History on ${REGTEST_CHAIN_LABEL} regtest`, () => {
             await createWallet(page, { password: PASSWORD });
             await switchToRegtest(page, PASSWORD);
 
-            own = await readOwnAddress(page);
+            own = await readReceiveAddress(page);
             // The destination must not be this wallet's own address, or the
             // direction claim below would be true by accident.
             expect(own, 'the throwaway destination is this wallet\'s own address, so the send '
@@ -693,7 +612,7 @@ test.describe(`History on ${REGTEST_CHAIN_LABEL} regtest`, () => {
          * be reused for a tick this wallet issued itself.
          */
         const mintTick = async (amount) => {
-            await gotoPalette(page, 'Advanced action');
+            await openPaletteCommand(page, 'Advanced action');
             await selectVenueChain(page);
             await page.getByLabel('Action', { exact: true }).selectOption('MINT');
             await page.getByRole('textbox', { name: 'TICK', exact: true }).fill(tick);
@@ -706,7 +625,7 @@ test.describe(`History on ${REGTEST_CHAIN_LABEL} regtest`, () => {
         await test.step('onboard and fund', async () => {
             await createWallet(page, { password: PASSWORD });
             await switchToRegtest(page, PASSWORD);
-            own = await readOwnAddress(page);
+            own = await readReceiveAddress(page);
             // Three coins, not one: an ISSUE carries a protocol fee the two
             // later MINTs do not, and a funding that only covers the mints
             // fails as an opaque compose error on the first screen.
@@ -715,7 +634,7 @@ test.describe(`History on ${REGTEST_CHAIN_LABEL} regtest`, () => {
         });
 
         await test.step('issue a token, leaving headroom to mint', async () => {
-            await gotoPalette(page, 'Issue token');
+            await openPaletteCommand(page, 'Issue token');
             const main = page.getByRole('main');
             await expect(main.getByLabel('Ticker')).toBeVisible({ timeout: 30_000 });
             await selectVenueChain(main);

@@ -58,6 +58,9 @@ const httpBrowserShim = fileURLToPath(
 const replBrowserShim = fileURLToPath(
     new URL('../core/src/shims/repl-browser.js', import.meta.url),
 );
+const zlibBrowserShim = fileURLToPath(
+    new URL('../core/src/shims/zlib-browser.js', import.meta.url),
+);
 const startupThemeUrl = new URL('../web/public/theme-init.js', import.meta.url);
 
 /**
@@ -289,6 +292,10 @@ export default defineConfig({
             // src/cli/repl.js. The wallet never calls startREPL, so the
             // shim throws loudly if anything does.
             repl: replBrowserShim,
+            // xchain-sdk's carrier verifier inflates a compressed rawData push
+            // with zlib.inflateRawSync; unshimmed, the bundle hands it an empty
+            // module and every compressed chunk-lane compose reads as tampered.
+            zlib: zlibBrowserShim,
             // Point the bare musig subpath at its real file (see note above).
             '@brandonblack/musig/base_crypto': musigBaseCrypto,
         },

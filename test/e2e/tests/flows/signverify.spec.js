@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-import { createWallet, expect, test } from '../../fixtures/wallet.js';
+import { createWallet, expect, openPaletteCommand, test } from '../../fixtures/wallet.js';
 import {
     readReceiveAddress,
     REGTEST_CHAIN_LABEL,
@@ -82,12 +82,7 @@ async function expectScreen(page, heading, label) {
 }
 
 async function openPaletteRoute(page, command, heading, formName) {
-    await page.keyboard.press('ControlOrMeta+k');
-    const palette = page.getByRole('dialog', { name: 'Command palette' });
-    await expect(palette).toBeVisible({ timeout: 15_000 });
-    await palette.getByRole('combobox').first().fill(command);
-    await palette.getByRole('option', { name: new RegExp(`^${command}\\b`) }).first().click();
-    await expect(palette).toBeHidden({ timeout: 15_000 });
+    await openPaletteCommand(page, command);
     await expect(page.getByRole('heading', { name: heading, exact: true }).first())
         .toBeVisible({ timeout: 30_000 });
     await expect(page.getByRole('form', { name: formName, exact: true }))
@@ -124,12 +119,15 @@ async function signAndVerify(page, viewportName) {
     await expect(confirm.getByTestId('confirm-message-text')).toHaveText(MESSAGE);
     await expect(confirm.getByTestId('confirm-chain-badge')).toHaveText(REGTEST_CHAIN_LABEL);
     await expect(confirm.getByTestId('confirm-source')).toContainText(address);
+    // The review's Reject and Approve sit in the screen's pinned footer, a
+    // sibling of the confirm body rather than inside it, so they are named by
+    // their own test ids.
     await expectSharedLineHeights(
-        confirm.locator('footer').getByRole('button'),
+        page.getByTestId('confirm-reject').or(page.getByTestId('confirm-approve')),
         `${viewportName} sign review actions`,
     );
 
-    const approve = confirm.getByTestId('confirm-approve');
+    const approve = page.getByTestId('confirm-approve');
     await expect(approve).toBeEnabled({ timeout: 30_000 });
     await approve.click();
 
@@ -143,7 +141,11 @@ async function signAndVerify(page, viewportName) {
     expect(signature, 'signing returned no base64 signature').toMatch(/^[A-Za-z0-9+/]+={0,2}$/);
 
     await copySignature.click();
-    await expect(copySignature).toHaveAttribute('data-state', 'copied');
+    // The copied state renames the button to its confirmation ("Copied:
+    // signature") for about 1.5 s, so it is found by that name; a failed copy
+    // keeps the "Copy signature" name with data-state="failed".
+    await expect(page.getByRole('button', { name: 'Copied: signature', exact: true }))
+        .toHaveAttribute('data-state', 'copied');
     await expect.poll(() => page.evaluate(() => navigator.clipboard.readText()))
         .toBe(signature);
 

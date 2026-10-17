@@ -1,7 +1,7 @@
 // Copyright © 2025–2026 Dankest, LLC
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-import { createWallet, expect, test } from '../../fixtures/wallet.js';
+import { createWallet, expect, openPaletteCommand, test } from '../../fixtures/wallet.js';
 import {
     explorerJson,
     expectConfirmModal,
@@ -25,15 +25,6 @@ const XCHAIN_MINT = 50;
 const CALLBACK_TICK = 'XCHAIN';
 const CALLBACK_AMOUNT = 2;
 
-async function gotoPalette(page, title) {
-    await page.keyboard.press('ControlOrMeta+k');
-    const dialog = page.getByRole('dialog', { name: 'Command palette' });
-    await expect(dialog).toBeVisible({ timeout: 15_000 });
-    await dialog.getByRole('combobox').first().fill(title);
-    await dialog.getByRole('option', { name: new RegExp(`^${title}\\b`) }).first().click();
-    await expect(dialog).toBeHidden({ timeout: 15_000 });
-}
-
 async function approveAndReadTxid(page) {
     await expectConfirmModal(page, 'the token creation');
     const password = page.getByLabel('Password', { exact: true });
@@ -52,11 +43,11 @@ async function approveAndReadTxid(page) {
 }
 
 async function readCurrentHeight(main) {
-    const hint = main.getByText(/^Current block on /);
+    const hint = main.getByText(/^Current block: /);
     await expect(hint, 'the advanced callback fields did not load the current block')
         .toBeVisible({ timeout: 30_000 });
     const text = await hint.innerText();
-    const match = text.match(/Current block on [^:]+:\s*([\d,]+)\./);
+    const match = text.match(/Current block:\s*([\d,]+)\./);
     expect(match, `could not parse the current block from: ${text}`).toBeTruthy();
     return Number(match[1].replace(/,/g, ''));
 }
@@ -79,7 +70,7 @@ test.describe(`wizard callback fields on ${REGTEST_CHAIN_LABEL}`, () => {
         await page.reload();
         await unlockAfterReload(page, PASSWORD);
 
-        await gotoPalette(page, 'Create a token');
+        await openPaletteCommand(page, 'Create a token');
         const main = page.getByRole('main');
         await main.getByRole('button', { name: /^Custom/ }).click();
         await selectVenueChain(main);

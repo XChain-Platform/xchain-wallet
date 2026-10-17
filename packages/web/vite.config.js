@@ -218,6 +218,9 @@ const httpBrowserShim = fileURLToPath(
 const replBrowserShim = fileURLToPath(
     new URL('../core/src/shims/repl-browser.js', import.meta.url),
 );
+const zlibBrowserShim = fileURLToPath(
+    new URL('../core/src/shims/zlib-browser.js', import.meta.url),
+);
 
 // Vite-plugin-node-polyfills rewrites Buffer/process/global
 // references inside transformed CJS to bare
@@ -319,6 +322,10 @@ export default defineConfig({
             // src/cli/repl.js. The wallet never calls startREPL, so the
             // shim throws loudly if anything does.
             { find: 'repl', replacement: replBrowserShim },
+            // xchain-sdk's carrier verifier inflates a compressed rawData push
+            // with zlib.inflateRawSync; unshimmed, the bundle hands it an empty
+            // module and every compressed chunk-lane compose reads as tampered.
+            { find: 'zlib', replacement: zlibBrowserShim },
             // Point the bare musig subpath at its real file (see note above).
             { find: '@brandonblack/musig/base_crypto', replacement: musigBaseCrypto },
         ],

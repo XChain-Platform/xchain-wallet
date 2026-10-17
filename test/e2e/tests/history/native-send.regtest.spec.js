@@ -8,9 +8,11 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// Driven on a venue: a plain native-coin send leaves History's
-// pending list once its block lands, even though the explorer never learns
-// the transaction exists.
+// Driven on a venue: a plain native-coin send turns from pending to confirmed
+// in History once its block lands, even though the explorer never learns the
+// transaction exists. The wallet keeps the mined send as a confirmed row
+// (pendingTxs.forAddress lists chain-confirmed records), so "retired" here
+// means the row's own state reads confirmed, not that the row disappears.
 //
 // The user report this answers: a testnet DOGE payment sat at "PENDING /
 // not seen by network / 5 days ago" with ten thousand confirmations behind
@@ -37,7 +39,6 @@ import {
     NATIVE_COIN as COIN,
     pendingRowFor,
     pickAssetByChainAndTick,
-    readOwnAddress,
     searchForTx,
 } from '../../fixtures/pendingHistory.js';
 import {
@@ -46,6 +47,7 @@ import {
     expectConfirmModal,
     fundAddress,
     minerRpc,
+    readReceiveAddress,
     REGTEST_CHAIN_ID,
     REGTEST_CHAIN_LABEL,
     REGTEST_DESTINATION,
@@ -118,7 +120,7 @@ test.describe(`Native-coin send lifecycle on ${REGTEST_CHAIN_LABEL} regtest`, ()
         await test.step(`onboard onto ${REGTEST_CHAIN_LABEL} regtest and fund the address`, async () => {
             await createWallet(page, { password: PASSWORD });
             await switchToRegtest(page, PASSWORD);
-            own = await readOwnAddress(page);
+            own = await readReceiveAddress(page);
             expect(own, 'the throwaway destination is this wallet\'s own address').not.toBe(REGTEST_DESTINATION);
             await fundAddress(own, FUNDING);
             await page.goto('/');
@@ -178,10 +180,11 @@ test.describe(`Native-coin send lifecycle on ${REGTEST_CHAIN_LABEL} regtest`, ()
             expect(Number(utxo.confirmations), 'the recipient output confirmed with no confirmation count')
                 .toBeGreaterThanOrEqual(1);
 
-            await expect(pendingRowFor(page, txid), 'the native send is STILL pending after its block. '
-                + 'The explorer never records a plain payment, so the only thing that can retire this '
-                + 'row is the UTXO-set reconcile on History\'s poll')
-                .toHaveCount(0, { timeout: ONE_POLL_MS });
+            await expect(pendingRowFor(page, txid).locator('[data-pending-state]'),
+                'the native send is STILL pending after its block. The explorer never records a plain '
+                + 'payment, so the only thing that can confirm this row is the UTXO-set reconcile on '
+                + 'History\'s poll')
+                .toHaveAttribute('data-pending-state', 'confirmed', { timeout: ONE_POLL_MS });
 
             // The CONTROLS: nothing on the explorer retired it. A plain payment
             // is never an action, so its history stays empty for the txid.
@@ -190,11 +193,12 @@ test.describe(`Native-coin send lifecycle on ${REGTEST_CHAIN_LABEL} regtest`, ()
                 .toBeNull();
             await assertNoActionRecorded(txid);
 
-            // And no confirmed row appeared in its place: there is no action
-            // to show, so History simply no longer lists the payment.
+            // And no explorer row appeared beside it: there is no action to
+            // show, so the wallet's own confirmed record is the only row.
             await searchForTx(page, txid);
-            await expect(historyRows(page), 'History still lists a row for a plain payment the '
-                + 'explorer knows nothing about').toHaveCount(0, { timeout: 30_000 });
+            await expect(historyRows(page), 'History lists a second row for a plain payment the '
+                + 'explorer knows nothing about').toHaveCount(1, { timeout: 30_000 });
+            await expect(pendingRowFor(page, txid)).toHaveCount(1);
         });
 
         await test.step('CLAIM 3: the retirement is on the RECORD, not just on the screen', async () => {
@@ -218,8 +222,10 @@ test.describe(`Native-coin send lifecycle on ${REGTEST_CHAIN_LABEL} regtest`, ()
             }
             await gotoSection(page, 'History');
             await searchForTx(page, txid);
-            await expect(pendingRowFor(page, txid), 'after a reload the native send is pending again: the '
-                + 'PendingTx record was never flipped to indexed').toHaveCount(0, { timeout: 60_000 });
+            await expect(pendingRowFor(page, txid).locator('[data-pending-state]'),
+                'after a reload the native send is pending again: the PendingTx record was never '
+                + 'flipped to indexed')
+                .toHaveAttribute('data-pending-state', 'confirmed', { timeout: 60_000 });
         });
     });
 });

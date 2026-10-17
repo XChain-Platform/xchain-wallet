@@ -65,6 +65,7 @@ import { KeyQR } from '../KeyQR.jsx';
 import { isUserRejection, useActionConfirmFlow } from '../../hooks/useActionConfirmFlow.js';
 import { useSignerReady } from '../../hooks/useSignerReady.js';
 import { userFacingMessage } from '../../utils/userFacingMessage.js';
+import { submitFailureMessage } from '../../utils/submitFailureMessage.js';
 import { useLongOperationStatus } from '../../hooks/useLongOperationStatus.js';
 import { ADDRESS_TYPE_LABEL } from '../../utils/addressTypeLabel.js';
 import { RECOVERY_PHRASE_WARNING } from '../../utils/securityMomentCopy.js';
@@ -91,6 +92,24 @@ const INCORRECT_PASSWORD = 'Incorrect password.';
 /** Plain copy for a password-gated backup step that failed. */
 function passwordStepFailure(err, fallback) {
     return isWrongPasswordError(err) ? INCORRECT_PASSWORD : userFacingMessage(err, fallback);
+}
+
+const PUBLISH_FAILED = 'Failed to publish labels.';
+
+/**
+ * Plain copy for a label publish that failed. Copy a flow wrote for the user
+ * still passes through; a refusal whose sentence the generic filter would hide
+ * (a confirm-time tamper refusal, an encoder or broadcast failure) gets the
+ * shared submit wording instead of the bare fallback.
+ *
+ * @param {unknown} err
+ * @param {string} chainId
+ */
+function publishStepFailure(err, chainId) {
+    if (isWrongPasswordError(err)) return INCORRECT_PASSWORD;
+    const own = userFacingMessage(err, '');
+    if (own) return own;
+    return submitFailureMessage(err, { chainId, fallback: PUBLISH_FAILED, verb: 'publish labels' });
 }
 
 /**
@@ -370,7 +389,7 @@ export function BackupSection({ activeWallet }) {
             if (!r?.queued) setAutoSync(null);
         } catch (err) {
             if (!isUserRejection(err)) {
-                setPublishError(passwordStepFailure(err, 'Failed to publish labels.'));
+                setPublishError(publishStepFailure(err, chainId));
             }
             setPublishStage('form');
         } finally {

@@ -35,11 +35,13 @@
 // below-threshold lane ever activated by accident on a chain id it must not,
 // this is the send that would silently stop carrying its key.
 
+import { waitForShownTxid } from '../../fixtures/pendingHistory.js';
 import {
     createWallet,
     expect,
     gotoSection,
     mainButton,
+    openPaletteCommand,
     test,
 } from '../../fixtures/wallet.js';
 import { LICENSE_ACCEPTED_AT_KEY, LICENSE_ACCEPTED_VERSION_KEY } from '../../fixtures/wallet.js';
@@ -87,19 +89,6 @@ async function newDevice(browser) {
     return context.newPage();
 }
 
-async function gotoPalette(page, title) {
-    await page.keyboard.press('ControlOrMeta+k');
-    const dialog = page.getByRole('dialog', { name: 'Command palette' });
-    await expect(dialog, 'the command palette did not open').toBeVisible({ timeout: 15_000 });
-    const combobox = dialog.getByRole('combobox').first();
-    await expect(combobox).toBeEditable({ timeout: 15_000 });
-    await combobox.fill(title);
-    const row = page.getByRole('option', { name: new RegExp(`^${title}\\b`) }).first();
-    await expect(row, `no palette command matching "${title}"`).toBeVisible();
-    await row.click();
-    await expect(dialog).toBeHidden({ timeout: 15_000 });
-}
-
 /**
  * Every leg `txid` indexed as, oldest first, each asserted valid.
  *
@@ -132,12 +121,12 @@ async function approveConfirm(page) {
 }
 
 async function readBroadcastTxid(page) {
-    const main = page.getByRole('main');
-    await expect(main, 'no transaction id ever appeared after Approve')
-        .toContainText(/[0-9a-f]{64}/, { timeout: 180_000 });
-    const txid = (await main.innerText()).match(/\b[0-9a-f]{64}\b/)?.[0];
-    expect(txid, 'success screen showed no transaction id').toBeTruthy();
-    return txid;
+    // The success screen draws the id truncated; waitForShownTxid reads the
+    // full id from its accessible name.
+    return waitForShownTxid(page.getByRole('main'), {
+        timeout: 180_000,
+        message: 'no transaction id ever appeared after Approve',
+    });
 }
 
 test.describe('the PC-29 unlock threshold stays inert on regtest', () => {
@@ -179,7 +168,7 @@ test.describe('the PC-29 unlock threshold stays inert on regtest', () => {
         });
 
         await test.step('the issuer issues the tick', async () => {
-            await gotoPalette(issuer, 'Issue token');
+            await openPaletteCommand(issuer, 'Issue token');
             const main = issuer.getByRole('main');
             await expect(main.getByLabel('Ticker')).toBeVisible({ timeout: 30_000 });
             await selectVenueChain(main);
@@ -204,7 +193,7 @@ test.describe('the PC-29 unlock threshold stays inert on regtest', () => {
 
         let publishTxid;
         await test.step('the publish form never offers the unlock-threshold field on this chain', async () => {
-            await gotoPalette(issuer, 'Publish file');
+            await openPaletteCommand(issuer, 'Publish file');
             await issuer.getByRole('radio', { name: /Encrypted & token-gated/ }).click();
             // PublishFileForm pins role="listitem" on this owned-token row (it
             // sits inside a role="list" container), so it answers to
@@ -290,7 +279,7 @@ test.describe('the PC-29 unlock threshold stays inert on regtest', () => {
             // variant="status" as role="status"; scoped by role rather than
             // bare text so an unrelated element sharing a substring can never
             // make this locator ambiguous.
-            await expect(issuer.getByRole('status').filter({ hasText: /unlock key will be securely attached/ }))
+            await expect(issuer.getByRole('status').filter({ hasText: /unlock key will be attached securely/ }))
                 .toBeVisible({ timeout: 30_000 });
 
             await mainButton(issuer, 'Send').click();

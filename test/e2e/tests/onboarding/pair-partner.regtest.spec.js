@@ -210,6 +210,24 @@ function decodePairingCode(code) {
     return JSON.parse(Buffer.from(padded, 'base64').toString('utf8'));
 }
 
+/**
+ * Whether this browser has the Shape Detection API. Chromium ships it on
+ * macOS, Windows and Android but not on Linux, and it is secure-context only,
+ * so it is probed on a real localhost origin.
+ *
+ * @param {import('@playwright/test').Browser} browser
+ */
+async function hasBarcodeDetector(browser) {
+    const context = await browser.newContext();
+    try {
+        const probe = await context.newPage();
+        await probe.goto(BASE_URL, { waitUntil: 'domcontentloaded' });
+        return await probe.evaluate(() => typeof window.BarcodeDetector === 'function');
+    } finally {
+        await context.close();
+    }
+}
+
 test.describe('watcher/signer pairing lane (§20.5, )', () => {
     test.use({ actionTimeout: 30_000 });
     test.setTimeout(900_000);
@@ -291,6 +309,16 @@ test.describe('watcher/signer pairing lane (§20.5, )', () => {
                 // Collect over time, exactly as a camera does. Each poll grabs
                 // whatever frame is currently painted; duplicates are ignored
                 // by the collector, and the loop ends when the set completes.
+                // Reading frames back needs the native detector. Without it only
+                // this decode step is skipped; the privacy and refusal steps
+                // below do not depend on it.
+                if (!(await hasBarcodeDetector(browser))) {
+                    test.info().annotations.push({
+                        type: 'skipped step',
+                        description: 'this browser has no BarcodeDetector (Chromium on Linux), so the animated frames were not read back',
+                    });
+                    return;
+                }
                 const seen = new Map();
                 const deadline = Date.now() + 60_000;
                 while (Date.now() < deadline) {
@@ -468,6 +496,8 @@ test.describe('watcher/signer pairing lane (§20.5, )', () => {
     });
 
     test('The partner collects the animated code off a CAMERA and pairs', async ({ browser }) => {
+        test.skip(!(await hasBarcodeDetector(browser)),
+            'this browser has no BarcodeDetector (Chromium on Linux), so no camera QR can be read');
         // The test above proves the frames on the watcher's screen reassemble to
         // its code. This one closes the loop the lane exists for: the code moves
         // from one device to the other by CAMERA ONLY - no clipboard, no paste,

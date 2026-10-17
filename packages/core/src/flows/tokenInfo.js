@@ -864,11 +864,17 @@ export function normalizeTokenInfo(chainId, tick, raw, tisBundle = null, options
     // === 0`, so an explicitly-configured 0 and a never-configured field
     // are indistinguishable on the wire; treat both as "unset" (null)
     // rather than showing a misleading "0" in the Mint settings panel.
+    // The explorer sends these as numbers or as decimal strings, and a string
+    // "0" is truthy, so zero is tested by value: read as a cap, it made the
+    // Mint form call every token without MAX_MINT "at its supply cap".
     const mintsRaw = row?.mints && typeof row.mints === 'object' ? row.mints : {};
-    const mintMax = mintsRaw.max ? String(mintsRaw.max) : null;
-    const mintAddressMax = mintsRaw.address_max ? String(mintsRaw.address_max) : null;
-    const mintStartBlock = mintsRaw.start_block ? String(mintsRaw.start_block) : null;
-    const mintStopBlock = mintsRaw.stop_block ? String(mintsRaw.stop_block) : null;
+    const unsetWhenZero = (value) => (
+        value == null || String(value).trim() === '' || Number(value) === 0 ? null : String(value)
+    );
+    const mintMax = unsetWhenZero(mintsRaw.max);
+    const mintAddressMax = unsetWhenZero(mintsRaw.address_max);
+    const mintStartBlock = unsetWhenZero(mintsRaw.start_block);
+    const mintStopBlock = unsetWhenZero(mintsRaw.stop_block);
     // PC-03 callback config (ISSUE v4): xchain-explorer's getToken groups
     // these under a `callback` object { tick, price, block, amount }. Unlike
     // the mint fields (which run every column through Number(), collapsing 0

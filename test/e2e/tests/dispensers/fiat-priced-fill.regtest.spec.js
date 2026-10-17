@@ -46,7 +46,8 @@
 //   cd test/e2e && XC_REGTEST_COIN=RLTC npx playwright test \
 //       --config=playwright.regtest.config.js tests/dispensers/fiat-priced-fill.regtest.spec.js
 
-import { createWallet, expect, test } from '../../fixtures/wallet.js';
+import { waitForShownTxid } from '../../fixtures/pendingHistory.js';
+import { createWallet, expect, openPaletteCommand, test, addWallet } from '../../fixtures/wallet.js';
 import {
     expectConfirmModal as sharedConfirmModal,
     EXPLORER_URL,
@@ -61,6 +62,9 @@ import {
     switchToRegtest,
     tokenBalance,
     unlockAfterReload,
+    selectVenueSendAsset,
+    selectDispenserOnSource,
+    selectPickerAsset,
 } from '../../fixtures/regtest.js';
 
 const PASSWORD = 'regtestpassword123';
@@ -128,19 +132,6 @@ async function waitForBalanceChange(address, tick, from, timeoutMs = 180_000) {
     throw new Error(`${tick} balance for ${address} never moved off ${from}`);
 }
 
-async function gotoPalette(page, title) {
-    await page.keyboard.press('ControlOrMeta+k');
-    const dialog = page.getByRole('dialog', { name: 'Command palette' });
-    await expect(dialog, 'the command palette did not open').toBeVisible({ timeout: 15_000 });
-    const combobox = dialog.getByRole('combobox').first();
-    await expect(combobox).toBeEditable({ timeout: 15_000 });
-    await combobox.fill(title);
-    const row = page.getByRole('option', { name: new RegExp(`^${title}\\b`) }).first();
-    await expect(row, `no palette command matching "${title}"`).toBeVisible();
-    await row.click();
-    await expect(dialog).toBeHidden({ timeout: 15_000 });
-}
-
 /**
  * The shared reader, plus this lane's own checks.
  *
@@ -162,10 +153,13 @@ async function expectConfirmModal(page) {
 
 async function approveAndGetTxid(page) {
     await page.getByTestId('confirm-approve').click();
-    const main = page.getByRole('main');
-    await expect(main, 'no transaction id ever appeared after Approve')
-        .toContainText(/[0-9a-f]{64}/, { timeout: 180_000 });
-    return (await main.innerText()).match(/[0-9a-f]{64}/)?.[0];
+    // The Send success screen draws the id truncated; waitForShownTxid reads
+    // the full id from its accessible name, and from the text on screens
+    // that print it whole.
+    return waitForShownTxid(page.getByRole('main'), {
+        timeout: 180_000,
+        message: 'no transaction id ever appeared after Approve',
+    });
 }
 
 /**
@@ -209,7 +203,7 @@ test.describe(`fiat-priced dispensers on ${REGTEST_CHAIN_LABEL}`, () => {
             await createWallet(page, { password: PASSWORD, name: 'Fiat Seller' });
             await switchToRegtest(page, PASSWORD);
 
-            await gotoPalette(page, 'Create dispenser');
+            await openPaletteCommand(page, 'Create dispenser');
             let main = page.getByRole('main');
             await expect(main.getByLabel('Give amount per fill')).toBeVisible({ timeout: 30_000 });
             await selectVenueChain(main);
@@ -231,13 +225,16 @@ test.describe(`fiat-priced dispensers on ${REGTEST_CHAIN_LABEL}`, () => {
             // payment.
             payPerFill = (Math.ceil((FIAT_AMOUNT / coinUsd) * 1e8) / 1e8).toFixed(8);
 
-            await gotoPalette(page, 'Create dispenser');
+            await openPaletteCommand(page, 'Create dispenser');
             main = page.getByRole('main');
             await expect(main.getByLabel('Give amount per fill')).toBeVisible({ timeout: 30_000 });
             await selectVenueChain(main);
 
+            // The dispenser opens on the Source, the address the buyer pays below.
+            await selectDispenserOnSource(page);
+
             await main.getByRole('button', { name: /^Token/ }).click();
-            await page.getByText('XCHAIN', { exact: true }).first().click();
+            await selectPickerAsset(page, 'XCHAIN');
 
             await main.getByLabel('Give amount per fill').fill(String(GIVE_PER_FILL));
             await main.getByLabel('Escrow amount').fill(String(ESCROW));
@@ -280,14 +277,7 @@ test.describe(`fiat-priced dispensers on ${REGTEST_CHAIN_LABEL}`, () => {
         });
 
         await test.step('the BUYER pays the dollar price, in coin, from the Send form', async () => {
-            await gotoPalette(page, 'Switch wallet');
-            await page.getByRole('button', { name: 'Add wallet' }).click();
-            await createWallet(page, { password: PASSWORD, name: 'Fiat Buyer', navigate: false });
-            await gotoPalette(page, 'Switch wallet');
-            await page.getByRole('button', { name: /Fiat Buyer/ }).first().click();
-            await expect(page.getByRole('button', { name: /Fiat Buyer/ }).first(),
-                'the app did not switch to the newly added wallet')
-                .toBeVisible({ timeout: 30_000 });
+            await addWallet(page, { name: 'Fiat Buyer', password: PASSWORD });
 
             // Read the buyer's address off a form that carries a chain picker,
             // not off Receive: Receive shows the ACTIVE chain's address and a
@@ -296,7 +286,7 @@ test.describe(`fiat-priced dispensers on ${REGTEST_CHAIN_LABEL}`, () => {
             // form is used purely as a chain-scoped address reader here and
             // nothing is composed from it (the same trick token-paid-settle
             // uses with the dispenser form's Source).
-            await gotoPalette(page, 'Issue token');
+            await openPaletteCommand(page, 'Issue token');
             const form = page.getByRole('main');
             await expect(form.getByLabel('Ticker')).toBeVisible({ timeout: 30_000 });
             await selectVenueChain(form);
@@ -313,7 +303,7 @@ test.describe(`fiat-priced dispensers on ${REGTEST_CHAIN_LABEL}`, () => {
             // two outputs, no OP_RETURN, no XChain action of its own. The Send
             // form composes exactly that for a coin send, so this is the buyer's
             // real in-app path and not a harness shortcut.
-            await gotoPalette(page, 'Send');
+            await openPaletteCommand(page, 'Send');
             const main = page.getByRole('main');
             // The Send form carries no chain picker of its own: it follows the
             // SELECTED ASSET's chain (and otherwise the wallet's active chain,
@@ -323,14 +313,7 @@ test.describe(`fiat-priced dispensers on ${REGTEST_CHAIN_LABEL}`, () => {
             // and "This looks like a Litecoin address, not a Bitcoin address."
             // under the destination.
             const coin = REGTEST_COIN.slice(1);
-            await page.getByRole('button', { name: /Change asset/ }).click();
-            await page.getByLabel('Search coins or tokens').fill(coin);
-            // A NATIVE coin row is named for its CHAIN ("Open Litecoin
-            // details"), not for its ticker the way a token row is ("Open
-            // XCHAIN details"). Searching by ticker finds it; addressing it by
-            // ticker does not.
-            await page.getByLabel(new RegExp(`Open ${REGTEST_CHAIN_LABEL} details`, 'i'))
-                .first().click();
+            await selectVenueSendAsset(page);
             await expect(main.getByRole('textbox', { name: new RegExp(`^Amount \\(${coin}\\)`) }),
                 `the Send form is composing on the wrong chain: no ${coin} amount field`)
                 .toBeVisible({ timeout: 30_000 });
@@ -385,7 +368,7 @@ test.describe(`fiat-priced dispensers on ${REGTEST_CHAIN_LABEL}`, () => {
             // buy surface must never quote a price of zero, because a buyer who
             // pays it gets nothing and a buyer who trusts it thinks the goods
             // are free.
-            await gotoPalette(page, 'All actions');
+            await openPaletteCommand(page, 'All actions');
             await page.getByRole('main').getByText('Browse dispensers', { exact: true })
                 .first().click();
             const main = page.getByRole('main');

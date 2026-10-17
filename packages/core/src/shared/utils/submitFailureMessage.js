@@ -51,6 +51,7 @@ import { explorerErrorMessage } from '../../sdk/explorerErrors.js';
 import { knownSdkErrorMessage, unknownSdkErrorCode } from '../../sdk/sdkErrorMessages.js';
 import { validationErrorMessage } from '../../sdk/validationErrors.js';
 import { broadcastFailureKindFromError } from '../../flows/broadcastPermanence.js';
+import { OFFER_LIFECYCLE_REFUSAL } from '../../flows/marketExpiry.js';
 import { humanizeError } from './humanizeError.js';
 import { actionDisplayLabel } from './actionDisplayLabel.js';
 import { CHUNK_LANE_OPENER_RE } from './chunkLaneCopy.js';
@@ -134,6 +135,20 @@ export function isWatcherChunkLane(err) {
     // carry (submitWithSigner.js#EnvelopeConfirmLaneError).
     if (e.name === 'EnvelopeConfirmLaneError') return true;
     return CHUNK_LANE_OPENER_RE.test(String(e.message || ''));
+}
+
+/**
+ * A confirm-lane tamper refusal (flows/confirmChecks.js#TamperDetectedError),
+ * keyed on name because only `{ name, message }` crosses the messaging boundary
+ * (MessageHost.serializeError); the code covers an in-process caller.
+ *
+ * @param {unknown} err
+ * @returns {boolean}
+ */
+function isTamperDetected(err) {
+    if (!err || typeof err !== 'object') return false;
+    const e = /** @type {any} */ (err);
+    return e.name === 'TamperDetectedError' || e.code === 'TAMPER_DETECTED';
 }
 
 /**
@@ -272,6 +287,22 @@ export function submitFailureMessage(
     // carries the whole remedy, and nothing else here would recognise it.
     if (isWatcherChunkLane(err)) {
         return userFacingMessage(String(/** @type {any} */ (err).message || ''), generic);
+    }
+    // A refused build check: its message is the wallet's own sentence about
+    // the bytes it refused to sign. Forms pass that message as their fallback,
+    // which the tail treats as raw wire text, so it would surface as the generic
+    // line and hide that nothing was signed because the transaction differed.
+    if (isTamperDetected(err)) {
+        return userFacingMessage(
+            `${String(/** @type {any} */ (err).message || '').trim()} Nothing was signed.`, generic,
+        );
+    }
+    // The referenced order, swap or dispenser is expired, or its expiry cannot
+    // be checked against a current chain height. The sentence is the wallet's
+    // own and names the next step; forms pass it as their fallback too, which
+    // the tail treats as raw wire text and would replace with the generic line.
+    if (/** @type {any} */ (err)?.name === OFFER_LIFECYCLE_REFUSAL) {
+        return userFacingMessage(String(/** @type {any} */ (err).message || '').trim(), generic);
     }
     if (isCommitFeeTooLowBroadcast(err)) return NETWORK_FEE_TOO_LOW_MESSAGE;
     const broadcastKind = broadcastFailureKindFromError(err);

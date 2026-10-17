@@ -103,7 +103,7 @@ async function openConnectedSites(page) {
     // navigation carries same-named destinations, and a Playwright click has no
     // default action timeout, so a miss hangs out the whole test budget rather
     // than failing.
-    const row = page.getByRole('main').getByRole('button', { name: /^Connected Sites/ }).first();
+    const row = page.getByRole('main').getByRole('button', { name: /^Connected sites\b/ }).first();
     await expect(row, 'Settings has no Connected Sites row').toBeVisible({ timeout: 30_000 });
     await row.click();
     await expect(page.getByLabel('Origin or wildcard to block'),
@@ -173,11 +173,11 @@ test.describe('Settings: connected sites', () => {
                 // The blocklist half of the panel is present and reachable -
                 // it is gated on three messaging routes existing at once
                 // (`blocklistWired`), so its absence would be silent.
-                await expect(main.getByText('Blocked origins', { exact: true }),
-                    'the panel has no Blocked origins section, so this shell is missing at least one '
+                await expect(main.getByText('Blocked sites', { exact: true }),
+                    'the panel has no Blocked sites section, so this shell is missing at least one '
                     + 'of the three blocklist routes it is gated on')
                     .toBeVisible({ timeout: 30_000 });
-                await expect(main.getByText('No blocked origins', { exact: true }),
+                await expect(main.getByText('No blocked sites', { exact: true }),
                     'the blocklist did not report its empty state')
                     .toBeVisible({ timeout: 30_000 });
             });
@@ -197,7 +197,7 @@ test.describe('Settings: connected sites', () => {
                     'a wildcard pattern was refused or silently dropped by the blocklist, while the '
                     + 'panel\'s own hint tells the user to use exactly this shape')
                     .toBeVisible({ timeout: 30_000 });
-                await expect(page.getByRole('main').getByText('No blocked origins', { exact: true }),
+                await expect(page.getByRole('main').getByText('No blocked sites', { exact: true }),
                     'the blocklist still claims to be empty with two entries on it')
                     .toHaveCount(0);
             });
@@ -231,9 +231,9 @@ test.describe('Settings: connected sites', () => {
                 expect(newestText.includes(WILDCARD),
                     'the newest audit entry is not the wildcard that was blocked last')
                     .toBe(true);
-                // `\bblock\b` does not match "unblock" - the b is preceded by a
+                // `\bblocked\b` does not match "unblocked" - the b is preceded by a
                 // word character there - so this really does separate the two.
-                expect(/\bblock\b/.test(newestText),
+                expect(/\bblocked\b/.test(newestText),
                     'the audit log recorded the wildcard block as something other than a block')
                     .toBe(true);
 
@@ -278,7 +278,7 @@ test.describe('Settings: connected sites', () => {
                     expect(textMentionsOrigin(newestText, ORIGIN),
                         'the newest audit entry is not the origin that was just unblocked')
                         .toBe(true);
-                    expect(/\bunblock\b/.test(newestText),
+                    expect(/\bunblocked\b/.test(newestText),
                         'the withdrawal was not recorded as an unblock in the audit log, so the record '
                         + 'of who was let back in - the one thing that log exists for - is wrong')
                         .toBe(true);

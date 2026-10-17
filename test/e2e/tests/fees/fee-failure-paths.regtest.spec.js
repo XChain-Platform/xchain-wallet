@@ -45,7 +45,7 @@
 // spec is about - which on this spec would be a false PASS, since both lanes
 // assert that something was refused.
 
-import { createWallet, expect, test } from '../../fixtures/wallet.js';
+import { createWallet, expect, openPaletteCommand, test } from '../../fixtures/wallet.js';
 import {
     EXPLORER_URL,
     REGTEST_ADDRESS_RE,
@@ -104,19 +104,6 @@ async function expectNothingSpent(address, sats, label) {
         .toBe(sats);
 }
 
-async function gotoPalette(page, title) {
-    await page.keyboard.press('ControlOrMeta+k');
-    const dialog = page.getByRole('dialog', { name: 'Command palette' });
-    await expect(dialog, 'the command palette did not open').toBeVisible({ timeout: 15_000 });
-    const combobox = dialog.getByRole('combobox').first();
-    await expect(combobox).toBeEditable({ timeout: 15_000 });
-    await combobox.fill(title);
-    const row = page.getByRole('option', { name: new RegExp(`^${title}\\b`) }).first();
-    await expect(row, `no palette command matching "${title}"`).toBeVisible();
-    await row.click();
-    await expect(dialog).toBeHidden({ timeout: 15_000 });
-}
-
 /** The native-fee opt-in, which on Bitcoin is a real control. */
 function feeToggle(scope) {
     const name = /^Pay protocol fee in BTC instead of XCHAIN/;
@@ -125,7 +112,7 @@ function feeToggle(scope) {
 
 /** Fills the issue form and submits it, leaving the caller to judge the outcome. */
 async function submitIssue(page, tick, { nativeFee }) {
-    await gotoPalette(page, 'Issue token');
+    await openPaletteCommand(page, 'Issue token');
     const main = page.getByRole('main');
     await expect(main.getByLabel('Ticker')).toBeVisible({ timeout: 30_000 });
     await main.getByLabel('Ticker').fill(tick);
@@ -168,7 +155,7 @@ test.describe('§11.5 fee failure paths: the payer cannot afford the protocol fe
             await createWallet(page, { password: PASSWORD, name: 'Fee Failure Wallet' });
             await switchToRegtest(page, PASSWORD);
 
-            await gotoPalette(page, 'Issue token');
+            await openPaletteCommand(page, 'Issue token');
             const main = page.getByRole('main');
             await expect(main.getByLabel('Ticker')).toBeVisible({ timeout: 30_000 });
             source = await main.getByLabel('From').inputValue();

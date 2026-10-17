@@ -52,7 +52,8 @@
 //   cd test/e2e && XC_REGTEST_COIN=RLTC npx playwright test \
 //       --config=playwright.regtest.config.js tests/tokens/subtoken-issue.regtest.spec.js
 
-import { createWallet, expect, test } from '../../fixtures/wallet.js';
+import { waitForShownTxid } from '../../fixtures/pendingHistory.js';
+import { createWallet, expect, openPaletteCommand, test } from '../../fixtures/wallet.js';
 import {
     EXPLORER_URL,
     REGTEST_ADDRESS_RE,
@@ -61,6 +62,7 @@ import {
     encoderRpc,
     fundAddress,
     minerRpc,
+    payProtocolFeeInCoin,
     seedPrices,
     selectVenueChain,
     switchToRegtest,
@@ -165,19 +167,6 @@ async function waitForBalance(address, tick, want, timeoutMs = 180_000) {
     throw new Error(`${tick} balance for ${address} never reached ${want} (last=${last})`);
 }
 
-async function gotoPalette(page, title) {
-    await page.keyboard.press('ControlOrMeta+k');
-    const dialog = page.getByRole('dialog', { name: 'Command palette' });
-    await expect(dialog, 'the command palette did not open').toBeVisible({ timeout: 15_000 });
-    const combobox = dialog.getByRole('combobox').first();
-    await expect(combobox).toBeEditable({ timeout: 15_000 });
-    await combobox.fill(title);
-    const row = page.getByRole('option', { name: new RegExp(`^${title}\\b`) }).first();
-    await expect(row, `no palette command matching "${title}"`).toBeVisible();
-    await row.click();
-    await expect(dialog).toBeHidden({ timeout: 15_000 });
-}
-
 /**
  * Reloads onto a clean, unlocked Home.
  *
@@ -186,7 +175,7 @@ async function gotoPalette(page, title) {
  * else unlocks fine and then times out on a healthy wallet (§3.5, Session 32).
  */
 async function reloadToHome(page) {
-    await gotoPalette(page, 'Home');
+    await openPaletteCommand(page, 'Home');
     await page.reload();
     await unlockAfterReload(page, PASSWORD);
 }
@@ -215,12 +204,12 @@ async function approveAndGetTxid(page) {
     const approve = page.getByTestId('confirm-approve');
     await expect(approve).toBeEnabled({ timeout: 120_000 });
     await approve.click();
-    const main = page.getByRole('main');
-    // The success screens render the id with no separators, so a \b-anchored
-    // pattern does not match (§3.5, Session 30).
-    await expect(main, 'no transaction id ever appeared after Approve')
-        .toContainText(/[0-9a-f]{64}/, { timeout: 180_000 });
-    return (await main.innerText()).match(/[0-9a-f]{64}/)?.[0];
+    // Success screens may draw the id truncated; waitForShownTxid reads the
+    // full id from its accessible name, and from the text where it is whole.
+    return waitForShownTxid(page.getByRole('main'), {
+        timeout: 180_000,
+        message: 'no transaction id ever appeared after Approve',
+    });
 }
 
 /** The composed PSBT's own network fee, in satoshis, off the confirm screen. */
@@ -260,7 +249,7 @@ async function onboardAndIssueParent(page, walletName, parentTick = PARENT) {
     await createWallet(page, { password: PASSWORD, name: walletName });
     await switchToRegtest(page, PASSWORD);
 
-    await gotoPalette(page, 'Issue token');
+    await openPaletteCommand(page, 'Issue token');
     const main = page.getByRole('main');
     await expect(main.getByLabel('Ticker')).toBeVisible({ timeout: 30_000 });
     await selectVenueChain(main);
@@ -274,7 +263,7 @@ async function onboardAndIssueParent(page, walletName, parentTick = PARENT) {
     await unlockAfterReload(page, PASSWORD);
     await seedPrices();
 
-    await gotoPalette(page, 'Issue token');
+    await openPaletteCommand(page, 'Issue token');
     const form = page.getByRole('main');
     await expect(form.getByLabel('Ticker')).toBeVisible({ timeout: 30_000 });
     await selectVenueChain(form);
@@ -283,6 +272,8 @@ async function onboardAndIssueParent(page, walletName, parentTick = PARENT) {
         .toBe(source);
     await form.getByLabel('Ticker').fill(parentTick);
     await form.getByLabel('Supply', { exact: true }).fill(String(PARENT_SUPPLY));
+    // The coin lane, the one this spec measures the fee on (no XCHAIN needed).
+    await payProtocolFeeInCoin(form);
     await form.getByRole('button', { name: 'Issue token', exact: true }).click();
 
     await expectConfirmScreen(page);
@@ -309,7 +300,7 @@ async function onboardAndIssueParent(page, walletName, parentTick = PARENT) {
  */
 async function fillSubtoken(page, { parent, child, supply, signAs }) {
     await reloadToHome(page);
-    await gotoPalette(page, 'Create a token');
+    await openPaletteCommand(page, 'Create a token');
 
     const main = page.getByRole('main');
     await main.getByRole('button', { name: /^Subtoken/ }).click();
@@ -352,6 +343,9 @@ async function fillSubtoken(page, { parent, child, supply, signAs }) {
     await main.getByLabel('Parent ticker').fill(parent);
     await main.getByLabel('Subtoken name').fill(child);
     await main.getByLabel('Supply', { exact: true }).fill(String(supply));
+    // The coin lane: the screen's native fee line and the payer's coin delta
+    // are what this spec measures.
+    await payProtocolFeeInCoin(main);
     await main.getByRole('button', { name: 'Review token', exact: true }).click();
     await main.getByRole('button', { name: 'Continue to confirmation', exact: true }).click();
 
@@ -374,7 +368,7 @@ async function composeSubtoken(page, opts) {
  * venues (§3.5). The modal has its OWN coin picker, labelled "Coin".
  */
 async function generateVenueAddress(page) {
-    await gotoPalette(page, 'Addresses');
+    await openPaletteCommand(page, 'Addresses');
     const listed = async () => {
         const rows = page.getByRole('button', { name: /^View address / });
         await expect(rows.first()).toBeVisible({ timeout: 30_000 });

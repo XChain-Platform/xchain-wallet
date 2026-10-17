@@ -56,7 +56,7 @@
 //   cd test/e2e && XC_REGTEST_COIN=RLTC npx playwright test \
 //       --config=playwright.regtest.config.js tests/dispensers/edit-expiry-fee.regtest.spec.js
 
-import { createWallet, expect, test } from '../../fixtures/wallet.js';
+import { createWallet, expect, openPaletteCommand, test } from '../../fixtures/wallet.js';
 import {
     expectConfirmModal as sharedConfirmModal,
     EXPLORER_URL,
@@ -71,6 +71,7 @@ import {
     switchToRegtest,
     unlockAfterReload,
     waitForTokenBalance,
+    selectPickerAsset,
 } from '../../fixtures/regtest.js';
 
 const PASSWORD = 'regtestpassword123';
@@ -164,6 +165,42 @@ async function waitForIndexedAction(txid, timeoutMs = 300_000) {
         + `${status?.decoder_lag_blocks?.[REGTEST_COIN]}.`);
 }
 
+/** How long the wallet reuses an identical explorer read (explorerRateLimit.js reuseMs). */
+const WALLET_READ_REUSE_MS = 2_000;
+
+/**
+ * Holds until the indexer has stood at the node's tip for longer than the
+ * wallet reuses a status read.
+ *
+ * An edit names the dispenser it changes, so the wallet refuses to sign it
+ * until it can read the expiry against a CURRENT chain height: it compares
+ * `last_block` with `chain_tip` and refuses on any gap ("the chain height is
+ * still syncing"). The waits in this file mine blocks to land each action, so
+ * the next edit can reach Approve while the indexer is a block behind the
+ * node. The hold also covers a status read the wallet took just before the
+ * catch-up and would reuse for one more Approve.
+ */
+async function waitForIndexerAtTip(timeoutMs = 120_000) {
+    const deadline = Date.now() + timeoutMs;
+    let atTipSince = null;
+    let last = null;
+    while (Date.now() < deadline) {
+        last = await explorerJson('status').catch(() => last);
+        const indexed = Number(last?.last_block?.[REGTEST_COIN]);
+        const tip = Number(last?.chain_tip?.[REGTEST_COIN]);
+        if (Number.isFinite(tip) && indexed === tip) {
+            atTipSince ??= Date.now();
+            if (Date.now() - atTipSince > WALLET_READ_REUSE_MS) return;
+        } else {
+            atTipSince = null;
+        }
+        await new Promise((r) => setTimeout(r, 500));
+    }
+    throw new Error(`the ${REGTEST_COIN} indexer never held the chain tip (indexed `
+        + `${last?.last_block?.[REGTEST_COIN]}, tip ${last?.chain_tip?.[REGTEST_COIN]}), so the wallet `
+        + 'would refuse the edit as unverifiable. Venue state, not a wallet defect');
+}
+
 /** The dispenser's live expiration, as the chain reports it. */
 async function currentExpiration(index) {
     const row = await explorerJson(`action/${index}`);
@@ -196,19 +233,6 @@ function unixToLocalInput(unix) {
     const p = (n) => String(n).padStart(2, '0');
     return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`
         + `T${p(d.getHours())}:${p(d.getMinutes())}`;
-}
-
-async function gotoPalette(page, title) {
-    await page.keyboard.press('ControlOrMeta+k');
-    const dialog = page.getByRole('dialog', { name: 'Command palette' });
-    await expect(dialog, 'the command palette did not open').toBeVisible({ timeout: 15_000 });
-    const combobox = dialog.getByRole('combobox').first();
-    await expect(combobox).toBeEditable({ timeout: 15_000 });
-    await combobox.fill(title);
-    const row = page.getByRole('option', { name: new RegExp(`^${title}\\b`) }).first();
-    await expect(row, `no palette command matching "${title}"`).toBeVisible();
-    await row.click();
-    await expect(dialog).toBeHidden({ timeout: 15_000 });
 }
 
 /**
@@ -245,7 +269,7 @@ async function approveAndGetTxid(page) {
  * and re-entering is what an owner making a second change actually does.
  */
 async function openDispenserDetail(page, index) {
-    await gotoPalette(page, 'Dispensers');
+    await openPaletteCommand(page, 'Dispensers');
     const main = page.getByRole('main');
     // The owner's list labels the row rather than printing the index in its
     // text ("Open XCHAIN dispenser #1699"), so filtering on visible text finds
@@ -266,7 +290,7 @@ async function openDispenserDetail(page, index) {
  * The edit signs through the shared confirm page (its network dry run and
  * Approve), then lands on its own "Edit submitted" screen.
  */
-async function submitExpirationEdit(page, index, targetUnix) {
+async function submitExpirationEdit(page, index, targetUnix, { coinFee = false } = {}) {
     const main = await openDispenserDetail(page, index);
     await main.getByRole('button', { name: 'Edit' }).click();
 
@@ -274,8 +298,21 @@ async function submitExpirationEdit(page, index, targetUnix) {
     await expect(field, 'the edit form has no expiration field').toBeVisible({ timeout: 30_000 });
     await field.fill(unixToLocalInput(targetUnix));
 
+    // On Bitcoin the coin fee is an opt-in and the default pays in XCHAIN; off
+    // Bitcoin the coin lane is mandatory and the control is a statement, not a
+    // switch, so there is nothing to turn on.
+    if (coinFee && REGTEST_COIN === 'RBTC') {
+        const toggle = main.getByRole('switch', { name: /^Pay protocol fee in .* instead of XCHAIN/ })
+            .or(main.getByRole('checkbox', { name: /^Pay protocol fee in .* instead of XCHAIN/ })).first();
+        await expect(toggle, 'Bitcoin did not offer its native-fee choice on the edit form')
+            .toBeVisible({ timeout: 30_000 });
+        if (!(await toggle.isChecked())) await toggle.click();
+        await expect(toggle).toBeChecked();
+    }
+
     await main.getByRole('button', { name: 'Edit dispenser' }).click();
     await expectConfirmModal(page);
+    await waitForIndexerAtTip();
     await page.getByTestId('confirm-approve').click();
     await expect(main.getByRole('heading', { name: 'Edit submitted' }),
         'the edit never reached its own success screen')
@@ -303,7 +340,7 @@ test.describe(`dispenser expiration-edit fee on ${REGTEST_CHAIN_LABEL}`, () => {
             await createWallet(page, { password: PASSWORD, name: 'Expiry Owner' });
             await switchToRegtest(page, PASSWORD);
 
-            await gotoPalette(page, 'Create dispenser');
+            await openPaletteCommand(page, 'Create dispenser');
             let main = page.getByRole('main');
             await expect(main.getByLabel('Give amount per fill')).toBeVisible({ timeout: 30_000 });
             await selectVenueChain(main);
@@ -318,12 +355,12 @@ test.describe(`dispenser expiration-edit fee on ${REGTEST_CHAIN_LABEL}`, () => {
             await waitForTokenBalance(owner, TICK, MINT);
             await seedPrices();
 
-            await gotoPalette(page, 'Create dispenser');
+            await openPaletteCommand(page, 'Create dispenser');
             main = page.getByRole('main');
             await expect(main.getByLabel('Give amount per fill')).toBeVisible({ timeout: 30_000 });
             await selectVenueChain(main);
             await main.getByRole('button', { name: /^Token/ }).click();
-            await page.getByText(TICK, { exact: true }).first().click();
+            await selectPickerAsset(page, TICK);
             await main.getByLabel('Give amount per fill').fill(String(GIVE_PER_FILL));
             await main.getByLabel('Escrow amount').fill(String(ESCROW));
             await main.getByLabel(/Trigger price/).fill(TRIGGER);
@@ -394,7 +431,9 @@ test.describe(`dispenser expiration-edit fee on ${REGTEST_CHAIN_LABEL}`, () => {
                 + 'lane at all - check the seeded coin price (campaign §3.2)')
                 .toBeGreaterThan(0);
 
-            const done = await waitForIndexedAction(await submitExpirationEdit(page, dispenserIndex, to));
+            const done = await waitForIndexedAction(
+                await submitExpirationEdit(page, dispenserIndex, to, { coinFee: true }),
+            );
 
             // itself. Before the fix the wallet composed this edit with
             // no native-coin output, so it confirmed on chain and the indexer

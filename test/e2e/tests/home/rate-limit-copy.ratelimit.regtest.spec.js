@@ -98,6 +98,11 @@ test.describe('rate-limit copy and recovery against a throttled explorer (AT6)',
     // Two windows to reach the copy (the honoured wait plus the failed retry),
     // one countdown, one more window to recover: six minutes is the budget.
     test.setTimeout(720_000);
+    // The regtest config's `**/*.regtest.spec.js` match picks this file up too,
+    // where localhost:18080 is the shared explorer. It runs only under
+    // playwright.ratelimit.config.js, which demands XC_RATE_LIMIT_AT6=1.
+    test.skip(process.env.XC_RATE_LIMIT_AT6 !== '1',
+        'needs the throttled explorer (EXPLORER_RATE_LIMIT_RPM=20), not the shared regtest venue; run it with playwright.ratelimit.config.js and XC_RATE_LIMIT_AT6=1');
 
     test.beforeAll(async () => {
         const res = await fetch(`${EXPLORER_URL}/${REGTEST_COIN}/api/status`, { signal: AbortSignal.timeout(10_000) });

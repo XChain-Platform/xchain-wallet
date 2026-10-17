@@ -13,14 +13,12 @@
 // the GIVE chain, and the counterparty chain appears only as a coin name and a
 // receiving address on the record.
 //
-// THE PAIR IS give-RLTC / get-RDOGE, AND IT IS A RULING, NOT A PREFERENCE.
-// Bitcoin regtest cannot start a spec at all (its decoder is crash-looping on a
-// durable REORG_HALT marker, and resyncing it would destroy another item's
-// preserved evidence), so the operator ruled the campaign onto the chains that
-// exist. Dogecoin is the COUNTERPARTY here, never the chain this spec runs on:
-// nothing below drives the Dogecoin venue, mines it, or reads its explorer.
-// That is what keeps "run on RLTC" intact while still making the action
-// genuinely cross-chain.
+// THE PAIR IS CHOSEN BY ASKING THE VENUE. The give chain is the one this run
+// drives (XC_REGTEST_COIN); the get chain is the first OTHER regtest chain whose
+// explorer knows the swap's token (`pickCounterparty`), and the test skips with
+// the venue's own answer when no such chain exists. Nothing below drives the
+// counterparty venue, mines it, or reads it beyond that one token probe, so the
+// action is genuinely cross-chain while only the give chain is exercised.
 //
 // WHY THIS SPEC IS SMALLER THAN THE CAMPAIGN EXPECTED, measured at HEAD rather
 // than assumed. The frontier row carried this as "a harness build before it is a
@@ -28,7 +26,7 @@
 // it. Three of those four turned out to be already done:
 //
 //   - `switchToRegtest` derives an address on EACH chain of the network it
-//     switches to, so the wallet has a Dogecoin address from the start and the
+//     switches to, so the wallet has a get-chain address from the start and the
 //     form's "Receive at" auto-fills from it (`getNewestAddress`).
 //   - The form is two ordinary `ChainPicker`s plus two `TokenField`s, all four
 //     of which the campaign's widget map already knows how to drive.
@@ -66,13 +64,14 @@
 //     chain's address would otherwise produce a perfectly valid-looking swap
 //     that pays the counterparty on the wrong network.
 //
-// RUN IT ON LITECOIN:
+// RUN IT ON ANOTHER GIVE CHAIN (Bitcoin is the default):
 //   cd test/e2e && XC_REGTEST_COIN=RLTC npx playwright test \
 //       --config=playwright.regtest.config.js tests/dex/cross-chain-swap.regtest.spec.js
 
-import { createWallet, expect, test } from '../../fixtures/wallet.js';
+import { createWallet, expect, openPaletteCommand, test } from '../../fixtures/wallet.js';
 import { selectNamedChain, selectNamedToken } from '../../fixtures/crossChain.js';
 import {
+    explorerJson,
     fundAddress,
     mintXchain,
     readReceiveAddress,
@@ -97,39 +96,54 @@ const GIVE_AMOUNT = '10';
 const GET_AMOUNT = '5';
 
 /**
- * The counterparty chain, and the coin ticker the PROTOCOL uses for it.
+ * The counterparty chains, and the coin ticker the PROTOCOL uses for each.
  *
- * Deliberately not derived from `REGTEST_COIN`: the give chain is whatever the
- * run drives, and the get chain has to be a DIFFERENT one that the venue's
- * indexer also knows (`COINS`). Litecoin is the only chain this campaign can
- * currently run on, so the counterparty is fixed here rather than computed, and
- * a run on some future third chain fails on this table rather than silently
- * offering a swap to itself (which the form refuses anyway: "Give and get
- * chains must differ").
+ * Deliberately not derived from `REGTEST_COIN` alone: the give chain is
+ * whatever the run drives, and the get chain has to be a DIFFERENT one that the
+ * venue also serves. Each give chain lists every other regtest chain in order of
+ * preference, and `pickCounterparty` takes the first one the venue can actually
+ * quote, so a spec on Bitcoin pairs with Litecoin or Dogecoin and never offers a
+ * swap to itself (which the form refuses anyway: "Give and get chains must
+ * differ").
+ *
+ * `addressRe` is the get chain's shape and must NOT also match the give
+ * chain's, which is why Litecoin is bech32-only here: its legacy `[mn2]`
+ * prefixes are the same as Bitcoin's and Dogecoin's.
  */
-const COUNTERPARTY = {
-    RLTC: { chainId: 'dogecoin-regtest', chainLabel: 'Dogecoin', coin: 'DOGE', addressRe: /^[mn2]/ },
-    RDOGE: { chainId: 'litecoin-regtest', chainLabel: 'Litecoin', coin: 'LTC', addressRe: /^rltc1/ },
+const CHAINS = {
+    RBTC: { explorerCoin: 'RBTC', chainId: 'bitcoin-regtest', chainLabel: 'Bitcoin', coin: 'BTC', addressRe: /^bcrt1/ },
+    RLTC: { explorerCoin: 'RLTC', chainId: 'litecoin-regtest', chainLabel: 'Litecoin', coin: 'LTC', addressRe: /^rltc1/ },
+    RDOGE: { explorerCoin: 'RDOGE', chainId: 'dogecoin-regtest', chainLabel: 'Dogecoin', coin: 'DOGE', addressRe: /^[mn2]/ },
 };
-const GET = COUNTERPARTY[REGTEST_COIN];
+const COUNTERPARTIES = {
+    RBTC: [CHAINS.RLTC, CHAINS.RDOGE],
+    RLTC: [CHAINS.RDOGE, CHAINS.RBTC],
+    RDOGE: [CHAINS.RLTC, CHAINS.RBTC],
+};
 
 /**
- * Opens a screen through the command palette.
+ * Asks the venue which counterparty chain can carry the GET half, before any UI.
  *
- * Same helper the sweep and dispenser lanes use: the palette is the one entry
- * point every shell has, and this form has no nav row of its own.
+ * The get token is chosen through the picker's platform discovery, which is a
+ * token search against the GET chain's own explorer. So a counterparty is only
+ * usable when that explorer answers for the swap's tick there: a second chain the
+ * venue runs without the token deployed would fail several screens in, on "the
+ * asset picker lists no XCHAIN", reading like a wallet defect. Returns the first usable
+ * chain, or the venue's answer for every candidate so the skip says why.
  */
-async function gotoPalette(page, title) {
-    await page.keyboard.press('ControlOrMeta+k');
-    const dialog = page.getByRole('dialog', { name: 'Command palette' });
-    await expect(dialog, 'the command palette did not open').toBeVisible({ timeout: 15_000 });
-    const combobox = dialog.getByRole('combobox').first();
-    await expect(combobox).toBeEditable({ timeout: 15_000 });
-    await combobox.fill(title);
-    const row = page.getByRole('option', { name: new RegExp(`^${title}\\b`) }).first();
-    await expect(row, `no palette command matching "${title}"`).toBeVisible();
-    await row.click();
-    await expect(dialog).toBeHidden({ timeout: 15_000 });
+async function pickCounterparty() {
+    const refusals = [];
+    for (const chain of COUNTERPARTIES[REGTEST_COIN] || []) {
+        try {
+            const body = await explorerJson(`token/${TICK}`, { coin: chain.explorerCoin });
+            if (String(body?.info?.tick || '').toUpperCase() === TICK) return { chain, gap: null };
+            refusals.push(`${chain.explorerCoin} answered with no ${TICK} token record`);
+        } catch (err) {
+            refusals.push(`${chain.explorerCoin}: ${String(err?.message || err).split('\n')[0]}`);
+        }
+    }
+    if (refusals.length === 0) refusals.push(`no counterparty chain is listed for ${REGTEST_COIN}`);
+    return { chain: null, gap: refusals.join('; ') };
 }
 
 /**
@@ -163,8 +177,13 @@ test.describe(`cross-chain SWAP from ${REGTEST_CHAIN_LABEL}`, () => {
     test.setTimeout(1_800_000);
 
     test('an offer composed on the give chain records the counterparty chain and settles nothing yet', async ({ page }) => {
-        expect(GET, `no counterparty chain is mapped for ${REGTEST_COIN}; a cross-chain swap needs `
-            + 'a second chain this venue\'s indexer also knows').toBeTruthy();
+        // Venue capability, asked before any UI: a cross-chain swap needs a
+        // second chain whose explorer knows the get token. Wherever one exists
+        // this runs; a venue with only the give chain carrying it skips with
+        // the venue's own answer.
+        const { chain: GET, gap } = await pickCounterparty();
+        test.skip(!GET, `this venue has no second chain that can carry the get half of a ${TICK} `
+            + `swap from ${REGTEST_COIN}: ${gap}`);
 
         let source;
 
@@ -192,7 +211,7 @@ test.describe(`cross-chain SWAP from ${REGTEST_CHAIN_LABEL}`, () => {
         });
 
         await test.step('compose the offer: give on this chain, get on the counterparty chain', async () => {
-            await gotoPalette(page, 'Cross-chain swap');
+            await openPaletteCommand(page, 'Cross-chain swap');
             const main = page.getByRole('main');
             await expect(main.getByRole('button', { name: /^Give network:/ }),
                 'the palette did not land on the cross-chain swap form')

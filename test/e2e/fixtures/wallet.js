@@ -116,6 +116,24 @@ export function unlockedShell(page) {
 }
 
 /**
+ * The unlocked shell on WHICHEVER screen it opens, for waits that follow a
+ * reload.
+ *
+ * An unlock after a reload resumes the wallet's last view (`useLastView`,
+ * §24 / G055), so a spec that reloaded on Addresses comes back on Addresses
+ * and Home's balance hero never renders. Every shell mounts the shared
+ * "App header" region only inside its unlocked layout (web, desktop, and the
+ * popup's non-Home views), and the popup's Home carries the hero instead, so
+ * one of the two is on screen once the wallet is open and neither is on the
+ * lock screen.
+ */
+export function unlockedAnyScreen(page) {
+    return unlockedShell(page)
+        .or(page.getByRole('region', { name: 'App header', exact: true }))
+        .first();
+}
+
+/**
  * Opens Settings, by whichever route this shell offers.
  *
  * The MV3 popup has no navigation surface. Its entry point is the gear
@@ -134,14 +152,124 @@ export async function openSettings(page) {
     if (await gear.count() > 0) {
         await gear.click();
     } else {
-        await page.keyboard.press('ControlOrMeta+k');
-        const palette = page.getByRole('dialog', { name: 'Command palette' });
-        await palette.waitFor({ state: 'visible', timeout: 15_000 });
-        await palette.getByRole('combobox').fill('settings');
-        await palette.getByRole('option', { name: /^Settings/ }).first().click();
+        await openPaletteCommand(page, 'Settings');
     }
     await expect(page.getByRole('button', { name: /^Developer mode/ }))
         .toBeVisible({ timeout: 15_000 });
+}
+
+function escapeRegExp(text) {
+    return String(text).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+/** The command palette dialog, open or not. */
+export function commandPalette(page) {
+    return page.getByRole('dialog', { name: 'Command palette' });
+}
+
+/**
+ * Opens the command palette and types `query` into its own search field.
+ *
+ * The search field is found INSIDE the dialog by its name. A page-wide
+ * `getByRole('combobox').first()` resolves to whatever select sits earlier in
+ * the DOM (Home's "Sort balances", a form's Currency picker) and fails with
+ * "Element is not an <input>".
+ *
+ * Cmd/Ctrl+K toggles the palette, and the shell closes it on its own whenever
+ * the view changes under it (a screen still settling after an unlock or a
+ * wallet switch). So the shortcut is pressed only while the dialog is absent,
+ * and open-and-type retries as one step until the field really holds the
+ * query. Bounded, so a palette that never opens fails in seconds with that
+ * sentence instead of waiting out the test timeout.
+ *
+ * @returns {Promise<import('@playwright/test').Locator>} the open dialog
+ */
+export async function openPaletteSearch(page, query, { timeoutMs = 30_000 } = {}) {
+    const dialog = commandPalette(page);
+    const search = dialog.getByRole('combobox', { name: 'Search commands' });
+    await expect(async () => {
+        if (!(await dialog.isVisible())) await page.keyboard.press('ControlOrMeta+k');
+        await expect(search, 'the command palette did not open').toBeEditable({ timeout: 3_000 });
+        await search.fill(query, { timeout: 3_000 });
+        await expect(search).toHaveValue(query, { timeout: 2_000 });
+    }, `the command palette never opened with "${query}" typed into its search field`)
+        .toPass({ timeout: timeoutMs });
+    return dialog;
+}
+
+/**
+ * Runs one command palette entry by its title, and waits for the palette to
+ * close behind it.
+ *
+ * The option is matched as an anchored word prefix of its accessible name,
+ * because a row's name carries its subtitle after the title.
+ *
+ * @param {import('@playwright/test').Page} page
+ * @param {string} title  the command's visible title, typed as the search
+ * @param {{ option?: RegExp, timeoutMs?: number }} [opts]  `option` overrides the row match
+ */
+export async function openPaletteCommand(page, title, { option, timeoutMs = 30_000 } = {}) {
+    const dialog = await openPaletteSearch(page, title, { timeoutMs });
+    const row = dialog.getByRole('option', { name: option || new RegExp(`^${escapeRegExp(title)}\\b`) }).first();
+    await expect(row, `no palette command matching "${title}"`).toBeVisible({ timeout: 15_000 });
+    await row.click();
+    await expect(dialog, `the command palette stayed open after choosing "${title}"`)
+        .toBeHidden({ timeout: 15_000 });
+}
+
+/**
+ * The active wallet's identity in the App header.
+ *
+ * The header names the active wallet in a `WalletIdentity` span (not a
+ * button), and the wallet picker closes itself after a pick, so this is the
+ * one place a switch can be confirmed.
+ */
+export function activeWalletIdentity(page) {
+    return page.getByRole('region', { name: 'App header' }).getByTestId('wallet-identity');
+}
+
+/** Asserts the App header names `name` as the active wallet. */
+export async function expectActiveWallet(page, name, message, { timeoutMs = 30_000 } = {}) {
+    await expect(activeWalletIdentity(page).filter({ hasText: name }),
+        message || `the app did not switch to ${name}`)
+        .toBeVisible({ timeout: timeoutMs });
+}
+
+/**
+ * Switches to the wallet called `name` through the palette's Switch wallet
+ * screen, and confirms it in the App header.
+ *
+ * The row is told apart from its own "Wallet details for <name>" button,
+ * which carries the same name.
+ */
+export async function switchToWallet(page, name, { timeoutMs = 30_000 } = {}) {
+    await openPaletteCommand(page, 'Switch wallet');
+    const row = page.getByRole('main')
+        .getByRole('button', { name: new RegExp(`^(?!Wallet details for).*${escapeRegExp(name)}`) })
+        .first();
+    await expect(row, `the wallet picker lists no wallet named ${name}`).toBeVisible({ timeout: timeoutMs });
+    await row.click();
+    await expectActiveWallet(page, name, undefined, { timeoutMs });
+}
+
+/**
+ * Adds a second wallet inside the unlocked session, then switches to it.
+ *
+ * Adding a wallet does not make it active: the add flow ends on App's
+ * `refresh`, which returns to the wallet the session started on. So this
+ * switches explicitly and confirms the switch in the App header.
+ *
+ * @returns {Promise<string[]>} the new wallet's recovery phrase
+ */
+export async function addWallet(page, { name, password = DEFAULT_PASSWORD, ads = 'off' } = {}) {
+    if (!name) throw new Error('addWallet needs a name, so the switch to it can be confirmed');
+    await openPaletteCommand(page, 'Switch wallet');
+    await page.getByRole('button', { name: 'Add wallet', exact: true }).click();
+    // navigate:false: the add flow starts at the onboarding welcome inside the
+    // unlocked shell, and a goto('/') would drop the session.
+    const words = await createWallet(page, { password, name, ads, navigate: false });
+    await switchToWallet(page, name);
+    return words;
 }
 
 /**

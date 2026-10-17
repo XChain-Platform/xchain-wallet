@@ -66,12 +66,14 @@
 //   cd test/e2e && XC_REGTEST_COIN=RLTC npx playwright test \
 //       --config=playwright.regtest.config.js tests/tokens/access-list-bind.regtest.spec.js
 
-import { createWallet, expect, test } from '../../fixtures/wallet.js';
+import { waitForShownTxid } from '../../fixtures/pendingHistory.js';
+import { createWallet, expect, openPaletteCommand, test } from '../../fixtures/wallet.js';
 import {
     expectConfirmModal as sharedConfirmModal,
     EXPLORER_URL,
     fundAddress,
     minerRpc,
+    mintXchain,
     REGTEST_ADDRESS_RE,
     REGTEST_CHAIN_LABEL,
     REGTEST_COIN,
@@ -81,6 +83,7 @@ import {
     tokenBalance,
     unlockAfterReload,
     warmPreflight,
+    selectVenueSendAsset,
 } from '../../fixtures/regtest.js';
 
 const PASSWORD = 'regtestpassword123';
@@ -90,6 +93,12 @@ const STAMP = Date.now().toString().slice(-6);
 const TICK_ALLOW = `ALW${STAMP}`;
 const TICK_BLOCK = `BLK${STAMP}`;
 const SUPPLY = 1000;
+/**
+ * XCHAIN held for protocol fees on Bitcoin, where ISSUE, LIST and the ISSUE v5
+ * edit each charge theirs in XCHAIN rather than in the coin. Off Bitcoin the
+ * fee rides the coin lane and FUNDING covers it.
+ */
+const MINT_XCHAIN = 100;
 /** Moved by each permitted send, and attempted by each refused one. */
 const SEND_AMOUNT = 10;
 
@@ -162,19 +171,6 @@ async function waitForBalance(address, tick, want, timeoutMs = 180_000) {
     throw new Error(`${tick} balance for ${address} never reached ${want} (last=${last})`);
 }
 
-async function gotoPalette(page, title) {
-    await page.keyboard.press('ControlOrMeta+k');
-    const dialog = page.getByRole('dialog', { name: 'Command palette' });
-    await expect(dialog, 'the command palette did not open').toBeVisible({ timeout: 15_000 });
-    const combobox = dialog.getByRole('combobox').first();
-    await expect(combobox).toBeEditable({ timeout: 15_000 });
-    await combobox.fill(title);
-    const row = page.getByRole('option', { name: new RegExp(`^${title}\\b`) }).first();
-    await expect(row, `no palette command matching "${title}"`).toBeVisible();
-    await row.click();
-    await expect(dialog).toBeHidden({ timeout: 15_000 });
-}
-
 /**
  * Waits for the confirm screen, naming a stale price sentinel for what it is.
  *
@@ -205,12 +201,13 @@ async function approveAndGetTxid(page) {
     const approve = page.getByTestId('confirm-approve');
     await expect(approve).toBeEnabled({ timeout: 120_000 });
     await approve.click();
-    const main = page.getByRole('main');
-    // The success screens render the id with no separators ("Transaction
-    // IDae0d…Done"), so a \b-anchored pattern does not match (§3.5, Session 30).
-    await expect(main, 'no transaction id ever appeared after Approve')
-        .toContainText(/[0-9a-f]{64}/, { timeout: 180_000 });
-    return (await main.innerText()).match(/[0-9a-f]{64}/)?.[0];
+    // The Send success screen draws the id truncated; waitForShownTxid reads
+    // the full id from its accessible name, and from the text on screens
+    // that print it whole.
+    return waitForShownTxid(page.getByRole('main'), {
+        timeout: 180_000,
+        message: 'no transaction id ever appeared after Approve',
+    });
 }
 
 /**
@@ -223,7 +220,7 @@ async function approveAndGetTxid(page) {
  * caches a form filled in an earlier step (the D-83 stale-token-info shape).
  */
 async function reloadToHome(page) {
-    await gotoPalette(page, 'Home');
+    await openPaletteCommand(page, 'Home');
     await page.reload();
     await unlockAfterReload(page, PASSWORD);
 }
@@ -281,7 +278,7 @@ async function onboardAndIssue(page, tick, walletName) {
     await createWallet(page, { password: PASSWORD, name: walletName });
     await switchToRegtest(page, PASSWORD);
 
-    await gotoPalette(page, 'Issue token');
+    await openPaletteCommand(page, 'Issue token');
     const main = page.getByRole('main');
     await expect(main.getByLabel('Ticker')).toBeVisible({ timeout: 30_000 });
     await selectVenueChain(main);
@@ -293,9 +290,15 @@ async function onboardAndIssue(page, tick, walletName) {
     await fundAddress(source, FUNDING);
     await page.reload();
     await unlockAfterReload(page, PASSWORD);
+    if (REGTEST_COIN === 'RBTC') {
+        await mintXchain(page, MINT_XCHAIN);
+        await waitForBalance(source, 'XCHAIN', MINT_XCHAIN);
+        await page.reload();
+        await unlockAfterReload(page, PASSWORD);
+    }
 
     await seedPrices();
-    await gotoPalette(page, 'Issue token');
+    await openPaletteCommand(page, 'Issue token');
     const form = page.getByRole('main');
     await expect(form.getByLabel('Ticker')).toBeVisible({ timeout: 30_000 });
     await selectVenueChain(form);
@@ -318,7 +321,7 @@ async function onboardAndIssue(page, tick, walletName) {
 
 /** Adds `count` more receive addresses on the venue chain. */
 async function generateExtraAddresses(page, count) {
-    await gotoPalette(page, 'Addresses');
+    await openPaletteCommand(page, 'Addresses');
     await page.getByTestId('address-add-menu').click();
     await page.getByTestId('address-add-address').click();
     await selectVenueChain(page, 'Coin');
@@ -340,7 +343,7 @@ async function generateExtraAddresses(page, count) {
  */
 async function publishAddressList(page, source, chooseMembers) {
     await seedPrices();
-    await gotoPalette(page, 'Create a list');
+    await openPaletteCommand(page, 'Create a list');
     const main = page.getByRole('main');
     await expect(main.getByLabel('List type')).toBeVisible({ timeout: 30_000 });
     await selectVenueChain(main);
@@ -401,7 +404,7 @@ async function bindAccessList(page, tick, kind, listIndex, memberCount) {
     const other = kind === 'allow' ? 'block' : 'allow';
 
     await seedPrices();
-    await gotoPalette(page, 'My Tokens');
+    await openPaletteCommand(page, 'My tokens');
     const main = page.getByRole('main');
     const row = main.getByRole('button').filter({ hasText: tick }).first();
     await expect(row, `${tick} is on chain but My Tokens does not list it`)
@@ -507,11 +510,9 @@ async function warmSend(source, tick, destination, expected) {
  * prove nothing about the list.
  */
 async function composeTokenSend(page, tick, destination) {
-    await gotoPalette(page, 'Send');
+    await openPaletteCommand(page, 'Send');
     const main = page.getByRole('main');
-    await page.getByRole('button', { name: /Change asset/ }).click();
-    await page.getByLabel('Search coins or tokens').fill(tick);
-    await page.getByLabel(new RegExp(`Open ${tick} details`, 'i')).click();
+    await selectVenueSendAsset(page, tick);
 
     // The form's "available" line is read from the address it will actually
     // spend from, so it is the earliest place a wrong source shows up. Without

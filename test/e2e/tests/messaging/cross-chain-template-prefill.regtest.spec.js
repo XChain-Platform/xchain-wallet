@@ -8,12 +8,13 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-import { createWallet, expect, test } from '../../fixtures/wallet.js';
+import { createWallet, expect, openPaletteCommand, test } from '../../fixtures/wallet.js';
 import {
     ENCODER_URL,
     REGTEST_CHAIN_ID,
     REGTEST_CHAIN_LABEL,
     REGTEST_TICKER,
+    approveConfirm,
     fundAddress,
     healVenueClock,
     mintXchain,
@@ -63,10 +64,7 @@ const rowField = (scope, role, name) => scope.getByRole(role, { name, exact: tru
 const composerRow = (scope, number) => scope.getByRole('region', { name: `Row ${number}`, exact: true });
 
 async function gotoCrossChainTemplates(page) {
-    await page.getByRole('button', { name: 'Open menu' }).click();
-    await page.getByRole('button', { name: 'More actions', exact: true }).click();
-    const actions = page.getByRole('main');
-    await actions.getByRole('button', { name: /^Cross-chain templates/ }).click();
+    await openPaletteCommand(page, 'Cross-chain templates');
     await expect(page.getByRole('main').getByText('Bridge token pair', { exact: true }))
         .toBeVisible({ timeout: 30_000 });
 }
@@ -177,11 +175,14 @@ test.describe(`cross-chain template prefill on ${REGTEST_CHAIN_LABEL}`, () => {
 
             const password = main.getByLabel('Password', { exact: true });
             for (let row = 0; row < 3; row += 1) {
-                await expect(main.getByText(`Signing action ${row + 1} of 3`))
+                await expect(main.getByText(new RegExp(`^Action ${row + 1} of 3\\.`)))
                     .toBeVisible({ timeout: 120_000 });
                 // An unlocked wallet signs without a password field at all.
                 if (await password.count() && !(await password.inputValue())) await password.fill(PASSWORD);
                 await main.getByRole('button', { name: 'Sign', exact: true }).click();
+                // Each row opens its own confirm screen with a dry run before
+                // anything is signed.
+                await approveConfirm(page, `Parallel row ${row + 1}`);
                 await waitForBroadcastTxid(txids, row + 2);
             }
 

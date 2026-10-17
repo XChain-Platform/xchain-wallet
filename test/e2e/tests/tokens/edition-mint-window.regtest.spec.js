@@ -52,7 +52,8 @@
 //   cd test/e2e && XC_REGTEST_COIN=RLTC npx playwright test \
 //       --config=playwright.regtest.config.js tests/tokens/edition-mint-window.regtest.spec.js
 
-import { createWallet, expect, test } from '../../fixtures/wallet.js';
+import { waitForShownTxid } from '../../fixtures/pendingHistory.js';
+import { createWallet, expect, openPaletteCommand, test } from '../../fixtures/wallet.js';
 import {
     EXPLORER_URL,
     REGTEST_ADDRESS_RE,
@@ -60,23 +61,38 @@ import {
     REGTEST_COIN,
     fundAddress,
     minerRpc,
+    mintXchain,
     seedPrices,
     selectVenueChain,
     switchToRegtest,
     tokenBalance,
     unlockAfterReload,
+    waitForTokenBalance,
     expectConfirmModal as sharedConfirmModal,
+    REGTEST_CHAIN_ID,
 } from '../../fixtures/regtest.js';
 
 const PASSWORD = 'regtestpassword123';
 /** The ISSUE pays a real coin fee; the MINTs pay only miner fees. */
 const FUNDING = 3;
+/**
+ * XCHAIN held for protocol fees on Bitcoin, where every ISSUE (genesis and each
+ * later edit) charges its fee in XCHAIN rather than in the coin, and the review
+ * refuses a wallet holding none. Off Bitcoin the fee rides the coin lane and
+ * FUNDING covers it.
+ */
+const MINT_XCHAIN = 20;
 const STAMP = Date.now().toString().slice(-6);
 const TICK = `EDT${STAMP}`;
 /** MAX_SUPPLY. Nothing is minted at genesis - that is the template's whole point. */
 const EDITION = 100;
 /** MAX_MINT: the per-transaction cap. */
 const PER_TX = 10;
+/**
+ * Artwork URL for the limited-edition template, which refuses to review an
+ * edition without one. Any stable https URL serves: nothing here reads it back.
+ */
+const IMAGE_URL = 'https://example.com/art/edition-mint-window.png';
 /** MINT_ADDRESS_MAX: the cumulative cap for any one minting address. */
 const PER_ADDRESS = 20;
 /**
@@ -205,22 +221,9 @@ async function waitForBalance(address, tick, want, timeoutMs = 180_000) {
     throw new Error(`${tick} balance for ${address} never reached ${want} (last=${last})`);
 }
 
-async function gotoPalette(page, title) {
-    await page.keyboard.press('ControlOrMeta+k');
-    const dialog = page.getByRole('dialog', { name: 'Command palette' });
-    await expect(dialog, 'the command palette did not open').toBeVisible({ timeout: 15_000 });
-    const combobox = dialog.getByRole('combobox').first();
-    await expect(combobox).toBeEditable({ timeout: 15_000 });
-    await combobox.fill(title);
-    const row = page.getByRole('option', { name: new RegExp(`^${title}\\b`) }).first();
-    await expect(row, `no palette command matching "${title}"`).toBeVisible();
-    await row.click();
-    await expect(dialog).toBeHidden({ timeout: 15_000 });
-}
-
 /** Reloads onto a clean, unlocked Home (§3.5: navigate FIRST, then reload). */
 async function reloadToHome(page) {
-    await gotoPalette(page, 'Home');
+    await openPaletteCommand(page, 'Home');
     await page.reload();
     await unlockAfterReload(page, PASSWORD);
 }
@@ -249,10 +252,21 @@ async function approveAndGetTxid(page) {
     const approve = page.getByTestId('confirm-approve');
     await expect(approve).toBeEnabled({ timeout: 120_000 });
     await approve.click();
-    const main = page.getByRole('main');
-    await expect(main, 'no transaction id ever appeared after Approve')
-        .toContainText(/[0-9a-f]{64}/, { timeout: 180_000 });
-    return (await main.innerText()).match(/[0-9a-f]{64}/)?.[0];
+    // Success screens may draw the id truncated; waitForShownTxid reads the
+    // full id from its accessible name, and from the text where it is whole.
+    return waitForShownTxid(page.getByRole('main'), {
+        timeout: 180_000,
+        message: 'no transaction id ever appeared after Approve',
+    });
+}
+
+/** Mints the XCHAIN the Bitcoin protocol fee is paid in, then reloads onto a fresh session. */
+async function fundProtocolFee(page, source) {
+    if (REGTEST_COIN !== 'RBTC') return;
+    await mintXchain(page, MINT_XCHAIN);
+    await waitForTokenBalance(source, 'XCHAIN', MINT_XCHAIN);
+    await page.reload();
+    await unlockAfterReload(page, PASSWORD);
 }
 
 /**
@@ -264,7 +278,7 @@ async function approveAndGetTxid(page) {
  * venues (§3.5). The modal has its OWN coin picker, labelled "Coin".
  */
 async function generateVenueAddress(page) {
-    await gotoPalette(page, 'Addresses');
+    await openPaletteCommand(page, 'Addresses');
     const listed = async () => {
         const rows = page.getByRole('button', { name: /^View address / });
         await expect(rows.first()).toBeVisible({ timeout: 30_000 });
@@ -290,12 +304,12 @@ async function pickToken(page, tick) {
     await expect(page.getByLabel('Search coins or tokens'),
         'the Select token screen never opened').toBeVisible({ timeout: 30_000 });
     await page.getByLabel('Search coins or tokens').fill(tick);
-    const row = page.getByLabel(new RegExp(`Open ${tick} details`, 'i')).first();
+    const row = page.locator(`[data-balance-key="${REGTEST_CHAIN_ID}:${tick}"]`).first();
     await expect(row,
         `the token picker cannot reach ${tick}. It runs the platform-wide discovery for exactly `
         + 'this case - an edition the issuer holds none of (D-41)')
         .toBeVisible({ timeout: 30_000 });
-    await row.click();
+    await row.getByRole('button', { name: /^Select / }).first().click();
 }
 
 /**
@@ -308,7 +322,7 @@ async function pickToken(page, tick) {
  */
 async function composeMint(page, amount, tick = TICK, signAs = null) {
     await reloadToHome(page);
-    await gotoPalette(page, 'Mint supply');
+    await openPaletteCommand(page, 'Mint supply');
     const main = page.getByRole('main');
     // The label GAINS the ticker once a token is picked ("Amount" -> "Amount (EDT123)"),
     // so an exact match works before the pick and never after it.
@@ -351,7 +365,7 @@ async function onboardAndCreateEdition(page, {
     await createWallet(page, { password: PASSWORD, name: walletName });
     await switchToRegtest(page, PASSWORD);
 
-    await gotoPalette(page, 'Issue token');
+    await openPaletteCommand(page, 'Issue token');
     const probe = page.getByRole('main');
     await expect(probe.getByLabel('Ticker')).toBeVisible({ timeout: 30_000 });
     await selectVenueChain(probe);
@@ -362,6 +376,7 @@ async function onboardAndCreateEdition(page, {
     await fundAddress(source, FUNDING);
     await page.reload();
     await unlockAfterReload(page, PASSWORD);
+    await fundProtocolFee(page, source);
     await seedPrices();
 
     const tip = await chainTip();
@@ -373,7 +388,7 @@ async function onboardAndCreateEdition(page, {
         ? (startBlock === null ? null : startBlock + WINDOW_LENGTH)
         : tip + closesIn;
 
-    await gotoPalette(page, 'Create a token');
+    await openPaletteCommand(page, 'Create a token');
     const main = page.getByRole('main');
     await main.getByRole('button', { name: /^Limited edition/ }).click();
     await selectVenueChain(main);
@@ -383,6 +398,7 @@ async function onboardAndCreateEdition(page, {
     await main.getByLabel('Token name (ticker)').fill(tick);
     await main.getByLabel('Edition size').fill(String(EDITION));
     await main.getByLabel('Copies per mint').fill(String(PER_TX));
+    await main.getByLabel('Image URL').fill(IMAGE_URL);
     await main.getByLabel('Limit per address (optional)').fill(String(PER_ADDRESS));
     if (startBlock !== null) {
         await main.getByLabel('Minting opens at block (optional)').fill(String(startBlock));

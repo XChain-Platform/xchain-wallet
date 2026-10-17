@@ -68,7 +68,7 @@
 
 import { readFile } from 'node:fs/promises';
 
-import { createWallet, expect, openSettings, test } from '../../fixtures/wallet.js';
+import { createWallet, expect, openPaletteCommand, openSettings, test } from '../../fixtures/wallet.js';
 import { REGTEST_DESTINATION } from '../../fixtures/regtest.js';
 
 const PASSWORD = 'regtestpassword123';
@@ -82,18 +82,6 @@ const CONTACT_NAME = 'E2E Round Trip';
 // own contact on any chain but one. `REGTEST_DESTINATION` is the same key
 // re-encoded for whichever chain `XC_REGTEST_COIN` names.
 const CONTACT_ADDRESS = REGTEST_DESTINATION;
-
-/** Opens the Contacts route through the command palette. */
-async function gotoContacts(page) {
-    await page.keyboard.press('ControlOrMeta+k');
-    const dialog = page.getByRole('dialog', { name: 'Command palette' });
-    await expect(dialog, 'the command palette did not open').toBeVisible({ timeout: 15_000 });
-    const combobox = dialog.getByRole('combobox').first();
-    await expect(combobox).toBeEditable({ timeout: 15_000 });
-    await combobox.fill('Contacts');
-    await page.getByRole('option', { name: /^Contacts\b/ }).first().click();
-    await expect(dialog).toBeHidden({ timeout: 15_000 });
-}
 
 /** Opens Settings and scrolls the Contacts panel into reach. */
 async function gotoContactsSettings(page) {
@@ -133,7 +121,7 @@ test.describe('Settings: contacts export / import', () => {
             await createWallet(page, { password: PASSWORD });
 
             await test.step('a contact exists to export', async () => {
-                await gotoContacts(page);
+                await openPaletteCommand(page, 'Contacts');
                 // An empty list offers "Create first contact"; a list with entries offers "Add contact".
                 await page.getByRole('button', { name: /^(Add contact|Create first contact)$/ }).click();
                 // `getByLabel` matches accessible names, and the app bar's
@@ -177,7 +165,7 @@ test.describe('Settings: contacts export / import', () => {
                 // Without this the round trip proves nothing: re-importing over
                 // a contact that never left passes against an import that does
                 // nothing at all.
-                await gotoContacts(page);
+                await openPaletteCommand(page, 'Contacts');
                 await contactRow(page, CONTACT_NAME).click();
                 await page.getByRole('button', { name: 'Delete', exact: true }).click();
                 // Deleting a contact goes through `useConfirmModal`, whose
@@ -199,11 +187,17 @@ test.describe('Settings: contacts export / import', () => {
             await test.step('Import restores it, with the address intact', async () => {
                 await gotoContactsSettings(page);
                 await page.getByLabel('Import contacts JSON').setInputFiles(exported);
+                // Every import asks first, because records with a matching id
+                // are overwritten.
+                const ask = page.getByRole('dialog', { name: 'Import contacts?' });
+                await expect(ask, 'the import never asked before overwriting contacts')
+                    .toBeVisible({ timeout: 30_000 });
+                await ask.getByRole('button', { name: 'Import contacts', exact: true }).click();
 
                 await expect(page.getByText(/^Imported 1 contact/),
                     'the import never reported a result').toBeVisible({ timeout: 30_000 });
 
-                await gotoContacts(page);
+                await openPaletteCommand(page, 'Contacts');
                 await contactRow(page, CONTACT_NAME).click();
                 await expect(page.getByText(CONTACT_ADDRESS),
                     'the contact came back by NAME but not by ADDRESS - a restored address book that '

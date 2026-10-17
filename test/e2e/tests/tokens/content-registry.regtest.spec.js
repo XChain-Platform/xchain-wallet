@@ -29,7 +29,7 @@
 // screen, which is itself backed by a live indexer read) rather than
 // only the form's own success copy.
 
-import { createWallet, expect, test } from '../../fixtures/wallet.js';
+import { createWallet, expect, openPaletteCommand, test } from '../../fixtures/wallet.js';
 import {
     explorerJson,
     expectConfirmModal,
@@ -56,20 +56,6 @@ const SUPPLY = '1000';
 /** Pays the XCHAIN protocol fee on the three ISSUEs, the FILE, three LINKs and three LISTs, with room to spare. */
 const MINT_XCHAIN = 100;
 const STAMP = Date.now().toString().slice(-6);
-
-/** Opens the command palette and runs the named command. */
-async function gotoPalette(page, title) {
-    await page.keyboard.press('ControlOrMeta+k');
-    const dialog = page.getByRole('dialog', { name: 'Command palette' });
-    await expect(dialog, 'the command palette did not open').toBeVisible({ timeout: 15_000 });
-    const combobox = dialog.getByRole('combobox').first();
-    await expect(combobox).toBeEditable({ timeout: 15_000 });
-    await combobox.fill(title);
-    const row = page.getByRole('option', { name: new RegExp(`^${title}\\b`) }).first();
-    await expect(row, `no palette command matching "${title}"`).toBeVisible();
-    await row.click();
-    await expect(dialog).toBeHidden({ timeout: 15_000 });
-}
 
 /** Approves the open confirm screen and returns the broadcast txid. */
 async function approveAndGetTxid(page) {
@@ -112,7 +98,7 @@ async function readLabelledTxid(page, doneHeading, label = 'Link transaction') {
  * `collectible-one-of-one.regtest.spec.js` already reads around).
  */
 async function openManageTokenAction(page, tick, label) {
-    await gotoPalette(page, 'My Tokens');
+    await openPaletteCommand(page, 'My tokens');
     const main = page.getByRole('main');
     const row = main.getByRole('button').filter({ hasText: tick }).first();
     await expect(row, `${tick} is on chain but My Tokens does not list it`)
@@ -139,8 +125,8 @@ async function issueToken(page, source, tick) {
     // Opening Issue token from the palette while its own "Token issued" screen
     // is showing keeps that screen (same view, no remount), so a second issue in
     // a row would find no Ticker field. Leave for another view first.
-    await gotoPalette(page, 'My Tokens');
-    await gotoPalette(page, 'Issue token');
+    await openPaletteCommand(page, 'My tokens');
+    await openPaletteCommand(page, 'Issue token');
     const main = page.getByRole('main');
     await expect(main.getByLabel('Ticker')).toBeVisible({ timeout: 30_000 });
     await selectVenueChain(main);
@@ -176,7 +162,7 @@ test.describe(`content and registry flows on ${REGTEST_CHAIN_LABEL}`, () => {
             await createWallet(page, { password: PASSWORD, name: 'Content Registry Wallet' });
             await switchToRegtest(page, PASSWORD);
 
-            await gotoPalette(page, 'Issue token');
+            await openPaletteCommand(page, 'Issue token');
             const issueMain = page.getByRole('main');
             await expect(issueMain.getByLabel('Ticker')).toBeVisible({ timeout: 30_000 });
             await selectVenueChain(issueMain);
@@ -254,7 +240,7 @@ test.describe(`content and registry flows on ${REGTEST_CHAIN_LABEL}`, () => {
         });
 
         await test.step('Link: pair the same two actions again, in the opposite order', async () => {
-            await gotoPalette(page, 'All actions');
+            await openPaletteCommand(page, 'All actions');
             await page.getByRole('main').getByText('Link cross-chain actions', { exact: true })
                 .first().click();
 
@@ -293,7 +279,7 @@ test.describe(`content and registry flows on ${REGTEST_CHAIN_LABEL}`, () => {
         });
 
         await test.step('the list manager: create, fork, and read the membership back from ListDetail', async () => {
-            await gotoPalette(page, 'Create a list');
+            await openPaletteCommand(page, 'Create a list');
             const main = page.getByRole('main');
             await selectVenueChain(main);
             // The first textbox on this form is the read-only From field; the
@@ -309,7 +295,7 @@ test.describe(`content and registry flows on ${REGTEST_CHAIN_LABEL}`, () => {
             const listActionIndex = String(created.action_index);
             managedListIndex = listActionIndex;
 
-            await gotoPalette(page, 'My Lists');
+            await openPaletteCommand(page, 'My lists');
             const listRow = page.getByRole('listitem', { name: `Open address list #${listActionIndex}` });
             await expect(listRow, `the list just published (#${listActionIndex}) is not in My Lists`)
                 .toBeVisible({ timeout: 60_000 });
@@ -341,7 +327,7 @@ test.describe(`content and registry flows on ${REGTEST_CHAIN_LABEL}`, () => {
             const forked = await waitForValidAction(forkTxid);
             const forkActionIndex = String(forked.action_index);
 
-            await gotoPalette(page, 'My Lists');
+            await openPaletteCommand(page, 'My lists');
             const forkRow = page.getByRole('listitem', { name: `Open address list #${forkActionIndex}` });
             await expect(forkRow, `the fork just published (#${forkActionIndex}) is not in My Lists`)
                 .toBeVisible({ timeout: 60_000 });
@@ -362,7 +348,7 @@ test.describe(`content and registry flows on ${REGTEST_CHAIN_LABEL}`, () => {
         await test.step('the list manager: rename the list, then transfer it to another owner', async () => {
             const NAME = `Roster ${STAMP}`;
             const openManagedList = async () => {
-                await gotoPalette(page, 'My Lists');
+                await openPaletteCommand(page, 'My lists');
                 const row = page.getByRole('listitem', { name: `Open address list #${managedListIndex}` });
                 await expect(row, `list #${managedListIndex} is not in My Lists`).toBeVisible({ timeout: 60_000 });
                 await row.click();

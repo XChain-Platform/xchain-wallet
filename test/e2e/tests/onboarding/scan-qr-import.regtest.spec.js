@@ -134,11 +134,33 @@ async function scan(page, buttonName) {
     }
 }
 
+/**
+ * Skips the calling test on a browser with no Shape Detection API. `QrScanner`
+ * reads frames through the native `BarcodeDetector`, which Chromium ships on
+ * macOS, Windows and Android but not on Linux, so a Linux venue runner cannot
+ * read any camera QR no matter what the wallet does. Probed on a real
+ * localhost origin because the API is secure-context only.
+ *
+ * @param {import('@playwright/test').Browser} browser
+ */
+async function skipWithoutBarcodeDetector(browser) {
+    const context = await browser.newContext();
+    try {
+        const probe = await context.newPage();
+        await probe.goto(BASE_URL, { waitUntil: 'domcontentloaded' });
+        const present = await probe.evaluate(() => typeof window.BarcodeDetector === 'function');
+        test.skip(!present, 'this browser has no BarcodeDetector (Chromium on Linux), so no camera QR can be read');
+    } finally {
+        await context.close();
+    }
+}
+
 test.describe('QR scan on the import screen (§15.4)', () => {
     test.use({ actionTimeout: 30_000 });
     test.setTimeout(900_000);
 
-    test('a scanned recovery phrase imports, and the backup lane refuses it', async () => {
+    test('a scanned recovery phrase imports, and the backup lane refuses it', async ({ browser }) => {
+        await skipWithoutBarcodeDetector(browser);
         await test.step('SCAN: a phrase on a QR lands in the box and imports', async () => {
             const { page, close } = await importScreenFacing(PHRASE_QR);
             try {

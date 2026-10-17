@@ -45,7 +45,7 @@
 // Runs on any regtest chain. Litecoin is the default choice for betting work
 // (§3.5: Bitcoin is the busy chain), and nothing here depends on the fee lane.
 
-import { createWallet, expect, test } from '../../fixtures/wallet.js';
+import { createWallet, expect, openPaletteCommand, test } from '../../fixtures/wallet.js';
 import {
     EXPLORER_URL,
     REGTEST_ADDRESS_RE,
@@ -121,19 +121,6 @@ async function waitForFeed(oracle, labelPart, timeoutMs = 300_000) {
     throw new Error(`no market labelled *${labelPart}* landed for ${oracle}`);
 }
 
-async function gotoPalette(page, title) {
-    await page.keyboard.press('ControlOrMeta+k');
-    const dialog = page.getByRole('dialog', { name: 'Command palette' });
-    await expect(dialog, 'the command palette did not open').toBeVisible({ timeout: 15_000 });
-    const combobox = dialog.getByRole('combobox').first();
-    await expect(combobox).toBeEditable({ timeout: 15_000 });
-    await combobox.fill(title);
-    const row = page.getByRole('option', { name: new RegExp(`^${title}\\b`) }).first();
-    await expect(row, `no palette command matching "${title}"`).toBeVisible();
-    await row.click();
-    await expect(dialog).toBeHidden({ timeout: 15_000 });
-}
-
 function toLocalDateTimeInput(unixSec) {
     const d = new Date(unixSec * 1000);
     const pad = (n) => String(n).padStart(2, '0');
@@ -151,7 +138,7 @@ function toLocalDateTimeInput(unixSec) {
  * itself one of the cases.
  */
 async function openValidForm(page, { label, pickToken = true, deadlineOffsetSec = 2 * 86_400 }) {
-    await gotoPalette(page, 'Betting');
+    await openPaletteCommand(page, 'Betting');
     await page.getByRole('button', { name: 'Create market', exact: true }).click();
     const main = page.getByRole('main');
     await selectVenueChain(main);
@@ -210,7 +197,7 @@ test.describe(`refusing a bad market, and the promise that it cannot be edited (
             await createWallet(page, { password: PASSWORD, name: 'Market Refusal Wallet' });
             await switchToRegtest(page, PASSWORD);
 
-            await gotoPalette(page, 'Betting');
+            await openPaletteCommand(page, 'Betting');
             await page.getByRole('button', { name: 'Create market', exact: true }).click();
             const main = page.getByRole('main');
             await selectVenueChain(main);
@@ -222,7 +209,7 @@ test.describe(`refusing a bad market, and the promise that it cannot be edited (
             // Leave the form before minting: `mintXchain` opens the palette with
             // `getByRole('combobox').first()`, and this form carries its own
             // <select>, which would be the one it typed into.
-            await gotoPalette(page, 'Home');
+            await openPaletteCommand(page, 'Home');
             await mintXchain(page, MINT_XCHAIN);
             await waitForTokenBalance(oracle, 'XCHAIN', MINT_XCHAIN);
             await page.reload();
@@ -247,14 +234,21 @@ test.describe(`refusing a bad market, and the promise that it cannot be edited (
             await expectRefusal(page, main, 'Choose the token bets are placed in.',
                 'a market with no wager token was not refused');
             await expect(page.getByRole('alert'),
-                'the refusal does not explain that the chain coin cannot be wagered')
-                .toContainText('the chain coin cannot be wagered');
+                'the refusal does not explain that the network coin cannot be wagered')
+                .toContainText('the network coin cannot be wagered');
         });
 
         await test.step('a single outcome, which nobody could lose', async () => {
+            // The form never offers fewer than two outcome rows (Remove appears
+            // only above two), so the only one-outcome market a user can submit
+            // is two rows with one left blank, and the empty-row rule is the
+            // refusal that meets it.
             const main = await openValidForm(page, { label: `${RUN_TAG} oneway` });
+            await expect(main.getByRole('button', { name: 'Remove', exact: true }),
+                'the form offers to remove an outcome below two')
+                .toHaveCount(0);
             await main.getByLabel('Outcome 1').fill('');
-            await expectRefusal(page, main, 'A market needs at least two outcomes.',
+            await expectRefusal(page, main, 'Fill in every outcome, or remove the empty one.',
                 'a one-outcome market was not refused');
         });
 
@@ -320,7 +314,7 @@ test.describe(`refusing a bad market, and the promise that it cannot be edited (
             // one existed: it is the surface that offers the two things that DO
             // exist for a market you created. Reached from the hub's "My
             // markets", not from the palette - there is no command for it.
-            await gotoPalette(page, 'Betting');
+            await openPaletteCommand(page, 'Betting');
             await page.getByRole('button', { name: 'My markets', exact: true }).click();
             const console_ = page.getByRole('main');
             await expect(console_.getByText(label, { exact: false }).first(),

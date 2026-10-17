@@ -30,7 +30,7 @@
 //   cd test/e2e && XC_REGTEST_COIN=RLTC npx playwright test \
 //       --config=playwright.regtest.config.js tests/dispensers/token-paid-settle.regtest.spec.js
 
-import { createWallet, expect, test } from '../../fixtures/wallet.js';
+import { createWallet, expect, openPaletteCommand, test, addWallet, switchToWallet } from '../../fixtures/wallet.js';
 import {
     expectConfirmModal as sharedConfirmModal,
     EXPLORER_URL,
@@ -45,6 +45,7 @@ import {
     switchToRegtest,
     tokenBalance,
     unlockAfterReload,
+    selectPickerAsset,
 } from '../../fixtures/regtest.js';
 
 const PASSWORD = 'regtestpassword123';
@@ -54,6 +55,8 @@ const STAMP = Date.now().toString().slice(-6);
 /** What the buyer pays WITH: their own token, issued in this run. */
 const PAY_TICK = `PAY${STAMP}`;
 const PAY_SUPPLY = 1000;
+/** XCHAIN minted for the buyer's ISSUE protocol fee. */
+const GAS_XCHAIN = 10;
 /** What the dispenser sells: XCHAIN, free-mintable on regtest. */
 const MINT = 1000;
 const GIVE_PER_FILL = 25;
@@ -119,19 +122,6 @@ async function waitForBalanceAtLeast(address, tick, min, timeoutMs = 180_000) {
     throw new Error(`${tick} balance never reached ${min} for ${address} (last=${last})`);
 }
 
-async function gotoPalette(page, title) {
-    await page.keyboard.press('ControlOrMeta+k');
-    const dialog = page.getByRole('dialog', { name: 'Command palette' });
-    await expect(dialog, 'the command palette did not open').toBeVisible({ timeout: 15_000 });
-    const combobox = dialog.getByRole('combobox').first();
-    await expect(combobox).toBeEditable({ timeout: 15_000 });
-    await combobox.fill(title);
-    const row = page.getByRole('option', { name: new RegExp(`^${title}\\b`) }).first();
-    await expect(row, `no palette command matching "${title}"`).toBeVisible();
-    await row.click();
-    await expect(dialog).toBeHidden({ timeout: 15_000 });
-}
-
 /**
  * Waits for the confirm screen, naming a stale price sentinel for what it is.
  *
@@ -171,7 +161,7 @@ async function approveAndGetTxid(page) {
 /** Issues `tick` with `supply` from the wallet currently active. */
 async function issueToken(page, tick, supply) {
     await seedPrices();
-    await gotoPalette(page, 'Issue token');
+    await openPaletteCommand(page, 'Issue token');
     const main = page.getByRole('main');
     await expect(main.getByLabel('Ticker')).toBeVisible({ timeout: 30_000 });
     await selectVenueChain(main);
@@ -195,6 +185,7 @@ test.describe(`the token-paid dispenser lane on ${REGTEST_CHAIN_LABEL}`, () => {
         let seller;
         let buyer;
         let dispenserIndex;
+        let payTo;
 
         await test.step('the BUYER exists first and issues the token they will pay with', async () => {
             // Order matters: the dispenser names its payment ticker, and a
@@ -202,7 +193,7 @@ test.describe(`the token-paid dispenser lane on ${REGTEST_CHAIN_LABEL}`, () => {
             await createWallet(page, { password: PASSWORD, name: 'Buyer Wallet' });
             await switchToRegtest(page, PASSWORD);
 
-            await gotoPalette(page, 'Issue token');
+            await openPaletteCommand(page, 'Issue token');
             const main = page.getByRole('main');
             await expect(main.getByLabel('Ticker')).toBeVisible({ timeout: 30_000 });
             await selectVenueChain(main);
@@ -214,24 +205,18 @@ test.describe(`the token-paid dispenser lane on ${REGTEST_CHAIN_LABEL}`, () => {
             await page.reload();
             await unlockAfterReload(page, PASSWORD);
 
+            // The ISSUE protocol fee is charged in XCHAIN, which a fresh wallet does not hold.
+            await mintXchain(page, GAS_XCHAIN);
+            await waitForBalanceAtLeast(buyer, 'XCHAIN', GAS_XCHAIN);
+
             await issueToken(page, PAY_TICK, PAY_SUPPLY);
             await waitForBalanceAtLeast(buyer, PAY_TICK, PAY_SUPPLY);
         });
 
         await test.step('the SELLER is a second wallet, and opens a token-priced dispenser', async () => {
-            await gotoPalette(page, 'Switch wallet');
-            await page.getByRole('button', { name: 'Add wallet' }).click();
-            // navigate:false - the add-wallet flow starts at the onboarding
-            // welcome INSIDE the unlocked shell.
-            await createWallet(page, { password: PASSWORD, name: 'Seller Wallet', navigate: false });
-            // Adding a wallet does not switch to it.
-            await gotoPalette(page, 'Switch wallet');
-            await page.getByRole('button', { name: /Seller Wallet/ }).first().click();
-            await expect(page.getByRole('button', { name: /Seller Wallet/ }).first(),
-                'the app did not switch to the newly added wallet')
-                .toBeVisible({ timeout: 30_000 });
+            await addWallet(page, { name: 'Seller Wallet', password: PASSWORD });
 
-            await gotoPalette(page, 'Create dispenser');
+            await openPaletteCommand(page, 'Create dispenser');
             let main = page.getByRole('main');
             await expect(main.getByLabel('Give amount per fill')).toBeVisible({ timeout: 30_000 });
             await selectVenueChain(main);
@@ -245,14 +230,14 @@ test.describe(`the token-paid dispenser lane on ${REGTEST_CHAIN_LABEL}`, () => {
             await waitForBalanceAtLeast(seller, 'XCHAIN', MINT);
 
             await seedPrices();
-            await gotoPalette(page, 'Create dispenser');
+            await openPaletteCommand(page, 'Create dispenser');
             main = page.getByRole('main');
             await expect(main.getByLabel('Give amount per fill')).toBeVisible({ timeout: 30_000 });
             await selectVenueChain(main);
 
             // The token being SOLD comes from a picker over real balances.
             await main.getByRole('button', { name: /^Token/ }).click();
-            await page.getByText('XCHAIN', { exact: true }).first().click();
+            await selectPickerAsset(page, 'XCHAIN');
 
             await main.getByLabel('Give amount per fill').fill(String(GIVE_PER_FILL));
             await main.getByLabel('Escrow amount').fill(String(ESCROW));
@@ -268,6 +253,12 @@ test.describe(`the token-paid dispenser lane on ${REGTEST_CHAIN_LABEL}`, () => {
             expect(String(created.action)).toBe('DISPENSER');
             expect(String(created.status), 'the chain rejected the dispenser').toBe('valid');
             dispenserIndex = String(created.action_index);
+            // The wallet opens each dispenser on a payment address of its own
+            // (GET_ADDRESS, derived on the seller's wallet), so a fill's price
+            // lands there rather than on the funding Source.
+            payTo = String(created.get_address ?? created.details?.get_address ?? seller);
+            expect(payTo, 'the dispenser names a payment address that is not a regtest address')
+                .toMatch(REGTEST_ADDRESS_RE);
 
             // The escrow left the seller: that is what the buyer will be paid from.
             expect(await waitForBalanceChange(seller, 'XCHAIN', MINT),
@@ -276,16 +267,13 @@ test.describe(`the token-paid dispenser lane on ${REGTEST_CHAIN_LABEL}`, () => {
         });
 
         await test.step('the buyer finds the dispenser and pays a fill in tokens', async () => {
-            await gotoPalette(page, 'Switch wallet');
-            await page.getByRole('button', { name: /Buyer Wallet/ }).first().click();
-            await expect(page.getByRole('button', { name: /Buyer Wallet/ }).first())
-                .toBeVisible({ timeout: 30_000 });
+            await switchToWallet(page, 'Buyer Wallet');
 
             await seedPrices();
             // "Browse dispensers" is how a buyer reaches a dispenser they do not
             // own; My dispensers only ever lists their own. It lives on the
             // All actions screen rather than in the palette itself.
-            await gotoPalette(page, 'All actions');
+            await openPaletteCommand(page, 'All actions');
             await page.getByRole('main').getByText('Browse dispensers', { exact: true })
                 .first().click();
             const main = page.getByRole('main');
@@ -293,9 +281,11 @@ test.describe(`the token-paid dispenser lane on ${REGTEST_CHAIN_LABEL}`, () => {
             await main.getByLabel('Token ticker').fill('XCHAIN');
             await main.getByRole('button', { name: 'Search', exact: true }).click();
 
-            // An explorer result row reads "<TICK> @ <addr> · <rate>" with
-            // "#<index> · status open" underneath - not the "Open … dispenser
-            // #N" aria-label the OWNER's list uses.
+            // An explorer result row is named "<TICK> @ <dispenser address>
+            // Dispenser terms #<index> · by <owner>" - not the "Open …
+            // dispenser #N" aria-label the OWNER's list uses. The address after
+            // "@" is the dispenser's own derived address, not the seller's, so
+            // the seller is matched on the "by" line.
             //
             // MATCHED ON THE SELLER'S ADDRESS AS WELL AS THE INDEX, because a
             // dispenser index is per-CHAIN and this search is not. Dogecoin's
@@ -309,8 +299,9 @@ test.describe(`the token-paid dispenser lane on ${REGTEST_CHAIN_LABEL}`, () => {
             // rendered address is truncated for width, so a `hasText` on the
             // full string matches nothing at all - which fails identically to a
             // dispenser that never landed.
-            const row = main.getByRole('button', { name: new RegExp(`@\\s*${seller}\\b`) })
-                .filter({ hasText: `#${dispenserIndex} ` });
+            const row = main.getByRole('button', {
+                name: new RegExp(`#${dispenserIndex} · by ${seller}\\b`),
+            });
             await expect(row,
                 `the seller's dispenser #${dispenserIndex} is on chain but the buyer cannot find it by `
                 + 'searching the token it sells')
@@ -360,8 +351,8 @@ test.describe(`the token-paid dispenser lane on ${REGTEST_CHAIN_LABEL}`, () => {
             expect(await waitForBalanceAtLeast(buyer, 'XCHAIN', GIVE_PER_FILL),
                 'the buyer was credited something other than one fill')
                 .toBe(GIVE_PER_FILL);
-            // ...the payment reached the seller...
-            expect(await waitForBalanceAtLeast(seller, PAY_TICK, PRICE_PER_FILL),
+            // ...the payment reached the seller's dispenser payment address...
+            expect(await waitForBalanceAtLeast(payTo, PAY_TICK, PRICE_PER_FILL),
                 'the seller was paid something other than the fill price')
                 .toBe(PRICE_PER_FILL);
             // ...and it came out of the buyer's own balance.

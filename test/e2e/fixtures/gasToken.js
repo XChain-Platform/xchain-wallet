@@ -37,9 +37,11 @@ import { chromium, devices, expect } from '@playwright/test';
 import {
     EXPLORER_URL, REGTEST_COIN, REGTEST_DESTINATION,
     fundAddress, switchToRegtest, unlockAfterReload, readReceiveAddress,
-    selectVenueChain, expectConfirmModal, nudgeChain,
+    selectVenueChain, expectConfirmModal, approveConfirm, nudgeChain,
 } from './regtest.js';
-import { createWallet, LICENSE_ACCEPTED_AT_KEY, LICENSE_ACCEPTED_VERSION_KEY } from './wallet.js';
+import {
+    createWallet, openPaletteCommand, LICENSE_ACCEPTED_AT_KEY, LICENSE_ACCEPTED_VERSION_KEY,
+} from './wallet.js';
 import { LICENSE_VERSION } from '../../../packages/core/src/buildInfo.js';
 
 export const GAS_TICK = 'XCHAIN';
@@ -126,6 +128,9 @@ export async function ensureGasToken({ baseURL, log = console.log }) {
             },
             [LICENSE_ACCEPTED_AT_KEY, LICENSE_ACCEPTED_VERSION_KEY, LICENSE_VERSION],
         );
+        // Global setup has no test timeout behind it, so an unbounded click on a
+        // control that never appears would hang the run before any spec starts.
+        context.setDefaultTimeout(60_000);
         page = await context.newPage();
         await createWallet(page, { password: BOOTSTRAP_PASSWORD, name: 'Gas bootstrap' });
         await switchToRegtest(page, BOOTSTRAP_PASSWORD);
@@ -134,13 +139,7 @@ export async function ensureGasToken({ baseURL, log = console.log }) {
         await page.reload();
         await unlockAfterReload(page, BOOTSTRAP_PASSWORD);
 
-        await page.keyboard.press('ControlOrMeta+k');
-        const dialog = page.getByRole('dialog', { name: 'Command palette' });
-        await expect(dialog, 'the command palette did not open').toBeVisible({ timeout: 15_000 });
-        const combobox = dialog.getByRole('combobox').first();
-        await expect(combobox).toBeVisible();
-        await combobox.fill('Advanced action');
-        await page.keyboard.press('Enter');
+        await openPaletteCommand(page, 'Advanced action');
         await selectVenueChain(page);
         await page.getByLabel('Action', { exact: true }).selectOption('ISSUE');
         await page.getByRole('textbox', { name: 'TICK', exact: true }).fill(GAS_TICK);
@@ -152,7 +151,7 @@ export async function ensureGasToken({ baseURL, log = console.log }) {
         }
         await page.getByRole('button', { name: 'Sign action' }).click();
         await expectConfirmModal(page, `the ISSUE of ${GAS_TICK}`);
-        await page.getByTestId('confirm-approve').click();
+        await approveConfirm(page, `the ISSUE of ${GAS_TICK}`);
         await page.waitForTimeout(4_000);
     } catch (err) {
         // Global setup has no test artifacts, so a locator timeout here would

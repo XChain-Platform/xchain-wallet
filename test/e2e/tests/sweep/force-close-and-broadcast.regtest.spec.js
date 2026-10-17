@@ -67,7 +67,7 @@
 //   cd test/e2e && XC_REGTEST_COIN=RBTC npx playwright test \
 //       --config=playwright.regtest.config.js tests/sweep/force-close-and-broadcast.regtest.spec.js
 
-import { createWallet, expect, test } from '../../fixtures/wallet.js';
+import { createWallet, expect, openPaletteCommand, test } from '../../fixtures/wallet.js';
 import {
     expectConfirmModal as sharedConfirmModal,
     EXPLORER_URL,
@@ -85,6 +85,8 @@ import {
     unlockAfterReload,
     waitForTokenBalance,
     waitForValidAction,
+    selectDispenserOnSource,
+    selectPickerAsset,
 } from '../../fixtures/regtest.js';
 
 const PASSWORD = 'regtestpassword123';
@@ -124,26 +126,6 @@ async function explorerJson(path) {
         signal: AbortSignal.timeout(15_000),
     });
     return res.json();
-}
-
-/**
- * Opens a screen through the command palette.
- *
- * Lifted from tests/dispensers/refill-ceiling: the palette is the one entry
- * point every shell has, and SweepForm has no nav row of its own - the only
- * other ways in are the actions menu and MigrateToBip39's per-chain deep link.
- */
-async function gotoPalette(page, title) {
-    await page.keyboard.press('ControlOrMeta+k');
-    const dialog = page.getByRole('dialog', { name: 'Command palette' });
-    await expect(dialog, 'the command palette did not open').toBeVisible({ timeout: 15_000 });
-    const combobox = dialog.getByRole('combobox').first();
-    await expect(combobox).toBeEditable({ timeout: 15_000 });
-    await combobox.fill(title);
-    const row = page.getByRole('option', { name: new RegExp(`^${title}\\b`) }).first();
-    await expect(row, `no palette command matching "${title}"`).toBeVisible();
-    await row.click();
-    await expect(dialog).toBeHidden({ timeout: 15_000 });
 }
 
 /** Waits for the confirm surface itself, WITHOUT requiring Approve to be live. */
@@ -294,7 +276,7 @@ test.describe(`sweep force-close and broadcast on ${REGTEST_CHAIN_LABEL}`, () =>
             // The dispenser form READS the wallet's own venue-chain
             // address, the same way the dispenser specs do: addresses derive
             // from a random seed, so the spec cannot know it in advance.
-            await gotoPalette(page, 'Create dispenser');
+            await openPaletteCommand(page, 'Create dispenser');
             let main = page.getByRole('main');
             await expect(main.getByLabel('Give amount per fill')).toBeVisible({ timeout: 30_000 });
             await selectVenueChain(main);
@@ -311,12 +293,16 @@ test.describe(`sweep force-close and broadcast on ${REGTEST_CHAIN_LABEL}`, () =>
             await waitForTokenBalance(source, TICK, MINT, 1_200_000);
             await seedPrices();
 
-            await gotoPalette(page, 'Create dispenser');
+            await openPaletteCommand(page, 'Create dispenser');
             main = page.getByRole('main');
             await expect(main.getByLabel('Give amount per fill')).toBeVisible({ timeout: 30_000 });
             await selectVenueChain(main);
+            // The dispenser opens on the Source, so the sweep of that address has a
+            // dispenser to force-close.
+            await selectDispenserOnSource(page);
+
             await main.getByRole('button', { name: /^Token/ }).click();
-            await page.getByText(TICK, { exact: true }).first().click();
+            await selectPickerAsset(page, TICK);
             await main.getByLabel('Give amount per fill').fill(String(GIVE_PER_FILL));
             await main.getByLabel('Escrow amount').fill(String(ESCROW));
             await main.getByLabel(/Trigger price/).fill(TRIGGER);
@@ -353,7 +339,7 @@ test.describe(`sweep force-close and broadcast on ${REGTEST_CHAIN_LABEL}`, () =>
         let destBefore;
 
         await test.step('drive the sweep wizard, with the dispenser force-close selected', async () => {
-            await gotoPalette(page, 'Sweep address');
+            await openPaletteCommand(page, 'Sweep address');
             const main = page.getByRole('main');
             // Screen facts (SweepForm.jsx + ui/PageHeader.jsx + ui/Screen.jsx):
             //   - The page title ("Sweep address" free-entry, "Sweep to new
@@ -375,7 +361,7 @@ test.describe(`sweep force-close and broadcast on ${REGTEST_CHAIN_LABEL}`, () =>
                 + 'this run funded, so it would sweep the wrong address')
                 .toHaveValue(source, { timeout: 30_000 });
 
-            await main.getByLabel('Destination address').fill(DESTINATION);
+            await main.getByRole('textbox', { name: 'Destination address', exact: true }).fill(DESTINATION);
 
             // The loud third-party path. This alert is the only thing between a
             // user and handing an address's entire contents to a stranger, and

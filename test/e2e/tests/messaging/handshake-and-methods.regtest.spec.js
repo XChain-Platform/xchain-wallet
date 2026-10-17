@@ -19,11 +19,13 @@
 // wallet is BUILT to answer it in exactly two ways, and neither of them is
 // "encrypt anyway":
 //
-//   1. It REFUSES. `Send message` is disabled while an encrypted method is
-//      selected and the recipient's key is unresolved, and a `role="alert"`
-//      banner says why. There is no silent downgrade to plaintext.
+//   1. It REFUSES. While an encrypted method is selected and the recipient's
+//      key is unresolved, pressing `Send message` opens no confirm screen and
+//      broadcasts nothing, and a `role="alert"` banner says why. There is no
+//      silent downgrade to plaintext.
 //   2. It offers two ways forward, in that same banner: pick "Plain text"
-//      (MESSAGE v3, which needs no key at all), or press "Request encrypted
+//      (MESSAGE v3, which needs no key at all, and which the form makes the
+//      user confirm with "Send as plain text"), or press "Request encrypted
 //      session (publish your key)", which broadcasts MESSAGE format 0 carrying
 //      OUR OWN pubkey in ENCRYPTION_KEY. Note the asymmetry, because it IS the
 //      answer: the handshake does not let this wallet encrypt to them, it hands
@@ -37,13 +39,14 @@
 //
 // WHAT WOULD BE FALSE IF THIS PASSED VACUOUSLY. Three things, each guarded:
 //
-//   - "Send is disabled" would pass while the pubkey lookup is merely still
-//     IN FLIGHT (`pubkeyState === 'checking'` disables the button too). So
-//     every disabled-assertion below is preceded by an assertion on the
+//   - "Send was refused" would pass while the pubkey lookup is merely still
+//     IN FLIGHT (`pubkeyState === 'checking'` refuses the press too). So
+//     every refusal assertion below is preceded by an assertion on the
 //     missing-key banner, which renders ONLY in the settled `missing` state.
-//     And the disable is falsified the one way that should lift it (choosing
-//     Plain text) and then reinstated (choosing ECIES again), so a stuck
-//     loading flag or an unrelated empty field cannot masquerade as the gate.
+//     And the refusal is falsified the one way that should lift it (choosing
+//     Plain text, after which Send reaches a confirm screen) and then
+//     reinstated (choosing ECIES again), so a stuck loading flag or an
+//     unrelated empty field cannot masquerade as the gate.
 //   - "The message was sent" would pass on the wallet's own say-so. The
 //     "Message sent" notice is the wallet reporting on itself. Every claim
 //     about what actually went out is read back from the EXPLORER via
@@ -86,7 +89,7 @@
 //       npx playwright test --config=playwright.regtest.config.js \
 //       tests/messaging/handshake-and-methods.regtest.spec.js
 
-import { createWallet, expect, gotoSection, test } from '../../fixtures/wallet.js';
+import { createWallet, expect, gotoSection, openPaletteCommand, test } from '../../fixtures/wallet.js';
 import {
     ENCODER_URL,
     REGTEST_ADDRESS_RE,
@@ -126,20 +129,6 @@ const PROBE_TEXT = 'xc-e2e-structural-probe';
 const ECIES_OVERHEAD_BYTES = 1 + 33 + 12 + 16; // version + ephemeralPubkey + iv + authTag
 const ECDH_OVERHEAD_BYTES = 12 + 16;           // iv + authTag only
 
-/** Opens the command palette and runs the first matching entry. */
-async function gotoPalette(page, title) {
-    await page.keyboard.press('ControlOrMeta+k');
-    const dialog = page.getByRole('dialog', { name: 'Command palette' });
-    await expect(dialog, 'the command palette did not open').toBeVisible({ timeout: 15_000 });
-    const combobox = dialog.getByRole('combobox').first();
-    await expect(combobox).toBeEditable({ timeout: 15_000 });
-    await combobox.fill(title);
-    const row = page.getByRole('option', { name: new RegExp(`^${title}\\b`) }).first();
-    await expect(row, `no palette command matching "${title}"`).toBeVisible();
-    await row.click();
-    await expect(dialog).toBeHidden({ timeout: 15_000 });
-}
-
 /**
  * Onboards a fresh wallet on the regtest network, funds its address on this
  * run's chain, and returns that address.
@@ -160,7 +149,7 @@ async function onboardFundedWallet(page, walletName) {
     await createWallet(page, { password: PASSWORD, name: walletName });
     await switchToRegtest(page, PASSWORD);
 
-    await gotoPalette(page, 'Issue token');
+    await openPaletteCommand(page, 'Issue token');
     const main = page.getByRole('main');
     await expect(main.getByLabel('Ticker')).toBeVisible({ timeout: 30_000 });
     await selectVenueChain(main);
@@ -210,15 +199,16 @@ async function pickDeliveryNetwork(scope) {
 /**
  * Opens a fresh compose screen and puts it on this run's chain.
  *
- * SCREEN FACT: "New conversation" is the PageHeader's trailing icon button on
- * the Messaging inbox (`MessagingInbox.jsx` renders it with that exact
- * `aria-label`; it is an icon with no visible text, so the accessible name is
- * the only way to reach it).
+ * SCREEN FACT: the Messaging inbox shows its compose action once. An empty
+ * inbox offers it as "New message" from the empty state; an inbox with
+ * conversations offers it as "New conversation" in the actions row
+ * (`MessagingInbox.jsx`). A fresh wallet is the first, a wallet that has
+ * already messaged is the second, so both names are accepted.
  */
 async function gotoNewConversation(page) {
     await gotoSection(page, 'Messaging');
-    const compose = page.getByRole('button', { name: 'New conversation' });
-    await expect(compose, 'no "New conversation" entry point on the Messaging screen')
+    const compose = page.getByRole('button', { name: /^New (conversation|message)$/ });
+    await expect(compose, 'no "New conversation" or "New message" entry point on the Messaging screen')
         .toBeVisible({ timeout: 30_000 });
     await compose.click();
 
@@ -242,13 +232,28 @@ function encryptionTrigger(scope) {
     return scope.getByRole('button', { name: /^Encryption:/ });
 }
 
-/** Picks an Encryption option by its visible label prefix (a regex source). */
+/**
+ * Picks an Encryption option by its visible label prefix (a regex source), and
+ * asserts the trigger then reads it.
+ *
+ * SCREEN FACT: choosing "Plain text" on a new conversation does not switch the
+ * method by itself. The form asks "Send this message as plain text?" and only
+ * "Send as plain text" applies the choice, so that prompt is answered here.
+ */
 async function pickEncryption(scope, labelPrefix) {
     await encryptionTrigger(scope).click();
     const option = scope.getByRole('option', { name: new RegExp(`^${labelPrefix}`) });
     await expect(option, `no "${labelPrefix}" encryption option offered`)
         .toBeVisible({ timeout: 15_000 });
     await option.click();
+    if (/^Plain text/.test(labelPrefix)) {
+        const accept = scope.getByRole('button', { name: 'Send as plain text', exact: true });
+        await expect(accept, 'choosing Plain text did not ask to confirm sending unencrypted')
+            .toBeVisible({ timeout: 15_000 });
+        await accept.click();
+    }
+    await expect(encryptionTrigger(scope), `the Encryption picker does not read "${labelPrefix}"`)
+        .toHaveAttribute('aria-label', new RegExp(`^Encryption: ${labelPrefix}`), { timeout: 15_000 });
 }
 
 /**
@@ -268,6 +273,33 @@ function keyRequestBlock(scope) {
 }
 
 const sendButton = (scope) => scope.getByRole('button', { name: 'Send message', exact: true });
+
+/**
+ * How long a refused press is watched for a confirm screen. An accepted press
+ * shows "Preparing review…" at once and opens the confirm screen once the
+ * compose returns; a refused one does neither.
+ */
+const SEND_REFUSAL_SETTLE_MS = 10_000;
+
+/**
+ * Presses Send and proves the wallet refused it.
+ *
+ * SCREEN FACT: Send stays pressable while something is missing, so the form
+ * can say what (only a busy compose disables it). For an encrypted method with
+ * no recipient key the refusal is therefore what the press does NOT do: no
+ * compose starts, no confirm screen opens, nothing is broadcast, and the
+ * missing-key banner is still the screen's answer.
+ */
+async function expectSendRefused(page, scope, txids, message) {
+    const before = txids.length;
+    await sendButton(scope).click();
+    await page.waitForTimeout(SEND_REFUSAL_SETTLE_MS);
+    await expect(page.getByTestId('confirm-modal'), message).toHaveCount(0);
+    await expect(sendButton(scope), `${message} (a compose started)`).toBeVisible();
+    expect(txids.length, `${message} (something was broadcast)`).toBe(before);
+    await expect(missingPubkeyBanner(scope), 'the missing-key banner went away after a refused send')
+        .toBeVisible();
+}
 
 /** Fills the recipient, and the body when one is given. */
 async function fillRecipient(scope, address, message) {
@@ -411,11 +443,10 @@ test.describe(`Messaging: first contact on ${REGTEST_CHAIN_LABEL}`, () => {
                 .toBeVisible({ timeout: 60_000 });
 
             // The banner above proves the lookup SETTLED on missing, so this is
-            // the refusal and not the in-flight `checking` disable.
-            await expect(sendButton(main),
-                'Send is enabled for an ENCRYPTED message to a recipient with no known public key: '
-                + 'the wallet is about to sign something it cannot actually encrypt')
-                .toBeDisabled();
+            // the refusal and not the in-flight `checking` one.
+            await expectSendRefused(page, main, txids,
+                'Send reached a confirm screen for an ENCRYPTED message to a recipient with no known '
+                + 'public key: the wallet is about to sign something it cannot actually encrypt');
 
             // The banner is also where the two ways out are offered, and an
             // offer nobody can see is not an offer.
@@ -429,17 +460,14 @@ test.describe(`Messaging: first contact on ${REGTEST_CHAIN_LABEL}`, () => {
         });
 
         await test.step('the refusal is conditioned on the encryption choice, not stuck on', async () => {
-            // Falsify the disable by taking the ONE path that should lift it.
+            // Falsify the refusal by taking the ONE path that should lift it.
             // Without this, a stuck loading flag or an unrelated empty field
-            // would read exactly like the gate under test.
+            // would read exactly like the gate under test. The press itself
+            // reaching a confirm screen on Plain text is the next step's.
             await pickEncryption(main, 'Plain text');
             await expect(missingPubkeyBanner(main),
                 'the missing-key banner is still shown for a PLAIN TEXT send, which needs no key at all')
                 .toHaveCount(0);
-            await expect(sendButton(main),
-                'Send stayed disabled after switching to Plain text, so the disable above is not '
-                + 'really a function of encryption mode plus key state')
-                .toBeEnabled({ timeout: 15_000 });
 
             // And back, to show it is the CURRENT choice that decides, not a
             // one-way flag the first switch tripped.
@@ -447,9 +475,8 @@ test.describe(`Messaging: first contact on ${REGTEST_CHAIN_LABEL}`, () => {
             await expect(missingPubkeyBanner(main),
                 'the missing-key banner did not come back for the same unresolved recipient')
                 .toBeVisible({ timeout: 15_000 });
-            await expect(sendButton(main),
-                'switching back to ECIES did not re-disable Send for the same unresolved recipient')
-                .toBeDisabled();
+            await expectSendRefused(page, main, txids,
+                'switching back to ECIES did not restore the refusal for the same unresolved recipient');
         });
 
         await test.step('the plaintext fallback delivers, and the CHAIN says it is plaintext', async () => {

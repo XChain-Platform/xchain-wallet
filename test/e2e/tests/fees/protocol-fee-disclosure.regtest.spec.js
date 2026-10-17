@@ -50,7 +50,8 @@
 // fails with that named instead of looking like a wallet defect three steps
 // later (§3.2).
 
-import { createWallet, expect, gotoSection, mainButton, test } from '../../fixtures/wallet.js';
+import { waitForShownTxid } from '../../fixtures/pendingHistory.js';
+import { createWallet, expect, gotoSection, mainButton, openPaletteCommand, test } from '../../fixtures/wallet.js';
 import {
     encoderRpc,
     expectConfirmModal,
@@ -184,24 +185,11 @@ async function projectedProtocolFeeSats(page) {
     const deltas = page.getByTestId('action-intent-deltas');
     if (await deltas.count() === 0) return null;
     const text = await deltas.innerText();
-    // Tolerant on the separator: the label and the amount are sibling spans in
-    // a flex row, so whether innerText puts a newline, a space or nothing
-    // between them is a layout detail this assertion must not depend on.
-    const coin = text.match(/Protocol fee\s*BTC\s*([\d.]+)/)?.[1];
+    // Tolerant on the separator: the label and the "<amount> <ticker>" value are
+    // sibling spans in a flex row, so whether innerText puts a newline, a space
+    // or nothing between them is a layout detail this assertion must not depend on.
+    const coin = text.match(/Protocol fee\s*([\d.]+)\s*BTC/)?.[1];
     return coin === undefined ? null : Math.round(Number(coin) * 1e8);
-}
-
-async function gotoPalette(page, title) {
-    await page.keyboard.press('ControlOrMeta+k');
-    const dialog = page.getByRole('dialog', { name: 'Command palette' });
-    await expect(dialog, 'the command palette did not open').toBeVisible({ timeout: 15_000 });
-    const combobox = dialog.getByRole('combobox').first();
-    await expect(combobox).toBeEditable({ timeout: 15_000 });
-    await combobox.fill(title);
-    const row = page.getByRole('option', { name: new RegExp(`^${title}\\b`) }).first();
-    await expect(row, `no palette command matching "${title}"`).toBeVisible();
-    await row.click();
-    await expect(dialog).toBeHidden({ timeout: 15_000 });
 }
 
 /** The native-fee opt-in, which on Bitcoin is a real control. */
@@ -228,8 +216,8 @@ async function composeIssue(page, tick, { nativeFee }) {
     // screen. Bouncing through Home forces the remount. (Session 32; the same
     // shape the multi-recipient spec records as "the mint left the shell on its
     // terminal screen".)
-    await gotoPalette(page, 'Home');
-    await gotoPalette(page, 'Issue token');
+    await openPaletteCommand(page, 'Home');
+    await openPaletteCommand(page, 'Issue token');
     const main = page.getByRole('main');
     await expect(main.getByLabel('Ticker')).toBeVisible({ timeout: 30_000 });
     await main.getByLabel('Ticker').fill(tick);
@@ -250,15 +238,13 @@ async function composeIssue(page, tick, { nativeFee }) {
 /** Approves the open confirm screen and returns the broadcast txid. */
 async function approveAndGetTxid(page) {
     await page.getByTestId('confirm-approve').click();
-    const main = page.getByRole('main');
-    // No \b anchors: this screen renders the id with no separator around it
-    // ("Transaction IDae0d…Done"), so a word-boundary pattern never matches
-    // even though the id is right there. Cost a run.
-    await expect(main, 'no transaction id ever appeared after Approve')
-        .toContainText(/[0-9a-f]{64}/, { timeout: 180_000 });
-    const txid = (await main.innerText()).match(/[0-9a-f]{64}/)?.[0];
-    expect(txid, 'success screen showed no transaction id').toBeTruthy();
-    return txid;
+    // The Send success screen draws the id truncated; waitForShownTxid reads
+    // the full id from its accessible name, and from the text on screens
+    // that print it whole.
+    return waitForShownTxid(page.getByRole('main'), {
+        timeout: 180_000,
+        message: 'no transaction id ever appeared after Approve',
+    });
 }
 
 test.describe('what a fee-bearing action costs: the confirm screen against the chain', () => {
@@ -287,7 +273,7 @@ test.describe('what a fee-bearing action costs: the confirm screen against the c
             await createWallet(page, { password: PASSWORD, name: 'Fee Disclosure Wallet' });
             await switchToRegtest(page, PASSWORD);
 
-            await gotoPalette(page, 'Issue token');
+            await openPaletteCommand(page, 'Issue token');
             const main = page.getByRole('main');
             await expect(main.getByLabel('Ticker')).toBeVisible({ timeout: 30_000 });
             source = await main.getByLabel('From').inputValue();
@@ -451,7 +437,7 @@ test.describe('what a fee-bearing action costs: the confirm screen against the c
             await createWallet(page, { password: PASSWORD, name: 'Dry Run Down Wallet' });
             await switchToRegtest(page, PASSWORD);
 
-            await gotoPalette(page, 'Issue token');
+            await openPaletteCommand(page, 'Issue token');
             const main = page.getByRole('main');
             await expect(main.getByLabel('Ticker')).toBeVisible({ timeout: 30_000 });
             const source = await main.getByLabel('From').inputValue();
@@ -501,7 +487,7 @@ test.describe('what a fee-bearing action costs: the confirm screen against the c
             await createWallet(page, { password: PASSWORD, name: 'Zero Fee Wallet' });
             await switchToRegtest(page, PASSWORD);
 
-            await gotoPalette(page, 'Broadcast a message');
+            await openPaletteCommand(page, 'Broadcast a message');
             const main = page.getByRole('main');
             await expect(main.getByLabel('Message')).toBeVisible({ timeout: 30_000 });
             source = await main.getByLabel('From').inputValue();
@@ -524,7 +510,7 @@ test.describe('what a fee-bearing action costs: the confirm screen against the c
         });
 
         const composeBroadcast = async (message, nativeFee) => {
-            await gotoPalette(page, 'Broadcast a message');
+            await openPaletteCommand(page, 'Broadcast a message');
             const main = page.getByRole('main');
             await expect(main.getByLabel('Message')).toBeVisible({ timeout: 30_000 });
             await main.getByLabel('Message').fill(message);

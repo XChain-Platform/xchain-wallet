@@ -87,6 +87,12 @@ export default defineConfig({
         : 'list',
     use: {
         baseURL: `http://localhost:${PREVIEW_PORT}`,
+        // Bounds every click and fill that names no timeout of its own. Without
+        // it an action inherits the 30 minute TEST budget above, so one locator
+        // that no longer matches the screen waits out the whole test and eats
+        // the job cap. Chain waits are explicit polls and do not ride on this.
+        // A spec's own `test.use({ actionTimeout })` still wins.
+        actionTimeout: 60_000,
         trace: 'retain-on-failure',
         video: 'retain-on-failure',
         screenshot: 'only-on-failure',

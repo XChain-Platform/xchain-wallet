@@ -41,7 +41,7 @@
 //    WITHOUT that sentence actively misleads, so its absence is a defect of the
 //    same class as a wrong number.
 
-import { createWallet, expect, test } from '../../fixtures/wallet.js';
+import { createWallet, expect, openPaletteCommand, test } from '../../fixtures/wallet.js';
 import { EXPLORER_URL, REGTEST_COIN, selectVenueChain, switchToRegtest } from '../../fixtures/regtest.js';
 
 const PASSWORD = 'regtestpassword123';
@@ -114,14 +114,6 @@ async function pickFixture() {
     return fallback;
 }
 
-async function gotoPalette(page, title) {
-    await page.keyboard.press('ControlOrMeta+k');
-    const combobox = page.getByRole('combobox').first();
-    await expect(combobox).toBeVisible();
-    await combobox.fill(title);
-    await page.keyboard.press('Enter');
-}
-
 test.describe('BET oracle record against a live explorer', () => {
     test.use({ actionTimeout: 30_000 });
 
@@ -145,7 +137,7 @@ test.describe('BET oracle record against a live explorer', () => {
         });
 
         await test.step('open the market this oracle runs', async () => {
-            await gotoPalette(page, 'Betting');
+            await openPaletteCommand(page, 'Betting');
             await expect(page.getByRole('button', { name: 'Create market', exact: true }))
                 .toBeVisible({ timeout: 60_000 });
 
