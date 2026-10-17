@@ -186,18 +186,18 @@ Three things differ from regtest on purpose:
   `--disable-web-security` would be reporting on a browser nobody ships.
 - **Global setup only reads.** It proves the venue is reachable, not stale,
   halted or lagging, and that it prices a MINT of XCHAIN. It seeds nothing.
-- **Funding comes from the treasury, over stdin.** `fundFromTreasury` reads
-  one JSON object (`{ "wif": ..., "address": ... }`) from the process's stdin,
-  only once the wallet has shown the address to fund. The WIF is held in
-  memory for one signing call, the key buffer is zeroed after the address is
-  derived, and it is never logged, written, or passed in argv or the
-  environment. Before signing, the WIF must derive the declared address, every
-  selected input must be confirmed and pay that address, the value must cover
-  the spend, and change below the dust floor folds into the fee. A refusal
-  happens before any broadcast.
+- **Funding and recovery input arrive over stdin.** After the venue check
+  passes, `global-setup.testnet.js` reads stdin once and stages it in a
+  mode-0600 file inside a mode-0700 directory. Only that file's path, never a
+  key, is exported as `XC_TESTNET_RUN_INPUT`. The input is one JSON object
+  carrying the treasury `wif` and `address` (`segwitAddress` is accepted as an
+  alias), plus a `claimant` object with its own `wif` and `address` for the
+  partial-claim import. Before any funding is sent, stake-unstake writes each
+  funded wallet's phrase owner-only under the `xchain-wallet-testnet-recovery`
+  directory in the OS temporary directory.
 
 ```bash
-cat <treasury wallet json> | pnpm test:e2e:testnet   # the operator's act, never a script's
+cat <testnet run-input JSON> | pnpm test:e2e:testnet   # the operator's act, never a script's
 ```
 
 One worker, no retries: the specs share one treasury and one chain, and a
