@@ -30,6 +30,32 @@ function addAll(target, source) {
     for (const value of source) target.add(value);
 }
 
+// The file being scanned, so a relative import can be followed one hop into a
+// sibling source (History.jsx reads its pending copy tables from HistoryShared.jsx).
+let currentFile = null;
+const siblingScopes = new Map();
+
+function siblingProgramScope(key) {
+    if (!siblingScopes.has(key)) {
+        const ast = parse(sources[key], { sourceType: 'unambiguous', plugins: PARSER_PLUGINS });
+        let programScope = null;
+        traverse(ast, { Program(path) { programScope = path.scope; path.stop(); } });
+        siblingScopes.set(key, programScope);
+    }
+    return siblingScopes.get(key);
+}
+
+function followRelativeImport(binding) {
+    if (!currentFile || !binding?.path.isImportSpecifier()) return binding;
+    const from = binding.path.parentPath.node.source.value;
+    if (!from.startsWith('./')) return binding;
+    const target = `${currentFile.slice(0, currentFile.lastIndexOf('/'))}/${from.slice(2)}`;
+    const key = Object.keys(sources).find((k) => k.replace(/^(\.\.\/)+/, '') === target);
+    if (!key) return binding;
+    const imported = binding.path.node.imported;
+    return siblingProgramScope(key)?.getBinding(imported.name) ?? binding;
+}
+
 function staticStrings(node, scope, seenBindings = new Set()) {
     if (!node || node.type === 'NullLiteral') return { strings: new Set(), resolved: true };
     if (node.type === 'StringLiteral') return { strings: new Set([node.value]), resolved: true };
@@ -51,7 +77,7 @@ function staticStrings(node, scope, seenBindings = new Set()) {
         return { strings: left.strings, resolved: left.resolved && right.resolved };
     }
     if (node.type === 'Identifier') {
-        const binding = scope.getBinding(node.name);
+        const binding = followRelativeImport(scope.getBinding(node.name));
         if (!binding || seenBindings.has(binding) || !binding.path.isVariableDeclarator()) {
             return { strings: new Set(), resolved: false };
         }
@@ -76,7 +102,7 @@ function staticStrings(node, scope, seenBindings = new Set()) {
         return staticStrings(node.object, scope, seenBindings);
     }
     if (node.type === 'CallExpression' && node.callee.type === 'Identifier') {
-        const binding = scope.getBinding(node.callee.name);
+        const binding = followRelativeImport(scope.getBinding(node.callee.name));
         if (!binding || seenBindings.has(binding)) return { strings: new Set(), resolved: false };
         const nextSeen = new Set(seenBindings).add(binding);
         let functionPath = binding.path;
@@ -155,6 +181,7 @@ function isTranslateBinding(binding) {
 }
 
 function translationUsage(file, source) {
+    currentFile = file;
     const ast = parse(source, {
         sourceType: 'unambiguous',
         plugins: PARSER_PLUGINS,

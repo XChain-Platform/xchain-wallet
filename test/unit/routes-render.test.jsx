@@ -160,9 +160,13 @@ beforeEach(() => {
 // under the vitest transform). Lazy importers (no `eager`) keep a
 // module-load crash inside the route's own `it()` instead of failing the
 // whole suite at collection time.
-const routeModules = import.meta.glob(
+const routeModules = import.meta.glob([
     '../../packages/core/src/shared/routes/*.jsx',
-);
+    // Split-out pieces of History.jsx are not routes; History.jsx renders them.
+    '!../../packages/core/src/shared/routes/HistoryDetailCard.jsx',
+    '!../../packages/core/src/shared/routes/HistoryEntryRow.jsx',
+    '!../../packages/core/src/shared/routes/HistoryShared.jsx',
+]);
 
 // Layer 1 messaging: every property access yields a function returning a
 // never-resolving promise → routes stay in their loading branch.

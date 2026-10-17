@@ -291,7 +291,8 @@ translatedRoots.push(join(packagesDir, 'desktop', 'renderer'));
 const translated = translatedRoots
     .flatMap((dir) => sourceFiles(dir))
     .map((f) => ({ rel: relative(wsRoot, f).split('\\').join('/'), src: readFileSync(f, 'utf8') }))
-    .filter(({ src }) => /(?<![\w$.])t\(/.test(src) && keyLiterals(src).length > 0);
+    // HistoryShared.jsx holds the pending copy tables (key literals, no t() call of its own).
+    .filter(({ rel, src }) => (/(?<![\w$.])t\(/.test(src) || rel === 'packages/core/src/shared/routes/HistoryShared.jsx') && keyLiterals(src).length > 0);
 
 const seenKeys = new Set();
 for (const { rel, src } of translated) {

@@ -67,7 +67,9 @@ assert.ok(/'xchain:open-window'/.test(preload),
 
 // --- 3. History.jsx detach button + initialFocus prop -------------------
 
-const hist = readFileSync(historyPath, 'utf8');
+const hist = ['History', 'HistoryDetailCard', 'HistoryEntryRow', 'HistoryShared']
+    .map((n) => readFileSync(join(wsRoot, 'packages', 'core', 'src', 'shared', 'routes', `${n}.jsx`), 'utf8'))
+    .join('\n');
 assert.ok(/initialFocus = null/.test(hist),
     'History accepts an initialFocus prop with null default');
 assert.ok(/initialFocusFiredRef/.test(hist),

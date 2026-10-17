@@ -20,10 +20,9 @@ import { fileURLToPath } from 'node:url';
 const here = dirname(fileURLToPath(import.meta.url));
 const wsRoot = join(here, '..', '..', '..');
 
-const histSrc = readFileSync(
-    join(wsRoot, 'packages', 'core', 'src', 'shared', 'routes', 'History.jsx'),
-    'utf8',
-);
+const histSrc = ['History', 'HistoryDetailCard', 'HistoryEntryRow', 'HistoryShared']
+    .map((n) => readFileSync(join(wsRoot, 'packages', 'core', 'src', 'shared', 'routes', `${n}.jsx`), 'utf8'))
+    .join('\n');
 const histCss = readFileSync(
     join(wsRoot, 'packages', 'core', 'src', 'shared', 'routes', 'History.module.css'),
     'utf8',

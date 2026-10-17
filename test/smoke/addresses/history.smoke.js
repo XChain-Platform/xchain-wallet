@@ -28,7 +28,10 @@ const sharedRoutes = join(core, 'src', 'shared', 'routes');
 
 const formPath = join(sharedRoutes, 'History.jsx');
 assert.ok(existsSync(formPath), 'History.jsx exists');
-const src = readFileSync(formPath, 'utf8');
+// DetailCard, EntryRow and their shared helpers live in sibling files of History.jsx.
+const src = ['History', 'HistoryDetailCard', 'HistoryEntryRow', 'HistoryShared']
+    .map((n) => readFileSync(join(sharedRoutes, `${n}.jsx`), 'utf8'))
+    .join('\n');
 
 assert.ok(/export function History\b/.test(src),
     'History is a named export');
