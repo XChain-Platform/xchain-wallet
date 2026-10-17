@@ -108,7 +108,7 @@ const MNEMONIC_LENGTHS = [24, 21, 18, 15, 12];
  * @property {{ version: string | null, platform: string | null, os: string | null, browser: string | null }} wallet
  * @property {{ version: string | null }} sdk
  * @property {Array<{ id: string, coin: string, networkKind: string, isUserAdded: boolean }>} chains
- * @property {Array<{ chainId: string, explorerUrl: string, encoderUrl: string, hubUrl: string, custom: boolean }>} endpoints
+ * @property {Array<{ chainId: string, explorerUrl: string, encoderUrl: string, hubUrl?: string, custom: boolean }>} endpoints
  * @property {DiagnosticSignerSummary[]} signers
  * @property {Record<string, unknown>} settings
  * @property {DiagnosticError[]} recent_errors
@@ -169,7 +169,7 @@ export async function diagnosticDump(opts = {}) {
                   chainId: d.id,
                   explorerUrl: joinEndpoint(d.explorer),
                   encoderUrl: joinEndpoint(d.encoder),
-                  hubUrl: joinEndpoint(d.hub),
+                  ...(d.hub ? { hubUrl: joinEndpoint(d.hub) } : {}),
                   custom: false,
               };
           })

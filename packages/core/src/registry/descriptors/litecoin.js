@@ -68,7 +68,6 @@ export const litecoinDescriptors = [
         wifVersionByte: 0xef,
         explorer: { defaultUrl: 'https://explorer.xchain.io', defaultPort: 443 },
         encoder: { defaultUrl: 'https://encoder.xchain.io/TLTC', defaultPort: 443 },
-        hub: { defaultUrl: 'https://hub.xchain.io/TLTC', defaultPort: 443 },
     },
     {
         ...COMMON,

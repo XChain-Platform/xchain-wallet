@@ -74,7 +74,6 @@ export const bitcoinDescriptors = [
         wifVersionByte: 0xef,
         explorer: { defaultUrl: 'https://explorer.xchain.io', defaultPort: 443 },
         encoder: { defaultUrl: 'https://encoder.xchain.io/TBTC', defaultPort: 443 },
-        hub: { defaultUrl: 'https://hub.xchain.io/TBTC', defaultPort: 443 },
     },
     {
         ...COMMON,

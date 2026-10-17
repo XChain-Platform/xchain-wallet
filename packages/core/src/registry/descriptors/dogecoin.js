@@ -67,7 +67,6 @@ export const dogecoinDescriptors = [
         wifVersionByte: 0xf1,
         explorer: { defaultUrl: 'https://explorer.xchain.io', defaultPort: 443 },
         encoder: { defaultUrl: 'https://encoder.xchain.io/TDOGE', defaultPort: 443 },
-        hub: { defaultUrl: 'https://hub.xchain.io/TDOGE', defaultPort: 443 },
     },
     {
         ...COMMON,
