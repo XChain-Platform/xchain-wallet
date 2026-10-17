@@ -87,7 +87,9 @@ function fixedEgressOrigins() {
 
 function configuredEndpointOrigins() {
     return CHAIN_DESCRIPTORS.flatMap((descriptor) => (
-        ['explorer', 'encoder', 'hub'].map((name) => endpointOrigin(descriptor[name]))
+        ['explorer', 'encoder', 'hub']
+            .filter((name) => descriptor[name])
+            .map((name) => endpointOrigin(descriptor[name]))
     ));
 }
 

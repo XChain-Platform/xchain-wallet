@@ -22,7 +22,7 @@ import { installSdkNetworkPolicy, sharedExplorerLimiter } from './explorerRateLi
  * @property {string} network           chainId, e.g. 'bitcoin-mainnet'
  * @property {string} explorerUrl       fully-formed URL
  * @property {string} encoderUrl
- * @property {string} hubUrl
+ * @property {string} [hubUrl]
  * @property {number} [timeout] per-request ms budget (; see DEFAULT_SDK_NETWORK_OPTIONS)
  * @property {{ maxRetries: number, baseDelay: number, maxDelay: number,
  *              retryAfterMaxDelay: number, maxRateLimitRetries: number }} [retry]
@@ -247,11 +247,12 @@ export class SDKRegistry {
         const d = this._chainRegistry.get(chainId);
         if (!d) throw new UnknownChainError(chainId);
         const over = this._endpointOverrides[chainId] ?? {};
+        const hubUrl = overrideUrl(over.hubUrl) ?? joinEndpoint(d.hub);
         const sdk = this._sdkFactory({
             network: chainId,
             explorerUrl: overrideUrl(over.explorerUrl) ?? joinEndpoint(d.explorer),
             encoderUrl: overrideUrl(over.encoderUrl) ?? joinEndpoint(d.encoder),
-            hubUrl: overrideUrl(over.hubUrl) ?? joinEndpoint(d.hub),
+            ...(hubUrl ? { hubUrl } : {}),
             // Bounded network patience: the real XChainSDK honors
             // `timeout` + `retry` per client; the dev mock ignores them.
             timeout: this._networkOptions.timeout,
@@ -351,9 +352,10 @@ export function endpointOverridesFromSettings(settings, chainRegistry) {
             const value = overrideUrl(entry[field]);
             if (!value) continue;
             const endpoint = descriptor[key];
-            if (!endpoint) continue;
-            if (value === joinEndpoint(endpoint)) continue;
-            if (value === endpoint.defaultUrl) continue;
+            if (endpoint) {
+                if (value === joinEndpoint(endpoint)) continue;
+                if (value === endpoint.defaultUrl) continue;
+            }
             over[field] = value;
         }
         if (Object.keys(over).length > 0) out[chainId] = over;
