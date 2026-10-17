@@ -3359,7 +3359,7 @@ export function Send({ walletId, accountId, onBack, prefill = null, onDone, onCh
                 maxBusy={maxBusy}
                 balanceText={
                     previewBalances.loading
-                        ? t('common.loading')
+                        ? (balanceGateSettledRef.current ? 'Balance unavailable' : t('common.loading'))
                         : previewBalances.error
                             ? t('send.balance.unavailable', { error: previewBalances.error })
                             : sourceBalance
