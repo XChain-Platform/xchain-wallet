@@ -48,7 +48,7 @@ import { assertBuiltActionMatchesIntent } from '../flows/verifyBuiltAction.js';
 export { RevealInputsRefusedError } from './p2shRevealInputs.js';
 
 // Broadcast signed bytes, treating "the node already holds this txid" as delivery: the
-// SDK retries a lost response with the same bytes, and the retry gets that answer.
+// answer comes from a later re-send of the same signed bytes after a lost response.
 async function broadcastSigned(encoder, txHex) {
     try {
         await encoder.broadcastTx(txHex);
