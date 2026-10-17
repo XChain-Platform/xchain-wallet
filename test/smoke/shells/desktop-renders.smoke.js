@@ -44,11 +44,15 @@ import { createRequire } from 'node:module';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { timeoutBudget } from '../../e2e/timeout-budget.js';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const wsRoot = join(here, '..', '..', '..');
 const desktopDir = join(wsRoot, 'packages', 'desktop');
 const rendererIndex = join(desktopDir, 'renderer', 'dist', 'index.html');
+const rendererBudget = timeoutBudget();
+const RENDERER_MOUNT_TIMEOUT_MS = rendererBudget.expectTimeout;
+const MAX_DIAGNOSTICS = 50;
 
 if (!existsSync(rendererIndex)) {
     const required = process.env.XCHAIN_REQUIRE_DESKTOP_RENDER === '1';
@@ -90,47 +94,81 @@ const userDataDir = mkdtempSync(join(tmpdir(), 'xc-desktop-renders-'));
 const app = await electron.launch({
     args: ['.', `--user-data-dir=${userDataDir}`],
     cwd: desktopDir,
+    env: {
+        ...process.env,
+        ELECTRON_ENABLE_LOGGING: process.env.ELECTRON_ENABLE_LOGGING || '1',
+    },
 });
 const pageErrors = [];
+const consoleErrors = [];
+const requestFailures = [];
+const rendererFailures = [];
 const settingsLoadFailures = [];
+const observedWindows = new WeakSet();
+const appendDiagnostic = (entries, value) => {
+    if (entries.length === MAX_DIAGNOSTICS) entries.shift();
+    entries.push(value);
+};
+const diagnostics = () => `Page errors: ${pageErrors.join(' | ') || '(none)'}. `
+    + `Console errors: ${consoleErrors.join(' | ') || '(none)'}. `
+    + `Request failures: ${requestFailures.join(' | ') || '(none)'}. `
+    + `Renderer failures: ${rendererFailures.join(' | ') || '(none)'}`;
+const captureRendererDiagnostics = (page) => {
+    if (observedWindows.has(page)) return;
+    observedWindows.add(page);
+    page.on('pageerror', (err) => appendDiagnostic(pageErrors, String(err)));
+    page.on('console', (msg) => {
+        if (msg.type() === 'error') appendDiagnostic(consoleErrors, msg.text());
+        if (msg.text().includes('[settings] load failed')) settingsLoadFailures.push(msg.text());
+    });
+    page.on('requestfailed', (request) => {
+        appendDiagnostic(
+            requestFailures,
+            `${request.method()} ${request.url()} ${request.failure()?.errorText || ''}`.trim(),
+        );
+    });
+    page.on('crash', () => {
+        appendDiagnostic(rendererFailures, `render-process-gone: ${page.url()}`);
+    });
+};
+app.on('window', captureRendererDiagnostics);
 let win;
 try {
     win = await app.firstWindow();
-    win.on('pageerror', (err) => pageErrors.push(String(err)));
-    // Collect the raw cause the Settings sections log instead of showing.
-    win.on('console', (msg) => {
-        if (msg.text().includes('[settings] load failed')) settingsLoadFailures.push(msg.text());
-    });
+    captureRendererDiagnostics(win);
     await win.waitForURL((url) => url.protocol === 'file:', { timeout: 30_000 });
     await win.waitForLoadState('domcontentloaded');
 
-    // The mount is asynchronous, so poll rather than sleep a fixed amount:
-    // a fixed wait is either flaky or slow, and this failure mode is
-    // permanent - a blank page stays blank.
-    const deadline = Date.now() + 20000;
-    let html = '';
-    while (Date.now() < deadline) {
-        // eslint-disable-next-line no-await-in-loop
-        html = await win.evaluate(
-            () => (document.getElementById('root') || document.body).innerHTML,
+    let mountFailure;
+    try {
+        await win.waitForFunction(
+            () => {
+                const root = document.getElementById('xchain-desktop-root');
+                return root?.innerHTML.length > 200 && document.body.innerText.trim().length > 0;
+            },
+            undefined,
+            { polling: 250, timeout: RENDERER_MOUNT_TIMEOUT_MS },
         );
-        if (html.length > 200) break;
-        // eslint-disable-next-line no-await-in-loop
-        await new Promise((r) => { setTimeout(r, 250); });
+    } catch (err) {
+        mountFailure = err;
     }
+    const rendered = await win.evaluate(() => ({
+        htmlLength: document.getElementById('xchain-desktop-root')?.innerHTML.length || 0,
+        textLength: document.body.innerText.trim().length,
+    })).catch(() => ({ htmlLength: 0, textLength: 0 }));
 
     assert.ok(
-        html.length > 200,
-        'the desktop renderer mounted nothing: #root is '
-        + `${html.length} characters after 20s, which is the blank white window `
-        + `a user would see. Page errors: ${pageErrors.join(' | ') || '(none)'}`,
+        !mountFailure && rendered.htmlLength > 200,
+        'the desktop renderer mounted nothing: #xchain-desktop-root is '
+        + `${rendered.htmlLength} characters after ${RENDERER_MOUNT_TIMEOUT_MS / 1000}s `
+        + `(load scale ${rendererBudget.scale.toFixed(2)}x), which is the blank white window `
+        + `a user would see. ${diagnostics()}. Wait failure: ${mountFailure || '(none)'}`,
     );
 
-    const text = await win.evaluate(() => document.body.innerText);
     assert.ok(
-        text.trim().length > 0,
-        'the desktop app rendered a DOM with no readable text at all; '
-        + `page errors: ${pageErrors.join(' | ') || '(none)'}`,
+        rendered.textLength > 0,
+        'the desktop app rendered a DOM with no readable text at all after '
+        + `${RENDERER_MOUNT_TIMEOUT_MS / 1000}s. ${diagnostics()}`,
     );
 
     // A page error at module scope is how the blank window happened, and it
@@ -139,7 +177,12 @@ try {
     assert.deepEqual(
         pageErrors,
         [],
-        `the desktop renderer raised page errors while booting: ${pageErrors.join(' | ')}`,
+        `the desktop renderer raised page errors while booting. ${diagnostics()}`,
+    );
+    assert.deepEqual(
+        rendererFailures,
+        [],
+        `the desktop renderer process exited while booting. ${diagnostics()}`,
     );
 
     // ---- Phase 2: the app is not just painted, it is WIRED ---------------
@@ -197,7 +240,12 @@ try {
     assert.deepEqual(
         pageErrors,
         [],
-        `the desktop renderer raised page errors during the demo + settings walk: ${pageErrors.join(' | ')}`,
+        `the desktop renderer raised page errors during the demo + settings walk. ${diagnostics()}`,
+    );
+    assert.deepEqual(
+        rendererFailures,
+        [],
+        `the desktop renderer process exited during the demo + settings walk. ${diagnostics()}`,
     );
 } finally {
     await app.close();
