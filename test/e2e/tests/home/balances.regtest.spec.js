@@ -325,7 +325,7 @@ test.describe('Home balances against the chain', () => {
 
         const hero = unlockedShell(page);
         await expect(hero).toBeVisible({ timeout: kdfStepTimeout() });
-        await expect(hero.locator('[aria-label="Test coins have no value"]')).toBeVisible({ timeout: 60_000 });
+        await expect(hero.locator('[aria-label="Test coins have no value"]')).toBeVisible({ timeout: kdfStepTimeout() });
         expect((await hero.innerText()).match(/\$[\d,]+\.\d{2}/)?.[0] ?? null,
             'the hero put a dollar value on regtest coins').toBeNull();
     });
