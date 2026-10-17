@@ -131,6 +131,18 @@ test.describe(`A send the network never reports, on ${REGTEST_CHAIN_LABEL} regte
         let sendTxid;
         let heldBlocks;
 
+        // The venue lever this test needs is `docker pause` on the decoder over
+        // the venue ssh key. A venue whose key is gated to other commands
+        // refuses it by name, and no wallet behaviour can be measured there.
+        // `unpause` is the probe because on a running decoder it changes
+        // nothing (decoderControl treats "is not paused" as success).
+        const leverRefusal = await decoderControl('unpause')
+            .then(() => '', (err) => String(err?.message || err));
+        test.skip(/command refused/.test(leverRefusal),
+            `the venue ssh key cannot pause the decoder (${leverRefusal.trim()}), so no send can `
+            + 'be held unreported. Allow `docker pause` and `docker unpause` of the regtest '
+            + 'decoder containers in the venue gate to run this test.');
+
         await test.step(`onboard onto ${REGTEST_CHAIN_LABEL} regtest, fund, and mint ${TICK}`, async () => {
             await createWallet(page, { password: PASSWORD });
             await switchToRegtest(page, PASSWORD);

@@ -270,8 +270,10 @@ test.describe('multi-recipient SEND on regtest', () => {
             // later, so a "Will likely fail" here is a real finding.
             await expect(page.getByTestId('preflight-chip')).toHaveText('Looks good');
 
+            // The footer action names what it signs: one verb over the SUM of
+            // the legs, so a leg dropped from the composed action shows here too.
             const approve = page.getByTestId('confirm-approve');
-            await expect(approve).toHaveText(/^Approve$/);
+            await expect(approve).toHaveText(`Send ${TOTAL_SENT} XCHAIN`);
             await expect(approve).toBeEnabled();
             await approve.click();
 

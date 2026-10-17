@@ -133,7 +133,10 @@ function auditRows(page) {
         .filter({ hasNot: page.getByRole('button', { name: 'Unblock', exact: true }) });
 }
 
-/** Blocks `entry` through the panel's own manual-block form. */
+/**
+ * Blocks `entry` through the panel's own manual-block form, answering the
+ * confirmation the panel asks before it disconnects and blocks a site.
+ */
 async function blockEntry(page, entry) {
     const field = page.getByLabel('Origin or wildcard to block');
     await expect(field, 'the Connected Sites panel offers no way to block an origin')
@@ -142,6 +145,12 @@ async function blockEntry(page, entry) {
     const submit = page.getByRole('main').getByRole('button', { name: 'Block', exact: true });
     await expect(submit, 'the manual-block form has no Block button').toBeVisible({ timeout: 30_000 });
     await submit.click();
+    const ask = page.getByRole('dialog', { name: `Block ${entry}?` });
+    await expect(ask, 'the panel blocked nothing and asked nothing after Block was pressed')
+        .toBeVisible({ timeout: 30_000 });
+    await ask.getByRole('button', { name: 'Block site', exact: true }).click();
+    await expect(ask, 'the block confirmation stayed open after it was accepted')
+        .toBeHidden({ timeout: 30_000 });
 }
 
 test.describe('Settings: connected sites', () => {

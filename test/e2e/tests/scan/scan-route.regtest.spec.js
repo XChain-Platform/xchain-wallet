@@ -149,11 +149,34 @@ async function deviceFacing(qrText, walletName) {
     return { page, close: () => browser.close() };
 }
 
+/**
+ * Skips the calling test on a browser with no Shape Detection API. `QrScanner`
+ * reads frames through the native `BarcodeDetector`, which Chromium ships on
+ * macOS, Windows and Android but not on Linux, so a Linux venue runner cannot
+ * read any camera QR no matter what the wallet does. Probed on a real
+ * localhost origin because the API is secure-context only. Only the camera
+ * tests call it; the paste tests reach the same classifier without a detector.
+ *
+ * @param {import('@playwright/test').Browser} browser
+ */
+async function skipWithoutBarcodeDetector(browser) {
+    const context = await browser.newContext();
+    try {
+        const probe = await context.newPage();
+        await probe.goto(BASE_URL, { waitUntil: 'domcontentloaded' });
+        const present = await probe.evaluate(() => typeof window.BarcodeDetector === 'function');
+        test.skip(!present, 'this browser has no BarcodeDetector (Chromium on Linux), so no camera QR can be read');
+    } finally {
+        await context.close();
+    }
+}
+
 test.describe('scan and classify (§24.3)', () => {
     test.use({ actionTimeout: 30_000 });
     test.setTimeout(900_000);
 
-    test('a payment QR reaches Send with the destination and amount it carried', async () => {
+    test('a payment QR reaches Send with the destination and amount it carried', async ({ browser }) => {
+        await skipWithoutBarcodeDetector(browser);
         const { page, close } = await deviceFacing(PAYMENT_QR, 'Scanner Wallet');
         try {
             await openScan(page);
@@ -185,7 +208,8 @@ test.describe('scan and classify (§24.3)', () => {
         }
     });
 
-    test('a recovery phrase in front of the camera is refused, not imported', async () => {
+    test('a recovery phrase in front of the camera is refused, not imported', async ({ browser }) => {
+        await skipWithoutBarcodeDetector(browser);
         const { page, close } = await deviceFacing(PHRASE_QR, 'Refusal Wallet');
         try {
             await openScan(page);

@@ -77,6 +77,7 @@ import {
     switchToRegtest,
     unlockAfterReload,
     warmPreflight,
+    betDetailRefusal,
 } from '../../fixtures/regtest.js';
 
 const PASSWORD = 'regtestpassword123';
@@ -279,6 +280,12 @@ test.describe('BET deadline race', () => {
     test.setTimeout(1_800_000);
 
     test('a bet approved after its market closed is refused, and overriding it still reports', async ({ page }) => {
+        // Probed before any wallet work: this spec ends on a BET action's
+        // detail, and a venue whose indexer predates a BET table refuses every
+        // such read. A conditional skip, so it runs again once the venue is current.
+        const betGap = await betDetailRefusal();
+        test.skip(!!betGap, `the venue cannot serve BET action detail here. ${betGap}`);
+
         let oracle;
         let punter;
         let feedIndex;

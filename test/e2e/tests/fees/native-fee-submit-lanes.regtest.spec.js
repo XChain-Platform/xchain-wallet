@@ -316,6 +316,16 @@ test.describe(`the native-fee flag on each submit lane on ${REGTEST_CHAIN_LABEL}
                 return;
             }
 
+            // A SECOND coin output before the pair of builds. An unsigned build
+            // is an outstanding transaction, so the encoder reserves its inputs
+            // for five minutes, and after LANE 1 this address holds exactly one
+            // output: without another, the second build is refused with "all 1
+            // candidate input(s) are reserved by a transaction built in the last
+            // 5 minutes". Selection stops at sufficiency, so each build takes
+            // one input, and two equal-shape P2WPKH inputs keep the length
+            // differential below exact; that differential is what proves the
+            // flag reached the wire.
+            await fundAddress(source, 1);
             const off = await build(`${ISSUE_TICK}A`, false);
             // BACK VIA THE SCREEN'S OWN CONTROL, not the palette: re-selecting
             // "Issue token" while the route is already mounted changes no state,

@@ -329,13 +329,29 @@ test.describe(`refusing a bad market, and the promise that it cannot be edited (
                 + 'assertion thinks it is')
                 .toBeVisible({ timeout: 30_000 });
 
-            // And then the promise the form makes in words: there is no edit.
-            for (const scope of [console_]) {
-                await expect(scope.getByRole('button', { name: /\b(edit|modify|change the terms|update)\b/i }),
-                    'a created market offers an edit control, but BET has no edit format on the wire: '
-                    + 'anything that looked like one could only ever silently do something else')
+            // And then the promise the form makes in words: the TERMS cannot be
+            // edited. BET v4 carries exactly one edit on the wire, the market's
+            // allow-list and block-list references, so "Edit lists" is the only
+            // edit-shaped control allowed here, and opening it must offer the two
+            // list fields and nothing that touches the label, the outcomes or the
+            // deadline.
+            const editLike = console_.getByRole('button', { name: /\b(edit|modify|change the terms|update)\b/i });
+            await expect(editLike,
+                'a created market offers an edit control other than "Edit lists", but BET can only '
+                + 'edit list references on the wire: anything else could only ever silently do something else')
+                .toHaveCount(1);
+            await expect(editLike).toHaveAccessibleName('Edit lists');
+            await expect(console_.getByRole('link', { name: /\bedit\b/i })).toHaveCount(0);
+
+            await editLike.click();
+            await expect(console_.getByLabel('New allow-list index'),
+                '"Edit lists" did not open the list editor, so this is not the control it claims to be')
+                .toBeVisible({ timeout: 30_000 });
+            await expect(console_.getByLabel('New block-list index')).toBeVisible();
+            for (const term of ['What is being bet on', /^Outcome \d+$/, 'Betting closes']) {
+                await expect(console_.getByLabel(term),
+                    `the list editor offers a "${term}" field, so it can change a market term`)
                     .toHaveCount(0);
-                await expect(scope.getByRole('link', { name: /\bedit\b/i })).toHaveCount(0);
             }
         });
     });

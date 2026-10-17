@@ -322,9 +322,20 @@ test.describe(`the token-paid dispenser lane on ${REGTEST_CHAIN_LABEL}`, () => {
             await expect(buyButton, 'the Buy button is disabled for a funded buyer').toBeEnabled();
             await buyButton.click();
 
+            // A purchase signs through the shared Confirm screen (dry-run, From
+            // row and the dispenser purchase notice), whose approve button is
+            // named after the payment ("Send 5 PAY..."), so it is found by its
+            // test id. The notice must name THIS dispenser: a token SEND to the
+            // right address that the screen did not recognise as a buy is the
+            // case where a buyer pays and nothing dispenses.
+            await sharedConfirmModal(page, 'the dispenser buy', 60_000);
             const password = page.getByLabel('Password', { exact: true });
             if (await password.count() > 0 && await password.isVisible()) await password.fill(PASSWORD);
-            await page.getByRole('button', { name: /^Sign buy/ }).click();
+            await expectConfirmModal(page);
+            await expect(page.getByTestId('confirm-modal'),
+                'the Confirm screen does not say this payment buys from the dispenser')
+                .toContainText(`This pays dispenser #${dispenserIndex}:`);
+            await page.getByTestId('confirm-approve').click();
             await expect(page.getByText('Buy submitted'), 'the buy never reported being submitted')
                 .toBeVisible({ timeout: 180_000 });
         });

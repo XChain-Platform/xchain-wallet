@@ -85,11 +85,33 @@ async function signPanelFacing(frames) {
     return { page, box, close: () => browser.close() };
 }
 
+/**
+ * Skips the calling test on a browser with no Shape Detection API. `QrScanner`
+ * reads frames through the native `BarcodeDetector`, which Chromium ships on
+ * macOS, Windows and Android but not on Linux, so a Linux venue runner cannot
+ * read any camera QR no matter what the wallet does. Probed on a real
+ * localhost origin because the API is secure-context only.
+ *
+ * @param {import('@playwright/test').Browser} browser
+ */
+async function skipWithoutBarcodeDetector(browser) {
+    const context = await browser.newContext();
+    try {
+        const probe = await context.newPage();
+        await probe.goto(BASE_URL, { waitUntil: 'domcontentloaded' });
+        const present = await probe.evaluate(() => typeof window.BarcodeDetector === 'function');
+        test.skip(!present, 'this browser has no BarcodeDetector (Chromium on Linux), so no camera QR can be read');
+    } finally {
+        await context.close();
+    }
+}
+
 test.describe('multi-frame transaction capture (§20.3)', () => {
     test.use({ actionTimeout: 30_000 });
     test.setTimeout(900_000);
 
-    test('an animated QR is collected frame by frame and reassembled exactly', async () => {
+    test('an animated QR is collected frame by frame and reassembled exactly', async ({ browser }) => {
+        await skipWithoutBarcodeDetector(browser);
         const frames = encodeXcwChunks(PSBT_HEX);
         expect(frames.length,
             'the fixture PSBT no longer needs multiple frames, so this test would pass without '
@@ -125,7 +147,8 @@ test.describe('multi-frame transaction capture (§20.3)', () => {
         }
     });
 
-    test('a set with a frame missing never completes, and leaves nothing behind', async () => {
+    test('a set with a frame missing never completes, and leaves nothing behind', async ({ browser }) => {
+        await skipWithoutBarcodeDetector(browser);
         // The failure that matters. A partial PSBT that reached the signing path
         // would be worse than no capture: it would be a transaction the user
         // never saw whole. The collector must hold, not guess.

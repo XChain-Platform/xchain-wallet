@@ -199,7 +199,9 @@ test.describe('Settings: contacts export / import', () => {
 
                 await openPaletteCommand(page, 'Contacts');
                 await contactRow(page, CONTACT_NAME).click();
-                await expect(page.getByText(CONTACT_ADDRESS),
+                // The contact page draws the address truncated, with the full
+                // address as that element's accessible name.
+                await expect(page.getByRole('main').locator(`[aria-label="${CONTACT_ADDRESS}"]`),
                     'the contact came back by NAME but not by ADDRESS - a restored address book that '
                     + 'shows a familiar name against a missing or wrong address is worse than one '
                     + 'that failed outright, because the user pays a stranger from a form that looks '

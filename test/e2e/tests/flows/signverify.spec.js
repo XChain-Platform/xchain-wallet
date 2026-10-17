@@ -166,7 +166,10 @@ async function signAndVerify(page, viewportName) {
     await expectScreen(page, 'Verify signature', `${viewportName} verify form`);
 
     await verifyForm.getByRole('button', { name: 'Verify signature', exact: true }).click();
-    await expect(verifyForm.getByRole('status')).toContainText(
+    // FormPage draws a plain form's notices just above the form, as a sibling
+    // of it, so the verdict is read from the screen's main content and not
+    // from inside the form landmark.
+    await expect(page.getByRole('main').getByRole('status')).toContainText(
         'Valid signature. Signature matches this message and address.',
         { timeout: 30_000 },
     );

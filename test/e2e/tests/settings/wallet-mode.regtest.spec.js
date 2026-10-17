@@ -12,8 +12,8 @@
 // third of the four surfaces the 2026-08-03 re-scope found undriven.
 //
 // THE CLAIM IS THE SCREEN'S OWN PROMISE, quoted from `WalletModeSection.jsx`:
-// picking Signer says "Sign transactions pasted in from a watcher wallet.
-// **Send / receive screens are hidden; this wallet does not broadcast.**" That
+// picking Signer says "Sign transactions from a watcher wallet **without showing
+// send or receive screens or broadcasting from this device.**" That
 // is not a description of a preference, it is a statement about what the wallet
 // will no longer do - the same shape as the Tor toggle in, which offered
 // a protection the wallet could not provide. So this spec asserts the promise
@@ -91,6 +91,18 @@ test.describe('Settings: wallet mode', () => {
                 await expect(page.getByRole('radio', { name: /^Signer/ }),
                     'the Signer radio did not take the selection').toBeChecked({ timeout: 30_000 });
 
+                // The radio shows the PENDING choice; nothing is written until
+                // the mode change is confirmed, so the reload below would
+                // otherwise test a choice the wallet was never asked to keep.
+                // The dialog closes only once the write resolves, which is what
+                // makes it safe to reload after it.
+                const ask = page.getByRole('dialog', { name: /^Switch to Signer\b.* mode\?$/ });
+                await expect(ask, 'choosing Signer asked for no confirmation')
+                    .toBeVisible({ timeout: 30_000 });
+                await ask.getByRole('button', { name: 'Confirm mode change', exact: true }).click();
+                await expect(ask, 'the mode-change confirmation never closed, so the write did not finish')
+                    .toBeHidden({ timeout: 30_000 });
+
                 // A RELOAD, not a re-render: the whole point is to separate a
                 // value the component is holding from one the vault kept.
                 //
@@ -128,15 +140,15 @@ test.describe('Settings: wallet mode', () => {
             });
 
             await test.step('and the screens the hint says are hidden ARE hidden', async () => {
-                // The exact promise, quoted: "Send / receive screens are
-                // hidden; this wallet does not broadcast." A wallet that still
+                // The exact promise, quoted: "without showing send or receive
+                // screens or broadcasting from this device." A wallet that still
                 // offers Send in signer mode is telling the user something
                 // untrue on the screen where they chose to be safe.
                 await expect(page.getByRole('navigation', { name: 'Primary navigation' })
                     .getByRole('button', { name: 'Send', exact: true }),
                     'signer mode still offers SEND in the primary navigation, while the Wallet Mode '
-                    + 'screen told the user "Send / receive screens are hidden; this wallet does not '
-                    + 'broadcast" - a promise of REMOVED capability that was not kept')
+                    + 'screen told the user it would sign "without showing send or receive screens or '
+                    + 'broadcasting from this device" - a promise of REMOVED capability that was not kept')
                     .toHaveCount(0);
                 await expect(page.getByRole('navigation', { name: 'Primary navigation' })
                     .getByRole('button', { name: 'Receive', exact: true }),

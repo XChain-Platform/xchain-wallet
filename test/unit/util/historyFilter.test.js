@@ -50,6 +50,35 @@ describe('shared/utils/historyFilter', () => {
             expect(classifyEntryAction(e, wallet)).toBe('receive');
         });
 
+        // The explorer's SEND row can name only the destination, so the row's
+        // own address (the one History fetched it for) decides the direction.
+        it('classifies a sourceless SEND to someone else as send', () => {
+            const e = entry({
+                action: 'SEND',
+                address: WALLET_ADDR,
+                raw: { tick: 'XCHAIN', amount: '25', destination: 'bc1qstranger' },
+            });
+            expect(classifyEntryAction(e, wallet)).toBe('send');
+        });
+
+        it('classifies a sourceless SEND to the row address as receive', () => {
+            const e = entry({
+                action: 'SEND',
+                address: WALLET_ADDR,
+                raw: { tick: 'XCHAIN', amount: '25', destination: WALLET_ADDR },
+            });
+            expect(classifyEntryAction(e, wallet)).toBe('receive');
+        });
+
+        it('classifies a sourceless SEND to another wallet address as receive', () => {
+            const e = entry({
+                action: 'SEND',
+                address: 'bc1qother',
+                raw: { destination: WALLET_ADDR },
+            });
+            expect(classifyEntryAction(e, wallet)).toBe('receive');
+        });
+
         it('treats ISSUANCE as issue', () => {
             expect(classifyEntryAction(entry({ action: 'ISSUANCE' }), wallet)).toBe('issue');
         });

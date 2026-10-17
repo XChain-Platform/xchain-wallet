@@ -275,6 +275,17 @@ function keyRequestBlock(scope) {
 const sendButton = (scope) => scope.getByRole('button', { name: 'Send message', exact: true });
 
 /**
+ * The confirm page's accessible name for a MESSAGE: "Confirm " plus the
+ * decoded headline with the recipient in full. The visible headline shortens
+ * the address, so the exact recipient is only checkable here.
+ *
+ * @param {'public' | 'encrypted'} kind
+ * @param {string} recipient
+ */
+const confirmName = (kind, recipient) =>
+    `Confirm Send ${kind} message to ${recipient} on ${REGTEST_CHAIN_LABEL}`;
+
+/**
  * How long a refused press is watched for a confirm screen. An accepted press
  * shows "Preparing review…" at once and opens the confirm screen once the
  * compose returns; a refused one does neither.
@@ -491,10 +502,12 @@ test.describe(`Messaging: first contact on ${REGTEST_CHAIN_LABEL}`, () => {
             // not from form state, and the decoder's own word for v3 is PUBLIC
             // rather than the softer "unencrypted" (`describe.js` decodeMessage,
             // version 3 branch). A user about to publish a message forever is
-            // owed the harder word.
+            // owed the harder word. The headline draws the recipient shortened
+            // (first6…last6); the full headline is the confirm page's
+            // accessible name, so that is where the exact text is read.
             await expect(confirm,
                 'the confirm screen does not name the message as PUBLIC on the venue chain')
-                .toContainText(`Send public message to ${REGTEST_DESTINATION} on ${REGTEST_CHAIN_LABEL}`);
+                .toHaveAttribute('aria-label', confirmName('public', REGTEST_DESTINATION));
 
             const txid = await approveAndCaptureTxid(page, txids);
             const action = await waitForValidAction(txid);
@@ -739,8 +752,8 @@ test.describe(`Messaging: first contact on ${REGTEST_CHAIN_LABEL}`, () => {
                 .toHaveAttribute('aria-label', /^Encryption: Standard \(ECIES\)/);
             await expect(sendButton(main)).toBeEnabled({ timeout: 15_000 });
             await sendButton(main).click();
-            await expect(page.getByTestId('confirm-modal')).toContainText(
-                `Send encrypted message to ${ownAddress} on ${REGTEST_CHAIN_LABEL}`);
+            await expect(page.getByTestId('confirm-modal'))
+                .toHaveAttribute('aria-label', confirmName('encrypted', ownAddress));
 
             const action = await waitForValidAction(await approveAndCaptureTxid(page, txids));
             expect(action.encrypted_message, 'the ECIES send carries no ENCRYPTED_MESSAGE on chain')
@@ -778,8 +791,8 @@ test.describe(`Messaging: first contact on ${REGTEST_CHAIN_LABEL}`, () => {
             await sendButton(main).click();
             // The SAME decoded headline as ECIES: the confirm screen cannot tell
             // the methods apart either, because v2 carries no method field.
-            await expect(page.getByTestId('confirm-modal')).toContainText(
-                `Send encrypted message to ${ownAddress} on ${REGTEST_CHAIN_LABEL}`);
+            await expect(page.getByTestId('confirm-modal'))
+                .toHaveAttribute('aria-label', confirmName('encrypted', ownAddress));
 
             const action = await waitForValidAction(await approveAndCaptureTxid(page, txids));
             expect(action.encrypted_message, 'the ECDH send carries no ENCRYPTED_MESSAGE on chain')

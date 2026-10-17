@@ -78,7 +78,13 @@ export function classifyEntryAction(entry, walletAddresses) {
     const a = String(entry?.action || '').toUpperCase();
     if (a === 'SEND') {
         const src = entrySource(entry).toLowerCase();
-        if (src && walletAddresses && walletAddresses.has(src)) return 'send';
+        if (src) return walletAddresses && walletAddresses.has(src) ? 'send' : 'receive';
+        // An explorer SEND row can carry no source, only the destination. The
+        // row was fetched for one of this wallet's addresses, so a destination
+        // that is not the wallet's own means the value left it.
+        const dest = entryDestination(entry).toLowerCase();
+        const own = String(entry?.address || '').toLowerCase();
+        if (dest && dest !== own && !(walletAddresses && walletAddresses.has(dest))) return 'send';
         return 'receive';
     }
     if (a === 'ISSUE' || a === 'ISSUANCE') return 'issue';
@@ -203,6 +209,12 @@ function entrySource(entry) {
     if (!entry) return '';
     const raw = entry.raw || {};
     return String(entry.source || raw.source || raw.SOURCE || '');
+}
+
+function entryDestination(entry) {
+    if (!entry) return '';
+    const raw = entry.raw || {};
+    return String(raw.destination || raw.DESTINATION || '');
 }
 
 // The seconds-or-milliseconds reading lives with the merge that creates the

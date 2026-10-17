@@ -85,19 +85,23 @@
 //   - A History row is `<li data-history-key="<chainId>:<actionIndex>:<address>">`
 //     (History.jsx EntryRow). A collapsed GROUP is an `<li>` with no such
 //     attribute, so `[data-history-key]` counts rows and never group cards.
-//   - The row itself carries only: action label, status pill, source chip,
-//     "Block N", "N Confirms", relative time. Amount, destination, tick and
-//     txid are NOT on the row - they live on the detail view.
+//   - The row's text carries the action label (named by direction: an
+//     outgoing SEND reads "Send", an incoming one "Receive"), the verified
+//     pill, the counterparty, the amount and tick, the status and a relative
+//     time. "Block N, N Confirmations" is the row button's aria-description,
+//     not its text. The txid is NOT on the row; it lives on the detail view.
 //   - On the web shell a row click does NOT expand inline. App.jsx passes
 //     `onSelectEntry`, so `onRowClick` navigates to a STANDALONE ActionDetail
 //     page (header "Send #2,262", back button labelled "Back to history"). The
 //     filter bar does not exist on that page; claims 2 and 3 have to come back
 //     first, and History re-mounts with its default date window when they do.
-//   - ActionDetail's Details tab renders `entry.raw`'s own keys, and since
-//     `details` is not in its skip-list the whole nested object renders as ONE
-//     JSON-stringified cell. The real values are substrings of it.
-//   - `tx_hash` on that tab is SHORTENED to `first16…last8` (U+2026), so the
-//     full txid never appears as text; assert the shortened form.
+//   - ActionDetail's Details tab is one table row per field, each headed by a
+//     plain label: curated rows first ("Address", "Transaction ID", "Block"),
+//     then every other `entry.raw` key under a sentence-case label ("Status",
+//     "Details"). The nested `details` object renders as ONE JSON-stringified
+//     cell, so its real values are substrings of it.
+//   - Addresses and the txid on that tab draw as `first6…last6` (U+2026); the
+//     full value is the element's title, which is what the assertions read.
 //   - The Send form has no chain picker (D-140): it follows the SELECTED
 //     ASSET's chain. The picker names a row "Select <name> on <chain>", and
 //     the chain's display name reads the same on mainnet and regtest -
@@ -287,9 +291,9 @@ async function widenDateWindow(page) {
     await page.getByLabel('To date').fill(iso(2));
 }
 
-/** ActionDetail's Details tab renders one `<tr>` per raw key; this is one of them. */
-function detailRow(page, key) {
-    return page.getByRole('tabpanel').getByRole('row', { name: new RegExp(`^${key}\\b`) });
+/** One row of ActionDetail's Details tab, found by the label that heads it. */
+function detailRow(page, label) {
+    return page.getByRole('tabpanel').getByRole('row', { name: new RegExp(`^${label}\\b`) });
 }
 
 /**
@@ -304,13 +308,6 @@ function detailRow(page, key) {
  */
 function detailsFragment(details, key) {
     return `"${key}":${JSON.stringify(details[key])}`;
-}
-
-/** History.jsx's `shortenAddress`, reproduced so assertions can predict the text. */
-function shortenAddress(value) {
-    if (!value) return '';
-    if (value.length <= 26) return value;
-    return `${value.slice(0, 16)}…${value.slice(-8)}`;
 }
 
 test.describe(`History on ${REGTEST_CHAIN_LABEL} regtest`, () => {
@@ -414,7 +411,8 @@ test.describe(`History on ${REGTEST_CHAIN_LABEL} regtest`, () => {
             await expect(button, 'the row does not read Confirmed for a mined, valid action')
                 .toContainText('Confirmed');
             await expect(button, 'the row shows a different block than the explorer recorded')
-                .toContainText(`Block ${Number(chainRow.block_index).toLocaleString('en-US')}`);
+                .toHaveAttribute('aria-description',
+                    new RegExp(`^Block ${Number(chainRow.block_index).toLocaleString('en-US')}(,|$)`));
 
             baselineRows = await historyRows(page).count();
             // The MINT and the SEND. More than one matters: claim 2's
@@ -442,7 +440,7 @@ test.describe(`History on ${REGTEST_CHAIN_LABEL} regtest`, () => {
             // cell (see the header), so its values are asserted individually
             // rather than as an exact string whose key ORDER this spec would
             // then be pinning by accident.
-            const details = detailRow(page, 'details');
+            const details = detailRow(page, 'Details');
             await expect(details, 'the detail does not carry the tick the chain recorded')
                 .toContainText(detailsFragment(chainRow.details, 'tick'));
             await expect(details, 'the detail does not carry the amount the chain recorded')
@@ -453,19 +451,20 @@ test.describe(`History on ${REGTEST_CHAIN_LABEL} regtest`, () => {
             // Direction, stated by two facts that cannot both be an accident:
             // the wallet's own address is the row's address, and the money went
             // somewhere that is not it.
-            await expect(detailRow(page, 'address'), 'the detail does not attribute this action to '
-                + 'the wallet\'s own address').toContainText(shortenAddress(own));
+            await expect(detailRow(page, 'Address').getByTitle(own, { exact: true }),
+                'the detail does not attribute this action to the wallet\'s own address')
+                .toBeVisible();
             expect(String(chainRow.details.destination)).not.toBe(own);
 
-            await expect(detailRow(page, 'status'), 'the detail disagrees with the chain about status')
-                .toContainText(String(chainRow.status));
-            await expect(detailRow(page, 'block_index'), 'the detail disagrees with the chain about the block')
+            // The tab words a status in sentence case ("Valid" for "valid").
+            await expect(detailRow(page, 'Status'), 'the detail disagrees with the chain about status')
+                .toContainText(String(chainRow.status), { ignoreCase: true });
+            await expect(detailRow(page, 'Block'), 'the detail disagrees with the chain about the block')
                 .toContainText(Number(chainRow.block_index).toLocaleString('en-US'));
-            // Shortened, never in full: the whole txid only exists on the copy
-            // button's value, so a `toContainText(sendTxid)` here would fail on
-            // a screen that is behaving correctly.
-            await expect(detailRow(page, 'tx_hash'), 'the detail shows a different transaction than '
-                + 'the one the wallet said it broadcast').toContainText(shortenAddress(sendTxid));
+            // The txid draws shortened; its full value is the element's title.
+            await expect(detailRow(page, 'Transaction ID').getByTitle(sendTxid, { exact: true }),
+                'the detail shows a different transaction than the one the wallet said it broadcast')
+                .toBeVisible();
         });
 
         await test.step('CLAIM 2: the search box narrows the list to this row, and releases it again', async () => {

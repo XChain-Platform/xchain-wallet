@@ -238,8 +238,9 @@ test.describe('pre-flight gate on regtest', () => {
         await expect(page.getByTestId('ack-DRYRUN_INVALID')).toHaveCount(0);
         await expect(page.getByTestId('ack-BALANCE_INSUFFICIENT')).toHaveCount(0);
 
+        // The footer action names what it signs: the verb, the amount and the token.
         const approve = page.getByTestId('confirm-approve');
-        await expect(approve).toHaveText(/^Approve$/);
+        await expect(approve).toHaveText(`Send ${AFFORDABLE} XCHAIN`);
         await expect(approve).toBeEnabled();
         await approve.click();
 

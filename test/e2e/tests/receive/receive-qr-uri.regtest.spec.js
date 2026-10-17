@@ -107,6 +107,20 @@ function parsePaymentUri(raw) {
     };
 }
 
+/**
+ * Skips the calling test on a browser with no Shape Detection API, the same
+ * probe `onboarding/backup-pointer-restore.regtest.spec.js` uses. Chromium
+ * ships `BarcodeDetector` on macOS, Windows and Android but not on Linux, so a
+ * Linux venue runner cannot read the painted code no matter what Receive
+ * draws. Probed on the app's own origin because the API is secure-context
+ * only.
+ */
+async function skipWithoutBarcodeDetector(page) {
+    const present = await page.evaluate(() => typeof window.BarcodeDetector === 'function');
+    test.skip(!present, 'this browser has no BarcodeDetector (Chromium on Linux), so the painted '
+        + 'Receive QR cannot be decoded here');
+}
+
 /** Opens Receive on this run's venue chain and returns its address. */
 async function openVenueReceive(page) {
     await createWallet(page, { password: PASSWORD });
@@ -116,6 +130,7 @@ async function openVenueReceive(page) {
     expect(ownAddress,
         `Receive never reached a ${REGTEST_COIN} address even through its own picker`)
         .toMatch(REGTEST_ADDRESS_RE);
+    await skipWithoutBarcodeDetector(page);
     return ownAddress;
 }
 

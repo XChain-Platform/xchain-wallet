@@ -321,8 +321,9 @@ jobs:
   e2e-regtest:
     runs-on: ubuntu-24.04
     # One run at a time on the shared regtest venue: concurrent runs starve each other past the
-    # 6 h job limit, while a lone run takes about 65 minutes.
-    timeout-minutes: 150
+    # 6 h job limit. A lone run of the 160-test suite measures about 70 s a test (139 min for
+    # the first 120 on 2026-10-17), so the cap leaves room for the whole suite plus waits.
+    timeout-minutes: 240
     concurrency:
       group: wallet-regtest-venue
       cancel-in-progress: false

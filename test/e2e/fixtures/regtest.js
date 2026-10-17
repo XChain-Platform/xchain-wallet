@@ -1418,6 +1418,52 @@ export async function priceFamilyRefusal() {
 }
 
 /**
+ * `null` when this venue can serve a BET action's detail, else the venue's
+ * own refusal, for a `test.skip(...)` that heals itself once the venue's
+ * indexer is current.
+ *
+ * A BET detail read joins the market's state from the indexer database, so an
+ * indexer image older than the explorer that reads it can lack a table that
+ * join needs, and the explorer then answers HTTP 500 `DB_ERROR` for every BET
+ * action. A BET round trip reads that detail at its last step, so on such a
+ * venue it fails after all of its real work, on a gap that is nothing about
+ * the wallet.
+ *
+ * Probes the newest bet and the newest market, since a bet's detail and a
+ * market's detail take different joins. Only a `DB_ERROR` skips: a venue with
+ * no BET history yet, or one refusing for any other reason (a rate limit, a
+ * timeout), runs the spec, so a real failure still fails.
+ *
+ * @returns {Promise<string | null>} the reason to skip, or null to run
+ */
+export async function betDetailRefusal() {
+    const dbRefusal = (err, what) => {
+        const said = err?.message || String(err);
+        return said.includes('[DB_ERROR]')
+            ? `the venue cannot serve ${what} (read the explorer container log for the query): ${said}`
+            : null;
+    };
+    for (const list of ['bets?limit=1', 'bet_feeds?limit=1']) {
+        let index;
+        try {
+            index = (await explorerJson(list))?.data?.[0]?.action_index;
+        } catch (err) {
+            const gap = dbRefusal(err, `the ${list.split('?')[0]} list`);
+            if (gap) return gap;
+            continue;
+        }
+        if (index === undefined || index === null) continue;
+        try {
+            await explorerJson(`action/${index}`);
+        } catch (err) {
+            const gap = dbRefusal(err, `the detail of BET action ${index}`);
+            if (gap) return gap;
+        }
+    }
+    return null;
+}
+
+/**
  * The venue's own answer about a PLANTED oracle feed, or null when the
  * feed is really there and the lane can be driven.
  *

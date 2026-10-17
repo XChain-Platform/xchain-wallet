@@ -280,7 +280,6 @@ test.describe(`holder-payout callback on ${REGTEST_CHAIN_LABEL}`, () => {
             const ownerXchainBefore = await tokenBalance(owner, PAYOUT_TICK);
             const holderXchainBefore = await tokenBalance(holder, PAYOUT_TICK);
             const expectedHolderPayout = HOLDER_UNITS * PAYOUT_AMOUNT;
-            const expectedOwnerXchainAfter = ownerXchainBefore - expectedHolderPayout;
             expect(holderXchainBefore).toBe(0);
 
             await mineToHeight(callbackBlock);
@@ -304,6 +303,21 @@ test.describe(`holder-payout callback on ${REGTEST_CHAIN_LABEL}`, () => {
             const callback = await waitForValidAction(txid);
             expect(callback.action).toBe('CALLBACK');
             expect(callback.source).toBe(owner);
+
+            // CALLBACK carries a unified-gas protocol fee (CALLBACK_BASE plus a
+            // per-recipient term). On Bitcoin it is paid from the owner's XCHAIN
+            // balance, so the owner loses the payout AND the fee. The fee is read
+            // off the chain's own record of this action rather than hard-coded,
+            // since the gas schedule is protocol data, and summed in millionths
+            // so a binary float cannot turn 41 - 0.051 into 40.948999.
+            const fee = callback.fee || {};
+            const xchainFee = String(fee.tick || '').toUpperCase() === PAYOUT_TICK
+                ? Number(fee.amount || 0) : 0;
+            expect(Number.isFinite(xchainFee) && xchainFee >= 0,
+                `the CALLBACK fee record is unreadable: ${JSON.stringify(callback.fee)}`).toBe(true);
+            const micro = (n) => Math.round(n * 1e6);
+            const expectedOwnerXchainAfter = (micro(ownerXchainBefore) - micro(expectedHolderPayout)
+                - micro(xchainFee)) / 1e6;
 
             const callbackRows = await explorerJson(`callbacks/${TICK}/token`);
             expect((callbackRows?.data || []).some((row) => row.tx_hash === txid)).toBe(true);
