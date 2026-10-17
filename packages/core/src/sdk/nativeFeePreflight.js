@@ -224,6 +224,34 @@ function oracleVerdictMessage(detail, coin) {
         + 'sent. Waiting will not change this, so adjust the action and try again.';
 }
 
+/**
+ * The sentence for an OracleFeeUnpayableError, the refusal the oracle pre-flight
+ * raises on the XCHAIN fee lane, where the native-fee quote never runs.
+ *
+ * The oracle fee quote carries the same indexer verdicts as the native-fee quote,
+ * so the same table names the remedy. Only the three verdicts with a known remedy
+ * are answered; anything else returns null so the caller's generic copy applies
+ * rather than wire wording.
+ *
+ * @param {unknown} err
+ * @param {{ coinTicker?: string }} [chain]
+ * @returns {string | null}
+ */
+export function oracleFeeRefusalMessage(err, { coinTicker } = {}) {
+    if (!err || typeof err !== 'object' || /** @type {any} */ (err).name !== 'OracleFeeUnpayableError') {
+        return null;
+    }
+    const m = /oracle usage fee pre-flight failed \([a-z]+\): (.+)$/s
+        .exec(String(/** @type {any} */ (err).message || ''));
+    const detail = m ? m[1].trim().replace(/^invalid:\s*/i, '') : '';
+    if (!/^ORACLE_ADDRESS\b/i.test(detail)
+        || !/no effective oracle price|no validator price|missing oracle fee output|insufficient oracle fee/i
+            .test(detail)) {
+        return null;
+    }
+    return oracleVerdictMessage(detail, coinTicker || 'the native coin');
+}
+
 // The indexer's verdict, recovered from the message the constructor built. Same
 // boundary-survival reason as dustAmountFromMessage: the popup receives only
 // { name, message }, so `quote` is gone by the time a form renders this. The leading

@@ -564,7 +564,15 @@ test.describe('BET round trip on regtest', () => {
 
         await test.step('place a bet from the second address', async () => {
             await gotoBettingHub(page);
-            await page.getByRole('button', { name: new RegExp(`#${feedIndex}\\b`) }).click();
+            // The hub reads its market list once per visit, and on the shared
+            // venue that read can draw an HTTP 429; the wallet retries it about
+            // 20 seconds later, which measured 25 ms past a 30 s click budget in
+            // CI. The row is waited for on a budget that covers one throttled
+            // retry before it is clicked.
+            const market = page.getByRole('button', { name: new RegExp(`#${feedIndex}\\b`) });
+            await expect(market, `the betting hub never listed market #${feedIndex}`)
+                .toBeVisible({ timeout: 120_000 });
+            await market.click();
 
             const main = page.getByRole('main');
             // Anchored on a CONTROL, not on the page title: PageHeader renders
@@ -651,7 +659,10 @@ test.describe('BET round trip on regtest', () => {
             await openPaletteCommand(page, 'My markets');
 
             const main = page.getByRole('main');
-            await expect(main.getByText(new RegExp(`#${feedIndex}\\b`))).toBeVisible({ timeout: 30_000 });
+            // This list reads the shared explorer too, so it gets the hub's
+            // throttled-retry budget.
+            await expect(main.getByText(new RegExp(`#${feedIndex}\\b`)),
+                `My markets never listed market #${feedIndex}`).toBeVisible({ timeout: 120_000 });
             await main.getByRole('button', { name: 'Resolve', exact: true }).first().click();
             await main.getByRole('button', { name: 'Yes', exact: true }).click();
             await fillPasswordIfPresent(main);

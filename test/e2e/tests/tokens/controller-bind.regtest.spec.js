@@ -533,6 +533,9 @@ async function generateExtraAddresses(page, count) {
     await selectVenueChain(page, 'Coin');
     await page.getByLabel('Number of addresses').fill(String(count));
     await page.getByTestId('add-address-generate').click();
+    // The modal closes only once the last address is stored; a reload before
+    // that cuts generation short.
+    await expect(page.getByTestId('add-address-generate')).toBeHidden({ timeout: 60_000 });
 }
 
 /**

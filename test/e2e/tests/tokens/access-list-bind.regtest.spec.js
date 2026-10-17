@@ -283,7 +283,7 @@ async function onboardAndIssue(page, tick, walletName) {
     await expect(main.getByLabel('Ticker')).toBeVisible({ timeout: 30_000 });
     await selectVenueChain(main);
 
-    const source = await main.getByLabel('From').inputValue();
+    const source = await main.getByLabel('From', { exact: true }).inputValue();
     expect(source, `the form has no ${REGTEST_CHAIN_LABEL} address to sign with`)
         .toMatch(REGTEST_ADDRESS_RE);
 
@@ -302,7 +302,7 @@ async function onboardAndIssue(page, tick, walletName) {
     const form = page.getByRole('main');
     await expect(form.getByLabel('Ticker')).toBeVisible({ timeout: 30_000 });
     await selectVenueChain(form);
-    expect(await form.getByLabel('From').inputValue(),
+    expect(await form.getByLabel('From', { exact: true }).inputValue(),
         'the Issue form changed its From address between the two visits')
         .toBe(source);
     await form.getByLabel('Ticker').fill(tick);
@@ -327,6 +327,11 @@ async function generateExtraAddresses(page, count) {
     await selectVenueChain(page, 'Coin');
     await page.getByLabel('Number of addresses').fill(String(count));
     await page.getByTestId('add-address-generate').click();
+    // The modal derives the addresses one at a time and closes only after the
+    // last one is stored; navigating or reloading before that drops the rest.
+    await expect(page.getByTestId('add-address-generate'),
+        `the wallet never finished generating ${count} addresses`)
+        .toBeHidden({ timeout: 60_000 });
 }
 
 /**
@@ -357,7 +362,7 @@ async function publishAddressList(page, source, chooseMembers) {
         + `${others.length}: ${others.join(', ')}`)
         .toBeGreaterThanOrEqual(2);
 
-    expect(await main.getByLabel('From').inputValue(),
+    expect(await main.getByLabel('From', { exact: true }).inputValue(),
         'the list would be published from an address that is not the token issuer, so it would be '
         + 'paid for by an address holding no coin')
         .toBe(source);
@@ -556,12 +561,12 @@ async function expectRefusedSend(page, { source, tick, destination, senderNow })
     await warmSend(source, tick, destination, false);
     await composeTokenSend(page, tick, destination);
 
-    // Half one: the wallet says so BEFORE the fee is spent, and quotes the
-    // network's own words rather than paraphrasing them.
+    // Half one: the wallet says so BEFORE the fee is spent, and its refusal
+    // sentence carries the network's own reason ("not authorized") inside it.
     await expect(page.getByTestId('preflight-chip')).toHaveText('Will likely fail');
     await expect(page.getByTestId('preflight-panel')).toHaveAttribute('data-verdict', 'fail');
     await expect(page.getByTestId('preflight-panel'))
-        .toContainText(/The network reports this will fail: .*not authorized/i);
+        .toContainText(/would be refused because .*not authorized/i);
 
     // ...and it blocks by default. The override is the anti-censorship half of
     // §4.2 and is what lets this spec ask the chain directly.

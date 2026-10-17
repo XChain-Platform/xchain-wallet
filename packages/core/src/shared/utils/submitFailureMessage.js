@@ -45,7 +45,7 @@
 // takes. Routing every path through one helper is what makes "did this form
 // get swept?" a question with one answer.
 
-import { nativeFeeErrorMessage } from '../../sdk/nativeFeePreflight.js';
+import { nativeFeeErrorMessage, oracleFeeRefusalMessage } from '../../sdk/nativeFeePreflight.js';
 import { encoderErrorMessage } from '../../sdk/encoderErrors.js';
 import { explorerErrorMessage } from '../../sdk/explorerErrors.js';
 import { knownSdkErrorMessage, unknownSdkErrorCode } from '../../sdk/sdkErrorMessages.js';
@@ -55,7 +55,7 @@ import { OFFER_LIFECYCLE_REFUSAL } from '../../flows/marketExpiry.js';
 import { humanizeError } from './humanizeError.js';
 import { actionDisplayLabel } from './actionDisplayLabel.js';
 import { CHUNK_LANE_OPENER_RE } from './chunkLaneCopy.js';
-import { protocolRefusalReason, userFacingMessage } from './userFacingMessage.js';
+import { isShowableRefusal, protocolRefusalReason, userFacingMessage } from './userFacingMessage.js';
 
 const NEXT_STEP_RE = /\b(?:add|check|choose|enter|give|reconnect|report|retry(?:ing)?|review|try|update|wait)\b/i;
 const SIGNER_CANCELLED_RE = /\b(?:user (?:cancelled|canceled)|(?:cancelled|canceled) (?:by the user|on (?:the )?device)|user rejected on (?:the )?device)\b/i;
@@ -279,10 +279,18 @@ export function submitFailureMessage(
         return 'Signing was cancelled. Nothing was signed. Review the details and try again when you are ready.';
     }
     if (isNativeFeeForfeit(err)) {
-        return userFacingMessage(
-            nativeFeeErrorMessage(err, { coinTicker, mandatory, chainId, networkKind }), generic,
-        );
+        // The sentence can quote the indexer's verdict, which names the field
+        // it refused ("mint exceeds MINT_ADDRESS_MAX"). The general filter
+        // reads that field name as an error code and would hide the one thing
+        // the user can act on, so the verdict gets the protocol-refusal check.
+        const copy = nativeFeeErrorMessage(err, { coinTicker, mandatory, chainId, networkKind });
+        return isShowableRefusal(copy) ? copy : userFacingMessage(copy, generic);
     }
+    // The oracle pre-flight's refusal names its remedy only through the
+    // indexer verdict it carries, and "wait a day" and "try again" are both
+    // possible answers, so the verdict is read before the name-only SDK copy.
+    const oracleRefusal = oracleFeeRefusalMessage(err, { coinTicker });
+    if (oracleRefusal) return userFacingMessage(oracleRefusal, generic);
     // Before every other classifier and before the fallback: the error already
     // carries the whole remedy, and nothing else here would recognise it.
     if (isWatcherChunkLane(err)) {

@@ -83,6 +83,7 @@ import {
     expectConfirmModal,
     fundAddress,
     mintXchain,
+    payProtocolFeeInCoin,
     REGTEST_ADDRESS_RE,
     REGTEST_CHAIN_LABEL,
     REGTEST_COIN,
@@ -524,6 +525,10 @@ test.describe(`ticker grammar on ${REGTEST_CHAIN_LABEL}`, () => {
             const main = await openWizardDetails(page);
             await main.getByLabel('Token name (ticker)').fill(ISSUED_TICK);
             await main.getByLabel('Supply', { exact: true }).fill(String(SUPPLY));
+            // The coin lane: FUNDING carries this leg's protocol fee, and the
+            // wallet holds no XCHAIN, so the Bitcoin default (XCHAIN) would be
+            // refused for insufficient funds before the ticker is ever tested.
+            await payProtocolFeeInCoin(main);
             await main.getByRole('button', { name: 'Review token', exact: true }).click();
             await main.getByRole('button', { name: 'Continue to confirmation', exact: true }).click();
 

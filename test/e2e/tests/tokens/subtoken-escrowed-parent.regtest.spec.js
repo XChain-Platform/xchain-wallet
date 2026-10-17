@@ -52,6 +52,7 @@ import {
     fundAddress,
     minerRpc,
     mintXchain,
+    payProtocolFeeInCoin,
     seedPrices,
     selectVenueChain,
     switchToRegtest,
@@ -219,6 +220,10 @@ async function fillSubtoken(page, { parent, child, supply }) {
     await main.getByLabel('Parent ticker').fill(parent);
     await main.getByLabel('Subtoken name').fill(child);
     await main.getByLabel('Supply', { exact: true }).fill(String(supply));
+    // The coin lane on Bitcoin, for the control and the refused leg alike:
+    // the native-fee pre-flight is what answers a refused ISSUE on the form.
+    // On the XCHAIN lane the same verdict surfaces on the confirm screen.
+    await payProtocolFeeInCoin(main);
     await main.getByRole('button', { name: 'Review token', exact: true }).click();
     await main.getByRole('button', { name: 'Continue to confirmation', exact: true }).click();
 }
@@ -310,25 +315,15 @@ test.describe(`subtoken under an escrowed parent on ${REGTEST_CHAIN_LABEL}`, () 
             await expect(page.getByRole('main').getByLabel(/^Price/))
                 .toBeVisible({ timeout: 30_000 });
             await page.getByRole('main').getByLabel(/^Price/).fill(ASK);
-            await page.getByRole('main').getByRole('button', { name: 'Review', exact: true }).click();
 
-            // This form does NOT route through the shared confirm modal. It
-            // has its own review stage ("Review sale") whose submit is
-            // labelled "List name for sale", and it broadcasts from there,
-            // reporting the txid in its own result panel. The submit is
-            // disabled until the signer is ready or a password is typed; with
-            // the vault already unlocked there is no password field at all
-            // (§3.5, Session 29), so identify the stage by its button.
-            const listBtn = page.getByRole('main')
-                .getByRole('button', { name: 'List name for sale', exact: true });
-            await expect(listBtn, 'the sell-ownership review stage never offered its submit')
-                .toBeEnabled({ timeout: 90_000 });
-            await listBtn.click();
-
-            const main2 = page.getByRole('main');
-            await expect(main2, 'the ownership sale never reported a transaction id')
-                .toContainText(/[0-9a-f]{64}/, { timeout: 180_000 });
-            const orderTxid = (await main2.innerText()).match(/[0-9a-f]{64}/)?.[0];
+            // A signing wallet composes the sale onto the shared confirm
+            // screen straight from the form's "List name for sale" submit;
+            // only a watcher wallet gets the form's own review stage. The
+            // result panel then carries the txid.
+            await page.getByRole('main')
+                .getByRole('button', { name: 'List name for sale', exact: true }).click();
+            await expectConfirmScreen(page);
+            const orderTxid = await approveAndGetTxid(page);
 
             const order = await waitForIndexedAction(orderTxid);
             expect(String(order.status), `the venue rejected the ownership sale: ${order.status}`)

@@ -84,6 +84,7 @@ import {
     fundAddress,
     minerRpc,
     mintXchain,
+    payProtocolFeeInCoin,
     REGTEST_ADDRESS_RE,
     REGTEST_CHAIN_LABEL,
     REGTEST_COIN,
@@ -150,8 +151,10 @@ async function projectedProtocolFeeSats(page) {
     const deltas = page.getByTestId('action-intent-deltas');
     if (await deltas.count() === 0) return null;
     const text = await deltas.innerText();
-    const coin = text.match(/Protocol fee\s*[A-Z]{3,5}\s*([\d.]+)/)?.[1];
-    return coin === undefined ? null : Math.round(Number(coin) * 1e8);
+    // The projection prints the amount before its ticker ("Protocol fee" then
+    // "0.00001 BTC").
+    const coin = text.match(/Protocol fee\s*([\d.,]+)\s*[A-Z]{3,5}\b/)?.[1];
+    return coin === undefined ? null : Math.round(Number(coin.replace(/,/g, '')) * 1e8);
 }
 
 /**
@@ -171,11 +174,12 @@ function expectPerRecipientFee(dropped, recipients) {
         `an airdrop to ${recipients} addresses was billed ${fee.gas_cost} gas units; the unified `
         + `schedule prices it per recipient, so it should be ${100 * recipients}`)
         .toBe(100 * recipients);
-    // Off Bitcoin the native coin is the ONLY lane, so a fee recorded
-    // against an XCHAIN balance here would be a fee this wallet cannot pay (it
-    // holds no XCHAIN at all).
+    // Every drop here is composed on the coin lane: Litecoin and Dogecoin have
+    // no other lane, and on Bitcoin the spec turns on "Pay protocol fee in BTC
+    // instead of XCHAIN" (payProtocolFeeInCoin). Mode 2 is an XCHAIN balance
+    // debit, so seeing it means the wallet dropped the lane the signer chose.
     expect(Number(fee.payment_mode),
-        'the airdrop recorded an XCHAIN-lane fee on a chain that has no XCHAIN fee lane')
+        'the airdrop recorded an XCHAIN-lane fee although it was composed on the coin lane')
         .toBe(1);
     expect(Number(fee.native_coin_amount),
         'the mandatory native lane recorded no coin amount for a fee-bearing action')
@@ -405,7 +409,7 @@ async function issueToken(page, tick, supply, source) {
     const form = page.getByRole('main');
     await expect(form.getByLabel('Ticker')).toBeVisible({ timeout: 30_000 });
     await selectVenueChain(form);
-    expect(await form.getByLabel('From').inputValue(),
+    expect(await form.getByLabel('From', { exact: true }).inputValue(),
         'the Issue form is not signing with the funded address')
         .toBe(source);
     await form.getByLabel('Ticker').fill(tick);
@@ -441,7 +445,7 @@ async function onboardAndIssue(page, ticks = [[TICK, SUPPLY]], walletName = 'Air
     await expect(main.getByLabel('Ticker')).toBeVisible({ timeout: 30_000 });
     await selectVenueChain(main);
 
-    const source = await main.getByLabel('From').inputValue();
+    const source = await main.getByLabel('From', { exact: true }).inputValue();
     expect(source, `the form has no ${REGTEST_CHAIN_LABEL} address to sign with`)
         .toMatch(REGTEST_ADDRESS_RE);
 
@@ -547,7 +551,7 @@ async function publishAddressList(page, source, members) {
     await expect(main.getByLabel('List type')).toBeVisible({ timeout: 30_000 });
     await selectVenueChain(main);
     await readChainAddresses(page, source);
-    expect(await main.getByLabel('From').inputValue(),
+    expect(await main.getByLabel('From', { exact: true }).inputValue(),
         'the list would be published from an address holding no coin')
         .toBe(source);
 
@@ -574,6 +578,11 @@ async function generateExtraAddresses(page, count) {
     await selectVenueChain(page, 'Coin');
     await page.getByLabel('Number of addresses').fill(String(count));
     await page.getByTestId('add-address-generate').click();
+    // The modal derives the addresses one at a time and closes only after the
+    // last one is stored; navigating or reloading before that drops the rest.
+    await expect(page.getByTestId('add-address-generate'),
+        `the wallet never finished generating ${count} addresses`)
+        .toBeHidden({ timeout: 60_000 });
 }
 
 /** Opens the Airdrop form's token picker and selects `tick`. */
@@ -607,6 +616,7 @@ test.describe(`airdrop on ${REGTEST_CHAIN_LABEL}`, () => {
         let minerSats;
         let projectedFeeSats;
         let satsBefore;
+        let xchainBefore;
 
         await test.step('onboard, fund and issue the token from the wallet\'s only address', async () => {
             issuer = await onboardAndIssue(page);
@@ -643,7 +653,7 @@ test.describe(`airdrop on ${REGTEST_CHAIN_LABEL}`, () => {
             recipients = others.slice(0, 2);
             [control] = others.slice(2);
 
-            expect(await main.getByLabel('From').inputValue(),
+            expect(await main.getByLabel('From', { exact: true }).inputValue(),
                 'the airdrop would be signed by an address that is not the token issuer, so it '
                 + 'would be paid for by an address holding no coin and no supply')
                 .toBe(issuer);
@@ -674,6 +684,7 @@ test.describe(`airdrop on ${REGTEST_CHAIN_LABEL}`, () => {
             await expect(main, 'the form did not project the total this drop pays out')
                 .toContainText(`total ~${AMOUNT * recipients.length} ${TICK}`);
 
+            await payProtocolFeeInCoin(main);
             await main.getByRole('button', { name: 'Review recipients' }).click();
         });
 
@@ -743,6 +754,7 @@ test.describe(`airdrop on ${REGTEST_CHAIN_LABEL}`, () => {
                 + 'eight places and the larger charge unmentioned')
                 .not.toBeNull();
             satsBefore = await coinBalanceSats(issuer);
+            xchainBefore = await tokenBalance(issuer, 'XCHAIN');
 
             // The done screen prints the LIST's id above the AIRDROP's, so the
             // one already known has to be excluded by name.
@@ -816,11 +828,11 @@ test.describe(`airdrop on ${REGTEST_CHAIN_LABEL}`, () => {
                 + `+ protocol ${projectedFeeSats}); the chain charged ${satsBefore - satsAfter}`)
                 .toBe(minerSats + projectedFeeSats);
 
-            // This wallet minted no XCHAIN, so a fee taken there as well would
-            // have to come out of a balance of nothing.
+            // Onboarding minted XCHAIN for the ISSUE fee, so the coin-lane drop
+            // must leave that balance exactly where it stood before Approve.
             expect(await tokenBalance(issuer, 'XCHAIN'),
-                'the mandatory coin lane also touched an XCHAIN balance')
-                .toBe(0);
+                'the coin-lane airdrop also debited the XCHAIN balance')
+                .toBe(xchainBefore);
         });
     });
 
@@ -900,7 +912,7 @@ test.describe(`airdrop on ${REGTEST_CHAIN_LABEL}`, () => {
             await pickDropToken(page, DROP_TICK);
             await selectVenueChain(main);
             await readChainAddresses(page, issuer);
-            expect(await main.getByLabel('From').inputValue(),
+            expect(await main.getByLabel('From', { exact: true }).inputValue(),
                 'the drop would be signed by an address that is not the issuer')
                 .toBe(issuer);
 
@@ -925,6 +937,7 @@ test.describe(`airdrop on ${REGTEST_CHAIN_LABEL}`, () => {
             // skipping the rest of this chain assertion.
             await waitForHolderCount(page, MEMB_TICK, /1 token · ~2 holders right now/);
 
+            await payProtocolFeeInCoin(main);
             await main.getByRole('button', { name: 'Review recipients' }).click();
             await expect(page.getByText('Review token list', { exact: true }).first(),
                 'a token-holder drop did not reach the TOKEN list review (it may have fallen '
@@ -1110,6 +1123,7 @@ test.describe(`airdrop on ${REGTEST_CHAIN_LABEL}`, () => {
             await expect(main, 'the form did not recognise the pick as an ADDRESS list')
                 .toContainText(/address list/i);
 
+            await payProtocolFeeInCoin(main);
             // 'existing' skips the LIST leg entirely, so the submit button is
             // labelled for the airdrop rather than for a recipient review.
             await main.getByRole('button', { name: 'Review airdrop' }).click();

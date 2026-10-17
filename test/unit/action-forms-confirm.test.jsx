@@ -874,6 +874,42 @@ describe('Action forms confirm via the single-encode pipeline', () => {
         });
     });
 
+    // The review stage has no fee toggle, so a resumed AIRDROP can only pay
+    // the way the LIST did if the pending record carries that choice. Without
+    // it a Bitcoin airdrop whose LIST paid in BTC moved onto the XCHAIN balance.
+    it.each([
+        [true, true],
+        [false, undefined],
+        [undefined, undefined],
+    ])('AirdropForm resumes leg 2 on the fee lane the LIST chose (record %s)', async (recorded, expected) => {
+        const { calls } = await driveThroughConfirm({
+            Form: AirdropForm,
+            props: {
+                resumeId: 'pa-1',
+                messagingOverrides: {
+                    listPendingAirdropsForWallet: () => Promise.resolve([{
+                        id: 'pa-1',
+                        walletId: 'w',
+                        chainId: CHAIN,
+                        fromAddress: HD_ADDRESS.address,
+                        token: 'JDOG',
+                        amountPer: '5',
+                        recipients: ['bc1qrecipientone', 'bc1qrecipienttwo'],
+                        listTxid: 'listtx',
+                        listActionIndex: '77',
+                        stage: 'ready-to-airdrop',
+                        ...(recorded === undefined ? {} : { payFeeInNativeCoin: recorded }),
+                    }]),
+                },
+            },
+            actionLabel: /^Sign airdrop/,
+        });
+        const submit = expectSingleEncode(calls, { action: 'AIRDROP', submitMethod: 'airdropAction' });
+        const compose = calls.find((c) => c.method === 'composeForConfirm');
+        expect(compose.args.encoderOpts?.payFeeInNativeCoin).toBe(expected);
+        expect(submit.args.payFeeInNativeCoin).toBe(expected);
+    });
+
     it('DispenserForm composes DISPENSER and signs the prebuilt PSBT', async () => {
         const { calls } = await driveThroughConfirm({
             Form: DispenserForm,

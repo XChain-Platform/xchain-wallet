@@ -320,6 +320,9 @@ export function AirdropForm({ walletId, resumeId = null, onBack, initialChainId,
                     });
                 }
                 setMemo(rec.memo || '');
+                // The review stage renders no fee toggle, so the lane the LIST
+                // was paid on is the only record of the signer's choice.
+                nativeFee.setPayFeeInNativeCoin(rec.payFeeInNativeCoin === true);
                 setPendingId(rec.id);
                 setListTxid(rec.listTxid);
                 setListActionIndex(rec.listActionIndex);
@@ -1027,6 +1030,7 @@ export function AirdropForm({ walletId, resumeId = null, onBack, initialChainId,
                                 listTxid: '',
                                 listType,
                                 memo: memo.trim() || undefined,
+                                payFeeInNativeCoin: nativeFee.payFeeInNativeCoin,
                             }),
                         },
                         txidPath: ['record', 'listTxid'],
@@ -1056,6 +1060,7 @@ export function AirdropForm({ walletId, resumeId = null, onBack, initialChainId,
                 listTxid: txid,
                 listType,
                 memo: memo.trim() || undefined,
+                payFeeInNativeCoin: nativeFee.payFeeInNativeCoin,
             });
             await messaging.savePendingAirdrop({ record });
             setPendingId(record.id);
@@ -1162,6 +1167,7 @@ export function AirdropForm({ walletId, resumeId = null, onBack, initialChainId,
                 listTxid: txid,
                 listType,
                 memo: memo.trim() || undefined,
+                payFeeInNativeCoin: nativeFee.payFeeInNativeCoin,
             });
             await messaging.savePendingAirdrop({ record });
             setPendingId(record.id);

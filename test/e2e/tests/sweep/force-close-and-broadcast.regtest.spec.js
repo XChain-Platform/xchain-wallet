@@ -337,6 +337,8 @@ test.describe(`sweep force-close and broadcast on ${REGTEST_CHAIN_LABEL}`, () =>
 
         let before;
         let destBefore;
+        /** The XCHAIN protocol fee the sweep's confirm screen quoted, 0 when it quoted none. */
+        let sweepFeeXchain = 0;
 
         await test.step('drive the sweep wizard, with the dispenser force-close selected', async () => {
             await openPaletteCommand(page, 'Sweep address');
@@ -425,6 +427,19 @@ test.describe(`sweep force-close and broadcast on ${REGTEST_CHAIN_LABEL}`, () =>
                 .toBeVisible({ timeout: 30_000 });
             await typed.fill('SWEEP');
 
+            // On Bitcoin the sweep pays its protocol fee in XCHAIN out of the
+            // balance it moves, so the destination receives the free balance
+            // less this fee. It is read off the screen the user approved: the
+            // fee is a hub setting, and on a coin-fee lane there is no line.
+            await expect(approve, 'Approve never went live after the confirmation word was typed')
+                .toBeEnabled({ timeout: 120_000 });
+            const feeLine = page.getByTestId('confirm-protocol-fee');
+            if (await feeLine.count() > 0) {
+                const said = await feeLine.innerText();
+                sweepFeeXchain = Number(said.match(new RegExp(`([\\d.]+)\\s*${TICK}\\b`))?.[1]);
+                expect(Number.isFinite(sweepFeeXchain), `unparseable protocol-fee line: ${said}`).toBe(true);
+            }
+
             txid = await approveAndGetTxid(page);
 
             // The campaign's one unreproduced observation, asserted as its own
@@ -472,10 +487,10 @@ test.describe(`sweep force-close and broadcast on ${REGTEST_CHAIN_LABEL}`, () =>
             // The protocol fee is debited from the swept balance before it is
             // credited (indexer actions/sweep.js), and its size is a function of
             // the db-hits fee schedule and the LEGACY_FEE_NUMERIC_DBHITS
-            // flag-day - so it is BOUNDED here rather than pinned to a figure
-            // this spec would have to re-derive on every schedule change. What
-            // is pinned is the part that matters: essentially all of it arrived,
-            // and none of it went anywhere else.
+            // flag-day, so the spec takes the figure the confirm screen quoted
+            // rather than re-deriving it. The credit must equal the free balance
+            // less that quoted fee: nothing else may go missing, and the user
+            // must have been told the true cost before signing.
             // THE ESCROW DOES NOT TRAVEL WITH THE SWEEP, AND IT IS EASY TO
             // FORGET THAT. A sweep can only move the FREE balance - the
             // dispenser's ESCROW is still committed to the dispenser at the
@@ -497,15 +512,16 @@ test.describe(`sweep force-close and broadcast on ${REGTEST_CHAIN_LABEL}`, () =>
             // closes exactly and nothing was lost.
             const escrowStillCounted = ESCROW - escrowNetted;
             const movable = before - escrowStillCounted;
+            const expected = movable - sweepFeeXchain;
             expect(credited, 'the destination was credited MORE than the free balance a sweep '
                 + 'could move, so something other than the sweep paid it')
                 .toBeLessThanOrEqual(movable);
-            expect(movable - credited,
-                `only ${credited} of the ${movable} FREE ${TICK} reached the destination (the `
-                + `address read ${before}, of which ${escrowStillCounted} is dispenser escrow that settles at `
-                + 'close time). The shortfall is far larger than any protocol fee, so the sweep '
-                + 'lost tokens on the way')
-                .toBeLessThan(0.01);
+            expect(Math.abs(expected - credited),
+                `only ${credited} of the ${movable} FREE ${TICK} reached the destination, where the `
+                + `confirm screen's ${sweepFeeXchain} ${TICK} protocol fee leaves ${expected} (the address `
+                + `read ${before}, of which ${escrowStillCounted} is dispenser escrow that settles at close `
+                + 'time), so the sweep lost tokens on the way')
+                .toBeLessThan(1e-6);
         });
 
         await test.step('the force-close reached the dispenser at the source', async () => {

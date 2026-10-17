@@ -95,16 +95,20 @@ const TICK_LONG = `WCL${RUN}`;
 /**
  * Puts the wallet into watcher mode and waits for the write to land.
  *
- * The radio is fully controlled by PERSISTED settings, so it does not flip
- * until the vault write resolves.
+ * A mode change stays pending behind a confirmation dialog, and the radio
+ * shows the pending choice while it is open, so a checked radio alone does not
+ * prove the write landed: the dialog closing does.
  */
 async function setWalletMode(page, mode) {
-    const label = mode === 'watcher' ? /^Watcher/ : /^Full/;
+    const label = mode === 'watcher' ? /^Watcher/ : /^Normal/;
     await openPaletteCommand(page, 'Settings');
     await page.getByRole('button', { name: /^Wallet mode\b/ }).click();
     const radio = page.getByRole('radio', { name: label });
     await expect(radio).toBeVisible({ timeout: 30_000 });
     await radio.click();
+    const ask = page.getByRole('dialog', { name: /^Switch to .* mode\?$/ });
+    await ask.getByRole('button', { name: 'Confirm mode change', exact: true }).click();
+    await expect(ask, `the ${mode} mode change never saved`).toBeHidden({ timeout: 30_000 });
     await expect(radio, `the wallet did not switch to ${mode} mode`).toBeChecked({ timeout: 30_000 });
 }
 
