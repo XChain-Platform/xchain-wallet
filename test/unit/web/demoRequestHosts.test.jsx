@@ -99,10 +99,12 @@ function configuredServiceHosts() {
     const serviceUrls = defaultRegistry().supportedChains().flatMap((descriptor) => ([
         joinEndpoint(descriptor.explorer),
         joinEndpoint(descriptor.encoder),
-        joinEndpoint(descriptor.hub),
+        // Testnet descriptors carry no default hub; only a configured one is allowed.
+        descriptor.hub ? joinEndpoint(descriptor.hub) : null,
     ]));
     return new Set(
         [...serviceUrls, COINGECKO_API_BASE]
+            .filter(Boolean)
             .map((url) => new URL(url).host.toLowerCase()),
     );
 }
