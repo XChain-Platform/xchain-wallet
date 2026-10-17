@@ -32,9 +32,9 @@ import {
     waitForTokenBalance,
     waitForValidAction,
 } from '../../fixtures/testnet.js';
+import { FUNDING_SATS } from '../../fixtures/testnet_preflight.js';
 
 const WALLET_UNLOCK = 'testnetpassword123';
-const FUNDING_SATS = 500_000;
 const STAKE_AMOUNT = '100';
 const UNSTAKE_AMOUNT = '30';
 const MINT_AMOUNT = 200;
