@@ -12,26 +12,25 @@
 // tools/release/manifest-diff.mjs - structural manifest.json compare
 // (§4 "Post-publish verification"), used by verify-store.sh.
 //
-// The Chrome Web Store rewrites manifest.json on publish: it injects
-// `update_url` (the store's update-check endpoint) and `key` (the
-// base64 public key that keeps the extension ID stable) into the copy it
-// serves. A byte-for-byte file diff against the CI-built manifest.json
-// therefore fails on EVERY publish, store-injected keys included, even
-// when nothing else changed. A check that always fails gets waived and
-// then ignored - the failure mode this script exists to avoid. See
-// verify-store.sh's header for the fuller reasoning; this file is only
+// The Chrome Web Store rewrites manifest.json on publish. The copy served
+// for 0.341.2 injected `update_url` (the store's update-check endpoint),
+// but did not inject `key`, so `key` remains part of the comparison. A
+// byte-for-byte file diff against the CI-built manifest.json therefore
+// fails even when nothing else changed. A check that always fails gets
+// waived and then ignored - the failure mode this script exists to avoid.
+// See verify-store.sh's header for the fuller reasoning; this file is only
 // the comparison primitive.
 //
 // What this does: deep-equal two JSON files after deleting exactly the
-// known store-injected top-level keys from BOTH sides (deleting from
-// both is symmetric and harmless: our own manifest.json never has
-// `update_url` or `key` set, so there is nothing to lose on that side).
+// observed store-injected top-level keys from BOTH sides (deleting from
+// both is symmetric and harmless: our own manifest.json does not set
+// `update_url`, so there is nothing to lose on that side).
 // Every other key, at any depth, must be exactly equal. Key ORDER does
 // not matter; VALUE does.
 //
 // Usage:
 //   node tools/release/manifest-diff.mjs <ours.json> <theirs.json> \
-//     [--ignore update_url,key]
+//     [--ignore update_url]
 //
 // Exit 0 and prints "manifest-diff: ok" when equal after ignoring the
 // listed keys. Exit 1 and prints every path that differs otherwise.
@@ -39,7 +38,7 @@
 import { readFileSync, realpathSync } from 'node:fs';
 import { pathToFileURL } from 'node:url';
 
-const DEFAULT_IGNORE = ['update_url', 'key'];
+const DEFAULT_IGNORE = ['update_url'];
 
 const USAGE = `manifest-diff.mjs - structural manifest.json compare (§4
 post-publish verification). The comparison primitive behind verify-store.sh.
@@ -57,12 +56,12 @@ Options:
                    before comparing (default: ${DEFAULT_IGNORE.join(',')})
   -h, --help       print this and exit 0
 
-The store REWRITES manifest.json on publish, injecting update_url (its
-update-check endpoint) and key (the base64 public key that keeps the
-extension ID stable). A byte-for-byte diff therefore fails on every publish
+The store REWRITES manifest.json on publish. The copy served for 0.341.2
+injected update_url (its update-check endpoint) and did not inject key, so
+key remains part of the comparison. A byte-for-byte diff therefore fails
 even when nothing changed, and a check that always fails gets waived and
-then ignored. Deleting those keys from both sides is symmetric and loses
-nothing: our own manifest never sets either.
+then ignored. Deleting update_url from both sides is symmetric and loses
+nothing: our own manifest never sets it.
 
 Every other key, at any depth, must be exactly equal. Key ORDER does not
 matter; VALUE does.

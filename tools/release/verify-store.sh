@@ -48,13 +48,13 @@
 #      existed in what was submitted, so there is nothing in the
 #      reference zip to compare it against.
 #   2. `manifest.json` is compared STRUCTURALLY, not byte-for-byte, via
-#      manifest-diff.mjs, ignoring only `update_url` and `key` (both
-#      injected by the store on publish: the update-check endpoint and
-#      the public key that keeps the extension ID stable). Every other
-#      field must be exactly equal, at any depth. A byte diff on
-#      manifest.json fails on EVERY publish even when nothing meaningful
-#      changed, which is exactly how a real check becomes a permanently
-#      waived one; see manifest-diff.mjs's header for the fuller case.
+#      manifest-diff.mjs, ignoring only `update_url` by default. That is
+#      the sole rewrite observed in the copy CWS served for 0.341.2;
+#      `key` was not injected and remains part of the comparison. Every
+#      other field must be exactly equal, at any depth. A byte diff on
+#      manifest.json fails even when nothing meaningful changed, which is
+#      exactly how a real check becomes a permanently waived one; see
+#      manifest-diff.mjs's header for the fuller case.
 #
 # A file present in the store tree that matches no reference file (and is
 # not under `_metadata/`) is a hard failure: something shipped that this
@@ -84,7 +84,8 @@
 #                         unpacked item (see above)
 #   --crx <file>          a raw CRX3 file to unpack and compare instead
 #   --ignore <k1,k2>      manifest.json top-level keys to ignore in the
-#                         structural diff (default: update_url,key)
+#                         structural diff (default from manifest-diff.mjs:
+#                         update_url, as observed in CWS 0.341.2)
 #   --no-sig              passed through to verify.sh: skip the GPG
 #                         signature check on the reference zip (NOT a
 #                         full verification of the reference; see verify.sh)
@@ -100,7 +101,7 @@ TAG=""
 ZIP_NAME=""
 UNPACKED_DIR=""
 CRX_FILE=""
-IGNORE_KEYS="update_url,key"
+IGNORE_KEYS=""
 NO_SIG=0
 
 while [[ $# -gt 0 ]]; do
@@ -259,7 +260,9 @@ while IFS= read -r rel; do
     if [[ "$rel" == "manifest.json" ]]; then
         # Require the tool's own ok line as well as exit 0, so a run that compared nothing never passes.
         md_status=0
-        md_out="$(node "$HERE/manifest-diff.mjs" "$REF_DIR/manifest.json" "$store_file" --ignore "$IGNORE_KEYS")" || md_status=$?
+        manifest_diff_args=()
+        if [[ -n "$IGNORE_KEYS" ]]; then manifest_diff_args=(--ignore "$IGNORE_KEYS"); fi
+        md_out="$(node "$HERE/manifest-diff.mjs" "$REF_DIR/manifest.json" "$store_file" "${manifest_diff_args[@]}")" || md_status=$?
         if [[ -n "$md_out" ]]; then printf '%s\n' "$md_out" >&2; fi
         if (( md_status != 0 )); then
             FAILURES=$((FAILURES + 1))
@@ -308,4 +311,8 @@ if [[ "$FAILURES" -gt 0 ]]; then
 fi
 
 echo "verify-store.sh: ok - $CHECKED reference file(s) match the store-served tree" >&2
-echo "  (excluding _metadata/, manifest.json compared structurally ignoring: $IGNORE_KEYS)" >&2
+if [[ -n "$IGNORE_KEYS" ]]; then
+    echo "  (excluding _metadata/, manifest.json compared structurally with --ignore: $IGNORE_KEYS)" >&2
+else
+    echo "  (excluding _metadata/, manifest.json compared structurally with manifest-diff.mjs defaults)" >&2
+fi
