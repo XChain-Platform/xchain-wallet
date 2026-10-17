@@ -510,6 +510,8 @@ export function Send({ walletId, accountId, onBack, prefill = null, onDone, onCh
     const [chainId, setChainId] = useState(/** @type {string | null} */ (
         prefill?.chainId || null
     ));
+    const prefillChainIdRef = useRef(prefill?.chainId || null);
+    prefillChainIdRef.current = prefill?.chainId || null;
     const [fromAddressId, setFromAddressId] = useState(
         /** @type {string | null} */ (null),
     );
@@ -697,6 +699,12 @@ export function Send({ walletId, accountId, onBack, prefill = null, onDone, onCh
         onDiscard: discardDraft,
     });
 
+    useEffect(() => {
+        if (!prefill?.chainId) return;
+        setChainId(prefill.chainId);
+        if (typeof prefill.tick === 'string') setTick(prefill.tick);
+    }, [prefill?.chainId, prefill?.tick]);
+
     // The settings read rides the address load so the last-used chain is
     // known in the render that first shows the form. Best-effort: a host
     // without `getSettings`, or a failed read, still yields a usable form.
@@ -704,7 +712,7 @@ export function Send({ walletId, accountId, onBack, prefill = null, onDone, onCh
         let cancelled = false;
         setAddressesByChain(null);
         setLoadError(null);
-        setChainId(prefill?.chainId || null);
+        setChainId(prefillChainIdRef.current);
         setFromAddressId(null);
         setActiveByChain({});
         setPickedSourceChain(null);
@@ -739,7 +747,7 @@ export function Send({ walletId, accountId, onBack, prefill = null, onDone, onCh
                 }
             });
         return () => { cancelled = true; };
-    }, [walletId, accountId, messaging, prefill?.chainId]);
+    }, [walletId, accountId, messaging]);
 
     // §18.4 firmware-warning support. When the source address is HW we
     // need vendor / model / firmwareVersion to render the warning banner
@@ -3726,7 +3734,7 @@ export function Send({ walletId, accountId, onBack, prefill = null, onDone, onCh
                 maxBusy={maxBusy}
                 balanceText={
                     previewBalances.loading
-                        ? (balanceGateWaived ? t('send.balance.unknown') : t('common.loading'))
+                        ? ((balanceGateWaived || balanceGateSettledRef.current) ? t('send.balance.unknown') : t('common.loading'))
                         : previewBalances.error
                             ? t('send.balance.unavailable', { error: previewBalances.error })
                             : networkOffline && !isDemo && !previewBalances.sdkShape
