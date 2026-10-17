@@ -110,6 +110,19 @@ async function waitForBalanceChange(address, tick, from, timeoutMs = 180_000) {
     throw new Error(`${tick} balance for ${address} never moved off ${from}`);
 }
 
+/** Polls until a token balance equals `want`, and returns the last figure read. */
+async function waitForBalanceEqual(address, tick, want, timeoutMs = 180_000) {
+    const deadline = Date.now() + timeoutMs;
+    let last = NaN;
+    while (Date.now() < deadline) {
+        last = await tokenBalance(address, tick).catch(() => last);
+        if (Math.abs(last - want) < 1e-9) return last;
+        await mineIfPending();
+        await new Promise((r) => setTimeout(r, 2_000));
+    }
+    return last;
+}
+
 async function waitForBalanceAtLeast(address, tick, min, timeoutMs = 180_000) {
     const deadline = Date.now() + timeoutMs;
     let last = 0;
@@ -186,6 +199,10 @@ test.describe(`the token-paid dispenser lane on ${REGTEST_CHAIN_LABEL}`, () => {
         let buyer;
         let dispenserIndex;
         let payTo;
+        /** The buyer's XCHAIN just before the buy: the gas mint less the ISSUE fee. */
+        let buyerXchainBefore;
+        /** The XCHAIN protocol fee the buy's confirm screen quoted, 0 when it quoted none. */
+        let buyFeeXchain = 0;
 
         await test.step('the BUYER exists first and issues the token they will pay with', async () => {
             // Order matters: the dispenser names its payment ticker, and a
@@ -317,6 +334,9 @@ test.describe(`the token-paid dispenser lane on ${REGTEST_CHAIN_LABEL}`, () => {
             await expect(page.getByTestId('buy-balance'))
                 .toContainText(new RegExp(`1,?000\\s*${PAY_TICK}`), { timeout: 60_000 });
 
+            // The buyer already holds XCHAIN (the gas mint, less the ISSUE
+            // fee), so the fill is measured as a delta from this figure.
+            buyerXchainBefore = await tokenBalance(buyer, 'XCHAIN');
             await buySection.getByLabel('Fills').fill('1');
             const buyButton = buySection.getByRole('button', { name: /^Buy 1 fill$/ });
             await expect(buyButton, 'the Buy button is disabled for a funded buyer').toBeEnabled();
@@ -335,6 +355,12 @@ test.describe(`the token-paid dispenser lane on ${REGTEST_CHAIN_LABEL}`, () => {
             await expect(page.getByTestId('confirm-modal'),
                 'the Confirm screen does not say this payment buys from the dispenser')
                 .toContainText(`This pays dispenser #${dispenserIndex}:`);
+            const feeLine = page.getByTestId('confirm-protocol-fee');
+            if (await feeLine.count() > 0) {
+                const said = await feeLine.innerText();
+                buyFeeXchain = Number(said.match(/([\d.]+)\s*XCHAIN\b/)?.[1]);
+                expect(Number.isFinite(buyFeeXchain), `unparseable protocol-fee line: ${said}`).toBe(true);
+            }
             await page.getByTestId('confirm-approve').click();
             await expect(page.getByText('Buy submitted'), 'the buy never reported being submitted')
                 .toBeVisible({ timeout: 180_000 });
@@ -359,9 +385,12 @@ test.describe(`the token-paid dispenser lane on ${REGTEST_CHAIN_LABEL}`, () => {
             expect(String(dispense.status), 'the chain rejected the dispense').toBe('valid');
 
             // The goods reached the buyer...
-            expect(await waitForBalanceAtLeast(buyer, 'XCHAIN', GIVE_PER_FILL),
-                'the buyer was credited something other than one fill')
-                .toBe(GIVE_PER_FILL);
+            const wantXchain = buyerXchainBefore - buyFeeXchain + GIVE_PER_FILL;
+            expect(await waitForBalanceEqual(buyer, 'XCHAIN', wantXchain),
+                `the buyer was credited something other than one fill (held ${buyerXchainBefore} `
+                + `XCHAIN before the buy, paid a ${buyFeeXchain} XCHAIN protocol fee, so one fill of `
+                + `${GIVE_PER_FILL} leaves ${wantXchain})`)
+                .toBeCloseTo(wantXchain, 8);
             // ...the payment reached the seller's dispenser payment address...
             expect(await waitForBalanceAtLeast(payTo, PAY_TICK, PRICE_PER_FILL),
                 'the seller was paid something other than the fill price')

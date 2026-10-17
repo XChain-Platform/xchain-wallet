@@ -292,6 +292,11 @@ async function generateVenueAddress(page) {
     await page.getByRole('menuitem', { name: 'Add address' }).click();
     await selectVenueChain(page, 'Coin');
     await page.getByRole('button', { name: /^Generate/ }).click();
+    // The modal closes only once the address is stored; listing before then
+    // can read the list as it was.
+    await expect(page.getByTestId('add-address-generate'),
+        'the wallet never finished generating the address')
+        .toBeHidden({ timeout: 60_000 });
 
     const generated = (await listed()).filter((a) => !before.has(a));
     expect(generated.length, 'generating added exactly one address to the list').toBe(1);
@@ -340,7 +345,7 @@ async function composeMint(page, amount, tick = TICK, signAs = null) {
         await expect(row, `the source picker does not offer ${signAs}`)
             .toBeVisible({ timeout: 30_000 });
         await row.click();
-        await expect(page.getByLabel('From')).toHaveValue(signAs, { timeout: 30_000 });
+        await expect(page.getByLabel('From', { exact: true })).toHaveValue(signAs, { timeout: 30_000 });
     }
 
     // The AmountField's balance line, whatever it currently says: it carries the
@@ -369,7 +374,7 @@ async function onboardAndCreateEdition(page, {
     const probe = page.getByRole('main');
     await expect(probe.getByLabel('Ticker')).toBeVisible({ timeout: 30_000 });
     await selectVenueChain(probe);
-    const source = await probe.getByLabel('From').inputValue();
+    const source = await probe.getByLabel('From', { exact: true }).inputValue();
     expect(source, `the wallet has no ${REGTEST_CHAIN_LABEL} address to sign with`)
         .toMatch(REGTEST_ADDRESS_RE);
 
@@ -549,12 +554,31 @@ test.describe(`limited-edition mint window on ${REGTEST_CHAIN_LABEL}`, () => {
             expect(footer, 'the amount field says nothing about the per-address cap')
                 .toMatch(new RegExp(`${PER_TX} ${TICK} available to mint, ${PER_ADDRESS} per address in total`));
 
-            await expect(page.getByRole('alert').filter({ hasText: /MINT_ADDRESS_MAX/i }),
-                'the wallet did not quote the network\'s verdict for the per-address cap')
-                .toBeVisible({ timeout: 90_000 });
-            expect(await page.getByTestId('confirm-modal').count(),
-                'a mint past the address cap reached the confirm screen')
-                .toBe(0);
+            if (REGTEST_COIN === 'RBTC') {
+                // Bitcoin defaults to the XCHAIN fee lane, where no native-fee
+                // quote runs on the form, so the network's verdict arrives as
+                // the confirm screen's pre-send check. That check must name the
+                // cap and hold Approve until the signer explicitly overrides it.
+                await expectConfirmScreen(page);
+                const panel = page.getByTestId('preflight-panel');
+                await expect(panel).toHaveAttribute('data-verdict', 'fail', { timeout: 90_000 });
+                await expect(page.getByTestId('preflight-chip')).toHaveText('Will likely fail');
+                await expect(panel,
+                    'the wallet did not quote the network\'s verdict for the per-address cap')
+                    .toContainText(/would be refused because .*MINT_ADDRESS_MAX/i);
+                await expect(page.getByTestId('confirm-approve'),
+                    'a mint past the address cap can be approved without overriding the refusal')
+                    .toBeDisabled();
+                await page.getByTestId('confirm-reject').click();
+                await expect(page.getByTestId('confirm-modal')).toBeHidden({ timeout: 30_000 });
+            } else {
+                await expect(page.getByRole('alert').filter({ hasText: /MINT_ADDRESS_MAX/i }),
+                    'the wallet did not quote the network\'s verdict for the per-address cap')
+                    .toBeVisible({ timeout: 90_000 });
+                expect(await page.getByTestId('confirm-modal').count(),
+                    'a mint past the address cap reached the confirm screen')
+                    .toBe(0);
+            }
             expect(await tokenBalance(source, TICK),
                 'the refused mint credited the minter anyway')
                 .toBe(PER_TX * 2);

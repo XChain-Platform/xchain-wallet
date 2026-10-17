@@ -97,6 +97,19 @@ async function readLabelledTxid(page, doneHeading, label = 'Link transaction') {
  * once there are more than three, so both are checked (same split
  * `collectible-one-of-one.regtest.spec.js` already reads around).
  */
+/**
+ * The My Lists row that opens list `index`.
+ *
+ * The accessible name sits on the row's button, not on its list item, and it
+ * follows the list's name: "Open address list #N" while unnamed, and
+ * "Open <name> (List #N)" once a rename has landed.
+ */
+function myListsRow(page, index) {
+    return page.getByRole('button', {
+        name: new RegExp(`^Open (address list #${index}|.* \\(List #${index}\\))$`),
+    });
+}
+
 async function openManageTokenAction(page, tick, label) {
     await openPaletteCommand(page, 'My tokens');
     const main = page.getByRole('main');
@@ -130,7 +143,7 @@ async function issueToken(page, source, tick) {
     const main = page.getByRole('main');
     await expect(main.getByLabel('Ticker')).toBeVisible({ timeout: 30_000 });
     await selectVenueChain(main);
-    expect(await main.getByLabel('From').inputValue(),
+    expect(await main.getByLabel('From', { exact: true }).inputValue(),
         `the Issue token form defaulted away from ${source}, so the issued token would not be owned `
         + 'by the address this test funded')
         .toBe(source);
@@ -166,7 +179,7 @@ test.describe(`content and registry flows on ${REGTEST_CHAIN_LABEL}`, () => {
             const issueMain = page.getByRole('main');
             await expect(issueMain.getByLabel('Ticker')).toBeVisible({ timeout: 30_000 });
             await selectVenueChain(issueMain);
-            source = await issueMain.getByLabel('From').inputValue();
+            source = await issueMain.getByLabel('From', { exact: true }).inputValue();
             expect(source, `the form has no ${REGTEST_CHAIN_LABEL} address to sign with`)
                 .toMatch(REGTEST_ADDRESS_RE);
             await fundAddress(source, FUNDING);
@@ -296,7 +309,7 @@ test.describe(`content and registry flows on ${REGTEST_CHAIN_LABEL}`, () => {
             managedListIndex = listActionIndex;
 
             await openPaletteCommand(page, 'My lists');
-            const listRow = page.getByRole('listitem', { name: `Open address list #${listActionIndex}` });
+            const listRow = myListsRow(page, listActionIndex);
             await expect(listRow, `the list just published (#${listActionIndex}) is not in My Lists`)
                 .toBeVisible({ timeout: 60_000 });
             await listRow.click();
@@ -328,7 +341,7 @@ test.describe(`content and registry flows on ${REGTEST_CHAIN_LABEL}`, () => {
             const forkActionIndex = String(forked.action_index);
 
             await openPaletteCommand(page, 'My lists');
-            const forkRow = page.getByRole('listitem', { name: `Open address list #${forkActionIndex}` });
+            const forkRow = myListsRow(page, forkActionIndex);
             await expect(forkRow, `the fork just published (#${forkActionIndex}) is not in My Lists`)
                 .toBeVisible({ timeout: 60_000 });
             await forkRow.click();
@@ -349,7 +362,7 @@ test.describe(`content and registry flows on ${REGTEST_CHAIN_LABEL}`, () => {
             const NAME = `Roster ${STAMP}`;
             const openManagedList = async () => {
                 await openPaletteCommand(page, 'My lists');
-                const row = page.getByRole('listitem', { name: `Open address list #${managedListIndex}` });
+                const row = myListsRow(page, managedListIndex);
                 await expect(row, `list #${managedListIndex} is not in My Lists`).toBeVisible({ timeout: 60_000 });
                 await row.click();
             };

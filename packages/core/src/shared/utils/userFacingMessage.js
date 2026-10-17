@@ -118,6 +118,27 @@ export function protocolRefusalReason(err) {
 }
 
 /**
+ * True when `text`, a wallet sentence quoting a network verdict, may be shown
+ * as written. A verdict names the protocol field it refused (`MINT_ADDRESS_MAX`,
+ * `ORACLE_ADDRESS`), which the general filter reads as an error code; that is
+ * the user's one clue to what to change, so only the checks that mark real
+ * developer output apply here, the same ones `protocolRefusalReason` uses.
+ *
+ * @param {unknown} text
+ * @returns {boolean}
+ */
+export function isShowableRefusal(text) {
+    const value = typeof text === 'string' ? text.trim() : '';
+    return Boolean(value)
+        && value.length <= MAX_REFUSAL_REASON_LENGTH
+        && !DEV_PREFIX.test(value)
+        && !INTERNALS.test(value)
+        && !INTERNAL_NAME.test(value)
+        && !WIRE_TEXT.test(value)
+        && !SERIALIZED_DATA.test(value);
+}
+
+/**
  * @param {unknown} err       the caught error (Error, string, or anything)
  * @param {string} fallback   house-voice copy to show when the message is
  *                            developer output (or missing entirely)

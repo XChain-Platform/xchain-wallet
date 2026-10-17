@@ -138,17 +138,28 @@ async function readCurrentHeight(main) {
     return Number(match[1].replace(/,/g, ''));
 }
 
+/**
+ * Mines until the INDEXER's processed height (`last_block`) reaches `target`.
+ *
+ * The callback form refuses before review while the wallet's indexer
+ * watermark is below the token's callback block ("Callback is not allowed
+ * until block N. The network is at M."), and that watermark is `last_block`,
+ * which trails `chain_tip` by a few blocks while the indexer catches up. A
+ * wait on the node's tip alone opens the form that short of the block.
+ */
 async function mineToHeight(target, timeoutMs = 300_000) {
     const deadline = Date.now() + timeoutMs;
-    let tip = -1;
+    let tip = null;
+    let indexed = null;
     while (Date.now() < deadline) {
-        await nudgeChain();
-        const status = await explorerJson('status');
+        const status = await explorerJson('status').catch(() => null);
         tip = Number(status?.chain_tip?.[REGTEST_COIN]);
-        if (Number.isFinite(tip) && tip >= target) return tip;
+        indexed = Number(status?.last_block?.[REGTEST_COIN]);
+        if (Number.isFinite(indexed) && indexed >= target) return indexed;
+        if (!Number.isFinite(tip) || tip < target) await nudgeChain();
         await new Promise((resolve) => setTimeout(resolve, 2_000));
     }
-    throw new Error(`chain tip never reached block ${target}; last seen ${tip}`);
+    throw new Error(`the indexer never reached block ${target} (chain tip ${tip}, indexed ${indexed})`);
 }
 
 async function waitForExactBalance(address, tick, expected, timeoutMs = 300_000) {

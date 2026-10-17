@@ -89,9 +89,15 @@
 //       npx playwright test --config=playwright.regtest.config.js \
 //       tests/messaging/handshake-and-methods.regtest.spec.js
 
-import { createWallet, expect, gotoSection, openPaletteCommand, test } from '../../fixtures/wallet.js';
+import { createWallet, expect, gotoSection, mainButton, openPaletteCommand, test } from '../../fixtures/wallet.js';
 import {
     ENCODER_URL,
+    approveConfirm,
+    explorerJson,
+    mintXchain,
+    nudgeChain,
+    selectVenueSendAsset,
+    waitForTokenBalance,
     REGTEST_ADDRESS_RE,
     REGTEST_CHAIN_LABEL,
     REGTEST_COIN,
@@ -106,6 +112,9 @@ import {
 
 const PASSWORD = 'regtestpassword123';
 const FUNDING = 4;
+/** XCHAIN minted, then partly sent, so this wallet's address spends in single-transaction actions. */
+const KEY_MINT = 10;
+const KEY_SEND = '1';
 
 /**
  * The protocol COIN ticker this run's chain stamps into a MESSAGE.
@@ -310,6 +319,28 @@ async function expectSendRefused(page, scope, txids, message) {
     expect(txids.length, `${message} (something was broadcast)`).toBe(before);
     await expect(missingPubkeyBanner(scope), 'the missing-key banner went away after a refused send')
         .toBeVisible();
+}
+
+/**
+ * Polls the explorer's `pubkey/{address}` route, the one the compose form's
+ * recipient lookup reads (`getRecipientPubkey`), until it serves a key.
+ *
+ * Read here rather than inferred from the spends that should have published
+ * it, so the steps after this one start from a fact about the chain.
+ */
+async function waitForIndexedPubkey(address, timeoutMs = 300_000) {
+    const deadline = Date.now() + timeoutMs;
+    let last = null;
+    while (Date.now() < deadline) {
+        last = await explorerJson(`pubkey/${address}`, { allowErrorBody: true })
+            .catch((err) => ({ error: err?.message || String(err) }));
+        if (/^0[23][0-9a-f]{64}$/i.test(String(last?.pubkey || ''))) return last.pubkey;
+        await nudgeChain();
+        await new Promise((r) => setTimeout(r, 3_000));
+    }
+    throw new Error(`the explorer never served a public key for ${address} within `
+        + `${Math.round(timeoutMs / 1000)}s, so neither encrypted method can address it `
+        + `(last answer: ${JSON.stringify(last)})`);
 }
 
 /** Fills the recipient, and the body when one is given. */
@@ -709,9 +740,11 @@ test.describe(`Messaging: first contact on ${REGTEST_CHAIN_LABEL}`, () => {
     // WHY IT SELF-MESSAGES. Both encrypted methods need the RECIPIENT's pubkey
     // indexed, which needs that address to have spent. The cheapest way there
     // without a second funded wallet is to send to ourselves after our own
-    // address has spent once. That first send is the leg most likely to make
-    // this test slow or flaky on a shared venue, and it is the first thing to
-    // cut if this has to be reduced to something that finishes.
+    // address has spent once. The spend that publishes the key is a MINT and a
+    // token SEND, both single-transaction actions: a MESSAGE long enough to
+    // need a commit and a reveal does not get its sender's pubkey indexed on
+    // the platform, so a wallet whose only spend was such a MESSAGE stays
+    // unresolvable however long the test waits.
     // This is the coverage that establishes the two encrypted methods differ
     // on the wire instead of trusting the method selected in the UI.
     test('ECDH-session and ECIES are wire-distinct on chain for the same plaintext', async ({ page }) => {
@@ -722,19 +755,26 @@ test.describe(`Messaging: first contact on ${REGTEST_CHAIN_LABEL}`, () => {
         let ecdhBytes;
         let eciesHex;
 
-        await test.step('onboard, fund, and spend once so our own key is indexed', async () => {
+        await test.step('onboard, fund, and spend so our own key is indexed', async () => {
             ownAddress = await onboardFundedWallet(page, 'Wire Distinctness Wallet');
 
-            // A plaintext self-message is the cheapest spend that publishes our
-            // pubkey: it needs no recipient key, so it works before any key is
-            // known, and it is the same lane test 1 already drives.
-            const main = await gotoNewConversation(page);
-            await fillRecipient(main, ownAddress, PLAINTEXT_TEXT);
-            await pickEncryption(main, 'Plain text');
-            await expect(sendButton(main)).toBeEnabled({ timeout: 15_000 });
-            await sendButton(main).click();
-            const txid = await approveAndCaptureTxid(page, txids);
-            await waitForValidAction(txid);
+            await mintXchain(page, KEY_MINT);
+            await waitForTokenBalance(ownAddress, 'XCHAIN', KEY_MINT);
+            await page.reload();
+            await unlockAfterReload(page, PASSWORD);
+
+            await gotoSection(page, 'Send');
+            await selectVenueSendAsset(page, 'XCHAIN');
+            await page.getByLabel('To', { exact: true }).fill(REGTEST_DESTINATION);
+            await page.getByRole('main').getByRole('textbox', { name: /^Amount/ }).fill(KEY_SEND);
+            const before = txids.length;
+            await mainButton(page, 'Send').click();
+            await approveConfirm(page, `the SEND of ${KEY_SEND} XCHAIN`);
+            const sent = await waitForValidAction(await settledTxid(txids, before));
+            expect(sent.source, 'the key-publishing SEND did not come from this wallet\'s address')
+                .toBe(ownAddress);
+
+            await waitForIndexedPubkey(ownAddress);
         });
 
         await test.step('ECIES to a KNOWN key carries the ephemeral-key envelope', async () => {

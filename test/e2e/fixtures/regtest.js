@@ -1239,16 +1239,35 @@ export async function selectVenueSendAsset(page, tick = REGTEST_TICKER) {
     const selected = (await trigger.getAttribute('aria-label')) || '';
     if (shows.test(selected) && await onVenueChain()) return;
 
-    await trigger.click();
-
     // The picker lists every chain's assets together, so filter first: the row
     // wanted may otherwise be far down a list this venue keeps growing.
     const search = page.getByLabel('Search coins or tokens');
-    await expect(search, 'Change asset did not open the asset picker')
-        .toBeVisible({ timeout: 30_000 });
-    await search.fill(tick);
-
     const row = page.locator(`[data-balance-key="${REGTEST_CHAIN_ID}:${tick}"]`).first();
+    const incomplete = page.getByRole('heading', { name: 'Incomplete balance data', exact: true });
+    // The picker reads balances once when it opens. The shared explorer
+    // answers a burst over its per-minute budget with HTTP 429 and a
+    // Retry-After of seconds, and that one read then shows "Incomplete balance
+    // data" with no row and no retry of its own. Reopening the picker after
+    // the window is a fresh read; a picker that stays incomplete across three
+    // reads, or that completes without the row, still fails below.
+    for (let attempt = 1; ; attempt += 1) {
+        await trigger.click();
+        await expect(search, 'Change asset did not open the asset picker')
+            .toBeVisible({ timeout: 30_000 });
+        await search.fill(tick);
+        await row.or(incomplete).first().waitFor({ state: 'visible', timeout: 30_000 }).catch(() => {});
+        if (attempt >= 3 || await row.isVisible() || !(await incomplete.isVisible())) break;
+        await page.waitForTimeout(5_000);
+        await gotoSection(page, 'Home');
+        await gotoSection(page, 'Send');
+        await expect(trigger, 'Send did not return to its form after reopening it')
+            .toBeVisible({ timeout: 30_000 });
+    }
+
+    expect(await row.isVisible() || !(await incomplete.isVisible()),
+        `the asset picker could not read this wallet's balances on three opens, so it cannot list ${tick}. `
+        + 'Venue state (the explorer is rate-limiting or failing balance reads), not a wallet defect')
+        .toBe(true);
     await expect(row, `the asset picker lists no ${tick} on ${REGTEST_CHAIN_LABEL}. A wallet carries `
         + 'one address per chain from creation, so this usually means the venue chain is not the one '
         + 'the wallet was created against')

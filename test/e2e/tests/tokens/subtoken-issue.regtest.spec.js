@@ -40,13 +40,13 @@
 //
 // TEST 2 IS THE SAME FORM WITH ONE VARIABLE CHANGED: who owns the parent. Same
 // wallet, same chain, same parent ticker, same child name, minutes apart - the
-// only difference is that the wizard is signing from a second address. That is
-// not a contrived setup. The wizard has NO source picker at all: it auto-picks
-// the highest external HD address on the chain (`TokenWizard.jsx`, "Auto-pick
-// the highest external HD address"), so any user who issues a parent and later
-// taps Receive has silently moved the signer off the owner. The direct Issue
-// form, which cannot compose a subtoken at all (its ticker validation is
-// `/^[A-Za-z0-9]+$/`, so the dot is refused), is the one with the picker.
+// only difference is that the wizard is signing from a second address. The
+// wizard defaults its signer the way Send does (the chain's active address,
+// else the newest external HD address), and its chain step carries the same
+// source picker every other authoring form has, so a wallet holding several
+// addresses can sign from one that does not own the parent. The test points
+// the picker at that address, expects the refusal on the form, then points it
+// back at the owner and expects the child to settle.
 //
 // RUN IT ON LITECOIN:
 //   cd test/e2e && XC_REGTEST_COIN=RLTC npx playwright test \
@@ -231,8 +231,10 @@ async function projectedProtocolFeeSats(page) {
     const deltas = page.getByTestId('action-intent-deltas');
     if (await deltas.count() === 0) return null;
     const text = await deltas.innerText();
-    const coin = text.match(/Protocol fee\s*[A-Z]{3,5}\s*([\d.]+)/)?.[1];
-    return coin === undefined ? null : Math.round(Number(coin) * 1e8);
+    // The row reads "Protocol fee 0.00001 BTC": amount first, then the coin
+    // ticker. An XCHAIN fee does not match, since it is not a coin amount.
+    const coin = text.match(/Protocol fee\s*([\d.,]+)\s*[A-Z]{3,5}\b/)?.[1];
+    return coin === undefined ? null : Math.round(Number(coin.replace(/,/g, '')) * 1e8);
 }
 
 /**
@@ -293,8 +295,7 @@ async function onboardAndIssueParent(page, walletName, parentTick = PARENT) {
  * of the two outcomes it is asserting.
  *
  * `signAs` picks the signing address through the chain step's own picker.
- * Omitted, the wizard's default stands - which is the newest external HD
- * address, and is the whole subject of the second test.
+ * Omitted, the wizard's default stands: the chain's active address.
  *
  * Returns the address it is signing with, read off the chain step.
  */
@@ -513,7 +514,7 @@ test.describe(`subtoken issuance on ${REGTEST_CHAIN_LABEL}`, () => {
     test('a subtoken is refused from an address that does not own the parent, and the wizard can be pointed at one that does', async ({ page }) => {
         /** Owns GATE_PARENT. Issued from the wallet's only address, before any other exists. */
         let owner;
-        /** Generated afterwards, so it becomes the highest external HD index. */
+        /** Generated afterwards, funded, and never the owner of the parent. */
         let stranger;
 
         await test.step('onboard, issue the parent, then generate a second address', async () => {
@@ -552,15 +553,16 @@ test.describe(`subtoken issuance on ${REGTEST_CHAIN_LABEL}`, () => {
                 .toMatch(/parent issued by another address/i);
         });
 
-        await test.step('the wizard defaults to the wrong signer, and stops before spending anything', async () => {
+        await test.step('signing from an address that does not own the parent stops before spending anything', async () => {
+            // Through the chain step's own picker: the default is the active
+            // address, which is the owner here, so the second address has to
+            // be chosen the way a user would choose it.
             const signer = await fillSubtoken(page, {
-                parent: GATE_PARENT, child: CHILD, supply: CHILD_SUPPLY,
+                parent: GATE_PARENT, child: CHILD, supply: CHILD_SUPPLY, signAs: stranger,
             });
-
-            // The default is the newest external HD address, which the Receive
-            // tap above moved off the owner. Nothing warned; nothing asked.
             expect(signer,
-                'the wizard defaulted to the parent\'s owner, so this run never reached the gate')
+                'the source picker did not move the signer to the second address, so this run '
+                + 'never reached the gate')
                 .toBe(stranger);
 
             // THE GOOD HALF, and it is why this was a dead end rather than a
@@ -581,9 +583,7 @@ test.describe(`subtoken issuance on ${REGTEST_CHAIN_LABEL}`, () => {
 
         await test.step('THE FIX: the same form, pointed at the owner, composes and settles', async () => {
             // Same wallet, same chain, same parent, same child name, minutes
-            // apart. The only variable is the signer - chosen through the
-            // picker this stage did not have, which is what made the refusal
-            // above unfixable from the screen that reported it.
+            // apart. The only variable is the signer, which is the owner again.
             const signer = await composeSubtoken(page, {
                 parent: GATE_PARENT, child: CHILD, supply: CHILD_SUPPLY, signAs: owner,
             });

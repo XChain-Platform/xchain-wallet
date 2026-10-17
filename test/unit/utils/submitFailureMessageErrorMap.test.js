@@ -7,8 +7,11 @@ import {
     KNOWN_SDK_ERROR_CODES,
     knownSdkErrorMessage,
 } from '../../../packages/core/src/sdk/sdkErrorMessages.js';
+import { OracleFeeUnpayableError } from '../../../packages/core/src/sdk/oracleFeePreflight.js';
+import { NativeFeeForfeitError } from '../../../packages/core/src/sdk/nativeFeePreflight.js';
 import {
     isDeveloperMessage,
+    isShowableRefusal,
     userFacingMessage,
 } from '../../../packages/core/src/shared/utils/userFacingMessage.js';
 
@@ -152,6 +155,69 @@ describe('submitFailureMessage SDK error map', () => {
         const err = new Error('request failed for /RBTC/api/private');
         expect(submitFailureMessage(err, { fallback: `Send failed. ${err.message}` }))
             .toBe("Couldn't complete this. Something went wrong. Try again.");
+    });
+});
+
+describe('submitFailureMessage oracle pre-flight refusals', () => {
+    // Built by the real constructor so the message shape the classifier reads
+    // is the one the pre-flight throws on the XCHAIN fee lane.
+    const refusal = (error) => new OracleFeeUnpayableError({ reason: 'unquotable', quote: { valid: false, error } });
+
+    it('tells the user an unmatured oracle price starts pricing after 24 hours', () => {
+        const message = submitFailureMessage(
+            refusal('invalid: ORACLE_ADDRESS (no effective oracle price)'), { coinTicker: 'BTC' },
+        );
+        expect(message).toMatch(/no price in effect yet/);
+        expect(message).toMatch(/24 hours/);
+        expect(message).not.toMatch(/temporarily unavailable|try again in a moment|ORACLE_ADDRESS|pre-flight/i);
+    });
+
+    it('names a missing validator rate as a short wait on the chain coin', () => {
+        const message = submitFailureMessage(
+            refusal('invalid: ORACLE_ADDRESS (no validator price to value the oracle fee)'), { coinTicker: 'BTC' },
+        );
+        expect(message).toMatch(/no current BTC rate/);
+        expect(message).not.toMatch(/ORACLE_ADDRESS|pre-flight/);
+    });
+
+    it('keeps the catalog copy for a refusal with no known verdict', () => {
+        const err = new OracleFeeUnpayableError({ reason: 'unavailable', quote: null });
+        expect(submitFailureMessage(err)).toBe(knownSdkErrorMessage(err));
+        expect(submitFailureMessage(refusal('invalid: ORACLE_ADDRESS (something new)')))
+            .toBe(knownSdkErrorMessage(err));
+    });
+});
+
+describe('submitFailureMessage native-fee verdicts', () => {
+    // The popup boundary keeps only name and message, so the error is passed in
+    // that shape, the one a Mint form on Litecoin or Dogecoin receives.
+    const verdict = (detail) => {
+        const err = new NativeFeeForfeitError({ reason: 'invalid', quote: { valid: false, error: detail } });
+        return { name: err.name, message: err.message };
+    };
+
+    it.each([
+        ['invalid: mint exceeds MINT_ADDRESS_MAX', 'mint exceeds MINT_ADDRESS_MAX'],
+        ['invalid: MINT_START_BLOCK (not reached)', 'MINT_START_BLOCK (not reached)'],
+    ])('shows the refused field for %s instead of the generic line', (detail, shown) => {
+        const message = submitFailureMessage(verdict(detail), { coinTicker: 'LTC', mandatory: true });
+        expect(message).toBe(`The network would refuse this action as it stands: ${shown}. Nothing was `
+            + 'signed or sent. Waiting will not change this, so adjust the action and try again.');
+    });
+
+    it('still hides a verdict that carries wire text', () => {
+        const message = submitFailureMessage(
+            verdict('invalid: upstream failed for https://private.example/RLTC/api/x'),
+            { coinTicker: 'LTC', mandatory: true },
+        );
+        expect(message).toBe("Couldn't complete this. Something went wrong. Try again.");
+    });
+
+    it('accepts a field name but not developer output as a showable refusal', () => {
+        expect(isShowableRefusal('The network would refuse this: mint exceeds MINT_ADDRESS_MAX.')).toBe(true);
+        expect(isShowableRefusal('TypeError: x is not a function')).toBe(false);
+        expect(isShowableRefusal('fetchQuote: {"token":"secret"}')).toBe(false);
+        expect(isShowableRefusal('')).toBe(false);
     });
 });
 

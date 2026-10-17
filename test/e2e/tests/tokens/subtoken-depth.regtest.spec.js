@@ -239,8 +239,10 @@ async function projectedProtocolFeeSats(page) {
     const deltas = page.getByTestId('action-intent-deltas');
     if (await deltas.count() === 0) return null;
     const text = await deltas.innerText();
-    const coin = text.match(/Protocol fee\s*[A-Z]{3,5}\s*([\d.]+)/)?.[1];
-    return coin === undefined ? null : Math.round(Number(coin) * 1e8);
+    // The row reads "Protocol fee 0.00001 BTC": amount first, then the coin
+    // ticker. An XCHAIN fee does not match, since it is not a coin amount.
+    const coin = text.match(/Protocol fee\s*([\d.,]+)\s*[A-Z]{3,5}\b/)?.[1];
+    return coin === undefined ? null : Math.round(Number(coin.replace(/,/g, '')) * 1e8);
 }
 
 /**

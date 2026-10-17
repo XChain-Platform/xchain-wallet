@@ -238,7 +238,8 @@ async function mintOnce(page, tick, amount) {
     return minted;
 }
 
-async function openTokenAdmin(page, item, tick = TICK) {
+/** Opens Manage Token for `tick` through My Tokens, the way an owner reaches it. */
+async function openManageToken(page, tick = TICK) {
     await reloadToHome(page);
     await openPaletteCommand(page, 'My tokens');
     const main = page.getByRole('main');
@@ -250,6 +251,10 @@ async function openTokenAdmin(page, item, tick = TICK) {
     await expect(page.getByRole('heading', { name: 'Manage Token' })
         .or(page.getByText('Manage Token').first()))
         .toBeVisible({ timeout: 30_000 });
+}
+
+async function openTokenAdmin(page, item, tick = TICK) {
+    await openManageToken(page, tick);
 
     // Manage Token splits its actions between PAGE BUTTONS and the More menu,
     // and which action sits where depends on the token's state - "Mint
@@ -267,7 +272,8 @@ async function openTokenAdmin(page, item, tick = TICK) {
         return;
     }
     await page.getByRole('button', { name: /More/ }).last().click();
-    await page.getByRole('menuitem', { name: item }).click();
+    // Exact: a substring match on "Lock" also hits "Use a shared block list".
+    await page.getByRole('menuitem', { name: item, exact: true }).click();
 }
 
 /**
@@ -378,18 +384,19 @@ test.describe(`genesis lock flags on ${REGTEST_CHAIN_LABEL}`, () => {
                 'the venue would ACCEPT a new description for a token whose LOCK_DESCRIPTION is set')
                 .toMatch(/DESCRIPTION \(locked\)/i);
 
-            await openTokenAdmin(page, 'Description');
-            const form = page.getByRole('main');
-            await expect(form.getByLabel('New description')).toBeVisible({ timeout: 30_000 });
-            await form.getByLabel('New description').fill(NEW_DESCRIPTION);
-            await form.getByRole('button', { name: /^(Save|Update|Sign)/ }).first().click();
-
-            // Refused before anything is signed: the fee-bearing pre-flight
-            // answers on the form, so no confirm screen opens.
-            const alert = page.getByRole('alert').filter({ hasText: /DESCRIPTION \(locked\)/i });
-            await expect(alert,
-                'the wallet did not quote the network\'s verdict for an edit to a frozen field')
-                .toBeVisible({ timeout: 90_000 });
+            // Refused before any form opens: Manage Token reads the token's
+            // lock flags and withdraws the Description action, naming the
+            // lock as the reason. The Mint settings edit above went through
+            // the same page, so this is the lock and not a dead menu.
+            await openManageToken(page);
+            await page.getByRole('button', { name: /More/ }).last().click();
+            const describeAction = page.getByRole('menuitem', { name: 'Description', exact: true });
+            await expect(describeAction,
+                'Manage Token offers a description edit on a token whose LOCK_DESCRIPTION is set')
+                .toBeDisabled({ timeout: 30_000 });
+            await expect(describeAction,
+                'the withdrawn Description action does not say the description is locked')
+                .toHaveAttribute('title', /permanently locked/i);
             expect(await page.getByTestId('confirm-modal').count(),
                 'an edit the network has already refused reached the confirm screen')
                 .toBe(0);
