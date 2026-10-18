@@ -108,7 +108,7 @@ test.describe('STAKE and partial UNSTAKE on Bitcoin testnet', () => {
             const main = page.getByRole('main');
             await expect(main.getByLabel('From', { exact: true })).toHaveValue(address);
             await main.getByLabel('Signing public key', { exact: true }).fill(pubkey);
-            await expect(main.getByText('✓ No existing stake for this pubkey; defaulting to New stake.'))
+            await expect(main.getByText('✓ No existing stake for this public key. New stake is selected.'))
                 .toBeVisible({ timeout: 120_000 });
             await main.getByRole('textbox', { name: /^Amount/ }).fill(STAKE_AMOUNT);
             await main.getByRole('button', { name: 'Stake', exact: true }).click();
