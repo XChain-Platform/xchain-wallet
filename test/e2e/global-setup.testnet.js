@@ -36,10 +36,12 @@ import {
     stageRunInput,
     testnetEndpoints,
 } from './fixtures/testnet.js';
+import { assertOriginsAllowed, suiteOrigin } from './fixtures/testnet_origin.js';
 import { preflightRunInput } from './fixtures/testnet_preflight.js';
 
 export default async function globalSetup() {
     const endpoints = testnetEndpoints();
+    await assertOriginsAllowed(endpoints, { origin: suiteOrigin() });
     const venue = liveVenue(endpoints);
     const report = await checkTestnetVenue(venue);
     // Which price a run is asserting against is the single fact that explains
