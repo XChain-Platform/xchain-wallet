@@ -106,6 +106,74 @@ describe('testnet residual stake polling', () => {
         expect(fetch).toHaveBeenCalledTimes(10);
     });
 
+    it.each([
+        ['https://explorer.private.example/stakes', 'explorer.private.example'],
+        ['request to internal-service failed', 'internal-service'],
+        ['address tb1qsecretwalletaddress was rejected', 'tb1qsecretwalletaddress'],
+        ['wallet key xprv9sensitiveprivatekey was rejected', 'xprv9sensitiveprivatekey'],
+    ])('does not expose rejection message data from %s', async (message, secret) => {
+        const fetch = vi.fn(async () => {
+            throw Object.assign(new Error(message), { code: 'EHOSTUNREACH' });
+        });
+        let error;
+
+        try {
+            await waitForResidualStake(ADDRESS, ACTION_INDEX, {
+                ...OPTIONS,
+                ...clock(),
+                fetch,
+            });
+        } catch (caught) {
+            error = caught;
+        }
+
+        expect(error).toBeInstanceOf(Error);
+        expect(error.message).toContain('last explorer failure: EHOSTUNREACH');
+        expect(error.message).not.toContain(secret);
+    });
+
+    it('uses a cause code when the rejection has no direct code', async () => {
+        const fetch = vi.fn(async () => {
+            throw new Error('request to internal-service failed', {
+                cause: { code: 'ENETUNREACH' },
+            });
+        });
+
+        await expect(waitForResidualStake(ADDRESS, ACTION_INDEX, {
+            ...OPTIONS,
+            ...clock(),
+            fetch,
+        })).rejects.toThrow('last explorer failure: ENETUNREACH');
+    });
+
+    it('reports an AbortSignal timeout rejection by its name', async () => {
+        const fetch = vi.fn(async () => {
+            const signal = AbortSignal.timeout(0);
+            await new Promise((resolve) => {
+                signal.addEventListener('abort', resolve, { once: true });
+            });
+            throw signal.reason;
+        });
+
+        await expect(waitForResidualStake(ADDRESS, ACTION_INDEX, {
+            ...OPTIONS,
+            ...clock(),
+            fetch,
+        })).rejects.toThrow('last explorer failure: TimeoutError');
+    });
+
+    it('reports a code outside the safe pattern as unknown', async () => {
+        const fetch = vi.fn(async () => {
+            throw Object.assign(new Error('request failed'), { code: 'unsafe-code: host' });
+        });
+
+        await expect(waitForResidualStake(ADDRESS, ACTION_INDEX, {
+            ...OPTIONS,
+            ...clock(),
+            fetch,
+        })).rejects.toThrow('last explorer failure: unknown');
+    });
+
     it('reports only that the residual was not indexed after empty answers', async () => {
         const fetch = vi.fn(async () => response([]));
         let error;
