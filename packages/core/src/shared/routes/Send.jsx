@@ -221,6 +221,7 @@ import { useSignerInfo } from '../hooks/useSignerInfo.js';
 import { useUndoSend } from '../hooks/useUndoSend.js';
 import { useReachability } from '../hooks/useReachability.js';
 import { useNetworkOffline } from '../hooks/useNetworkOffline.js';
+import { useBalancesHidden } from '../hooks/useBalancesHidden.js';
 import { BalancesUncheckedState } from '../components/BalancesUncheckedState.jsx';
 import { HideReachabilityNotice } from '../components/hideReachabilityNotice.js';
 import { readBalanceCache } from '../utils/balanceCache.js';
@@ -231,6 +232,7 @@ import {
     countNonCommaBefore,
     indexAfterNonCommaCount,
     compareDecimalStrings,
+    decimalToBaseUnits,
     multiplyDecimalStrings,
     roundDecimalString,
 } from '../utils/amountFormat.js';
@@ -400,6 +402,7 @@ export function Send({ walletId, accountId, onBack, prefill = null, onDone, onCh
     // The shared offline verdict: a device with no network is offline from the
     // first render, and the probe's all-unreachable verdict counts as well.
     const { offline: networkOffline } = useNetworkOffline({ walletId });
+    const [balancesHidden] = useBalancesHidden();
     // The verdict behind the shell's "Some balances may be out of date".
     const balancesUnchecked = reachabilityOverall === 'degraded' || networkOffline;
     const mountedRef = useRef(true);
@@ -2051,6 +2054,22 @@ export function Send({ walletId, accountId, onBack, prefill = null, onDone, onCh
         };
     }, [previewBalances.sdkShape, tick]);
 
+    const amountBalanceError = useMemo(() => {
+        if (!sourceBalance || balancesUnchecked || balancesHidden) return null;
+        const divisibility = sourceBalance.divisibility
+            ?? (isNativeSend ? nativeDecimalsFor(descriptor) : null);
+        if (!Number.isInteger(divisibility) || divisibility < 0) return null;
+        const amountUnits = decimalToBaseUnits(String(amount).trim(), divisibility);
+        const balanceUnits = decimalToBaseUnits(
+            String(sourceBalance.amount ?? '').trim(),
+            divisibility,
+        );
+        if (amountUnits === null || balanceUnits === null || amountUnits <= balanceUnits) {
+            return null;
+        }
+        return 'Amount exceeds the available balance.';
+    }, [amount, balancesHidden, balancesUnchecked, descriptor, isNativeSend, sourceBalance]);
+
     const unusualSendWarnings = useMemo(() => {
         const exactFeeSats = confirmAction.composed?.networkFeeSats;
         const feeAmount = Number.isSafeInteger(exactFeeSats) && exactFeeSats >= 0
@@ -2381,6 +2400,7 @@ export function Send({ walletId, accountId, onBack, prefill = null, onDone, onCh
             setFormError('Amount must be a positive number.');
             return;
         }
+        if (amountBalanceError) return;
         // Refuse a below-dust amount BEFORE composing. Enter also submits this
         // form, so the inline warning alone would not be enough (same reasoning as the
         // test-send gate below).
@@ -3602,7 +3622,7 @@ export function Send({ walletId, accountId, onBack, prefill = null, onDone, onCh
                     type="submit"
                     variant="primary"
                     loading={confirmAction.composing}
-                    disabled={isDemo || networkOffline || !!testSendGate || maxUnavailable}
+                    disabled={isDemo || networkOffline || !!testSendGate || maxUnavailable || !!amountBalanceError}
                     title={networkOffline ? t('send.offline.title') : undefined}
                 >
                     {t('send.title')}
@@ -3725,6 +3745,7 @@ export function Send({ walletId, accountId, onBack, prefill = null, onDone, onCh
                 fiatRate={amountFiatRate}
                 fiatCurrency={fiatCurrency}
                 amountInputMode={amountInputMode}
+                error={amountBalanceError || undefined}
                 divisibility={sourceBalance?.divisibility ?? (isNativeSend ? 8 : undefined)}
                 onAmountFieldChange={onAmountFieldChange}
                 toggleAmountInputMode={toggleAmountInputMode}

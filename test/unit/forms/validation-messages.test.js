@@ -223,8 +223,7 @@ describe('Send field validation', () => {
         expectPlainCopy(precision);
     });
 
-    // Send above-balance validation bug: review opens without a local field error.
-    it.skip('rejects an amount above the available balance with plain copy', async () => {
+    it('rejects an amount above the available balance with plain copy', async () => {
         const messaging = mountSend({ quantity: '100000000' });
         fireEvent.change(await screen.findByLabelText(/^To$/), {
             target: { value: BITCOIN_TO },
