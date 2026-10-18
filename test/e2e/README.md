@@ -179,13 +179,29 @@ wait (`waitForTokenBalance`, `waitForValidAction`, `waitForActivationHeight`,
 (`test/unit/e2e/testnet-harness.test.js`) proves the whole healthy path with a
 venue whose forbidden members throw.
 
+Before the venue check and before stdin is read, `global-setup.testnet.js`
+runs `assertOriginsAllowed` from `test/e2e/fixtures/testnet_origin.js`. It sends
+one `OPTIONS` request carrying the suite origin to each encoder, explorer and
+hub URL named by the testnet descriptor, skipping an empty hub URL. A service
+is allowed only when it answers with a 2xx status and an
+`access-control-allow-origin` header that is `*` or exactly the suite origin.
+Otherwise setup stops the run with one error starting `Origin preflight refused`
+that names every refused role, the suite origin and the header seen, or the
+fetch rejection code. A public service that permits only the production wallet
+origin therefore fails the run in seconds instead of stalling it hours in. The
+suite origin is `http://localhost:` plus `XC_PREVIEW_PORT`, or `4193` when that
+variable is unset, matching the port `playwright.testnet.config.js` uses for the
+preview. This preflight does not relax browser origin rules or decide which
+origins a service allows.
+
 Three things differ from regtest on purpose:
 
 - **No browser relaxation.** The public explorer sends CORS headers, so the
   config launches Chromium with real origin rules. A testnet pass that needed
   `--disable-web-security` would be reporting on a browser nobody ships.
-- **Global setup only reads.** It proves the venue is reachable, not stale,
-  halted or lagging, and that it prices a MINT of XCHAIN. It seeds nothing.
+- **Global setup only reads.** Its origin check and venue probes prove the
+  services accept the suite origin, the venue is reachable, not stale, halted
+  or lagging, and that it prices a MINT of XCHAIN. It seeds nothing.
 - **Funding and recovery input arrive over stdin.** After the venue check
   passes, `global-setup.testnet.js` reads stdin once and stages it in a
   mode-0600 file inside a mode-0700 directory. Only that file's path, never a
