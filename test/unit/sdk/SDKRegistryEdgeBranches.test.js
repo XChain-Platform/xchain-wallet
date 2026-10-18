@@ -93,7 +93,7 @@ describe('SDKRegistry edge branches', () => {
         expect(joinEndpoint({ defaultUrl: 'https://x', defaultPort: 8443 })).toBe('https://x:8443');
     });
 
-    it('drops settings entries when registry lookup throws or an endpoint is absent', () => {
+    it('drops settings entries when registry lookup throws and keeps a user override for an absent default endpoint', () => {
         const throwingRegistry = {
             has: () => true,
             get: () => { throw new Error('registry unavailable'); },
@@ -108,11 +108,11 @@ describe('SDKRegistry edge branches', () => {
                 [descriptor.id]: {
                     custom: true,
                     explorerUrl: 'https://custom',
-                    hubUrl: 'https://ignored',
+                    hubUrl: 'https://custom-hub',
                 },
             },
         }, { has: () => true, get: () => withoutHub })).toEqual({
-            [descriptor.id]: { explorerUrl: 'https://custom' },
+            [descriptor.id]: { explorerUrl: 'https://custom', hubUrl: 'https://custom-hub' },
         });
     });
 });

@@ -1,0 +1,57 @@
+/* The one card surface. Every bordered content box in the wallet composes
+   one of these classes instead of drawing its own border, corner, inset and
+   fill, so every card has the same solid 1px border, radius, padding and
+   background:
+
+       .panel { composes: card from '../../ui/Card.module.css'; }
+
+   A card never sets border, border-radius, padding or background itself;
+   test/unit/ui/cardSurfaces.test.js holds that line. Width follows the
+   page template: list and dashboard cards fill the content width, and the
+   form template carries its own card (see FormPage.module.css). */
+
+.card {
+    padding: var(--xc-card-pad);
+    background: var(--xc-card-bg);
+    border: var(--xc-card-border);
+    border-radius: var(--xc-card-radius);
+}
+
+/* A flush card: the same surface with no inset, for a list whose rows carry
+   their own padding (dividers run edge to edge) or a tile whose image does. */
+.flush {
+    padding: 0;
+    background: var(--xc-card-bg);
+    border: var(--xc-card-border);
+    border-radius: var(--xc-card-radius);
+}
+
+/* No card inside a card: a nested one keeps its content and spacing rules
+   but drops its own surface, so it reads as part of the outer card. */
+.card .card,
+.card .flush,
+.flush .card,
+.flush .flush {
+    padding: 0;
+    background: transparent;
+    border: 0;
+    border-radius: 0;
+}
+
+/* The form template draws a card on wide screens only (FormPage composes
+   formCard), so cards inside a form flatten only where that card exists.
+   A full-width form draws no card, so it composes cardless and the cards
+   inside it keep their own surface. */
+.cardless {
+    --xc-form-cardless: 1;
+}
+
+@media (min-width: 600px) {
+    .formCard:not(.cardless) .card,
+    .formCard:not(.cardless) .flush {
+        padding: 0;
+        background: transparent;
+        border: 0;
+        border-radius: 0;
+    }
+}

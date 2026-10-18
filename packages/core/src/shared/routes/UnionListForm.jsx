@@ -11,7 +11,9 @@ import { useEffect, useMemo, useState } from 'react';
 import {
     AddressField,
     Button,
+    Checkbox,
     EmptyState,
+    FormNotice,
     FormPage,
     FormSection,
     Input,
@@ -32,6 +34,7 @@ import { useOwnerActionLane } from '../hooks/useOwnerActionLane.js';
 import { isUserRejection } from '../hooks/useActionConfirmFlow.js';
 import { useSignerReady } from '../hooks/useSignerReady.js';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
+import { useDemoGuard } from '../hooks/useDemoGuard.jsx';
 import { neutralizeControlText } from '../utils/textHardening.js';
 import { memoLengthError, MEMO_HINT } from '../utils/memoLimit.js';
 import { submitFailureMessage } from '../utils/submitFailureMessage.js';
@@ -145,6 +148,7 @@ async function readCandidates({ messaging, chainId, addresses }) {
  */
 export function UnionListForm({ walletId, chainId: initialChainId, activeAccountId, onBack, onDone = onBack }) {
     const { messaging, shell } = useMessaging();
+    const demoGuard = useDemoGuard(walletId, { onBack });
     const variant = screenVariantFor(shell);
     const signerReady = useSignerReady(walletId);
     const [chainId, setChainId] = useState(initialChainId || null);
@@ -255,7 +259,7 @@ export function UnionListForm({ walletId, chainId: initialChainId, activeAccount
         event.preventDefault();
         const trimmedMemo = memo.trim();
         if (sdkSupported !== true) { setFormError(SDK_REASON); return; }
-        if (!fromAddress) { setFormError('No signing address available on this chain.'); return; }
+        if (!fromAddress) { setFormError('No signing address available on this network.'); return; }
         if (!pickState.canReview) {
             setFormError(pickState.overLimit
                 ? 'The estimated merged membership is over 10,000.'
@@ -334,6 +338,7 @@ export function UnionListForm({ walletId, chainId: initialChainId, activeAccount
 
     return wrap(
         <FormPage
+            demoGuard={demoGuard}
             label="Create union list"
             onSubmit={handleReview}
             sectioned
@@ -368,7 +373,7 @@ export function UnionListForm({ walletId, chainId: initialChainId, activeAccount
             {fromAddress ? (
                 <AddressField label="From" value={fromAddress.address} readOnly onChange={() => {}} />
             ) : (
-                <StatusMessage variant="error">No address on this chain. Use Receive to generate one first.</StatusMessage>
+                <FormNotice variant="error">No address on this network. Use Receive to generate one first.</FormNotice>
             )}
             </FormSection>
 
@@ -377,7 +382,7 @@ export function UnionListForm({ walletId, chainId: initialChainId, activeAccount
                 {candidates.length === 0 ? (
                     <EmptyState
                         title="No usable lists"
-                        body="Local and shared lists available on this chain appear here."
+                        body="Local and shared lists available on this network appear here."
                         titleAs="p"
                     />
                 ) : null}
@@ -386,15 +391,12 @@ export function UnionListForm({ walletId, chainId: initialChainId, activeAccount
                     const reason = state?.reason || null;
                     return (
                         <div key={candidate.actionIndex}>
-                            <label>
-                                <input
-                                    type="checkbox"
-                                    checked={state?.picked === true}
-                                    disabled={sdkSupported !== true || state?.disabled === true}
-                                    onChange={() => toggleCandidate(candidate.actionIndex)}
-                                />
-                                {' '}{candidateName(candidate)}
-                            </label>
+                            <Checkbox
+                                label={candidateName(candidate)}
+                                checked={state?.picked === true}
+                                disabled={sdkSupported !== true || state?.disabled === true}
+                                onChange={() => toggleCandidate(candidate.actionIndex)}
+                            />
                             {reason ? <p className={styles.hint}>{reason}</p> : null}
                         </div>
                     );
@@ -424,12 +426,14 @@ export function UnionListForm({ walletId, chainId: initialChainId, activeAccount
                     </p>
                 </div>
             ) : null}
-            <div className={styles.warnings}>
-                <p className={styles.warning}>
-                    A union follows each member's edits, including a shared list's new versions.
-                </p>
-                <p className={styles.warning}>A union cannot itself be shared in this release.</p>
-            </div>
+            <FormNotice
+                variant="warning"
+                role={null}
+                lines={[
+                    "A union follows each member's edits, including a shared list's new versions.",
+                    'A union cannot itself be shared in this release.',
+                ]}
+            />
             </FormSection>
 
         </FormPage>,

@@ -117,7 +117,6 @@ export function AddAddressModal({ walletId, accountId, chainIds, onClose, onGene
         .filter(Boolean)
         .map((d) => ({
             chainId: d.id,
-            displayName: d.displayName,
             addressTypes: d.addressTypes,
             defaultAddressType: flowsLib.defaultAddressTypeForFormat(d, walletFormat),
             coin: d.coin,
@@ -203,13 +202,29 @@ export function AddAddressModal({ walletId, accountId, chainIds, onClose, onGene
 
     const header = (
         <PageHeader
+            nested
             onBack={busy ? undefined : onClose}
             title="Add addresses"
             titleIcon={<Icon.PlusIcon />}
         />
     );
+    const footer = coinOptions.length > 0 ? (
+        <form aria-label="Generate addresses" onSubmit={handleGenerate}>
+            <Button
+                type="submit"
+                variant="primary"
+                size="md"
+                block
+                loading={busy}
+                disabled={busy || !effectiveChainId}
+                data-testid="add-address-generate"
+            >
+                {generateLabel}
+            </Button>
+        </form>
+    ) : null;
     return (
-        <Screen variant={variant} header={header}>
+        <Screen variant={variant} header={header} footer={footer}>
             {coinOptions.length === 0 ? (
                 <EmptyState
                     title="No coins available"
@@ -221,24 +236,10 @@ export function AddAddressModal({ walletId, accountId, chainIds, onClose, onGene
                     onSubmit={handleGenerate}
                     status={(error || busy) ? (
                         <>
-                            {error ? <StatusMessage variant="error" className={styles.error}>{error}</StatusMessage> : null}
+                            {error ? <StatusMessage variant="error">{error}</StatusMessage> : null}
                             {busy ? <p className={styles.progress}>Generating {done}/{countNum}…</p> : null}
                         </>
                     ) : null}
-                    actions={(
-                        // The label carries a count ("Generate 3"), so matching it by
-                        // text needs a regex that also matches any future Generate button.
-                        <Button
-                            type="submit"
-                            variant="primary"
-                            size="md"
-                            loading={busy}
-                            disabled={busy || !effectiveChainId}
-                            data-testid="add-address-generate"
-                        >
-                            {generateLabel}
-                        </Button>
-                    )}
                 >
                         <ChainPicker
                             label="Coin"
@@ -246,6 +247,7 @@ export function AddAddressModal({ walletId, accountId, chainIds, onClose, onGene
                             onChange={changeCoin}
                             chainIds={coinOptions.map((c) => c.chainId)}
                             chainRegistry={chainRegistry}
+                            hideNetworkKind
                             disabled={busy}
                         />
                         <label className={styles.field}>

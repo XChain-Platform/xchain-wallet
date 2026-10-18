@@ -35,7 +35,7 @@
 // user actually walks when their wallet was closed. Auto-pay's own arming is
 // left to a spec that can watch it in isolation.
 
-import { createWallet, expect, test } from '../../fixtures/wallet.js';
+import { createWallet, expect, openPaletteCommand, test, addWallet } from '../../fixtures/wallet.js';
 import {
     encoderRpc,
     expectConfirmModal,
@@ -46,6 +46,7 @@ import {
     REGTEST_ADDRESS_RE,
     REGTEST_CHAIN_LABEL,
     REGTEST_COIN,
+    seedPrices,
     selectVenueChain,
     switchToRegtest,
     tokenBalance,
@@ -55,9 +56,12 @@ import {
 const PASSWORD = 'regtestpassword123';
 /** Wallet A needs miner fees only; wallet B also has to pay the ask. */
 const FUNDING = 2;
+/** XCHAIN for wallet A's ISSUE fee; the traded token is issued per test. */
 const MINT = 1000;
 /** The escrowed token side. */
 const GIVE_TOKENS = 100;
+const TOKEN_SUPPLY = 1000;
+const STAMP = Date.now().toString().slice(-6);
 /** The ask, in native coin, and the exact amount the obligation will demand. */
 const ASK = '1';
 const ASK_SATS = 100_000_000;
@@ -88,8 +92,8 @@ async function explorerJson(path) {
  * with the cause named, because a silent skip is how a suite reports coverage it
  * does not have.
  */
-async function quoteMirrorOrder(source) {
-    const params = `0|${COIN}||${ASK}||${COIN}|XCHAIN|${GIVE_TOKENS}`;
+async function quoteMirrorOrder(source, tick) {
+    const params = `0|${COIN}||${ASK}||${COIN}|${tick}|${GIVE_TOKENS}`;
     const q = new URLSearchParams({ action: 'ORDER', params, source });
     return explorerJson(`feequote?${q.toString()}`);
 }
@@ -177,19 +181,6 @@ async function waitForBalanceAtLeast(address, tick, min, timeoutMs = 180_000) {
     throw new Error(`${tick} balance never reached ${min} for ${address} (last=${last})`);
 }
 
-async function gotoPalette(page, title) {
-    await page.keyboard.press('ControlOrMeta+k');
-    const dialog = page.getByRole('dialog', { name: 'Command palette' });
-    await expect(dialog, 'the command palette did not open').toBeVisible({ timeout: 15_000 });
-    const combobox = dialog.getByRole('combobox').first();
-    await expect(combobox).toBeEditable({ timeout: 15_000 });
-    await combobox.fill(title);
-    const row = page.getByRole('option', { name: new RegExp(`^${title}\\b`) }).first();
-    await expect(row, `no palette command matching "${title}"`).toBeVisible();
-    await row.click();
-    await expect(dialog).toBeHidden({ timeout: 15_000 });
-}
-
 async function approveAndGetTxid(page) {
     await page.getByTestId('confirm-approve').click();
     const main = page.getByRole('main');
@@ -198,9 +189,37 @@ async function approveAndGetTxid(page) {
     return (await main.innerText()).match(/[0-9a-f]{64}/)?.[0];
 }
 
+/**
+ * Issues a token only this test trades, from the active wallet.
+ *
+ * The venue's order book is shared and keeps every earlier run's unfilled
+ * orders. An XCHAIN-for-coin bid at this spec's price crossed resting asks at
+ * the same price from earlier runs ahead of this run's own, by price-time
+ * priority, so the match this spec waits for never formed (measured on the
+ * venue: #582 filled against #404 and #578, #587 against #72 and #176). A fresh ticker
+ * gives the pair an empty book, so the two orders can only cross each other.
+ */
+async function issueRunToken(page, owner, tick) {
+    // ISSUE is fee-bearing, and a stale price sentinel presents as a confirm
+    // screen that never opens.
+    await seedPrices();
+    await openPaletteCommand(page, 'Issue token');
+    const main = page.getByRole('main');
+    await expect(main.getByLabel('Ticker')).toBeVisible({ timeout: 30_000 });
+    await selectVenueChain(main);
+    await main.getByLabel('Ticker').fill(tick);
+    await main.getByLabel('Supply', { exact: true }).fill(String(TOKEN_SUPPLY));
+    await main.getByRole('button', { name: 'Issue token', exact: true }).click();
+    await expectConfirmModal(page, 'this action', 60_000);
+    await expect(page.getByTestId('confirm-approve')).toBeEnabled({ timeout: 120_000 });
+    const issued = await waitForIndexedAction(await approveAndGetTxid(page));
+    expect(String(issued.status), `the venue rejected the ISSUE of ${tick}`).toBe('valid');
+    await waitForBalanceAtLeast(owner, tick, TOKEN_SUPPLY);
+}
+
 /** Opens Create order on the venue chain and returns the form scope + source. */
 async function openCreateOrder(page) {
-    await gotoPalette(page, 'Create order');
+    await openPaletteCommand(page, 'Create order');
     const main = page.getByRole('main');
     await expect(main.getByLabel('From address')).toBeVisible({ timeout: 30_000 });
     await selectVenueChain(main);
@@ -215,6 +234,7 @@ test.describe(`ORDER match + CoinPay on ${REGTEST_CHAIN_LABEL}`, () => {
     test.setTimeout(1_800_000);
 
     test('two crossing orders match, and a whole-coin payment settles at the full amount', async ({ page }) => {
+        const tick = `OMC${STAMP}`;
         let maker;
         let taker;
         let makerOrder;
@@ -230,10 +250,15 @@ test.describe(`ORDER match + CoinPay on ${REGTEST_CHAIN_LABEL}`, () => {
             await unlockAfterReload(page, PASSWORD);
             await mintXchain(page, MINT);
             await waitForBalanceAtLeast(maker, 'XCHAIN', MINT);
+            await issueRunToken(page, maker, tick);
+            // The order form checks the give amount against the balance the
+            // wallet has loaded, which the ISSUE just changed.
+            await page.reload();
+            await unlockAfterReload(page, PASSWORD);
 
             const { main } = await openCreateOrder(page);
             // Defaults are give-a-token / get-native, which is this side exactly.
-            await main.getByLabel('Ticker', { exact: true }).fill('XCHAIN');
+            await main.getByLabel('Ticker', { exact: true }).fill(tick);
             await main.getByLabel('Amount', { exact: true }).fill(String(GIVE_TOKENS));
             await main.getByLabel(`Amount (${COIN})`).fill(ASK);
             await main.getByRole('button', { name: /^Place order/ }).click();
@@ -246,19 +271,7 @@ test.describe(`ORDER match + CoinPay on ${REGTEST_CHAIN_LABEL}`, () => {
         });
 
         await test.step('wallet B is a second wallet and offers the coin', async () => {
-            await gotoPalette(page, 'Switch wallet');
-            await page.getByRole('button', { name: 'Add wallet' }).click();
-            // navigate:false - this add-wallet flow starts at the onboarding
-            // welcome INSIDE the unlocked shell, and a goto would throw the
-            // session away and land back on wallet A.
-            await createWallet(page, { password: PASSWORD, name: 'Taker Wallet', navigate: false });
-            // Adding a wallet does not switch to it (the sibling bet spec paid
-            // for this lesson); switch explicitly or B's address reads as A's.
-            await gotoPalette(page, 'Switch wallet');
-            await page.getByRole('button', { name: /Taker Wallet/ }).first().click();
-            await expect(page.getByRole('button', { name: /Taker Wallet/ }).first(),
-                'the app did not switch to the newly added wallet')
-                .toBeVisible({ timeout: 30_000 });
+            await addWallet(page, { name: 'Taker Wallet', password: PASSWORD });
 
             ({ source: taker } = await openCreateOrder(page));
             expect(taker, 'wallet B derived the same address as wallet A').not.toBe(maker);
@@ -274,7 +287,7 @@ test.describe(`ORDER match + CoinPay on ${REGTEST_CHAIN_LABEL}`, () => {
             // refuse an order the chain accepts, and no amount of wallet code can
             // get past that. Checked here, where a real open order exists to
             // match against, so the probe means what it says.
-            const quote = await quoteMirrorOrder(taker);
+            const quote = await quoteMirrorOrder(taker, tick);
             test.skip(quote?.valid === false && String(quote?.error).includes('pending_coinpay'),
                 'this venue\'s indexer still quotes an instantly-filling ORDER as its MATCH\'s '
                 + '"pending_coinpay" (valid:false, xchainFee:null), so the wallet cannot place the '
@@ -291,13 +304,13 @@ test.describe(`ORDER match + CoinPay on ${REGTEST_CHAIN_LABEL}`, () => {
             await main.getByRole('radio', { name: 'A token' }).last().check();
 
             await main.getByLabel(`Amount (${COIN})`).fill(ASK);
-            await main.getByLabel('Ticker', { exact: true }).fill('XCHAIN');
+            await main.getByLabel('Ticker', { exact: true }).fill(tick);
             await main.getByLabel('Amount', { exact: true }).fill(String(GIVE_TOKENS));
 
             // A native GIVE is the only shape that can arm auto-pay, and this
             // spec wants the MANUAL queue. Turning it off also removes the
             // web-shell acknowledgement the armed path would demand.
-            const autopay = main.getByRole('checkbox', { name: /Enable CoinPay auto-pay/ });
+            const autopay = main.getByRole('switch', { name: /Enable CoinPay auto-pay/ });
             await expect(autopay,
                 'the native-coin GIVE side offers no auto-pay control, so PC-16 never armed')
                 .toBeVisible();
@@ -340,7 +353,7 @@ test.describe(`ORDER match + CoinPay on ${REGTEST_CHAIN_LABEL}`, () => {
 
             // Until it is paid, nothing has moved: the seller still has no coin
             // and the buyer still has no tokens.
-            expect(await tokenBalance(taker, 'XCHAIN'),
+            expect(await tokenBalance(taker, tick),
                 'the tokens were released before the coin was paid')
                 .toBe(0);
         });
@@ -379,7 +392,7 @@ test.describe(`ORDER match + CoinPay on ${REGTEST_CHAIN_LABEL}`, () => {
             const settled = await waitForObligation(taker, 'fulfilled');
             expect(Math.round(Number(settled.coin_amount) * 1e8)).toBe(ASK_SATS);
 
-            const takerTokens = await waitForBalanceAtLeast(taker, 'XCHAIN', GIVE_TOKENS);
+            const takerTokens = await waitForBalanceAtLeast(taker, tick, GIVE_TOKENS);
             expect(takerTokens,
                 'the buyer was credited something other than the tokens the order escrowed')
                 .toBe(GIVE_TOKENS);
@@ -426,6 +439,7 @@ test.describe(`ORDER match + CoinPay on ${REGTEST_CHAIN_LABEL}`, () => {
     // (amounts-unavailable / amount-mismatch / terms-unparseable / depth), and
     // whichever it is names the next fix.
     test('an armed order pays its own match, with nobody driving the wallet', async ({ page }) => {
+        const tick = `OMA${STAMP}`;
         let maker;
         let taker;
         let makerOrder;
@@ -441,9 +455,14 @@ test.describe(`ORDER match + CoinPay on ${REGTEST_CHAIN_LABEL}`, () => {
             await unlockAfterReload(page, PASSWORD);
             await mintXchain(page, MINT);
             await waitForBalanceAtLeast(maker, 'XCHAIN', MINT);
+            await issueRunToken(page, maker, tick);
+            // The order form checks the give amount against the balance the
+            // wallet has loaded, which the ISSUE just changed.
+            await page.reload();
+            await unlockAfterReload(page, PASSWORD);
 
             const { main } = await openCreateOrder(page);
-            await main.getByLabel('Ticker', { exact: true }).fill('XCHAIN');
+            await main.getByLabel('Ticker', { exact: true }).fill(tick);
             await main.getByLabel('Amount', { exact: true }).fill(String(GIVE_TOKENS));
             await main.getByLabel(`Amount (${COIN})`).fill(ASK);
             await main.getByRole('button', { name: /^Place order/ }).click();
@@ -455,13 +474,7 @@ test.describe(`ORDER match + CoinPay on ${REGTEST_CHAIN_LABEL}`, () => {
         });
 
         await test.step('wallet B mirrors it with auto-pay ARMED', async () => {
-            await gotoPalette(page, 'Switch wallet');
-            await page.getByRole('button', { name: 'Add wallet' }).click();
-            await createWallet(page, { password: PASSWORD, name: 'Autopay Taker', navigate: false });
-            await gotoPalette(page, 'Switch wallet');
-            await page.getByRole('button', { name: /Autopay Taker/ }).first().click();
-            await expect(page.getByRole('button', { name: /Autopay Taker/ }).first())
-                .toBeVisible({ timeout: 30_000 });
+            await addWallet(page, { name: 'Autopay Taker', password: PASSWORD });
 
             ({ source: taker } = await openCreateOrder(page));
             expect(taker, 'wallet B derived the same address as wallet A').not.toBe(maker);
@@ -473,12 +486,12 @@ test.describe(`ORDER match + CoinPay on ${REGTEST_CHAIN_LABEL}`, () => {
             await main.getByRole('radio', { name: `Native ${COIN}` }).first().check();
             await main.getByRole('radio', { name: 'A token' }).last().check();
             await main.getByLabel(`Amount (${COIN})`).fill(ASK);
-            await main.getByLabel('Ticker', { exact: true }).fill('XCHAIN');
+            await main.getByLabel('Ticker', { exact: true }).fill(tick);
             await main.getByLabel('Amount', { exact: true }).fill(String(GIVE_TOKENS));
 
             // Left ON this time, and the web shell's acknowledgement taken: this
             // is the arming the rest of the test depends on.
-            await expect(main.getByRole('checkbox', { name: /Enable CoinPay auto-pay/ })).toBeChecked();
+            await expect(main.getByRole('switch', { name: /Enable CoinPay auto-pay/ })).toBeChecked();
             await main.getByRole('checkbox', { name: /only auto-pays while it is open/ }).check();
 
             await main.getByRole('button', { name: /^Place order/ }).click();
@@ -524,7 +537,7 @@ test.describe(`ORDER match + CoinPay on ${REGTEST_CHAIN_LABEL}`, () => {
 
             const settled = await waitForObligation(taker, 'fulfilled');
             expect(Math.round(Number(settled.coin_amount) * 1e8)).toBe(ASK_SATS);
-            expect(await waitForBalanceAtLeast(taker, 'XCHAIN', GIVE_TOKENS),
+            expect(await waitForBalanceAtLeast(taker, tick, GIVE_TOKENS),
                 'the escrowed tokens did not reach the payer after their own auto-payment')
                 .toBe(GIVE_TOKENS);
         });

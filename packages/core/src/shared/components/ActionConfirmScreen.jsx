@@ -28,6 +28,7 @@ import { formatNativeBaseUnits, tickerForDescriptor } from '../../registry/coinT
 import { withOutcomeLabels } from '../utils/betOutcomeLabels.js';
 import { readActiveWallet } from '../utils/activeWalletMemory.js';
 import { sumDecimalStrings, trimAmountTail } from '../utils/amountFormat.js';
+import { t } from '../../i18n/index.js';
 
 const chainRegistry = registryLib.defaultRegistry();
 
@@ -136,6 +137,7 @@ function useSourceIdentity(address, chainId, walletId) {
  *   this screen renders - see withOutcomeLabels for why it is neutralized first.
  * @param {(amount: string) => string|null} [props.formatNativeFee]
  * @param {(amount: string) => string|null} [props.formatProtocolFee]
+ * @param {string} [props.totalText]             form-derived aggregate when the action decoder exposes only a per-unit amount
  */
 export function ActionConfirmScreen({
     confirmAction,
@@ -165,6 +167,7 @@ export function ActionConfirmScreen({
     outcomeLabels = null,
     formatNativeFee,
     formatProtocolFee,
+    totalText,
 }) {
     // A hardware signer has no password to type: readiness is the device being
     // connected, unlocked and on the right app - plus the §18.5 cross-check
@@ -272,9 +275,10 @@ export function ActionConfirmScreen({
             sourceAddress={sourceAddress}
             sourceName={sourceName}
             signingWallet={sourceIdentity.wallet}
+            hardwareSigner={Boolean(hwSource)}
             chainLabel={chainLabel}
             feeText={displayedFee}
-            totalText={nativePaymentTotal ? `Total: ${nativePaymentTotal} ${ticker}` : undefined}
+            totalText={totalText || (nativePaymentTotal ? `Total: ${nativePaymentTotal} ${ticker}` : undefined)}
             requestOrigin={requestOrigin}
             nativeTicker={ticker}
             formatNativeFee={formatNativeFee}
@@ -306,14 +310,14 @@ export function ActionConfirmScreen({
                         // a self-armed freeze.
                         <SigningReadyNote>
                             <p className={hintClassName}>
-                                <span aria-hidden="true">🔓</span> Wallet unlocked. No password needed.
+                                <span aria-hidden="true">🔓</span> {t('send.walletUnlocked')}
                             </p>
                         </SigningReadyNote>
                     ) : (
                         <Input
                             type="password"
-                            label="Password"
-                            hint="Required to sign."
+                            label={t('common.password')}
+                            hint={t('components.messageConfirmScreen.requiredToSign')}
                             value={password}
                             onChange={(e) => onPasswordChange(e.target.value)}
                             autoComplete="current-password"

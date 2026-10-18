@@ -26,7 +26,12 @@
 // not survive. Both are plain JSON values, so they do.
 
 import { tickerForCoin } from '../registry/coinTicker.js';
+import { decimalToBaseUnits, roundDecimalString } from '../shared/utils/amountFormat.js';
 import { importedAddressIdsFor } from './_importedAddressIds.js';
+import { synthesizeDemoBalances } from './demoFixtures.js';
+import { UNCONFIRMED_COMMITTED_STATUSES } from './pendingDeltas.js';
+
+const LIVE_PENDING_STATUSES = new Set(UNCONFIRMED_COMMITTED_STATUSES);
 
 /**
  * Most addresses one batch request may carry.
@@ -193,16 +198,77 @@ export function tokensFromBalances(balResp) {
         .filter((t) => t.tick);
 }
 
-// Human-scale decimal string -> atomic-unit integer string, BigInt-exact
-// (same conversion nativeFromAddress applies at fixed 8-decimal scale).
-// Fractional digits beyond `decimals` are truncated; anything that isn't a
-// plain non-negative decimal returns null so the caller can fall back.
+// Human-scale decimal string -> atomic-unit integer string, BigInt-exact.
+// Explorer aggregates can carry more fractional places than the asset allows,
+// so the boundary rounds half away from zero before applying the atomic scale.
 function atomicFromHumanAmount(amount, decimals) {
-    const m = /^(\d+)(?:\.(\d+))?$/.exec(String(amount).trim());
-    if (!m) return null;
-    const d = Number.isFinite(decimals) && decimals > 0 ? Math.floor(decimals) : 0;
-    const frac = (m[2] || '').slice(0, d).padEnd(d, '0');
-    return (BigInt(m[1]) * 10n ** BigInt(d) + BigInt(frac || '0')).toString();
+    const scale = Number(decimals);
+    if (!Number.isInteger(scale) || scale < 0 || scale > 100) return null;
+    const rounded = roundDecimalString(amount, scale);
+    if (rounded === null) return null;
+    const atomic = decimalToBaseUnits(rounded, scale);
+    return atomic === null ? null : atomic.toString();
+}
+
+function subtractAtomic(quantity, debit) {
+    try {
+        const remaining = BigInt(String(quantity)) - BigInt(String(debit));
+        return (remaining > 0n ? remaining : 0n).toString();
+    } catch {
+        return String(quantity);
+    }
+}
+
+/**
+ * Project locally committed sends onto explorer balances that still describe
+ * the pre-send chain state. Terminal and indexed records contribute nothing,
+ * so a failed or dropped send restores the fetched balance and confirmation
+ * cannot subtract the same spend twice.
+ *
+ * @param {Record<string, AddressBalancesEntry[]>} byChain
+ * @param {Array<import('../schemas/pendingTx.js').PendingTx>} pendingTxs
+ * @param {import('../registry/index.js').ChainRegistry} chainRegistry
+ * @returns {Record<string, AddressBalancesEntry[]>}
+ */
+export function applyPendingBalanceDeltas(byChain, pendingTxs, chainRegistry) {
+    if (!byChain || !Array.isArray(pendingTxs)) return byChain;
+    for (const pending of pendingTxs) {
+        if (!pending || !LIVE_PENDING_STATUSES.has(pending.status)) continue;
+        const chainId = chainRegistry.chainIdFor(pending.chain, pending.network);
+        const entries = chainId && Array.isArray(byChain[chainId]) ? byChain[chainId] : [];
+        for (const entry of entries) {
+            if (entry?.address !== pending.fromAddress || !entry.balances) continue;
+            const native = entry.balances.native;
+            const nativeTick = String(native?.tick || '').toUpperCase();
+            let appliedExactNativeDebit = false;
+            if (native && /^\d+$/.test(String(pending.nativeDebitSats ?? ''))) {
+                native.quantity = subtractAtomic(native.quantity, pending.nativeDebitSats);
+                appliedExactNativeDebit = true;
+            }
+            const debits = Array.isArray(pending.balanceDebits) && pending.balanceDebits.length > 0
+                ? pending.balanceDebits
+                : (pending.tick && pending.amount != null
+                    ? [{ tick: pending.tick, amount: pending.amount }]
+                    : []);
+            for (const debit of debits) {
+                const tick = String(debit?.tick || '').toUpperCase();
+                if (!tick) continue;
+                if (native && tick === nativeTick) {
+                    if (!appliedExactNativeDebit) {
+                        const atomic = atomicFromHumanAmount(debit.amount, native.divisibility ?? 8);
+                        if (atomic !== null) native.quantity = subtractAtomic(native.quantity, atomic);
+                    }
+                    continue;
+                }
+                for (const token of Array.isArray(entry.balances.tokens) ? entry.balances.tokens : []) {
+                    if (String(token?.tick || '').toUpperCase() !== tick) continue;
+                    const atomic = atomicFromHumanAmount(debit.amount, token.divisibility ?? 0);
+                    if (atomic !== null) token.quantity = subtractAtomic(token.quantity, atomic);
+                }
+            }
+        }
+    }
+    return byChain;
 }
 
 // D-6: fetch the { native, tokens } shape for ONE address: the TOKEN ledger
@@ -282,6 +348,50 @@ function nativeAnswerUnreadable(addrResp) {
     return addrResp.balances?.confirmed == null;
 }
 
+// Demo wallets (issue #82). A demo wallet lands on mainnet, so every balance
+// read for it would hand its addresses to the public mainnet explorer. It is
+// recognised here by its vault record's `origin`, not by `isDemoWallet()`:
+// that helper reads `localStorage`, which the extension's background worker
+// does not have, and these flows run in the host. receiveAddress.js and
+// getActiveAddresses.js key on the same field for the same reason.
+async function isDemoOriginWallet(vault, walletId) {
+    try {
+        return (await vault.wallets.get(walletId))?.origin === 'demo';
+    } catch {
+        return false;
+    }
+}
+
+// The demo wallet that owns `address` on `chainId`, or null. Reads the wallet
+// list first and stops there when no demo wallet exists, so a real wallet's
+// read pays one in-memory list and nothing else. Any vault that cannot answer
+// (a stand-in without the collections) counts as "not a demo".
+async function demoWalletOwning({ vault, chainRegistry, chainId, address }) {
+    if (!chainRegistry) return null;
+    try {
+        const wallets = await vault.wallets.list();
+        const demoWallets = wallets.filter((w) => w && w.origin === 'demo');
+        if (demoWallets.length === 0) return null;
+        const [records, accounts] = await Promise.all([
+            vault.addresses.list(),
+            vault.accounts.list(),
+        ]);
+        const walletIdByAccount = new Map(accounts.map((a) => [a.id, a.walletId]));
+        for (const rec of records) {
+            if (!rec || rec.address !== address) continue;
+            if (chainRegistry.chainIdFor(rec.chain, rec.network) !== chainId) continue;
+            const owner = demoWallets.find((w) => (rec.accountId
+                ? walletIdByAccount.get(rec.accountId) === w.id
+                : Array.isArray(w.importedKeys)
+                    && w.importedKeys.some((k) => k && k.addressId === rec.id)));
+            if (owner) return owner.id;
+        }
+    } catch {
+        return null;
+    }
+    return null;
+}
+
 /**
  * @typedef {Object} AddressBalancesEntry
  * @property {string} address
@@ -302,6 +412,7 @@ function nativeAnswerUnreadable(addrResp) {
  * @property {import('../registry/index.js').ChainRegistry} [chainRegistry]  resolves the chain's native ticker; when absent the native side degrades to null
  * @property {string} chainId
  * @property {string} address
+ * @property {import('../storage/Vault.js').Vault} [vault]  lets the read recognise a demo wallet's address and answer from its fixture instead of the explorer; callers without a vault read the explorer as before
  * @property {object} [opts]                  passed through to `sdk.getBalances`
  */
 
@@ -315,10 +426,25 @@ function nativeAnswerUnreadable(addrResp) {
  * @param {AddressBalancesOpts} params
  * @returns {Promise<unknown>}
  */
-export async function addressBalances({ sdkRegistry, chainRegistry, chainId, address, opts }) {
+export async function addressBalances({ sdkRegistry, chainRegistry, chainId, address, vault, opts }) {
     if (!sdkRegistry) throw new Error('addressBalances: sdkRegistry is required');
     if (!chainId) throw new Error('addressBalances: chainId is required');
     if (!address) throw new Error('addressBalances: address is required');
+    if (vault) {
+        const demoWalletId = await demoWalletOwning({ vault, chainRegistry, chainId, address });
+        if (demoWalletId) {
+            // Answered by the wallet aggregator, which short-circuits a demo
+            // wallet to its fixture, so this address reads exactly the row
+            // Home shows for it (the first address on a chain holds the
+            // fixture, the rest hold zero) and no request leaves the wallet.
+            const byChain = await walletBalances({
+                vault, walletId: demoWalletId, chainRegistry, sdkRegistry, chainId,
+            });
+            const entry = (byChain[chainId] || []).find((e) => e.address === address);
+            if (entry && entry.balances) return entry.balances;
+            return { native: null, tokens: [] };
+        }
+    }
     const sdk = sdkRegistry.get(chainId);
     const descriptor = chainRegistry ? chainRegistry.descriptorFor(chainId) : null;
     const nativeTicker = tickerForCoin(descriptor && descriptor.coin);
@@ -746,6 +872,15 @@ export async function walletBalances({
         byChain[cid].push(a);
     }
 
+    // A demo wallet answers from its fixture: the same synthesized entries
+    // Home shows, built from the same grouped addresses, and no explorer
+    // request. Pending deltas are skipped because a demo wallet cannot
+    // broadcast, so it has none, and skipping them keeps this byte-identical
+    // to what Home renders.
+    if (await isDemoOriginWallet(vault, walletId)) {
+        return synthesizeDemoBalances(byChain);
+    }
+
     // 3. Fetch balances per chain. Per-address failures are captured as entries
     //    with `error` set, whichever path served them.
     //
@@ -784,5 +919,11 @@ export async function walletBalances({
             result[cid] = perChunk.flat();
         }),
     );
-    return result;
+    let pendingTxs = [];
+    try {
+        pendingTxs = await vault.pendingTxs.list();
+    } catch {
+        pendingTxs = [];
+    }
+    return applyPendingBalanceDeltas(result, pendingTxs, chainRegistry);
 }

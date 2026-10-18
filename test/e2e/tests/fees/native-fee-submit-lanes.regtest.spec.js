@@ -49,13 +49,12 @@
 // the §3.2 recipe for a clock-frozen chain, measured safe on Bitcoin in
 // session 22. for why the spec cannot do this itself yet.
 
-import { createWallet, expect, test } from '../../fixtures/wallet.js';
+import { createWallet, expect, openPaletteCommand, test } from '../../fixtures/wallet.js';
 import {
     expectConfirmModal,
     fundAddress,
     mintXchain,
     REGTEST_ADDRESS_RE,
-    REGTEST_CHAIN_ID,
     REGTEST_CHAIN_LABEL,
     REGTEST_COIN,
     REGTEST_DESTINATION,
@@ -67,6 +66,7 @@ import {
     waitForTokenBalance,
     waitForValidAction,
     warmFeeQuote,
+    selectPickerAsset,
 } from '../../fixtures/regtest.js';
 
 const PASSWORD = 'regtestpassword123';
@@ -90,26 +90,15 @@ async function feeQuote(action, params, source) {
     return warmFeeQuote({ action, params, source });
 }
 
-async function gotoPalette(page, title) {
-    await page.keyboard.press('ControlOrMeta+k');
-    const dialog = page.getByRole('dialog', { name: 'Command palette' });
-    await expect(dialog, 'the command palette did not open').toBeVisible({ timeout: 15_000 });
-    const combobox = dialog.getByRole('combobox').first();
-    await expect(combobox).toBeEditable({ timeout: 15_000 });
-    await combobox.fill(title);
-    const row = page.getByRole('option', { name: new RegExp(`^${title}\\b`) }).first();
-    await expect(row, `no palette command matching "${title}"`).toBeVisible();
-    await row.click();
-    await expect(dialog).toBeHidden({ timeout: 15_000 });
-}
-
 async function setWalletMode(page, mode) {
-    const label = mode === 'watcher' ? /^Watcher/ : /^Full/;
-    await gotoPalette(page, 'Settings');
-    await page.getByRole('button', { name: /^Wallet Mode/ }).click();
+    const label = mode === 'watcher' ? /^Watcher/ : /^Normal/;
+    await openPaletteCommand(page, 'Settings');
+    await page.getByRole('main').getByRole('button', { name: /^Wallet mode/ }).click();
     const radio = page.getByRole('radio', { name: label });
     await expect(radio).toBeVisible({ timeout: 30_000 });
     await radio.click();
+    // A mode change asks first, because it decides whether this device signs.
+    await page.getByRole('button', { name: 'Confirm mode change', exact: true }).click();
     await expect(radio, `the wallet did not switch to ${mode} mode`).toBeChecked({ timeout: 30_000 });
 }
 
@@ -142,7 +131,7 @@ async function setNativeFee(scope, enabled = true) {
  * fees.
  */
 async function fillIssueForm(page, tick, { nativeFee, initialMint = null }) {
-    await gotoPalette(page, 'Issue token');
+    await openPaletteCommand(page, 'Issue token');
     const main = page.getByRole('main');
     await expect(main.getByLabel('Ticker')).toBeVisible({ timeout: 30_000 });
     await selectVenueChain(main);
@@ -184,7 +173,7 @@ async function assertNativeFeeRecord(action, quote) {
 async function setupFundedWallet(page, name) {
     await createWallet(page, { password: PASSWORD, name });
     await switchToRegtest(page, PASSWORD);
-    await gotoPalette(page, 'Issue token');
+    await openPaletteCommand(page, 'Issue token');
     const main = page.getByRole('main');
     await expect(main.getByLabel('Ticker')).toBeVisible({ timeout: 30_000 });
     await selectVenueChain(main);
@@ -216,13 +205,7 @@ async function issueToken(page, tick, { initialMint = null } = {}) {
 async function pickMintToken(page, tick) {
     const main = page.getByRole('main');
     await main.getByRole('button', { name: /^Token:/ }).click();
-    const search = page.getByLabel('Search coins or tokens');
-    await expect(search, 'the Mint token picker did not open').toBeVisible({ timeout: 30_000 });
-    await search.fill(tick);
-    const row = page.locator(`[data-balance-key="${REGTEST_CHAIN_ID}:${tick}"]`).first();
-    await expect(row, `the Mint picker does not list ${tick} on ${REGTEST_CHAIN_LABEL}`)
-        .toBeVisible({ timeout: 60_000 });
-    await row.click();
+    await selectPickerAsset(page, tick, { timeoutMs: 60_000 });
 }
 
 async function waitForExactTokenBalance(address, tick, expected) {
@@ -248,7 +231,7 @@ test.describe(`the native-fee flag on each submit lane on ${REGTEST_CHAIN_LABEL}
             await createWallet(page, { password: PASSWORD, name: 'Fee Lane Wallet' });
             await switchToRegtest(page, PASSWORD);
 
-            await gotoPalette(page, 'Issue token');
+            await openPaletteCommand(page, 'Issue token');
             const main = page.getByRole('main');
             await expect(main.getByLabel('Ticker')).toBeVisible({ timeout: 30_000 });
             await selectVenueChain(main);
@@ -315,7 +298,7 @@ test.describe(`the native-fee flag on each submit lane on ${REGTEST_CHAIN_LABEL}
             const build = async (tick, nativeFee) => {
                 const main = await fillIssueForm(page, tick, { nativeFee });
                 await main.getByRole('button', { name: 'Preview', exact: true }).click();
-                await main.getByRole('button', { name: 'Create unsigned transaction', exact: true }).click();
+                await main.getByRole('button', { name: 'Create transaction for signing', exact: true }).click();
                 // By ROLE: the panel also carries a "Copy unsigned transaction
                 // hex" button, so the label alone matches two elements.
                 const hex = page.getByRole('textbox', { name: 'Unsigned transaction hex' });
@@ -333,6 +316,16 @@ test.describe(`the native-fee flag on each submit lane on ${REGTEST_CHAIN_LABEL}
                 return;
             }
 
+            // A SECOND coin output before the pair of builds. An unsigned build
+            // is an outstanding transaction, so the encoder reserves its inputs
+            // for five minutes, and after LANE 1 this address holds exactly one
+            // output: without another, the second build is refused with "all 1
+            // candidate input(s) are reserved by a transaction built in the last
+            // 5 minutes". Selection stops at sufficiency, so each build takes
+            // one input, and two equal-shape P2WPKH inputs keep the length
+            // differential below exact; that differential is what proves the
+            // flag reached the wire.
+            await fundAddress(source, 1);
             const off = await build(`${ISSUE_TICK}A`, false);
             // BACK VIA THE SCREEN'S OWN CONTROL, not the palette: re-selecting
             // "Issue token" while the route is already mounted changes no state,
@@ -368,11 +361,11 @@ test.describe(`the native-fee flag on each submit lane on ${REGTEST_CHAIN_LABEL}
         expect(quote?.valid, `the venue refused the SEND before the wallet composed it: ${quote?.status}`)
             .toBe(true);
 
-        await gotoPalette(page, 'Advanced action');
+        await openPaletteCommand(page, 'Advanced action');
         const main = page.getByRole('main');
-        await expect(main.getByLabel('Action')).toBeVisible({ timeout: 30_000 });
+        await expect(main.getByLabel('Action', { exact: true })).toBeVisible({ timeout: 30_000 });
         await selectVenueChain(main);
-        await main.getByLabel('Action').selectOption('SEND');
+        await main.getByLabel('Action', { exact: true }).selectOption('SEND');
         await main.getByRole('textbox', { name: 'TICK', exact: true }).fill(SEND_TICK);
         await main.getByRole('textbox', { name: 'AMOUNT', exact: true })
             .fill(String(SEND_AMOUNT));
@@ -407,7 +400,7 @@ test.describe(`the native-fee flag on each submit lane on ${REGTEST_CHAIN_LABEL}
         expect(quote?.valid, `the venue refused the MINT before the wallet composed it: ${quote?.status}`)
             .toBe(true);
 
-        await gotoPalette(page, 'Mint supply');
+        await openPaletteCommand(page, 'Mint supply');
         const main = page.getByRole('main');
         await expect(main.getByRole('textbox', { name: /^Amount/ }))
             .toBeVisible({ timeout: 30_000 });

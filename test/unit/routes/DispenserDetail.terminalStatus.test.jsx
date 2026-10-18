@@ -21,6 +21,7 @@ import { render, act as domAct, fireEvent, cleanup } from '@testing-library/reac
 import React from 'react';
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
 import { DispenserDetail } from '../../../packages/core/src/shared/routes/DispenserDetail.jsx';
+import { messageText } from '../helpers/messageText.js';
 
 const CHAIN = 'bitcoin-mainnet';
 const OWNER = 'bc1qownerownerownerownerownerownerownerown';
@@ -138,7 +139,7 @@ describe('DispenserDetail on a sold-out (empty) dispenser', () => {
         const notice = utils.getAllByRole('status')
             .find((el) => /sold out/.test(el.textContent || ''));
         expect(notice, 'a status notice names the sold-out state').toBeTruthy();
-        expect(notice.textContent).toBe(
+        expect(messageText(notice)).toBe(
             "This dispenser sold out. Sold-out dispensers can't be refilled, but you can open a new one on the same address.",
         );
     });
@@ -154,7 +155,7 @@ describe('DispenserDetail on a sold-out (empty) dispenser', () => {
         expect(ownerButtons(utils)).toEqual([null, null, null]);
         const notice = utils.getAllByRole('status')
             .find((el) => /sold out/.test(el.textContent || ''));
-        expect(notice.textContent).toBe("This dispenser sold out. Sold-out dispensers can't be refilled.");
+        expect(messageText(notice)).toBe("This dispenser sold out. Sold-out dispensers can't be refilled.");
     });
 
     it('Open again hands the form the same terms, the creator as source and the same address', async () => {

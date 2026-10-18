@@ -14,14 +14,17 @@
 // by its EXACT label. Header controls now carry labels such as
 // "Active network: Mainnet" and "Active network in header", and Playwright's
 // getByLabel matches substrings by default, so a bare 'Active network' would
-// resolve to several elements and fail strict mode.
+// resolve to several elements and fail strict mode. The fixtures share one
+// exact lookup, activeNetworkControl in regtest.js, so each fixture selects
+// through it and the helper itself is pinned to the exact label.
 
 import fs from 'node:fs';
 import { describe, it, expect } from 'vitest';
 
 const read = (rel) => fs.readFileSync(new URL(`../../e2e/fixtures/${rel}`, import.meta.url), 'utf8');
 
-const SELECT_CALL = /getByLabel\(\s*'Active network'\s*(?:,\s*\{([^}]*)\})?\s*\)\s*\.selectOption\(\s*'(\w+)'\s*\)/g;
+const SELECT_CALL = /(?:getByLabel\(\s*'Active network'\s*(?:,\s*\{([^}]*)\})?\s*\)|activeNetworkControl\(\s*page\s*\))\s*\.selectOption\(\s*'(\w+)'\s*\)/g;
+const HELPER = /export function activeNetworkControl\(page\) \{\s*return page\.getByRole\('combobox', \{ name: 'Active network', exact: true \}\);/;
 
 describe.each([
     ['regtest.js', 'regtest'],
@@ -35,7 +38,10 @@ describe.each([
     });
 
     it('matches the label exactly', () => {
-        for (const m of calls) expect(m[1]).toMatch(/\bexact:\s*true\b/);
+        for (const m of calls) {
+            if (m[0].startsWith('activeNetworkControl')) expect(read('regtest.js')).toMatch(HELPER);
+            else expect(m[1]).toMatch(/\bexact:\s*true\b/);
+        }
     });
 
     it('has no substring-matching Active network lookup left', () => {

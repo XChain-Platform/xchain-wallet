@@ -1,41 +1,45 @@
-/* TokenField: an inline token selector styled to match the shared Input's
-   field chrome (border/background/radius/label) at both sizes, so it sits in
-   a form indistinguishable in size from an Input/Select. The control is a
-   button (icon + ticker/chain text + caret) rather than an <input>, but the
-   sizing contract mirrors Input.module.css: default (md, 36px) values on
-   .control/.label, `.lg` overrides for the 48px hero size. */
+/* TokenField matches the shared Input chrome and size scale while keeping its
+   button semantics for opening the token picker. */
 
 .field {
+    --token-field-control-height: var(--xc-control-h-md);
     display: flex;
     flex-direction: column;
     min-width: 0;
-    gap: var(--xc-space-1);
-    margin-bottom: var(--xc-space-3);
+    /* No outer margin: the form around the field spaces it with --xc-form-gap,
+       the same as every Input, so a picker never adds its own gap on top. */
+    margin: 0;
+}
+
+.lg {
+    --token-field-control-height: var(--xc-control-h-lg);
 }
 
 .label {
+    margin-block-end: var(--xc-label-gap);
     font-size: var(--xc-text-sm);
     color: var(--xc-text-muted);
     font-weight: 500;
 }
 
 .control {
+    /* The pointer target never drops below the WCAG 2.5.8 floor; a later
+       min-height or height here may raise it. */
+    min-block-size: var(--xc-tap-min);
     display: flex;
     box-sizing: border-box;
     align-items: center;
     gap: var(--xc-space-3);
     width: 100%;
     min-width: 0;
-    /* space-1 vertical (not Input's space-2): the 20px token icon plus
-       borders must fit inside the same 36px outer height as Input md. */
-    padding: var(--xc-space-1) var(--xc-space-3);
-    min-height: 36px;
+    height: var(--token-field-control-height);
+    padding: 0 var(--xc-control-pad-x);
     font-family: var(--xc-font-sans);
-    font-size: var(--xc-text-md);
+    font-size: var(--xc-control-font);
     color: var(--xc-text);
     background: var(--xc-surface);
     border: 1px solid var(--xc-border-strong);
-    border-radius: var(--xc-radius-md);
+    border-radius: var(--xc-control-radius);
     cursor: pointer;
     text-align: start;
     transition: border-color var(--xc-transition), box-shadow var(--xc-transition);
@@ -52,7 +56,10 @@
 }
 
 .control:disabled {
-    opacity: 0.55;
+    background: var(--xc-control-disabled-bg);
+    border-color: var(--xc-control-disabled-border);
+    color: var(--xc-control-disabled-text);
+    opacity: var(--xc-disabled-opacity);
     cursor: not-allowed;
 }
 
@@ -63,20 +70,12 @@
     box-shadow: var(--xc-shadow-danger-focus-ring);
 }
 
-/* lg (hero) size, matching Input.module.css `.lg`. */
-.lg .control {
-    font-size: var(--xc-text-lg);
-    padding: var(--xc-space-3) var(--xc-space-4);
-    min-height: 48px;
-}
-
 .lg .label {
     font-size: var(--xc-text-md);
     font-weight: 600;
 }
 
-/* md: single line ("TICK on Chain") so the control stays at the Input
-   md height (36px); lg stacks the two lines in the 48px hero field. */
+/* The default is a single line; the lg hero control stacks the two lines. */
 .text {
     display: flex;
     flex-direction: row;
@@ -89,6 +88,7 @@
 .lg .text {
     flex-direction: column;
     align-items: stretch;
+    /* Preserve the untokenized 2px optical separation between stacked labels. */
     gap: 2px;
 }
 
@@ -101,22 +101,6 @@
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
-}
-
-.chain {
-    flex: 0 1 auto;
-    min-width: 0;
-    max-width: 45%;
-    font-size: var(--xc-text-xs);
-    color: var(--xc-text-muted);
-    line-height: 1.2;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-}
-
-.lg .chain {
-    max-width: 100%;
 }
 
 .placeholder {
@@ -136,12 +120,6 @@
     color: var(--xc-text-muted);
     flex: 0 0 auto;
     margin-inline-start: auto;
-}
-
-.error {
-    font-size: var(--xc-text-xs);
-    color: var(--xc-danger-fg);
-    overflow-wrap: anywhere;
 }
 
 /* Box-shadow focus rings are not painted in forced-colors mode, so give

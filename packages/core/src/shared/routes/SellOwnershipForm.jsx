@@ -9,15 +9,16 @@
 // contact legal@dankest.llc.
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { AddressText, Button, ChainBadge, FeeSelector, FormPage, Icon, Input, ListPage, NetworkField, PageHeader, Screen, StatusMessage } from '@xchain-wallet/core/ui';
+import { AddressText, Button, ChainBadge, ChainPicker, FeeSelector, FormPage, Icon, Input, ListPage, PageHeader, Screen, StatusMessage } from '@xchain-wallet/core/ui';
 import { registry as registryLib } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
+import { useDemoGuard } from '../hooks/useDemoGuard.jsx';
 import { SignCredentials, isHwSource } from '../components/SignCredentials.jsx';
 import { useSignerReady } from '../hooks/useSignerReady.js';
 import { WatcherResultPanel } from '../components/WatcherResultPanel.jsx';
 import { useWalletMode } from '../hooks/useWalletMode.js';
 import { useSignerInfo } from '../hooks/useSignerInfo.js';
-import { TokenField } from '../components/TokenField.jsx';
+import { TickerIcon } from '../components/TickerIcon.jsx';
 import { TokenPicker } from './TokenPicker.jsx';
 import { useTokenInfo } from '../hooks/useTokenInfo.js';
 import { coinFromChainId } from '../components/BalanceList.jsx';
@@ -37,6 +38,7 @@ import { useActionConfirmFlow, useConfirmSubmit, isUserRejection } from '../hook
 import { ActionConfirmScreen } from '../components/ActionConfirmScreen.jsx';
 import { QueuedResultPanel } from '../components/QueuedResultPanel.jsx';
 import { tokenAmountPrecisionError } from '../utils/amountFormat.js';
+import { tickerReferenceError } from '../utils/tickerGrammar.js';
 
 const chainRegistry = registryLib.defaultRegistry();
 
@@ -71,13 +73,20 @@ export function SellOwnershipForm({ walletId, onBack, chainId: initialChainId, t
     // Seeded from the launching context; the Network field lets the user retarget.
     const [chainId, setChainId] = useState(initialChainId);
     const { messaging, shell } = useMessaging();
+    const demoGuard = useDemoGuard(walletId, { onBack });
     const signerReady = useSignerReady(walletId);
     const variant = screenVariantFor(shell);
 
-    const [addressesByChain, setAddressesByChain] = useState(
-        /** @type {Record<string, any[]> | null} */ (null),
-    );
-    const [loadError, setLoadError] = useState(/** @type {string | null} */ (null));
+    const [addressLoad, setAddressLoad] = useState({
+        walletId: null,
+        chainId: null,
+        addressesByChain: null,
+        error: null,
+    });
+    const addressLoadMatches = addressLoad.walletId === walletId
+        && addressLoad.chainId === chainId;
+    const addressesByChain = addressLoadMatches ? addressLoad.addressesByChain : null;
+    const loadError = addressLoadMatches ? addressLoad.error : null;
     const [fromAddressId, setFromAddressId] = useState(/** @type {string | null} */ (null));
 
     // 'order' → open ORDER (matched offer); 'dispenser' → DISPENSER (instant
@@ -103,6 +112,14 @@ export function SellOwnershipForm({ walletId, onBack, chainId: initialChainId, t
 
     useEffect(() => {
         let cancelled = false;
+        const pendingLoad = {
+            walletId,
+            chainId,
+            addressesByChain: null,
+            error: null,
+        };
+        setAddressLoad(pendingLoad);
+        setFromAddressId(null);
         Promise.all([
             messaging.getAddressesByChain(walletId),
             typeof messaging.getActiveAddresses === 'function'
@@ -111,12 +128,17 @@ export function SellOwnershipForm({ walletId, onBack, chainId: initialChainId, t
         ])
             .then(([byChain, active]) => {
                 if (cancelled) return;
-                setAddressesByChain(byChain || {});
-                const all = (byChain || {})[chainId] || [];
+                const nextByChain = byChain || {};
+                const all = nextByChain[chainId] || [];
                 if (all.length === 0) {
-                    setLoadError(`No address on this chain to sign from. Use Receive to generate one first.`);
+                    setAddressLoad({
+                        ...pendingLoad,
+                        addressesByChain: nextByChain,
+                        error: 'No address on this network can sign the sale. Use Receive to create one first.',
+                    });
                     return;
                 }
+                setAddressLoad({ ...pendingLoad, addressesByChain: nextByChain });
                 if (initialFromAddress) {
                     const match = all.find((a) => a.address === initialFromAddress);
                     if (match) { setFromAddressId(match.id); return; }
@@ -125,8 +147,13 @@ export function SellOwnershipForm({ walletId, onBack, chainId: initialChainId, t
                 const pool = hd.length > 0 ? hd : all;
                 setFromAddressId(preferredSourceId(pool, active?.[chainId]) || pool[0].id);
             })
-            .catch((err) => {
-                if (!cancelled) setLoadError(err?.message || 'Failed to load addresses.');
+            .catch(() => {
+                if (!cancelled) {
+                    setAddressLoad({
+                        ...pendingLoad,
+                        error: 'Could not load your addresses. Check your connection and try again.',
+                    });
+                }
             });
         return () => { cancelled = true; };
     }, [walletId, chainId, messaging, initialFromAddress]);
@@ -162,6 +189,10 @@ export function SellOwnershipForm({ walletId, onBack, chainId: initialChainId, t
     const validationError = useMemo(() => {
         if (getMode === 'token') {
             const gt = getTick.trim().toUpperCase();
+            if (gt) {
+                const tickError = tickerReferenceError(gt, { noun: 'Price token', allowRef: true });
+                if (tickError) return tickError;
+            }
             if (gt && gt === coinTicker) {
                 return `Pick "Native coin" to sell for ${coinTicker}. The token field is for selling against another token.`;
             }
@@ -172,8 +203,11 @@ export function SellOwnershipForm({ walletId, onBack, chainId: initialChainId, t
         if (expiration.trim() && !/^[0-9]+$/.test(expiration.trim())) {
             return 'Expiration must be a whole number of blocks.';
         }
+        if (memo.includes('|') || memo.includes(';')) {
+            return 'Memo cannot contain "|" or ";".';
+        }
         return null;
-    }, [getMode, getTick, coinTicker, tokenUpper, expiration]);
+    }, [getMode, getTick, coinTicker, tokenUpper, expiration, memo]);
 
     const priceReady = /^[0-9]+(\.[0-9]+)?$/.test(price.trim()) && Number(price.trim()) > 0;
     const getTickReady = getMode === 'coin' || getTick.trim().length > 0;
@@ -206,6 +240,20 @@ export function SellOwnershipForm({ walletId, onBack, chainId: initialChainId, t
         && Number.isFinite(feeEstimate.rateValue) && feeEstimate.rateValue > 0)
         ? displayRateToSettingsCustom(feeEstimate.unit, feeEstimate.rateValue)
         : null;
+    const customFeeRate = Number(feePick.customRate);
+    const customFeeRateText = String(feePick.customRate ?? '').toLowerCase();
+    const [customFeeMantissa, customFeeExponentText] = customFeeRateText.split('e');
+    const customFeeDecimals = Math.max(
+        0,
+        (customFeeMantissa.split('.')[1]?.length || 0) - Number(customFeeExponentText || 0),
+    );
+    const feeValidationError = feePick.mode !== 'custom'
+        ? null
+        : !Number.isFinite(customFeeRate) || customFeeRate <= 0
+            ? 'Enter a custom fee rate greater than zero.'
+            : customFeeDecimals > 8 || !feeCustomEstimate
+                ? 'Custom fee rate can have at most 8 decimal places.'
+                : null;
 
     // ORDER and DISPENSER ownership sales take the same fields; only the
     // action name and the submit handler differ. GIVE_ESCROW is omitted (it
@@ -305,7 +353,11 @@ export function SellOwnershipForm({ walletId, onBack, chainId: initialChainId, t
             setFormError('Pick a source address first.');
             return;
         }
-        if (validationError) return;
+        if (getMode === 'token' && !getTick.trim()) {
+            setFormError('Select a price token.');
+            return;
+        }
+        if (validationError || feeValidationError) return;
         if (!priceReady || !getTickReady) {
             setFormError(`Enter what you want in return and a price greater than 0.`);
             return;
@@ -430,16 +482,20 @@ export function SellOwnershipForm({ walletId, onBack, chainId: initialChainId, t
         />
     );
     const wrap = (children) => (
-        <Screen variant={variant} header={header}>
+        <Screen
+            variant={variant}
+            header={header}
+            restoreScroll={!(stage === 'review' || stage === 'submitting')}
+        >
             {children}
         </Screen>
     );
 
     if (loadError) {
-        return wrap(<ListPage><StatusMessage variant="error" className={styles.error}>{loadError}</StatusMessage></ListPage>);
+        return wrap(<ListPage><StatusMessage variant="error">{loadError}</StatusMessage></ListPage>);
     }
     if (!addressesByChain) {
-        return wrap(<ListPage><p className={styles.hint}>Loading wallet…</p></ListPage>);
+        return wrap(<ListPage><p className={styles.hint}>Loading your addresses.</p></ListPage>);
     }
 
     if (stage === 'done') {
@@ -477,17 +533,18 @@ export function SellOwnershipForm({ walletId, onBack, chainId: initialChainId, t
 
     if (stage === 'review' || stage === 'submitting') {
         const mechanismLabel = mechanism === 'dispenser' ? 'Dispenser (instant buy)' : 'Open order';
-        const priceLabel = `${price} ${wantLabel}`;
+        const priceLabel = `${saleParams.GET_AMOUNT} ${wantLabel}`;
         const feeRow = feeEstimate
             ? `${feeEstimate.coinAmount} ${coinTicker}${feeEstimate.rate ? ` (${feeEstimate.rate})` : ''}`
             : 'Estimate unavailable';
 
         return wrap(
             <FormPage
+                demoGuard={demoGuard}
                 label="Review ownership sale"
                 onSubmit={handleSubmit}
                 status={(isWatcherMode || hw) && submitError ? (
-                    <StatusMessage variant="error" className={styles.error}>{submitError}</StatusMessage>
+                    <StatusMessage variant="error">{submitError}</StatusMessage>
                 ) : null}
                 actions={(
                     <Button
@@ -514,7 +571,7 @@ export function SellOwnershipForm({ walletId, onBack, chainId: initialChainId, t
                     Sell ownership of {tokenUpper} for {priceLabel} via {mechanismLabel}.
                 </p>
                 <dl className={styles.detailsList}>
-                    <DetailRow label="Chain" value={descriptor ? <ChainBadge descriptor={descriptor} size="sm" /> : chainId} />
+                    {descriptor ? <DetailRow label="Network" value={<ChainBadge descriptor={descriptor} size="sm" showName={false} />} /> : null}
                     <DetailRow label="From" value={<AddressText address={fromAddress.address} />} />
                     <DetailRow label="Selling" value={`${tokenUpper} (ownership)`} />
                     <DetailRow label="Mechanism" value={mechanismLabel} />
@@ -526,6 +583,10 @@ export function SellOwnershipForm({ walletId, onBack, chainId: initialChainId, t
                         <DetailRow label="Memo" value={memo.trim()} />
                     ) : null}
                     <DetailRow label="Network fee" value={feeRow} />
+                    <DetailRow
+                        label="Protocol fee"
+                        value={`If charged, paid in ${nativeFee.flag ? coinTicker : 'XCHAIN'}; the network fee is separate.`}
+                    />
                 </dl>
 
                 {isWatcherMode ? (
@@ -586,7 +647,12 @@ export function SellOwnershipForm({ walletId, onBack, chainId: initialChainId, t
                 walletId={walletId}
                 title="Select price token"
                 networkFilter={coinFromChainId(chainId)}
-                onSelect={(sel) => { setGetTick(String(sel.tick || '').toUpperCase()); setTokenPickerOpen(false); }}
+                chainIdFilter={chainId}
+                onSelect={(sel) => {
+                    if (sel.chainId !== chainId) return;
+                    setGetTick(String(sel.tick || '').toUpperCase());
+                    setTokenPickerOpen(false);
+                }}
                 onBack={() => setTokenPickerOpen(false)}
             />
         );
@@ -594,18 +660,22 @@ export function SellOwnershipForm({ walletId, onBack, chainId: initialChainId, t
 
     return wrap(
         <FormPage
+            demoGuard={demoGuard}
             label={`Sell ${tokenUpper} name`}
             onSubmit={handleReview}
             inert={actionConfirm.composing ? '' : undefined}
             aria-busy={actionConfirm.composing ? 'true' : undefined}
             onChangeCapture={() => { if (formError) setFormError(null); }}
-            status={validationError || formError ? (
+            status={validationError || feeValidationError || formError ? (
                 <>
                     {validationError ? (
-                        <StatusMessage variant="error" className={styles.error}>{validationError}</StatusMessage>
+                        <StatusMessage variant="error">{validationError}</StatusMessage>
+                    ) : null}
+                    {feeValidationError ? (
+                        <StatusMessage variant="error">{feeValidationError}</StatusMessage>
                     ) : null}
                     {formError ? (
-                        <StatusMessage variant="error" className={styles.error}>{formError}</StatusMessage>
+                        <StatusMessage variant="error">{formError}</StatusMessage>
                     ) : null}
                 </>
             ) : null}
@@ -622,7 +692,14 @@ export function SellOwnershipForm({ walletId, onBack, chainId: initialChainId, t
                 </Button>
             )}
         >
-            <NetworkField value={chainId} onChange={(cid) => { setChainId(cid); setFromAddressId(null); }} chainIds={addressesByChain ? Object.keys(addressesByChain) : [chainId]} chainRegistry={chainRegistry} />
+            <ChainPicker
+                label="Network"
+                value={chainId}
+                onChange={(cid) => { setChainId(cid); setFromAddressId(null); }}
+                chainIds={addressesByChain ? Object.keys(addressesByChain) : [chainId]}
+                chainRegistry={chainRegistry}
+                hideNetworkKind
+            />
 
             <dl className={styles.detailsList}>
                 <dt className={styles.detailsLabel}>Selling the name</dt>
@@ -634,10 +711,6 @@ export function SellOwnershipForm({ walletId, onBack, chainId: initialChainId, t
                     </>
                 ) : null}
             </dl>
-
-            <p className={styles.hint} style={{ marginTop: 0 }}>
-                You're selling the entire ownership of {tokenUpper}. Single sale, no partial fills.
-            </p>
 
             <div
                 className={receivePickerStyles.kindSegments}
@@ -697,10 +770,14 @@ export function SellOwnershipForm({ walletId, onBack, chainId: initialChainId, t
             </div>
 
             {getMode === 'token' ? (
-                <TokenField
-                    label="Price token"
-                    value={getTick && chainId ? { chainId, tick: getTick } : null}
-                    onOpenPicker={() => setTokenPickerOpen(true)}
+                <Button
+                    type="button"
+                    variant="ghost"
+                    icon={getTick && chainId
+                        ? <TickerIcon chainId={chainId} tick={getTick} size={40} />
+                        : <Icon.TokenIcon />}
+                    aria-label={getTick ? `Price token: ${getTick}. Change asset` : 'Choose price token'}
+                    onClick={() => setTokenPickerOpen(true)}
                 />
             ) : null}
 

@@ -86,27 +86,17 @@ describe('sdk/SDKRegistry', () => {
             expect(worstCase).toBeLessThan(30_000);
         });
 
-        // A 429 carries its own wait, so the honoured `Retry-After` has its own
-        // ceiling: a retry clamped to the 5xx cap re-asks while the bucket is
-        // still empty, spends the one retry and surfaces the failure anyway.
-        it('lets a named Retry-After run past the 5xx backoff cap, up to 60s', () => {
+        it('disables the SDK rate-limit retry loop', () => {
             const { calls, factory } = captureFactory();
             const reg = new SDKRegistry({ chainRegistry, sdkFactory: factory });
             reg.get('bitcoin-mainnet');
-            expect(calls[0].retry.retryAfterMaxDelay).toBe(60_000);
-            expect(calls[0].retry.maxDelay, '5xx backoff must stay capped at 2s')
-                .toBe(2_000);
+            expect(calls[0].retry.maxRateLimitRetries).toBe(0);
         });
 
-        it('bounds the rate-limit path too: one honoured wait, not an open-ended one', () => {
-            const { timeout, retry } = DEFAULT_SDK_NETWORK_OPTIONS;
-            expect(retry.retryAfterMaxDelay).toBeGreaterThan(retry.maxDelay);
-            // The wallet holds ONE request across the wait (maxRetries is 1),
-            // and Home's banner counts that wait down rather than showing a
-            // frozen screen, which is what makes 60s acceptable at all.
-            const worstCase =
-                (1 + retry.maxRetries) * timeout + retry.maxRetries * retry.retryAfterMaxDelay;
-            expect(worstCase).toBeLessThanOrEqual(80_000);
+        it('keeps transient read retry waits capped for interactive use', () => {
+            const { retry } = DEFAULT_SDK_NETWORK_OPTIONS;
+            expect(retry.maxRetries).toBe(1);
+            expect(retry.maxDelay).toBe(2_000);
         });
 
         it('honours networkOptions overrides, merged over the defaults', () => {

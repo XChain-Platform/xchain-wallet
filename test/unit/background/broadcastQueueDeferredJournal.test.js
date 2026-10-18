@@ -59,6 +59,7 @@ function memCollection() {
 function adsSettings() {
     return {
         schemaVersion: 2,
+        activeNetwork: 'regtest',
         ads: { enabled: false, perChain: {} },
     };
 }

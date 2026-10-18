@@ -321,8 +321,8 @@ describe('Litecoin history flow', () => {
         });
         render(provider(messaging, <History walletId={WALLET_ID} />));
 
-        const row = await screen.findByRole('button', { name: /Send.*Confirmed/i });
-        expect(row).toHaveTextContent(/Litecoin/);
+        // An incoming SEND reads as Receive; the asset icon overlay carries the chain.
+        const row = await screen.findByRole('button', { name: /Receive.*Confirmed/i });
         expect(row).toHaveTextContent('+0.125 LTC');
         expect(messaging.getAddressHistory).toHaveBeenCalledWith({
             chainId: CHAIN,

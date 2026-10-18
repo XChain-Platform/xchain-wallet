@@ -40,6 +40,8 @@
 //     omits it and the fronting server (Apache) sends it as a header to
 //     actually prevent framing.
 //   - img/font allow data: + blob: for QR codes and the favicon.
+//   - worker-src is 'self' only: the app starts no Worker, and a service
+//     worker must be a same-origin script anyway (matches the extension).
 
 import { WIRE_AUDIT } from '../../core/src/privacy/wireAudit.js';
 import { bitcoinDescriptors } from '../../core/src/registry/descriptors/bitcoin.js';
@@ -85,7 +87,9 @@ function fixedEgressOrigins() {
 
 function configuredEndpointOrigins() {
     return CHAIN_DESCRIPTORS.flatMap((descriptor) => (
-        ['explorer', 'encoder', 'hub'].map((name) => endpointOrigin(descriptor[name]))
+        ['explorer', 'encoder', 'hub']
+            .filter((name) => descriptor[name])
+            .map((name) => endpointOrigin(descriptor[name]))
     ));
 }
 
@@ -123,7 +127,7 @@ const DIRECTIVES = {
     'img-src': ["'self'", 'data:', 'blob:'],
     'font-src': ["'self'", 'data:'],
     'connect-src': [],
-    'worker-src': ["'self'", 'blob:'],
+    'worker-src': ["'self'"],
     'object-src': ["'none'"],
     'base-uri': ["'none'"],
     'form-action': ["'none'"],

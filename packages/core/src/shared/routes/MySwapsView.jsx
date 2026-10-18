@@ -18,9 +18,9 @@
 // getAction(...).state.status does NOT promptly reflect a cancel, so
 // "cancelled" is read from the authoritative + immediate swap_cancels
 // table (getSwapCancelsForAddress). The list feed carries lifecycle inline
-// as `swap_status`, while action detail carries edited expiration. A failed
-// or older detail read falls back to the creation expiration. Cancel/edit
-// are offered only while open.
+// as `swap_status`, while action detail carries edited expiration and the
+// chain-clock expiry classification. A failed or older detail read falls
+// back to the creation expiration. Cancel/edit are offered only while open.
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
@@ -29,6 +29,7 @@ import {
     ChainBadge,
     EmptyState,
     FormPage,
+    Icon,
     Input,
     ListPage,
     PageHeader,
@@ -37,10 +38,11 @@ import {
     Skeleton,
     StatusMessage,
 } from '@xchain-wallet/core/ui';
-import { registry as registryLib } from '@xchain-wallet/core';
+import { flows as flowsLib, registry as registryLib } from '@xchain-wallet/core';
 import { countdownText } from '../../market/obligationStatus.js';
 import { formatLocalDateTime } from '../utils/dateTime.js';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
+import { useDemoGuard } from '../hooks/useDemoGuard.jsx';
 import { ListPickerScreen } from '../components/ListPickerScreen.jsx';
 import { MarketLifecycleTimeline } from '../components/MarketLifecycleTimeline.jsx';
 import { ActionConfirmScreen } from '../components/ActionConfirmScreen.jsx';
@@ -85,13 +87,16 @@ const CLOSED_LABELS = Object.freeze({
 
 const STATE_READ_CONCURRENCY = 6;
 
-const isPositiveActionIndex = (value) => /^[0-9]+$/.test(String(value).trim())
-    && /[1-9]/.test(String(value));
+const isPositiveActionIndex = (value) => /^[1-9][0-9]*$/.test(String(value ?? ''));
 
 function swapStateOf(detail) {
     const state = detail?.state || detail?.data?.state;
     if (!state || typeof state !== 'object') return null;
-    return { status: String(state.status || ''), expiration: state.expiration ?? null };
+    return {
+        status: String(state.status || ''),
+        expiration: state.expiration ?? null,
+        ...(state.expiry_status != null ? { expiryStatus: state.expiry_status } : {}),
+    };
 }
 
 async function readSwapStates(messaging, candidates) {
@@ -118,6 +123,8 @@ export function deriveStatus(item, cancelledKeys, nowSec) {
     if (swapStatus === 'complete' || swapStatus === 'filled' || swapStatus === 'settled') return 'settled';
     if (swapStatus === 'cancelled') return 'cancelled';
     if (swapStatus === 'expired') return 'expired';
+    if (item.live?.expiryStatus === 'expired') return 'expired';
+    if (item.live?.expiryStatus != null) return 'open';
     const exp = Number(item.live?.expiration ?? item.row.expiration);
     if (Number.isFinite(exp) && exp > 0 && exp <= nowSec) return 'expired';
     return 'open';
@@ -211,6 +218,12 @@ export function MySwapsView({ walletId, accountId, onBack, onCreateSwap }) {
 
     const load = useCallback(async () => {
         const requestId = ++loadRequestId.current;
+        if (flowsLib.isDemoWallet(walletId)) {
+            setByChain({});
+            setItems([]);
+            setLoadError(null);
+            return;
+        }
         if (typeof messaging?.getAddressesByChain !== 'function'
             || typeof messaging?.getSwapsForAddress !== 'function') {
             setItems([]); return;
@@ -268,12 +281,23 @@ export function MySwapsView({ walletId, accountId, onBack, onCreateSwap }) {
         <PageHeader
             onBack={onBack}
             title="My swaps"
-            trailing={onCreateSwap ? <Button variant="secondary" size="sm" onClick={onCreateSwap}>New swap</Button> : undefined}
         />
     );
-    const wrap = (children) => (
+    // The page header holds only the title and Back, so New swap sits in
+    // the content's actions row. An empty list offers it from its
+    // EmptyState instead, so the screen never shows it twice.
+    const wrap = (children, { notices, emptyOffersCreate = false } = {}) => (
         <Screen variant={variant} header={header}>
-            <ListPage>{children}</ListPage>
+            <ListPage
+                notices={notices}
+                actions={onCreateSwap && !emptyOffersCreate ? (
+                    <Button variant="secondary" icon={<Icon.PlusIcon />} onClick={onCreateSwap}>
+                        New swap
+                    </Button>
+                ) : null}
+            >
+                {children}
+            </ListPage>
         </Screen>
     );
 
@@ -300,15 +324,17 @@ export function MySwapsView({ walletId, accountId, onBack, onCreateSwap }) {
         );
     }
     if (loadError) {
-        return wrap(
-            <StatusMessage
-                variant="error"
-                className={L.hint}
-                recovery={{ label: 'Try again', onAction: load }}
-            >
-                {loadError}
-            </StatusMessage>,
-        );
+        return wrap(null, {
+            notices: (
+                <StatusMessage
+                    variant="error"
+                    className={L.hint}
+                    recovery={{ label: 'Try again', onAction: load }}
+                >
+                    {loadError}
+                </StatusMessage>
+            ),
+        });
     }
     if (items.length === 0) {
         return wrap(
@@ -318,6 +344,7 @@ export function MySwapsView({ walletId, accountId, onBack, onCreateSwap }) {
                 actionLabel={onCreateSwap ? 'Create a swap' : undefined}
                 onAction={onCreateSwap}
             />,
+            { emptyOffersCreate: true },
         );
     }
 
@@ -352,9 +379,11 @@ export function MySwapsView({ walletId, accountId, onBack, onCreateSwap }) {
                         {chip}
                     </div>
                     <div className={`${L.rowMeta} ${S.rowMeta}`}>
-                        <span className={S.metaItem}>
-                            {descriptor ? <ChainBadge descriptor={descriptor} size="sm" /> : it.chainId}
-                        </span>
+                        {descriptor ? (
+                            <span className={S.metaItem}>
+                                <ChainBadge descriptor={descriptor} size="sm" showName={false} />
+                            </span>
+                        ) : null}
                         <span className={S.metaItem}>#{it.row.action_index}</span>
                         <span className={S.metaItem}><AddressText address={it.owner.address} /></span>
                     </div>
@@ -421,6 +450,7 @@ export function MySwapsView({ walletId, accountId, onBack, onCreateSwap }) {
  * transaction.
  */
 function SwapActionPanel({ type, item, chainAddresses, variant, walletId, messaging, onDone, onBack }) {
+    const demoGuard = useDemoGuard(walletId, { onBack });
     const { chainId, owner, row } = item;
     const { settings } = useSettings();
     const descriptor = chainRegistry.get(chainId);
@@ -498,6 +528,44 @@ function SwapActionPanel({ type, item, chainAddresses, variant, walletId, messag
             ? { VERSION: '1', SWAP_ACTION_INDEX: idx }
             : { VERSION: '2', SWAP_ACTION_INDEX: idx, ...editParams };
         try {
+            let freshCancelledKeys = item.cancelledKeys || new Set();
+            if (typeof messaging.getSwapCancelsForAddress === 'function') {
+                try {
+                    const response = await messaging.getSwapCancelsForAddress({ chainId, address: owner.address });
+                    freshCancelledKeys = collectCancelledKeys([{
+                        p: { chainId, owner },
+                        cancels: extractRows(response),
+                    }]);
+                } catch {
+                    setError('Could not refresh this swap. Try again.');
+                    return;
+                }
+            }
+            if (typeof messaging.getSwapDetail === 'function') {
+                let freshDetail;
+                try {
+                    freshDetail = await messaging.getSwapDetail({ chainId, actionIndex: idx });
+                } catch {
+                    setError('Could not refresh this swap. Try again.');
+                    return;
+                }
+                const freshState = swapStateOf(freshDetail);
+                if (freshState) {
+                    const status = deriveStatus(
+                        { ...item, live: freshState },
+                        freshCancelledKeys,
+                        Math.floor(Date.now() / 1000),
+                    );
+                    if (status !== 'open') {
+                        setError('This swap is no longer open. Refresh My swaps and try again.');
+                        return;
+                    }
+                }
+            }
+            if (freshCancelledKeys.has(item.key)) {
+                setError('This swap is no longer open. Refresh My swaps and try again.');
+                return;
+            }
             const res = await lane.run({
                 actionData: { action: 'SWAP', params },
                 encoderOpts: nativeFee.flag ? { payFeeInNativeCoin: true } : {},
@@ -602,10 +670,11 @@ function SwapActionPanel({ type, item, chainAddresses, variant, walletId, messag
 
     return wrap(
         <FormPage
+            demoGuard={demoGuard}
             label={isCancel ? 'Cancel swap' : 'Edit swap'}
             onSubmit={submit}
             status={validationError || error ? (
-                <StatusMessage variant="error" className={F.error}>{validationError || error}</StatusMessage>
+                <StatusMessage variant="error">{validationError || error}</StatusMessage>
             ) : null}
             actions={(
                 <Button
@@ -629,8 +698,12 @@ function SwapActionPanel({ type, item, chainAddresses, variant, walletId, messag
                 </span>
             </p>
             <dl className={F.detailsList}>
-                <dt className={F.detailsLabel}>Chain</dt>
-                <dd className={F.detailsValue}>{descriptor ? <ChainBadge descriptor={descriptor} size="sm" /> : chainId}</dd>
+                {descriptor ? (
+                    <>
+                        <dt className={F.detailsLabel}>Network</dt>
+                        <dd className={F.detailsValue}><ChainBadge descriptor={descriptor} size="sm" showName={false} /></dd>
+                    </>
+                ) : null}
                 <dt className={F.detailsLabel}>Swap</dt>
                 <dd className={F.detailsValue}>#{row.action_index}</dd>
                 <dt className={F.detailsLabel}>From</dt>

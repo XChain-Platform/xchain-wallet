@@ -63,7 +63,7 @@
 //       --config=playwright.regtest.config.js tests/onboarding/publish-labels.regtest.spec.js
 
 import { spawn } from 'node:child_process';
-import { createWallet, expect, test } from '../../fixtures/wallet.js';
+import { createWallet, expect, openPaletteCommand, test } from '../../fixtures/wallet.js';
 import {
     EXPLORER_URL,
     REGTEST_ADDRESS_RE,
@@ -168,19 +168,6 @@ async function waitForIndexedAction(txid, timeoutMs = 300_000) {
     throw new Error(`No XChain action recorded for ${txid} within ${Math.round(timeoutMs / 1000)}s`);
 }
 
-async function gotoPalette(page, title) {
-    await page.keyboard.press('ControlOrMeta+k');
-    const dialog = page.getByRole('dialog', { name: 'Command palette' });
-    await expect(dialog, 'the command palette did not open').toBeVisible({ timeout: 15_000 });
-    const combobox = dialog.getByRole('combobox').first();
-    await expect(combobox).toBeEditable({ timeout: 15_000 });
-    await combobox.fill(title);
-    const row = page.getByRole('option', { name: new RegExp(`^${title}\\b`) }).first();
-    await expect(row, `no palette command matching "${title}"`).toBeVisible();
-    await row.click();
-    await expect(dialog).toBeHidden({ timeout: 15_000 });
-}
-
 /**
  * Runs one publish and returns what the report screen states.
  *
@@ -188,7 +175,7 @@ async function gotoPalette(page, title) {
  * gives back is checked against the chain afterwards rather than trusted.
  */
 async function publishLabels(page) {
-    await gotoPalette(page, 'Settings');
+    await openPaletteCommand(page, 'Settings');
     const main = page.getByRole('main');
     await main.getByRole('button', { name: /^Backup/ }).first().click();
 
@@ -196,7 +183,7 @@ async function publishLabels(page) {
     await expect(open, 'the Backup section offers no "Publish now…" action').toBeVisible({ timeout: 30_000 });
     await open.click();
 
-    const chain = page.getByLabel('Publish chain');
+    const chain = page.getByLabel('Publish network');
     await expect(chain, 'the publish form has no chain picker').toBeVisible({ timeout: 30_000 });
     await chain.selectOption(REGTEST_CHAIN_ID);
     await page.getByLabel('Wallet password').fill(PASSWORD);
@@ -250,9 +237,9 @@ test.describe(`on-chain label publish on ${REGTEST_CHAIN_LABEL}`, () => {
             // picker and a Source field. §3.5 bullet 3: on these venues BTC and
             // LTC regtest share version bytes, so an address must never be
             // identified by its prefix.
-            await gotoPalette(page, 'Create dispenser');
+            await openPaletteCommand(page, 'Create dispenser');
             const main = page.getByRole('main');
-            await expect(main.getByLabel('Give amount (per fill)')).toBeVisible({ timeout: 30_000 });
+            await expect(main.getByLabel('Give amount per fill')).toBeVisible({ timeout: 30_000 });
             await selectVenueChain(main);
             owner = await main.getByRole('textbox', { name: 'Source' }).inputValue();
             expect(owner, `the form has no ${REGTEST_CHAIN_LABEL} address to sign with`)
@@ -278,7 +265,7 @@ test.describe(`on-chain label publish on ${REGTEST_CHAIN_LABEL}`, () => {
         });
 
         await test.step('label an address and add a contact', async () => {
-            await gotoPalette(page, 'Addresses');
+            await openPaletteCommand(page, 'Addresses');
             const main = page.getByRole('main');
             const row = main.getByLabel(`View address ${owner}`).first();
             await expect(row, 'the funded address is not in the address list').toBeVisible({ timeout: 30_000 });
@@ -297,12 +284,10 @@ test.describe(`on-chain label publish on ${REGTEST_CHAIN_LABEL}`, () => {
             await expect(saveLabel, 'the address label was never persisted')
                 .toBeDisabled({ timeout: 30_000 });
 
-            // NOT scoped to `main`: "Add contact" lives in the screen HEADER's
-            // trailing slot, outside the main landmark, so a main-scoped
-            // locator waits out its timeout on a button that is plainly on
-            // screen. Cost a run.
-            await gotoPalette(page, 'Contacts');
-            await page.getByLabel('Add contact').first().click();
+            // An empty list offers "Create first contact"; a list with entries offers
+            // "Add contact" in its actions row.
+            await openPaletteCommand(page, 'Contacts');
+            await page.getByRole('button', { name: /^(Add contact|Create first contact)$/ }).click();
             await page.getByRole('textbox', { name: 'Name' }).fill(CONTACT_CANARY);
             // A contact is a NAME PLUS AN ADDRESS - saving without one is
             // refused, and the refusal is quiet enough that the first draft of

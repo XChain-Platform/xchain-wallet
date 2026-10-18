@@ -23,21 +23,22 @@
 //                    affordance; the passphrase cannot be recovered
 //                    from storage.
 //
-//   error            `<StatusMessage variant="error">` (role="alert") with a
-//                    one-click "Try again" recovery on storage-write failure.
+//   error            an error message (role="alert") above the form card, via
+//                    SettingsInlineForm, with a one-click "Try again" recovery on storage-write failure.
 //
 // Setup verifies the current wallet password so a duress passphrase cannot
 // equal it. Disable remains available to the unlocked session.
 
 import { useRef, useState } from 'react';
-import { Button, Input, StatusMessage } from '@xchain-wallet/core/ui';
+import { Button, Input } from '@xchain-wallet/core/ui';
 import { useMessaging } from '../../useMessaging.js';
 import {
     isDuressConfigured,
     setDuressPassphrase,
     clearDuressPassphrase,
 } from '../../../flows/duressPassphrase.js';
-import { ROW, ROW_HINT } from './_settingsPrimitives.jsx';
+import { ROW, ROW_HINT, SettingsInlineForm } from './_settingsPrimitives.jsx';
+import { t } from '../../../i18n/index.js';
 
 export function DuressPassphraseRow() {
     const { messaging } = useMessaging();
@@ -109,14 +110,13 @@ export function DuressPassphraseRow() {
         return (
             <div style={ROW}>
                 <div style={{ display: 'flex', flexDirection: 'column', flex: 1, minWidth: 0 }}>
-                    <span style={labelStyle}>Duress passphrase</span>
+                    <span style={labelStyle}>{t('settings.duress.duressPassphrase')}</span>
                     <span style={ROW_HINT}>
-                        Configured. Entering this passphrase on the unlock screen will silently arm
-                        panic mode while showing a normal-looking wrong-password message.
+                        {t('settings.duress.configuredEnteringThisPassphraseOn')}
                     </span>
                 </div>
                 <Button type="button" size="sm" variant="ghost" icon={null} onClick={handleClear}>
-                    Disable
+                    {t('settings.biometric.disable')}
                 </Button>
             </div>
         );
@@ -124,91 +124,88 @@ export function DuressPassphraseRow() {
 
     if (showForm) {
         return (
-            <form onSubmit={handleSet} style={{ ...ROW, flexDirection: 'column', alignItems: 'stretch' }}>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--xc-space-1)' }}>
-                    <span style={labelStyle}>Set duress passphrase</span>
-                    <span style={ROW_HINT}>
-                        Pick a passphrase that is NOT your real wallet password. Entering it on the
-                        unlock screen will silently arm panic mode (24-hour signing freeze) and surface
-                        the same UI a wrong password produces.
-                    </span>
-                </div>
-                <Input
-                    type="password"
-                    enterKeyHint="next"
-                    value={currentPassword}
-                    onChange={(e) => { setCurrentPassword(e.target.value); if (error) setError(null); }}
-                    placeholder="Current wallet password"
-                    autoComplete="current-password"
-                    aria-label="Current wallet password"
-                />
-                <Input
-                    type="password"
-                    enterKeyHint="next"
-                    value={pass}
-                    onChange={(e) => { setPass(e.target.value); if (error) setError(null); }}
-                    placeholder="Duress passphrase"
-                    autoComplete="new-password"
-                    aria-label="Duress passphrase"
-                />
-                <Input
-                    type="password"
-                    enterKeyHint="done"
-                    value={confirm}
-                    onChange={(e) => { setConfirm(e.target.value); if (error) setError(null); }}
-                    placeholder="Confirm passphrase"
-                    autoComplete="new-password"
-                    aria-label="Confirm duress passphrase"
-                />
-                {error ? (
-                    <StatusMessage
-                        variant="error"
-                        recovery={retryRef.current ? { label: 'Try again', onAction: retryRef.current } : undefined}
-                    >
-                        {error}
-                    </StatusMessage>
-                ) : null}
-                <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 'var(--xc-space-2)' }}>
-                    <Button
-                        type="button"
-                        size="sm"
-                        variant="ghost"
-                        icon={null}
-                        onClick={() => {
-                            setShowForm(false);
-                            setCurrentPassword('');
-                            setPass('');
-                            setConfirm('');
-                            setError(null);
-                        }}
-                        disabled={busy}
-                    >
-                        Cancel
-                    </Button>
-                    <Button
-                        type="submit"
-                        size="sm"
-                        icon={null}
-                        disabled={busy || currentPassword.length === 0 || pass.length === 0 || confirm.length === 0}
-                    >
-                        {busy ? 'Verifying…' : 'Save'}
-                    </Button>
-                </div>
-            </form>
+            <SettingsInlineForm
+                error={error}
+                recovery={retryRef.current ? { label: t('common.tryAgain'), onAction: retryRef.current } : undefined}
+            >
+                <form onSubmit={handleSet} style={{ ...ROW, flexDirection: 'column', alignItems: 'stretch' }}>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--xc-space-1)' }}>
+                        <span style={labelStyle}>{t('settings.duress.setDuressPassphrase')}</span>
+                        <span style={ROW_HINT}>
+                            {t('settings.duress.pickAPassphraseThatIs')}
+                        </span>
+                    </div>
+                    <Input
+                        type="password"
+                        revealable
+                        enterKeyHint="next"
+                        value={currentPassword}
+                        onChange={(e) => { setCurrentPassword(e.target.value); if (error) setError(null); }}
+                        placeholder={t('settings.thisWallet.currentWalletPassword')}
+                        autoComplete="current-password"
+                        aria-label={t('settings.thisWallet.currentWalletPassword')}
+                    />
+                    <Input
+                        type="password"
+                        revealable
+                        enterKeyHint="next"
+                        value={pass}
+                        onChange={(e) => { setPass(e.target.value); if (error) setError(null); }}
+                        placeholder={t('settings.duress.duressPassphrase')}
+                        autoComplete="new-password"
+                        aria-label={t('settings.duress.duressPassphrase')}
+                    />
+                    <Input
+                        type="password"
+                        revealable
+                        enterKeyHint="done"
+                        value={confirm}
+                        onChange={(e) => { setConfirm(e.target.value); if (error) setError(null); }}
+                        placeholder={t('settings.duress.confirmPassphrase')}
+                        autoComplete="new-password"
+                        aria-label={t('settings.duress.confirmDuressPassphrase')}
+                    />
+                    <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 'var(--xc-space-2)' }}>
+                        <Button
+                            type="button"
+                            size="sm"
+                            variant="ghost"
+                            icon={null}
+                            onClick={() => {
+                                setShowForm(false);
+                                setCurrentPassword('');
+                                setPass('');
+                                setConfirm('');
+                                setError(null);
+                            }}
+                            disabled={busy}
+                        >
+                            {t('common.cancel')}
+                        </Button>
+                        <Button
+                            type="submit"
+                            size="sm"
+                            icon={null}
+                            disabled={busy || currentPassword.length === 0 || pass.length === 0 || confirm.length === 0}
+                        >
+                            {busy ? t('verifySignature.verifying') : t('history.contact.save')}
+                        </Button>
+                    </div>
+                </form>
+            </SettingsInlineForm>
         );
     }
 
     return (
         <div style={ROW}>
             <div style={{ display: 'flex', flexDirection: 'column', flex: 1, minWidth: 0 }}>
-                <span style={labelStyle}>Duress passphrase</span>
+                <span style={labelStyle}>{t('settings.duress.duressPassphrase')}</span>
                 <span style={ROW_HINT}>
-                    A second password that, if entered on the unlock screen, silently arms panic mode
-                    (24-hour signing freeze) without giving the observer any visible cue.
+                    {t('settings.duress.aSecondPasswordThatIf')}
                 </span>
             </div>
             <Button type="button" size="sm" variant="ghost" icon={null} onClick={() => setShowForm(true)}>
-                Set
+                {t('settings.duress.set')}
             </Button>
         </div>
     );

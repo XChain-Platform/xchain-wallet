@@ -1,7 +1,8 @@
+/* Help text reads from the start edge, like every form's field hints. */
 .hint {
     font-size: var(--xc-text-sm);
     color: var(--xc-text-muted);
-    text-align: center;
+    text-align: start;
     margin: 0;
 }
 
@@ -11,60 +12,28 @@
     margin: 0 0 var(--xc-space-3);
 }
 
+/* The step caption owns a full row above the step content, clear of the
+   cards below it. */
 .progress {
+    display: block;
+    flex: none;
+    width: 100%;
+    /* The fixed measure keeps the step label readable without a matching size token. */
     max-width: 560px;
-    margin: var(--xc-space-3) auto 0;
+    /* No top margin: the page already insets its first row from the header. */
+    margin: 0 auto var(--xc-space-3);
     color: var(--xc-text-muted);
     font-size: var(--xc-text-sm);
     font-weight: 600;
     text-align: center;
 }
 
-.error {
-    font-size: var(--xc-text-sm);
-    color: var(--xc-danger-fg);
-    background: color-mix(in srgb, var(--xc-danger) 8%, transparent);
-    padding: var(--xc-space-2) var(--xc-space-3);
-    border-radius: var(--xc-radius-sm);
-    margin: var(--xc-space-2) 0;
-}
-
-.pickerLabel {
-    display: flex;
-    flex-direction: column;
-    gap: var(--xc-space-1);
-    font-size: var(--xc-text-sm);
-    color: var(--xc-text-muted);
-    margin-bottom: var(--xc-space-3);
-}
-
-.picker {
-    padding: var(--xc-space-2) var(--xc-space-3);
-    font-family: var(--xc-font-sans);
-    font-size: var(--xc-text-md);
-    color: var(--xc-text);
-    background: var(--xc-surface);
-    border: 1px solid var(--xc-border-strong);
-    border-radius: var(--xc-radius-md);
-}
-
 .fromLine {
+    composes: card from '../../ui/Card.module.css';
     display: flex;
     align-items: baseline;
     gap: var(--xc-space-2);
-    padding: var(--xc-space-2) var(--xc-space-3);
-    background: var(--xc-bg-muted);
-    border: 1px solid var(--xc-border);
-    border-radius: var(--xc-radius-md);
     margin-bottom: var(--xc-space-3);
-}
-
-.fromLabel {
-    font-size: var(--xc-text-xs);
-    color: var(--xc-text-muted);
-    font-weight: 600;
-    text-transform: uppercase;
-    letter-spacing: 0.04em;
 }
 
 .templateGrid {
@@ -86,46 +55,17 @@
     }
 }
 
-.templateContent {
-    display: flex;
-    flex-direction: column;
+.templateCard {
+    padding: var(--xc-space-3);
+    border: 1px solid var(--xc-border-strong);
+    background: var(--xc-surface);
+}
+
+/* Cards in a two-column row stretch to the taller one; their text starts
+   at the top so a one-line tagline does not float to the middle beside a
+   two-line one. */
+.templateGrid .templateCard {
     align-items: flex-start;
-    gap: var(--xc-space-1);
-    width: 100%;
-    text-align: start;
-}
-
-.templateName {
-    font-weight: 700;
-    font-size: var(--xc-text-md);
-}
-
-.templateTag {
-    font-size: var(--xc-text-sm);
-    color: inherit;
-    opacity: 0.85;
-    line-height: 1.3;
-}
-
-.templateSoon {
-    font-size: var(--xc-text-xs);
-    color: inherit;
-    opacity: 0.85;
-    font-style: italic;
-}
-
-.checkRow {
-    display: flex;
-    align-items: flex-start;
-    gap: var(--xc-space-2);
-    margin: var(--xc-space-2) 0 var(--xc-space-3);
-    font-size: var(--xc-text-sm);
-    color: var(--xc-text);
-    line-height: 1.4;
-}
-
-.checkRow input[type="checkbox"] {
-    margin-top: 3px;
 }
 
 .summary {
@@ -138,15 +78,12 @@
 }
 
 .detailsList {
+    composes: card from '../../ui/Card.module.css';
     display: grid;
-    grid-template-columns: minmax(0, max-content) minmax(0, 1fr);
-    gap: var(--xc-space-1) var(--xc-space-3);
+    grid-template-columns: var(--xc-table-label-column) minmax(0, 1fr);
+    gap: 0;
     min-width: 0;
     margin: 0 0 var(--xc-space-4);
-    padding: var(--xc-space-3);
-    background: var(--xc-bg-muted);
-    border: 1px solid var(--xc-border);
-    border-radius: var(--xc-radius-md);
 }
 
 .detailsLabel {
@@ -157,6 +94,7 @@
     letter-spacing: 0.04em;
     margin: 0;
     align-self: center;
+    padding: var(--xc-table-cell-padding-block) var(--xc-table-cell-padding-inline);
 }
 
 .detailsValue {
@@ -165,24 +103,20 @@
     min-width: 0;
     margin: 0;
     overflow-wrap: anywhere;
+    padding: var(--xc-table-cell-padding-block) var(--xc-table-cell-padding-inline);
+    text-align: end;
+    font-variant-numeric: tabular-nums;
 }
 
-.warnings {
-    border: 1px solid color-mix(in srgb, var(--xc-warning, #B07A00) 40%, transparent);
-    background: color-mix(in srgb, var(--xc-warning, #B07A00) 12%, transparent);
-    padding: var(--xc-space-2) var(--xc-space-3);
-    border-radius: var(--xc-radius-sm);
-    margin-bottom: var(--xc-space-3);
+.detailsLabel ~ .detailsLabel,
+.detailsValue ~ .detailsValue {
+    border-top: var(--xc-table-row-divider);
 }
 
-.warning {
-    margin: 0;
-    font-size: var(--xc-text-sm);
-    color: var(--xc-text);
-    line-height: 1.4;
-}
-.warning + .warning {
-    margin-top: var(--xc-space-1);
+.detailsValue code,
+.txid {
+    direction: ltr;
+    unicode-bidi: isolate;
 }
 
 .actions {
@@ -193,13 +127,28 @@
     margin-top: var(--xc-space-4);
 }
 
+/* Inside a form stack the form gap spaces the row; the margin above is for
+   result screens, where the row follows plain content. */
+:global([data-form-stack]) > .actions {
+    margin-top: 0;
+}
+
 @media not all and (min-width: 400px) {
     .detailsList {
         grid-template-columns: minmax(0, 1fr);
     }
 
-    .detailsLabel:not(:first-child) {
-        margin-top: var(--xc-space-2);
+    .detailsValue {
+        padding-top: var(--xc-space-1);
+        text-align: start;
+    }
+
+    .detailsLabel {
+        padding-bottom: 0;
+    }
+
+    .detailsValue ~ .detailsValue {
+        border-top: 0;
     }
 }
 
@@ -226,8 +175,7 @@
 
 /* PC-06: the Custom template's advanced disclosure (locks, callback,
    access lists). Collapsed by default; the body is a dense settings
-   block, so its copy reads left-aligned rather than centred like the
-   wizard's one-line stage hints. */
+   block. */
 .advanced {
     margin: var(--xc-space-4) 0 var(--xc-space-3);
     padding-top: var(--xc-space-3);
@@ -238,10 +186,6 @@
     margin-top: var(--xc-space-3);
 }
 
-.advancedBody .hint {
-    text-align: start;
-}
-
 .lockFlagRow {
     padding: var(--xc-space-2) 0;
     border-bottom: 1px solid var(--xc-border);
@@ -249,17 +193,6 @@
 
 .lockFlagRow:last-child {
     border-bottom: none;
-}
-
-.lockFlagRow .checkRow {
-    margin-bottom: var(--xc-space-1);
-}
-
-.lockFlagHint {
-    font-size: var(--xc-text-xs);
-    color: var(--xc-text-muted);
-    margin: 0 0 0 calc(var(--xc-space-2) + 1em);
-    line-height: 1.4;
 }
 
 .listRow {

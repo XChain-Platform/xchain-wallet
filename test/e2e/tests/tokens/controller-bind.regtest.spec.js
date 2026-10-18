@@ -71,7 +71,8 @@
 //   cd test/e2e && XC_REGTEST_COIN=RLTC npx playwright test \
 //       --config=playwright.regtest.config.js tests/tokens/controller-bind.regtest.spec.js
 
-import { createWallet, expect, test } from '../../fixtures/wallet.js';
+import { waitForShownTxid } from '../../fixtures/pendingHistory.js';
+import { createWallet, expect, openPaletteCommand, test } from '../../fixtures/wallet.js';
 import {
     expectConfirmModal as sharedConfirmModal,
     explorerJson,
@@ -87,6 +88,7 @@ import {
     tokenBalance,
     unlockAfterReload,
     waitForTokenBalance,
+    REGTEST_CHAIN_ID,
 } from '../../fixtures/regtest.js';
 
 const PASSWORD = 'regtestpassword123';
@@ -117,10 +119,12 @@ const SEND_AMOUNT = 10;
 const CONTROL_AMOUNT = 5;
 
 /**
- * VM gas is XCHAIN and a freshly-onboarded wallet holds none. This covers the
- * DEPLOY (VM_DEPLOY_BASE 100000 + 10/byte, priced at GAS_PRICE 0.00001) and the
- * VM_GUARD_GAS_CEILING of 200000 that every guarded leg reserves against the
- * SENDER - including the legs the guard goes on to deny.
+ * VM gas is XCHAIN and a freshly-onboarded wallet holds none, and on Bitcoin
+ * ISSUE charges its protocol fee in XCHAIN too, so it is minted before the
+ * first ISSUE. This covers those fees, the DEPLOY (VM_DEPLOY_BASE 100000 +
+ * 10/byte, priced at GAS_PRICE 0.00001) and the VM_GUARD_GAS_CEILING of 200000
+ * that every guarded leg reserves against the SENDER - including the legs the
+ * guard goes on to deny.
  */
 const MINT_XCHAIN = 2000;
 const DEPLOY_GAS = '200000';
@@ -313,19 +317,6 @@ async function waitForBindings(tick, predicate, what, timeoutMs = 180_000) {
     throw new Error(`${tick} never reached ${what}; controllers=${JSON.stringify(last)}`);
 }
 
-async function gotoPalette(page, title) {
-    await page.keyboard.press('ControlOrMeta+k');
-    const dialog = page.getByRole('dialog', { name: 'Command palette' });
-    await expect(dialog, 'the command palette did not open').toBeVisible({ timeout: 15_000 });
-    const combobox = dialog.getByRole('combobox').first();
-    await expect(combobox).toBeEditable({ timeout: 15_000 });
-    await combobox.fill(title);
-    const row = page.getByRole('option', { name: new RegExp(`^${title}\\b`) }).first();
-    await expect(row, `no palette command matching "${title}"`).toBeVisible();
-    await row.click();
-    await expect(dialog).toBeHidden({ timeout: 15_000 });
-}
-
 /**
  * Waits for the confirm screen, naming a stale price sentinel for what it is.
  *
@@ -356,12 +347,13 @@ async function approveAndGetTxid(page) {
     const approve = page.getByTestId('confirm-approve');
     await expect(approve).toBeEnabled({ timeout: 120_000 });
     await approve.click();
-    const main = page.getByRole('main');
-    // The success screens render the id with no separators ("Transaction
-    // IDae0d…Done"), so a \b-anchored pattern does not match (§3.5, Session 30).
-    await expect(main, 'no transaction id ever appeared after Approve')
-        .toContainText(/[0-9a-f]{64}/, { timeout: 180_000 });
-    return (await main.innerText()).match(/[0-9a-f]{64}/)?.[0];
+    // The Send success screen draws the id truncated; waitForShownTxid reads
+    // the full id from its accessible name, and from the text on screens
+    // that print it whole.
+    return waitForShownTxid(page.getByRole('main'), {
+        timeout: 180_000,
+        message: 'no transaction id ever appeared after Approve',
+    });
 }
 
 /**
@@ -376,7 +368,11 @@ async function approveAndGetTxid(page) {
  * kind of token state a stale cache would hide.
  */
 async function reloadToHome(page) {
-    await gotoPalette(page, 'Home');
+    await openPaletteCommand(page, 'Home');
+    // Reload only once Home has drawn, so the reload never races the
+    // navigation the palette command started.
+    await expect(page.getByRole('heading', { name: 'Home', level: 1 }))
+        .toBeVisible({ timeout: 30_000 });
     await page.reload();
     await unlockAfterReload(page, PASSWORD);
 }
@@ -415,7 +411,8 @@ async function readChainAddresses(page, keep) {
 }
 
 /**
- * Onboards a fresh wallet, funds its ONLY address and issues `TICK` from it.
+ * Onboards a fresh wallet, funds its ONLY address, mints its XCHAIN and issues
+ * `TICK` from it.
  * Returns that address, which is the token's owner AND the chain's active
  * address.
  *
@@ -434,7 +431,7 @@ async function issueToken(page, tick, source) {
     // having disappeared, which is how this spec failed its second run.
     await reloadToHome(page);
     await seedPrices();
-    await gotoPalette(page, 'Issue token');
+    await openPaletteCommand(page, 'Issue token');
     const form = page.getByRole('main');
     await expect(form.getByLabel('Ticker')).toBeVisible({ timeout: 30_000 });
     await selectVenueChain(form);
@@ -458,7 +455,7 @@ async function onboardAndIssue(page, ticks = [TICK, CONTROL_TICK], walletName = 
     await createWallet(page, { password: PASSWORD, name: walletName });
     await switchToRegtest(page, PASSWORD);
 
-    await gotoPalette(page, 'Issue token');
+    await openPaletteCommand(page, 'Issue token');
     const main = page.getByRole('main');
     await expect(main.getByLabel('Ticker')).toBeVisible({ timeout: 30_000 });
     await selectVenueChain(main);
@@ -470,6 +467,8 @@ async function onboardAndIssue(page, ticks = [TICK, CONTROL_TICK], walletName = 
     await fundAddress(source, FUNDING);
     await page.reload();
     await unlockAfterReload(page, PASSWORD);
+    await mintXchain(page, MINT_XCHAIN);
+    await waitForTokenBalance(source, 'XCHAIN', MINT_XCHAIN);
 
     // Issued back to back from one address so the only thing that ever differs
     // between them is the binding.
@@ -488,7 +487,7 @@ async function onboardAndIssue(page, ticks = [TICK, CONTROL_TICK], walletName = 
  */
 async function deployGuard(page, source, guardSource = GUARD_SOURCE) {
     await seedPrices();
-    await gotoPalette(page, 'Contracts');
+    await openPaletteCommand(page, 'Contracts');
     const deploy = page.getByRole('button', { name: '+ Publish contract' });
     await expect(deploy).toBeVisible({ timeout: 30_000 });
     await deploy.click();
@@ -528,12 +527,15 @@ async function deployGuard(page, source, guardSource = GUARD_SOURCE) {
 
 /** Adds `count` more receive addresses on the venue chain. */
 async function generateExtraAddresses(page, count) {
-    await gotoPalette(page, 'Addresses');
+    await openPaletteCommand(page, 'Addresses');
     await page.getByTestId('address-add-menu').click();
     await page.getByTestId('address-add-address').click();
     await selectVenueChain(page, 'Coin');
     await page.getByLabel('Number of addresses').fill(String(count));
     await page.getByTestId('add-address-generate').click();
+    // The modal closes only once the last address is stored; a reload before
+    // that cuts generation short.
+    await expect(page.getByTestId('add-address-generate')).toBeHidden({ timeout: 60_000 });
 }
 
 /**
@@ -545,7 +547,7 @@ async function generateExtraAddresses(page, count) {
  * lives.
  */
 async function gotoControllerForm(page, tick) {
-    await gotoPalette(page, 'My Tokens');
+    await openPaletteCommand(page, 'My tokens');
     const row = page.getByRole('main').getByRole('button').filter({ hasText: tick }).first();
     await expect(row, `${tick} is on chain but My Tokens does not list it`)
         .toBeVisible({ timeout: 60_000 });
@@ -668,7 +670,7 @@ async function unbindController(page, source, tick = TICK) {
  */
 async function gotoAddressControllerForm(page, source) {
     await seedPrices();
-    await gotoPalette(page, 'Bind a controller');
+    await openPaletteCommand(page, 'Bind a controller');
     const form = page.getByRole('main');
     await expect(form.getByLabel(/What to protect/), 'the palette did not open the controller form')
         .toBeVisible({ timeout: 30_000 });
@@ -777,27 +779,27 @@ async function unbindAddressController(page, source) {
  */
 async function pickAsset(page, tick) {
     for (let attempt = 1; attempt <= 3; attempt += 1) {
-        await page.getByRole('button', { name: /Change asset/ }).click();
+        await page.getByRole('main').getByRole('button', { name: /^Change asset \(currently / }).first().click();
         try {
-            await expect(page.getByLabel(/Open .+ details/i).first(),
+            await expect(page.locator('[data-balance-key]').first(),
                 'the asset picker listed nothing at all, so its balances never arrived')
                 .toBeVisible({ timeout: 30_000 });
             await page.getByLabel('Search coins or tokens').fill(tick);
-            const row = page.getByLabel(new RegExp(`Open ${tick} details`, 'i')).first();
+            const row = page.locator(`[data-balance-key="${REGTEST_CHAIN_ID}:${tick}"]`).first();
             await expect(row, `the wallet's balance list does not carry ${tick}`)
                 .toBeVisible({ timeout: 15_000 });
-            await row.click();
+            await row.getByRole('button', { name: /^Select / }).first().click();
             return;
         } catch (err) {
             if (attempt === 3) throw err;
             await reloadToHome(page);
-            await gotoPalette(page, 'Send');
+            await openPaletteCommand(page, 'Send');
         }
     }
 }
 
 async function composeSend(page, tick, destination, amount) {
-    await gotoPalette(page, 'Send');
+    await openPaletteCommand(page, 'Send');
     const main = page.getByRole('main');
     await pickAsset(page, tick);
 
@@ -838,15 +840,8 @@ test.describe(`token controller bindings on ${REGTEST_CHAIN_LABEL}`, () => {
         let destination;
         let contractIndex;
 
-        await test.step('onboard, fund and issue the token from the wallet\'s only address', async () => {
+        await test.step('onboard, fund, mint XCHAIN and issue the token from the wallet\'s only address', async () => {
             source = await onboardAndIssue(page);
-        });
-
-        await test.step('mint the XCHAIN the VM meters its gas in', async () => {
-            await reloadToHome(page);
-            await mintXchain(page, MINT_XCHAIN);
-            await waitForTokenBalance(source, 'XCHAIN', MINT_XCHAIN);
-            await reloadToHome(page);
         });
 
         await test.step('deploy the guard contract from the wallet', async () => {
@@ -856,7 +851,7 @@ test.describe(`token controller bindings on ${REGTEST_CHAIN_LABEL}`, () => {
         await test.step('generate the destination every send below will use', async () => {
             await generateExtraAddresses(page, 1);
             await reloadToHome(page);
-            await gotoPalette(page, 'Issue token');
+            await openPaletteCommand(page, 'Issue token');
             await selectVenueChain(page.getByRole('main'));
             const addresses = await readChainAddresses(page, source);
             const others = addresses.filter((a) => a !== source);
@@ -986,15 +981,8 @@ test.describe(`token controller bindings on ${REGTEST_CHAIN_LABEL}`, () => {
         let denyIndex;
         let allowIndex;
 
-        await test.step('onboard, fund and issue the token', async () => {
+        await test.step('onboard, fund, mint XCHAIN and issue the token', async () => {
             source = await onboardAndIssue(page, [CATCHALL_TICK], 'Catch-all Wallet');
-        });
-
-        await test.step('mint the XCHAIN the VM meters its gas in', async () => {
-            await reloadToHome(page);
-            await mintXchain(page, MINT_XCHAIN);
-            await waitForTokenBalance(source, 'XCHAIN', MINT_XCHAIN);
-            await reloadToHome(page);
         });
 
         await test.step('deploy both guards: one that denies everything, one that allows', async () => {
@@ -1008,7 +996,7 @@ test.describe(`token controller bindings on ${REGTEST_CHAIN_LABEL}`, () => {
         await test.step('generate the destination', async () => {
             await generateExtraAddresses(page, 1);
             await reloadToHome(page);
-            await gotoPalette(page, 'Issue token');
+            await openPaletteCommand(page, 'Issue token');
             await selectVenueChain(page.getByRole('main'));
             const others = (await readChainAddresses(page, source)).filter((a) => a !== source);
             expect(others.length, `expected exactly one address beside the issuer, found ${others.length}`)
@@ -1094,15 +1082,8 @@ test.describe(`token controller bindings on ${REGTEST_CHAIN_LABEL}`, () => {
         let destination;
         let guardIndex;
 
-        await test.step('onboard, fund and issue a token to have something to move', async () => {
+        await test.step('onboard, fund, mint XCHAIN and issue a token to have something to move', async () => {
             source = await onboardAndIssue(page, [ADDRESS_TICK], 'Address-controller Wallet');
-        });
-
-        await test.step('mint the XCHAIN the VM meters its gas in', async () => {
-            await reloadToHome(page);
-            await mintXchain(page, MINT_XCHAIN);
-            await waitForTokenBalance(source, 'XCHAIN', MINT_XCHAIN);
-            await reloadToHome(page);
         });
 
         await test.step('deploy the guard', async () => {
@@ -1112,7 +1093,7 @@ test.describe(`token controller bindings on ${REGTEST_CHAIN_LABEL}`, () => {
         await test.step('generate the destination', async () => {
             await generateExtraAddresses(page, 1);
             await reloadToHome(page);
-            await gotoPalette(page, 'Issue token');
+            await openPaletteCommand(page, 'Issue token');
             await selectVenueChain(page.getByRole('main'));
             const others = (await readChainAddresses(page, source)).filter((a) => a !== source);
             expect(others.length, `expected exactly one address beside the issuer, found ${others.length}`)

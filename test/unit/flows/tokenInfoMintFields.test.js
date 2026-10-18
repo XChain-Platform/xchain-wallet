@@ -40,6 +40,29 @@ describe('normalizeTokenInfo mint-configuration fields', () => {
         expect(info.mintStopBlock).toBeNull();
     });
 
+    it('treats a decimal-string 0 as unset too, as the explorer now sends these fields', () => {
+        // Live shape from the regtest explorer for a token issued with no
+        // MAX_MINT: a truthy "0" here capped every mint at zero.
+        const info = normalizeTokenInfo('bitcoin-regtest', 'MNF', {
+            mints: { max: '0', address_max: '0', start_block: 0, stop_block: 0 },
+            supply: { current: '500', max: '1000', decimals: 0 },
+        });
+        expect(info.mintMax).toBeNull();
+        expect(info.mintAddressMax).toBeNull();
+        expect(info.mintStartBlock).toBeNull();
+        expect(info.mintStopBlock).toBeNull();
+    });
+
+    it('keeps a decimal-string cap', () => {
+        const info = normalizeTokenInfo('bitcoin-regtest', 'MNF', {
+            mints: { max: '25', address_max: '100', start_block: '1400', stop_block: '2000' },
+        });
+        expect(info.mintMax).toBe('25');
+        expect(info.mintAddressMax).toBe('100');
+        expect(info.mintStartBlock).toBe('1400');
+        expect(info.mintStopBlock).toBe('2000');
+    });
+
     it('defaults to null when the mints object is absent entirely', () => {
         const info = normalizeTokenInfo('bitcoin-mainnet', 'MEMA', { info: {} });
         expect(info.mintMax).toBeNull();

@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 
 import { describe, expect, it } from 'vitest';
@@ -17,6 +17,15 @@ const root = process.cwd();
 const css = readFileSync(resolve(root, 'packages/core/src/ui/tokens.css'), 'utf8');
 const buttonCss = readFileSync(resolve(root, 'packages/core/src/ui/Button.module.css'), 'utf8');
 const addressComboboxCss = readFileSync(resolve(root, 'packages/core/src/ui/AddressCombobox.module.css'), 'utf8');
+const kitControls = [
+    'ListRow',
+    'Chip',
+    'Tabs',
+    'SegmentedControl',
+    'Checkbox',
+    'RadioGroup',
+    'Switch',
+];
 
 function declarationsFor(pattern) {
     const body = pattern.exec(css)?.[1];
@@ -107,6 +116,13 @@ const uiColors = [
     '--xc-warning',
     '--xc-success',
 ];
+const controlBorders = [
+    '--xc-control-border',
+    '--xc-control-border-hover',
+    '--xc-control-selected',
+    '--xc-control-focus-ring',
+    '--xc-control-disabled-border',
+];
 
 function expectPair(tokens, foreground, background, minimum) {
     const ratio = contrast(resolveToken(tokens, foreground), resolveToken(tokens, background));
@@ -134,6 +150,18 @@ describe('theme token contrast', () => {
         }
     });
 
+    it.each(Object.entries(themes))('%s theme keeps shared control states at 3:1', (_, tokens) => {
+        for (const backgroundName of backgrounds) {
+            for (const borderName of controlBorders) {
+                expectPair(tokens, borderName, backgroundName, largeTextAndUiMinimum);
+            }
+        }
+
+        expectPair(tokens, '--xc-control-disabled-border', '--xc-control-disabled-bg', largeTextAndUiMinimum);
+        expectPair(tokens, '--xc-control-disabled-text', '--xc-control-disabled-bg', normalTextMinimum);
+        expectPair(tokens, '--xc-control-selected-text', '--xc-control-selected', normalTextMinimum);
+    });
+
     it.each(Object.entries(themes))('%s theme keeps text on solid fills at 4.5:1', (_, tokens) => {
         for (const [foreground, background] of filledTextPairs) {
             expectPair(tokens, foreground, background, normalTextMinimum);
@@ -157,8 +185,7 @@ describe('theme token contrast', () => {
 
     it.each(Object.entries(themes))('%s theme visibly distinguishes disabled controls with shared tokens', (_, tokens) => {
         const opacity = Number(resolveToken(tokens, '--xc-disabled-opacity'));
-        expect(opacity).toBeGreaterThan(0);
-        expect(opacity).toBeLessThan(1);
+        expect(opacity).toBe(1);
         const saturation = Number(resolveToken(tokens, '--xc-disabled-saturation'));
         expect(saturation).toBeGreaterThanOrEqual(0);
         expect(saturation).toBeLessThan(1);
@@ -174,9 +201,9 @@ describe('theme token contrast', () => {
                 .toBeGreaterThanOrEqual(normalTextMinimum);
         }
 
-        const disabledBorder = saturate(resolveToken(tokens, '--xc-border-strong'), saturation);
-        const disabledSurface = saturate(resolveToken(tokens, '--xc-surface'), saturation);
-        expect(contrast(disabledBorder, disabledSurface), '--xc-border-strong on --xc-surface')
+        const disabledBorder = saturate(resolveToken(tokens, '--xc-control-disabled-border'), saturation);
+        const disabledSurface = saturate(resolveToken(tokens, '--xc-control-disabled-bg'), saturation);
+        expect(contrast(disabledBorder, disabledSurface), '--xc-control-disabled-border on --xc-control-disabled-bg')
             .toBeGreaterThanOrEqual(largeTextAndUiMinimum);
     });
 
@@ -184,12 +211,38 @@ describe('theme token contrast', () => {
         expect(css).toMatch(/:where\(input, select, textarea, button\):disabled\s*\{[^}]*opacity:\s*var\(--xc-disabled-opacity\)\s*!important/s);
         expect(css).toMatch(/filter:\s*saturate\(var\(--xc-disabled-saturation\)\)/);
         expect(buttonCss).toMatch(/\.btn:disabled\s*\{[^}]*opacity:\s*var\(--xc-disabled-opacity\)/s);
+        expect(resolveToken(light, '--xc-disabled-opacity')).toBe('1');
         expect(buttonCss).toMatch(/\.success\s*\{[^}]*color:\s*var\(--xc-on-success\)/s);
+    });
+
+    it('keeps shared control module colors on theme tokens', () => {
+        const checked = kitControls.filter((name) => existsSync(
+            resolve(root, `packages/core/src/ui/${name}.module.css`),
+        ));
+        expect(checked).toEqual(expect.arrayContaining(['ListRow', 'Chip', 'Tabs']));
+
+        for (const name of checked) {
+            const moduleCss = readFileSync(
+                resolve(root, `packages/core/src/ui/${name}.module.css`),
+                'utf8',
+            );
+            const declarations = moduleCss.replace(/\/\*[\s\S]*?\*\//g, '');
+            expect(declarations, name).not.toMatch(
+                /#[\da-f]{3,8}\b|\brgba?\(|\bhsla?\(|\b(?:white|black)\b(?!-)/i,
+            );
+        }
     });
 
     it('keeps the address dropdown on contrast-tested theme tokens', () => {
         expect(addressComboboxCss).not.toMatch(/var\(--(?:surface|surface-hover|border|text|text-muted|badge-bg|badge-fg)\b/);
         expect(addressComboboxCss).toContain('background: var(--xc-surface)');
         expect(addressComboboxCss).toContain('color: var(--xc-text-muted)');
+    });
+});
+
+describe('disabled controls with a hidden native input', () => {
+    it.each(['Switch', 'Checkbox'])('keeps the %s input invisible when disabled despite the global !important', (name) => {
+        const css = readFileSync(`packages/core/src/ui/${name}.module.css`, 'utf8');
+        expect(css).toMatch(/\.input:disabled\s*\{[^}]*opacity:\s*0\s*!important/s);
     });
 });

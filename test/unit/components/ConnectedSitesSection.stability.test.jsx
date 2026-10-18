@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 import React from 'react';
+import { readFileSync } from 'node:fs';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { createDefaultSettings } from '../../../packages/core/src/schemas/settings.js';
@@ -53,6 +54,7 @@ beforeEach(() => {
     messaging = {
         listConnectedSites: vi.fn(async () => []),
         listBlockedOrigins: vi.fn(async () => []),
+        listBlocklistAuditLog: vi.fn(async () => []),
         blockOrigin: vi.fn(),
         unblockOrigin: vi.fn(),
     };
@@ -67,7 +69,49 @@ beforeEach(() => {
 
 afterEach(() => cleanup());
 
+// Both control rows take the shared centred row class from the section stylesheet.
+const controlRowCss = readFileSync(
+    'packages/core/src/shared/components/settings/ConnectedSitesSection.module.css',
+    'utf8',
+).match(/\.controlRow\s*\{[^}]*\}/s)?.[0] || '';
+
 describe('ConnectedSitesSection settings controls', () => {
+    it('centres md controls in the throttle row', async () => {
+        render(<ConnectedSitesSection />);
+        const burstField = (await screen.findByRole('spinbutton', {
+            name: 'Sign-throttle burst (max requests per window)',
+        })).parentElement.parentElement;
+        const throttleForm = screen.getByRole('form', { name: 'Sign-request throttle controls' });
+
+        expect(burstField.className).toMatch(/(?:^|\s)_?md_/);
+        expect(throttleForm.className).toMatch(/controlRow/);
+        expect(controlRowCss).toMatch(/align-items:\s*center/);
+        expect(screen.getByRole('button', { name: 'Apply' }).className).toMatch(/(?:^|\s)_?md_/);
+    });
+
+    it('centres the md manual block action beside its md field', async () => {
+        render(<ConnectedSitesSection />);
+        const origin = await screen.findByRole('textbox', { name: 'Origin or wildcard to block' });
+        const originField = origin.parentElement.parentElement;
+        const blockForm = origin.closest('form');
+
+        expect(originField.className).toMatch(/(?:^|\s)_?md_/);
+        expect(blockForm.className).toMatch(/controlRow/);
+        expect(controlRowCss).toMatch(/align-items:\s*center/);
+        expect(screen.getByRole('button', { name: 'Block' }).className).toMatch(/(?:^|\s)_?md_/);
+    });
+
+    it('keeps section descriptions compact and non-repetitive', async () => {
+        render(<ConnectedSitesSection />);
+
+        expect(await screen.findByText('Latest 50 changes, newest last.')).toBeTruthy();
+        expect(screen.getByText('Rejects excess requests until reset.')).toBeTruthy();
+        expect(screen.getByRole('heading', { name: 'Blocked sites' }).closest('section')).toHaveTextContent(
+            'Use *.example.com with example.com.',
+        );
+        expect(screen.queryByText(/Blocked sites cannot connect/)).toBeNull();
+    });
+
     it('ignores a connected-site load from a replaced messaging source', async () => {
         let resolveOld;
         const oldMessaging = messaging;
@@ -84,7 +128,7 @@ describe('ConnectedSitesSection settings controls', () => {
         };
         rerender(<ConnectedSitesSection />);
 
-        expect(await screen.findAllByText('https://new.example')).toHaveLength(2);
+        expect(await screen.findAllByText('https://new.example')).toHaveLength(1);
         resolveOld([{
             id: 'old-site',
             origin: 'https://old.example',
@@ -93,8 +137,23 @@ describe('ConnectedSitesSection settings controls', () => {
         await Promise.resolve();
         await Promise.resolve();
 
-        expect(screen.getAllByText('https://new.example')).toHaveLength(2);
+        expect(screen.getAllByText('https://new.example')).toHaveLength(1);
         expect(screen.queryAllByText('https://old.example')).toHaveLength(0);
+    });
+
+    it('shows the origin under a named site but never repeats an origin title', async () => {
+        messaging = {
+            ...messaging,
+            listConnectedSites: vi.fn(async () => [
+                { id: 'named', origin: 'https://named.example', appName: 'Named App', permissions: {} },
+                { id: 'bare', origin: 'https://bare.example', permissions: {} },
+            ]),
+        };
+        render(<ConnectedSitesSection />);
+
+        expect(await screen.findByText('Named App')).toBeInTheDocument();
+        expect(screen.getAllByText('https://named.example')).toHaveLength(1);
+        expect(screen.getAllByText('https://bare.example')).toHaveLength(1);
     });
 
     it('ignores an audit-log load from a replaced messaging source', async () => {
@@ -162,6 +221,10 @@ describe('ConnectedSitesSection settings controls', () => {
         render(<ConnectedSitesSection />);
 
         expect(await screen.findByText('No sites connected yet')).toBeTruthy();
+        expect(screen.getByRole('group', { name: 'Connected sites and dApp permissions' })).toBeTruthy();
+        // The page header already reads Connected sites, so the list's own heading names what it holds.
+        expect(screen.getByRole('region', { name: 'Allowed sites' })).toBeTruthy();
+        expect(screen.queryByRole('heading', { name: 'Connected sites' })).toBeNull();
         expect(screen.getByText(/When a website asks to connect/)).toBeTruthy();
     });
 

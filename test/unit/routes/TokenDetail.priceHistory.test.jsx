@@ -171,6 +171,67 @@ describe('TokenDetail price history', () => {
         expect(screen.queryByRole('status', { name: 'Loading supply history' })).toBeNull();
     });
 
+    it('leaves no blank verification band once a token on no roster has loaded', async () => {
+        const messaging = {
+            getSettings: vi.fn().mockResolvedValue({ walletMode: 'full' }),
+            getTokenInfo: vi.fn().mockResolvedValue({ creator: 'bcrt1qx', marketPrice: '0.5', projects: [] }),
+            getAddressesByChain: vi.fn().mockResolvedValue({ [MAINNET_CHAIN]: [] }),
+            getHoldersForToken: vi.fn().mockResolvedValue({ data: [] }),
+            listGatedContent: vi.fn().mockResolvedValue([]),
+        };
+        render(
+            <MessagingProvider shell="web" messaging={messaging}>
+                <TokenDetail
+                    walletId="w1"
+                    chainId={MAINNET_CHAIN}
+                    tick="NOROSTER"
+                    kind="token"
+                    quantity="100"
+                    onBack={() => {}}
+                />
+            </MessagingProvider>,
+        );
+
+        const hero = await screen.findByRole('region', { name: 'NOROSTER balance' });
+        await vi.waitFor(() => expect(screen.queryByRole('status', { name: 'Loading token verification' })).toBeNull());
+        // The element after the balance hero holds content, not an empty slot.
+        expect(hero.nextElementSibling.textContent.trim()).not.toBe('');
+        expect(screen.queryByText(/official token in the/i)).toBeNull();
+    });
+
+    it('shows an empty supply history beside the page sections, not inside a card', async () => {
+        const messaging = {
+            getSettings: vi.fn().mockResolvedValue({ walletMode: 'full' }),
+            getTokenInfo: vi.fn().mockResolvedValue({ creator: 'bcrt1qx', projects: [] }),
+            getAddressesByChain: vi.fn().mockResolvedValue({ [MAINNET_CHAIN]: [] }),
+            getHoldersForToken: vi.fn().mockResolvedValue({ data: [] }),
+            listGatedContent: vi.fn().mockResolvedValue([]),
+            getSupplyHistory: vi.fn().mockResolvedValue([]),
+        };
+        render(
+            <MessagingProvider shell="web" messaging={messaging}>
+                <TokenDetail
+                    walletId="w1"
+                    chainId={MAINNET_CHAIN}
+                    tick="NOSUPPLY"
+                    kind="token"
+                    quantity="100"
+                    onBack={() => {}}
+                />
+            </MessagingProvider>,
+        );
+
+        const title = await screen.findByText('No supply history yet');
+        const hero = screen.getByRole('region', { name: 'NOSUPPLY balance' });
+        const actions = screen.getByRole('group', { name: 'Quick actions' });
+        // The empty state is a sibling of the hero and the actions: one
+        // message in the page stack, with no card drawn around it.
+        expect(actions.previousElementSibling.contains(title)).toBe(true);
+        expect(actions.previousElementSibling.parentElement).toBe(hero.parentElement);
+        expect(actions.previousElementSibling.querySelector('section, [class*="infoCard"]')).toBeNull();
+        expect(actions.previousElementSibling.className).not.toMatch(/infoCard/);
+    });
+
     it('reserves price-history and price-alert space until native prices settle', async () => {
         let finishPrices;
         const messaging = {
@@ -218,7 +279,11 @@ describe('TokenDetail price history', () => {
         });
 
         expect(await screen.findByRole('button', { name: 'Set price alert' })).toBeTruthy();
-        expect(screen.getByText('No price history yet')).toBeTruthy();
+        expect(screen.getByLabelText('7d price chart')).toBeTruthy();
+        expect(screen.queryByText('No price history yet')).toBeNull();
+        const chartRanges = screen.getByRole('tablist', { name: 'Chart range' });
+        expect([...chartRanges.querySelectorAll('[role="tab"]')].map((tab) => tab.textContent))
+            .toEqual(['24h', '7d']);
         expect(actions.previousElementSibling).toBe(alertSlot);
         expect(screen.queryByRole('status', { name: 'Loading price history' })).toBeNull();
     });
@@ -281,7 +346,10 @@ describe('TokenDetail price history', () => {
         expect(screen.queryByText('$2.00')).toBeNull();
         expect(screen.queryByText(/DEX price/)).toBeNull();
         fireEvent.click(screen.getByRole('tab', { name: 'Details' }));
-        expect(screen.getByText('Estimated value').nextElementSibling).toHaveTextContent('-');
+        // Detail fields are list rows: the value sits in the same row as its label.
+        const estimate = screen.getByText('Estimated value').closest('li');
+        expect(estimate).toHaveTextContent('-');
+        expect(estimate).not.toHaveTextContent('2.00');
     });
 
     it('renders dashes instead of non-finite native market values', async () => {
@@ -323,7 +391,7 @@ describe('TokenDetail price history', () => {
         widgetFailure.current = 'market';
         renderDetail('demo-wallet');
 
-        expect(await screen.findByRole('alert')).toHaveTextContent('Could not load this section.');
+        expect(await screen.findByRole('alert')).toHaveTextContent('Couldn\'t load this section.');
         expect(screen.getByRole('group', { name: 'Quick actions' })).toBeInTheDocument();
         expect(screen.queryByRole('button', { name: 'Reload' })).toBeNull();
 

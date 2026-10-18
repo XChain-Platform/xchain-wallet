@@ -12,8 +12,8 @@
        rendered outside the frame but its 56px slot still steals layout
        space inside the frame. */
     position: absolute;
-    inset-inline-start: 0;
-    inset-inline-end: 0;
+    inset-inline-start: calc(0px - env(safe-area-inset-left, 0px));
+    inset-inline-end: calc(0px - env(safe-area-inset-right, 0px));
     bottom: 0;
     min-height: 3.5rem;
     display: flex;
@@ -21,7 +21,9 @@
     background: var(--xc-surface-raised);
     border-top: 1px solid var(--xc-border);
     z-index: var(--xc-z-sticky);
-    /* Respect iOS safe-area insets so the bar floats above the home indicator. */
+    /* Fill the cutout gutters while keeping tabs and the home indicator clear. */
+    padding-inline-start: env(safe-area-inset-left, 0);
+    padding-inline-end: env(safe-area-inset-right, 0);
     padding-bottom: env(safe-area-inset-bottom, 0);
     box-sizing: content-box;
 }
@@ -89,24 +91,13 @@
 
 .tabLabel {
     display: block;
+    flex: 0 0 auto;
     max-width: 100%;
     line-height: 1.1;
     text-align: center;
     white-space: normal;
     overflow-wrap: normal;
     word-break: normal;
-}
-
-/* Scrim + bottom sheet. The sheet sits above the bar so its safe-area
-   padding stacks correctly. */
-
-.scrim {
-    position: fixed;
-    inset: 0;
-    /* safe-area-backdrop: this layer only paints and catches outside taps;
-       the adjacent sheet owns the content insets. */
-    background: var(--xc-overlay, rgba(0, 0, 0, 0.45));
-    z-index: var(--xc-z-overlay);
 }
 
 .sheet {
@@ -134,41 +125,21 @@
     box-shadow: var(--xc-shadow-bottom-sheet);
 }
 
-.sheetHeader {
-    position: relative;
-    min-height: var(--xc-tap-min);
-    display: flex;
-    align-items: center;
-    flex: 0 0 auto;
-}
-
 .handle {
+    grid-column: 1 / -1;
     width: 36px;
     height: 4px;
-    margin: 0 auto;
+    margin: 0 auto var(--xc-space-1);
     border-radius: var(--xc-radius-xs);
     background: var(--xc-border);
 }
 
-.sheetClose {
-    position: absolute;
-    inset-inline-end: var(--xc-space-2);
-    top: 2px;
-    display: inline-flex;
-}
-
-.sheetBody {
-    flex: 1 1 auto;
-    min-height: 0;
-    overflow-y: auto;
-    overscroll-behavior: contain;
-}
-
 .sheetTitle {
+    min-width: 0;
     margin: 0;
-    padding: 0 var(--xc-space-4) var(--xc-space-2);
     font-size: var(--xc-text-lg);
     line-height: 1.25;
+    overflow-wrap: anywhere;
 }
 
 .sheetList {
@@ -227,15 +198,22 @@
 
 /* Unread count pill on a sheet row (e.g. Messaging). */
 .sheetBadge {
+    /* Centre the count in the pill; as a plain block its line box sat at
+       the top of the taller pill. */
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
     flex: 0 0 auto;
-    min-width: 1.25rem;
-    padding: 0 0.4rem;
-    border-radius: var(--xc-radius-pill);
+    box-sizing: border-box;
+    min-width: var(--xc-badge-height-sm);
+    height: var(--xc-badge-height-sm);
+    padding: 0 var(--xc-badge-padding-inline-sm);
+    border-radius: var(--xc-badge-radius);
     background: var(--xc-accent-primary, #0b84ff);
     color: var(--xc-on-accent);
-    font-size: var(--xc-text-xs);
-    font-weight: 700;
-    line-height: 1.35rem;
+    font-size: var(--xc-badge-font-size-sm);
+    font-weight: var(--xc-badge-font-weight);
+    line-height: 1;
     text-align: center;
 }
 
@@ -254,7 +232,7 @@
 
 /* A shorter row leaves room for route content on landscape phones without
    reducing the tab buttons below the shared pointer-target floor. */
-@media (orientation: landscape) and (max-height: 480px) {
+@media (orientation: landscape) and (max-height: 480px) and (min-aspect-ratio: 3/2) {
     .bar {
         min-height: 2.75rem;
     }

@@ -425,9 +425,20 @@ function foldLocalIntoNetwork(networkEntry, localEntry) {
  * @returns {{ entries: object[], pending: PendingEntry[] }}
  */
 export function mergePendingEntries({ confirmed, pending }) {
-    const confirmedList = Array.isArray(confirmed) ? confirmed : [];
+    const confirmedSource = Array.isArray(confirmed) ? confirmed : [];
+    const confirmedList = [];
+    const confirmedIdentities = new Set();
+    for (const entry of confirmedSource) {
+        const actionIndex = String(entry?.actionIndex ?? '').trim();
+        const identity = actionIndex ? `${entry?.chainId || ''}:${actionIndex}` : null;
+        // One action can be returned by the history query for several wallet
+        // addresses. It remains one confirmed action in the combined feed.
+        if (identity && confirmedIdentities.has(identity)) continue;
+        if (identity) confirmedIdentities.add(identity);
+        confirmedList.push(entry);
+    }
     const confirmedHashes = new Set();
-    for (const e of confirmedList) {
+    for (const e of confirmedSource) {
         const h = normalizeHash(e?.txHash);
         if (h) confirmedHashes.add(`${e.chainId}:${h}`);
     }

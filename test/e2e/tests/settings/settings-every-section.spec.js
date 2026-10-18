@@ -13,16 +13,17 @@ import { createWallet, expect, openSettings, test, unlockedShell } from '../../f
 const PASSWORD = 'settings-sections-password';
 const VIEWPORT = { width: 412, height: 869 };
 
+// Phone layouts leave Keyboard out of Settings (shortcut bindings need a
+// hardware keyboard), and Network & endpoints shows only in Developer Mode;
+// this walk runs at a phone width on an ordinary wallet.
 const SUBPAGES = [
     'This wallet',
     'Display',
-    'Keyboard',
     'Privacy',
     'Safety',
     'Wallet mode',
     'Backup',
     'Fees',
-    'Network & endpoints',
     'Connected sites',
     'Automatic donation system',
     'Developer mode',
@@ -71,6 +72,16 @@ async function flipSwitch(control) {
 test.describe('Settings: every section', () => {
     test('every sub-page fits a phone and Display and Notifications persist through lock', async ({ page }) => {
         test.slow();
+        // Notification toggles stay disabled until the browser grants the
+        // permission, as a user does from the permission row. Headless
+        // Chromium reports "denied" even after a grant, so model a browser
+        // that has granted it.
+        await page.context().grantPermissions(['notifications']);
+        await page.addInitScript(() => {
+            if (typeof Notification !== 'undefined') {
+                Object.defineProperty(Notification, 'permission', { get: () => 'granted' });
+            }
+        });
         await page.setViewportSize(VIEWPORT);
         await createWallet(page, { password: PASSWORD, name: 'Settings Sections Wallet' });
         await openSettings(page);
@@ -83,7 +94,7 @@ test.describe('Settings: every section', () => {
 
             const back = page.getByRole('button', { name: 'Back to settings', exact: true });
             await expect(back, `${title} has no back-to-settings control`).toBeVisible();
-            await expect(page.getByRole('heading', { name: title, exact: true }),
+            await expect(page.getByRole('heading', { level: 1, name: title, exact: true }),
                 `${title} has no matching page heading`).toBeVisible();
             await expectNoHorizontalOverflow(page, title);
 
@@ -104,7 +115,10 @@ test.describe('Settings: every section', () => {
         await expect(notificationSwitch).toBeVisible();
         const expectedNotification = await flipSwitch(notificationSwitch);
 
-        await page.getByRole('button', { name: 'Lock wallet', exact: true }).first().click();
+        // Wide layouts lock from the side navigation ('Lock'); the phone header carries 'Lock wallet'.
+        await page.getByRole('button', { name: 'Lock', exact: true })
+            .or(page.getByRole('button', { name: 'Lock wallet', exact: true }))
+            .first().click();
         const unlock = page.getByRole('button', { name: 'Unlock Wallet', exact: true });
         await expect(unlock, 'the wallet did not lock').toBeVisible();
         await page.getByLabel('Password', { exact: true }).fill(PASSWORD);

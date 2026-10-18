@@ -20,15 +20,10 @@
 // fire on the next check.
 
 import { useEffect, useId, useMemo, useRef, useState } from 'react';
-import { Button, Input, Select } from '../../ui/index.js';
+import { Button, Input, Select, StatusMessage } from '../../ui/index.js';
 import { COINGECKO_SUPPORTED_CHAINS } from '../../flows/priceOracle.js';
 import { userFacingMessage } from '../utils/userFacingMessage.js';
-
-const HINT = {
-    color: 'var(--xc-text-muted)',
-    fontSize: 'var(--xc-text-xs)',
-    lineHeight: 1.3,
-};
+import { t } from '../../i18n/index.js';
 
 /** Native mainnet coins that have a price source. */
 const MAINNET_PRICE_CHAINS = COINGECKO_SUPPORTED_CHAINS.filter((c) => c.endsWith('-mainnet'));
@@ -71,6 +66,9 @@ export function PriceAlertForm({
     const [err, setErr] = useState(/** @type {string|null} */ (null));
     const mountedRef = useRef(false);
     const inputVersionRef = useRef(0);
+    // An alert saved for a coin that has since left the price list keeps its
+    // own option, so editing it does not silently switch to the first coin.
+    const unavailableChain = chainId && !MAINNET_PRICE_CHAINS.includes(chainId) ? chainId : null;
 
     useEffect(() => {
         mountedRef.current = true;
@@ -80,13 +78,14 @@ export function PriceAlertForm({
     const targetFiat = Number(targetStr);
     const valid = Boolean(chainId) && Number.isFinite(targetFiat) && targetFiat > 0;
     const invalidTarget = targetStr !== '' && !valid;
+    // A bad price belongs to the price field, so it shows as that field's
+    // error; the other reasons explain the disabled button below the row.
+    const priceError = chainId && invalidTarget ? 'Enter a price greater than zero.' : null;
     const disabledReason = !chainId
         ? 'Choose a coin to continue.'
         : targetStr === ''
             ? 'Enter a target price to continue.'
-            : invalidTarget
-                ? 'Enter a price greater than zero.'
-                : null;
+            : null;
 
     const alreadyMet = useMemo(() => {
         if (currentPrice == null || !Number.isFinite(currentPrice) || !valid) return false;
@@ -128,36 +127,44 @@ export function PriceAlertForm({
                     <span style={{ fontWeight: 500 }}>{coinLabelForChain(lockedChainId)}</span>
                 ) : (
                     <Select
-                        aria-label="Coin"
+                        aria-label={t('routes.addressList.coin')}
                         value={chainId}
                         onChange={(e) => updateInput(setChainId, e.target.value, chainId)}
                     >
                         {/* Native options remain because Select owns the listbox control, not its choices. */}
+                        {unavailableChain ? (
+                            <option value={unavailableChain}>
+                                {t('settings.notifications.coinUnavailable', { coin: coinLabelForChain(unavailableChain) })}
+                            </option>
+                        ) : null}
                         {MAINNET_PRICE_CHAINS.map((c) => (
                             <option key={c} value={c}>{coinLabelForChain(c)}</option>
                         ))}
                     </Select>
                 )}
                 <Select
-                    aria-label="Direction"
+                    aria-label={t('components.priceAlertForm.direction')}
                     value={direction}
                     onChange={(e) => updateInput(setDirection, e.target.value, direction)}
                 >
                     {/* Native options remain because Select owns the listbox control, not its choices. */}
-                    <option value="above">rises above</option>
-                    <option value="below">falls below</option>
+                    <option value="above">{t('settings.notifications.risesAbove')}</option>
+                    <option value="below">{t('settings.notifications.fallsBelow')}</option>
                 </Select>
+                {/* The currency symbol and its field wrap as one unit, so a narrow row never strands the symbol. */}
+                <span style={{ display: 'inline-flex', alignItems: 'center', gap: 'var(--xc-space-1)', flexWrap: 'nowrap' }}>
                 <span aria-hidden="true">{symbol}</span>
                 <Input
                     size="md"
                     type="text"
                     inputMode="decimal"
                     enterKeyHint="go"
-                    aria-label="Target price"
-                    placeholder="Price"
+                    aria-label={t('components.priceAlertForm.targetPrice')}
+                    placeholder={t('components.placeOrderPanel.price')}
                     value={targetStr}
                     aria-invalid={invalidTarget}
                     aria-describedby={disabledReason ? disabledReasonId : undefined}
+                    error={priceError || undefined}
                     onChange={(e) => updateInput(
                         setTargetStr,
                         normalizeDecimalEntry(e.target.value, targetStr),
@@ -167,6 +174,7 @@ export function PriceAlertForm({
                     style={{ width: 110 }}
                 />
                 {!cur || cur === 'usd' ? null : <span aria-hidden="true">{cur.toUpperCase()}</span>}
+                </span>
                 <Button
                     type="button"
                     onClick={submit}
@@ -175,7 +183,7 @@ export function PriceAlertForm({
                     size="md"
                     variant="primary"
                 >
-                    {busy ? 'Saving…' : editing ? 'Save changes' : 'Add alert'}
+                    {busy ? t('send.saveRecipient.saving') : editing ? t('components.priceAlertForm.saveChanges') : t('components.priceAlertForm.addAlert')}
                 </Button>
                 {onCancel ? (
                     <Button
@@ -184,26 +192,20 @@ export function PriceAlertForm({
                         size="md"
                         variant="secondary"
                     >
-                        Cancel
+                        {t('common.cancel')}
                     </Button>
                 ) : null}
             </div>
-            {disabledReason ? (
-                <span
-                    id={disabledReasonId}
-                    role={invalidTarget ? 'alert' : 'status'}
-                    style={invalidTarget ? { ...HINT, color: 'var(--xc-danger)' } : HINT}
-                >
-                    {disabledReason}
-                </span>
-            ) : null}
+            {/* Why the button is off is said to assistive tech only: sighted users see an empty
+                field and a disabled button, and a notice here would sit inside the indented
+                alert block instead of at the content width. */}
+            {disabledReason ? <span id={disabledReasonId} className="sr-only">{disabledReason}</span> : null}
             {alreadyMet ? (
-                <span style={HINT}>
-                    {coinLabelForChain(chainId)} is already {direction === 'above' ? 'above' : 'below'} that price.
-                    This alert will fire on the next check.
-                </span>
+                <StatusMessage variant="info">
+                    {coinLabelForChain(chainId)} {t('components.priceAlertForm.isAlready')} {direction === 'above' ? t('components.priceAlertForm.above') : t('components.priceAlertForm.below')} {t('components.priceAlertForm.thatPriceThisAlertWill')}
+                </StatusMessage>
             ) : null}
-            {err ? <span role="alert" style={{ ...HINT, color: 'var(--xc-danger-fg)' }}>{err}</span> : null}
+            <StatusMessage variant="error">{err}</StatusMessage>
         </div>
     );
 }

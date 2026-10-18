@@ -198,6 +198,74 @@ describe('NotificationService', () => {
         expect(deps.sdks['litecoin-mainnet'].onAddress).toHaveBeenCalledTimes(1);
     });
 
+    it.each([
+        ['testnet', 'bitcoin-testnet'],
+        ['regtest', 'bitcoin-regtest'],
+    ])('retries a failed %s socket once per chain with backoff', async (_network, chainId) => {
+        vi.useFakeTimers();
+        vi.setSystemTime(1_000);
+        const logger = { debug: vi.fn(), warn: vi.fn(), error: vi.fn() };
+        const deps = makeDeps({ now: () => Date.now() });
+        const sdk = makeSdk();
+        sdk.connectWs.mockRejectedValueOnce(new Error('endpoint unavailable'));
+        deps.addresses.splice(0, 1,
+            { address: 'addr1', chainId, label: 'Bitcoin', network: _network },
+            { address: 'addr2', chainId, label: 'Bitcoin', network: _network },
+        );
+        deps.sdks[chainId] = sdk;
+
+        const svc = makeService(deps, { logger });
+        try {
+            await svc.start();
+            await svc.refresh();
+            expect(sdk.connectWs).toHaveBeenCalledTimes(1);
+            expect(sdk.onAddress).not.toHaveBeenCalled();
+
+            await vi.advanceTimersByTimeAsync(999);
+            expect(sdk.connectWs).toHaveBeenCalledTimes(1);
+            await vi.advanceTimersByTimeAsync(1);
+
+            expect(sdk.connectWs).toHaveBeenCalledTimes(2);
+            expect(sdk.onAddress).toHaveBeenCalledTimes(2);
+            expect(logger.warn).not.toHaveBeenCalled();
+            expect(logger.error).not.toHaveBeenCalled();
+        } finally {
+            svc.stop();
+            vi.useRealTimers();
+        }
+    });
+
+    it('caps failed socket attempts and emits one sanitized warning', async () => {
+        vi.useFakeTimers();
+        vi.setSystemTime(1_000);
+        const logger = { debug: vi.fn(), warn: vi.fn(), error: vi.fn() };
+        const deps = makeDeps({ now: () => Date.now() });
+        deps.addresses.push({ address: 'addrBTC2', chainId: 'bitcoin-mainnet', label: 'Bitcoin', network: 'mainnet' });
+        deps.sdks['bitcoin-mainnet'].connectWs.mockRejectedValue(
+            new Error('password=hunter2 body={"address":"addrBTC"}'),
+        );
+
+        const svc = makeService(deps, { logger });
+        try {
+            await svc.start();
+            await vi.advanceTimersByTimeAsync(1_000);
+            await vi.advanceTimersByTimeAsync(2_000);
+            await vi.advanceTimersByTimeAsync(60_000);
+            await svc.refresh();
+
+            expect(deps.sdks['bitcoin-mainnet'].connectWs).toHaveBeenCalledTimes(3);
+            expect(deps.sdks['bitcoin-mainnet'].onAddress).not.toHaveBeenCalled();
+            expect(logger.warn).toHaveBeenCalledTimes(1);
+            expect(logger.warn.mock.calls[0][0]).toMatch(/^\[notify\] NotificationService: WebSocket unavailable/);
+            expect(logger.warn.mock.calls[0][1]).toBe('<Error>');
+            expect(JSON.stringify(logger.warn.mock.calls)).not.toMatch(/addrBTC|hunter2|body=/);
+            expect(logger.error).not.toHaveBeenCalled();
+        } finally {
+            svc.stop();
+            vi.useRealTimers();
+        }
+    });
+
     it('stop() unsubscribes everything and disconnects each chain', async () => {
         const deps = makeDeps();
         const svc = makeService(deps);

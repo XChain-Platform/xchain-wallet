@@ -3,20 +3,24 @@
 
 import React from 'react';
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
-import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { createDefaultSettings } from '../../../packages/core/src/schemas/settings.js';
 import { userEvent } from '../../helpers/userEvent.js';
 import {
     registerLocale,
     setLocale,
 } from '../../../packages/core/src/i18n/index.js';
+import { resetBackStackForTests } from '../../../packages/core/src/ui/backStack.js';
 
 let settings;
 let update;
 let messaging;
+let nativeBack;
+let capacitorApp;
+let unsupportedFiatCurrency;
 
 vi.mock('../../../packages/core/src/shared/hooks/useSettings.js', () => ({
-    useSettings: () => ({ settings, loading: false, error: null, update }),
+    useSettings: () => ({ settings, loading: false, error: null, unsupportedFiatCurrency, update }),
 }));
 vi.mock('../../../packages/core/src/shared/useMessaging.js', () => ({
     useMessaging: () => ({ shell: 'web', messaging }),
@@ -51,8 +55,18 @@ beforeAll(() => {
 });
 
 beforeEach(() => {
+    resetBackStackForTests();
+    capacitorApp = {
+        addListener: vi.fn((_event, listener) => {
+            nativeBack = listener;
+            return { remove: vi.fn() };
+        }),
+        minimizeApp: vi.fn(),
+    };
+    globalThis.Capacitor = { Plugins: { App: capacitorApp } };
     settings = createDefaultSettings();
     update = vi.fn(async () => settings);
+    unsupportedFiatCurrency = null;
     messaging = {
         sendHoldCancel: vi.fn(),
         listContacts: vi.fn(async () => []),
@@ -62,10 +76,38 @@ beforeEach(() => {
 
 afterEach(async () => {
     cleanup();
+    resetBackStackForTests();
+    delete globalThis.Capacitor;
     await setLocale('en');
 });
 
 describe('settings form validation', () => {
+    it('closes the fiat currency dropdown on Android Back instead of minimizing the app', () => {
+        render(<LanguageRegionSection />);
+        const picker = screen.getByLabelText('Fiat currency');
+        fireEvent.focus(picker);
+        picker.focus();
+        expect(screen.getByRole('listbox', { name: 'Supported fiat currencies' }))
+            .toBeInTheDocument();
+
+        act(() => nativeBack({ canGoBack: false }));
+
+        expect(screen.queryByRole('listbox', { name: 'Supported fiat currencies' })).toBeNull();
+        expect(picker).toHaveFocus();
+        expect(capacitorApp.minimizeApp).not.toHaveBeenCalled();
+    });
+
+    it('explains the USD fallback for an unsupported saved currency', () => {
+        settings = { ...settings, fiatCurrency: 'USD' };
+        unsupportedFiatCurrency = 'XYZ';
+        render(<LanguageRegionSection />);
+
+        expect(screen.getByRole('status')).toHaveTextContent(
+            'XYZ isn\'t supported. Values are shown in USD.',
+        );
+        expect(screen.getByLabelText('Fiat currency').value).toContain('USD');
+    });
+
     it('searches supported currencies by code and name, shows symbols, and saves the choice', () => {
         render(<LanguageRegionSection />);
         const picker = screen.getByLabelText('Fiat currency');
@@ -105,8 +147,8 @@ describe('settings form validation', () => {
 
         const languageRow = screen.getByLabelText('Language').parentElement;
         expect(languageRow.style.flexWrap).toBe('wrap');
-        expect(screen.getByText(/language used for wallet navigation/)).toBeTruthy();
-        expect(screen.getByText(/Asset balances are unchanged/)).toBeTruthy();
+        expect(screen.queryByText(/language used for wallet navigation/)).toBeNull();
+        expect(screen.getByText('Changes estimates, not asset balances.')).toBeTruthy();
     });
 
     it('offers pseudo-RTL only while developer mode is enabled', () => {
@@ -131,14 +173,28 @@ describe('settings form validation', () => {
         expect(document.documentElement.dir).toBe('rtl');
     });
 
-    it('confirms contact imports through a danger action', async () => {
+    it('presents equal secondary contact actions in one wrapping row', async () => {
         render(<ContactsSection />);
         await screen.findByText('0 contacts stored');
 
+        const exportButton = screen.getByRole('button', { name: 'Export…' });
+        const csvButton = screen.getByRole('button', { name: 'Export CSV…' });
         const importButton = screen.getByRole('button', { name: 'Import…' });
-        expect(importButton.className).toMatch(/danger/);
-        const importRow = screen.getByText('Import').parentElement.parentElement;
-        expect(importRow.style.border).toBe('1px solid var(--xc-border)');
+        const actions = importButton.parentElement;
+
+        expect(actions.style.flexWrap).toBe('wrap');
+        expect(actions.children).toEqual(expect.objectContaining({
+            0: exportButton,
+            1: csvButton,
+            2: importButton,
+        }));
+        for (const button of [exportButton, csvButton, importButton]) {
+            expect(button.className).toMatch(/secondary/);
+            expect(button.className).toMatch(/sm/);
+            expect(button.style.width).toBe('');
+            expect(button.style.flex).toBe('1 0 9.5rem');
+            expect(button.style.whiteSpace).toBe('nowrap');
+        }
 
         const file = {
             name: 'contacts.json',
@@ -244,6 +300,24 @@ describe('settings form validation', () => {
         expect(error).toHaveTextContent(/non-negative decimal fee rate/);
         expect(input).toHaveAttribute('aria-invalid', 'true');
         expect(input.getAttribute('aria-describedby').split(' ')).toContain(error.id);
+    });
+
+    it('does not repeat the active network kind in fee headings', () => {
+        settings = {
+            ...createDefaultSettings(),
+            activeNetwork: 'testnet',
+            fees: {
+                'bitcoin-testnet': {
+                    strategy: 'normal',
+                    customSatsPerKb: null,
+                    rbfByDefault: true,
+                },
+            },
+        };
+        render(<FeesSection />);
+
+        expect(screen.getByText('Bitcoin')).toBeTruthy();
+        expect(screen.queryByText(/testnet/i)).toBeNull();
     });
 
     it('saves a comma-decimal custom fee rate as the same numeric setting', async () => {

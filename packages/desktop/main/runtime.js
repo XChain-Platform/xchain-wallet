@@ -115,6 +115,7 @@ export const AUTO_LOCK_REPORT_TYPE = 'session.autolock';
  *   coinpayAutopayWatcher: import('@xchain-wallet/core').notifications.CoinpayAutopayWatcher | null,
  *   signerPool: import('@xchain-wallet/core').signers.SignerPool,
  *   idleLockInFlight: Promise<{ locked: boolean, reason: string }> | null,
+ *   autoLockCleanupPending: boolean,
  *   systemLockInFlight: Promise<{ locked: boolean, reason: string }> | null,
  *   broadcastQueueStore: ReturnType<typeof createBroadcastQueueStore>,
  * }} DesktopRuntime
@@ -159,14 +160,15 @@ export function createRuntime(deps) {
         dispenserEscrowWatcher: null,
         coinpayAutopayWatcher: null,
         // PC-16: pre-unlocked software signers, populated by the shared
-        // wallet.unlock handler while the password is in scope (wallet
-        // seeds have their own per-wallet KDF, so the keychain-cached
-        // master key alone cannot sign). A keychain auto-unlock leaves
-        // this pool empty: the wallet works with per-op passwords and
-        // auto-pay stays disarmed until one password unlock arms it.
+        // wallet.unlock handler while the password is in scope. A keychain
+        // restore can also populate wallets sealed under the vault key; any
+        // wallet with independent KDF params still requires a password.
         signerPool: new signersLib.SignerPool(),
         // The windowless idle check in flight, shared by concurrent callers.
         idleLockInFlight: null,
+        // Fail closed if an auto-lock cannot remove the persisted session key.
+        // The durable auto-lock record drives a later cleanup retry.
+        autoLockCleanupPending: false,
         // OS lock and suspend can arrive together, so they share one lock.
         systemLockInFlight: null,
         // One broadcast-queue store for every host this process builds, as the
@@ -241,8 +243,18 @@ export async function enforceLaunchAutoLock(runtime, now = Date.now()) {
     // Drop the cached key AND the stale record together: leaving the
     // record would let the next launch read a stamp that no longer
     // describes any session.
-    try { await runtime.sessionBackend.clear(); } catch (err) {
+    runtime.autoLockCleanupPending = true;
+    try {
+        await runtime.sessionBackend.clear();
+        runtime.autoLockCleanupPending = false;
+    } catch (err) {
         console.error('[xchain] auto-lock could not clear the cached session key:', err);
+        // The keychain backend revokes its in-process copy before removing
+        // the file. Drop this launch's record so a relaunch fails closed on
+        // the missing record, while the pending flag protects this process
+        // if an injected backend rejects before revoking its copy.
+        try { await store.clear(); } catch { /* best-effort */ }
+        return { locked: true, reason };
     }
     try { await store.clear(); } catch { /* best-effort */ }
     return { locked: true, reason };
@@ -331,8 +343,15 @@ async function runSystemAutoLock(runtime) {
 async function lockRuntimeForAutoLock(runtime, store, reason) {
     // Stop watchers first so nothing signs while the cached key is removed.
     tearDownHost(runtime);
-    try { await runtime.sessionBackend.clear(); } catch (err) {
+    runtime.autoLockCleanupPending = true;
+    try {
+        await runtime.sessionBackend.clear();
+        runtime.autoLockCleanupPending = false;
+    } catch (err) {
         console.error('[xchain] auto-lock could not clear the cached session key:', err);
+        // Keep the expired record so the next windowless check retries the
+        // clear. Vault-backed IPC remains closed while this flag is set.
+        return { locked: true, reason: 'session-clear-failed' };
     }
     try { await store.clear(); } catch { /* best-effort */ }
     return { locked: true, reason };
@@ -346,6 +365,7 @@ async function lockRuntimeForAutoLock(runtime, store, reason) {
  * @param {DesktopRuntime} runtime
  */
 export async function ensureHost(runtime) {
+    if (runtime.autoLockCleanupPending) return null;
     if (runtime.host) return runtime.host;
 
     const masterKey = await runtime.sessionBackend.load();
@@ -358,6 +378,27 @@ export async function ensureHost(runtime) {
     try {
         await vault.open();
         runtime.vault = vault;
+
+        // The keychain restores the already-derived vault key rather than a
+        // password. Reuse it only for wallet records carrying identical KDF
+        // params, which is the primary wallet created with the vault. Added
+        // wallets with independent params remain unpooled and require unlock.
+        try {
+            const meta = await runtime.metaBackend.load();
+            if (meta?.kdfParams) {
+                await runtime.signerPool.populate({
+                    vault,
+                    masterKey,
+                    masterKeyKdfParams: meta.kdfParams,
+                    chainRegistry: runtime.chainRegistry,
+                    sdkRegistry: runtime.sdkRegistry,
+                });
+            }
+        } catch {
+            // Best-effort restoration. The network switch locks before reload
+            // when its wallet has no signer, so this cannot leave a false
+            // unlocked state with address derivation unavailable.
+        }
 
         // Apply the egress policy before the host or any watcher can reach
         // the network (both boot and the `onUnlocked` path land here).
@@ -700,13 +741,22 @@ export async function handleIpcMessage(runtime, message) {
             await applyAutoLockReport(runtime.autoLockStore, message.request, Date.now());
             return { ok: true, result: { armed: message.request?.armed === true } };
         }
+        const preHostMessage = PRE_HOST_MESSAGE_TYPES.has(message.type);
+        if (!preHostMessage && runtime.autoLockCleanupPending) {
+            return errorEnvelope(Object.assign(
+                new Error('Wallet is locked. Unlock before calling vault-backed handlers.'),
+                { name: 'WalletLockedError' },
+            ));
+        }
         // Every other message is renderer activity, and the idle clock has
         // to advance from it or a user who is actively using the app would
         // come back to a locked wallet. Throttled inside the helper.
-        stampAutoLockActivity(runtime.autoLockStore, Date.now())
-            .catch(() => { /* best-effort; never blocks the message */ });
+        if (!runtime.autoLockCleanupPending) {
+            stampAutoLockActivity(runtime.autoLockStore, Date.now())
+                .catch(() => { /* best-effort; never blocks the message */ });
+        }
 
-        if (PRE_HOST_MESSAGE_TYPES.has(message.type)) {
+        if (preHostMessage) {
             const result = await dispatchPreHost(message.type, message.request, {
                 storageBackend: runtime.storageBackend,
                 sessionBackend: runtime.sessionBackend,
@@ -718,6 +768,10 @@ export async function handleIpcMessage(runtime, message) {
                 // password is in scope, arming auto-pay for the session.
                 signerPool: runtime.signerPool,
                 onUnlocked: async () => {
+                    // A fresh password-authenticated unlock supersedes a
+                    // failed cleanup attempt and starts a new idle window.
+                    runtime.autoLockCleanupPending = false;
+                    try { await runtime.autoLockStore?.clear(); } catch { /* best-effort */ }
                     try { await ensureHost(runtime); } catch (err) {
                         // Logged but not thrown: the unlock itself
                         // succeeded; the host-build failure will
@@ -729,12 +783,25 @@ export async function handleIpcMessage(runtime, message) {
                     walletId: opts.walletId,
                     run: () => restoreLabelSyncBestEffort({ ...opts, vault: runtime.vault }),
                 }),
-                onLocked: () => {
+                onLocked: (result) => {
+                    runtime.autoLockCleanupPending = result?.secretsCleared === false;
                     tearDownHost(runtime);
                     // An explicit lock ends the window the stamp described.
-                    runtime.autoLockStore?.clear().catch(() => { /* best-effort */ });
+                    if (!runtime.autoLockCleanupPending) {
+                        runtime.autoLockStore?.clear().catch(() => { /* best-effort */ });
+                    }
                 },
             });
+            if (message.type === 'session.status' && runtime.autoLockCleanupPending) {
+                return {
+                    ok: true,
+                    result: {
+                        ...result,
+                        hasSession: false,
+                        state: result.hasWallet ? 'locked' : 'no-wallet',
+                    },
+                };
+            }
             return { ok: true, result };
         }
 

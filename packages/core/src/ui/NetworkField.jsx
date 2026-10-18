@@ -9,6 +9,7 @@
 // contact legal@dankest.llc.
 
 import { ChainPicker } from './ChainPicker.jsx';
+import { t } from '../i18n/index.js';
 
 /**
  * NetworkField: the standard "which network is this action on" form
@@ -19,7 +20,7 @@ import { ChainPicker } from './ChainPicker.jsx';
  *   - the wallet's own chains as options (callers pass the chain ids
  *     they operate over, usually every chain the wallet holds
  *     addresses on);
- *   - the testnet/regtest cue kept on (money-moving context).
+ *   - no network or coin label beside the name (house ruling).
  *
  * Replaces the older pattern of a bare ChainBadge bubble at the top of
  * a form: a fixed-looking pill that couldn't be opened or changed.
@@ -42,7 +43,7 @@ export function NetworkField({
     onChange,
     chainIds,
     chainRegistry,
-    label = 'Network',
+    label = t('settings.network.label'),
     disabled,
     size = 'md',
 }) {

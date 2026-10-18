@@ -27,9 +27,14 @@ import { OnboardingCarousel } from '../../../packages/core/src/shared/routes/Onb
 import { Onboarding } from '../../../packages/core/src/shared/routes/Onboarding.jsx';
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
 import { LICENSE_VERSION } from '../../../packages/core/src/buildInfo.js';
+import * as branding from '../../../packages/core/src/branding/branding.js';
 
 const carouselCss = readFileSync(
     join(process.cwd(), 'packages/core/src/shared/routes/OnboardingCarousel.module.css'),
+    'utf8',
+);
+const buttonCss = readFileSync(
+    join(process.cwd(), 'packages/core/src/ui/Button.module.css'),
     'utf8',
 );
 
@@ -169,7 +174,10 @@ describe('OnboardingCarousel: paginated (default motion)', () => {
         stubMatchMedia(false);
         const onDone = vi.fn();
         render(React.createElement(OnboardingCarousel, { frames: FRAMES, onDone }));
-        fireEvent.click(screen.getByRole('button', { name: 'Skip' }));
+        const skip = screen.getByRole('button', { name: 'Skip' });
+        expect(skip.className).toMatch(/skipBtn/);
+        expect(skip.className).not.toMatch(/ghost/);
+        fireEvent.click(skip);
         expect(onDone).toHaveBeenCalledTimes(1);
         expect(onDone).toHaveBeenCalledWith(false);
     });
@@ -324,6 +332,25 @@ describe('Onboarding: explainer gating', () => {
         expect(screen.getByRole('button', { name: 'Import wallet' })).toBeInTheDocument();
     });
 
+    it('keeps the fresh welcome hierarchy and full-width primary and secondary actions', () => {
+        stubMatchMedia(false);
+        acceptLicense();
+        globalThis.localStorage.setItem('xc:onboardingExplainerSeenAt', new Date().toISOString());
+        mountOnboarding();
+
+        expect(screen.queryByRole('heading', { name: 'Wallet setup' })).not.toBeInTheDocument();
+        expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent(branding.PRODUCT_NAME);
+
+        const create = screen.getByRole('button', { name: 'Create new wallet' });
+        const importWallet = screen.getByRole('button', { name: 'Import wallet' });
+        expect(create.className).toMatch(/primary/);
+        expect(importWallet.className).toMatch(/secondary/);
+        expect(create.className).toMatch(/block/);
+        expect(importWallet.className).toMatch(/block/);
+        expect(create.className).toMatch(/md/);
+        expect(importWallet.className).toMatch(/md/);
+    });
+
     it('skips the carousel for the unlocked-vault Add-Wallet lane (onBack)', () => {
         stubMatchMedia(false);
         acceptLicense();
@@ -462,12 +489,22 @@ describe('Onboarding: license gate', () => {
         await withElementDimensions({ scrollHeight: 600, clientHeight: 200 }, async () => {
             mountLicenseGate();
             const checkbox = screen.getByRole('checkbox');
+            const accept = screen.getByRole('button', { name: 'Accept and continue' });
             expect(checkbox).toBeDisabled();
+            expect(accept).toBeDisabled();
+            expect(accept).toHaveAccessibleDescription('Review all license terms to continue.');
+            expect(buttonCss).toMatch(/\.btn:disabled:not\(\.link\)\s*\{[^}]*background:\s*var\(--xc-control-disabled-bg\)[^}]*border-color:\s*var\(--xc-control-disabled-border\)[^}]*color:\s*var\(--xc-control-disabled-text\)/s);
 
             const terms = screen.getByLabelText('License terms');
             terms.scrollTop = 400;
             fireEvent.scroll(terms);
             expect(checkbox).toBeEnabled();
+            expect(accept).toBeDisabled();
+            expect(accept).toHaveAccessibleDescription('Check "I have read and agree to these terms" to continue.');
+
+            fireEvent.click(checkbox);
+            expect(accept).toBeEnabled();
+            expect(accept).not.toHaveAttribute('aria-describedby');
         });
     });
 });
@@ -495,10 +532,15 @@ describe('Onboarding: demo entry', () => {
         await waitFor(() => expect(onDemoEntered).toHaveBeenCalledTimes(1));
 
         expect(importMnemonic).toHaveBeenCalledTimes(1);
+        // xchain-wallet#78: the demo lands on mainnet, with mainnet leading
+        // the chain list and testnet and regtest still registered.
         expect(importMnemonic.mock.calls[0][0]).toMatchObject({
             name: 'Demo Wallet',
-            activeNetwork: 'regtest',
+            activeNetwork: 'mainnet',
         });
+        const chainIds = importMnemonic.mock.calls[0][0].activeChainIds;
+        expect(chainIds[0]).toBe('bitcoin-mainnet');
+        expect(chainIds).toEqual(expect.arrayContaining(['bitcoin-testnet', 'bitcoin-regtest']));
         expect(importMnemonic.mock.calls[0][0].password).toMatch(/^[0-9a-f]{64}$/);
         expect(globalThis.localStorage.getItem('xc:demoWalletId')).toBe('demo-wallet');
         expect(globalThis.localStorage.getItem('xc:demoWalletPassword')).toBe(importMnemonic.mock.calls[0][0].password);

@@ -44,7 +44,7 @@ describe('NetworkSection', () => {
         fireEvent.change(screen.getByLabelText('Active network'), { target: { value: 'testnet' } });
 
         expect(screen.getByRole('dialog', { name: 'Switch to Testnet?' })).toBeInTheDocument();
-        expect(screen.getByText(/Mainnet balances and chain settings stay unchanged/)).toBeInTheDocument();
+        expect(screen.getByText(/Mainnet balances and network settings stay unchanged/)).toBeInTheDocument();
         expect(setActiveNetworkSpy).not.toHaveBeenCalled();
 
         fireEvent.click(screen.getByRole('button', { name: 'Cancel' }));
@@ -64,6 +64,17 @@ describe('NetworkSection', () => {
             network: 'regtest',
         }));
         expect(updateSpy).not.toHaveBeenCalled();
+    });
+
+    it('shows a progress status while a confirmed switch is under way', async () => {
+        setActiveNetworkSpy.mockReturnValueOnce(new Promise(() => {}));
+        render(<NetworkSection activeWallet={{ id: 'wallet-1' }} />);
+        expect(screen.queryByText(/Switching networks/)).not.toBeInTheDocument();
+        fireEvent.change(screen.getByLabelText('Active network'), { target: { value: 'regtest' } });
+        fireEvent.click(screen.getByRole('button', { name: 'Switch network' }));
+
+        expect(await screen.findByText(/Switching networks/)).toBeInTheDocument();
+        expect(screen.getByLabelText('Active network')).toBeDisabled();
     });
 
     it('shows a failed switch without reloading the selected network', async () => {

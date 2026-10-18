@@ -16,6 +16,7 @@ import { webcrypto } from 'node:crypto';
 import { existsSync, readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { HDKey } from '@scure/bip32';
 
 if (!globalThis.crypto) {
     globalThis.crypto = webcrypto;
@@ -50,9 +51,21 @@ assert.equal(MULTISIG_VERSION, 2, 'MultisigConfig schema is at v2');
 
 // ─── buildMultisigConfig assigns an id ────────────────────────
 
-const alice = '02' + 'a'.repeat(64);
-const bob = '03' + 'b'.repeat(64);
-const carol = '02' + 'c'.repeat(64);
+const alice = '0279be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798';
+// Real derived keys: external-xpub cosigners are checked against their xpub.
+const MAINNET_VERSIONS = { private: 0x0488ade4, public: 0x0488b21e };
+function externalKey(fill) {
+    const account = HDKey.fromMasterSeed(new Uint8Array(32).fill(fill), MAINNET_VERSIONS).derive("m/48'/0'/0'/2'");
+    const child = account.derive('m/0/0');
+    return {
+        xpub: account.publicExtendedKey,
+        pubkey: Array.from(child.publicKey, (byte) => byte.toString(16).padStart(2, '0')).join(''),
+    };
+}
+const bobKey = externalKey(7);
+const carolKey = externalKey(8);
+const bob = bobKey.pubkey;
+const carol = carolKey.pubkey;
 
 const cfg1 = buildMultisigConfig({
     scheme: 'p2wsh-multisig',
@@ -61,7 +74,7 @@ const cfg1 = buildMultisigConfig({
         { name: 'A', pubkey: alice, fingerprint: '11223344', origin: 'local',
           localSignerId: 's1', xpub: null, derivationPath: "m/48'/0'/0'/2'/0/0" },
         { name: 'B', pubkey: bob, fingerprint: '55667788', origin: 'external-xpub',
-          localSignerId: null, xpub: 'xpubB', derivationPath: "m/48'/0'/0'/2'/0/0" },
+          localSignerId: null, xpub: bobKey.xpub, derivationPath: "m/48'/0'/0'/2'/0/0" },
     ],
 });
 assert.ok(typeof cfg1.id === 'string' && cfg1.id.length > 0,
@@ -79,7 +92,7 @@ const cfg2 = buildMultisigConfig({
         { name: 'A', pubkey: alice, fingerprint: '11223344', origin: 'local',
           localSignerId: 's1', xpub: null, derivationPath: "m/48'/0'/0'/2'/0/0" },
         { name: 'B', pubkey: carol, fingerprint: '99aabbcc', origin: 'external-xpub',
-          localSignerId: null, xpub: 'xpubC', derivationPath: "m/48'/0'/0'/2'/0/0" },
+          localSignerId: null, xpub: carolKey.xpub, derivationPath: "m/48'/0'/0'/2'/0/0" },
     ],
 });
 assert.equal(cfg2.id, 'custom-id-1',
@@ -111,7 +124,7 @@ const legacyV1 = {
               localSignerId: 's1', xpub: null, derivationPath: "m/48'/0'/0'/2'/0/0",
               addedAt: '2026-01-01T00:00:00Z' },
             { name: 'B', pubkey: bob, fingerprint: '55667788', origin: 'external-xpub',
-              localSignerId: null, xpub: 'xpubB', derivationPath: "m/48'/0'/0'/2'/0/0",
+              localSignerId: null, xpub: bobKey.xpub, derivationPath: "m/48'/0'/0'/2'/0/0",
               addedAt: '2026-01-01T00:00:00Z' },
         ],
     },
@@ -200,7 +213,7 @@ assert.ok(/duplicate id/.test(errs),
             { name: 'A', pubkey: alice, fingerprint: '11223344', origin: 'local',
               localSignerId: 's1', derivationPath: "m/48'/0'/0'/2'/0/0" },
             { name: 'B', pubkey: bob, fingerprint: '55667788', origin: 'external-xpub',
-              xpub: 'xpubB', derivationPath: "m/48'/0'/0'/2'/0/0" },
+              xpub: bobKey.xpub, derivationPath: "m/48'/0'/0'/2'/0/0" },
         ],
     });
     assert.equal(r1.wallet.multisigs.length, 1,
@@ -214,7 +227,7 @@ assert.ok(/duplicate id/.test(errs),
             { name: 'A', pubkey: alice, fingerprint: '11223344', origin: 'local',
               localSignerId: 's1', derivationPath: "m/48'/0'/0'/2'/0/0" },
             { name: 'C', pubkey: carol, fingerprint: 'aabbccdd', origin: 'external-xpub',
-              xpub: 'xpubC', derivationPath: "m/48'/0'/0'/2'/0/0" },
+              xpub: carolKey.xpub, derivationPath: "m/48'/0'/0'/2'/0/0" },
         ],
     });
     assert.equal(r2.wallet.multisigs.length, 2,
@@ -232,7 +245,7 @@ assert.ok(/duplicate id/.test(errs),
                 { name: 'A', pubkey: alice, fingerprint: '11223344', origin: 'local',
                   localSignerId: 's1', derivationPath: "m/48'/0'/0'/2'/0/0" },
                 { name: 'B', pubkey: bob, fingerprint: '55667788', origin: 'external-xpub',
-                  xpub: 'xpubB', derivationPath: "m/48'/0'/0'/2'/0/0" },
+                  xpub: bobKey.xpub, derivationPath: "m/48'/0'/0'/2'/0/0" },
             ],
         }),
         /already has a multisig configuration with this scriptTemplate/,

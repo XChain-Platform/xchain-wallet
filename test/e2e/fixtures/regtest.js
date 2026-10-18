@@ -59,9 +59,10 @@ import { spawn } from 'node:child_process';
 import { randomBytes } from 'node:crypto';
 
 import { expect } from '@playwright/test';
-import { openSettings, gotoSection, unlockedShell } from './wallet.js';
+import { openSettings, gotoSection, openPaletteCommand, unlockedAnyScreen } from './wallet.js';
 import { kdfStepTimeout } from '../timeout-budget.js';
 import { rateLimitDelayMs, venueVerdict } from './venueHealth.js';
+import { compareDecimal, subtractDecimal } from '../../../packages/core/src/shared/utils/mintHeadroom.js';
 import {
     MIN_SEED_MARGIN_SECONDS,
     XCHAIN_PAIR,
@@ -1121,8 +1122,8 @@ export function actionStatuses(detail) {
  *
  * `field` is the picker's own visible label, and it is REQUIRED to be specific
  * because several screens carry more than one: a form's is "Network", the
- * add-address modal's is "Coin", a cross-chain swap has "Give chain" and "Get
- * chain". Addressing them by accessible name is possible at all because
+ * add-address modal's is "Coin", a cross-chain swap has "Give network" and "Get
+ * network". Addressing them by accessible name is possible at all because
  * ChainPicker now puts its label in that name; before that fix every picker on
  * a screen answered to the same query, which is a defect for a screen reader
  * user and was a coin flip for this helper.
@@ -1134,77 +1135,212 @@ export async function selectVenueChain(scope, field = 'Network') {
     const trigger = scope.getByRole('button', { name: new RegExp(`^${field}:`) }).first();
     await expect(trigger, `no "${field}" chain picker on this screen`)
         .toBeVisible({ timeout: 30_000 });
-    if (((await trigger.getAttribute('aria-label')) || '').includes(REGTEST_CHAIN_LABEL)) return;
-
-    await trigger.click();
-    await scope.getByRole('option', { name: new RegExp(`^${REGTEST_CHAIN_LABEL}\\b`) })
-        .first().click();
-    // Assert the switch took: the picker closes on click whether or not the
-    // option was the one intended, so an unasserted click is a silent
-    // wrong-chain run - the exact failure this helper exists to prevent.
-    await expect(trigger).toHaveAttribute('aria-label', new RegExp(REGTEST_CHAIN_LABEL),
-        { timeout: 15_000 });
+    if (!((await trigger.getAttribute('aria-label')) || '').includes(REGTEST_CHAIN_LABEL)) {
+        await trigger.click();
+        await scope.getByRole('option', { name: new RegExp(`^${REGTEST_CHAIN_LABEL}\\b`) })
+            .first().click();
+        // Assert the switch took: the picker closes on click whether or not the
+        // option was the one intended, so an unasserted click is a silent
+        // wrong-chain run - the exact failure this helper exists to prevent.
+        await expect(trigger).toHaveAttribute('aria-label', new RegExp(REGTEST_CHAIN_LABEL),
+            { timeout: 15_000 });
+    }
+    await expectVenueSourceAddress(scope, field);
 }
 
 /**
- * Puts the SEND screen on this run's chain by choosing its native coin.
+ * Puts the open form's protocol fee on the coin lane.
  *
- * WHY SEND NEEDS ITS OWN HELPER, which cost this campaign several reverts to
- * establish. `selectVenueChain()` drives a `ChainPicker`: a popover listbox of
- * CHAINS whose items are `role="option"` named "Litecoin". Send has no such
- * widget. It renders a `TokenField` (Send.jsx:2283) whose trigger is named
- * `Token: BTC on Bitcoin` - close enough to a chain picker to fool a locator,
- * and not one. Clicking it NAVIGATES to the SendPicker screen (`TokenPicker`
- * with `purpose="send"`), which contains no `role="option"` element anywhere.
- * So `selectVenueChain(main, 'Token')` finds the trigger, clicks it, and then
- * waits for an option that cannot exist until the whole 420s budget is gone:
- * a hang, not a failure, which is why it read as a slow venue rather than a
- * wrong locator.
+ * Bitcoin offers two lanes and defaults to XCHAIN, so a spec that measures the
+ * fee as a coin output (the confirm screen's native line, the payer's coin
+ * delta) turns on the form's "Pay protocol fee in BTC instead of XCHAIN"
+ * switch. Litecoin and Dogecoin have no XCHAIN lane and render a statement in
+ * its place, so there is nothing to turn on.
  *
- * Send also picks the ASSET and the CHAIN with one control - the coin IS the
- * chain selection - so there is nothing to switch until an asset is chosen.
+ * @param {import('@playwright/test').Page | import('@playwright/test').Locator} scope
+ */
+export async function payProtocolFeeInCoin(scope) {
+    if (REGTEST_COIN !== 'RBTC') return;
+    const toggle = scope.getByRole('switch', { name: /^Pay protocol fee in \S+ instead of XCHAIN$/ });
+    await expect(toggle, 'the form offers no switch to pay its protocol fee in the coin')
+        .toBeVisible({ timeout: 30_000 });
+    if (!(await toggle.isChecked())) await toggle.click();
+    await expect(toggle).toBeChecked({ timeout: 15_000 });
+}
+
+/**
+ * Fails when a form's From address is not this venue's regtest shape.
+ *
+ * The chain picker names a chain by display name only (`hideNetworkKind`), so
+ * "Bitcoin" reads the same on mainnet and regtest and the trigger's label
+ * cannot prove which one the form is on. The From address can: a mainnet
+ * Bitcoin address never starts `bcrt1`, `m`, `n` or `2`. Checked only where
+ * the form shows From as a text field; a form without one keeps the label
+ * check above as its only guard.
+ */
+async function expectVenueSourceAddress(scope, field) {
+    const from = scope.getByLabel('From', { exact: true });
+    if (await from.count() !== 1) return;
+    const tag = await from.evaluate((el) => el.tagName, undefined, { timeout: 5_000 }).catch(() => '');
+    if (tag !== 'INPUT') return;
+    await expect(from, `the "${field}" picker reads ${REGTEST_CHAIN_LABEL}, but the form's From `
+        + `address is not a ${REGTEST_CHAIN_LABEL} regtest address, so the form is on another network`)
+        .toHaveValue(REGTEST_ADDRESS_RE, { timeout: 15_000 });
+}
+
+/**
+ * Puts the SEND screen on this run's chain by choosing its asset.
+ *
+ * Send has no chain picker. The asset IS the chain selection, and the control
+ * is the hero icon button named `Change asset (currently <name>)`, where the
+ * name is the chain's display name for a native coin ("Bitcoin") and the
+ * token's name otherwise. Clicking it NAVIGATES to the send picker screen
+ * (`TokenPicker` with `purpose="send"`), which holds no `role="option"`
+ * element, so `selectVenueChain` cannot drive it.
  *
  * Selection is by `data-balance-key`, which `BalanceList` writes as
- * `${chainId}:${tick}`, rather than by the row's "Open LTC details" label:
- * the label is a DISPLAY name and two chains can list the same tick (every
- * chain has XCHAIN), so the label is ambiguous exactly where it matters and
- * the key never is.
+ * `${chainId}:${tick}`, rather than by the row's "Select XCHAIN on Bitcoin"
+ * label: every chain lists XCHAIN, and the key is the one per-row
+ * discriminator that never repeats.
+ *
+ * The chain is confirmed from the form's From address, not from the hero's
+ * name: "Bitcoin" reads the same on mainnet and regtest, and only the address
+ * shape tells them apart.
+ *
+ * An unfunded wallet gets no form at all on Send ("Nothing to send yet"), so
+ * that screen is reported as such instead of as a missing button.
  *
  * @param {import('@playwright/test').Page} page
  * @param {string} [tick]  asset to select; defaults to this chain's native coin
  */
 export async function selectVenueSendAsset(page, tick = REGTEST_TICKER) {
     const main = page.getByRole('main');
-    const trigger = main.getByRole('button', { name: /^Token: / }).first();
-    await expect(trigger, 'no Token field on this screen; is this the Send form?')
+    const trigger = main.getByRole('button', { name: /^Change asset \(currently / }).first();
+    const empty = main.getByRole('heading', { name: 'Nothing to send yet' });
+    await expect(trigger.or(empty).first(), 'Send rendered neither its form nor its empty state')
         .toBeVisible({ timeout: 30_000 });
+    if (await empty.isVisible()) {
+        throw new Error(`Send shows "Nothing to send yet": the wallet holds nothing it can see on this `
+            + `network, so there is no asset to pick. Fund the address and reload before choosing ${tick}.`);
+    }
 
-    // Already showing this chain's asset: nothing to do. Anchored on " on
-    // <Chain>" so a tick that merely CONTAINS the chain name cannot satisfy it.
+    const native = tick === REGTEST_TICKER;
+    const from = main.getByLabel('From', { exact: true });
+    const onVenueChain = async () => REGTEST_ADDRESS_RE.test(
+        (await from.inputValue({ timeout: 5_000 }).catch(() => '')) || '');
+    // Already showing this asset on the venue chain: nothing to do. Re-opening
+    // the picker for an asset the form already holds races the re-render
+    // behind it, and the row detaches mid-click.
+    // A token's hero name is the picked row's display name, which need not be
+    // the bare tick, so a token is matched as a whole word inside it.
+    const shows = native
+        ? new RegExp(`^Change asset \\(currently ${REGTEST_CHAIN_LABEL}\\)$`)
+        : new RegExp(`^Change asset \\(currently .*\\b${tick.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b.*\\)$`, 'i');
     const selected = (await trigger.getAttribute('aria-label')) || '';
-    if (new RegExp(`^Token: ${tick} on ${REGTEST_CHAIN_LABEL}$`).test(selected)) return;
-
-    await trigger.click();
+    if (shows.test(selected) && await onVenueChain()) return;
 
     // The picker lists every chain's assets together, so filter first: the row
     // wanted may otherwise be far down a list this venue keeps growing.
     const search = page.getByLabel('Search coins or tokens');
-    await expect(search, 'the Token field did not open the asset picker')
-        .toBeVisible({ timeout: 30_000 });
-    await search.fill(tick);
-
     const row = page.locator(`[data-balance-key="${REGTEST_CHAIN_ID}:${tick}"]`).first();
+    const incomplete = page.getByRole('heading', { name: 'Incomplete balance data', exact: true });
+    // The picker reads balances once when it opens. The shared explorer
+    // answers a burst over its per-minute budget with HTTP 429 and a
+    // Retry-After of seconds, and that one read then shows "Incomplete balance
+    // data" with no row and no retry of its own. Reopening the picker after
+    // the window is a fresh read; a picker that stays incomplete across three
+    // reads, or that completes without the row, still fails below.
+    for (let attempt = 1; ; attempt += 1) {
+        await trigger.click();
+        await expect(search, 'Change asset did not open the asset picker')
+            .toBeVisible({ timeout: 30_000 });
+        await search.fill(tick);
+        await row.or(incomplete).first().waitFor({ state: 'visible', timeout: 30_000 }).catch(() => {});
+        if (attempt >= 3 || await row.isVisible() || !(await incomplete.isVisible())) break;
+        await page.waitForTimeout(5_000);
+        await gotoSection(page, 'Home');
+        await gotoSection(page, 'Send');
+        await expect(trigger, 'Send did not return to its form after reopening it')
+            .toBeVisible({ timeout: 30_000 });
+    }
+
+    expect(await row.isVisible() || !(await incomplete.isVisible()),
+        `the asset picker could not read this wallet's balances on three opens, so it cannot list ${tick}. `
+        + 'Venue state (the explorer is rate-limiting or failing balance reads), not a wallet defect')
+        .toBe(true);
     await expect(row, `the asset picker lists no ${tick} on ${REGTEST_CHAIN_LABEL}. A wallet carries `
         + 'one address per chain from creation, so this usually means the venue chain is not the one '
         + 'the wallet was created against')
         .toBeVisible({ timeout: 30_000 });
-    await row.click();
+    await row.getByRole('button', { name: /^Select / }).first().click();
 
     // Assert the selection took. The picker closes on click either way, so an
-    // unasserted click is a silent wrong-chain run - the same hazard
-    // `selectVenueChain` guards, and the reason both helpers end this way.
-    await expect(main.getByRole('button', { name: /^Token: / }).first())
-        .toHaveAttribute('aria-label', `Token: ${tick} on ${REGTEST_CHAIN_LABEL}`, { timeout: 15_000 });
+    // unasserted click is a silent wrong-chain run.
+    const hero = main.getByRole('button', { name: /^Change asset \(currently / }).first();
+    await expect(hero, 'the picker closed without putting an asset on the Send form')
+        .toBeVisible({ timeout: 15_000 });
+    await expect(hero, `the Send form is not showing ${tick} after picking it`)
+        .toHaveAttribute('aria-label', shows, { timeout: 15_000 });
+    await expect(from, `the Send form's From address is not a ${REGTEST_CHAIN_LABEL} regtest address `
+        + `after picking ${tick}, so the form is on another chain`)
+        .toHaveValue(REGTEST_ADDRESS_RE, { timeout: 15_000 });
+}
+
+/**
+ * Puts the Create dispenser form's dispenser on its own Source address, and
+ * returns that address.
+ *
+ * The form opens a dispenser on a freshly derived address by default. Picking
+ * the Source itself in the Dispenser address picker selects the form's
+ * 'current' mode instead (GET_ADDRESS omitted, so the protocol opens it on
+ * SOURCE), which is what a spec that pays or lists a dispenser by its owner's
+ * address needs. The Dispenser address field then reads the Source, and that
+ * is asserted: a different row would land as a reused address and the spec
+ * would pay an address no dispenser watches.
+ *
+ * @param {import('@playwright/test').Page} page
+ * @returns {Promise<string>} the Source address the dispenser opens on
+ */
+export async function selectDispenserOnSource(page) {
+    const main = page.getByRole('main');
+    const sourceField = main.getByLabel('Source', { exact: true });
+    await expect(sourceField, 'the Create dispenser form names no Source').toBeVisible({ timeout: 30_000 });
+    const source = await sourceField.inputValue();
+    expect(source, `the Create dispenser Source is not a ${REGTEST_CHAIN_LABEL} regtest address`)
+        .toMatch(REGTEST_ADDRESS_RE);
+    await main.getByRole('button', { name: 'Change dispenser address', exact: true }).click();
+    const row = page.getByRole('button', { name: `View address ${source}`, exact: true }).first();
+    await expect(row, `the dispenser address picker does not offer the Source ${source}`)
+        .toBeVisible({ timeout: 30_000 });
+    await row.click();
+    await expect(main.getByLabel('Dispenser address', { exact: true }),
+        'the dispenser is not on its Source address after picking it')
+        .toHaveValue(source, { timeout: 15_000 });
+    return source;
+}
+
+/**
+ * Picks `tick` on this run's chain in the open asset picker (`TokenPicker`),
+ * which every form's Token field and Send's Change asset navigate to.
+ *
+ * The picker labels its rows `Select <name> on <chain>`, never Home's
+ * `Open <name> details`, and that label repeats across chains for any token
+ * every chain lists, so the row is found by its `data-balance-key`
+ * (`${chainId}:${tick}`) and its own Select button is clicked.
+ *
+ * @param {import('@playwright/test').Page} page
+ * @param {string} tick
+ * @param {{ search?: string, chainId?: string, timeoutMs?: number }} [opts]  `search` is typed into the filter (default: the tick); `timeoutMs` bounds the wait for the row
+ */
+export async function selectPickerAsset(page, tick, { search = tick, chainId = REGTEST_CHAIN_ID, timeoutMs = 30_000 } = {}) {
+    const filter = page.getByLabel('Search coins or tokens');
+    await expect(filter, 'the asset picker did not open').toBeVisible({ timeout: 30_000 });
+    await filter.fill(search);
+    const row = page.locator(`[data-balance-key="${chainId}:${tick}"]`).first();
+    await expect(row, `the asset picker lists no ${tick} on ${chainId} for "${search}"`)
+        .toBeVisible({ timeout: timeoutMs });
+    await row.getByRole('button', { name: /^Select / }).first().click();
+    await expect(filter, `picking ${tick} did not close the asset picker`).toBeHidden({ timeout: 15_000 });
 }
 
 /**
@@ -1298,6 +1434,52 @@ export async function priceFamilyRefusal() {
     } catch (err) {
         return err?.message || String(err);
     }
+}
+
+/**
+ * `null` when this venue can serve a BET action's detail, else the venue's
+ * own refusal, for a `test.skip(...)` that heals itself once the venue's
+ * indexer is current.
+ *
+ * A BET detail read joins the market's state from the indexer database, so an
+ * indexer image older than the explorer that reads it can lack a table that
+ * join needs, and the explorer then answers HTTP 500 `DB_ERROR` for every BET
+ * action. A BET round trip reads that detail at its last step, so on such a
+ * venue it fails after all of its real work, on a gap that is nothing about
+ * the wallet.
+ *
+ * Probes the newest bet and the newest market, since a bet's detail and a
+ * market's detail take different joins. Only a `DB_ERROR` skips: a venue with
+ * no BET history yet, or one refusing for any other reason (a rate limit, a
+ * timeout), runs the spec, so a real failure still fails.
+ *
+ * @returns {Promise<string | null>} the reason to skip, or null to run
+ */
+export async function betDetailRefusal() {
+    const dbRefusal = (err, what) => {
+        const said = err?.message || String(err);
+        return said.includes('[DB_ERROR]')
+            ? `the venue cannot serve ${what} (read the explorer container log for the query): ${said}`
+            : null;
+    };
+    for (const list of ['bets?limit=1', 'bet_feeds?limit=1']) {
+        let index;
+        try {
+            index = (await explorerJson(list))?.data?.[0]?.action_index;
+        } catch (err) {
+            const gap = dbRefusal(err, `the ${list.split('?')[0]} list`);
+            if (gap) return gap;
+            continue;
+        }
+        if (index === undefined || index === null) continue;
+        try {
+            await explorerJson(`action/${index}`);
+        } catch (err) {
+            const gap = dbRefusal(err, `the detail of BET action ${index}`);
+            if (gap) return gap;
+        }
+    }
+    return null;
 }
 
 /**
@@ -1439,6 +1621,116 @@ export async function expectConfirmModal(page, what = 'this action', timeoutMs =
 }
 
 /**
+ * The confirm screen's intent sentence reads `words` and names `recipient`.
+ *
+ * The sentence draws the recipient truncated ("bcrt1q…56f48f") with the full
+ * address as that element's accessible name, so the words are matched as text
+ * and the recipient by its name inside the same sentence.
+ *
+ * @param {import('@playwright/test').Page} page
+ * @param {string} words  the sentence up to the recipient, e.g. "Send 25 XCHAIN on Bitcoin to "
+ * @param {string} recipient  the full address the sentence must name
+ */
+export async function expectIntentSentence(page, words, recipient) {
+    const sentence = page.getByTestId('action-intent').locator('p').first();
+    await expect(sentence).toContainText(words);
+    await expect(sentence.locator(`[aria-label="${recipient}"]`),
+        'the intent sentence names a different recipient than the one entered')
+        .toHaveCount(1);
+}
+
+/**
+ * The confirm screen's own reasons for holding Approve back, as one string.
+ *
+ * A pre-flight that refuses renders its verdict as a plain sentence inside the
+ * confirm surface ("This action would be refused because insufficient funds
+ * (FEE)."), not always as a `role="alert"`, so the modal's text is read too.
+ */
+async function readConfirmBlockers(page) {
+    const said = [];
+    const alerts = await readScreenRefusals(page);
+    if (alerts) said.push(alerts);
+    const text = await page.getByTestId('confirm-modal').innerText({ timeout: 2_000 }).catch(() => '');
+    for (const line of String(text).split('\n').map((l) => l.trim()).filter(Boolean)) {
+        if (/refused|insufficient|unavailable|not enough|cannot|can't|could not|couldn't/i.test(line)
+            && !said.some((s) => s.includes(line))) said.push(line);
+    }
+    return said.join(' || ').slice(0, 700);
+}
+
+/**
+ * Clicks Approve on the open confirm screen once it is enabled, and fails in a
+ * bounded time naming what the screen says when it never is.
+ *
+ * A bare `click()` on a disabled Approve retries until the TEST timeout, which
+ * on this suite is 30 minutes: one refused compose then eats the job cap and
+ * reports "Test timeout exceeded" with nothing about the refusal. Approve
+ * waits on the pre-flight report, and a cold dry run on this shared venue has
+ * been measured at several seconds, so the budget is generous but finite.
+ */
+export async function approveConfirm(page, what = 'this action', timeoutMs = 120_000) {
+    const approve = page.getByTestId('confirm-approve');
+    try {
+        await expect(approve).toBeEnabled({ timeout: timeoutMs });
+    } catch {
+        const said = await readConfirmBlockers(page);
+        throw new Error(
+            `Approve never became enabled for ${what} within ${Math.round(timeoutMs / 1000)}s`
+            + (said
+                ? `, and the confirm screen says: ${said}`
+                : ': the pre-flight report never arrived, and the screen names no refusal'),
+        );
+    }
+    await approve.click();
+}
+
+/**
+ * XCHAIN the venue must still let anyone mint before a run starts. A whole run
+ * mints tens of thousands; below this the suite cannot fund its gas.
+ */
+export const GAS_HEADROOM_FLOOR = '1000000';
+
+/**
+ * How much more XCHAIN the venue lets anyone mint: MAX_SUPPLY minus the supply
+ * in existence. Null when the gas token is not issued yet or is uncapped, both
+ * of which leave room.
+ *
+ * @param {{ fetchImpl?: typeof fetch }} [opts]
+ * @returns {Promise<string | null>}
+ */
+export async function readGasHeadroom({ fetchImpl = fetch } = {}) {
+    const res = await fetchImpl(`${EXPLORER_URL}/${REGTEST_COIN}/api/token/XCHAIN`, {
+        signal: AbortSignal.timeout(30_000),
+    });
+    // 404 is a not-yet-issued token; any other refusal leaves nothing to judge,
+    // and the gas probe and confirm screen report their own errors.
+    if (!res.ok) return null;
+    const row = await res.json().catch(() => null);
+    const max = row?.supply?.max;
+    const current = row?.supply?.current;
+    if (max == null || current == null) return null;
+    return subtractDecimal(String(max), String(current));
+}
+
+/**
+ * Throws a venue-state error when the venue cannot mint `needed` more XCHAIN.
+ * Without it every spec reaches a confirm screen that correctly refuses the
+ * mint and waits out its whole timeout on a disabled Approve.
+ *
+ * @param {string | number} needed
+ * @param {{ fetchImpl?: typeof fetch }} [opts]
+ */
+export async function assertGasHeadroom(needed, opts) {
+    const headroom = await readGasHeadroom(opts);
+    if (headroom === null || compareDecimal(headroom, String(needed)) !== -1) return;
+    throw new Error(
+        `the venue's XCHAIN gas token has ${headroom} of mint headroom left, short of ${needed}; `
+        + 'its MAX_SUPPLY is nearly all minted, so this is venue state and not a wallet defect. '
+        + 'Restore headroom on the venue (re-issue with a higher cap, or a fresh regtest chain).',
+    );
+}
+
+/**
  * Mints `amount` XCHAIN to the active address and waits for the balance.
  *
  * XCHAIN is free-mintable on regtest and testnet by any address, so this is
@@ -1452,31 +1744,21 @@ export async function expectConfirmModal(page, what = 'this action', timeoutMs =
  * the wallet holds none of.
  */
 export async function mintXchain(page, amount) {
-    await page.keyboard.press('ControlOrMeta+k');
-    // Scoped to the palette DIALOG, not to the page. A bare
-    // `getByRole('combobox').first()` picks up any <select> on the screen
-    // behind the palette - the oracle form's Currency picker, for one - and
-    // then fails with "Element is not an <input>" from inside a helper that
-    // has nothing to do with the screen it was called from.
-    const dialog = page.getByRole('dialog', { name: 'Command palette' });
-    await expect(dialog, 'the command palette did not open').toBeVisible({ timeout: 15_000 });
-    const combobox = dialog.getByRole('combobox').first();
-    await expect(combobox).toBeVisible();
-    await combobox.fill('Advanced action');
-    await page.keyboard.press('Enter');
+    await assertGasHeadroom(amount);
+    await openPaletteCommand(page, 'Advanced action');
 
     // Every form defaults to whichever chain the wallet lists first, which is
     // Bitcoin; on any other venue the mint would land on the wrong chain and
     // the balance this helper promises would never appear.
     await selectVenueChain(page);
 
-    await page.getByLabel('Action').selectOption('MINT');
+    await page.getByLabel('Action', { exact: true }).selectOption('MINT');
     await page.getByRole('textbox', { name: 'TICK', exact: true }).fill('XCHAIN');
     await page.getByRole('textbox', { name: 'AMOUNT', exact: true }).fill(String(amount));
     await page.getByRole('button', { name: 'Sign action' }).click();
 
     await expectConfirmModal(page, `the MINT of ${amount} XCHAIN`);
-    await page.getByTestId('confirm-approve').click();
+    await approveConfirm(page, `the MINT of ${amount} XCHAIN`);
     // The advanced-action flow has its own terminal screen; rather than
     // couple to it, wait on the thing that actually matters downstream - the
     // on-chain balance, below.
@@ -1658,6 +1940,10 @@ export async function waitForTokenBalance(address, tick, min, timeoutMs = INDEX_
     throw new Error(`${tick} balance never reached ${min} for ${address} (last=${last})`);
 }
 
+export function activeNetworkControl(page) {
+    return page.getByRole('combobox', { name: 'Active network', exact: true });
+}
+
 /**
  * Flips the wallet onto the regtest network and waits for it to come
  * back up.
@@ -1682,7 +1968,7 @@ export async function switchToRegtest(page, password) {
     await openSettings(page);
 
     await page.getByRole('button', { name: /^Developer mode/ }).click();
-    const devToggle = page.getByRole('switch', { name: 'Developer Mode', exact: true });
+    const devToggle = page.getByRole('switch', { name: 'Turn on developer mode', exact: true });
     await expect(devToggle).toBeVisible();
     if (!(await devToggle.isChecked())) {
         // `.check()` fails here: the input is fully controlled by PERSISTED
@@ -1698,7 +1984,10 @@ export async function switchToRegtest(page, password) {
     // network it switches to. Before that fix it only moved a filter,
     // stranding the wallet with no addresses and no UI path to make one -
     // so if this ever regresses, the funding step below is where it shows.
-    await page.getByLabel('Active network', { exact: true }).selectOption('regtest');
+    await activeNetworkControl(page).selectOption('regtest');
+    // The switch reloads the wallet, so Settings asks first.
+    const confirm = page.getByRole('dialog', { name: 'Switch to Regtest?' });
+    await confirm.getByRole('button', { name: 'Switch network', exact: true }).click();
 
     await unlockAfterReload(page, password);
 }
@@ -1717,18 +2006,26 @@ export async function unlockAfterReload(page, password) {
     // a popup reload, so it comes back already unlocked; the web shell holds
     // it in memory and re-locks. Waiting only for the unlock screen hangs for
     // 60s in the extension on a wallet that is fine.
-    await unlock.or(unlockedShell(page)).first()
+    await unlock.or(unlockedAnyScreen(page)).first()
         .waitFor({ state: 'visible', timeout: kdfStepTimeout() });
 
-    if (await unlock.count() === 0) return;
+    // The shell paints its header for a moment while it decides whether the
+    // session survived the reload, so an unlocked-looking first frame is not
+    // yet an answer: give the lock screen its chance to appear.
+    if (await unlock.count() === 0) {
+        await unlock.waitFor({ state: 'visible', timeout: 3_000 }).catch(() => {});
+        if (await unlock.count() === 0) return;
+    }
 
     await page.getByLabel('Password', { exact: true }).fill(password);
     await unlock.click();
-    // Home's balance hero, not the Lock button: the popup renders no nav at
-    // all, and below 600px Lock sits inside the closed More sheet.
+    // Any unlocked screen, not Home's hero alone: unlock resumes the last
+    // view, so a reload on Addresses reopens Addresses. Not the Lock button
+    // either: the popup renders no nav at all, and below 600px Lock sits
+    // inside the closed More sheet.
     // Shared budget, not a hand-picked number: this is the far side of an
     // Argon2id unlock  .
-    await expect(unlockedShell(page)).toBeVisible({ timeout: kdfStepTimeout() });
+    await expect(unlockedAnyScreen(page)).toBeVisible({ timeout: kdfStepTimeout() });
 }
 
 /**
@@ -1763,7 +2060,7 @@ export async function unlockAfterReload(page, password) {
 export async function readReceiveAddress(page) {
     await gotoSection(page, 'Receive');
 
-    const field = page.getByLabel('Address', { exact: true });
+    const field = page.getByTestId('receive-address');
     await expect(field).toBeVisible({ timeout: 30_000 });
 
     if (!REGTEST_ADDRESS_RE.test(await field.inputValue())) {

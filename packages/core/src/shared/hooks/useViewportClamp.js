@@ -40,11 +40,12 @@ export const ANCHORED_POPOVER_GAP = 6;
 /**
  * Places a popover below with its right edge aligned to its trigger.
  *
- * The horizontal clamp keeps the panel reachable when the trigger sits too
- * close to either viewport edge. The panel CSS limits its width to the space
- * between those margins.
+ * When end alignment crosses the leading edge, start alignment gets the first
+ * chance to keep the panel next to its trigger. The horizontal clamp handles
+ * positions where neither alignment fits. The panel CSS limits its width to
+ * the space between the viewport margins.
  *
- * @param {{ right: number, bottom: number }} triggerRect
+ * @param {{ left?: number, right: number, bottom: number }} triggerRect
  * @param {number} popoverWidth
  * @param {number} viewportWidth
  * @param {number} [margin]
@@ -58,7 +59,14 @@ export function anchoredPopoverPlacement(
     margin = VIEWPORT_CLAMP_MARGIN,
     gap = ANCHORED_POPOVER_GAP,
 ) {
-    const naturalLeft = triggerRect.right - popoverWidth;
+    const endAlignedLeft = triggerRect.right - popoverWidth;
+    const startAlignedLeft = triggerRect.left;
+    const fits = (left) => Number.isFinite(left)
+        && left >= margin
+        && left + popoverWidth <= viewportWidth - margin;
+    const naturalLeft = fits(endAlignedLeft) || !fits(startAlignedLeft)
+        ? endAlignedLeft
+        : startAlignedLeft;
     const maxLeft = Math.max(margin, viewportWidth - margin - popoverWidth);
     return {
         left: Math.round(Math.min(Math.max(naturalLeft, margin), maxLeft)),

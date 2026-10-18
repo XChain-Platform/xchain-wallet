@@ -147,6 +147,7 @@ describe('ListRenameForm', () => {
         expect(screen.getByLabelText('Name (empty means unchanged)').disabled).toBe(true);
         expect(screen.getByRole('button', { name: 'Review' }).disabled).toBe(true);
         expect(messaging.composeForConfirm).not.toHaveBeenCalled();
+        expect(document.body.textContent).not.toMatch(/regtest|testnet|Not mainnet/i);
     });
 
     it('shows UTF-8 length and semicolon errors for the name', async () => {

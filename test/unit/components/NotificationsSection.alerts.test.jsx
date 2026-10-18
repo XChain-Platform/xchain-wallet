@@ -62,6 +62,16 @@ afterEach(() => {
 });
 
 describe('notification categories and permission', () => {
+    it('keeps only trigger details that add to category labels', () => {
+        render(<NotificationsSection />);
+
+        expect(screen.getByText('First confirmation of a sent transaction.')).toBeTruthy();
+        expect(screen.getByText('Seen by the network before confirmation.')).toBeTruthy();
+        expect(screen.getByText('Held-token polls; binding polls are flagged.')).toBeTruthy();
+        expect(screen.queryByText(/Notify when a watched address receives a message/)).toBeNull();
+        expect(screen.queryByText(/Notify when a DEX order/)).toBeNull();
+    });
+
     it('requests and revokes the optional Chrome notification permission', async () => {
         const prior = globalThis.chrome;
         const contains = vi.fn(async () => false);
@@ -185,6 +195,26 @@ describe('notification categories and permission', () => {
 });
 
 describe('price alert manager', () => {
+    it('keeps and labels an alert in its original currency after a display-currency switch', async () => {
+        settings = { ...settings, fiatCurrency: 'EUR' };
+        priceAlerts.alerts = [alertRecord({ fiatCurrency: 'usd' })];
+        render(<NotificationsSection walletId="wallet-1" />);
+
+        const edit = screen.getByRole('button', { name: 'Edit Bitcoin price alert' });
+        expect(edit.closest('div')).toHaveTextContent('Bitcoin rises above $70,000');
+        expect(screen.getByText(/Saved price alerts keep the currency/)).toHaveTextContent(
+            'Delete and recreate an alert to use the current display currency.',
+        );
+        fireEvent.click(edit);
+        fireEvent.click(screen.getByRole('button', { name: 'Save changes' }));
+        await waitFor(() => expect(priceAlerts.updateAlert).toHaveBeenCalledWith('alert-1', {
+            chainId: 'bitcoin-mainnet',
+            direction: 'above',
+            targetFiat: 70000,
+            fiatCurrency: 'usd',
+        }));
+    });
+
     it('distinguishes loading from an empty result', () => {
         priceAlerts.loading = true;
         render(<NotificationsSection walletId="wallet-1" />);
@@ -198,13 +228,21 @@ describe('price alert manager', () => {
         priceAlerts.error = 'storage failed';
         render(<NotificationsSection walletId="wallet-1" />);
 
-        expect(screen.getByRole('alert')).toHaveTextContent('Could not load price alerts.');
+        expect(screen.getByRole('alert')).toHaveTextContent('Couldn\'t load price alerts.');
         fireEvent.click(screen.getByRole('button', { name: 'Try again' }));
         expect(priceAlerts.reload).toHaveBeenCalledTimes(1);
         expect(screen.queryByText(/No price alerts yet/)).toBeNull();
     });
 
+    it('says one thing, not two, while price alerts are switched off', () => {
+        render(<NotificationsSection walletId="wallet-1" />);
+
+        expect(screen.getByText('Turn on Price alerts above to start receiving these.')).toBeTruthy();
+        expect(screen.queryByText('No price alerts yet')).toBeNull();
+    });
+
     it('creates a price alert from the empty state', async () => {
+        settings.notifications.priceAlerts = true;
         render(<NotificationsSection walletId="wallet-1" />);
         expect(screen.getAllByRole('status').some(
             (region) => region.textContent === 'No price alerts yetAdd one below.',

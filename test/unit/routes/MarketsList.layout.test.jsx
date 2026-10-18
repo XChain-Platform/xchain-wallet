@@ -10,6 +10,9 @@ import { MessagingProvider } from '../../../packages/core/src/shared/MessagingPr
 import { MarketsList } from '../../../packages/core/src/shared/routes/MarketsList.jsx';
 import { MarketActivity } from '../../../packages/core/src/shared/routes/MarketActivity.jsx';
 import { userEvent } from '../../helpers/userEvent.js';
+import chipStyles from '../../../packages/core/src/ui/Chip.module.css';
+import marketsStyles from '../../../packages/core/src/shared/routes/MarketsList.module.css';
+import { readFileSync } from 'node:fs';
 
 afterEach(() => {
     cleanup();
@@ -25,6 +28,30 @@ function deferred() {
 }
 
 describe('MarketsList narrow layout', () => {
+    it('names the selected chain without its network kind', async () => {
+        render(
+            <MessagingProvider shell="web" messaging={{
+                getMarkets: vi.fn().mockResolvedValue([]),
+                listWatchlistForWallet: vi.fn().mockResolvedValue([]),
+            }}>
+                <MarketsList
+                    walletId="w"
+                    selectedAsset={{ chainId: 'bitcoin-regtest', tick: 'BTC' }}
+                    onChangeAsset={() => {}}
+                    onOpenMarket={() => {}}
+                />
+            </MessagingProvider>,
+        );
+
+        await screen.findByText('No markets for BTC');
+        const selector = screen.getByRole('button', { name: /Change asset/ });
+        // The selector card names the chain (coordinator ruling) but never
+        // the network kind.
+        expect(selector).toHaveTextContent('Bitcoin');
+        expect(selector.textContent).not.toMatch(/regtest|testnet|Not mainnet/i);
+        expect(document.body.textContent).not.toMatch(/regtest|testnet|Not mainnet/i);
+    });
+
     it('reaches and activates market actions in their visual order', async () => {
         const user = userEvent.setup();
         const onBack = vi.fn();
@@ -51,6 +78,8 @@ describe('MarketsList narrow layout', () => {
         );
 
         await screen.findByRole('button', { name: 'Open Pepe market' });
+        const pair = screen.getByText('PEPE').closest(`.${chipStyles.chip}`);
+        expect(pair).toHaveTextContent('BTC / PEPE');
         const back = screen.getByRole('button', { name: 'Back to previous screen' });
         back.focus();
         await user.keyboard('{Enter}');
@@ -86,6 +115,38 @@ describe('MarketsList narrow layout', () => {
         expect(screen.getByRole('button', { name: 'Open Pepe market' })).toHaveFocus();
         await user.keyboard('{Enter}');
         expect(onOpenMarket).toHaveBeenCalledTimes(2);
+    });
+
+    it('shortens a long ticker inside the pair chip and keeps the full pair as its title', async () => {
+        const longTick = 'A'.repeat(120);
+        render(
+            <MessagingProvider shell="web" messaging={{
+                getMarkets: vi.fn().mockResolvedValue([{ tick1: longTick, tick2: 'BTC', depth: 3 }]),
+                getDispensersForToken: vi.fn().mockResolvedValue([]),
+                listWatchlistForWallet: vi.fn().mockResolvedValue([]),
+            }}>
+                <MarketsList
+                    walletId="w"
+                    selectedAsset={{ chainId: 'bitcoin-mainnet', tick: 'BTC' }}
+                    onChangeAsset={() => {}}
+                    onOpenMarket={() => {}}
+                />
+            </MessagingProvider>,
+        );
+
+        const pair = (await screen.findByText(longTick)).closest(`.${chipStyles.chip}`);
+        expect(pair).toHaveClass(marketsStyles.pairChip);
+        expect(pair).toHaveAttribute('title', `${longTick} / BTC`);
+        const css = readFileSync('packages/core/src/shared/routes/MarketsList.module.css', 'utf8');
+        expect(css).toMatch(/\.pairChip\s*\{[^}]*min-width:\s*0[^}]*max-width:\s*100%/s);
+        expect(css).toMatch(/\.pairTick\s*\{[^}]*text-overflow:\s*ellipsis/s);
+        // The depth pill stays on one line however long the pair name is.
+        expect(screen.getByText('depth 3')).toHaveStyle({ whiteSpace: 'nowrap' });
+        // The figures slot is not capped at half the row, so at larger text the
+        // depth pill stays inside the row padding instead of spilling past it.
+        const trailing = screen.getByText('depth 3').closest(`.${marketsStyles.marketTrailing}`);
+        expect(trailing).not.toBeNull();
+        expect(css).toMatch(/\.marketButton \.marketTrailing\s*\{[^}]*max-width:\s*none/s);
     });
 
     it('matches market-row height and marks the results region busy on first load', () => {

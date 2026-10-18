@@ -8,18 +8,29 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-import { useCallback, useEffect, useRef, useState } from 'react';
-import { Button, Icon } from '@xchain-wallet/core/ui';
-import { NetworkFilter } from './NetworkFilter.jsx';
+import { Suspense, lazy, useCallback, useEffect, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
+import { Button, Icon, Spinner } from '@xchain-wallet/core/ui';
+import { ConfirmModal } from './ConfirmModal.jsx';
+import { OverlaySurface } from './OverlaySurface.jsx';
 import { useAnchoredPopover } from '../hooks/useViewportClamp.js';
+import { useConfirmModal } from '../hooks/useConfirmModal.js';
 import {
     activeNetworkLabel,
     activeNetworkOptions,
-    confirmActiveNetworkSwitch,
+    activeNetworkSwitchCopy,
     normalizeActiveNetwork,
 } from '../utils/activeNetworkSwitch.js';
 import styles from './HeaderSettingsButton.module.css';
+import menuStyles from './AppHeader.module.css';
 import { useBackHandler } from '../../ui/backStack.js';
+import { t } from '../../i18n/index.js';
+
+// The chain filter renders only inside the open popover, so it loads with the
+// header menu rather than in the startup bundle. The component starts the
+// fetch when it mounts, so the chunk is ready before the popover opens.
+const loadNetworkFilter = () => import('./NetworkFilter.jsx');
+const NetworkFilter = lazy(() => loadNetworkFilter().then((module) => ({ default: module.NetworkFilter })));
 
 /**
  * Header gear-icon → settings popover. Four sections:
@@ -59,6 +70,9 @@ import { useBackHandler } from '../../ui/backStack.js';
  * @param {'mainnet'|'testnet'|'regtest'} [props.activeNetwork]
  * @param {boolean} [props.developerMode]
  * @param {(network: 'mainnet'|'testnet'|'regtest') => Promise<void>} [props.onActiveNetworkChange]
+ * @param {boolean} [props.menuRow] renders the trigger as a labelled overflow-menu row
+ * @param {() => void} [props.onNavigate] closes an owning menu before destination navigation
+ * @param {(open: boolean) => void} [props.onOpenChange] reports the popover opening or closing, so an owning menu can step out of its way
  */
 export function HeaderSettingsButton({
     activeWallet,
@@ -75,9 +89,13 @@ export function HeaderSettingsButton({
     activeNetwork,
     developerMode = false,
     onActiveNetworkChange,
+    menuRow = false,
+    onNavigate,
+    onOpenChange,
 }) {
     const [open, setOpen] = useState(false);
     const [switchingNetwork, setSwitchingNetwork] = useState(false);
+    const confirmDialog = useConfirmModal();
     const wrapRef = useRef(null);
     const triggerRef = useRef(null);
     // The system Back gesture and Escape close this before it leaves the
@@ -87,9 +105,28 @@ export function HeaderSettingsButton({
         triggerRef.current?.querySelector('button')?.focus();
     }, []);
     useBackHandler(open ? closePopover : undefined);
+    useEffect(() => {
+        onOpenChange?.(open);
+        return () => onOpenChange?.(false);
+    }, [onOpenChange, open]);
     // Flex wrapping can move the gear independently of the header slot, so
     // the open panel derives its viewport coordinates from the gear itself.
     const popoverPlacement = useAnchoredPopover(open, triggerRef);
+    useEffect(() => { loadNetworkFilter().catch(() => {}); }, []);
+    const popoverRef = popoverPlacement.ref;
+    // The popover is portaled to the body, so Tab from its trigger walked the
+    // page behind it (and closed an owning menu) and its controls were out of
+    // keyboard reach. Opening moves focus to its first control; closing hands
+    // it back to the trigger.
+    useEffect(() => {
+        if (!open) return undefined;
+        const frame = requestAnimationFrame(() => {
+            popoverRef.current?.querySelector(
+                'button:not([disabled]), select:not([disabled]), input:not([disabled]), [tabindex]:not([tabindex="-1"])',
+            )?.focus();
+        });
+        return () => cancelAnimationFrame(frame);
+    }, [open, popoverRef]);
 
     useEffect(() => {
         if (!open) return undefined;
@@ -97,9 +134,33 @@ export function HeaderSettingsButton({
             if (wrapRef.current?.contains(e.target)) return;
             closePopover();
         };
+        const onFocusIn = (event) => {
+            if (event.target.closest?.('#xc-main')) setOpen(false);
+        };
+        // The panel is portaled to the end of the body, so Tab off its last
+        // control (or Shift+Tab off its first) would walk the page behind it
+        // or leave the document. Either end closes it and returns to the gear.
+        const onKeyDown = (event) => {
+            if (event.key !== 'Tab') return;
+            const panel = popoverRef.current;
+            if (!panel?.contains(document.activeElement)) return;
+            const stops = Array.from(panel.querySelectorAll(
+                'button:not([disabled]), select:not([disabled]), input:not([disabled]), [tabindex]:not([tabindex="-1"])',
+            ));
+            const edge = event.shiftKey ? stops[0] : stops.at(-1);
+            if (document.activeElement !== edge) return;
+            event.preventDefault();
+            closePopover();
+        };
         window.addEventListener('mousedown', onClick);
-        return () => window.removeEventListener('mousedown', onClick);
-    }, [closePopover, open]);
+        window.addEventListener('focusin', onFocusIn);
+        window.addEventListener('keydown', onKeyDown);
+        return () => {
+            window.removeEventListener('mousedown', onClick);
+            window.removeEventListener('focusin', onFocusIn);
+            window.removeEventListener('keydown', onKeyDown);
+        };
+    }, [closePopover, open, popoverRef]);
 
     // The Network section needs all four pieces to render anything
     // useful; NetworkFilter dereferences the registry and maps over the
@@ -125,10 +186,20 @@ export function HeaderSettingsButton({
     const walletLabel = activeWallet?.name || null;
     const accountLabel = activeAccount?.name
         || (Number.isInteger(activeAccount?.index) ? `Account ${activeAccount.index + 1}` : null);
+    const navigate = (handler) => {
+        closePopover();
+        onNavigate?.();
+        handler();
+    };
 
     const switchNetwork = async (next) => {
         if (next === currentNetwork) return;
-        if (!confirmActiveNetworkSwitch(currentNetwork, next)) return;
+        const copy = activeNetworkSwitchCopy(currentNetwork, next);
+        const confirmed = await confirmDialog.confirm({
+            ...copy,
+            confirmLabel: 'Switch network',
+        });
+        if (!confirmed) return;
         setSwitchingNetwork(true);
         try {
             await onActiveNetworkChange(next);
@@ -141,58 +212,65 @@ export function HeaderSettingsButton({
     };
 
     return (
-        <div ref={wrapRef} className={styles.wrap}>
-            {hasActiveNetwork ? (
-                <span
-                    className={`${styles.networkBadge} ${currentNetwork === 'mainnet' ? '' : styles.networkBadgeNonMainnet}`}
-                    aria-label={`Active network: ${activeNetworkLabel(currentNetwork)}`}
-                    title={`Active network: ${activeNetworkLabel(currentNetwork)}`}
-                >
-                    {/* Short form for phone widths: the dot shows and the
-                        name is visually hidden but still read out, so the
-                        badge never renders as clipped letters. */}
-                    <span className={styles.networkBadgeDot} aria-hidden="true" />
-                    <span className={styles.networkBadgeText}>{activeNetworkLabel(currentNetwork)}</span>
-                </span>
-            ) : null}
-            <span ref={triggerRef} className={styles.trigger}>
-                <Button
-                    variant="secondary"
-                    icon={(
-                        <>
-                            <Icon.GearIcon />
-                            {anyNonDefault ? <span className={styles.dot} /> : null}
-                        </>
+        <>
+            <div ref={wrapRef} className={`${styles.wrap} ${menuRow ? menuStyles.settingsWrap : ''}`.trim()}>
+                <span ref={triggerRef} className={styles.trigger}>
+                    {menuRow ? (
+                        <button
+                            type="button"
+                            role="menuitem"
+                            className={menuStyles.actionRow}
+                            onClick={() => setOpen((v) => !v)}
+                            aria-haspopup="dialog"
+                            aria-expanded={open ? 'true' : 'false'}
+                            data-active={anyNonDefault ? 'true' : undefined}
+                        >
+                            <span className={menuStyles.rowIcon} aria-hidden="true">
+                                <Icon.GearIcon />
+                                {anyNonDefault ? <span className={styles.dot} /> : null}
+                            </span>
+                            <span className={menuStyles.rowLabel}>{t('home.settings')}</span>
+                            <span className={menuStyles.rowIcon} aria-hidden="true"><Icon.ForwardIcon /></span>
+                        </button>
+                    ) : (
+                        <Button
+                            variant="secondary"
+                            icon={(
+                                <>
+                                    <Icon.GearIcon />
+                                    {anyNonDefault ? <span className={styles.dot} /> : null}
+                                </>
+                            )}
+                            onClick={() => setOpen((v) => !v)}
+                            aria-haspopup="dialog"
+                            aria-expanded={open ? 'true' : 'false'}
+                            aria-label={t('home.settings')}
+                            title={t('home.settings')}
+                            data-active={anyNonDefault ? 'true' : undefined}
+                        />
                     )}
-                    onClick={() => setOpen((v) => !v)}
-                    aria-haspopup="dialog"
-                    aria-expanded={open ? 'true' : 'false'}
-                    aria-label="Settings"
-                    title="Settings"
-                    data-active={anyNonDefault ? 'true' : undefined}
-                />
-            </span>
-            {open ? (
-                <div
-                    ref={popoverPlacement.ref}
-                    style={popoverPlacement.style}
-                    className={styles.popover}
-                    role="dialog"
-                    aria-modal="false"
-                    aria-labelledby="xc-wallet-settings-title"
-                >
-                    <div id="xc-wallet-settings-title" className={styles.sectionLabel}>Wallet settings</div>
+                </span>
+                {open && typeof document !== 'undefined' ? createPortal(
+                    <OverlaySurface
+                        variant="popover"
+                        surfaceRef={popoverPlacement.ref}
+                        style={popoverPlacement.style}
+                        title={t('shell.settingsButton.walletSettings')}
+                        titleId="xc-wallet-settings-title"
+                        aria-labelledby="xc-wallet-settings-title"
+                        onMouseDown={(event) => event.stopPropagation()}
+                    >
                     {/* Picker destinations stay native buttons to preserve full-row navigation semantics. */}
                     {onOpenWalletPicker ? (
-                        <Section title="Wallet">
+                        <Section title={t('settings.thisWallet.wallet')}>
                             <button
                                 type="button"
                                 className={styles.summaryRow}
-                                onClick={() => { closePopover(); onOpenWalletPicker(); }}
-                                title={walletLabel || 'Choose wallet'}
+                                onClick={() => navigate(onOpenWalletPicker)}
+                                title={walletLabel || t('shell.settingsButton.chooseWallet')}
                             >
                                 <span className={`${styles.summaryName} ${walletLabel ? '' : styles.summaryEmpty}`}>
-                                    {walletLabel || 'No wallet'}
+                                    {walletLabel || t('shell.settingsButton.noWallet')}
                                 </span>
                                 <span className={styles.summaryChevron} aria-hidden="true">›</span>
                             </button>
@@ -200,15 +278,15 @@ export function HeaderSettingsButton({
                     ) : null}
 
                     {onOpenAccountPicker && activeWallet ? (
-                        <Section title="Account">
+                        <Section title={t('shell.settingsButton.account')}>
                             <button
                                 type="button"
                                 className={styles.summaryRow}
-                                onClick={() => { closePopover(); onOpenAccountPicker(); }}
-                                title={accountLabel || 'Choose account'}
+                                onClick={() => navigate(onOpenAccountPicker)}
+                                title={accountLabel || t('shell.settingsButton.chooseAccount')}
                             >
                                 <span className={`${styles.summaryName} ${accountLabel ? '' : styles.summaryEmpty}`}>
-                                    {accountLabel || 'Account 1'}
+                                    {accountLabel || t('shell.settingsButton.account1')}
                                 </span>
                                 <span className={styles.summaryChevron} aria-hidden="true">›</span>
                             </button>
@@ -216,30 +294,35 @@ export function HeaderSettingsButton({
                     ) : null}
 
                     {showActiveNetwork ? (
-                        <Section title="Network">
+                        <Section title={t('settings.network.label')}>
                             <select
                                 className={styles.networkSelect}
                                 value={currentNetwork}
-                                disabled={switchingNetwork}
+                                disabled={switchingNetwork || Boolean(confirmDialog.request)}
                                 onChange={(event) => switchNetwork(event.target.value)}
-                                aria-label="Active network in header"
+                                aria-label={t('shell.settingsButton.activeNetworkInHeader')}
                             >
                                 {networkOptions.map((option) => (
                                     <option key={option.value} value={option.value}>{option.label}</option>
                                 ))}
                             </select>
+                            {switchingNetwork ? (
+                                <Spinner size="sm" label={t('settings.network.switching')} />
+                            ) : null}
                         </Section>
                     ) : null}
 
                     {showNetwork ? (
-                        <Section title="Chain filter">
-                            <NetworkFilter
-                                chainRegistry={chainRegistry}
-                                coinFamilies={coinFamilies}
-                                value={networkFilter || 'all'}
-                                onChange={(next) => { onNetworkFilterChange(next); /* keep popover open */ }}
-                            />
-                        </Section>
+                        <Suspense fallback={null}>
+                            <Section title={t('shell.settingsButton.chainFilter')}>
+                                <NetworkFilter
+                                    chainRegistry={chainRegistry}
+                                    coinFamilies={coinFamilies}
+                                    value={networkFilter || 'all'}
+                                    onChange={(next) => { onNetworkFilterChange(next); /* keep popover open */ }}
+                                />
+                            </Section>
+                        </Suspense>
                     ) : null}
 
                     {onOpenSettings ? (
@@ -247,17 +330,34 @@ export function HeaderSettingsButton({
                             <button
                                 type="button"
                                 className={styles.summaryRow}
-                                onClick={() => { closePopover(); onOpenSettings(); }}
-                                title="All settings"
+                                onClick={() => navigate(onOpenSettings)}
+                                title={t('shell.settingsButton.allSettings')}
                             >
-                                <span className={styles.summaryName}>All settings</span>
+                                <span className={styles.summaryName}>{t('shell.settingsButton.allSettings')}</span>
                                 <span className={styles.summaryChevron} aria-hidden="true">›</span>
                             </button>
                         </div>
                     ) : null}
-                </div>
+                    </OverlaySurface>,
+                    document.body,
+                ) : null}
+            </div>
+            {/* Rendered in place, the confirm sat inside the header's stacking
+                context and the body-level popover painted over it. Portaled
+                beside the popover it stacks on top; like the popover, its
+                presses stop at the portal so the open menu and popover
+                underneath do not read them as outside clicks and unmount it. */}
+            {confirmDialog.request && typeof document !== 'undefined' ? createPortal(
+                <div data-header-settings-confirm="" onMouseDown={(event) => event.stopPropagation()}>
+                    <ConfirmModal
+                        {...confirmDialog.request}
+                        onConfirm={confirmDialog.onConfirm}
+                        onCancel={confirmDialog.onCancel}
+                    />
+                </div>,
+                document.body,
             ) : null}
-        </div>
+        </>
     );
 }
 

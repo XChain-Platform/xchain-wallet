@@ -30,7 +30,7 @@
 //      would have done it is not on screen.
 
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { Button, FormPage, PageHeader, Screen, StatusMessage } from '@xchain-wallet/core/ui';
+import { Button, FormNotice, FormPage, PageHeader, Screen, StatusMessage } from '@xchain-wallet/core/ui';
 import { registry as registryLib, flows as flowsLib } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { useConfirmAction, isConfirmOpenPhase } from '../hooks/useConfirmAction.js';
@@ -95,7 +95,10 @@ export function ResumeConfirm({ session, onDone, onCancel }) {
         }
         setCopyError(null);
         setCopied(label);
-        announce('Copied');
+        const copiedLabel = label === 'from' ? 'From address copied.'
+            : label === 'to' ? 'To address copied.'
+            : 'Transaction ID copied.';
+        announce(copiedLabel);
         setTimeout(() => setCopied((current) => current === label ? '' : current), 1500);
     }, [announce]);
 
@@ -208,7 +211,7 @@ export function ResumeConfirm({ session, onDone, onCancel }) {
                             }}
                         />
                     ) : (
-                        <StatusMessage variant="error">The unfinished transaction has no unsigned PSBT to export.</StatusMessage>
+                        <FormNotice variant="error">The unfinished transaction has no unsigned PSBT to export.</FormNotice>
                     )}
                 </FormPage>
             </Screen>
@@ -266,9 +269,13 @@ export function ResumeConfirm({ session, onDone, onCancel }) {
                 />
             )}
         >
-            <FormPage label={title}>
-                {error ? <StatusMessage variant="error">{error}</StatusMessage> : null}
-                {copyError ? <StatusMessage variant="error">{copyError}</StatusMessage> : null}
+            <FormPage
+                label={title}
+                status={[
+                    error ? <StatusMessage variant="error">{error}</StatusMessage> : null,
+                    copyError ? <StatusMessage variant="error">{copyError}</StatusMessage> : null,
+                ]}
+            >
                 {result ? (
                     <section
                         className={styles.resultCard}
@@ -307,7 +314,7 @@ export function ResumeConfirm({ session, onDone, onCancel }) {
                                             onClick={() => copyValue('from', sourceAddress)}
                                             aria-label="Copy from address"
                                         >
-                                            {copied === 'from' ? 'Copied' : 'Copy'}
+                                            {copied === 'from' ? 'From address copied' : 'Copy'}
                                         </Button>
                                     </dd>
                                 </div>
@@ -325,7 +332,7 @@ export function ResumeConfirm({ session, onDone, onCancel }) {
                                             onClick={() => copyValue('to', destinationAddress)}
                                             aria-label="Copy to address"
                                         >
-                                            {copied === 'to' ? 'Copied' : 'Copy'}
+                                            {copied === 'to' ? 'To address copied' : 'Copy'}
                                         </Button>
                                     </dd>
                                 </div>
@@ -343,7 +350,7 @@ export function ResumeConfirm({ session, onDone, onCancel }) {
                                             onClick={() => copyValue('txid', txid)}
                                             aria-label="Copy transaction ID"
                                         >
-                                            {copied === 'txid' ? 'Copied' : 'Copy'}
+                                            {copied === 'txid' ? 'Transaction ID copied' : 'Copy'}
                                         </Button>
                                     </dd>
                                 </div>

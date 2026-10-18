@@ -28,6 +28,7 @@ import {
 } from '@xchain-wallet/core/ui';
 import { registry as registryLib } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
+import { useDemoGuard } from '../hooks/useDemoGuard.jsx';
 import { useActionConfirmFlow, useConfirmSubmit, isUserRejection } from '../hooks/useActionConfirmFlow.js';
 import { ActionConfirmScreen } from '../components/ActionConfirmScreen.jsx';
 import { submitFailureMessage } from '../utils/submitFailureMessage.js';
@@ -119,6 +120,7 @@ function CreatePollFormState({ walletId, chainId: initialChainId, presetTick, on
     // Seeded from the launching context; the Network field lets the user retarget.
     const [chainId, setChainId] = useState(initialChainId);
     const { messaging, shell } = useMessaging();
+    const demoGuard = useDemoGuard(walletId, { onBack });
     const signerReady = useSignerReady(walletId);
     const variant = screenVariantFor(shell);
 
@@ -172,7 +174,7 @@ function CreatePollFormState({ walletId, chainId: initialChainId, presetTick, on
                 if (cancelled) return;
                 setAddressesByChain(byChain || {});
                 const sourceId = preferredSourceId(byChain?.[chainId] || [], active?.[chainId]);
-                if (!sourceId) { setLoadError('No address on this chain. Use Receive to generate one first.'); return; }
+                if (!sourceId) { setLoadError('No address on this network. Use Receive to generate one first.'); return; }
                 setFromAddressId(sourceId);
                 setLoadError(null);
             })
@@ -557,12 +559,12 @@ function CreatePollFormState({ walletId, chainId: initialChainId, presetTick, on
             title={stage === 'review' || stage === 'submitting' ? 'Review poll' : 'Create poll'}
         />
     );
-    const wrap = (children) => <Screen variant={variant} header={header}>{children}</Screen>;
+    const wrap = (children) => <Screen variant={variant} header={header} restoreScroll={!(stage === 'review' || stage === 'submitting')}>{children}</Screen>;
 
     if (loadError) {
         return wrap(
             <>
-                <StatusMessage variant="error" className={styles.error}>{loadError}</StatusMessage>
+                <StatusMessage variant="error">{loadError}</StatusMessage>
             </>,
         );
     }
@@ -597,10 +599,11 @@ function CreatePollFormState({ walletId, chainId: initialChainId, presetTick, on
     if (stage === 'review' || stage === 'submitting') {
         return wrap(
             <FormPage
+                demoGuard={demoGuard}
                 label="Review poll"
                 onSubmit={handleSubmit}
                 status={(isWatcherMode || isHwSource) && submitError
-                    ? <StatusMessage variant="error" className={styles.error}>{submitError}</StatusMessage>
+                    ? <StatusMessage variant="error">{submitError}</StatusMessage>
                     : null}
                 actions={(
                     <>
@@ -614,8 +617,12 @@ function CreatePollFormState({ walletId, chainId: initialChainId, presetTick, on
             >
                 <p className={styles.summary}>Create a {tick} governance poll closing at block {endBlock}.</p>
                 <dl className={styles.detailsList}>
-                    <dt className={styles.detailsLabel}>Chain</dt>
-                    <dd className={styles.detailsValue}>{descriptor ? <ChainBadge descriptor={descriptor} size="sm" /> : chainId}</dd>
+                    {descriptor ? (
+                        <>
+                            <dt className={styles.detailsLabel}>Network</dt>
+                            <dd className={styles.detailsValue}><ChainBadge descriptor={descriptor} size="sm" /></dd>
+                        </>
+                    ) : null}
                     <dt className={styles.detailsLabel}>From</dt>
                     <dd className={styles.detailsValue}><AddressText address={fromAddress.address} /></dd>
                     <dt className={styles.detailsLabel}>Token</dt>
@@ -744,10 +751,11 @@ function CreatePollFormState({ walletId, chainId: initialChainId, presetTick, on
 
     return wrap(
         <FormPage
+            demoGuard={demoGuard}
             label="Create poll"
             onSubmit={handleReview}
             sectioned
-            status={formError ? <StatusMessage variant="error" className={styles.error}>{formError}</StatusMessage> : null}
+            status={formError ? <StatusMessage variant="error">{formError}</StatusMessage> : null}
             actions={(
                 <Button
                     type="submit"
@@ -755,7 +763,7 @@ function CreatePollFormState({ walletId, chainId: initialChainId, presetTick, on
                     loading={actionConfirm.composing}
                     disabled={actionConfirm.composing}
                 >
-                    {actionConfirm.composing ? 'Preparing review…' : singleEncode ? 'Create poll' : 'Preview'}
+                    {singleEncode ? 'Create poll' : 'Preview'}
                 </Button>
             )}
         >
@@ -785,7 +793,7 @@ function CreatePollFormState({ walletId, chainId: initialChainId, presetTick, on
             </FormSection>
             <FormSection title="Options and rules">
 
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--xc-form-gap)' }}>
                 <span className={styles.fromLabel}>Options</span>
                 {options.map((opt, i) => (
                     <div key={i} style={{ display: 'flex', gap: '0.5rem', alignItems: 'flex-end' }}>

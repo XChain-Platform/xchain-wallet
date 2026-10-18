@@ -51,7 +51,7 @@
 // venue's LTC/USD snapshot must be seeded low enough for the quoted fee to
 // clear the 5,460-sat dust floor (campaign §3.2 / §3.5). Seed $30 and mine.
 
-import { createWallet, expect, test } from '../../fixtures/wallet.js';
+import { createWallet, expect, openPaletteCommand, test } from '../../fixtures/wallet.js';
 import {
     expectConfirmModal,
     EXPLORER_URL,
@@ -80,7 +80,16 @@ const MINT_XCHAIN = 1000;
  */
 const DEADLINE_LEAD_SEC = 240;
 
-/** Unique per run: the venue's Litecoin chain carries markets from every prior session. */
+/**
+ * The chain the last step switches the hub to: Litecoin on a Bitcoin run,
+ * Bitcoin otherwise. Its explorer code is what each card on that list is
+ * resolved against.
+ */
+const OTHER_CHAIN = REGTEST_COIN === 'RBTC'
+    ? { coin: 'RLTC', label: 'Litecoin' }
+    : { coin: 'RBTC', label: 'Bitcoin' };
+
+/** Unique per run: the venue chain carries markets from every prior session. */
 const RUN_TAG = `browse-${Date.now()}`;
 
 /**
@@ -174,20 +183,6 @@ async function waitForToken(address, tick, min, timeoutMs = 300_000) {
     throw new Error(`${tick} balance never reached ${min} for ${address} (last=${last})`);
 }
 
-/** Runs a palette command by clicking its row (see the deadline-race spec). */
-async function gotoPalette(page, title) {
-    await page.keyboard.press('ControlOrMeta+k');
-    const dialog = page.getByRole('dialog', { name: 'Command palette' });
-    await expect(dialog, 'the command palette did not open').toBeVisible({ timeout: 15_000 });
-    const combobox = dialog.getByRole('combobox').first();
-    await expect(combobox).toBeEditable({ timeout: 15_000 });
-    await combobox.fill(title);
-    const row = page.getByRole('option', { name: new RegExp(`^${title}\\b`) }).first();
-    await expect(row, `no palette command matching "${title}"`).toBeVisible();
-    await row.click();
-    await expect(dialog).toBeHidden({ timeout: 15_000 });
-}
-
 /**
  * Opens the betting hub on the VENUE chain.
  *
@@ -196,7 +191,7 @@ async function gotoPalette(page, title) {
  * list, which reads as the market having vanished.
  */
 async function gotoBettingHub(page) {
-    await gotoPalette(page, 'Betting');
+    await openPaletteCommand(page, 'Betting');
     await expect(page.getByRole('button', { name: 'Create market', exact: true }))
         .toBeVisible({ timeout: 30_000 });
     await selectVenueChain(page.getByRole('main'));
@@ -345,46 +340,63 @@ test.describe('BET browse', () => {
             // `history/pending-lifecycle` uses for the same reason, and the
             // release below is unconditional: a run that leaves the SHARED miner
             // parked breaks every run after it, including another session's.
+            //
+            // The window spans the WALLET'S READ, not only the wait. Released
+            // before the reload, the miner mines whatever sits in the mempool
+            // at once, the first block past the deadline latches the market
+            // closed, and the wallet then rightly drops it from the open list
+            // (measured: release at deadline+15s, block stamped deadline+16s,
+            // list refetched at deadline+19s without the market).
             const stored = await feedRow(feedIndex);
             const deadline = Number(stored.deadline);
             const waitMs = Math.max(0, (deadline - Math.floor(Date.now() / 1000)) + 15) * 1000;
+            const interference = (heightNow) => `VENUE INTERFERENCE, not a wallet defect: `
+                + `${REGTEST_COIN} advanced from ${heightAtCreate} to ${heightNow} during the hold `
+                + `window, which latched the market closed before the wallet could be asked about `
+                + `it. Re-run when the chain is quiet.`;
             try {
                 await minerRpc('pause_mining', {});
                 await new Promise((r) => setTimeout(r, waitMs));
+                expect(Math.floor(Date.now() / 1000),
+                    'the deadline has not actually passed in wall-clock terms').toBeGreaterThan(deadline);
+
+                const heightNow = await tipHeight();
+                const after = await feedRow(feedIndex);
+                expect(String(after.feed_status),
+                    heightNow > heightAtCreate
+                        ? interference(heightNow)
+                        : 'the chain closed the market with no new block')
+                    .toBe('open');
+
+                // RELOADED, not re-navigated. Selecting "Betting" from the palette
+                // while the hub is already on screen changes no state, so the route
+                // does not remount and nothing re-reads - which is how the first
+                // version of this spec "proved" the pill on a list fetched minutes
+                // earlier (and how D-117 was found). A reload is the only way to be
+                // certain the status on screen came from a fresh read of the chain.
+                await page.reload();
+                await unlockAfterReload(page, PASSWORD);
+                await gotoBettingHub(page);
+                const mine = page.getByRole('main').getByRole('button', { name: new RegExp(`^#${feedIndex}\\s`) });
+                try {
+                    await expect(mine,
+                        'a market past its deadline but still open on chain vanished from the open list: '
+                        + 'the wallet is recomputing status from the clock')
+                        .toBeVisible({ timeout: 30_000 });
+                    await expect(mine,
+                        'the wallet recomputed the status from the clock instead of showing what the chain stored')
+                        .toContainText(PILL_TEXT.open);
+                } catch (err) {
+                    // A parked miner does not stop another session's
+                    // generate_blocks, so the chain is asked again before the
+                    // wallet is blamed.
+                    const now = await feedRow(feedIndex);
+                    if (String(now?.feed_status) !== 'open') throw new Error(interference(await tipHeight()));
+                    throw err;
+                }
             } finally {
                 await minerRpc('continue_mining', {}).catch(() => {});
             }
-            expect(Math.floor(Date.now() / 1000),
-                'the deadline has not actually passed in wall-clock terms').toBeGreaterThan(deadline);
-
-            const heightNow = await tipHeight();
-            const after = await feedRow(feedIndex);
-            expect(String(after.feed_status),
-                heightNow > heightAtCreate
-                    ? `VENUE INTERFERENCE, not a wallet defect: ${REGTEST_COIN} advanced from `
-                      + `${heightAtCreate} to ${heightNow} during the hold window, which latched the `
-                      + `market closed before the wallet could be asked about it. Re-run when the `
-                      + `chain is quiet.`
-                    : 'the chain closed the market with no new block')
-                .toBe('open');
-
-            // RELOADED, not re-navigated. Selecting "Betting" from the palette
-            // while the hub is already on screen changes no state, so the route
-            // does not remount and nothing re-reads - which is how the first
-            // version of this spec "proved" the pill on a list fetched minutes
-            // earlier (and how D-117 was found). A reload is the only way to be
-            // certain the status on screen came from a fresh read of the chain.
-            await page.reload();
-            await unlockAfterReload(page, PASSWORD);
-            await gotoBettingHub(page);
-            const mine = page.getByRole('main').getByRole('button', { name: new RegExp(`^#${feedIndex}\\s`) });
-            await expect(mine,
-                'a market past its deadline but still open on chain vanished from the open list: '
-                + 'the wallet is recomputing status from the clock')
-                .toBeVisible({ timeout: 30_000 });
-            await expect(mine,
-                'the wallet recomputed the status from the clock instead of showing what the chain stored')
-                .toContainText(PILL_TEXT.open);
         });
 
         await test.step('a block lands, and the filter follows the chain', async () => {
@@ -449,24 +461,30 @@ test.describe('BET browse', () => {
             // not filter the current one. A market index from this chain
             // appearing under another chain would mean the list is keyed on
             // nothing.
+            // The other chain is whichever regtest chain this run is NOT on: the
+            // picker lists Bitcoin, Dogecoin and Litecoin, so naming Bitcoin
+            // outright re-selects the venue's own chain on an RBTC run and the
+            // market rightly stays listed.
+            const other = OTHER_CHAIN;
             const main = page.getByRole('main');
             const picker = main.getByRole('button', { name: /^Network:/ }).first();
             await picker.click();
-            await main.getByRole('option', { name: /^Bitcoin\b/ }).first().click();
-            await expect(picker).toHaveAttribute('aria-label', /Bitcoin/, { timeout: 15_000 });
+            await main.getByRole('option', { name: new RegExp(`^${other.label}\\b`) }).first().click();
+            await expect(picker).toHaveAttribute('aria-label', new RegExp(other.label), { timeout: 15_000 });
 
             // Matched on the LABEL, not the index: action indexes are per
-            // chain, so Bitcoin having a market #<same number> is ordinary and
-            // would make an index-based assertion fail for the wrong reason.
+            // chain, so the other chain having a market #<same number> is
+            // ordinary and would make an index-based assertion fail for the
+            // wrong reason.
             await expect(main.getByRole('button', { name: new RegExp(RUN_TAG) }),
-                `Bitcoin's list still shows this run's ${REGTEST_COIN} market`)
+                `${other.label}'s list still shows this run's ${REGTEST_COIN} market`)
                 .toBeHidden({ timeout: 30_000 });
 
             const cards = await renderedCards(page);
             for (const card of cards) {
-                const onBitcoin = await feedRow(card.index, 'RBTC');
-                expect(onBitcoin,
-                    `#${card.index} is listed under Bitcoin but Bitcoin's chain has no such market`)
+                const onOther = await feedRow(card.index, other.coin);
+                expect(onOther,
+                    `#${card.index} is listed under ${other.label} but ${other.label}'s chain has no such market`)
                     .toBeTruthy();
             }
         });

@@ -9,15 +9,19 @@
 // contact legal@dankest.llc.
 
 import { useEffect, useRef, useState } from 'react';
-import { Button, FormPage, Icon, Screen, StatusMessage } from '@xchain-wallet/core/ui';
+import { Button, Checkbox, FormPage, Icon, PageHeader, Screen, StatusMessage } from '@xchain-wallet/core/ui';
 import * as branding from '@xchain-wallet/core/branding/branding.js';
 import { LICENSE_NAME, LICENSE_FILE, LICENSE_VERSION } from '../../buildInfo.js';
-import { crypto as cryptoLib, flows as flowsLib } from '@xchain-wallet/core';
+// Direct module imports, not the core barrel: this screen is first paint on a
+// device with no wallet, and the barrel would pull every flow into startup.
+import { generateBip39Mnemonic } from '../../crypto/mnemonic.js';
+import { demoCaptureMnemonic } from '../../flows/demoCapture.js';
+import { getDemoWalletId, markDemoWallet } from '../../flows/demoMode.js';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { demoOwnsVaultPassword, exitDemoWallet } from '../utils/demoGraduation.js';
 import { OnboardingCarousel } from './OnboardingCarousel.jsx';
 import styles from './Onboarding.module.css';
-import pickerStyles from './WalletPicker.module.css';
+import { t } from '../../i18n/index.js';
 
 const LICENSE_STORAGE_KEY = 'xc:licenseAcceptedAt';
 const LICENSE_VERSION_KEY = 'xc:licenseAcceptedVersion';
@@ -48,13 +52,13 @@ const EXPLAINER_FRAMES = [
         id: 'transactions',
         icon: <Icon.SendIcon />,
         title: 'Review before you send',
-        body: 'A confirmed blockchain transaction cannot be reversed. Check the chain, address, and amount before you approve a send.',
+        body: 'A confirmed blockchain transaction cannot be reversed. Check the network, address, and amount before you approve a send.',
     },
     {
         id: 'multi-chain',
         icon: <Icon.TokenIcon />,
         title: 'Built for the XChain Platform',
-        body: 'Use the XChain Platform on Bitcoin, Litecoin, and Dogecoin, the chains supported today. Each chain has its own addresses here, kept separate so you always know where you are acting.',
+        body: 'Use the XChain Platform on Bitcoin, Litecoin, and Dogecoin, the networks supported today. Each network has its own addresses here, kept separate so you always know where you are acting.',
     },
 ];
 
@@ -163,6 +167,11 @@ export function Onboarding({ onCreate, onImport, onImportFromFreeWallet, onPairP
     const [explainerSeenAt, setExplainerSeenAt] = useState(() => readExplainerSeen());
     const licenseScrollRef = useRef(/** @type {HTMLDivElement | null} */ (null));
     const licenseSatisfied = !!licenseAcceptedAt && licenseAcceptedVersion === LICENSE_VERSION;
+    const licenseDisabledReason = !scrolledToEnd
+        ? 'Review all license terms to continue.'
+        : !licenseAck
+            ? 'Check "I have read and agree to these terms" to continue.'
+            : null;
 
     useEffect(() => {
         const el = licenseScrollRef.current;
@@ -254,8 +263,8 @@ export function Onboarding({ onCreate, onImport, onImportFromFreeWallet, onPairP
             // anything that could be mistaken for a real seed). Capture
             // mode is off unless that harness armed it, so a user still
             // gets a randomly generated throwaway wallet.
-            const mnemonic = flowsLib.demoCaptureMnemonic()
-                || cryptoLib.generateBip39Mnemonic(128);
+            const mnemonic = demoCaptureMnemonic()
+                || generateBip39Mnemonic(128);
             // Cluster J FOLLOWUP 7: demo wallets register chains on
             // mainnet, testnet, AND regtest so the user can flip the
             // activeNetwork setting and see populated views on each.
@@ -264,20 +273,25 @@ export function Onboarding({ onCreate, onImport, onImportFromFreeWallet, onPairP
             // when isDemoWallet returns true. If a future fetch path
             // forgets the demo guard it could leak the demo wallet's
             // addresses to real endpoints; keep the guards.
-            // `activeNetwork: 'regtest'` keeps the initial landing
-            // experience the same as before; the user toggles in
-            // Settings to see mainnet / testnet.
+            // The demo lands on MAINNET (xchain-wallet#78): App Review is
+            // sent to demo mode first, so the first address a reviewer
+            // sees on Receive must be a mainnet one, not a regtest
+            // `bcrt1`. The regtest and testnet chains stay registered so
+            // a Developer Mode switch still finds addresses there.
+            // Mainnet chains lead the list as well, because a shell that
+            // drops `activeNetwork` infers the network from the first
+            // chain id.
             const r = await messaging.importMnemonic({
                 password,
                 mnemonic,
                 name: 'Demo Wallet',
                 origin: 'demo',
                 activeChainIds: [
-                    'bitcoin-regtest', 'litecoin-regtest', 'dogecoin-regtest',
                     'bitcoin-mainnet', 'litecoin-mainnet', 'dogecoin-mainnet',
                     'bitcoin-testnet', 'litecoin-testnet', 'dogecoin-testnet',
+                    'bitcoin-regtest', 'litecoin-regtest', 'dogecoin-regtest',
                 ],
-                activeNetwork: 'regtest',
+                activeNetwork: 'mainnet',
             });
             let walletId = r?.wallet?.id || r?.walletId || r?.id;
             if (!walletId && typeof messaging.listWallets === 'function') {
@@ -292,7 +306,7 @@ export function Onboarding({ onCreate, onImport, onImportFromFreeWallet, onPairP
             // Persist the auto-password so a reload can silently re-unlock
             // this throwaway demo wallet instead of stranding the user on
             // the password screen with a key they never typed.
-            if (walletId) flowsLib.markDemoWallet(walletId, { password });
+            if (walletId) markDemoWallet(walletId, { password });
             // Seed a few demo contacts (random names, 1-3 chains each) into the
             // address book so the Contacts screen, Send picker, and message
             // inbox show realistic contact data. Best-effort: a failure here
@@ -300,7 +314,10 @@ export function Onboarding({ onCreate, onImport, onImportFromFreeWallet, onPairP
             // whole vault, so these don't outlive the throwaway wallet.
             if (typeof messaging.saveContact === 'function') {
                 try {
-                    for (const input of flowsLib.synthesizeDemoContacts()) {
+                    // The demo fixtures are large and only this path needs
+                    // them, so they load here rather than with the screen.
+                    const { synthesizeDemoContacts } = await import('../../flows/demoFixtures.js');
+                    for (const input of synthesizeDemoContacts()) {
                         await messaging.saveContact({ input });
                     }
                 } catch { /* non-fatal: the demo works without seeded contacts */ }
@@ -330,7 +347,7 @@ export function Onboarding({ onCreate, onImport, onImportFromFreeWallet, onPairP
     // its first act, so re-reading it every render would pull the screen
     // (and any error on it) out from under the user mid-flow. The gate
     // lifts only when `graduated` says so.
-    const [demoWalletId] = useState(() => flowsLib.getDemoWalletId());
+    const [demoWalletId] = useState(() => getDemoWalletId());
     const mustGraduate = !graduated && demoOwnsVaultPassword({ mode, demoWalletId });
 
     async function handleGraduate(intent, next) {
@@ -367,19 +384,11 @@ export function Onboarding({ onCreate, onImport, onImportFromFreeWallet, onPairP
     }
 
     const header = onBack ? (
-        <div className={pickerStyles.header}>
-            <button
-                type="button"
-                onClick={onBack}
-                className={pickerStyles.iconBtn}
-                aria-label="Back to wallets"
-                title="Back to wallets"
-            >
-                <Icon.BackIcon />
-            </button>
-            <span />
-            <span />
-        </div>
+        <PageHeader
+            onBack={onBack}
+            backLabel={t('onboarding.backToWallets')}
+            title={t('walletPicker.add')}
+        />
     ) : null;
 
     // First-launch + version-bump gate. The Add-Wallet shortcut (when
@@ -389,21 +398,47 @@ export function Onboarding({ onCreate, onImport, onImportFromFreeWallet, onPairP
     if (!licenseSatisfied) {
         return (
             <Screen variant={variant} header={null}>
-                <FormPage label="License agreement" fill fullWidth>
-                    <div className={styles.licenseGate}>
-                        <div className={styles.licenseHero}>
-                            <img
-                                src={branding.logoUrl()}
-                                alt={branding.PRODUCT_NAME}
-                                className={isFull ? styles.logoFull : styles.logoPopup}
-                            />
+                <FormPage
+                    label={t('onboarding.licenseAgreement')}
+                    fill
+                    fullWidth
+                    title={t('onboarding.licenseAgreement')}
+                    visual={(
+                        <img
+                            src={branding.logoUrl()}
+                            alt={branding.PRODUCT_NAME}
+                            className={`${isFull ? styles.logoFull : styles.logoPopup} ${styles.licenseLogo}`}
+                        />
+                    )}
+                    actions={(
+                        <div className={styles.licenseActions}>
+                            {licenseDisabledReason ? (
+                                <span id="license-accept-disabled-reason" className="sr-only">
+                                    {licenseDisabledReason}
+                                </span>
+                            ) : null}
+                            <Button
+                                variant="primary"
+                                onClick={handleAcceptLicense}
+                                disabled={Boolean(licenseDisabledReason)}
+                                aria-describedby={licenseDisabledReason
+                                    ? 'license-accept-disabled-reason'
+                                    : undefined}
+                                icon={<Icon.CheckIcon />}
+                            >
+                                {t('onboarding.acceptAndContinue')}
+                            </Button>
                         </div>
+                    )}
+                    stackedActions
+                >
+                    <div className={styles.licenseGate}>
                         <div
                             ref={licenseScrollRef}
                             className={styles.licenseScroll}
                             onScroll={handleLicenseScroll}
                             tabIndex={0}
-                            aria-label="License terms"
+                            aria-label={t('onboarding.licenseTerms')}
                         >
                             {LICENSE_SUMMARY.map((p, i) => (
                                 <p
@@ -414,30 +449,15 @@ export function Onboarding({ onCreate, onImport, onImportFromFreeWallet, onPairP
                                 </p>
                             ))}
                         </div>
-                        <label className={styles.licenseAck}>
-                            <input
-                                type="checkbox"
-                                checked={licenseAck}
-                                disabled={!scrolledToEnd}
-                                onChange={(e) => setLicenseAck(e.target.checked)}
-                            />
-                            <span>
-                                {scrolledToEnd
-                                    ? 'I have read and agree to these terms.'
-                                    : 'Scroll to the end to review all terms.'}
-                            </span>
-                        </label>
-                        <div className={isFull ? styles.actionsFull : styles.actionsPopup}>
-                            <Button
-                                variant="primary"
-                                block
-                                onClick={handleAcceptLicense}
-                                disabled={!licenseAck || !scrolledToEnd}
-                                icon={<Icon.CheckIcon />}
-                            >
-                                Accept and continue
-                            </Button>
-                        </div>
+                        <Checkbox
+                            className={styles.licenseAck}
+                            label={scrolledToEnd
+                                ? t('onboarding.iHaveReadAndAgree')
+                                : t('onboarding.scrollToTheEndTo')}
+                            checked={licenseAck}
+                            disabled={!scrolledToEnd}
+                            onChange={(e) => setLicenseAck(e.target.checked)}
+                        />
                     </div>
                 </FormPage>
             </Screen>
@@ -447,74 +467,76 @@ export function Onboarding({ onCreate, onImport, onImportFromFreeWallet, onPairP
     if (mustGraduate) {
         return (
             <Screen variant={variant} header={header}>
-                <FormPage label="Leave the demo">
-                    <div className={isFull ? styles.heroFull : styles.heroPopup}>
+                <FormPage
+                    label={t('onboarding.leaveTheDemo')}
+                    title={t('onboarding.leaveTheDemoFirst')}
+                    headingAs={header ? 'h2' : 'h1'}
+                    visual={(
                         <img
                             src={branding.logoUrl()}
                             alt={branding.PRODUCT_NAME}
                             className={isFull ? styles.logoFull : styles.logoPopup}
                         />
-                        <h1 className={isFull ? styles.nameFull : styles.namePopup}>
-                            Leave the demo first
-                        </h1>
-                    </div>
-                    <div className={styles.demoGraduateNotice}>
-                        <p>
-                            The demo uses a temporary password for this device.
-                        </p>
-                        <p>
-                            Clear the demo before you create or import a wallet. Your wallet
-                            can then use the password you choose.
-                        </p>
-                        <p>
-                            Demo balances and activity are examples, so clearing the demo
-                            does not affect real funds.
-                        </p>
-                    </div>
-                    <div className={isFull ? styles.actionsFull : styles.actionsPopup}>
-                        <Button
-                            variant="primary"
-                            block
-                            onClick={() => handleGraduate('create', onCreate)}
-                            loading={gradBusy === 'create'}
-                            disabled={!!gradBusy || !onCreate}
-                            icon={<Icon.PlusIcon />}
-                        >
-                            Clear demo &amp; create new wallet
-                        </Button>
-                        <Button
-                            variant="secondary"
-                            block
-                            onClick={() => handleGraduate('import', onImport)}
-                            loading={gradBusy === 'import'}
-                            disabled={!!gradBusy || !onImport}
-                            icon={<Icon.KeyIcon />}
-                        >
-                            Clear demo &amp; import wallet
-                        </Button>
-                        <Button
-                            variant="ghost"
-                            block
-                            onClick={() => handleGraduate('import-freewallet', onImportFromFreeWallet)}
-                            loading={gradBusy === 'import-freewallet'}
-                            disabled={!!gradBusy || !onImportFromFreeWallet}
-                            icon={<Icon.MigrateIcon />}
-                        >
-                            Clear demo &amp; import from FreeWallet
-                        </Button>
-                        {onBack ? (
+                    )}
+                    status={gradError ? (
+                        <StatusMessage variant="error" className={styles.demoError}>{gradError}</StatusMessage>
+                    ) : null}
+                    actions={(
+                        <>
+                            <Button
+                                variant="primary"
+                                block
+                                onClick={() => handleGraduate('create', onCreate)}
+                                loading={gradBusy === 'create'}
+                                disabled={!!gradBusy || !onCreate}
+                                icon={<Icon.PlusIcon />}
+                            >
+                                {t('onboarding.clearDemoCreateNewWallet')}
+                            </Button>
+                            <Button
+                                variant="secondary"
+                                block
+                                onClick={() => handleGraduate('import', onImport)}
+                                loading={gradBusy === 'import'}
+                                disabled={!!gradBusy || !onImport}
+                                icon={<Icon.KeyIcon />}
+                            >
+                                {t('onboarding.clearDemoImportWallet')}
+                            </Button>
                             <Button
                                 variant="ghost"
                                 block
-                                onClick={onBack}
-                                disabled={!!gradBusy}
+                                onClick={() => handleGraduate('import-freewallet', onImportFromFreeWallet)}
+                                loading={gradBusy === 'import-freewallet'}
+                                disabled={!!gradBusy || !onImportFromFreeWallet}
+                                icon={<Icon.MigrateIcon />}
                             >
-                                Keep exploring the demo
+                                {t('onboarding.clearDemoImportFromFreewallet')}
                             </Button>
-                        ) : null}
-                        {gradError ? (
-                            <StatusMessage variant="error" className={styles.demoError}>{gradError}</StatusMessage>
-                        ) : null}
+                            {onBack ? (
+                                <Button
+                                    variant="ghost"
+                                    block
+                                    onClick={onBack}
+                                    disabled={!!gradBusy}
+                                >
+                                    {t('onboarding.keepExploringTheDemo')}
+                                </Button>
+                            ) : null}
+                        </>
+                    )}
+                    stackedActions
+                >
+                    <div className={styles.demoGraduateNotice}>
+                        <p>
+                            {t('onboarding.theDemoUsesATemporary')}
+                        </p>
+                        <p>
+                            {t('onboarding.clearTheDemoBeforeYou')}
+                        </p>
+                        <p>
+                            {t('onboarding.demoBalancesAndActivityAre')}
+                        </p>
                     </div>
                 </FormPage>
             </Screen>
@@ -540,80 +562,83 @@ export function Onboarding({ onCreate, onImport, onImportFromFreeWallet, onPairP
 
     return (
         <Screen variant={variant} header={header}>
-            <FormPage label="Wallet setup">
-                <div className={isFull ? styles.heroFull : styles.heroPopup}>
+            <FormPage
+                label={t('onboarding.walletSetup')}
+                // Inside the app the page header already names the screen and the
+                // app header carries the logo, so the brand block only shows on the
+                // first-run screen that has neither.
+                title={header ? undefined : branding.PRODUCT_NAME}
+                description={header ? undefined : branding.TAGLINE}
+                visual={header ? undefined : (
                     <img
                         src={branding.logoUrl()}
                         alt={branding.PRODUCT_NAME}
                         className={isFull ? styles.logoFull : styles.logoPopup}
                     />
-                    <h1 className={isFull ? styles.nameFull : styles.namePopup}>
-                        {branding.PRODUCT_NAME}
-                    </h1>
-                    <p className={isFull ? styles.taglineFull : styles.taglinePopup}>
-                        {branding.TAGLINE}
-                    </p>
-                </div>
-                <div className={isFull ? styles.actionsFull : styles.actionsPopup}>
-                    <Button
-                        variant="primary"
-                        block
-                        onClick={onCreate}
-                        disabled={!onCreate}
-                        icon={<Icon.PlusIcon />}
-                    >
-                        Create new wallet
-                    </Button>
-                    <Button
-                        variant="secondary"
-                        block
-                        onClick={onImport}
-                        disabled={!onImport}
-                        icon={<Icon.KeyIcon />}
-                    >
-                        Import wallet
-                    </Button>
-                    <Button
-                        variant="ghost"
-                        block
-                        onClick={onImportFromFreeWallet}
-                        disabled={!onImportFromFreeWallet}
-                        icon={<Icon.MigrateIcon />}
-                    >
-                        From FreeWallet
-                    </Button>
-                    {/*
-                      §20.5: the fourth lane. Create / Import both make a
-                      standalone `full` wallet; this one makes HALF of an
-                      air-gapped pair, so it needs its own entry point rather than
-                      a post-hoc mode flip in Settings that nothing verifies.
-                    */}
-                    {onPairPartner ? (
+                )}
+                status={demoError ? (
+                    <StatusMessage variant="error" className={styles.demoError}>{demoError}</StatusMessage>
+                ) : null}
+                actions={(
+                    <>
+                        <Button
+                            variant="primary"
+                            block
+                            onClick={onCreate}
+                            disabled={!onCreate}
+                            icon={<Icon.PlusIcon />}
+                        >
+                            {t('onboarding.createNewWallet')}
+                        </Button>
+                        <Button
+                            variant="secondary"
+                            block
+                            onClick={onImport}
+                            disabled={!onImport}
+                            icon={<Icon.KeyIcon />}
+                        >
+                            {t('importWallet.title')}
+                        </Button>
                         <Button
                             variant="ghost"
                             block
-                            onClick={onPairPartner}
-                            icon={<Icon.LinkIcon />}
+                            onClick={onImportFromFreeWallet}
+                            disabled={!onImportFromFreeWallet}
+                            icon={<Icon.MigrateIcon />}
                         >
-                            Pair a watcher or signer
+                            {t('onboarding.fromFreewallet')}
                         </Button>
-                    ) : null}
-                    {onDemoEntered ? (
-                        <Button
-                            variant="ghost"
-                            block
-                            onClick={handleEnterDemo}
-                            loading={demoBusy}
-                            disabled={demoBusy}
-                        >
-                            {demoBusy ? 'Setting up demo…' : 'Try in demo mode'}
-                        </Button>
-                    ) : null}
-                    {demoError ? (
-                        <StatusMessage variant="error" className={styles.demoError}>{demoError}</StatusMessage>
-                    ) : null}
-                </div>
-            </FormPage>
+                        {/*
+                          §20.5: the fourth lane. Create / Import both make a
+                          standalone `full` wallet; this one makes HALF of an
+                          air-gapped pair, so it needs its own entry point rather than
+                          a post-hoc mode flip in Settings that nothing verifies.
+                        */}
+                        {onPairPartner ? (
+                            <Button
+                                variant="ghost"
+                                block
+                                onClick={onPairPartner}
+                                icon={<Icon.LinkIcon />}
+                            >
+                                {t('onboarding.pairAWatcherOrSigner')}
+                            </Button>
+                        ) : null}
+                        {onDemoEntered ? (
+                            <Button
+                                variant="ghost"
+                                block
+                                onClick={handleEnterDemo}
+                                loading={demoBusy}
+                                disabled={demoBusy}
+                            >
+                                {demoBusy ? t('onboarding.settingUpDemo') : t('onboarding.tryInDemoMode')}
+                            </Button>
+                        ) : null}
+                    </>
+                )}
+                stackedActions
+            />
         </Screen>
     );
 }

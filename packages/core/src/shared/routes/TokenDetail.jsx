@@ -9,17 +9,17 @@
 // contact legal@dankest.llc.
 
 import { useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from 'react';
-import { Button, CopyButton, EmptyState, Icon, Input, ListPage, PageHeader, Screen, SectionHeader, Skeleton, StatusMessage, Tabs } from '@xchain-wallet/core/ui';
+import { AddressText, Button, ChainBadge, CopyButton, EmptyState, Icon, Input, ListPage, ListRow, PageHeader, Screen, SectionHeader, Skeleton, StatusMessage, Tabs } from '@xchain-wallet/core/ui';
 import { registry as registryLib } from '@xchain-wallet/core';
 import * as branding from '@xchain-wallet/core/branding/branding.js';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
-import { isDemoGatedActionIndex } from '../../flows/demoGatedContent.js';
+import { getDemoGatedGroupsForTick, isDemoGatedActionIndex } from '../../flows/demoGatedContent.js';
 import { StalenessLabel } from '../components/StalenessLabel.jsx';
 import { GatedFileViewer } from '../components/GatedFileViewer.jsx';
 import { Sparkline, synthesizeTokenChart } from '../components/Sparkline.jsx';
-import tableStyles from '../components/DataTable.module.css';
 import { isDemoWallet } from '../../flows/demoMode.js';
-import { RANGES as CHART_RANGES, resampleTo as resampleSeriesTo } from '../components/PortfolioChart.jsx';
+import { synthesizeDemoNativePrices } from '../../flows/demoFixtures.js';
+import { RANGES as CHART_RANGES, priceHistoryForRange } from '../components/PortfolioChart.jsx';
 import portfolioChartStyles from '../components/PortfolioChart.module.css';
 import { useTokenInfo } from '../hooks/useTokenInfo.js';
 import { useIsTokenIssuer } from '../hooks/useIsTokenIssuer.js';
@@ -30,8 +30,7 @@ import { RouteErrorBoundary } from '../components/RouteErrorBoundary.jsx';
 import { useSettings } from '../hooks/useSettings.js';
 import { useBalancesHidden } from '../hooks/useBalancesHidden.js';
 import { usePortfolioChartVisible } from '../hooks/usePortfolioChartVisible.js';
-import { useOnlineStatus } from '../hooks/useOnlineStatus.js';
-import { useReachability } from '../hooks/useReachability.js';
+import { useNetworkOffline } from '../hooks/useNetworkOffline.js';
 import { coinFromChainId, formatFiat } from '../components/BalanceList.jsx';
 import { BridgeOriginTick } from './BridgeOriginBadge.jsx';
 import { parseBridgedTick, bridgeDisplayTick, coinDisplay } from './BridgeTick.js';
@@ -50,6 +49,8 @@ import { extractHolderRows } from '../utils/holderRows.js';
 import { explorerPage, uniqueRows } from '../utils/pagedRows.js';
 import { percentChangeDisplay } from '../utils/percentFormat.js';
 import { safeHttpUrl } from '../utils/externalUrl.js';
+import { readActiveAccount } from '../utils/activeAccountMemory.js';
+import { sumTickOnChain } from '../utils/walletBalanceShape.js';
 import styles from './TokenDetail.module.css';
 
 const chainRegistry = registryLib.defaultRegistry();
@@ -86,6 +87,8 @@ function callAsync(callback) {
  * @param {number} [props.divisibility]
  * @param {number | null} [props.fiatRate]           selected fiat currency per token if known
  * @param {string | null} [props.fiatRateSource]     rate source, including `market` for DEX-derived prices
+ * @param {boolean} [props.fiatRateStale]           true when the rate is a kept observation after a failed refresh
+ * @param {string | null} [props.fiatRateFetchedAt]  ISO time the rate was observed
  * @param {string} [props.quantity]                  atomic-unit balance string
  * @param {() => void} props.onBack
  * @param {() => void} [props.onSend]                navigate to Send route
@@ -112,7 +115,9 @@ function TokenDetailContent({
     divisibility = null,
     fiatRate = null,
     fiatRateSource = null,
-    quantity = null,
+    fiatRateStale = false,
+    fiatRateFetchedAt = null,
+    quantity: suppliedQuantity,
     imageUrl: rowImageUrl = null,
     onBack,
     onSend,
@@ -122,20 +127,52 @@ function TokenDetailContent({
     onManageToken,
 }) {
     const { messaging, shell } = useMessaging();
-    const { settings } = useSettings();
+    const { settings, loading: settingsLoading, error: settingsError } = useSettings();
     const fiatCurrency = settings?.fiatCurrency || 'USD';
-    const walletModeReady = settings !== null;
-    const isWatcherMode = settings?.walletMode === 'watcher';
-    const browserOnline = useOnlineStatus();
-    const { overall: reachabilityOverall } = useReachability({});
-    const networkActionsAvailable = browserOnline && reachabilityOverall !== 'offline';
+    // A failed settings read still opens the screen in full mode.
+    const walletModeReady = settings !== null || !settingsLoading;
+    const isDemo = isDemoWallet(walletId);
+    const { offline: networkOffline } = useNetworkOffline({ walletId });
+    const networkActionsAvailable = !networkOffline;
     const variant = screenVariantFor(shell);
     const tabsId = useId();
+    const [resolvedQuantity, setResolvedQuantity] = useState(
+        typeof suppliedQuantity === 'string' ? suppliedQuantity : null,
+    );
+    useEffect(() => {
+        if (typeof suppliedQuantity === 'string') {
+            setResolvedQuantity(suppliedQuantity);
+            return undefined;
+        }
+        setResolvedQuantity(null);
+        if (typeof messaging.getWalletBalances !== 'function') return undefined;
+        let cancelled = false;
+        messaging.getWalletBalances(walletId, readActiveAccount(walletId) || undefined)
+            .then((byChain) => {
+                if (!cancelled) setResolvedQuantity(sumTickOnChain(byChain, chainId, tick));
+            })
+            .catch(() => {
+                if (!cancelled) setResolvedQuantity('0');
+            });
+        return () => { cancelled = true; };
+    }, [messaging, walletId, chainId, tick, suppliedQuantity]);
+    const quantity = resolvedQuantity ?? '0';
 
     const descriptor = chainRegistry.get(chainId);
     const isNative = kind === 'native';
-    const isDemo = isDemoWallet(walletId);
+    // The price section shows outside test networks, including before
+    // settings load; the demo wallet prices its synthetic test holdings.
+    const fiatSupported = isDemo || (settings
+        ? settings.activeNetwork !== 'testnet' && settings.activeNetwork !== 'regtest'
+        : Boolean(settingsError) || descriptor?.networkKind === 'mainnet');
+    // A fiat value itself needs a mainnet holding, whatever the settings say.
     const fiatAllowed = isDemo || descriptor?.networkKind === 'mainnet';
+    const displayFiatRate = fiatSupported && fiatAllowed ? fiatRate : null;
+    // A kept rate from before a failed refresh says how old it is, so it
+    // never reads as a current price.
+    const staleFiatRateAsOf = fiatRateStale === true && displayFiatRate != null
+        ? Date.parse(fiatRateFetchedAt || '')
+        : NaN;
 
     // §27.6 / Cluster I FOLLOWUP 3 + Cluster C FOLLOWUP 3: pull
     // description / creator / supply / locks / market / extracted
@@ -173,12 +210,20 @@ function TokenDetailContent({
     // flag the UI uses to hide the stats strip + chart with no calls
     // having fired. Skipped for non-native (XCP tokens don't have a
     // CoinGecko entry).
-    const nativePrice = useNativePrice(isNative && fiatAllowed ? chainId : null, {
+    const queriedNativePrice = useNativePrice(isNative && fiatSupported && fiatAllowed && !isDemo ? chainId : null, {
         includeSparkline: true,
         fiatCurrency,
     });
+    const nativePrice = isNative && isDemo
+        ? {
+            entry: synthesizeDemoNativePrices([chainId])[chainId] ?? null,
+            loading: false,
+            disabled: false,
+            error: null,
+        }
+        : queriedNativePrice;
 
-    const supplyHistory = useSupplyHistory({ messaging, chainId, tick, skip: isNative });
+    const supplyHistory = useSupplyHistory({ messaging, chainId, tick, skip: isNative || isDemo });
 
     const handleBack = useCallback(() => {
         onBack();
@@ -210,6 +255,12 @@ function TokenDetailContent({
 
     useEffect(() => {
         if (!holdersOpen || isNative) return undefined;
+        if (isDemo) {
+            setHolders([]);
+            setHoldersLoading(false);
+            setHoldersError(null);
+            return undefined;
+        }
         if (typeof messaging.getHoldersForToken !== 'function') {
             setHoldersError('Holders lookup is not available in this build.');
             return undefined;
@@ -245,7 +296,7 @@ function TokenDetailContent({
             })
             .finally(() => { if (!cancelled) setHoldersLoading(false); });
         return () => { cancelled = true; };
-    }, [holdersOpen, isNative, tick, chainId, messaging]);
+    }, [holdersOpen, isNative, tick, chainId, messaging, isDemo]);
 
     const loadMoreHolders = useCallback(() => {
         if (holdersLoading || holdersLoadingMore || !holdersHasMore) return;
@@ -278,6 +329,12 @@ function TokenDetailContent({
 
     useEffect(() => {
         if (!holdersOpen || isNative) return undefined;
+        if (isDemo) {
+            setGatedGroups(getDemoGatedGroupsForTick(tick));
+            setGatedLoading(false);
+            setGatedError(null);
+            return undefined;
+        }
         if (typeof messaging.listGatedContent !== 'function') {
             // Older host build without gated-content support; skip silently
             // (no error UI), since pre-feature tokens have no gated entries.
@@ -299,12 +356,12 @@ function TokenDetailContent({
             })
             .finally(() => { if (!cancelled) setGatedLoading(false); });
         return () => { cancelled = true; };
-    }, [holdersOpen, isNative, tick, chainId, messaging]);
+    }, [holdersOpen, isNative, tick, chainId, messaging, isDemo]);
 
     const fiat = useMemo(() => {
-        if (!fiatAllowed || typeof fiatRate !== 'number' || !isFinite(fiatRate)) return null;
-        return fiatValue(quantity, resolvedDivisibility, fiatRate);
-    }, [quantity, resolvedDivisibility, fiatRate, fiatAllowed]);
+        if (typeof displayFiatRate !== 'number' || !isFinite(displayFiatRate)) return null;
+        return fiatValue(quantity, resolvedDivisibility, displayFiatRate);
+    }, [quantity, resolvedDivisibility, displayFiatRate]);
 
     // Header icon picks the smallest representation available: a TIS
     // `icon`-typed image first, then any other TIS image, then the
@@ -361,7 +418,6 @@ function TokenDetailContent({
 
     const nativePriceValue = positiveFiniteNumber(nativePrice.entry?.priceFiat);
     const showNativeStats = isNative && !nativePrice.disabled && nativePriceValue !== null;
-    const showSparkline = showNativeStats && Array.isArray(nativePrice.entry?.sparkline) && nativePrice.entry.sparkline.length > 1;
     const hasDescription = !isNative && detailText(assetInfo?.description) !== '-';
     const hasMarketData = (isNative && showNativeStats) || (!isNative && assetInfo?.marketPrice != null);
 
@@ -469,7 +525,6 @@ function TokenDetailContent({
                                     src={branding.chainIconSmallUrl(chainId)}
                                     alt=""
                                     aria-hidden="true"
-                                    title={descriptor?.displayName || chainId}
                                     className={styles.balanceHeroChainOverlay}
                                 />
                             ) : null}
@@ -497,14 +552,16 @@ function TokenDetailContent({
                                     title="Swap primary unit"
                                     icon={<Icon.SwapIcon />}
                                 />
-                                <Button
-                                    className={styles.balanceHeroEye}
-                                    onClick={toggleChartVisible}
-                                    aria-pressed={chartVisible ? 'true' : 'false'}
-                                    aria-label={chartVisible ? 'Hide chart' : 'Show chart'}
-                                    title={chartVisible ? 'Hide chart' : 'Show chart'}
-                                    icon={<Icon.LineChartIcon />}
-                                />
+                                {fiatSupported ? (
+                                    <Button
+                                        className={styles.balanceHeroEye}
+                                        onClick={toggleChartVisible}
+                                        aria-pressed={chartVisible ? 'true' : 'false'}
+                                        aria-label={chartVisible ? 'Hide chart' : 'Show chart'}
+                                        title={chartVisible ? 'Hide chart' : 'Show chart'}
+                                        icon={<Icon.LineChartIcon />}
+                                    />
+                                ) : null}
                                 <Button
                                     className={styles.balanceHeroEye}
                                     onClick={toggleBalanceHidden}
@@ -523,6 +580,12 @@ function TokenDetailContent({
                                         {hasDexPrice ? ' · DEX price' : ''}
                                     </AutoShrinkText>
                                 </span>
+                                {Number.isFinite(staleFiatRateAsOf) ? (
+                                    <StalenessLabel
+                                        lastSyncedAt={staleFiatRateAsOf}
+                                        className={styles.balanceHeroStaleness}
+                                    />
+                                ) : null}
                             </div>
                         ) : null}
                     </div>
@@ -531,13 +594,15 @@ function TokenDetailContent({
                 {/* "Official token" banner: the token is on a project
                     registry's current roster (owner-attested on-chain;
                     Project_Registry.md). Display policy is "just show
-                    it" (every attesting project is listed). */}
-                {!isNative ? (
+                    it" (every attesting project is listed). The slot is
+                    held only while metadata loads or a banner shows, so a
+                    token on no roster leaves no blank band above the chart. */}
+                {!isNative && (metadataLoading || (Array.isArray(assetInfo?.projects) && assetInfo.projects.length > 0)) ? (
                     <div className={styles.officialBannerSlot}>
                         {metadataLoading ? (
                             <Skeleton height={38} ariaLabel="Loading token verification" />
                         ) : Array.isArray(assetInfo?.projects) && assetInfo.projects.length > 0 ? (
-                            <p className={styles.officialBanner} role="status">
+                            <StatusMessage variant="success">
                                 This token is an official token in the{' '}
                                 {assetInfo.projects.map((p, i) => (
                                     <span key={p} className={styles.officialBannerProject}>
@@ -545,7 +610,7 @@ function TokenDetailContent({
                                     </span>
                                 ))}
                                 {' '}project{assetInfo.projects.length === 1 ? '' : 's'}.
-                            </p>
+                            </StatusMessage>
                         ) : null}
                     </div>
                 ) : null}
@@ -554,7 +619,7 @@ function TokenDetailContent({
                     the quick actions and is collapsible via the chart-icon
                     button in the balance hero (same hook the Home portfolio
                     chart uses, so the toggle persists across both surfaces). */}
-                {chartVisible ? (
+                {fiatSupported && chartVisible ? (
                     <div className={`${styles.infoCard} ${styles.marketCardOffset}`}>
                         <RouteErrorBoundary
                             variant="compact"
@@ -564,13 +629,12 @@ function TokenDetailContent({
                                 isNative={isNative}
                                 nativePrice={nativePrice}
                                 showNativeStats={showNativeStats}
-                                showSparkline={showSparkline}
                                 isDemo={isDemo}
                                 assetInfo={assetInfo}
                                 tick={tick}
                                 chainId={chainId}
                                 hasMarketData={hasMarketData}
-                                fiatRate={fiatAllowed ? fiatRate : null}
+                                fiatRate={displayFiatRate}
                                 fiatRateSource={fiatRateSource}
                                 fiatCurrency={fiatCurrency}
                                 loading={metadataLoading}
@@ -579,28 +643,32 @@ function TokenDetailContent({
                     </div>
                 ) : null}
 
+                {/* The empty state stands alone at full width rather than
+                    inside the chart card, so it never reads as a box in a box. */}
                 {!isNative && supplyHistory.available ? (
-                    <div className={`${styles.infoCard} ${styles.supplyCard}`}>
-                        <RouteErrorBoundary
-                            variant="compact"
-                            resetKey={`${chainId}:${tick}:supply`}
-                        >
-                            {supplyHistory.loading ? (
-                                <Skeleton height={94} ariaLabel="Loading supply history" />
-                            ) : supplyHistory.points.length >= 2 ? (
-                                <SupplyChart points={supplyHistory.points} divisibility={resolvedDivisibility} tick={tick} />
-                            ) : (
-                                <EmptyState
-                                    title="No supply history yet"
-                                    body="Indexed issuance and destruction activity builds this history."
-                                    titleAs="p"
-                                />
-                            )}
-                        </RouteErrorBoundary>
-                    </div>
+                    supplyHistory.loading || supplyHistory.points.length >= 2 ? (
+                        <div className={`${styles.infoCard} ${styles.supplyCard}`}>
+                            <RouteErrorBoundary
+                                variant="compact"
+                                resetKey={`${chainId}:${tick}:supply`}
+                            >
+                                {supplyHistory.loading ? (
+                                    <Skeleton height={94} ariaLabel="Loading supply history" />
+                                ) : (
+                                    <SupplyChart points={supplyHistory.points} divisibility={resolvedDivisibility} tick={tick} />
+                                )}
+                            </RouteErrorBoundary>
+                        </div>
+                    ) : (
+                        <EmptyState
+                            title="No supply history yet"
+                            body="Indexed issuance and destruction activity builds this history."
+                            titleAs="p"
+                        />
+                    )
                 ) : null}
 
-                {isNative ? (
+                {isNative && fiatSupported ? (
                     <NativePriceAlertEntry
                         walletId={walletId}
                         chainId={chainId}
@@ -611,66 +679,59 @@ function TokenDetailContent({
                     />
                 ) : null}
 
+                {!fiatSupported ? (
+                    <p className={styles.muted}>Test coins have no value.</p>
+                ) : null}
+
                 {/* Every shell shares this action order. Missing capabilities
                     disappear, while temporary blocks stay visible with the
                     reason that prevents the action. */}
                 <div className={styles.quickActions} role="group" aria-label="Quick actions">
-                    {typeof onSend === 'function' && walletModeReady && !isWatcherMode ? (
-                        <Button
-                            className={styles.quickAction}
+                    {typeof onSend === 'function' && walletModeReady ? (
+                        <ListRow
                             onClick={onSend}
                             disabled={Boolean(sendDisabledReason)}
-                            title={sendDisabledReason || undefined}
                             aria-label="Send"
-                            icon={<span className={styles.quickActionIcon}><Icon.SendIcon /></span>}
-                        >
-                            <span className={styles.quickActionContent}>
-                                <span>Send</span>
-                                {sendDisabledReason ? <span className={styles.quickActionReason}>{sendDisabledReason}</span> : null}
-                            </span>
-                        </Button>
+                            aria-busy="false"
+                            leading={<span className={styles.quickActionIcon} aria-hidden="true"><Icon.SendIcon /></span>}
+                            title="Send"
+                            subtitle={sendDisabledReason}
+                        />
                     ) : null}
                     {typeof onReceive === 'function' ? (
-                        <Button
-                            className={styles.quickAction}
+                        <ListRow
                             onClick={onReceive}
-                            icon={<span className={styles.quickActionIcon}><Icon.ReceiveIcon /></span>}
-                        >
-                            Receive
-                        </Button>
+                            aria-busy="false"
+                            leading={<span className={styles.quickActionIcon} aria-hidden="true"><Icon.ReceiveIcon /></span>}
+                            title="Receive"
+                        />
                     ) : null}
                     {typeof onBuy === 'function' ? (
-                        <Button
-                            className={styles.quickAction}
+                        <ListRow
                             onClick={onBuy}
                             disabled={Boolean(tradeDisabledReason)}
-                            title={tradeDisabledReason || undefined}
                             aria-label="Trade"
-                            icon={<span className={styles.quickActionIcon}><Icon.MarketIcon /></span>}
-                        >
-                            <span className={styles.quickActionContent}>
-                                <span>Trade</span>
-                                {tradeDisabledReason ? <span className={styles.quickActionReason}>{tradeDisabledReason}</span> : null}
-                            </span>
-                        </Button>
+                            aria-busy="false"
+                            leading={<span className={styles.quickActionIcon} aria-hidden="true"><Icon.MarketIcon /></span>}
+                            title="Trade"
+                            subtitle={tradeDisabledReason}
+                        />
                     ) : null}
                     {typeof onViewActivity === 'function' ? (
-                        <Button
-                            className={styles.quickAction}
+                        <ListRow
                             onClick={onViewActivity}
-                            icon={<span className={styles.quickActionIcon}><Icon.HistoryIcon /></span>}
-                        >
-                            History
-                        </Button>
+                            aria-busy="false"
+                            leading={<span className={styles.quickActionIcon} aria-hidden="true"><Icon.HistoryIcon /></span>}
+                            title="History"
+                        />
                     ) : null}
                     {!isNative && typeof onManageToken === 'function' && isTokenOwner ? (
-                        <Button
-                            className={styles.quickAction}
+                        <ListRow
                             onClick={onManageToken}
-                            icon={<span className={styles.quickActionIcon}><Icon.GearIcon /></span>}
-                        >
-                            Manage
-                        </Button>
+                            aria-busy="false"
+                            leading={<span className={styles.quickActionIcon} aria-hidden="true"><Icon.GearIcon /></span>}
+                            title="Manage"
+                        />
                     ) : null}
                 </div>
 
@@ -903,7 +964,7 @@ function NativePriceAlertEntry({ walletId, chainId, currentPrice, fiatCurrency, 
 // this message instead of a synthesized walk.
 const NO_PRICE_HISTORY = 'No price history yet';
 
-function MarketPanel({ isNative, nativePrice, showSparkline, isDemo, assetInfo, tick, chainId, fiatRate, fiatRateSource, fiatCurrency, loading }) {
+function MarketPanel({ isNative, nativePrice, isDemo, assetInfo, tick, chainId, fiatRate, fiatRateSource, fiatCurrency, loading }) {
     const tabsId = useId();
     // Always render the KPI strip with the same shape. Placeholders
     // fill in for missing data so the structure stays consistent
@@ -911,11 +972,12 @@ function MarketPanel({ isNative, nativePrice, showSparkline, isDemo, assetInfo, 
     // doesn't have data for this tick (e.g. testnet, regtest).
 
     // Range picker: mirrors the PortfolioChart buttons on Home. Native
-    // coins have a 7d CoinGecko sparkline (168 hourly points), so 24h /
-    // 7d are slices of the real series; 30d / 90d / All synthesize the
-    // same way single tokens do (the line still ends at current price).
-    const [rangeId, setRangeId] = useState('30d');
-    const range = CHART_RANGES.find((r) => r.id === rangeId) || CHART_RANGES[2];
+    // Coins have a 7d CoinGecko sparkline (168 hourly points), so real
+    // wallets offer the 24h tail and the full 7d series. Demo wallets also
+    // offer longer synthesized ranges.
+    const availableRanges = isDemo ? CHART_RANGES : CHART_RANGES.filter((item) => item.realCapable);
+    const [rangeId, setRangeId] = useState(isDemo ? '30d' : '7d');
+    const range = availableRanges.find((item) => item.id === rangeId) || availableRanges[0];
 
     let priceCell = '-';
     let priceLabel = 'Price';
@@ -945,14 +1007,9 @@ function MarketPanel({ isNative, nativePrice, showSparkline, isDemo, assetInfo, 
                 pctLabel24h = display?.label;
                 pctTone24h = display?.direction;
             }
-            if (showSparkline && range.realCapable && Array.isArray(e.sparkline) && e.sparkline.length >= 2) {
-                // Real CoinGecko sparkline = 168 hourly points (7d).
-                // 24h uses the tail; 7d uses the full series; longer
-                // ranges fall through to synthesis below.
-                const src = range.id === '24h'
-                    ? e.sparkline.slice(-Math.min(range.points, e.sparkline.length))
-                    : e.sparkline;
-                sparkline = resampleSeriesTo(src, range.points);
+            const recordedHistory = priceHistoryForRange(e, range);
+            if (recordedHistory) {
+                sparkline = recordedHistory;
             } else if (priceFiat !== null && isDemo) {
                 // Demo wallets only: no real series for this range, so
                 // synthesize a walk seeded by chain + change so the demo
@@ -980,7 +1037,7 @@ function MarketPanel({ isNative, nativePrice, showSparkline, isDemo, assetInfo, 
                 <div className={styles.marketHistorySlot}>
                     {nativeLoading ? (
                         <Skeleton height={64} ariaLabel="Loading price history" />
-                    ) : sparkline || (showSparkline && !hint) ? (
+                    ) : sparkline ? (
                         <>
                             <div
                                 id={`${tabsId}-panel`}
@@ -989,14 +1046,14 @@ function MarketPanel({ isNative, nativePrice, showSparkline, isDemo, assetInfo, 
                             >
                                 {sparkline ? (
                                     <div className={styles.chart} aria-label={`${range.label} price chart`}>
-                                        <Sparkline series={sparkline} height={40} />
+                                        <Sparkline series={sparkline} height={40} rangeLabel={range.label} />
                                     </div>
                                 ) : (
                                     <EmptyState title={NO_PRICE_HISTORY} body="Indexed market activity builds this token's price history." titleAs="p" />
                                 )}
                             </div>
                             <div className={portfolioChartStyles.ranges} role="tablist" aria-label="Chart range">
-                                {CHART_RANGES.map((r) => (
+                                {availableRanges.map((r) => (
                                     // A native button preserves tab semantics and roving tab focus, which Button does not provide.
                                     <button
                                         key={r.id}
@@ -1089,7 +1146,7 @@ function MarketPanel({ isNative, nativePrice, showSparkline, isDemo, assetInfo, 
                         aria-labelledby={`${tabsId}-tab-${rangeId}`}
                     >
                         <div className={styles.chart} aria-label={`${range.label} price chart`}>
-                            <Sparkline series={sparkline} height={40} />
+                            <Sparkline series={sparkline} height={40} rangeLabel={range.label} />
                         </div>
                     </div>
                 ) : !hint ? (
@@ -1143,107 +1200,84 @@ function DetailsPanel({
             aria-label="Token details"
             aria-busy={loading || undefined}
         >
-            <table className={styles.metaTable}>
-                <tbody>
-                    <tr className={styles.metaRow}>
-                        <th scope="row">Name</th>
-                        <td>{displayName || tick}</td>
-                    </tr>
-                    <tr className={styles.metaRow}>
-                        <th scope="row">Ticker</th>
-                        <td>
-                            <BridgeOriginTick tick={tick} localCoin={coinFromChainId(chainId)} />
-                        </td>
-                    </tr>
-                    {/* A bridged copy is a claim on an asset held in escrow on
-                        another chain, and its holder should be able to read that
-                        off the page rather than infer it from a dot in the
-                        ticker. Native rows have no origin to name and get no
-                        row at all. */}
-                    {parseBridgedTick(tick, coinFromChainId(chainId)) ? (
-                        <tr className={styles.metaRow}>
-                            <th scope="row">Origin</th>
-                            <td>
-                                {`Native to ${coinDisplay(parseBridgedTick(tick, coinFromChainId(chainId)).origin)}`
-                                    + `, bridged here as ${tick}`}
-                            </td>
-                        </tr>
-                    ) : null}
-                    <tr className={styles.metaRow}>
-                        <th scope="row">Type</th>
-                        <td>{kindLabel(kind)}</td>
-                    </tr>
-                    <tr className={styles.metaRow}>
-                        <th scope="row">Chain</th>
-                        <td>{descriptor?.displayName || chainId}</td>
-                    </tr>
-                    {!isNative ? (
-                        <tr className={styles.metaRow}>
-                            <th scope="row">Divisibility</th>
-                            <td>{detailText(divisibility)}</td>
-                        </tr>
-                    ) : null}
-                    <tr className={styles.metaRow}>
-                        <th scope="row">Total supply</th>
-                        <td>
-                            {formatTotalSupply(isNative, chainId, assetInfo, divisibility)}
-                            {!isNative && typeof assetInfo?.locked === 'boolean' ? (
-                                <span className={styles.supplyState}>
-                                    {assetInfo.locked ? 'Locked supply' : 'Unlocked supply'}
-                                </span>
-                            ) : null}
-                        </td>
-                    </tr>
-                    <tr className={styles.metaRow}>
-                        <th scope="row">Current balance</th>
-                        <td>{balanceHidden ? '•••••' : amountWithUnit(quantity, divisibility, tick)}</td>
-                    </tr>
-                    <tr className={styles.metaRow}>
-                        <th scope="row">Estimated value</th>
-                        <td>
-                            {balanceHidden
-                                ? '•••••'
-                                : fiat == null
-                                    ? '-'
-                                    : `${formatFiatNumber(fiat, fiatCurrency)} ${(fiatCurrency || 'USD').toUpperCase()}`}
-                        </td>
-                    </tr>
-                    {!isNative ? (
-                        <tr className={styles.metaRow}>
-                            <th scope="row">Creator</th>
-                            <td>
-                                {loading ? (
-                                    <Skeleton shape="text" width="70%" height={20} />
-                                ) : detailText(assetInfo?.creator) !== '-' ? (
-                                    <span className={styles.copyableValue}>
-                                        <span className={styles.creatorCell} title={assetInfo.creator}>
-                                            {shorten(assetInfo.creator)}
-                                        </span>
-                                        <CopyButton value={assetInfo.creator} ariaLabel="Copy creator address" />
-                                    </span>
-                                ) : '-'}
-                            </td>
-                        </tr>
-                    ) : null}
-                    {!isNative ? (
-                        <tr className={styles.metaRow}>
-                            <th scope="row">Status</th>
-                            <td>
-                                {loading ? (
-                                    <Skeleton shape="text" width="40%" height={20} />
-                                ) : assetInfo?.locked == null ? (
-                                    '-'
-                                ) : assetInfo.locked ? (
-                                    <span className={styles.lockedFlag}>Locked</span>
-                                ) : (
-                                    <span className={styles.unlockedFlag}>Mutable</span>
-                                )}
-                            </td>
-                        </tr>
-                    ) : null}
-                </tbody>
-            </table>
+            <ul className={styles.detailList} aria-label="Token detail fields">
+                <DetailRow label="Name">{displayName || tick}</DetailRow>
+                <DetailRow label="Ticker">
+                    <BridgeOriginTick tick={tick} localCoin={coinFromChainId(chainId)} />
+                </DetailRow>
+                {/* A bridged copy is a claim on an asset held in escrow on
+                    another chain, and its holder should be able to read that
+                    off the page rather than infer it from a dot in the
+                    ticker. Native rows have no origin to name and get no
+                    row at all. */}
+                {parseBridgedTick(tick, coinFromChainId(chainId)) ? (
+                    <DetailRow label="Origin">
+                        {`Native to ${coinDisplay(parseBridgedTick(tick, coinFromChainId(chainId)).origin)}`
+                            + `, bridged here as ${tick}`}
+                    </DetailRow>
+                ) : null}
+                <DetailRow label="Type">{kindLabel(kind)}</DetailRow>
+                {descriptor ? (
+                    <DetailRow label="Network"><ChainBadge descriptor={descriptor} size="sm" /></DetailRow>
+                ) : null}
+                {!isNative ? (
+                    <DetailRow label="Divisibility">{detailText(divisibility)}</DetailRow>
+                ) : null}
+                <DetailRow label={<span>Total supply</span>}>
+                    <span>
+                        {formatTotalSupply(isNative, chainId, assetInfo, divisibility)}
+                        {!isNative && typeof assetInfo?.locked === 'boolean' ? (
+                            <span className={styles.supplyState}>
+                                {assetInfo.locked ? 'Locked supply' : 'Unlocked supply'}
+                            </span>
+                        ) : null}
+                    </span>
+                </DetailRow>
+                <DetailRow label="Current balance">
+                    {balanceHidden ? '•••••' : amountWithUnit(quantity, divisibility, tick)}
+                </DetailRow>
+                <DetailRow label="Estimated value">
+                    {balanceHidden
+                        ? '•••••'
+                        : fiat == null
+                            ? '-'
+                            : `${formatFiatNumber(fiat, fiatCurrency)} ${(fiatCurrency || 'USD').toUpperCase()}`}
+                </DetailRow>
+                {!isNative ? (
+                    <DetailRow label={<span>Creator</span>}>
+                        {loading ? (
+                            <Skeleton shape="text" width="70%" height={20} />
+                        ) : detailText(assetInfo?.creator) !== '-' ? (
+                            <span className={styles.copyableValue}>
+                                <AddressText address={assetInfo.creator} className={styles.creatorCell} />
+                                <CopyButton value={assetInfo.creator} ariaLabel="Copy creator address" />
+                            </span>
+                        ) : '-'}
+                    </DetailRow>
+                ) : null}
+                {!isNative ? (
+                    <DetailRow label={<span>Status</span>}>
+                        {loading ? (
+                            <Skeleton shape="text" width="40%" height={20} />
+                        ) : assetInfo?.locked == null ? (
+                            '-'
+                        ) : assetInfo.locked ? (
+                            <span className={styles.lockedFlag}>Locked</span>
+                        ) : (
+                            <span className={styles.unlockedFlag}>Mutable</span>
+                        )}
+                    </DetailRow>
+                ) : null}
+            </ul>
         </div>
+    );
+}
+
+function DetailRow({ label, children }) {
+    return (
+        <li>
+            <ListRow title={label} trailing={children} />
+        </li>
     );
 }
 
@@ -1308,7 +1342,6 @@ function InfoPanel({ isNative, assetInfo, hasDescription, loading }) {
         <div className={`${styles.infoCard} ${styles.aboutCard}`}>
             {hasDescription ? (
                 <div className={styles.metaBlock}>
-                    <SectionHeader title="About" />
                     <p className={styles.descriptionBody}>{assetInfo.description}</p>
                 </div>
             ) : null}
@@ -1652,7 +1685,7 @@ function PgpsigBlock({ pgpsig }) {
     return (
         <div className={styles.metaBlock}>
             <SectionHeader title="PGP signature" />
-            <pre className={styles.pgpsigBlock}>{pgpsig}</pre>
+            <pre className={styles.pgpsigBlock} tabIndex={0}>{pgpsig}</pre>
         </div>
     );
 }
@@ -1902,7 +1935,7 @@ function GatedContentPanel({ walletId, chainId, tick, groups, loading, error, pa
                 const usable = list.filter((a) => a.source === 'hd' || a.source === 'imported-wif');
                 setAddresses(usable);
                 if (usable.length === 0) {
-                    setAddressesError('No unlockable addresses for this chain. Holders need an HD or imported-WIF address that holds the token.');
+                    setAddressesError('No unlockable addresses for this network. Holders need an HD or imported-WIF address that holds the token.');
                 }
             })
             .catch((err) => setAddressesError(err?.message || 'Failed to load addresses.'))
@@ -1978,7 +2011,6 @@ function GatedGroupCard({
     ownsToken,
     tokenLabel,
 }) {
-    const unlockErrorId = `${useId()}-unlock-error`;
     const [password, setPassword] = useState('');
     const [unlockError, setUnlockError] = useState(/** @type {string | null} */ (null));
     const [accessError, setAccessError] = useState(/** @type {string | null} */ (null));
@@ -2133,7 +2165,7 @@ function GatedGroupCard({
         event.preventDefault();
         if (submitting || password.length === 0) return;
         if (!Array.isArray(addresses) || addresses.length === 0) {
-            setUnlockError('No usable holding address found for this chain.');
+            setUnlockError('No usable holding address found for this network.');
             return;
         }
         setSubmitting(true);
@@ -2288,23 +2320,7 @@ function GatedGroupCard({
                     );
                 })}
             </ul>
-            {accessError ? (
-                <p
-                    role="alert"
-                    style={{
-                        marginTop: 'var(--xc-space-2)',
-                        padding: 'var(--xc-space-3)',
-                        background: 'var(--xc-bg-muted)',
-                        border: '1px dashed var(--xc-border)',
-                        borderRadius: 'var(--xc-radius-sm)',
-                        fontSize: 'var(--xc-text-sm)',
-                        color: 'var(--xc-text)',
-                        lineHeight: 1.5,
-                    }}
-                >
-                    {accessError}
-                </p>
-            ) : null}
+            <StatusMessage variant="error">{accessError}</StatusMessage>
             {passwordOpen ? (
                 <form onSubmit={handleUnlock} noValidate style={{ marginTop: 'var(--xc-space-3)' }}>
                     {addressesLoading ? (
@@ -2322,19 +2338,8 @@ function GatedGroupCard({
                             if (unlockError) setUnlockError(null);
                         }}
                         autoComplete="current-password"
-                        aria-invalid={unlockError ? true : undefined}
-                        aria-describedby={unlockError ? unlockErrorId : undefined}
+                        error={unlockError || undefined}
                     />
-                    {unlockError ? (
-                        <p
-                            id={unlockErrorId}
-                            role="alert"
-                            className={styles.error}
-                            style={{ marginTop: 'var(--xc-space-1)' }}
-                        >
-                            {unlockError}
-                        </p>
-                    ) : null}
                     <div style={{ display: 'flex', gap: 'var(--xc-space-2)', marginTop: 'var(--xc-space-2)' }}>
                         <Button
                             type="submit"
@@ -2453,37 +2458,34 @@ function HoldersPanel({
                     <StalenessLabel lastSyncedAt={holdersFetchedAt} warnAfterMs={10 * 60_000} />
                 </div>
             ) : null}
-            <table className={tableStyles.table}>
-                <caption className={tableStyles.visuallyHiddenCaption}>Holder balances</caption>
-                <thead>
-                    <tr>
-                        <th className={tableStyles.headerCell} scope="col">Address</th>
-                        <th className={`${tableStyles.headerCell} ${tableStyles.numeric}`} scope="col">Balance</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    {renderedHolders.map((h, i) => (
-                        <tr key={holderIdentity(h) || `holder:${i}`}>
-                            <td className={tableStyles.cell} data-label="Address">
-                                <span className={styles.holdersAddrWrap}>
-                                    <span className={styles.holdersAddr} title={holderAddress(h) === '-' ? undefined : holderAddress(h)}>
-                                        {shorten(holderAddress(h))}
+            <ul className={styles.holdersList} aria-label="Holder balances">
+                {renderedHolders.map((h, i) => {
+                    const address = holderAddress(h);
+                    const balance = formatHolderBalance(h, divisibility);
+                    return (
+                        <li key={holderIdentity(h) || `holder:${i}`}>
+                            <ListRow
+                                title={(
+                                    <span className={styles.holdersAddrWrap}>
+                                        {address === '-' ? (
+                                            <span className={styles.holdersAddr}>-</span>
+                                        ) : (
+                                            <AddressText address={address} className={styles.holdersAddr} />
+                                        )}
+                                        {address !== '-' ? (
+                                            <CopyButton
+                                                value={address}
+                                                ariaLabel={`Copy holder address ${i + 1}`}
+                                            />
+                                        ) : null}
                                     </span>
-                                    {holderAddress(h) !== '-' ? (
-                                        <CopyButton
-                                            value={holderAddress(h)}
-                                            ariaLabel={`Copy holder address ${i + 1}`}
-                                        />
-                                    ) : null}
-                                </span>
-                            </td>
-                            <td className={`${tableStyles.cell} ${tableStyles.numeric} ${styles.holdersQty}`} data-label="Balance">
-                                {formatHolderBalance(h, divisibility)}
-                            </td>
-                        </tr>
-                    ))}
-                </tbody>
-            </table>
+                                )}
+                                trailing={<span className={styles.holdersQty}>{balance}</span>}
+                            />
+                        </li>
+                    );
+                })}
+            </ul>
             {holdersMoreError ? (
                 <StatusMessage variant="error" className={styles.error}>{holdersMoreError}</StatusMessage>
             ) : null}
@@ -2565,11 +2567,6 @@ function kindLabel(kind) {
 function nativeTickerOf(chainId) {
     const desc = chainRegistry.get(chainId);
     return tickerForCoin(desc?.coin);
-}
-
-function shorten(addr) {
-    if (!addr || addr.length <= 12) return addr;
-    return `${addr.slice(0, 6)}…${addr.slice(-4)}`;
 }
 
 function parseAtomicQuantity(v) {

@@ -276,20 +276,21 @@ final class ScreenshotTests: XCTestCase {
 
     /// Move the demo wallet onto the MAIN networks before anything is shot.
     ///
-    /// WHY THIS EXISTS (frontier row 63 / dq-7). Demo mode
-    /// registers all nine chains and lands on `activeNetwork: 'regtest'`,
-    /// which was invisible in a screenshot until a shared-UI change started
-    /// rendering a network suffix for any non-mainnet chain. Every coin row
-    /// then reads "BTC - regtest" - a network the STORE build hides behind
-    /// Settings, Developer mode - so the listing would depict a state no
-    /// ordinary user can reach. That is the same accurate-metadata exposure
-    /// (Apple 2.3.3) as a stale screenshot, arriving from the other side.
+    /// WHY THIS EXISTS (frontier row 63 / dq-7). Demo mode used to land on
+    /// `activeNetwork: 'regtest'`, a network the STORE build hides behind
+    /// Settings, Developer mode, so the listing would depict a state no
+    /// ordinary user can reach (the accurate-metadata exposure of Apple
+    /// 2.3.3). Since xchain-wallet#78 demo mode itself lands on mainnet,
+    /// because App Review is sent there first and must see a mainnet
+    /// address, so this step is now a guard: on a mainnet demo the select
+    /// offers only Mainnet and picking it changes nothing. It stays so a
+    /// regression back to a non-mainnet landing is switched (and confirmed)
+    /// before anything is shot, rather than captured.
     ///
-    /// Done in the CAPTURE rather than by changing where demo mode lands,
-    /// because that is where it belongs: a user trying demo mode still gets
-    /// the experience they always got. The mainnet fixtures already exist and
-    /// are the richer set (0.12345678 BTC, EXAMPLE, XCP, RAREPEPE), which is
-    /// also what the Chrome Web Store listing images show.
+    /// The 0.341.4 `02-receive` image shows `bcrt1` because this step
+    /// picked Mainnet but never tapped the "Switch network" confirmation the
+    /// Network setting has asked for since 2026-10-13, so the switch never
+    /// happened. It taps it now, the same way the offline rehearsal does.
     ///
     /// The control is a real `<select aria-label="Active network">` in the
     /// WebView, and WebKit hands a select to UIKit differently per idiom: a
@@ -307,6 +308,16 @@ final class ScreenshotTests: XCTestCase {
     /// listing image of the settings screen. Settings is one row INSIDE that
     /// sheet, so the sheet is a step on the way, never the destination.
     @discardableResult
+    private func openReceive() -> Bool {
+        if let direct = button(anyOf: ["Receive"]) { return tap(direct, "receive nav entry") }
+        guard let more = button(anyOf: ["More"]), tap(more, "More (sheet) for Receive") else {
+            missed.append("receive: no Receive and no More")
+            print("MISSED: receive - neither a Receive control nor a More sheet")
+            return false
+        }
+        return openFromNav(["Receive"], scene: "receive")
+    }
+
     private func openSettings(scene: String) -> Bool {
         if let direct = button(anyOf: ["Settings"]), tap(direct, "Settings") {
             return reach(app.staticTexts.firstMatch, "settings content", timeout: 20)
@@ -464,6 +475,12 @@ final class ScreenshotTests: XCTestCase {
             return
         }
 
+        // "Switch to Mainnet?" confirmation, which appears after the pick
+        // whenever the pick changes the network. A demo that already lands on
+        // mainnet raises none, so its absence is not a miss.
+        let confirm = app.buttons.matching(NSPredicate(format: "label == %@", "Switch network")).firstMatch
+        if confirm.waitForExistence(timeout: 8) { _ = tap(confirm, "Switch network (confirm)") }
+
         // Switching reloads the WebView (NetworkSection calls
         // window.location.reload once the host route has re-derived addresses)
         // and the demo wallet silently re-unlocks with its stored password. A
@@ -573,7 +590,9 @@ final class ScreenshotTests: XCTestCase {
 
         // 2. Receive, which shows an address and a QR: the clearest proof in a
         //    still image that this is a wallet and not a web page.
-        if openFromNav(["Receive"], scene: "receive") {
+        //    The phone bottom bar carries Home, History, Send and Scan, and Receive
+        //    sits in the More sheet, so a missing direct entry opens the sheet first.
+        if openReceive() {
             _ = reach(app.staticTexts.firstMatch, "receive content", timeout: 20)
             capture("02-receive")
         } else {
@@ -672,12 +691,12 @@ extension ScreenshotTests {
     /// Find the first hittable element of any type whose label starts with `label`: settings
     /// rows carry their summary ("Safety Auto-lock 15 min") and nav rows a badge count.
     private func hittable(_ label: String, exact: Bool = false) -> XCUIElement? {
-        let format = exact ? "label == %@" : "label BEGINSWITH %@"
+        let format = exact ? "label ==[c] %@" : "label BEGINSWITH[c] %@"
         for query in [app.buttons, app.descendants(matching: .any)] {
             let q = query.matching(NSPredicate(format: format, label))
             for i in 0..<min(q.count, 6) {
                 let e = q.element(boundBy: i)
-                if e.exists && e.isHittable { return e }
+                if e.exists && e.frame.width > 1 && app.windows.firstMatch.frame.contains(CGPoint(x: e.frame.midX, y: e.frame.midY)) && e.isHittable { return e }
             }
         }
         return nil
@@ -707,7 +726,7 @@ extension ScreenshotTests {
 
     private func dumpButtons(_ tag: String) {
         let labels = app.buttons.allElementsBoundByIndex.filter { $0.exists }
-            .map { "\($0.label)\($0.isHittable ? "" : "(h-)")" }
+            .map { "\($0.label)" }
         print("BUTTONS \(tag): \(labels.joined(separator: " | "))")
     }
 
@@ -748,7 +767,7 @@ extension ScreenshotTests {
         let ff = field.frame
         print("KEYBOARD \(tag): field '\(field.label)' \(ff) keyboard=\(kf) fieldCovered=\(ff.maxY > kf.minY)")
         probeShot("\(tag)-kb-docked")
-        kb.pinch(withScale: 0.4, velocity: -1)
+        if ProcessInfo.processInfo.environment["SKIP_PINCH"] == nil { kb.pinch(withScale: 0.4, velocity: -1) }
         Thread.sleep(forTimeInterval: 1)
         let fk = app.keyboards.firstMatch.frame
         print("KEYBOARD \(tag): after pinch keyboard=\(fk) fieldCovered=\(field.frame.intersects(fk))")
@@ -904,5 +923,847 @@ extension ScreenshotTests {
         resizeWindow(to: 1210)
         XCUIDevice.shared.orientation = .portrait
         print("PROBE missed: \(missed.joined(separator: "; "))")
+    }
+}
+
+// MARK: - Review demo step 4 rehearsal
+
+import UIKit
+
+/// Rehearse the App Store review notes on a registered device: import the funded
+/// test-network demo wallet (step 1), switch to Testnet (step 2), compose a send
+/// ONLINE up to the confirmation screen, then turn on Airplane Mode and confirm
+/// (step 4), and record what the confirmation screen does with no network.
+///
+/// Device only. The driver injects XCHAIN_DEMO_MNEMONIC and XCHAIN_DEMO_SEND_TO
+/// into a 0600 copy of the .xctestrun, never on xcodebuild's argv. The phrase
+/// moves by pasteboard and the edit menu, never `typeText`, because typed text
+/// is written into the activity log; nothing is captured while it is on screen.
+/// XCHAIN_DEMO_SEND_TO is the demo wallet's own public test-network addresses,
+/// so the send is a self-send. XCHAIN_REHEARSAL_BROADCAST=1 taps "Send now" in
+/// the queue banner after Airplane Mode is off, as the review notes tell Apple to.
+/// Airplane Mode is turned off at the end and again in a teardown block.
+extension ScreenshotTests {
+
+    private var springboard: XCUIApplication { XCUIApplication(bundleIdentifier: "com.apple.springboard") }
+
+    private func rehearsalShot(_ name: String) {
+        Thread.sleep(forTimeInterval: 1.0)
+        capture("rehearsal-\(name)")
+    }
+
+    /// What the screen said, for the report. Only called after the phrase is gone.
+    private func dumpTexts(_ tag: String) {
+        let labels = app.staticTexts.allElementsBoundByIndex.prefix(60)
+            .filter { $0.exists }.map { $0.label }.filter { !$0.isEmpty }
+        let line = "TEXTS \(tag): \(labels.joined(separator: " | "))"
+        print(line)
+        let note = XCTAttachment(string: line)
+        note.name = "rehearsal-texts-\(tag)"
+        note.lifetime = .keepAlways
+        add(note)
+    }
+
+    // MARK: Airplane Mode through Control Center
+
+    private func airplaneToggle() -> XCUIElement? {
+        let sb = springboard
+        let byLabel = NSPredicate(format: "label ==[c] %@", "Airplane Mode")
+        let candidates: [XCUIElement] = [
+            sb.buttons["airplane-mode-button"],
+            sb.switches["airplane-mode-button"],
+            sb.switches.matching(byLabel).firstMatch,
+            sb.buttons.matching(byLabel).firstMatch,
+            sb.descendants(matching: .any).matching(byLabel).firstMatch,
+        ]
+        return candidates.first(where: { $0.exists })
+    }
+
+    private func toggleIsOn(_ toggle: XCUIElement) -> Bool {
+        if let s = toggle.value as? String { return s == "1" || s.lowercased() == "on" }
+        if let n = toggle.value as? NSNumber { return n.boolValue }
+        return toggle.isSelected
+    }
+
+    /// iPad opens Control Center with a swipe down from the top-right corner.
+    private func openControlCenter() {
+        let sb = springboard
+        sb.coordinate(withNormalizedOffset: CGVector(dx: 0.96, dy: 0.002))
+            .press(forDuration: 0.1, thenDragTo: sb.coordinate(withNormalizedOffset: CGVector(dx: 0.96, dy: 0.6)))
+        _ = sb.buttons["airplane-mode-button"].waitForExistence(timeout: 3)
+    }
+
+    /// A swipe up from the bottom edge dismisses Control Center; activating the
+    /// app afterwards covers the case where the swipe went to the home screen.
+    private func closeControlCenter() {
+        let sb = springboard
+        sb.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.995))
+            .press(forDuration: 0.1, thenDragTo: sb.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.4)))
+        Thread.sleep(forTimeInterval: 1.0)
+        app.activate()
+        Thread.sleep(forTimeInterval: 1.0)
+    }
+
+    /// Set Airplane Mode and READ IT BACK; a tap that did nothing looks the same
+    /// as a tap that worked. Returns the state read, or nil if it never matched.
+    @discardableResult
+    private func setAirplaneMode(_ on: Bool, tag: String) -> Bool? {
+        for attempt in 1...3 {
+            openControlCenter()
+            guard let toggle = airplaneToggle() else {
+                let labels = springboard.buttons.allElementsBoundByIndex.prefix(40).map { $0.label }
+                print("AIRPLANE \(tag): attempt \(attempt) found no toggle; springboard buttons: \(labels.joined(separator: " | "))")
+                closeControlCenter()
+                continue
+            }
+            let before = toggleIsOn(toggle)
+            if before != on {
+                toggle.tap()
+                Thread.sleep(forTimeInterval: 2.0)
+            }
+            let after = toggleIsOn(toggle)
+            print("AIRPLANE \(tag): attempt \(attempt) before=\(before) after=\(after) want=\(on) value=\(String(describing: toggle.value))")
+            rehearsalShot("control-center-\(tag)")
+            closeControlCenter()
+            if after == on { return after }
+        }
+        missed.append("airplane \(tag): Airplane Mode never read back as \(on ? "on" : "off")")
+        print("MISSED: airplane \(tag) - never read back as \(on ? "on" : "off")")
+        return nil
+    }
+
+    // MARK: Moving secrets without typing them
+
+    /// Stage the phrase on the pasteboard while the RUNNER is the foreground app.
+    /// A write from the runner once the wallet is in front fails with PBErrorDomain
+    /// Code=10 ("not available at this time"), so this runs before app.launch().
+    /// Local only (never Universal Clipboard) and expiring, so it clears itself.
+    private func stagePhraseOnPasteboard(_ phrase: String) -> Bool {
+        UIPasteboard.general.setItems([["public.utf8-plain-text": phrase]],
+                                      options: [.localOnly: true, .expirationDate: Date().addingTimeInterval(240)])
+        let staged = UIPasteboard.general.hasStrings
+        print("PASTEBOARD: phrase staged=\(staged)")
+        return staged
+    }
+
+    /// Paste through the edit menu: a user-initiated menu paste raises no consent
+    /// alert, and the phrase never appears in the activity log the way typed text does.
+    private func pasteViaMenu(into field: XCUIElement) -> Bool {
+        field.tap()
+        Thread.sleep(forTimeInterval: 0.6)
+        for attempt in 0..<3 {
+            if attempt == 1 { field.press(forDuration: 1.2) } else if attempt == 2 { field.doubleTap() } else { field.tap() }
+            let candidates = [app.menuItems["Paste"], app.buttons["Paste"], app.staticTexts["Paste"]]
+            for item in candidates where item.waitForExistence(timeout: 1.5) && item.isHittable {
+                item.tap()
+                // A Universal Clipboard paste fetches from the Mac first.
+                Thread.sleep(forTimeInterval: 4)
+                return true
+            }
+        }
+        return false
+    }
+
+    private func wordCount(_ field: XCUIElement) -> Int {
+        guard let value = field.value as? String else { return 0 }
+        return value.split(whereSeparator: { $0 == " " || $0 == "\n" }).count
+    }
+
+    private func unlockIfLocked(_ password: String, tag: String) {
+        let unlock = app.buttons.matching(NSPredicate(format: "label == %@", "Unlock Wallet")).firstMatch
+        guard unlock.waitForExistence(timeout: 5) else { return }
+        let field = app.secureTextFields.firstMatch
+        guard reach(field, "\(tag): unlock password field", timeout: 10) else { return }
+        // A throwaway password generated by this test for a test-network wallet.
+        field.tap()
+        field.typeText(password)
+        _ = tap(unlock, "\(tag): Unlock Wallet")
+        let gone = XCTNSPredicateExpectation(predicate: NSPredicate(format: "exists == false"), object: unlock)
+        if XCTWaiter().wait(for: [gone], timeout: 60) != .completed {
+            missed.append("\(tag): still locked after Unlock Wallet")
+            print("MISSED: \(tag) - still locked after Unlock Wallet")
+        }
+        _ = app.staticTexts.firstMatch.waitForExistence(timeout: 30)
+    }
+
+    // MARK: Steps 1 and 2
+
+    /// Step 1. Returns false while still on the import screen, so the caller
+    /// stops before anything could capture the phrase.
+    private func importDemoWallet(phrase: String, password: String) -> Bool {
+        guard let start = button(anyOf: ["Import wallet"]), tap(start, "Import wallet") else { return false }
+        let phraseField = app.textViews.firstMatch
+        guard reach(phraseField, "recovery phrase field", timeout: 20) else { return false }
+
+        // The driver copies the phrase to the Mac clipboard only on this marker, so the
+        // app's own launch-time clipboard read never meets it, and Universal Clipboard
+        // has time to carry it over before the paste.
+        print("REHEARSAL-MARK: READY-FOR-PHRASE")
+        // When the phrase lands, the app's own clipboard read raises the system
+        // "Allow Paste" alert, which blocks the app's main thread until answered.
+        // Answer it in Springboard; if that read fills the field, never touch the
+        // field again, because XCTest names a filled field by its contents.
+        let consent = springboard.buttons["Allow Paste"]
+        if consent.waitForExistence(timeout: 25) {
+            consent.tap()
+            print("PASTE-CONSENT: allowed the app's own clipboard read")
+            Thread.sleep(forTimeInterval: 4)
+        } else {
+            Thread.sleep(forTimeInterval: 2)
+        }
+        var pasted = wordCount(phraseField) >= 12
+        if !pasted {
+            pasted = pasteViaMenu(into: phraseField) && wordCount(phraseField) >= 12
+            let again = springboard.buttons["Allow Paste"]
+            if again.waitForExistence(timeout: 3) { again.tap(); Thread.sleep(forTimeInterval: 3) }
+            pasted = wordCount(phraseField) >= 12
+        }
+        if !pasted {
+            // The screen's own "Paste recovery phrase from clipboard" control reads
+            // the clipboard programmatically, which raises the system paste
+            // consent alert; allow it wherever it appears.
+            if let own = button(anyOf: ["Paste recovery phrase from clipboard"]), own.isHittable {
+                own.tap()
+                let hosts: [XCUIApplication] = [app, springboard]
+                for host in hosts {
+                    let allow = host.buttons["Allow Paste"]
+                    if allow.waitForExistence(timeout: 3) { allow.tap(); break }
+                }
+                Thread.sleep(forTimeInterval: 1.0)
+            }
+            pasted = wordCount(phraseField) >= 12
+        }
+        print("REHEARSAL-MARK: PHRASE-PASTED")
+        print("IMPORT: phrase field holds \(wordCount(phraseField)) words (pasted=\(pasted))")
+        guard pasted else {
+            missed.append("import: the recovery phrase never reached the field")
+            return false
+        }
+
+        let secure = app.secureTextFields
+        guard reach(secure.firstMatch, "import password field", timeout: 10) else { return false }
+        for i in 0..<min(secure.count, 2) {
+            let field = secure.element(boundBy: i)
+            if !field.isHittable { app.swipeUp() }
+            field.tap()
+            field.typeText(password)
+        }
+        let submit = app.buttons.matching(NSPredicate(format: "label == %@", "Import")).firstMatch
+        if !submit.isHittable { app.swipeUp() }
+        guard tap(submit, "Import (submit)") else { return false }
+
+        // Left the import screen when the Import button is gone. NEVER wait on the
+        // phrase field itself: once filled, XCTest names it by its contents in the
+        // log ("<twelve words>" TextView), which is how the phrase reached test.log.
+        var left = false
+        for _ in 0..<120 {
+            if !submit.exists { left = true; break }
+            Thread.sleep(forTimeInterval: 1)
+        }
+        if !left {
+            missed.append("import: still on the import screen 120s after Import")
+            print("MISSED: import - still on the import screen after Import")
+            return false
+        }
+        _ = app.staticTexts.firstMatch.waitForExistence(timeout: 30)
+        Thread.sleep(forTimeInterval: 3)
+        dumpButtons("after-import")
+        settleAfterImport()
+        return true
+    }
+
+    /// After import the app shows the Automatic Donation System notice (Continue) and
+    /// a four-step intro (Skip / Next / Get started). Clear them until the wallet is up.
+    private func settleAfterImport() {
+        for round in 0..<10 {
+            let exact = { (label: String) in self.app.buttons.matching(NSPredicate(format: "label == %@", label)).firstMatch }
+            var tapped = ""
+            for label in ["Continue", "Skip", "Get started", "Done", "Not now", "Maybe later"] {
+                let b = exact(label)
+                if b.exists && b.isHittable { b.tap(); tapped = label; break }
+            }
+            if tapped.isEmpty {
+                print("SETTLE: no more interstitials after \(round) taps")
+                break
+            }
+            print("SETTLE: tapped \(tapped)")
+            Thread.sleep(forTimeInterval: 1.5)
+        }
+        dumpButtons("after-settle")
+    }
+
+    /// Step 2, the network select with the same idiom handling as switchToMainnet.
+    private func switchActiveNetwork(to network: String, password: String) {
+        guard openSettings(scene: "network-switch (\(network))") else { return }
+        func networkSelect() -> XCUIElement? {
+            let byName = [app.buttons["Active network"], app.otherElements["Active network"],
+                          app.popUpButtons["Active network"], app.staticTexts["Active network"]]
+            return byName.first(where: { $0.exists && $0.isHittable })
+        }
+        var control = networkSelect()
+        var scrolls = 0
+        while control == nil && scrolls < 8 { app.swipeUp(); scrolls += 1; control = networkSelect() }
+        guard let control, tap(control, "Active network select") else { return }
+
+        var picked = false
+        let wheel = app.pickerWheels.firstMatch
+        if wheel.waitForExistence(timeout: 4) {
+            wheel.adjust(toPickerWheelValue: network)
+            if app.buttons["Done"].exists { _ = tap(app.buttons["Done"], "picker Done") }
+            picked = true
+        } else {
+            let option = app.buttons[network].exists ? app.buttons[network] : app.staticTexts[network]
+            if option.waitForExistence(timeout: 5) { picked = tap(option, "\(network) option") }
+        }
+        guard picked else {
+            missed.append("network switch: no '\(network)' option")
+            print("MISSED: network switch - no '\(network)' option")
+            return
+        }
+        // "Switch to Testnet?" confirmation, which appears after the pick.
+        let confirm = app.buttons.matching(NSPredicate(format: "label == %@", "Switch network")).firstMatch
+        if confirm.waitForExistence(timeout: 8) { _ = tap(confirm, "Switch network (confirm)") }
+        Thread.sleep(forTimeInterval: 5)
+        unlockIfLocked(password, tag: "after network switch")
+        // The select's focus zoom survives the reload; a relaunch resets it.
+        resetViewport(scene: "network-switch-\(network)")
+        unlockIfLocked(password, tag: "after relaunch")
+        print("NETWORK: switched to \(network)")
+    }
+
+    // MARK: Step 4
+
+    private func clearField(_ field: XCUIElement) {
+        guard let value = field.value as? String, !value.isEmpty else { return }
+        field.coordinate(withNormalizedOffset: CGVector(dx: 0.98, dy: 0.5)).tap()
+        field.typeText(String(repeating: XCUIKeyboardKey.delete.rawValue, count: value.count + 4))
+    }
+
+    private func reviewScreen() -> XCUIElement {
+        app.buttons.matching(NSPredicate(format: "label == %@", "Sign")).firstMatch
+    }
+
+    /// Compose online until the confirmation screen is up. Tries each of the demo
+    /// wallet's own addresses, since Send defaults to one chain and the test does
+    /// not assume which. Amounts sit well above each chain's dust floor.
+    private func composeToConfirmation(sendTo: [String]) -> Bool {
+        for address in sendTo {
+            if let home = button(anyOf: ["Home", "Balances"]), home.isHittable { home.tap() }
+            guard let send = button(anyOf: ["Send"]), tap(send, "Send nav") else { return false }
+            _ = app.staticTexts.firstMatch.waitForExistence(timeout: 20)
+            Thread.sleep(forTimeInterval: 2)
+            guard let to = editableField(["address or name", "To"]) else {
+                missed.append("send: no To field"); dumpButtons("send-form"); return false
+            }
+            to.tap(); clearField(to); to.typeText(address)
+            let amount: String = address.hasPrefix("tb1") ? "0.0001" : (address.hasPrefix("tltc1") ? "0.001" : "2")
+            if let amountField = editableField(["Amount", "0.00"]) {
+                amountField.tap(); clearField(amountField); amountField.typeText(amount)
+            }
+            let hide = app.keyboards.buttons.matching(NSPredicate(format: "label CONTAINS[c] %@", "hide")).firstMatch
+            if hide.exists && hide.isHittable { hide.tap() }
+            rehearsalShot("04-0-send-form-\(address.prefix(5))")
+
+            guard let review = button(anyOf: ["Review and send", "Review & Send"]) else { dumpButtons("send-form"); continue }
+            if !review.isHittable { app.swipeUp() }
+            if !review.isEnabled {
+                print("COMPOSE: Review and send disabled for \(address.prefix(6))…; trying the next chain")
+                dumpTexts("send-form-\(address.prefix(5))")
+                continue
+            }
+            review.tap()
+            // Compose is the remote call; poll for the confirmation screen, and
+            // pass the small-test gate a first payment to an address can raise.
+            let gate = app.buttons.matching(NSPredicate(format: "label == %@", "Continue with the full amount")).firstMatch
+            var reached = false
+            for _ in 0..<60 {
+                if reviewScreen().exists { reached = true; break }
+                if gate.exists && gate.isHittable { gate.tap() }
+                Thread.sleep(forTimeInterval: 1)
+            }
+            if reached {
+                print("COMPOSE: confirmation screen up for \(address.prefix(6))… amount \(amount)")
+                return true
+            }
+            print("COMPOSE: no confirmation screen for \(address.prefix(6))…")
+            dumpTexts("compose-failed-\(address.prefix(5))")
+            rehearsalShot("04-0-compose-failed-\(address.prefix(5))")
+        }
+        missed.append("compose: never reached the confirmation screen on any demo chain")
+        return false
+    }
+
+    /// Run first, on its own: Settings, Display & Brightness, Auto-Lock, Never,
+    /// so the device stays awake through the rehearsal and later runs.
+    func testA0SetAutoLockNever() throws {
+        let settings = XCUIApplication(bundleIdentifier: "com.apple.Preferences")
+        settings.terminate()
+        settings.launch()
+        // Prefer hittable cells and buttons; Settings rows carry their value
+        // in the label on some idioms, so match on the prefix.
+        func row(_ label: String) -> XCUIElement {
+            let p = NSPredicate(format: "label BEGINSWITH[c] %@ OR identifier BEGINSWITH[c] %@", label, label)
+            for q in [settings.cells, settings.buttons, settings.staticTexts, settings.descendants(matching: .any)] {
+                let m = q.matching(p)
+                for i in 0..<min(m.count, 4) where m.element(boundBy: i).isHittable { return m.element(boundBy: i) }
+            }
+            return settings.descendants(matching: .any).matching(p).firstMatch
+        }
+        func dumpSettings(_ tag: String) {
+            let cells = settings.cells.allElementsBoundByIndex.prefix(60).map { "\($0.label)[\($0.identifier)]" }
+            let buttons = settings.buttons.allElementsBoundByIndex.prefix(40).map { $0.label }
+            print("SETTINGS \(tag) cells: \(cells.joined(separator: " | "))")
+            print("SETTINGS \(tag) buttons: \(buttons.joined(separator: " | "))")
+        }
+        _ = settings.cells.firstMatch.waitForExistence(timeout: 10)
+
+        // Settings search is the reliable route: the iPad sidebar keeps its own
+        // scroll position, and a swipe on the app moves the detail pane instead.
+        let search = settings.searchFields.firstMatch
+        if search.waitForExistence(timeout: 5) && search.isHittable {
+            search.tap()
+            search.typeText("Auto-Lock")
+            Thread.sleep(forTimeInterval: 2)
+            let hit = NSPredicate(format: "label BEGINSWITH[c] %@", "Auto-Lock")
+            var result: XCUIElement?
+            for q in [settings.cells, settings.buttons, settings.staticTexts] {
+                let m = q.matching(hit)
+                for i in 0..<min(m.count, 4) where m.element(boundBy: i).isHittable { result = m.element(boundBy: i); break }
+                if result != nil { break }
+            }
+            if let result { result.tap(); Thread.sleep(forTimeInterval: 2) } else { dumpSettings("search") }
+        }
+        // The search result can land on Display & Brightness instead of Auto-Lock.
+        if !row("Never").exists {
+            if !row("Auto-Lock").exists {
+                let display = row("Display")
+                if display.exists && display.isHittable { display.tap(); Thread.sleep(forTimeInterval: 1.5) }
+            }
+            let autoLock = row("Auto-Lock")
+            if autoLock.exists && autoLock.isHittable { autoLock.tap(); Thread.sleep(forTimeInterval: 1.5) }
+        }
+        let never = row("Never")
+        guard never.waitForExistence(timeout: 5) else {
+            dumpSettings("auto-lock")
+            XCTFail("no Never option under Auto-Lock")
+            return
+        }
+        never.tap()
+        Thread.sleep(forTimeInterval: 1.5)
+        print("AUTO-LOCK: Never selected=\(never.isSelected) value=\(String(describing: never.value))")
+        let shot = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
+        shot.name = "rehearsal-00-auto-lock-never"
+        shot.lifetime = .keepAlways
+        add(shot)
+
+        // Read it back from Display & Brightness, where the Auto-Lock row shows its value.
+        let back = settings.navigationBars.buttons.matching(NSPredicate(format: "label BEGINSWITH[c] %@", "Display")).firstMatch
+        if back.exists && back.isHittable { back.tap(); Thread.sleep(forTimeInterval: 1.5) }
+        let cellPredicate = NSPredicate(format: "identifier CONTAINS[c] %@ OR label BEGINSWITH[c] %@", "AUTOLOCK", "Auto-Lock")
+        let autoLockRow = settings.cells.matching(cellPredicate).firstMatch
+        _ = autoLockRow.waitForExistence(timeout: 5)
+        let inner = autoLockRow.staticTexts.allElementsBoundByIndex.map { $0.label }.joined(separator: " ")
+        let readBack = "\(autoLockRow.label) \((autoLockRow.value as? String) ?? "") \(inner)"
+        print("AUTO-LOCK: Display & Brightness row reads [\(readBack)]")
+        let shot2 = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
+        shot2.name = "rehearsal-00-auto-lock-readback"
+        shot2.lifetime = .keepAlways
+        add(shot2)
+        XCTAssertTrue(readBack.contains("Never") || never.isSelected, "Auto-Lock did not read back as Never: \(readBack)")
+        settings.terminate()
+    }
+
+    func testOfflineSigningRehearsal() throws {
+        let env = ProcessInfo.processInfo.environment
+        guard let phrase = env["XCHAIN_DEMO_MNEMONIC"], !phrase.isEmpty else {
+            throw XCTSkip("XCHAIN_DEMO_MNEMONIC is not injected; run through the rehearsal driver")
+        }
+        let sendTo = (env["XCHAIN_DEMO_SEND_TO"] ?? "").split(separator: ",").map(String.init).filter { !$0.isEmpty }
+        let broadcast = env["XCHAIN_REHEARSAL_BROADCAST"] == "1"
+        let password = "Rehearsal-" + UUID().uuidString.replacingOccurrences(of: "-", with: "").prefix(14) + "!"
+
+        // Whatever happens below, the iPad does not stay in Airplane Mode.
+        addTeardownBlock { [weak self] in self?.setAirplaneMode(false, tag: "teardown") }
+
+        XCUIDevice.shared.orientation = .portrait
+        // On device the runner gets PBErrorDomain 10/11 for the general pasteboard,
+        // so the driver hands the phrase over from the Mac by Universal Clipboard and
+        // the app's own edit-menu Paste reads it. Staging here is only a fallback.
+        app.launch()
+        _ = app.staticTexts.firstMatch.waitForExistence(timeout: 30)
+        if button(anyOf: ["Unlock Wallet"]) != nil {
+            missed.append("the app already holds a wallet from an earlier run; uninstall it and run again")
+            XCTFail("rehearsal needs a fresh install: \(missed.joined(separator: "; "))")
+            return
+        }
+        acceptTerms()
+        advanceIntroCarousel()
+        rehearsalShot("01-0-wallet-setup")
+
+        guard importDemoWallet(phrase: phrase, password: password) else {
+            // Close the app BEFORE failing: a failure attaches a screenshot and a UI
+            // hierarchy, and the phrase may still be in the field.
+            app.terminate()
+            Thread.sleep(forTimeInterval: 1)
+            print("REHEARSAL STOPPED at import: \(missed.joined(separator: "; "))")
+            XCTFail("rehearsal stopped at import: \(missed.joined(separator: "; "))")
+            return
+        }
+        rehearsalShot("01-1-imported")
+
+        switchActiveNetwork(to: "Testnet", password: password)
+        Thread.sleep(forTimeInterval: 8)
+        rehearsalShot("02-testnet-balances")
+        dumpTexts("testnet-balances")
+
+        guard composeToConfirmation(sendTo: sendTo) else {
+            XCTFail("rehearsal could not compose: \(missed.joined(separator: "; "))")
+            return
+        }
+        rehearsalShot("04-1-confirm-online")
+        dumpTexts("confirm-online")
+
+        // "Now turn on Airplane Mode, and confirm."
+        let airplaneOn = setAirplaneMode(true, tag: "on")
+        rehearsalShot("04-2-confirm-airplane-on")
+        if airplaneOn == true {
+            let pw = app.secureTextFields.firstMatch
+            if pw.exists && pw.isHittable { pw.tap(); pw.typeText(password) }
+            _ = tap(reviewScreen(), "Sign (offline)")
+            let signed = app.staticTexts.matching(NSPredicate(format: "label CONTAINS[c] %@", "Signed. Not broadcast yet.")).firstMatch
+            let sawSigned = signed.waitForExistence(timeout: 90)
+            print("OFFLINE SIGN: 'Signed. Not broadcast yet.' shown=\(sawSigned)")
+            rehearsalShot("04-3-after-sign-offline")
+            dumpTexts("after-sign-offline")
+            if !sawSigned { missed.append("offline sign: 'Signed. Not broadcast yet.' never appeared") }
+            if let done = button(anyOf: ["Done"]), done.isHittable { done.tap() }
+        } else {
+            missed.append("Airplane Mode could not be turned on, so the offline confirm was not attempted")
+        }
+
+        // "Turn Airplane Mode off and the app prompts you about the queued transaction."
+        let airplaneOff = setAirplaneMode(false, tag: "off")
+        print("AIRPLANE restored off=\(airplaneOff == false)")
+        if let home = button(anyOf: ["Home", "Balances"]), home.isHittable { home.tap() }
+        // develop labels the queue button "Send now"; the 0.341.3 build in review says
+        // "Broadcast now" and also raises a "queued transaction" toast on reconnect.
+        let banner = app.buttons.matching(NSPredicate(
+            format: "label BEGINSWITH %@ OR label BEGINSWITH %@", "Send now", "Broadcast now")).firstMatch
+        let toast = app.staticTexts.matching(NSPredicate(format: "label CONTAINS[c] %@", "queued transaction")).firstMatch
+        let sawToast = toast.waitForExistence(timeout: 30)
+        let sawBanner = banner.waitForExistence(timeout: 60)
+        print("QUEUE: reconnect toast shown=\(sawToast) queue button shown=\(sawBanner) label=\(sawBanner ? banner.label : "-")")
+        rehearsalShot("04-4-network-back")
+        dumpTexts("network-back")
+        if !sawBanner && airplaneOn == true { missed.append("queue banner never appeared after Airplane Mode off") }
+
+        if broadcast && sawBanner {
+            if tap(banner, "queue banner send button") {
+                let cleared = XCTNSPredicateExpectation(predicate: NSPredicate(format: "exists == false"), object: banner)
+                let sent = XCTWaiter().wait(for: [cleared], timeout: 90) == .completed
+                print("QUEUE: banner cleared after Send now=\(sent)")
+                rehearsalShot("04-5-after-send-now")
+                dumpTexts("after-send-now")
+            }
+        }
+
+        print("REHEARSAL missed: \(missed.joined(separator: "; "))")
+        if !missed.isEmpty {
+            XCTFail("rehearsal could not complete: \(missed.joined(separator: "; "))")
+        }
+    }
+}
+
+// MARK: - iPhone layout probe
+
+/// Walk the real app on an iPhone at its current orientation, appearance and text size,
+/// one PNG per screen. Run `-only-testing:AppUITests/ScreenshotTests/testIPhoneLayoutProbe`;
+/// `TEST_RUNNER_IPAD_PASS_DIR=<dir>` writes the PNGs there, `TEST_RUNNER_IPHONE_TAG` prefixes
+/// them and `TEST_RUNNER_IPHONE_ORIENT=landscape` turns the device first. Misses print, never fail.
+extension ScreenshotTests {
+
+    func testIPhoneLayoutProbe() throws {
+        let env = ProcessInfo.processInfo.environment
+        let tag = env["IPHONE_TAG"] ?? "i"
+        print("ORIENT env=\(env["IPHONE_ORIENT"] ?? "nil")")
+        XCUIDevice.shared.orientation = env["IPHONE_ORIENT"] == "landscape" ? .landscapeLeft : .portrait
+        app.launch()
+        _ = app.staticTexts.firstMatch.waitForExistence(timeout: 30)
+        if hittable("Accept and continue") != nil || app.staticTexts.containing(
+            NSPredicate(format: "label CONTAINS[c] %@", "agree to the GNU Affero")).firstMatch.exists {
+            probeShot("\(tag)-onb-01-terms")
+            acceptTerms()
+            probeShot("\(tag)-onb-02-intro")
+            advanceIntroCarousel()
+            probeShot("\(tag)-onb-03-welcome")
+            enterDemoMode()
+            Thread.sleep(forTimeInterval: 2)
+        }
+        if env["IPHONE_ORIENT"] == "landscape" { landscapeSettings(tag) } else { phoneWalk(tag) }
+        XCUIDevice.shared.orientation = .portrait
+        print("PROBE missed: \(missed.joined(separator: "; "))")
+    }
+
+    /// Landscape phones reach Settings through the header menu, not the side rail.
+    private func landscapeSettings(_ o: String) {
+        goHome()
+        guard openMenu(), let row = hittable("Settings") else { print("LAND: no Settings in the menu"); return }
+        row.tap()
+        Thread.sleep(forTimeInterval: 0.8)
+        for page in 0..<6 { probeShot("\(o)-30-settings-page\(page)"); swipePage() }
+        var p = 1
+        for panel in ["Display", "Privacy", "Safety", "Backup", "Fees", "Network", "About"] {
+            goHome()
+            guard openMenu(), let again = hittable("Settings") else { continue }
+            again.tap()
+            Thread.sleep(forTimeInterval: 0.8)
+            guard let r = scrollTo(panel, max: 24) else { print("LAND: no row '\(panel)'"); continue }
+            r.tap()
+            probeShot(String(format: "%@-3%02d-settings-%@", o, p, slug(panel)))
+            swipePage()
+            probeShot(String(format: "%@-3%02d-settings-%@-b", o, p, slug(panel)))
+            p += 1
+        }
+        goHome()
+    }
+
+    /// Close the More sheet if it is open, then land on Home.
+    private func phoneHome() {
+        if app.keyboards.count > 0 {
+            dumpButtons("kb-open")
+            let done = app.buttons.matching(NSPredicate(format: "label ==[c] %@ OR label ==[c] %@", "Done", "Hide keyboard")).firstMatch
+            if done.exists { done.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).tap() }
+            Thread.sleep(forTimeInterval: 0.6)
+            if app.keyboards.count > 0 {
+                app.windows.firstMatch.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.075)).tap()
+                Thread.sleep(forTimeInterval: 0.6)
+            }
+            print("KBAFTER count=\(app.keyboards.count)")
+        }
+        if let close = hittable("Close more navigation", exact: true) { close.tap(); Thread.sleep(forTimeInterval: 0.6) }
+        goHome()
+    }
+
+    /// Open a row of the phone More sheet, scrolling the sheet when the row sits below the fold.
+    private func openMoreRow(_ label: String) -> Bool {
+        phoneHome()
+        guard let more = hittable("More", exact: true) else { print("PHONE: no More tab"); return false }
+        more.tap()
+        Thread.sleep(forTimeInterval: 0.8)
+        guard let row = scrollTo(label, max: 4) else { print("PHONE: no More row '\(label)'"); return false }
+        row.tap()
+        Thread.sleep(forTimeInterval: 0.8)
+        return true
+    }
+
+    private func phoneWalk(_ o: String) {
+        phoneHome()
+        probeShot("\(o)-00-home")
+        for i in 1...3 { swipePage(); probeShot("\(o)-00-home-scrolled\(i)") }
+        var n = 1
+        for label in ["History", "Send"] {
+            phoneHome()
+            // Home carries a quick-action Send as well as the tab: take the lowest match, the tab.
+            let matches = app.buttons.matching(NSPredicate(format: "label == %@", label)).allElementsBoundByIndex.filter { $0.exists && $0.isHittable }
+            guard let b = matches.max(by: { $0.frame.minY < $1.frame.minY }) else { print("NAV \(o): no '\(label)'"); continue }
+            b.tap()
+            probeShot(String(format: "%@-%02d-nav-%@", o, n, slug(label)))
+            n += 1
+            if label == "Send" { probeKeyboard("\(o)-send", hints: ["address or name", "To", "Amount"]) }
+        }
+        phoneHome()
+        if let scan = hittable("Scan", exact: true) { scan.tap(); probeShot("\(o)-05-nav-Scan") }
+        phoneHome()
+        if let more = hittable("More", exact: true) {
+            more.tap()
+            Thread.sleep(forTimeInterval: 0.8)
+            probeShot("\(o)-40-more-sheet")
+            swipePage()
+            probeShot("\(o)-40-more-sheet-scrolled")
+        }
+        var r = 1
+        for row in ["Receive", "DEX", "Dispensers", "Contracts", "Messaging", "Contacts", "Lists", "Payments due"] {
+            guard openMoreRow(row) else { continue }
+            probeShot(String(format: "%@-4%02d-more-%@", o, r, slug(row)))
+            if row == "Receive" {
+                swipePage()
+                probeShot(String(format: "%@-4%02d-more-%@-b", o, r, slug(row)))
+                swipePage()
+                probeShot(String(format: "%@-4%02d-more-%@-c", o, r, slug(row)))
+                probeKeyboard("\(o)-receive", hints: ["Amount", "0.00"])
+            }
+            r += 1
+        }
+        guard openMoreRow("Settings") else { return }
+        for page in 0..<16 { probeShot("\(o)-20-settings-page\(page)"); swipePage() }
+        var p = 1
+        for panel in Self.settingsDrills {
+            guard openMoreRow("Settings") else { continue }
+            guard let row = scrollTo(panel) else { print("SETTINGS \(o): no row '\(panel)'"); continue }
+            row.tap()
+            probeShot(String(format: "%@-2%02d-settings-%@", o, p, slug(panel)))
+            let page = app.webViews.firstMatch
+            if page.exists {
+                page.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.75)).press(forDuration: 0.1, thenDragTo: page.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.4)))
+            }
+            probeShot(String(format: "%@-2%02d-settings-%@-m", o, p, slug(panel)))
+            swipePage()
+            probeShot(String(format: "%@-2%02d-settings-%@-b", o, p, slug(panel)))
+            swipePage()
+            probeShot(String(format: "%@-2%02d-settings-%@-c", o, p, slug(panel)))
+            p += 1
+        }
+        phoneHome()
+    }
+}
+
+// MARK: - Settings keyboard probe
+
+extension ScreenshotTests {
+
+    /// Raise the keyboard in the Settings inline price-alert form and the Safety number fields.
+    func testSettingsKeyboardProbe() throws {
+        let tag = ProcessInfo.processInfo.environment["IPHONE_TAG"] ?? "k"
+        app.launch()
+        _ = app.staticTexts.firstMatch.waitForExistence(timeout: 30)
+        guard openMoreRow("Settings") else { return }
+        probeKeyboard("\(tag)-set-search", hints: ["Search settings"])
+        phoneHome()
+        guard openMoreRow("Settings") else { return }
+        _ = scrollTo("Price alerts", max: 12)
+        probeKeyboard("\(tag)-set-price", hints: ["Price"])
+        phoneHome()
+        guard openMoreRow("Settings"), let safety = scrollTo("Safety") else { return }
+        safety.tap()
+        probeKeyboard("\(tag)-safety-sats", hints: ["sats", "warning"])
+        probeKeyboard("\(tag)-safety-hold", hints: ["Hold duration", "seconds"])
+        phoneHome()
+    }
+}
+
+// MARK: - iPhone offline probe
+
+extension ScreenshotTests {
+
+    /// Create a throwaway wallet through the real onboarding, then walk the list and
+    /// form screens with every request to a remote host blocked by the bundle's own
+    /// connect-src policy, one PNG per screen. Run
+    /// `-only-testing:AppUITests/ScreenshotTests/testIPhoneOfflineProbe`; the env
+    /// variables are those of `testIPhoneLayoutProbe`. A demo wallet is never
+    /// offline, so this is the walk that reaches the offline states.
+    func testIPhoneOfflineProbe() throws {
+        let env = ProcessInfo.processInfo.environment
+        let tag = env["IPHONE_TAG"] ?? "o"
+        XCUIDevice.shared.orientation = .portrait
+        app.launch()
+        _ = app.staticTexts.firstMatch.waitForExistence(timeout: 30)
+        guard createThrowawayWallet(tag) else {
+            print("OFFLINE missed: \(missed.joined(separator: "; "))")
+            return
+        }
+        Thread.sleep(forTimeInterval: 6)
+        offlineWalk(tag)
+        print("OFFLINE missed: \(missed.joined(separator: "; "))")
+    }
+
+    private func typeInto(_ field: XCUIElement, _ text: String) {
+        guard field.exists else { return }
+        var scrolls = 0
+        while !field.isHittable && scrolls < 4 { swipePage(); scrolls += 1 }
+        field.tap()
+        var taps = 0
+        while taps < 3 && (field.value(forKey: "hasKeyboardFocus") as? Bool) != true {
+            Thread.sleep(forTimeInterval: 1)
+            field.tap()
+            taps += 1
+        }
+        field.typeText(text)
+    }
+
+    private func tapScrolled(_ el: XCUIElement, _ what: String) -> Bool {
+        var scrolls = 0
+        while el.exists && !el.isHittable && scrolls < 5 { swipePage(); scrolls += 1 }
+        return tap(el, what)
+    }
+
+    private func createThrowawayWallet(_ tag: String) -> Bool {
+        acceptTerms()
+        advanceIntroCarousel()
+        guard let create = button(anyOf: ["Create new wallet"]), tap(create, "Create new wallet") else { return false }
+        _ = reach(app.secureTextFields.firstMatch, "create password field", timeout: 20)
+        let password = "Sweep-" + UUID().uuidString.replacingOccurrences(of: "-", with: "").prefix(12) + "!"
+        let fields = app.secureTextFields.allElementsBoundByIndex
+        print("OFFLINE create: secure fields=\(fields.count)")
+        guard fields.count >= 2 else { missed.append("create form has no two password fields"); return false }
+        typeInto(fields[0], password)
+        app.typeText("\t")
+        Thread.sleep(forTimeInterval: 1)
+        app.typeText(password)
+        probeShot("\(tag)-off-00-create-form")
+        app.typeText("\n")
+        Thread.sleep(forTimeInterval: 2)
+        guard let reveal = button(anyOf: ["Reveal recovery phrase", "Reveal"]), tapScrolled(reveal, "reveal phrase") else { return false }
+        Thread.sleep(forTimeInterval: 1)
+        var words: [Int: String] = [:]
+        let cells = app.descendants(matching: .any).matching(NSPredicate(format: "label MATCHES %@", "^[0-9]+\\. [a-z]+$"))
+        for i in 0..<cells.count {
+            let label = cells.element(boundBy: i).label
+            let parts = label.components(separatedBy: ". ")
+            if parts.count == 2, let n = Int(parts[0]) { words[n] = parts[1] }
+        }
+        print("OFFLINE create: read \(words.count) phrase words")
+        guard words.count >= 12 else { missed.append("could not read the phrase words"); return false }
+        let saved = app.descendants(matching: .any).matching(NSPredicate(format: "label CONTAINS[c] %@", "I have saved my recovery")).firstMatch
+        var savedScrolls = 0
+        while saved.exists && !saved.isHittable && savedScrolls < 5 { swipePage(); savedScrolls += 1 }
+        if saved.exists { saved.coordinate(withNormalizedOffset: CGVector(dx: 0.05, dy: 0.5)).tap() }
+        guard let verify = button(anyOf: ["Verify recovery phrase"]), tapScrolled(verify, "Verify recovery phrase") else { return false }
+        Thread.sleep(forTimeInterval: 1.5)
+        let quiz = app.textFields.matching(NSPredicate(format: "label BEGINSWITH %@", "Word "))
+        print("OFFLINE create: quiz fields=\(quiz.count)")
+        var answers: [String] = []
+        for i in 0..<quiz.count {
+            let label = quiz.element(boundBy: i).label
+            if let n = Int(label.replacingOccurrences(of: "Word ", with: "")), let w = words[n] { answers.append(w) }
+        }
+        if let first = answers.first {
+            typeInto(quiz.element(boundBy: 0), first)
+            for w in answers.dropFirst() {
+                app.typeText("\t")
+                Thread.sleep(forTimeInterval: 0.5)
+                app.typeText(w)
+            }
+        }
+        app.typeText("\n")
+
+        Thread.sleep(forTimeInterval: 8)
+        probeShot("\(tag)-off-01-after-create")
+        if let proceed = button(anyOf: ["Continue"]), proceed.isHittable {
+            proceed.tap()
+            Thread.sleep(forTimeInterval: 4)
+        }
+        return true
+    }
+
+    private func offlineWalk(_ o: String) {
+        phoneHome()
+        probeShot("\(o)-off-10-home")
+        for i in 1...2 { swipePage(); probeShot("\(o)-off-10-home-scrolled\(i)") }
+        var n = 11
+        for label in ["History", "Send"] {
+            phoneHome()
+            let matches = app.buttons.matching(NSPredicate(format: "label == %@", label)).allElementsBoundByIndex.filter { $0.exists && $0.isHittable }
+            guard let b = matches.max(by: { $0.frame.minY < $1.frame.minY }) else { print("NAV \(o): no '\(label)'"); continue }
+            b.tap()
+            probeShot("\(o)-off-\(n)-nav-\(slug(label))")
+            n += 1
+        }
+        var r = 1
+        for row in ["Receive", "DEX", "Dispensers", "Contracts", "Messaging", "Contacts", "Lists", "Payments due", "Settings"] {
+            guard openMoreRow(row) else { continue }
+            probeShot(String(format: "%@-off-2%02d-more-%@", o, r, slug(row)))
+            r += 1
+        }
+        phoneHome()
     }
 }

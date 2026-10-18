@@ -5,70 +5,31 @@
     width: 100%;
 }
 
-/* ───── Tab strip ───── */
-
 .tabsRow {
-    display: contents;
-}
-
-.tabs {
     display: flex;
-    gap: var(--xc-space-1);
-    overflow-x: auto;
-    overflow-y: hidden;
-    border-bottom: 1px solid var(--xc-border);
-    padding-bottom: 1px;          /* pull active underline below the rule */
-    margin-bottom: -1px;
-    scrollbar-width: none;
-}
-
-.tabs::-webkit-scrollbar { display: none; }
-
-.tab {
-    appearance: none;
-    background: transparent;
-    border: none;
-    /* Side padding tightens on narrow windows so all five tabs fit: at the
-       desktop app's 360px minimum the strip overflowed by 11px and hid half
-       of "Activity" behind a scrollbar the strip deliberately does not show
-       (2026-10-12). Full padding from about 480px up. */
-    padding: var(--xc-space-3) clamp(6px, 2.5vw, var(--xc-space-3));
-    font-size: var(--xc-text-sm);
-    font-weight: 600;
-    color: var(--xc-text-muted);
-    cursor: pointer;
-    white-space: nowrap;
-    display: inline-flex;
-    align-items: center;
+    align-items: flex-start;
     gap: var(--xc-space-2);
-    border-bottom: 2px solid transparent;
-    transition: color var(--xc-transition), border-color var(--xc-transition);
+    min-width: 0;
+}
+
+.tabsRow > [role='tablist'] {
+    flex: 1 1 auto;
+    width: auto;
+}
+
+.tabsRow [role='tab'] {
     flex: 0 0 auto;
-}
-
-.tab:hover {
-    color: var(--xc-text);
-}
-
-.tab:focus-visible {
-    outline: 2px solid var(--xc-focus-ring);
-    outline-offset: -2px;
-}
-
-.tabActive {
-    color: var(--xc-accent-text);
-    border-bottom-color: var(--xc-accent-primary);
-}
-
-.tabLabel {
-    font-weight: 700;
+    white-space: nowrap;
 }
 
 .sortControl {
     display: flex;
+    box-sizing: border-box;
+    flex: 0 0 auto;
     align-items: center;
     justify-content: flex-end;
     gap: var(--xc-space-2);
+    height: var(--xc-control-h-md);
     color: var(--xc-text-muted);
     font-size: var(--xc-text-sm);
     font-weight: 600;
@@ -80,11 +41,12 @@
 }
 
 .sortSelect {
-    min-height: 36px;
+    height: 100%;
+    min-height: 0;
     box-sizing: border-box;
     padding: var(--xc-space-2) var(--xc-space-3);
     border: 1px solid var(--xc-border-strong);
-    border-radius: var(--xc-radius-md);
+    border-radius: var(--xc-control-radius);
     background: var(--xc-surface);
     color: var(--xc-text);
     font: inherit;
@@ -95,31 +57,45 @@
     outline-offset: 2px;
 }
 
-@media (max-width: 420px) {
+@media not all and (min-width: 600px) {
     .tabsRow {
-        display: grid;
-        grid-template-columns: minmax(0, 1fr) auto;
-        align-items: stretch;
-        border-bottom: 1px solid var(--xc-border);
-        margin-bottom: -1px;
+        flex-direction: column;
+        gap: var(--xc-space-2);
     }
 
-    .tabs {
-        min-width: 0;
-        border-bottom: 0;
-        margin-bottom: 0;
+    /* The tab row has the whole width here. The five labels take a little
+       under 12.25rem at any text size, so each tab's side padding gives
+       way, down to 1px, when the 12px default would push Activity behind a
+       sideways scroll: a 320px phone, or 130 and 150 percent text. Rows
+       with room keep the 12px padding unchanged. A WebView without
+       container queries keeps the 12px padding and the scrolling row. */
+    @supports (container-type: inline-size) and (width: 1cqw) {
+        .tabsRow {
+            container-type: inline-size;
+        }
+
+        .tabsRow [role='tab'] {
+            padding-inline: clamp(calc(var(--xc-space-1) / 4), calc((100cqw - 12.25rem) / 10), var(--xc-space-3));
+        }
+    }
+
+    .tabsRow > [role='tablist'] {
+        width: 100%;
     }
 
     .sortControl {
+        align-self: flex-end;
+    }
+}
+
+@media (max-width: 420px) {
+    .sortControl {
         position: relative;
-        align-self: center;
         justify-content: center;
         gap: var(--xc-space-1);
-        min-height: 36px;
-        margin-inline-start: var(--xc-space-1);
         padding: 0 var(--xc-space-2);
         border: 1px solid var(--xc-border-strong);
-        border-radius: var(--xc-radius-md);
+        border-radius: var(--xc-control-radius);
         background: var(--xc-surface);
         color: var(--xc-text);
     }
@@ -129,16 +105,12 @@
         outline-offset: -2px;
     }
 
+    /* The "Sort balances" label stays visible here: the sort control sits on
+       its own row under the tabs below 600px, so there is room for it at every
+       phone width, and a bare value with a chevron did not say what it sorted. */
     .sortLabel {
-        position: absolute;
-        width: 1px;
-        height: 1px;
-        padding: 0;
-        margin: -1px;
-        overflow: hidden;
-        clip: rect(0, 0, 0, 0);
+        color: var(--xc-text-muted);
         white-space: nowrap;
-        border: 0;
     }
 
     .sortCompactValue,
@@ -149,8 +121,8 @@
     }
 
     .sortCompactIcon {
-        width: var(--xc-icon-sm);
-        height: var(--xc-icon-sm);
+        width: var(--xc-control-icon-sm, var(--xc-icon-sm));
+        height: var(--xc-control-icon-sm, var(--xc-icon-sm));
     }
 
     .sortCompactIcon > svg {
@@ -181,12 +153,6 @@
     min-height: 0;
 }
 
-.staleness {
-    display: flex;
-    justify-content: flex-end;
-    padding: var(--xc-space-1) 0 var(--xc-space-2);
-}
-
 /* One-line rule statement above a tab's content. Muted and small: it
    explains the tab without competing with the rows. */
 .tabNote {
@@ -196,56 +162,22 @@
     margin: 0 0 var(--xc-space-3);
 }
 
-.placeholder {
-    background: var(--xc-surface);
-    border: 1px dashed var(--xc-border-strong);
-    border-radius: var(--xc-radius-md);
-    padding: var(--xc-space-5) var(--xc-space-4);
-    text-align: center;
-}
-
-.placeholderTitle {
-    font-size: var(--xc-type-card-title-size);
-    font-weight: var(--xc-type-card-title-weight);
-    color: var(--xc-text);
-    margin-bottom: var(--xc-space-2);
-}
-
-.placeholderBody {
-    font-size: var(--xc-type-body-size);
-    font-weight: var(--xc-type-body-weight);
-    color: var(--xc-text-muted);
-    line-height: 1.5;
-    margin: 0;
-    text-align: center;
-}
-
-.placeholderAction {
-    display: flex;
-    justify-content: center;
-    margin-top: var(--xc-space-3);
-}
-
-.firstFundingActions {
-    display: flex;
-    flex-wrap: wrap;
-    justify-content: center;
-    gap: var(--xc-space-2);
-}
-
 /* Demo activity / defi list: single rounded card with row dividers,
    matching the Tokens / Coins list layout so all five tabs share the
    same visual rhythm. */
 .demoList {
+    composes: flush from '../../ui/Card.module.css';
     list-style: none;
     margin: 0;
-    padding: 0;
     display: flex;
     flex-direction: column;
-    background: var(--xc-surface);
-    border: 1px solid var(--xc-border);
-    border-radius: var(--xc-radius-md);
     overflow: hidden;
+}
+
+/* The Activity tab's rows carry no border of their own; a divider runs
+   between them, as in History. */
+.activityList > li + li {
+    border-top: 1px solid var(--xc-border);
 }
 
 /* Small action-type glyph rendered next to the action label on both

@@ -131,8 +131,11 @@ describe('MarketChart states and timeframes', () => {
             rightPriceScale: { borderColor: '#222222' },
             timeScale: { borderColor: '#222222' },
         });
-        expect(chartHarness.addLineSeries.mock.calls.at(-1)[0].priceFormat.formatter(0.125))
-            .toBe('0.125 BTC');
+        const axisFormatter = chartHarness.addLineSeries.mock.calls.at(-1)[0].priceFormat.formatter;
+        expect(axisFormatter(0.125)).toBe('0.125');
+        // A sub-satoshi price keeps four significant digits on the axis.
+        expect(axisFormatter(0.00000062913043)).toBe('0.0000006291');
+        expect(axisFormatter(12345.678)).toBe('12,345.678');
 
         cleanup();
         renderChart(vi.fn().mockResolvedValue([

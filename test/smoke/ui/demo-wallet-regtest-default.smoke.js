@@ -8,11 +8,11 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// Cluster J FOLLOWUP 7: demo wallets activate on the regtest networks
-// rather than mainnet. Pairs with FOLLOWUP 1 (synthesizeDemo* flows
-// short-circuit the chain fetch entirely so the wallet never actually
-// hits a regtest node), but keeps any future "fan out a real fetch"
-// code path off mainnet under demo.
+// Cluster J FOLLOWUP 7: demo wallets register the regtest, testnet and
+// mainnet chains so a network switch finds addresses on each. Since
+// xchain-wallet#78 the demo LANDS on mainnet: App Review is sent to demo
+// mode first, and the first address it sees on Receive must be a mainnet
+// one. The file keeps its historic name; it pins both halves.
 
 import { strict as assert } from 'node:assert';
 import { readFileSync } from 'node:fs';
@@ -39,6 +39,15 @@ assert.ok(/activeChainIds:[\s\S]*?'litecoin-regtest'/.test(onboardingSrc),
 assert.ok(/activeChainIds:[\s\S]*?'dogecoin-regtest'/.test(onboardingSrc),
     'handleEnterDemo passes the three regtest chain ids to importMnemonic');
 
+// 2b. The demo lands on mainnet, and mainnet leads the chain list, so a
+//     shell that drops `activeNetwork` still infers mainnet from it.
+assert.ok(/activeNetwork: 'mainnet'/.test(onboardingSrc),
+    'handleEnterDemo lands the demo wallet on mainnet');
+assert.ok(!/activeNetwork: 'regtest'/.test(onboardingSrc),
+    'handleEnterDemo no longer lands the demo wallet on regtest');
+assert.ok(/activeChainIds: \[\s*'bitcoin-mainnet'/.test(onboardingSrc),
+    'handleEnterDemo lists a mainnet chain first');
+
 // 3. The same call still passes name: 'Demo Wallet' so the rest of
 //    the demo wiring (DemoBanner detection via name, markDemoWallet
 //    via id) keeps working.
@@ -60,4 +69,4 @@ for (const path of chainSources) {
         `${coin} descriptor file declares the regtest chain`);
 }
 
-console.log('OK: demo wallet regtest defaults');
+console.log('OK: demo wallet lands on mainnet with regtest and testnet registered');

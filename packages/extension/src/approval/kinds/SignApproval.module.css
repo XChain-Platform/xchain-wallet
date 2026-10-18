@@ -1,3 +1,20 @@
+/* The request summary and the password form stack with one section gap, so a
+   notice or card that ends the summary never touches the password label. */
+.body {
+    display: flex;
+    flex-direction: column;
+    gap: var(--xc-section-gap);
+    min-width: 0;
+}
+
+.body > * {
+    min-width: 0;
+}
+
+.body > :first-child > :last-child {
+    margin-bottom: 0;
+}
+
 .chainLine {
     display: flex;
     justify-content: flex-start;
@@ -12,13 +29,14 @@
 
 .detailsRow {
     display: grid;
-    grid-template-columns: auto 1fr;
+    grid-template-columns: minmax(0, max-content) minmax(0, 1fr);
     gap: var(--xc-space-2);
     padding: var(--xc-space-1) 0;
-    border-bottom: 1px dashed var(--xc-border);
+    border-bottom: 1px solid var(--xc-border);
 }
 
 .detailsLabel {
+    min-width: 0;
     font-size: var(--xc-text-xs);
     color: var(--xc-text-muted);
     font-weight: 600;
@@ -29,42 +47,13 @@
 }
 
 .detailsValue {
+    min-width: 0;
     font-family: var(--xc-font-mono);
     font-size: var(--xc-text-xs);
     color: var(--xc-text);
     margin: 0;
-    word-break: break-word;
+    overflow-wrap: anywhere;
     white-space: pre-wrap;
-}
-
-.warnings {
-    margin: var(--xc-space-2) 0 0;
-    padding: var(--xc-space-2) var(--xc-space-3);
-    list-style: none;
-    background: color-mix(in srgb, var(--xc-warning) 12%, transparent);
-    border: 1px solid color-mix(in srgb, var(--xc-warning) 35%, transparent);
-    border-radius: var(--xc-radius-sm);
-    color: var(--xc-text);
-    font-size: var(--xc-text-xs);
-    line-height: 1.4;
-}
-
-.warnings li + li {
-    margin-top: var(--xc-space-1);
-}
-
-/* §5.5 fail-closed refusal. Danger, not warning: unlike the
-   `.warnings` above there is no override and Approve is disabled, so it
-   must not read as one more advisory the user can click past. */
-.refusal {
-    margin: var(--xc-space-2) 0 0;
-    padding: var(--xc-space-2) var(--xc-space-3);
-    background: var(--xc-danger-bg);
-    border: 1px solid var(--xc-danger);
-    border-radius: var(--xc-radius-sm);
-    color: var(--xc-danger-text);
-    font-size: var(--xc-text-xs);
-    line-height: 1.4;
 }
 
 /* §21.3 Source block - distinct from the wallet chrome so the user
@@ -95,6 +84,7 @@
     font-size: var(--xc-text-xs);
     color: var(--xc-text-muted);
     margin: var(--xc-space-1) 0 0 0;
+    overflow-wrap: anywhere;
 }
 
 .textWarning {

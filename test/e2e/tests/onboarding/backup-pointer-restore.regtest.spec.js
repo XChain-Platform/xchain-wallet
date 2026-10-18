@@ -60,11 +60,20 @@
 //   venue the address read fails loudly rather than funding the wrong chain.
 //   Driven green on RBTC 2026-08-03.
 
+import { readShownTxid } from '../../fixtures/pendingHistory.js';
 import { readFile } from 'node:fs/promises';
 import {
-    acknowledgeImportNotice, createWallet, expect, test, dismissIntroCarousel, gotoSection, mainButton,
+    acknowledgeImportNotice,
+    createWallet,
+    expect,
+    openPaletteCommand,
+    test,
+    dismissIntroCarousel,
+    gotoSection,
+    mainButton,
     unlockedShell,
-    LICENSE_ACCEPTED_AT_KEY, LICENSE_ACCEPTED_VERSION_KEY,
+    LICENSE_ACCEPTED_AT_KEY,
+    LICENSE_ACCEPTED_VERSION_KEY,
 } from '../../fixtures/wallet.js';
 import { launchWithQrCamera } from '../../fixtures/qrCamera.js';
 import {
@@ -107,14 +116,7 @@ const SEND_AMOUNT = '0.01';
 
 /** Opens Settings via the command palette, then the Backup sub-page. */
 async function openBackupSection(page) {
-    await page.keyboard.press('ControlOrMeta+k');
-    const dialog = page.getByRole('dialog', { name: 'Command palette' });
-    await expect(dialog).toBeVisible({ timeout: 15_000 });
-    const combobox = dialog.getByRole('combobox').first();
-    await expect(combobox).toBeEditable({ timeout: 15_000 });
-    await combobox.fill('Settings');
-    await page.getByRole('option', { name: /^Settings\b/ }).first().click();
-    await expect(dialog).toBeHidden({ timeout: 15_000 });
+    await openPaletteCommand(page, 'Settings');
     await page.getByRole('main').getByRole('button', { name: /^Backup/ }).first().click();
 }
 
@@ -225,6 +227,25 @@ async function freshContext(browser, extra = {}) {
     return context;
 }
 
+/**
+ * Attaches what a second-device page shows, for a failure that happened on it.
+ *
+ * The second device runs in its own browser (`launchWithQrCamera`), which the
+ * run's trace and failure screenshots do not cover, so without this a hang on
+ * that device leaves no record of the screen it hung on.
+ */
+async function attachDeviceScreen(page, label, extra = {}) {
+    if (!page || page.isClosed()) return;
+    const info = test.info();
+    const snapshot = await page.locator('body').ariaSnapshot({ timeout: 5_000 }).catch((e) => `no snapshot: ${e}`);
+    await info.attach(`${label}-snapshot`, {
+        body: `${JSON.stringify(extra)}\nurl: ${page.url()}\n${snapshot}`,
+        contentType: 'text/plain',
+    });
+    const shot = await page.screenshot({ timeout: 5_000 }).catch(() => null);
+    if (shot) await info.attach(`${label}-screenshot`, { body: shot, contentType: 'image/png' });
+}
+
 /** Walks a vault-less browser to the restore screen's Encrypted-backup tab. */
 async function openFreshRestoreScreen(page) {
     await page.goto(BASE_URL);
@@ -254,11 +275,33 @@ async function readVenueReceiveAddress(page) {
     return address;
 }
 
+/**
+ * Skips the calling test on a browser with no Shape Detection API. `QrScanner`
+ * reads frames through the native `BarcodeDetector`, which Chromium ships on
+ * macOS, Windows and Android but not on Linux, so a Linux venue runner cannot
+ * read any camera QR no matter what the wallet does. Probed on a real
+ * localhost origin because the API is secure-context only.
+ *
+ * @param {import('@playwright/test').Browser} browser
+ */
+async function skipWithoutBarcodeDetector(browser) {
+    const context = await browser.newContext();
+    try {
+        const probe = await context.newPage();
+        await probe.goto(BASE_URL, { waitUntil: 'domcontentloaded' });
+        const present = await probe.evaluate(() => typeof window.BarcodeDetector === 'function');
+        test.skip(!present, 'this browser has no BarcodeDetector (Chromium on Linux), so no camera QR can be read');
+    } finally {
+        await context.close();
+    }
+}
+
 test.describe('backup-pointer restore (§15.4)', () => {
     test.use({ actionTimeout: 30_000 });
     test.setTimeout(900_000);
 
-    test('a pointer QR restores the wallet it points at, onto another device', async ({ page }) => {
+    test('a pointer QR restores the wallet it points at, onto another device', async ({ page, browser: probeBrowser }) => {
+        await skipWithoutBarcodeDetector(probeBrowser);
         /** @type {string} */
         let envelope;
 
@@ -268,14 +311,16 @@ test.describe('backup-pointer restore (§15.4)', () => {
         });
 
         const browser = await launchWithQrCamera(POINTER_QR);
+        /** @type {import('@playwright/test').Page | null} */
+        let two = null;
+        /** Every request the wallet made for the envelope. */
+        const fetched = [];
         try {
             const context = await freshContext(browser, {
                 permissions: ['camera'],
                 ignoreHTTPSErrors: true,
             });
 
-            /** Every request the wallet made for the envelope. */
-            const fetched = [];
             await context.route(ENVELOPE_URL, async (route) => {
                 fetched.push(route.request().url());
                 await route.fulfill({
@@ -285,7 +330,7 @@ test.describe('backup-pointer restore (§15.4)', () => {
                 });
             });
 
-            const two = await context.newPage();
+            two = await context.newPage();
 
             await test.step('DEVICE TWO: a different wallet on a different vault', async () => {
                 await two.goto(BASE_URL);
@@ -295,12 +340,7 @@ test.describe('backup-pointer restore (§15.4)', () => {
             });
 
             await test.step('scan the pointer and restore', async () => {
-                await two.keyboard.press('ControlOrMeta+k');
-                const dialog = two.getByRole('dialog', { name: 'Command palette' });
-                await expect(dialog).toBeVisible({ timeout: 15_000 });
-                await dialog.getByRole('combobox').first().fill('Switch wallet');
-                await two.getByRole('option', { name: /^Switch wallet/ }).first().click();
-                await expect(dialog).toBeHidden({ timeout: 15_000 });
+                await openPaletteCommand(two, 'Switch wallet');
 
                 await two.getByRole('button', { name: 'Add wallet' }).click();
                 await two.getByRole('button', { name: 'Import wallet' }).click();
@@ -354,12 +394,7 @@ test.describe('backup-pointer restore (§15.4)', () => {
                 expect(fetched.every((u) => u.startsWith('https://')),
                     'the pointer was fetched over something other than https').toBe(true);
 
-                await two.keyboard.press('ControlOrMeta+k');
-                const dialog = two.getByRole('dialog', { name: 'Command palette' });
-                await expect(dialog).toBeVisible({ timeout: 15_000 });
-                await dialog.getByRole('combobox').first().fill('Switch wallet');
-                await two.getByRole('option', { name: /^Switch wallet/ }).first().click();
-                await expect(dialog).toBeHidden({ timeout: 15_000 });
+                await openPaletteCommand(two, 'Switch wallet');
 
                 const main = two.getByRole('main');
                 await expect(main.getByText(ORIGIN_WALLET, { exact: false }).first(),
@@ -371,6 +406,9 @@ test.describe('backup-pointer restore (§15.4)', () => {
                     + 'landing alongside it')
                     .toBeVisible({ timeout: 30_000 });
             });
+        } catch (err) {
+            await attachDeviceScreen(two, 'device-two', { envelopeFetches: fetched.length });
+            throw err;
         } finally {
             await browser.close();
         }
@@ -389,7 +427,8 @@ test.describe('backup-pointer restore (§15.4)', () => {
     // spend - by which time they have thrown away the paper. So the last step
     // signs a real transaction and asks the chain whether it landed.
     test('A FRESH install restores from a pointer, and the restored wallet can sign',
-        async ({ page }) => {
+        async ({ page, browser: probeBrowser }) => {
+            await skipWithoutBarcodeDetector(probeBrowser);
             /** @type {string} */
             let envelope;
             /** @type {string} */
@@ -411,13 +450,15 @@ test.describe('backup-pointer restore (§15.4)', () => {
             });
 
             const browser = await launchWithQrCamera(POINTER_QR);
+            /** @type {import('@playwright/test').Page | null} */
+            let two = null;
+            const fetched = [];
             try {
                 const context = await freshContext(browser, {
                     permissions: ['camera'],
                     ignoreHTTPSErrors: true,
                 });
 
-                const fetched = [];
                 await context.route(ENVELOPE_URL, async (route) => {
                     fetched.push(route.request().url());
                     await route.fulfill({
@@ -427,7 +468,7 @@ test.describe('backup-pointer restore (§15.4)', () => {
                     });
                 });
 
-                const two = await context.newPage();
+                two = await context.newPage();
 
                 await test.step('DEVICE TWO: no wallet at all, and it restores from the QR', async () => {
                     await openFreshRestoreScreen(two);
@@ -552,11 +593,14 @@ test.describe('backup-pointer restore (§15.4)', () => {
                     // The wallet reporting on itself is not enough. Ask the
                     // chain: a transaction signed with the wrong key never
                     // reaches a block.
-                    const txid = (await main.innerText()).match(/\b[0-9a-f]{64}\b/)?.[0];
+                    const txid = await readShownTxid(main);
                     expect(txid, 'the success screen showed no transaction id').toBeTruthy();
                     const utxo = await waitForConfirmedUtxo(ownAddress, txid);
                     expect(Number(utxo.amount)).toBeCloseTo(Number(SEND_AMOUNT), 8);
                 });
+            } catch (err) {
+                await attachDeviceScreen(two, 'device-two', { envelopeFetches: fetched.length });
+                throw err;
             } finally {
                 await browser.close();
             }

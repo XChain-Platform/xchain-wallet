@@ -30,6 +30,62 @@
  */
 
 /**
+ * Fund the selected account's newest address on a regtest chain.
+ *
+ * @param {object} opts
+ * @param {object} opts.messaging
+ * @param {string} opts.walletId
+ * @param {string} opts.accountId
+ * @param {string} opts.chainId
+ * @param {string} opts.chainDisplayName
+ * @param {string} opts.minerUrl
+ * @param {number} opts.amount
+ * @param {string} [opts.apiKey]
+ * @param {typeof fetch} [opts.fetch]
+ * @returns {Promise<RegtestFundResult & { address?: string }>}
+ */
+export async function fundActiveWalletFromMiner({
+    messaging,
+    walletId,
+    accountId,
+    chainId,
+    chainDisplayName,
+    minerUrl,
+    amount,
+    apiKey,
+    fetch: fetchImpl,
+}) {
+    if (!walletId) return { ok: false, error: 'No active wallet found.' };
+    if (!accountId) return { ok: false, error: 'No active account found.' };
+    if (typeof messaging?.getNewestAddress !== 'function') {
+        return { ok: false, error: 'The wallet address lookup is not available in this build.' };
+    }
+
+    let newest;
+    try {
+        newest = await messaging.getNewestAddress(walletId, chainId, accountId);
+    } catch (err) {
+        return { ok: false, error: err?.message || 'Could not load the active account address.' };
+    }
+    const address = newest?.address;
+    if (!address) {
+        return {
+            ok: false,
+            error: `No ${chainDisplayName || chainId} address yet. Use Receive first.`,
+        };
+    }
+
+    const result = await fundBtcFromMiner({
+        minerUrl,
+        address,
+        amount,
+        apiKey,
+        fetch: fetchImpl,
+    });
+    return result.ok ? { ...result, address } : result;
+}
+
+/**
  * @param {object} opts
  * @param {string} opts.minerUrl    Base URL of the xchain-regtest-miner API (e.g. http://localhost:3005)
  * @param {string} opts.address     Address to fund

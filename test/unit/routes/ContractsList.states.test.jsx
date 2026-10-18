@@ -7,6 +7,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
 import { ContractsList } from '../../../packages/core/src/shared/routes/ContractsList.jsx';
+import { clearDemoWalletId, markDemoWallet } from '../../../packages/core/src/flows/demoMode.js';
 
 const CHAIN = 'bitcoin-mainnet';
 const ADDRESS = 'bc1qexampleexampleexampleexampleexampleex';
@@ -15,7 +16,7 @@ function pending() {
     return new Promise(() => {});
 }
 
-function mount(overrides = {}) {
+function mount(overrides = {}, props = {}) {
     const onOpenContract = vi.fn();
     const messaging = {
         getAddressesByChain: vi.fn().mockResolvedValue({ [CHAIN]: [{ address: ADDRESS }] }),
@@ -31,15 +32,28 @@ function mount(overrides = {}) {
                 walletId="wallet-1"
                 onBack={() => {}}
                 onOpenContract={onOpenContract}
+                {...props}
             />
         </MessagingProvider>,
     );
     return { messaging, onOpenContract };
 }
 
-afterEach(() => cleanup());
+afterEach(() => {
+    cleanup();
+    clearDemoWalletId();
+    localStorage.clear();
+});
 
 describe('ContractsList states', () => {
+    it('offers Publish contract once, in the toolbar, with a button-free empty state', async () => {
+        mount({}, { onDeploy: vi.fn() });
+
+        expect(await screen.findByText('No published contracts')).toBeInTheDocument();
+        expect(screen.getAllByRole('button', { name: /Publish contract/ })).toHaveLength(1);
+        expect(screen.getByRole('button', { name: '+ Publish contract' })).toBeInTheDocument();
+    });
+
     it('shows loading while wallet addresses resolve', () => {
         mount({ getAddressesByChain: vi.fn(() => pending()) });
 
@@ -82,5 +96,18 @@ describe('ContractsList states', () => {
         fireEvent.click(rows[0]);
         expect(onOpenContract).toHaveBeenCalledWith(CHAIN, '7');
         expect(screen.getByLabelText('Filter contracts')).toBeInTheDocument();
+    });
+
+    it('settles a demo wallet to its empty sections without asking an explorer', async () => {
+        markDemoWallet('demo-wallet');
+        const { messaging } = mount({}, { walletId: 'demo-wallet' });
+
+        expect(await screen.findByText('No published contracts')).toBeInTheDocument();
+        expect(screen.getByText('No contract interactions')).toBeInTheDocument();
+        expect(screen.getByText('No indexed contracts')).toBeInTheDocument();
+        expect(screen.queryByRole('status', { name: /Loading contracts/ })).toBeNull();
+        expect(messaging.getContractsForSource).not.toHaveBeenCalled();
+        expect(messaging.getDepositsForAddress).not.toHaveBeenCalled();
+        expect(messaging.getContractsBrowseAll).not.toHaveBeenCalled();
     });
 });

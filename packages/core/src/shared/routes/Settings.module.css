@@ -1,5 +1,12 @@
 .page {
     min-width: 0;
+    /* One gap between every stacked settings row, whether it is a drill-in
+       row on the page or a field row inside a section, so the list reads as
+       one evenly spaced column. Subpage sections built on FormSection take
+       the same gap between their heading and rows and between the rows. */
+    --xc-settings-row-gap: var(--xc-space-2);
+    --xc-section-gap: var(--xc-settings-row-gap);
+    --xc-form-gap: var(--xc-settings-row-gap);
 }
 
 .searchField {
@@ -8,6 +15,15 @@
 
 .searchField > * {
     margin-bottom: 0;
+}
+
+.searchHighlightScope {
+    display: contents;
+}
+
+.page [data-settings-search-highlight='true'] {
+    outline: 2px solid var(--xc-accent-primary);
+    outline-offset: 2px;
 }
 
 /* Settings section headings remain in document flow while the page header
@@ -32,6 +48,23 @@
         max-width: 100%;
     }
 
+    /* A field row's control slot takes the whole line under the copy, so
+       a kit Select fills it the same way a native select does. */
+    .page [data-settings-control] {
+        flex: 1 1 100%;
+    }
+
+    .page [data-settings-control] > * {
+        flex: 1 1 100%;
+        min-width: 0;
+    }
+
+    /* A control that sizes its own wrapper (the fiat currency search box)
+       fills the line like the dropdowns above it, not a capped 280px. */
+    .page [data-settings-fill] {
+        width: 100% !important;
+    }
+
     /* Raw action buttons share the same viewport clamp as the Button
        component, including destructive actions with longer labels. */
     .page button {
@@ -39,40 +72,12 @@
         max-width: 100%;
     }
 
-    @supports selector(:has(a)) {
-        .page div:has(> select),
-        .page div:has(> input:not([type='checkbox']):not([type='radio']):not([type='range'])),
-        .page div:has(> textarea),
-        .page div:has(> button),
-        .page div:has(> :is(span, div) > :is(select, button)),
-        .page div:has(> div > input:not([type='checkbox']):not([type='radio']):not([type='range'])) {
-            flex-wrap: wrap !important;
-        }
-
-        /* A label and its description keep the full first line when the control
-           is a direct child of the shared Settings row. */
-        .page div:has(> select) > :is(span, div):first-child,
-        .page div:has(> input:not([type='checkbox']):not([type='radio']):not([type='range'])) > :is(span, div):first-child,
-        .page div:has(> textarea) > :is(span, div):first-child,
-        .page div:has(> button) > :is(span, div):first-child {
-            flex: 1 1 100% !important;
-            min-width: 0;
-        }
-
-        /* Compound control groups and button groups wrap below their label as a
-           unit, leaving descriptions aligned with the label above them. */
-        .page div:has(> :is(span, div) > :is(select, button)) > :is(span, div):first-child,
-        .page div:has(> div > input:not([type='checkbox']):not([type='radio']):not([type='range'])) > :is(span, div):first-child {
-            flex: 1 1 100% !important;
-            min-width: 0;
-        }
-
-        .page div:has(> select),
-        .page div:has(> input:not([type='checkbox']):not([type='radio']):not([type='range'])),
-        .page div:has(> textarea) {
-            min-width: 0;
-            max-width: 100%;
-        }
+    /* Wrapping every flex row is harmless for block containers and keeps the
+       fallback independent of relational-selector support. */
+    .page div {
+        flex-wrap: wrap !important;
+        min-width: 0;
+        max-width: 100%;
     }
 
     /* Long section names take the first line so summaries and the forward

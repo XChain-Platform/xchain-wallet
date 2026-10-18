@@ -1,0 +1,215 @@
+.overlay {
+    /* safe-area-backdrop: the scrim paints edge to edge; the dialogOverlay and
+       sheetOverlay variants inset the surface from the device safe areas. */
+    position: fixed;
+    box-sizing: border-box;
+    inset: 0;
+    z-index: var(--xc-z-modal);
+    display: flex;
+    background: var(--xc-overlay, rgba(15, 23, 42, 0.55));
+}
+
+/* OverlaySurface selects these by variant name (`${variant}Overlay`). */
+.dialogOverlay {
+    align-items: center;
+    justify-content: center;
+    padding: calc(var(--xc-space-4) + env(safe-area-inset-top, 0px))
+        calc(var(--xc-space-4) + env(safe-area-inset-right, 0px))
+        calc(var(--xc-space-4) + env(safe-area-inset-bottom, 0px))
+        calc(var(--xc-space-4) + env(safe-area-inset-left, 0px));
+}
+
+.sheetOverlay {
+    align-items: flex-end;
+    justify-content: center;
+    padding-inline: env(safe-area-inset-left, 0px) env(safe-area-inset-right, 0px);
+}
+
+.surface {
+    box-sizing: border-box;
+    min-width: 0;
+    min-height: 0;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+    gap: var(--xc-space-3);
+    padding: var(--xc-space-4);
+    background: var(--xc-surface);
+    color: var(--xc-text);
+    border: 1px solid var(--xc-border);
+    border-radius: var(--xc-radius-lg);
+}
+
+.dialog {
+    width: 100%;
+    max-width: 20rem;
+    max-height: calc(var(--xc-viewport-h, 100vh) - var(--xc-space-8));
+    box-shadow: var(--xc-shadow-modal);
+    text-align: center;
+}
+
+.sheet {
+    width: 100%;
+    max-width: 35rem;
+    max-height: min(70vh, var(--xc-viewport-h, 100vh));
+    /* The bottom inset is padding on the scrolling body, not on the surface:
+       padding on the surface left a dead band under the list, so the scroller
+       stopped short of the edge and the last row was cut above the home
+       indicator. Now the list scrolls to the edge and its end rests above
+       the inset. A sheet has no footer; one would need the same padding. */
+    padding-bottom: 0;
+    border-end-start-radius: 0;
+    border-end-end-radius: 0;
+    box-shadow: var(--xc-shadow-bottom-sheet);
+}
+
+.popover {
+    position: absolute;
+    box-sizing: border-box;
+    top: calc(100% + var(--xc-space-2));
+    inset-inline-end: 0;
+    z-index: var(--xc-z-dropdown);
+    width: 20rem;
+    max-width: calc(100vw - var(--xc-space-6));
+    max-height: min(24rem, 70vh);
+    padding: var(--xc-space-2);
+    box-shadow: var(--xc-shadow-popover);
+}
+
+.header {
+    position: relative;
+    display: grid;
+    grid-template-columns: var(--xc-control-h-md) minmax(0, 1fr) var(--xc-control-h-md);
+    align-items: center;
+    gap: var(--xc-space-2);
+    flex: 0 0 auto;
+    min-height: var(--xc-control-h-md);
+}
+
+.title {
+    grid-column: 2;
+    min-width: 0;
+    margin: 0;
+    color: var(--xc-text);
+    font-size: var(--xc-text-lg);
+    font-weight: 700;
+    line-height: 1.25;
+    overflow-wrap: anywhere;
+}
+
+.popover .title {
+    grid-column: 1;
+    text-align: start;
+}
+
+.handle {
+    position: absolute;
+    top: 0;
+    /* Equal logical insets plus auto margins centre the handle in either direction. */
+    inset-inline: 0;
+    width: 2.25rem;
+    height: 4px;
+    margin-inline: auto;
+    border-radius: var(--xc-radius-xs);
+    background: var(--xc-border);
+}
+
+/* A sheet's drag handle takes its own strip above the title row, so on short
+   phones it never meets the centred title or the close control. */
+.sheet .header {
+    padding-top: calc(var(--xc-space-1) + var(--xc-space-2));
+    padding-inline: var(--xc-space-4);
+}
+
+.sheet .title {
+    text-align: center;
+}
+
+/* The close control is the shared secondary icon Button inside a fixed grid cell. */
+.close {
+    grid-column: 3;
+    width: var(--xc-control-h-md);
+    height: var(--xc-control-h-md);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+}
+
+/* A popover's title is start-aligned, so it needs no centring spacer cell;
+   with one it sat indented a control's width past the rows below it. The
+   inline inset matches the one popover sections carry inside the surface. */
+.popover .header {
+    grid-template-columns: minmax(0, 1fr) var(--xc-control-h-md);
+    padding-inline: var(--xc-space-2);
+}
+
+.popover .close {
+    grid-column: 2;
+}
+
+.body {
+    composes: scrollArea from '../../ui/Screen.module.css';
+    flex: 1 1 auto;
+    min-width: 0;
+    min-height: 0;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+}
+
+.body > :first-child {
+    margin-block-start: 0;
+}
+
+.body > :last-child {
+    margin-block-end: 0;
+}
+
+.sheet .body {
+    padding-bottom: calc(var(--xc-space-4) + env(safe-area-inset-bottom, 0px));
+}
+
+.popover .body {
+    display: flex;
+    flex-direction: column;
+    gap: var(--xc-space-3);
+}
+
+.footer {
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    flex: 0 0 auto;
+    gap: var(--xc-space-2);
+}
+
+.footer > * {
+    flex: 1 1 0;
+    min-width: 0;
+}
+
+@media (max-width: 360px) {
+    .footer {
+        flex-direction: column;
+        align-items: stretch;
+    }
+}
+
+@media (orientation: landscape) and (max-height: 480px) and (min-aspect-ratio: 3/2) {
+    .dialogOverlay {
+        padding: var(--xc-space-2);
+    }
+
+    .surface {
+        padding: var(--xc-space-3);
+    }
+
+    .dialog {
+        max-height: calc(var(--xc-viewport-h, 100vh) - var(--xc-space-4));
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .surface {
+        animation: none;
+    }
+}

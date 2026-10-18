@@ -9,11 +9,14 @@
 // contact legal@dankest.llc.
 
 import { useEffect, useMemo, useState } from 'react';
-import { Button, ChainBadge, EmptyState, Icon, Input, ListPage, ListRow, PageHeader, Screen, Skeleton, StatusMessage } from '@xchain-wallet/core/ui';
+import { Button, EmptyState, Icon, ListPage, ListRow, PageHeader, Screen, Skeleton, StatusMessage } from '@xchain-wallet/core/ui';
 import { registry as registryLib, flows as flowsLib } from '@xchain-wallet/core';
 import * as branding from '../../branding/branding.js';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
+import { ListToolbar } from '../components/ListToolbar.jsx';
 import { NetworkFilterDropdown } from '../components/NetworkFilterDropdown.jsx';
+import { OfflineEmptyState } from '../components/OfflineEmptyState.jsx';
+import { useNetworkOffline } from '../hooks/useNetworkOffline.js';
 import { coinFromChainId, isAssetImageSourceAllowed, tickerColor } from '../components/BalanceList.jsx';
 import { useOracleFeeds } from '../hooks/useOracleFeeds.js';
 import { useSettings } from '../hooks/useSettings.js';
@@ -21,10 +24,12 @@ import { dispenserRateLabel } from '../utils/dispenserPricing.js';
 import {
     CHAIN_TIME_REFRESH_MS, chainClockFromTipRead, dispenserCancelTimestamp, dispenserCloseEta,
 } from '../utils/dispenserCloseWindow.js';
+import { startVisibleInterval } from '../utils/visibleInterval.js';
 import styles from './ActionsMenu.module.css';
 import local from './DispensersList.module.css';
 
 const chainRegistry = registryLib.defaultRegistry();
+const DISPENSER_REFRESH_MS = 20000;
 
 /**
  * "My dispensers": §40.7.1 / §40.7.2 owner-facing list view.
@@ -54,6 +59,8 @@ const chainRegistry = registryLib.defaultRegistry();
 export function DispensersList({ walletId, activeAccountId, onOpenDispenser, onCreateDispenser, onBack }) {
     const { messaging, shell } = useMessaging();
     const variant = screenVariantFor(shell);
+    const isDemo = flowsLib.isDemoWallet(walletId);
+    const { offline, recheck } = useNetworkOffline({ walletId });
     const { settings } = useSettings();
     const allowRemoteImages = Boolean(settings)
         && settings.privacy?.metadataFetchEnabled !== false;
@@ -81,6 +88,17 @@ export function DispensersList({ walletId, activeAccountId, onOpenDispenser, onC
     const [chainClocks, setChainClocks] = useState(
         /** @type {Record<string, null | { chainTime: number, chainTimeReadAtMs: number }>} */ ({}),
     );
+
+    // Lifecycle changes land independently of this route. Refreshing on the
+    // standard wallet cadence lets an open row become closing or terminal as
+    // soon as the explorer indexes the owner transaction.
+    useEffect(() => {
+        if (!addressesByChain || flowsLib.isDemoWallet(walletId) || offline) return undefined;
+        return startVisibleInterval(
+            () => setDispensersReload((value) => value + 1),
+            DISPENSER_REFRESH_MS,
+        );
+    }, [addressesByChain, walletId, offline]);
 
     useEffect(() => {
         let cancelled = false;
@@ -127,16 +145,27 @@ export function DispensersList({ walletId, activeAccountId, onOpenDispenser, onC
         if (!addressesByChain) return;
         const chains = chainsWithAddresses;
         if (chains.length === 0) return;
+        // Offline the reads cannot finish; rows already shown stay, and the
+        // dispensers load again when the connection returns.
+        if (offline) return;
 
-        const initial = {};
-        for (const cid of chains) initial[cid] = { loading: true, rows: [], error: null };
-        setDispensersByChain(initial);
+        setDispensersByChain((previous) => {
+            const initial = {};
+            for (const cid of chains) {
+                initial[cid] = {
+                    loading: true,
+                    rows: previous[cid]?.rows || [],
+                    error: null,
+                };
+            }
+            return initial;
+        });
 
         let cancelled = false;
 
         // Demo wallet: no explorer to query; serve the fabricated dispensers
         // owned by the first address on each chain.
-        if (flowsLib.isDemoWallet(walletId)) {
+        if (isDemo) {
             const demo = {};
             for (const cid of chains) {
                 const first = (addressesByChain[cid] || [])
@@ -220,7 +249,7 @@ export function DispensersList({ walletId, activeAccountId, onOpenDispenser, onC
             });
         }
         return () => { cancelled = true; };
-    }, [addressesByChain, chainsWithAddresses, messaging, walletId, dispensersReload]);
+    }, [addressesByChain, chainsWithAddresses, messaging, isDemo, dispensersReload, offline]);
     // Re-render once a minute while any closing row shows a countdown, and
     // re-read the protocol time of each chain with one, at most once per
     // CHAIN_TIME_REFRESH_MS. The key is a sorted list so it only changes when
@@ -267,7 +296,10 @@ export function DispensersList({ walletId, activeAccountId, onOpenDispenser, onC
 
     // This list lane serves ORACLE_ADDRESS but no price for a Mode B row, so
     // its price comes from the oracle's own feeds.
-    const oracleEntries = useMemo(() => allRows.map((row) => ({ chainId: row.chainId, row })), [allRows]);
+    const oracleEntries = useMemo(
+        () => isDemo ? [] : allRows.map((row) => ({ chainId: row.chainId, row })),
+        [allRows, isDemo],
+    );
     const oracleFeedsFor = useOracleFeeds(messaging, oracleEntries);
 
     const anyLoading = useMemo(() => {
@@ -276,11 +308,10 @@ export function DispensersList({ walletId, activeAccountId, onOpenDispenser, onC
         return states.some((s) => s.loading);
     }, [dispensersByChain]);
 
-    const loadErrors = useMemo(() => (
-        Object.entries(dispensersByChain)
-            .filter(([, s]) => s.error)
-            .map(([cid]) => chainRegistry.get(cid)?.displayName || cid)
-    ), [dispensersByChain]);
+    const hasLoadErrors = useMemo(
+        () => Object.values(dispensersByChain).some((state) => state.error),
+        [dispensersByChain],
+    );
 
     const visibleRows = useMemo(() => {
         const q = query.trim().toLowerCase();
@@ -300,21 +331,23 @@ export function DispensersList({ walletId, activeAccountId, onOpenDispenser, onC
         <PageHeader
             onBack={onBack}
             backLabel="Back to home"
-            titleIcon={<Icon.TokenIcon />}
+            titleIcon={<Icon.DollarIcon />}
             title="My dispensers"
-            trailing={onCreateDispenser ? (
-                <Button
-                    type="button"
-                    className={local.addBtn}
-                    onClick={() => onCreateDispenser()}
-                    aria-label="Create dispenser"
-                    title="Create dispenser"
-                >
-                    <Icon.PlusIcon />
-                </Button>
-            ) : undefined}
         />
     );
+    // The page header holds only the title and Back, so Create dispenser
+    // sits in the content's actions row. An empty list offers it from its
+    // EmptyState instead, so the screen never shows it twice.
+    const actionsFor = (emptyOffersCreate = false) => (onCreateDispenser && !emptyOffersCreate ? (
+        <Button
+            type="button"
+            variant="secondary"
+            icon={<Icon.PlusIcon />}
+            onClick={() => onCreateDispenser()}
+        >
+            Create dispenser
+        </Button>
+    ) : null);
     const wrap = (children) => (
         <Screen variant={variant} header={header}>
             {children}
@@ -323,7 +356,7 @@ export function DispensersList({ walletId, activeAccountId, onOpenDispenser, onC
 
     if (addressesError) {
         return wrap(
-            <ListPage>
+            <ListPage actions={actionsFor()}>
                 <StatusMessage
                     variant="error"
                     className={styles.entryDescription}
@@ -343,7 +376,7 @@ export function DispensersList({ walletId, activeAccountId, onOpenDispenser, onC
     }
     if (!addressesByChain) {
         return wrap(
-            <ListPage>
+            <ListPage actions={actionsFor()}>
                 <div role="status" aria-label="Loading dispensers">
                     <Skeleton.List rows={5} />
                 </div>
@@ -352,7 +385,7 @@ export function DispensersList({ walletId, activeAccountId, onOpenDispenser, onC
     }
     if (chainsWithAddresses.length === 0) {
         return wrap(
-            <ListPage>
+            <ListPage actions={actionsFor()}>
                 <EmptyState
                     title="No supported address"
                     body="A supported address is required before dispensers can be created or viewed."
@@ -361,30 +394,11 @@ export function DispensersList({ walletId, activeAccountId, onOpenDispenser, onC
         );
     }
 
+    const emptyOffersCreate = !anyLoading && !hasLoadErrors && allRows.length === 0;
     return wrap(
         <ListPage
-            toolbar={(
-                <>
-                    <div className={local.searchField}>
-                        <Input
-                            type="search"
-                            enterKeyHint="search"
-                            autoCapitalize="off"
-                            className={local.search}
-                            placeholder="Search"
-                            value={query}
-                            onChange={(e) => setQuery(e.target.value)}
-                            autoComplete="off"
-                            autoCorrect="off"
-                            spellCheck={false}
-                            aria-label="Search dispensers"
-                        />
-                    </div>
-                    <NetworkFilterDropdown value={network} onChange={setNetwork} />
-                </>
-            )}
-        >
-            {loadErrors.length > 0 ? (
+            // Offline, the screen's one message is its offline state below.
+            notices={hasLoadErrors && !offline ? (
                 <StatusMessage
                     variant="error"
                     className={styles.entryDescription}
@@ -396,14 +410,27 @@ export function DispensersList({ walletId, activeAccountId, onOpenDispenser, onC
                         },
                     }}
                 >
-                    Couldn't load some dispensers. Failed networks: {loadErrors.join(', ')}. Try again.
+                    Couldn't load some dispensers. Try again.
                 </StatusMessage>
             ) : null}
-            {anyLoading && visibleRows.length === 0 ? (
+            actions={actionsFor(emptyOffersCreate)}
+            toolbar={(
+                <ListToolbar query={query} onQueryChange={setQuery} searchLabel="Search dispensers">
+                    <NetworkFilterDropdown
+                        value={network}
+                        onChange={setNetwork}
+                        announceNetworkCount
+                    />
+                </ListToolbar>
+            )}
+        >
+            {offline && allRows.length === 0 ? (
+                <OfflineEmptyState body="Your dispensers load when the connection returns." onRetry={recheck} />
+            ) : anyLoading && visibleRows.length === 0 ? (
                 <div role="status" aria-label="Loading dispensers">
                     <Skeleton.List rows={5} />
                 </div>
-            ) : loadErrors.length > 0 && allRows.length === 0 ? (
+            ) : hasLoadErrors && allRows.length === 0 ? (
                 null
             ) : visibleRows.length === 0 ? (
                 allRows.length === 0 ? (
@@ -451,7 +478,6 @@ function DispenserRow({ row, label, oracleFeeds, cancelTimestamp, nowMs, chainCl
     const tokenImageUrl = isAssetImageSourceAllowed(row.imageUrl, allowRemoteImages)
         ? row.imageUrl
         : null;
-    const descriptor = chainRegistry.get(row.chainId);
     // Badge the LIFECYCLE state (open / cancelling / cancelled / expired /
     // complete), not the create action's validity: `row.status` is frozen at
     // 'valid' forever, which dressed every dispenser - cancelled and drained
@@ -502,19 +528,15 @@ function DispenserRow({ row, label, oracleFeeds, cancelTimestamp, nowMs, chainCl
                         src={chainIconUrl}
                         alt=""
                         aria-hidden="true"
-                    title={chainRegistry.get(row.chainId)?.displayName}
-                    className={local.chainOverlay}
-                    loading="lazy"
-                    decoding="async"
+                        className={local.chainOverlay}
+                        loading="lazy"
+                        decoding="async"
                     />
                 ) : null}
             </span>}
             title={<span className={local.name}>{label ? `${label}: ` : ''}{row.give_tick || '?'}</span>}
             subtitle={(
                 <span className={local.body}>
-                    <span className={local.subtitle}>
-                        {descriptor ? <ChainBadge descriptor={descriptor} size="sm" /> : row.chainId}
-                    </span>
                     <span className={local.subtitle}>{dispenserRateLabel(row, oracleFeeds)}</span>
                 {/* Escrow is only stated when it is known. The explorer's
                     dispenser LIST lane carries no escrow column (remaining is

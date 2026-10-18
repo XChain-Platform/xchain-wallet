@@ -53,6 +53,9 @@ describe('WalletPicker row layout', () => {
         expect(nameRule).toMatch(/overflow:\s*hidden/);
         expect(nameRule).toMatch(/text-overflow:\s*ellipsis/);
         expect(nameRule).toMatch(/white-space:\s*nowrap/);
+        // The identity ring is a box-shadow; the clip box must leave room for it on every side.
+        expect(nameRule).toMatch(/padding-inline:\s*var\(--xc-space-1\)/);
+        expect(nameRule).toMatch(/margin-inline:\s*calc\(var\(--xc-space-1\) \* -1\)/);
     });
 
     it('marks the current wallet and keeps add and manage actions in the footer', async () => {
@@ -82,8 +85,68 @@ describe('WalletPicker row layout', () => {
         expect(add.closest('footer')).toBeTruthy();
         expect(manage.closest('footer')).toBeTruthy();
 
+        const css = readFileSync(
+            join(process.cwd(), 'packages/core/src/shared/routes/WalletPicker.module.css'),
+            'utf8',
+        );
+        const footerButtonRule = /\.footerActions button\s*\{([^}]*)\}/.exec(css)?.[1] || '';
+        expect(footerButtonRule).toMatch(/min-height:\s*var\(--xc-control-h-md, 40px\)/);
+        expect(footerButtonRule).not.toMatch(/--xc-tap-min/);
+
         fireEvent.click(manage);
         expect(onShowDetails).toHaveBeenCalledWith(wallet.id);
+    });
+
+    it('sizes the wallet-details control from the kit icon-button size', () => {
+        const css = readFileSync(
+            join(process.cwd(), 'packages/core/src/shared/routes/WalletPicker.module.css'),
+            'utf8',
+        );
+        const menuButtonRule = /\.rowMenuBtn\s*\{([^}]*)\}/.exec(css)?.[1] || '';
+
+        expect(menuButtonRule).toMatch(/width:\s*var\(--xc-button-height\)/);
+        expect(menuButtonRule).toMatch(/height:\s*var\(--xc-button-height\)/);
+        expect(menuButtonRule).not.toMatch(/(?:width|height):\s*32px/);
+    });
+
+    it('keeps the row action in place while it is pressed', () => {
+        const css = readFileSync(
+            join(process.cwd(), 'packages/core/src/shared/routes/WalletPicker.module.css'),
+            'utf8',
+        );
+        const menuButtonRule = /\.rowWrap \.rowMenuBtn\s*\{([^}]*)\}/.exec(css)?.[1] || '';
+        // The kit's :active rule sets transform, so a translate used for
+        // centring is dropped on press and the release misses the button.
+        expect(menuButtonRule).not.toMatch(/transform\s*:/);
+        expect(menuButtonRule).toMatch(/inset-block:\s*0/);
+        expect(menuButtonRule).toMatch(/margin-block:\s*auto/);
+    });
+
+    it('renders the wallet-details glyph in the kit icon slot', async () => {
+        const wallet = { id: 'wallet-1', name: 'Primary', format: 'bip39' };
+        await act(async () => {
+            render(
+                <MessagingProvider
+                    shell="popup"
+                    messaging={{ listWallets: () => Promise.resolve([wallet]) }}
+                >
+                    <WalletPicker
+                        activeWalletId={wallet.id}
+                        onSwitch={() => {}}
+                        onAddWallet={() => {}}
+                        onShowDetails={() => {}}
+                        onBack={() => {}}
+                    />
+                </MessagingProvider>,
+            );
+            await Promise.resolve();
+        });
+
+        const details = screen.getByRole('button', { name: 'Wallet details for Primary' });
+        // A glyph passed as a label child is squeezed by the label padding
+        // into a sliver; the icon slot sizes it from the kit icon scale.
+        expect(details.querySelector('[aria-hidden="true"] > svg')).toBeTruthy();
+        expect(details.children).toHaveLength(1);
     });
 
     it('labels imported-key wallets accurately', async () => {
@@ -244,6 +307,35 @@ describe('WalletPicker switching', () => {
 
         expect(onSwitch).toHaveBeenCalledOnce();
         await act(async () => finishSwitch());
+    });
+});
+
+describe('WalletDetails layout', () => {
+    it('leaves the gaps between its actions to the list page', async () => {
+        const wallet = { id: 'wallet-1', name: 'Legacy', format: 'counterwallet-legacy' };
+        render(
+            <MessagingProvider
+                shell="popup"
+                messaging={{
+                    listWallets: () => Promise.resolve([wallet]),
+                    listAccounts: () => Promise.resolve([]),
+                }}
+            >
+                <WalletDetails
+                    walletId={wallet.id}
+                    onBack={() => {}}
+                    onRename={() => {}}
+                    onMigrateToBip39={() => {}}
+                />
+            </MessagingProvider>,
+        );
+        const rename = await screen.findByRole('button', { name: 'Rename wallet' });
+        const upgrade = screen.getByRole('button', { name: /Upgrade/ });
+        // Extra inline margins on top of the page gap spaced the buttons
+        // unevenly (8 px more above one, 12 px more above the next).
+        for (const button of [rename, upgrade]) {
+            expect(button.parentElement.getAttribute('style')).toBeNull();
+        }
     });
 });
 

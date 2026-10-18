@@ -512,33 +512,35 @@ export function demoProbesFor(networkKind = 'testnet', descriptors = BUNDLED_DES
         const coin = explorerCoinCode(d);
         // The hub's registry route is origin-level and carries no coin, unlike
         // the per-coin URL the descriptor names for everything else.
-        add('hub', coin, new URL('/api/v1/chain-registry', d.hub.defaultUrl).href);
-        // The registry route above is the hub's ONE annotated cross-origin
-        // exception (it sets ACAO: * explicitly), so probing only that route
-        // reports the hub reachable while the JSON-RPC surface the wallet also
-        // needs - getAllConfig, service-endpoint discovery, capability
-        // thresholds - is closed. That is the same trap this file just fixed,
-        // one level in: a green signal for the relationship it measures and no
-        // other. Mounted at the origin root (`app.use(jsonRouter(...))`), and
-        // it is POST-only for the calls that matter, so the preflight is
-        // issued at this same root - there is no separate JSON-RPC path.
-        //
-        // Probed with a POST rather than a GET, and that is the whole of row
-        // 72. A GET of this root is answered by the vhost's DocumentRoot with
-        // a static HTML landing page - a different resource, which naturally
-        // carries no Access-Control-Allow-Origin - so a CORS verdict taken
-        // from it says nothing about the JSON-RPC surface. It said something
-        // false: on 2026-08-08, with the preflight repaired and every call the
-        // wallet makes working, this gate still reported the hub unreachable
-        // from the app because it was reading the landing page's headers.
-        // `ping` is the method the wallet's own reachability check sends
-        // (sdk.pingHub() -> POST {method:'ping'}), so the probe stands in for
-        // a call the app actually makes. NOT `getallconfigs`: that one is the
-        // hub's one sensitive read (it returns every service's DB credentials)
-        // and answers 401 to any client without HUB_API_KEY, which the shipped
-        // wallet correctly does not carry - a red gate for working-as-designed.
-        const hubRpcUrl = new URL('/', d.hub.defaultUrl).href;
-        add('hub-rpc', coin, hubRpcUrl, hubRpcUrl, { jsonrpc: '2.0', id: 1, method: 'ping', params: [] });
+        if (d.hub) {
+            add('hub', coin, new URL('/api/v1/chain-registry', d.hub.defaultUrl).href);
+            // The registry route above is the hub's ONE annotated cross-origin
+            // exception (it sets ACAO: * explicitly), so probing only that route
+            // reports the hub reachable while the JSON-RPC surface the wallet also
+            // needs - getAllConfig, service-endpoint discovery, capability
+            // thresholds - is closed. That is the same trap this file just fixed,
+            // one level in: a green signal for the relationship it measures and no
+            // other. Mounted at the origin root (`app.use(jsonRouter(...))`), and
+            // it is POST-only for the calls that matter, so the preflight is
+            // issued at this same root - there is no separate JSON-RPC path.
+            //
+            // Probed with a POST rather than a GET, and that is the whole of row
+            // 72. A GET of this root is answered by the vhost's DocumentRoot with
+            // a static HTML landing page - a different resource, which naturally
+            // carries no Access-Control-Allow-Origin - so a CORS verdict taken
+            // from it says nothing about the JSON-RPC surface. It said something
+            // false: on 2026-08-08, with the preflight repaired and every call the
+            // wallet makes working, this gate still reported the hub unreachable
+            // from the app because it was reading the landing page's headers.
+            // `ping` is the method the wallet's own reachability check sends
+            // (sdk.pingHub() -> POST {method:'ping'}), so the probe stands in for
+            // a call the app actually makes. NOT `getallconfigs`: that one is the
+            // hub's one sensitive read (it returns every service's DB credentials)
+            // and answers 401 to any client without HUB_API_KEY, which the shipped
+            // wallet correctly does not carry - a red gate for working-as-designed.
+            const hubRpcUrl = new URL('/', d.hub.defaultUrl).href;
+            add('hub-rpc', coin, hubRpcUrl, hubRpcUrl, { jsonrpc: '2.0', id: 1, method: 'ping', params: [] });
+        }
         add('explorer', coin, `${trimSlash(d.explorer.defaultUrl)}/${coin}/api/status`);
         // The encoder's create_tx call is POST '/' against an axios client
         // whose baseURL is the descriptor's URL, and axios's combineURLs joins

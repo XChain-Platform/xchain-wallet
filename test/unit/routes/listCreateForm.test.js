@@ -82,7 +82,7 @@ function mount(opts = {}) {
     return messaging;
 }
 
-const FORECLOSURE_TEXT = /can never be bridged to another chain/i;
+const FORECLOSURE_TEXT = /can never be bridged to another network/i;
 
 afterEach(() => { cleanup(); vi.clearAllMocks(); });
 
@@ -131,7 +131,7 @@ describe('ListCreateForm: the bridge-foreclosure disclosure', () => {
         expect(textarea).toHaveAttribute('autocapitalize', 'off');
 
         fireEvent.click(screen.getByRole('button', { name: 'Add from token picker' }));
-        fireEvent.click(await screen.findByLabelText(/^Select MiXeD!(?:\s|$)/));
+        fireEvent.click(await screen.findByLabelText(/^Select MiXeD!(?:[\s,]|$)/));
 
         expect(await screen.findByLabelText('Tokens (one per line)')).toHaveValue('MiXeD!');
     });

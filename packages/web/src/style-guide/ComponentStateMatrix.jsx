@@ -21,15 +21,22 @@ const componentSizes = {
     PageHeader: FIXED_SIZE,
     FormPage: FIXED_SIZE,
     FormErrorSummary: FIXED_SIZE,
+    FormNotice: FIXED_SIZE,
+    FieldNote: FIXED_SIZE,
     FormSection: FIXED_SIZE,
     ListPage: FIXED_SIZE,
     EmptyState: FIXED_SIZE,
     SectionHeader: FIXED_SIZE,
     StatusMessage: FIXED_SIZE,
     Button: ALL_SIZES,
+    Spinner: ALL_SIZES,
+    Checkbox: FIXED_SIZE,
+    ChoiceControl: FIXED_SIZE,
+    Switch: FIXED_SIZE,
     Input: FIELD_SIZES,
     Select: FIELD_SIZES,
     Textarea: FIELD_SIZES,
+    RadioGroup: FIXED_SIZE,
     IconSelect: FIXED_SIZE,
     AddressCombobox: FIELD_SIZES,
     AddressField: FIELD_SIZES,
@@ -49,6 +56,7 @@ const componentSizes = {
     ListRow: FIXED_SIZE,
     Chip: FIXED_SIZE,
     Tabs: FIXED_SIZE,
+    SegmentedControl: FIXED_SIZE,
 };
 
 export const COMPONENT_MATRIX = Object.freeze(Object.fromEntries(
@@ -108,6 +116,10 @@ function ComponentPreview({ name, size, state }) {
         return <UI.FormPage as="div" intro="Form introduction" actions={<UI.Button size="sm">Continue</UI.Button>}>Form body</UI.FormPage>;
     case 'FormErrorSummary':
         return <UI.FormErrorSummary errors={[{ message: 'Check this value' }]} />;
+    case 'FormNotice':
+        return <UI.FormNotice variant={statusVariant === 'error' ? 'error' : 'warning'}>Check the fee before you continue.</UI.FormNotice>;
+    case 'FieldNote':
+        return <UI.FieldNote variant={statusVariant === 'error' ? 'error' : 'warning'}>This address looks like one of your contacts.</UI.FieldNote>;
     case 'FormSection':
         return <UI.FormSection title="Details" description="Supporting information">Section body</UI.FormSection>;
     case 'ListPage':
@@ -120,12 +132,34 @@ function ComponentPreview({ name, size, state }) {
         return <UI.StatusMessage variant={statusVariant}>{state === 'error' ? error : 'Wallet is ready'}</UI.StatusMessage>;
     case 'Button':
         return <UI.Button size={nativeSize} variant={state === 'error' ? 'danger' : 'primary'} disabled={disabled}>Continue</UI.Button>;
+    case 'Spinner':
+        return <UI.Spinner size={nativeSize} label={disabled ? undefined : 'Checking'} />;
+    case 'Checkbox':
+        return <UI.Checkbox label="Publish permanently" defaultChecked disabled={disabled} error={error} />;
+    case 'ChoiceControl':
+        return <UI.ChoiceControl defaultChecked disabled={disabled}>Remember this site</UI.ChoiceControl>;
+    case 'Switch':
+        return <UI.Switch label="Price alerts" description="Notify when a target is reached." checked={state !== 'error'} onChange={noop} disabled={disabled} />;
     case 'Input':
         return <UI.Input label="Amount" size={nativeSize} value="1.00" readOnly disabled={disabled} error={error} />;
     case 'Select':
         return <UI.Select label="Network" size={nativeSize} defaultValue="btc" disabled={disabled} error={error}><option value="btc">Bitcoin</option></UI.Select>;
     case 'Textarea':
         return <UI.Textarea label="Message" size={nativeSize} defaultValue="Hello" rows={2} disabled={disabled} error={error} />;
+    case 'RadioGroup':
+        return (
+            <UI.RadioGroup
+                legend="Preference"
+                value="first"
+                onChange={noop}
+                disabled={disabled}
+                error={error}
+                options={[
+                    { value: 'first', label: 'First choice' },
+                    { value: 'second', label: 'Second choice' },
+                ]}
+            />
+        );
     case 'IconSelect':
         return <UI.IconSelect label="Action" value="send" onChange={noop} options={sampleOptions} disabled={disabled} />;
     case 'AddressCombobox':
@@ -149,7 +183,7 @@ function ComponentPreview({ name, size, state }) {
     case 'QrScanner':
         return <UI.QrScanner previewState={state === 'error' ? 'denied' : 'unsupported'} onFrame={noop} alt="QR scanner preview" />;
     case 'ChainPicker':
-        return <UI.ChainPicker label="Chain" value="bitcoin-mainnet" onChange={noop} chainIds={chainIds} chainRegistry={chainRegistry} size={nativeSize} disabled={disabled} />;
+        return <UI.ChainPicker label="Network" value="bitcoin-mainnet" onChange={noop} chainIds={chainIds} chainRegistry={chainRegistry} size={nativeSize} disabled={disabled} />;
     case 'NetworkField':
         return <UI.NetworkField value="bitcoin-mainnet" onChange={noop} chainIds={chainIds} chainRegistry={chainRegistry} size={nativeSize} disabled={disabled} />;
     case 'Skeleton':
@@ -160,6 +194,8 @@ function ComponentPreview({ name, size, state }) {
         return <UI.ListRow title="Treasury" subtitle="Bitcoin" trailing="0.5 BTC" chevron onClick={noop} disabled={disabled} />;
     case 'Chip':
         return <UI.Chip pressed={false} onPressedChange={noop} disabled={disabled}>Watchlist</UI.Chip>;
+    case 'SegmentedControl':
+        return <UI.SegmentedControl items={[{ id: 'buy', label: 'Buy' }, { id: 'sell', label: 'Sell', disabled }]} value='buy' onChange={noop} aria-label='Sample segments' />;
     case 'Tabs':
         return <UI.Tabs items={[{ id: 'all', label: 'All' }, { id: 'popular', label: 'Popular' }]} value="all" onChange={noop} aria-label="Sample tabs" disabled={disabled} />;
     case 'Icon': {

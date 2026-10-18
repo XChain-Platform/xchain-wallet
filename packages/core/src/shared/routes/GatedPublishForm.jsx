@@ -9,9 +9,10 @@
 // contact legal@dankest.llc.
 
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { AddressText, Button, ChainBadge, EmptyState, FeeSelector, FormPage, Input, PageHeader, Screen, StatusMessage } from '@xchain-wallet/core/ui';
+import { AddressText, Button, ChainBadge, Checkbox, EmptyState, FeeSelector, FieldNote, FormPage, Input, PageHeader, RadioGroup, Screen, StatusMessage } from '@xchain-wallet/core/ui';
 import { registry as registryLib, flows as flowsLib } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
+import { useDemoGuard } from '../hooks/useDemoGuard.jsx';
 import { SignCredentials, isHwSource } from '../components/SignCredentials.jsx';
 import { useSignerReady } from '../hooks/useSignerReady.js';
 import { WatcherResultPanel } from '../components/WatcherResultPanel.jsx';
@@ -25,7 +26,8 @@ import { submitFailureMessage } from '../utils/submitFailureMessage.js';
 import { useActionConfirmFlow, useConfirmSubmit, isUserRejection } from '../hooks/useActionConfirmFlow.js';
 import { ActionConfirmScreen } from '../components/ActionConfirmScreen.jsx';
 import { QueuedResultPanel } from '../components/QueuedResultPanel.jsx';
-import { imagePreviewDataUrl, publishFileType } from '../utils/publishingFile.js';
+import { imagePreviewDataUrl, publishFeeValidationError, publishFileType } from '../utils/publishingFile.js';
+import { memoLengthError } from '../utils/memoLimit.js';
 import styles from './IssueTokenForm.module.css';
 import { t } from '../../i18n/index.js';
 
@@ -54,6 +56,7 @@ const chainRegistry = registryLib.defaultRegistry();
  */
 export function GatedPublishForm({ walletId, chainId, tick, issuerAddress = null, onBack }) {
     const { messaging, shell } = useMessaging();
+    const demoGuard = useDemoGuard(walletId, { onBack });
     const signerReady = useSignerReady(walletId);
     const variant = screenVariantFor(shell);
     const { isWatcherMode } = useWalletMode();
@@ -194,7 +197,7 @@ export function GatedPublishForm({ walletId, chainId, tick, issuerAddress = null
             name,
             type,
             title,
-            memo,
+            memo: memo.trim(),
             gateTicker: tick,
             coin: coinTicker,
             address: fromAddress.address,
@@ -245,22 +248,29 @@ export function GatedPublishForm({ walletId, chainId, tick, issuerAddress = null
         reader.readAsArrayBuffer(file);
     }
 
-    function handleReview(event) {
+    async function handleReview(event) {
         event.preventDefault();
         if (!fileMeta) { setFormError('Pick a file first.'); return; }
         if (!fromAddress) {
             setFormError(ownerMissing
                 ? `This wallet does not hold the owner address for ${tick}; only the token owner can publish gated files.`
-                : 'No signing address available on this chain.');
+                : 'No signing address available on this network.');
             return;
         }
         if ((title && /[|;]/.test(title)) || (memo && /[|;]/.test(memo)) || /[|;]/.test(fileMeta.name)) {
             setFormError('File name, title, and memo cannot contain | or ; characters.');
             return;
         }
-        if (thresholdActive && gateMinAmount.trim()
-            && (!/^\d+(\.\d+)?$/.test(gateMinAmount.trim()) || Number(gateMinAmount.trim()) <= 0)) {
-            setFormError('The unlock threshold must be a positive amount (or leave it blank for no threshold).');
+        const memoError = memoLengthError(memo.trim());
+        if (memoError) { setFormError(memoError); return; }
+        const feeError = publishFeeValidationError(feePick, feeCustomEstimate);
+        if (feeError) { setFormError(feeError); return; }
+        const thresholdValue = thresholdActive ? gateMinAmount.trim() : '';
+        const thresholdError = thresholdValue
+            ? flowsLib.gateMinAmountValidationError(thresholdValue)
+            : null;
+        if (thresholdError) {
+            setFormError(thresholdError);
             return;
         }
         // Re-check the ceiling with the FINAL metadata: title/memo typed
@@ -277,6 +287,49 @@ export function GatedPublishForm({ walletId, chainId, tick, issuerAddress = null
         if (!ackForever) {
             setFormError('Confirm you understand the publish is permanent.');
             return;
+        }
+        let tokenInfo = null;
+        if (typeof messaging.getTokenInfo === 'function') {
+            try {
+                tokenInfo = await messaging.getTokenInfo({ chainId, tick });
+            } catch {
+                setFormError('Could not refresh token ownership. Check your connection and try again.');
+                return;
+            }
+            if (!tokenInfo?.creator) {
+                setFormError(`Could not verify that ${tick} still exists. Reopen this screen and try again.`);
+                return;
+            }
+            if (tokenInfo.creator !== fromAddress.address) {
+                setFormError(`This wallet no longer owns ${tick}. Reopen this screen to refresh your tokens.`);
+                return;
+            }
+        }
+        if (thresholdValue) {
+            const divisibility = Number(tokenInfo?.divisibility);
+            const maxDecimals = Number.isInteger(divisibility)
+                ? Math.max(0, Math.min(18, divisibility))
+                : 18;
+            const divisibilityError = flowsLib.gateMinAmountValidationError(
+                thresholdValue,
+                maxDecimals,
+            );
+            if (divisibilityError) { setFormError(divisibilityError); return; }
+            if (typeof messaging.getIndexerWatermark !== 'function') {
+                setFormError('Could not verify that unlock thresholds are active. Try again later.');
+                return;
+            }
+            try {
+                const current = await messaging.getIndexerWatermark({ chainId });
+                const height = Number(current?.watermark);
+                if (!Number.isFinite(height) || height < thresholdScheduledHeight) {
+                    setFormError('Unlock thresholds are not active on this network right now. Remove the threshold to continue.');
+                    return;
+                }
+            } catch {
+                setFormError('Could not verify that unlock thresholds are active. Try again later.');
+                return;
+            }
         }
         setFormError(null);
         setSubmitError(null);
@@ -368,11 +421,11 @@ export function GatedPublishForm({ walletId, chainId, tick, issuerAddress = null
         />
     );
     const wrap = (children) => (
-        <Screen variant={variant} header={header}>{children}</Screen>
+        <Screen variant={variant} header={header} restoreScroll={!(stage === 'review' || stage === 'submitting')}>{children}</Screen>
     );
 
     if (loadError) {
-        return wrap(<StatusMessage variant="error" className={styles.error}>{loadError}</StatusMessage>);
+        return wrap(<StatusMessage variant="error">{loadError}</StatusMessage>);
     }
 
     if (actionConfirm.open) {
@@ -380,7 +433,7 @@ export function GatedPublishForm({ walletId, chainId, tick, issuerAddress = null
             <ActionConfirmScreen
                 confirmAction={actionConfirm.confirmAction}
                 screenVariant={variant}
-                chainLabel={descriptor?.displayName || chainId}
+                chainLabel={descriptor ? <ChainBadge descriptor={descriptor} size="sm" /> : null}
                 feeText={feeEstimate?.coinAmount
                     ? t('send.networkFeeValue', {
                         amount: feeEstimate.coinAmount,
@@ -446,19 +499,28 @@ export function GatedPublishForm({ walletId, chainId, tick, issuerAddress = null
     if (stage === 'review' || stage === 'submitting') {
         const packLabel = packChoice === 'new'
             ? t('gatedPublish.pack.new')
-            : t('gatedPublish.pack.existing', { hash: packChoice.slice(0, 12) });
+            : packChoice;
         const reviewPreviewUrl = imagePreviewDataUrl(fileMeta?.bytes);
         return wrap(
             <FormPage
+                demoGuard={demoGuard}
                 label={t('gatedPublish.review.title')}
                 onSubmit={handleSubmit}
                 noValidate
                 status={(isWatcherMode || hw) && submitError ? (
-                    <StatusMessage variant="error" className={styles.error}>{submitError}</StatusMessage>
+                    <StatusMessage variant="error">{submitError}</StatusMessage>
                 ) : null}
                 actions={(
                     <>
-                        <Button variant="secondary" type="button" onClick={() => setStage('form')} disabled={stage === 'submitting'}>
+                        <Button
+                            variant="secondary"
+                            type="button"
+                            onClick={(event) => {
+                                event.preventDefault();
+                                setStage('form');
+                            }}
+                            disabled={stage === 'submitting'}
+                        >
                             {t('common.back')}
                         </Button>
                         <Button
@@ -479,7 +541,7 @@ export function GatedPublishForm({ walletId, chainId, tick, issuerAddress = null
                 )}
             >
                 <p className={styles.summary}>
-                    {t('gatedPublish.review.summary.beforeFile')} <strong>{fileMeta?.name}</strong>{' '}
+                    {t('gatedPublish.review.summary.beforeFile')} <strong>{fileMeta?.name.trim()}</strong>{' '}
                     {t('gatedPublish.review.summary.afterFile', { tick })}
                 </p>
                 {reviewPreviewUrl ? (
@@ -494,20 +556,34 @@ export function GatedPublishForm({ walletId, chainId, tick, issuerAddress = null
                     />
                 ) : null}
                 <dl className={styles.detailsList}>
-                    <dt className={styles.detailsLabel}>{t('send.fields.chain')}</dt>
-                    <dd className={styles.detailsValue}>
-                        {descriptor ? <ChainBadge descriptor={descriptor} size="sm" /> : chainId}
-                    </dd>
+                    {descriptor ? (
+                        <>
+                            <dt className={styles.detailsLabel}>{t('send.fields.chain')}</dt>
+                            <dd className={styles.detailsValue}><ChainBadge descriptor={descriptor} size="sm" /></dd>
+                        </>
+                    ) : null}
                     <dt className={styles.detailsLabel}>{t('gatedPublish.gateToken')}</dt>
                     <dd className={styles.detailsValue}><code>{tick}</code></dd>
                     <dt className={styles.detailsLabel}>{t('gatedPublish.file')}</dt>
                     <dd className={styles.detailsValue}>
                         {t('gatedPublish.fileMetadata', {
-                            name: fileMeta?.name,
+                            name: fileMeta?.name.trim(),
                             bytes: fileMeta?.bytes.length.toLocaleString(),
                             type: fileMeta?.type,
                         })}
                     </dd>
+                    {title.trim() ? (
+                        <>
+                            <dt className={styles.detailsLabel}>{t('gatedPublish.titleField')}</dt>
+                            <dd className={styles.detailsValue}>{title.trim()}</dd>
+                        </>
+                    ) : null}
+                    {memo.trim() ? (
+                        <>
+                            <dt className={styles.detailsLabel}>{t('send.memo')}</dt>
+                            <dd className={styles.detailsValue}>{memo.trim()}</dd>
+                        </>
+                    ) : null}
                     <dt className={styles.detailsLabel}>{t('gatedPublish.pack')}</dt>
                     <dd className={styles.detailsValue}>{packLabel}</dd>
                     {thresholdActive && gateMinAmount.trim() ? (
@@ -556,34 +632,37 @@ export function GatedPublishForm({ walletId, chainId, tick, issuerAddress = null
     const previewUrl = imagePreviewDataUrl(fileMeta?.bytes);
     return wrap(
         <FormPage
+            demoGuard={demoGuard}
             label={t('gatedPublish.gatedContent')}
             onSubmit={handleReview}
             noValidate
-            status={formError ? <StatusMessage variant="error" className={styles.error}>{formError}</StatusMessage> : null}
+            status={[
+                formError ? <StatusMessage variant="error">{formError}</StatusMessage> : null,
+                ownerMissing ? (
+                    <StatusMessage variant="error">
+                        {t('gatedPublish.ownerMissing.beforeAddress')}
+                        {' '}(<AddressText address={issuerAddress} />){' '}
+                        {t('gatedPublish.ownerMissing.afterAddress', { tick })}
+                    </StatusMessage>
+                ) : null,
+            ]}
             actions={(
                 <Button type="submit" variant="primary">
                     {t('common.review')}
                 </Button>
             )}
         >
-            <p className={styles.hint}>
-                {t('gatedPublish.formHint.beforeToken')} <strong>{tick}</strong>{' '}
-                {t('gatedPublish.formHint.afterToken')}
-            </p>
-
-            {ownerMissing ? (
-                <StatusMessage variant="error" className={styles.error}>
-                    {t('gatedPublish.ownerMissing.beforeAddress')}
-                    {' '}(<AddressText address={issuerAddress} />){' '}
-                    {t('gatedPublish.ownerMissing.afterAddress', { tick })}
-                </StatusMessage>
-            ) : null}
-
             <Input
                 type="file"
                 label={t('gatedPublish.fileLimit', {
                     bytes: plainCapFor(fileMeta?.name || `file${'.bin'}`, fileMeta?.type || 'application/octet-stream').toLocaleString(),
                 })}
+                hint={(
+                    <>
+                        {t('gatedPublish.formHint.beforeToken')} <strong>{tick}</strong>{' '}
+                        {t('gatedPublish.formHint.afterToken')}
+                    </>
+                )}
                 aria-label={t('gatedPublish.fileToPublish')}
                 onChange={handlePickFile}
                 disabled={ownerMissing}
@@ -652,39 +731,32 @@ export function GatedPublishForm({ walletId, chainId, tick, issuerAddress = null
                 </>
             ) : null}
 
-            <fieldset style={{ border: 0, padding: 0, margin: "0 0 var(--xc-space-3)" }} disabled={ownerMissing}>
-                <legend>{t('gatedPublish.pack')}</legend>
-                <label className={styles.checkRow}>
-                    {/* Pack choices stay native because the kit has no radio-group control. */}
-                    <input
-                        type="radio"
-                        name="pack"
-                        checked={packChoice === 'new'}
-                        onChange={() => setPackChoice('new')}
-                    />
-                    {' '}{t('gatedPublish.pack.new')}
-                </label>
-                {(packs || []).map((p) => (
-                    <label key={p.keyHash} className={styles.checkRow}>
-                        {/* Reusable pack choices stay native because the kit has no radio-group control. */}
-                        <input
-                            type="radio"
-                            name="pack"
-                            checked={packChoice === p.keyHash}
-                            onChange={() => setPackChoice(p.keyHash)}
-                        />
-                        {' '}{t('gatedPublish.pack.add')} <code>{String(p.keyHash).slice(0, 12)}…</code>
-                        {' '}{t('gatedPublish.pack.unlockTogether')}
-                    </label>
-                ))}
-                {packs === null ? (
-                    <p className={styles.hint}>{t('gatedPublish.pack.loading')}</p>
-                ) : packsError ? (
-                    <StatusMessage variant="error" className={styles.error}>{packsError}</StatusMessage>
-                ) : packs.length === 0 ? (
-                    <EmptyState title={t('gatedPublish.pack.emptyTitle')} titleAs="p" body={t('gatedPublish.pack.empty')} />
-                ) : null}
-            </fieldset>
+            <RadioGroup
+                legend={t('gatedPublish.pack')}
+                name="pack"
+                value={packChoice}
+                onChange={(nextValue) => setPackChoice(nextValue)}
+                disabled={ownerMissing}
+                options={[
+                    { value: 'new', label: t('gatedPublish.pack.new') },
+                    ...(packs || []).map((p) => ({
+                        value: p.keyHash,
+                        label: (
+                            <>
+                                {t('gatedPublish.pack.add')} <code>{String(p.keyHash).slice(0, 12)}…</code>
+                                {' '}{t('gatedPublish.pack.unlockTogether')}
+                            </>
+                        ),
+                    })),
+                ]}
+            />
+            {packs === null ? (
+                <p className={styles.hint}>{t('gatedPublish.pack.loading')}</p>
+            ) : packsError ? (
+                <FieldNote variant="error">{packsError}</FieldNote>
+            ) : packs.length === 0 ? (
+                <EmptyState title={t('gatedPublish.pack.emptyTitle')} titleAs="p" body={t('gatedPublish.pack.empty')} />
+            ) : null}
 
             {feeTiers ? (
                 <FeeSelector
@@ -697,16 +769,12 @@ export function GatedPublishForm({ walletId, chainId, tick, issuerAddress = null
                 />
             ) : null}
 
-            <label className={styles.checkRow}>
-                {/* The permanent-publish acknowledgement stays native because the kit has no checkbox control. */}
-                <input
-                    type="checkbox"
-                    checked={ackForever}
-                    onChange={(e) => setAckForever(e.target.checked)}
-                    disabled={ownerMissing}
-                />
-                {' '}{t('gatedPublish.ackForever')}
-            </label>
+            <Checkbox
+                label={t('gatedPublish.ackForever')}
+                checked={ackForever}
+                onChange={(e) => setAckForever(e.target.checked)}
+                disabled={ownerMissing}
+            />
 
         </FormPage>,
     );

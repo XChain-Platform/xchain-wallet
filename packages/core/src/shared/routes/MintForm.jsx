@@ -8,13 +8,15 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
+import { t } from '../../i18n/index.js';
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { AddressField, AddressText, Button, ChainBadge, FeeSelector, FormPage, NetworkField, PageHeader, Screen, StatusMessage } from '@xchain-wallet/core/ui';
+import { AddressField, AddressText, Button, ChainBadge, ChainPicker, FeeSelector, FormNotice, FormPage, PageHeader, Screen, StatusMessage } from '@xchain-wallet/core/ui';
 import {
     registry as registryLib,
     decoder as decoderLib,
 } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
+import { useDemoGuard } from '../hooks/useDemoGuard.jsx';
 import { useSettings } from '../hooks/useSettings.js';
 import { useConfirmAction } from '../hooks/useConfirmAction.js';
 import { prebuiltPsbtFromComposed } from '../../flows/prebuiltPsbtFromComposed.js';
@@ -84,6 +86,7 @@ const PROTOCOL_COIN_TICKER = {
  */
 export function MintForm({ walletId, onBack, initialChainId, initialTick, initialFromAddress }) {
     const { messaging, shell } = useMessaging();
+    const demoGuard = useDemoGuard(walletId, { onBack });
     const { settings } = useSettings();
     const variant = screenVariantFor(shell);
 
@@ -113,7 +116,7 @@ export function MintForm({ walletId, onBack, initialChainId, initialTick, initia
         initialFromAddress,
         lockedToken,
         noAddressMessage:
-            'No addresses on any chain yet. Use Receive to generate one before minting.',
+            'No addresses on any network yet. Use Receive to generate one before minting.',
     });
 
 
@@ -191,6 +194,7 @@ export function MintForm({ walletId, onBack, initialChainId, initialTick, initia
 
     const coinTicker = descriptor ? PROTOCOL_COIN_TICKER[descriptor.coin] : '';
     const { formatNativeFee, formatProtocolFee } = useFeeFiat({
+        chainId: descriptor?.id,
         chainCoin: descriptor?.coin,
         nativeTicker: coinTicker,
         settings,
@@ -489,14 +493,18 @@ export function MintForm({ walletId, onBack, initialChainId, initialTick, initia
         />
     );
     const wrap = (children, footer = null) => (
-        <Screen variant={variant} header={header}>
+        <Screen
+            variant={variant}
+            header={header}
+            restoreScroll={!(stage === 'review' || stage === 'submitting')}
+        >
             {children}
             {footer}
         </Screen>
     );
 
     if (loadError) {
-        return wrap(<StatusMessage variant="error" className={styles.error}>{loadError}</StatusMessage>);
+        return wrap(<StatusMessage variant="error">{loadError}</StatusMessage>);
     }
     if (!addressesByChain || !chainId) {
         return wrap(<p className={styles.hint}>Loading…</p>);
@@ -541,10 +549,11 @@ export function MintForm({ walletId, onBack, initialChainId, initialTick, initia
     if (stage === 'review' || stage === 'submitting') {
         return wrap(
             <FormPage
+                demoGuard={demoGuard}
                 label="Review mint"
                 onSubmit={handleSubmit}
                 status={(isWatcherMode || isHwSource) && submitError ? (
-                    <StatusMessage variant="error" className={styles.error}>{submitError}</StatusMessage>
+                    <StatusMessage variant="error">{submitError}</StatusMessage>
                 ) : null}
                 actions={(
                     <Button
@@ -563,15 +572,15 @@ export function MintForm({ walletId, onBack, initialChainId, initialTick, initia
                             ? 'Create unsigned transaction: mint'
                             : isHwSource
                                 ? `Sign on ${fromAddress.source === 'trezor' ? 'Trezor' : 'Ledger'}: mint`
-                                : `Sign${descriptor ? ` on ${descriptor.displayName}` : ''}: mint`}
+                                : 'Sign mint'}
                     </Button>
                 )}
             >
                 <p className={styles.summary}>{decoded?.summary}</p>
                 <dl className={styles.detailsList}>
-                    <dt className={styles.detailsLabel}>Chain</dt>
+                    <dt className={styles.detailsLabel}>Network</dt>
                     <dd className={styles.detailsValue}>
-                        {descriptor ? <ChainBadge descriptor={descriptor} size="sm" /> : chainId}
+                        {descriptor ? <ChainBadge descriptor={descriptor} size="sm" showName={false} /> : 'Selected network'}
                     </dd>
                     <dt className={styles.detailsLabel}>From</dt>
                     <dd className={styles.detailsValue}>
@@ -585,15 +594,11 @@ export function MintForm({ walletId, onBack, initialChainId, initialTick, initia
                         value={feeEstimate
                             ? `${feeEstimate.coinAmount} ${coinTicker}${feeEstimate.rate ? ` (${feeEstimate.rate})` : ''}`
                                 + (feeFiat ? ` (${feeFiat})` : '')
-                            : 'Fee estimate unavailable for this chain.'}
+                            : 'Fee estimate unavailable for this network.'}
                     />
                 </dl>
                 {decoded && decoded.warnings.length > 0 ? (
-                    <div role="alert" className={styles.warnings}>
-                        {decoded.warnings.map((w, i) => (
-                            <p key={i} className={styles.warning}>{w}</p>
-                        ))}
-                    </div>
+                    <FormNotice variant="warning" role="alert" lines={decoded.warnings} />
                 ) : null}
                 {isWatcherMode ? (
                     <p className={styles.hint}>
@@ -630,7 +635,7 @@ export function MintForm({ walletId, onBack, initialChainId, initialTick, initia
             <ActionConfirmScreen
                 confirmAction={confirmAction}
                 screenVariant={variant}
-                chainLabel={descriptor?.displayName || chainId}
+                chainLabel={null}
                 // Fallback only: the composed PSBT's exact fee wins (§5.2.5).
                 feeText={feeEstimate?.coinAmount
                     ? `Network fee: ${feeEstimate.coinAmount} ${coinTicker}`.trim()
@@ -709,10 +714,11 @@ export function MintForm({ walletId, onBack, initialChainId, initialTick, initia
 
     return wrap(
         <FormPage
+            demoGuard={demoGuard}
             label="Mint tokens"
             onSubmit={handleReview}
             status={formError ? (
-                <StatusMessage variant="error" className={styles.error}>{formError}</StatusMessage>
+                <StatusMessage variant="error">{formError}</StatusMessage>
             ) : null}
             actions={(
                 <Button
@@ -729,7 +735,14 @@ export function MintForm({ walletId, onBack, initialChainId, initialTick, initia
                 <LockedTokenContext chainId={chainId} tick={ticker} />
             ) : (
                 <>
-                    <NetworkField value={chainId} onChange={setChainId} chainIds={chainsWithAddresses.length ? chainsWithAddresses : (chainId ? [chainId] : [])} chainRegistry={chainRegistry} />
+                    <ChainPicker
+                        label="Network"
+                        value={chainId}
+                        onChange={setChainId}
+                        chainIds={chainsWithAddresses.length ? chainsWithAddresses : (chainId ? [chainId] : [])}
+                        chainRegistry={chainRegistry}
+                        hideNetworkKind
+                    />
                 </>
             )}
 
@@ -744,9 +757,9 @@ export function MintForm({ walletId, onBack, initialChainId, initialTick, initia
                     iconLabel="Choose source address"
                 />
             ) : (
-                <StatusMessage variant="error" className={styles.error}>
-                    No address on this chain. Use Receive to generate one first.
-                </StatusMessage>
+                <FormNotice variant="error">
+                    {t('send.source.noAddress')}
+                </FormNotice>
             )}
 
             {lockedToken ? null : (

@@ -10,11 +10,19 @@ import { render, screen } from '@testing-library/react';
 import { AmountField } from '../../../packages/core/src/shared/components/AmountField.jsx';
 import { AddressField } from '../../../packages/core/src/ui/AddressField.jsx';
 import { AddressText } from '../../../packages/core/src/ui/AddressText.jsx';
-import { BackIcon, ForwardIcon, MigrateIcon } from '../../../packages/core/src/ui/icons/index.jsx';
+import { BackIcon, ForwardIcon, MigrateIcon, SendIcon } from '../../../packages/core/src/ui/icons/index.jsx';
 import { Input } from '../../../packages/core/src/ui/Input.jsx';
 
 const tokens = readFileSync(
     join(process.cwd(), 'packages/core/src/ui/tokens.css'),
+    'utf8',
+);
+const amountFieldStyles = readFileSync(
+    join(process.cwd(), 'packages/core/src/shared/components/AmountField.module.css'),
+    'utf8',
+);
+const addressComboboxStyles = readFileSync(
+    join(process.cwd(), 'packages/core/src/ui/AddressCombobox.module.css'),
     'utf8',
 );
 
@@ -51,7 +59,7 @@ describe('RTL-safe machine-readable fields', () => {
         expect(screen.getByLabelText(address)).toHaveAttribute('dir', 'ltr');
     });
 
-    it('uses logical padding for the trailing Max control', () => {
+    it('places intrinsic-width trailing controls at the logical input end', () => {
         render(
             <AmountField
                 amount="1"
@@ -61,10 +69,30 @@ describe('RTL-safe machine-readable fields', () => {
             />,
         );
 
+        // Paste and Max sit inside the field's trailing edge. The reserved
+        // input padding and the action inset are logical properties, so no
+        // physical left or right value is written for either direction.
         const input = screen.getByRole('textbox', { name: 'Amount (BTC)' });
-        expect(input.style.paddingInlineEnd).toBe('64px');
+        const max = screen.getByRole('button', { name: 'Use max available amount' });
         expect(input.style.paddingRight).toBe('');
+        expect(input.style.paddingInlineEnd).toContain('--amount-action-width');
+        expect(max.style.position).toBe('');
+        expect(max.style.left).toBe('');
+        expect(max.style.right).toBe('');
         expect(input).toHaveAttribute('dir', 'ltr');
+        // The input is left to right, so under a right-to-left page its inline
+        // end is the right edge while the actions sit at the left. The same
+        // room is handed to the stylesheet, which moves it to the inline start.
+        expect(input.style.getPropertyValue('--amount-end-room')).toBe(input.style.paddingInlineEnd);
+        expect(amountFieldStyles).toMatch(
+            /:global\(html\[dir='rtl'\]\) \.amountFieldWrap input\s*\{[^}]*padding-inline-start:\s*var\(--amount-end-room\)[^}]*text-align:\s*end/s,
+        );
+        expect(amountFieldStyles).toMatch(
+            /\.amountFieldWrap \.pasteAction button,\s*\.amountFieldWrap \.maxAction\s*\{[^}]*flex:\s*none[^}]*min-width:\s*max-content[^}]*white-space:\s*nowrap/s,
+        );
+        expect(addressComboboxStyles).toMatch(
+            /\.pasteAction button\s*\{[^}]*inset-inline-end:\s*var\(--xc-space-1\)[^}]*flex:\s*none[^}]*min-width:\s*max-content[^}]*white-space:\s*nowrap/s,
+        );
     });
 });
 
@@ -75,10 +103,11 @@ describe('RTL-safe directional icons', () => {
                 <BackIcon />
                 <ForwardIcon />
                 <MigrateIcon />
+                <SendIcon />
             </>,
         );
 
-        expect(container.querySelectorAll('svg[data-xc-directional]')).toHaveLength(3);
+        expect(container.querySelectorAll('svg[data-xc-directional]')).toHaveLength(4);
         expect(tokens).toMatch(
             /\[dir='rtl'\][^{]*svg\[data-xc-directional\][^{]*\{[^}]*transform:\s*scaleX\(-1\)/s,
         );

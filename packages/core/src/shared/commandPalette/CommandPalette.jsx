@@ -18,17 +18,19 @@
 // Keyboard (§33.4):
 //   ↑ / ↓    move the selection through the flat result list (wrapping)
 //   Enter    run the selected command and close
-//   Tab      close the palette and continue through the page tab order
+//   Tab      stays within the modal search control
 //   Esc      close
 // The search input keeps focus while the palette is active, so the arrow keys
 // drive an `aria-activedescendant` selection rather than roving DOM focus.
 
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Icon } from '../../ui/index.js';
+import { Button, Icon } from '../../ui/index.js';
+import { categoryLabel } from './commandRegistry.js';
 import { filterCommands } from './fuzzyMatch.js';
 import styles from './CommandPalette.module.css';
 import { useBackHandler } from '../../ui/backStack.js';
 import { useFocusTrap } from '../utils/focusTrap.js';
+import { t } from '../../i18n/index.js';
 
 /**
  * @param {object} props
@@ -50,9 +52,8 @@ export function CommandPalette({ open, onClose, commands, placeholder, parseQuer
     const inputRef = useRef(/** @type {HTMLInputElement | null} */ (null));
     const listRef = useRef(/** @type {HTMLUListElement | null} */ (null));
     const dialogRef = useRef(/** @type {HTMLDivElement | null} */ (null));
-    // The palette does not trap Tab, so this only returns focus to the control
-    // that opened the palette when another dismissal path closes it.
-    useFocusTrap(dialogRef, { active: open, initialFocusRef: inputRef, trap: false });
+    // Search is the only tab stop, so Tab loops there until the palette closes.
+    useFocusTrap(dialogRef, { active: open, initialFocusRef: inputRef });
 
     const results = useMemo(() => {
         const base = filterCommands(commands || [], query);
@@ -144,9 +145,6 @@ export function CommandPalette({ open, onClose, commands, placeholder, parseQuer
                 e.preventDefault();
                 runAt(activeIndex);
                 break;
-            case 'Tab':
-                onClose();
-                break;
             default:
                 break;
         }
@@ -182,7 +180,20 @@ export function CommandPalette({ open, onClose, commands, placeholder, parseQuer
                 role="presentation"
                 onMouseDown={(e) => e.stopPropagation()}
             >
-                <div id="xc-command-palette-title" className={styles.groupHead}>Command palette</div>
+                <header className={styles.header}>
+                    <span className={styles.handle} aria-hidden="true" />
+                    <h2 id="xc-command-palette-title" className={styles.title}>{t('commandPalette.commandPalette.commandPalette')}</h2>
+                    <span className={styles.close}>
+                        <Button
+                            variant="secondary"
+                            size="md"
+                            icon={<Icon.XIcon />}
+                            onClick={onClose}
+                            aria-label={t('commandPalette.commandPalette.closeCommandPalette')}
+                            tabIndex={-1}
+                        />
+                    </span>
+                </header>
                 <div className={styles.searchRow}>
                     <span className={styles.searchIcon} aria-hidden="true">
                         <Icon.SearchIcon />
@@ -198,8 +209,8 @@ export function CommandPalette({ open, onClose, commands, placeholder, parseQuer
                         value={query}
                         onChange={(e) => { setQuery(e.target.value); setActiveIndex(0); }}
                         onKeyDown={onKeyDown}
-                        placeholder={placeholder || 'Search actions, tokens, contacts…'}
-                        aria-label="Search commands"
+                        placeholder={placeholder || t('commandPalette.commandPalette.searchActionsTokensContacts')}
+                        aria-label={t('commandPalette.commandPalette.searchCommands')}
                         role="combobox"
                         aria-expanded="true"
                         aria-controls="xc-cmd-listbox"
@@ -208,18 +219,18 @@ export function CommandPalette({ open, onClose, commands, placeholder, parseQuer
                         autoCorrect="off"
                         spellCheck={false}
                     />
-                    <kbd className={styles.escHint} aria-hidden="true">Esc</kbd>
+                    <kbd className={styles.escHint} aria-hidden="true">{t('commandPalette.commandPalette.esc')}</kbd>
                 </div>
                 <ul
                     ref={listRef}
                     id="xc-cmd-listbox"
                     className={styles.list}
                     role="listbox"
-                    aria-label="Commands"
+                    aria-label={t('commandPalette.commandPalette.commands')}
                 >
                     {results.length === 0 ? (
                         <li className={styles.empty} role="presentation">
-                            No matches for &ldquo;{query}&rdquo;
+                            {t('commandPalette.commandPalette.noMatchesFor')}{query}&rdquo;
                         </li>
                     ) : (
                         groups.map((group) => (
@@ -229,7 +240,7 @@ export function CommandPalette({ open, onClose, commands, placeholder, parseQuer
                             // and duplicate keys make React leave stale rows behind.
                             <li key={`${group.category}-${group.rows[0].index}`} role="presentation">
                                 <div className={styles.groupHead} role="presentation">
-                                    {group.category}
+                                    {categoryLabel(group.category)}
                                 </div>
                                 <ul className={styles.groupList} role="presentation">
                                     {group.rows.map(({ command, index }) => {

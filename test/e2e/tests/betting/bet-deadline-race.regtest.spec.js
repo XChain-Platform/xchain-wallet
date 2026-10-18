@@ -62,10 +62,11 @@
 // load rather than a test of the wallet. `warmPreflight` is the fix
 // and `warmBet` below is this spec's use of it.
 
-import { createWallet, expect, test } from '../../fixtures/wallet.js';
+import { createWallet, expect, openPaletteCommand, test } from '../../fixtures/wallet.js';
 import {
     expectConfirmModal,
     EXPLORER_URL,
+    explorerJson as venueJson,
     fundAddress,
     healVenueClock,
     minerRpc,
@@ -76,6 +77,7 @@ import {
     switchToRegtest,
     unlockAfterReload,
     warmPreflight,
+    betDetailRefusal,
 } from '../../fixtures/regtest.js';
 
 const PASSWORD = 'regtestpassword123';
@@ -187,33 +189,8 @@ async function waitForToken(address, tick, min, timeoutMs = 300_000) {
     throw new Error(`${tick} balance never reached ${min} for ${address} (last=${last})`);
 }
 
-/**
- * Runs a command from the palette by CLICKING its row, not by pressing Enter.
- *
- * Enter runs whatever is at `activeIndex` at the moment the key lands, and the
- * results are re-scored and re-sorted asynchronously as the query is typed. Type
- * then immediately Enter, and on a loaded machine the highlight is still on the
- * previous render's first row: the palette closes, some other command runs, and
- * the failure surfaces one step later as "the screen I asked for is not here"
- * (observed once as a run that pressed Enter for Betting and stayed on Home).
- * Waiting for the row and clicking it removes the race entirely.
- */
-async function gotoPalette(page, title) {
-    await page.keyboard.press('ControlOrMeta+k');
-    const combobox = page.getByRole('combobox').first();
-    await expect(combobox).toBeVisible();
-    await combobox.fill(title);
-
-    const row = page.getByRole('option', { name: new RegExp(`^${title}\\b`) }).first();
-    await expect(row, `no palette command matching "${title}"`).toBeVisible({ timeout: 15_000 });
-    await row.click();
-    // The palette is modal; if it is still up, the click did not run a command.
-    await expect(page.getByRole('dialog', { name: 'Command palette' }))
-        .toBeHidden({ timeout: 15_000 });
-}
-
 async function gotoBettingHub(page) {
-    await gotoPalette(page, 'Betting');
+    await openPaletteCommand(page, 'Betting');
     await expect(page.getByRole('button', { name: 'Create market', exact: true }))
         .toBeVisible({ timeout: 30_000 });
     // The hub carries a Network picker of its OWN, separate from the one on the
@@ -229,10 +206,17 @@ async function gotoBettingHub(page) {
  * them rather than juggling two vaults.
  */
 async function useAddress(page, address) {
-    await gotoPalette(page, 'Addresses');
+    await openPaletteCommand(page, 'Addresses');
     await page.getByRole('button', { name: `View address ${address}` }).click();
     await page.getByRole('group', { name: 'Address actions' })
         .getByRole('button', { name: 'Use' }).click();
+    // Use awaits the active-address write and only then returns to Home, and
+    // any route change closes the command palette. A palette opened before
+    // that late navigation is unmounted under the next step, so leaving the
+    // detail screen is what marks the switch as done.
+    await expect(page.getByRole('group', { name: 'Address actions' }),
+        'Use never completed, so the active-address write is still in flight')
+        .toBeHidden({ timeout: 30_000 });
 }
 
 async function fillPasswordIfPresent(scope) {
@@ -296,6 +280,12 @@ test.describe('BET deadline race', () => {
     test.setTimeout(1_800_000);
 
     test('a bet approved after its market closed is refused, and overriding it still reports', async ({ page }) => {
+        // Probed before any wallet work: this spec ends on a BET action's
+        // detail, and a venue whose indexer predates a BET table refuses every
+        // such read. A conditional skip, so it runs again once the venue is current.
+        const betGap = await betDetailRefusal();
+        test.skip(!!betGap, `the venue cannot serve BET action detail here. ${betGap}`);
+
         let oracle;
         let punter;
         let feedIndex;
@@ -340,7 +330,7 @@ test.describe('BET deadline race', () => {
             //
             // The oracle may not bet its own market (§6 format 2), so the race
             // needs a second address as much as a round trip does.
-            await gotoPalette(page, 'Addresses');
+            await openPaletteCommand(page, 'Addresses');
 
             // Snapshot the list BEFORE generating, so the new address is
             // identified by DIFFERENCE rather than by shape. A prefix filter
@@ -377,6 +367,11 @@ test.describe('BET deadline race', () => {
             await page.getByRole('button', { name: `View address ${generated[0]}` }).click();
             await page.getByRole('group', { name: 'Address actions' })
                 .getByRole('button', { name: 'Use' }).click();
+            // Same late navigation as in useAddress: the palette the hub opens
+            // next is closed by it unless the switch has finished first.
+            await expect(page.getByRole('group', { name: 'Address actions' }),
+                'Use never completed, so the active-address write is still in flight')
+                .toBeHidden({ timeout: 30_000 });
 
             // Read the bettor back off a form, the same way the oracle was read:
             // which address a form signs with is resolved through the wallet's
@@ -627,7 +622,11 @@ test.describe('BET deadline race', () => {
                 }
             }
             expect(row, `the bet named by the receipt never reached the chain: ${txid}`).toBeTruthy();
-            const detail = await explorerJson(`action/${row.action_index}`);
+            // Through the fixture reader, which throws on an error body: a venue
+            // whose explorer cannot serve this action answers `{error, code}`,
+            // and reading `.status` off that prints "undefined" where the chain's
+            // verdict belongs, which reads as a wallet or indexer defect.
+            const detail = await venueJson(`action/${row.action_index}`);
             expect(String(detail.status), 'the chain rejects a bet on a closed market')
                 .toMatch(/FEED_ACTION_INDEX|feed not open/i);
 

@@ -36,6 +36,9 @@ import { setRouteHistoryManaged } from '../../ui/backStack.js';
 
 const PARAM_VIEWS = new Set(['token-detail', 'list-detail', 'dispenser-detail', 'market']);
 const RESUMABLE_SET = new Set(RESUMABLE_VIEWS);
+// These routes can render secret material, so they share the previous safe
+// snapshot instead of leaving a restorable entry in browser history.
+const SECRET_HISTORY_VIEWS = new Set(['view-private-key', 'migrate-bip39', 'add-wallet']);
 
 /**
  * @param {object} args
@@ -133,6 +136,26 @@ export function useLastView({
             historyKey.current = null;
             pendingPopKey.current = null;
         }
+        if (SECRET_HISTORY_VIEWS.has(currentView)) {
+            const currentSnapshot = window.history.state?.xcRoute;
+            const currentParams = currentSnapshot
+                ? normalizeRouteParams(currentSnapshot.view, currentSnapshot.params)
+                : null;
+            const currentIsSafe = currentSnapshot?.walletId === walletId
+                && RESUMABLE_SET.has(currentSnapshot.view)
+                && (!PARAM_VIEWS.has(currentSnapshot.view) || currentParams !== null);
+            const safeRoute = currentIsSafe
+                ? { view: currentSnapshot.view, params: currentParams }
+                : { view: 'home', params: null };
+            const state = {
+                ...(window.history.state || {}),
+                xcRoute: { walletId, ...safeRoute },
+            };
+            window.history.replaceState(state, '');
+            historyKey.current = JSON.stringify(safeRoute);
+            pendingPopKey.current = null;
+            return;
+        }
         if (pendingPopKey.current === routeKey) {
             pendingPopKey.current = null;
             return;
@@ -142,7 +165,7 @@ export function useLastView({
         if (historyKey.current === null) window.history.replaceState(state, '');
         else window.history.pushState(state, '');
         historyKey.current = routeKey;
-    }, [walletId, routeKey, sessionActive]);
+    }, [walletId, currentView, routeKey, sessionActive]);
 
     // Resume on wallet activation / change. Skips re-running for the
     // same walletId so user navigation after the resume is not

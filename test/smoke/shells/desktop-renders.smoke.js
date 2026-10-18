@@ -46,6 +46,8 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { timeoutBudget } from '../../e2e/timeout-budget.js';
 
+import { launchGuardedElectron } from '../../e2e/fixtures/electron.js';
+
 const here = dirname(fileURLToPath(import.meta.url));
 const wsRoot = join(here, '..', '..', '..');
 const desktopDir = join(wsRoot, 'packages', 'desktop');
@@ -91,7 +93,8 @@ const { _electron: electron } = await import('@playwright/test');
 // last run left behind.
 const userDataDir = mkdtempSync(join(tmpdir(), 'xc-desktop-renders-'));
 
-const app = await electron.launch({
+// Under the app's test network guard, as every desktop test launch is.
+const app = await launchGuardedElectron(electron, {
     args: ['.', `--user-data-dir=${userDataDir}`],
     cwd: desktopDir,
     env: {
@@ -139,6 +142,9 @@ try {
     await win.waitForURL((url) => url.protocol === 'file:', { timeout: 30_000 });
     await win.waitForLoadState('domcontentloaded');
 
+    // The mount and its first readable text are separate asynchronous events.
+    // Use one load-scaled deadline for both so a committed skeleton does not
+    // hide a renderer that never becomes usable.
     let mountFailure;
     try {
         await win.waitForFunction(

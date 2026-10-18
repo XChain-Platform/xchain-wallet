@@ -12,8 +12,16 @@
 // report: all 12 BEER escrowed by DISPENSER 18, so the free-balance read had no
 // BEER row and the token vanished from Home.
 
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import { escrowedTokens, sumEscrowByTick, addPlainDecimals } from '../../../packages/core/src/flows/escrowedTokens.js';
+import {
+    assertReferencedOfferActionable,
+    OFFER_LIFECYCLE_REFUSAL,
+    readMarketExpiryClock,
+    withMarketExpiry,
+} from '../../../packages/core/src/flows/marketExpiry.js';
+import { submitFailureMessage } from '../../../packages/core/src/shared/utils/submitFailureMessage.js';
+import { hydrateEnvelopeError, serializeError } from '../../../packages/extension/src/background/MessageHost.js';
 
 const OWNER = 'tltc1ql05c4je6cjg5ejzyrrr2nxvdr7htmf5eelek37';
 
@@ -23,12 +31,19 @@ const BEER_DISPENSER = {
     give_tick: 'BEER', give_amount: '1', give_escrow: '12', escrow_remaining: '12', give_ownership: 0,
 };
 
-function fakeSdk({ orders = [], swaps = [], dispensers = [], fail = {} } = {}) {
+function fakeSdk({ orders = [], swaps = [], dispensers = [], fail = {}, status, details } = {}) {
     const reply = (name, data) => async () => {
         if (fail[name]) throw new Error(`${name} down`);
         return { data };
     };
-    return { getOrders: reply('orders', orders), getSwaps: reply('swaps', swaps), getDispensers: reply('dispensers', dispensers) };
+    return {
+        explorer: { coin: 'TLTC' },
+        getOrders: reply('orders', orders),
+        getSwaps: reply('swaps', swaps),
+        getDispensers: reply('dispensers', dispensers),
+        ...(status ? { getStatus: vi.fn(async () => status) } : {}),
+        ...(details ? { getAction: vi.fn(async (index) => details[index] ?? null) } : {}),
+    };
 }
 
 const registryFor = (sdk) => ({ get: () => sdk });
@@ -100,11 +115,163 @@ describe('escrowedTokens', () => {
         expect(r.rows.map((x) => x.tick)).toEqual(['BEER']);
     });
 
+    it('does not count expired order, swap, or dispenser escrow as locked', async () => {
+        const status = {
+            last_block: { TLTC: 500 },
+            chain_tip: { TLTC: 500 },
+            last_block_time: { TLTC: 2_000 },
+        };
+        const r = await escrowedTokens({
+            sdkRegistry: registryFor(fakeSdk({
+                status,
+                orders: [{ action_index: '1', source: OWNER, status: 'open', give_tick: 'OLD', give_amount: '2', expiration: 1_999 }],
+                swaps: [{ action_index: '2', source: OWNER, status: 'open', give_tick: 'OLD', give_amount: '3', expiration: 2_000 }],
+                dispensers: [{ ...BEER_DISPENSER, give_tick: 'OLD', expiration: 1_500 }],
+            })),
+            chainId: 'litecoin-testnet',
+            address: OWNER,
+        });
+
+        expect(r).toEqual({ rows: [], partial: false });
+    });
+
+    it('uses edited live expirations instead of the frozen list values', async () => {
+        const status = {
+            last_block: { TLTC: 500 },
+            chain_tip: { TLTC: 500 },
+            last_block_time: { TLTC: 2_000 },
+        };
+        const r = await escrowedTokens({
+            sdkRegistry: registryFor(fakeSdk({
+                status,
+                orders: [{ action_index: '1', source: OWNER, status: 'valid', give_tick: 'LIVE', give_amount: '2', expiration: 1_000 }],
+                swaps: [{ action_index: '2', source: OWNER, status: 'valid', give_tick: 'OLD', give_amount: '3', expiration: 3_000 }],
+                dispensers: [{ ...BEER_DISPENSER, action_index: '3', give_tick: 'OLD', expiration: 3_000 }],
+                details: {
+                    1: { state: { status: 'open', expiration: 3_000, give_remaining: '1.5' } },
+                    2: { state: { status: 'open', expiration: 2_000 } },
+                    3: { state: { status: 'open', expiration: 1_999 } },
+                },
+            })),
+            chainId: 'litecoin-testnet',
+            address: OWNER,
+        });
+
+        expect(r.rows).toEqual([{ tick: 'LIVE', amount: '1.5', offers: { order: 1 } }]);
+    });
+
     it('returns nothing for a blank address without reading', async () => {
         expect(await escrowedTokens({ sdkRegistry: registryFor(null), chainId: 'c', address: ' ' }))
             .toEqual({ rows: [], partial: false });
     });
 
+});
+
+describe('market expiry clock and action guard', () => {
+    const currentStatus = {
+        last_block: { TLTC: 800 },
+        chain_tip: { TLTC: 800 },
+        last_block_time: { TLTC: 4_000 },
+    };
+
+    it('marks list and detail fixtures expired from the current chain block time', async () => {
+        const sdk = fakeSdk({ status: currentStatus });
+        const list = await withMarketExpiry(sdk, { data: [
+            { action_index: '9', status: 'valid', swap_status: 'open', expiration: 3_999 },
+            { action_index: '10', status: 'valid', swap_status: 'open', expiration: 4_001 },
+        ] }, 'swap');
+        const detail = await withMarketExpiry(sdk, {
+            action_index: '11', status: 'valid', state: { status: 'open', expiration: 4_000 },
+        }, 'order');
+
+        expect(list.data[0]).toMatchObject({ status: 'valid', current_status: 'expired', swap_status: 'expired' });
+        expect(list.data[1].swap_status).toBe('open');
+        expect(list.data[1].state.expiry_status).toBe('open');
+        expect(detail.state.status).toBe('expired');
+    });
+
+    it('rejects an expired referenced action with a plain message', async () => {
+        const sdk = {
+            ...fakeSdk({ status: currentStatus }),
+            getAction: vi.fn(async () => ({ state: { status: 'open', expiration: 4_000 } })),
+        };
+        await expect(assertReferencedOfferActionable({
+            sdkRegistry: registryFor(sdk),
+            chainId: 'litecoin-testnet',
+            actionData: { action: 'DISPENSER', params: { VERSION: '1', DISPENSER_ACTION_INDEX: '18' } },
+        })).rejects.toThrow('This dispenser has expired.');
+    });
+
+    it('allows a referenced offer that expires after the current chain block time', async () => {
+        const sdk = {
+            ...fakeSdk({ status: currentStatus }),
+            getAction: vi.fn(async () => ({ state: { status: 'open', expiration: 4_001 } })),
+        };
+        await expect(assertReferencedOfferActionable({
+            sdkRegistry: registryFor(sdk),
+            chainId: 'litecoin-testnet',
+            actionData: { action: 'SWAP', params: { VERSION: '1', SWAP_ACTION_INDEX: '17' } },
+        })).resolves.toBeUndefined();
+    });
+
+    it('refuses to decide from a stale indexed height', async () => {
+        const sdk = {
+            ...fakeSdk({ status: {
+                last_block: { TLTC: 799 },
+                chain_tip: { TLTC: 800 },
+                last_block_time: { TLTC: 4_000 },
+            } }),
+            getAction: vi.fn(async () => ({ state: { status: 'open', expiration: 4_001 } })),
+        };
+        const clock = await readMarketExpiryClock(sdk);
+        expect(clock).toMatchObject({ blockTime: null, indexedHeight: 799, chainHeight: 800, stale: true });
+        await expect(assertReferencedOfferActionable({
+            sdkRegistry: registryFor(sdk),
+            chainId: 'litecoin-testnet',
+            actionData: { action: 'ORDER', params: { VERSION: '1', ORDER_ACTION_INDEX: '9' } },
+        })).rejects.toThrow('chain height is still syncing');
+    });
+
+    it('shows a stale-height refusal in its own words after it crosses the host boundary', async () => {
+        // A dispenser edit signed one block after the indexer fell behind the
+        // node: the form passes the error message as its fallback, and the
+        // submit copy must not collapse the wallet's own sentence into the
+        // generic "Something went wrong" line.
+        const sdk = {
+            ...fakeSdk({ status: {
+                last_block: { TLTC: 1432 },
+                chain_tip: { TLTC: 1433 },
+                last_block_time: { TLTC: 4_000 },
+            } }),
+            getAction: vi.fn(async () => ({ state: { status: 'open', expiration: 9_000 } })),
+        };
+        const thrown = await assertReferencedOfferActionable({
+            sdkRegistry: registryFor(sdk),
+            chainId: 'litecoin-testnet',
+            actionData: { action: 'DISPENSER', params: { VERSION: '2', DISPENSER_ACTION_INDEX: '201' } },
+        }).then(() => null, (err) => err);
+        expect(thrown?.name).toBe(OFFER_LIFECYCLE_REFUSAL);
+
+        const crossed = hydrateEnvelopeError(serializeError(thrown).error);
+        expect(submitFailureMessage(crossed, {
+            chainId: 'bitcoin-regtest', coinTicker: 'BTC', fallback: crossed.message,
+        })).toBe('Could not verify whether this dispenser has expired because the chain height is '
+            + 'still syncing. Try again.');
+    });
+
+    it('shows an expired-offer refusal in its own words', async () => {
+        const sdk = {
+            ...fakeSdk({ status: currentStatus }),
+            getAction: vi.fn(async () => ({ state: { status: 'expired', expiration: 4_000 } })),
+        };
+        const thrown = await assertReferencedOfferActionable({
+            sdkRegistry: registryFor(sdk),
+            chainId: 'litecoin-testnet',
+            actionData: { action: 'ORDER', params: { VERSION: '1', ORDER_ACTION_INDEX: '9' } },
+        }).then(() => null, (err) => err);
+        expect(submitFailureMessage(thrown, { fallback: thrown?.message }))
+            .toBe('This order has expired.');
+    });
 });
 
 describe('sumEscrowByTick / addPlainDecimals', () => {

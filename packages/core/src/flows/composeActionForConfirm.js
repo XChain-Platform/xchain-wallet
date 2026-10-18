@@ -150,7 +150,7 @@ export async function composeActionForConfirm({
     // pre-open compose of every single action for no reason. Pre-rejected to
     // null so a dead explorer never fails the compose.
     const balancesPromise = source
-        ? addressBalances({ sdkRegistry, chainRegistry, chainId, address: source })
+        ? addressBalances({ vault, sdkRegistry, chainRegistry, chainId, address: source })
             .catch(() => null)
         : Promise.resolve(null);
 

@@ -30,7 +30,7 @@
 // memo / action_format), independently of the wallet's own "Broadcast
 // sent" screen.
 
-import { createWallet, expect, test } from '../../fixtures/wallet.js';
+import { createWallet, expect, openPaletteCommand, test } from '../../fixtures/wallet.js';
 import {
     REGTEST_ADDRESS_RE,
     REGTEST_CHAIN_LABEL,
@@ -47,20 +47,6 @@ const PASSWORD = 'regtestpassword123';
 const FUNDING = 1;
 const STAMP = Date.now().toString().slice(-6);
 
-/** Opens the command palette and runs the first matching entry. */
-async function gotoPalette(page, title) {
-    await page.keyboard.press('ControlOrMeta+k');
-    const dialog = page.getByRole('dialog', { name: 'Command palette' });
-    await expect(dialog, 'the command palette did not open').toBeVisible({ timeout: 15_000 });
-    const combobox = dialog.getByRole('combobox').first();
-    await expect(combobox).toBeEditable({ timeout: 15_000 });
-    await combobox.fill(title);
-    const row = page.getByRole('option', { name: new RegExp(`^${title}\\b`) }).first();
-    await expect(row, `no palette command matching "${title}"`).toBeVisible();
-    await row.click();
-    await expect(dialog).toBeHidden({ timeout: 15_000 });
-}
-
 /**
  * Onboards a fresh wallet, opens the Broadcast form on this run's chain,
  * funds the address it will sign from, and leaves the form open (freshly
@@ -70,9 +56,9 @@ async function onboardOntoBroadcastForm(page, walletName) {
     await createWallet(page, { password: PASSWORD, name: walletName });
     await switchToRegtest(page, PASSWORD);
 
-    await gotoPalette(page, 'Broadcast a message');
+    await openPaletteCommand(page, 'Broadcast a message');
     let main = page.getByRole('main');
-    await expect(main.getByLabel('Message')).toBeVisible({ timeout: 30_000 });
+    await expect(main.getByLabel('Message (optional)', { exact: true })).toBeVisible({ timeout: 30_000 });
     await selectVenueChain(main);
     const address = await main.getByLabel('From').inputValue();
     expect(address, `the form has no ${REGTEST_CHAIN_LABEL} address to sign with`).toMatch(REGTEST_ADDRESS_RE);
@@ -81,9 +67,9 @@ async function onboardOntoBroadcastForm(page, walletName) {
     await page.reload();
     await unlockAfterReload(page, PASSWORD);
 
-    await gotoPalette(page, 'Broadcast a message');
+    await openPaletteCommand(page, 'Broadcast a message');
     main = page.getByRole('main');
-    await expect(main.getByLabel('Message')).toBeVisible({ timeout: 30_000 });
+    await expect(main.getByLabel('Message (optional)', { exact: true })).toBeVisible({ timeout: 30_000 });
     await selectVenueChain(main);
     expect(await main.getByLabel('From').inputValue(), 'still signing with the funded address').toBe(address);
     return { main, address };
@@ -126,7 +112,7 @@ test.describe(`Broadcast submit path on ${REGTEST_CHAIN_LABEL}`, () => {
             address = opened.address;
             const main = opened.main;
 
-            await main.getByLabel('Message').fill(text);
+            await main.getByLabel('Message (optional)', { exact: true }).fill(text);
             // Neither the feed name nor the value/fee fields are touched, so
             // FormatSelector has nothing that forces a memo-carrying version.
             await main.getByRole('button', { name: 'Broadcast', exact: true }).click();
@@ -158,9 +144,9 @@ test.describe(`Broadcast submit path on ${REGTEST_CHAIN_LABEL}`, () => {
             const main = opened.main;
 
             await main.getByLabel('Feed name (optional)').fill(feedName);
-            await main.getByLabel('Message').fill(body);
+            await main.getByLabel('Message (optional)', { exact: true }).fill(body);
             await main.getByLabel('Value (optional)').fill(value);
-            await main.getByLabel('Feed fee (optional, %)').fill(feedFee);
+            await main.getByLabel('Feed fee (%) (optional)', { exact: true }).fill(feedFee);
             await main.getByRole('button', { name: 'Broadcast', exact: true }).click();
 
             await approveConfirm(page, 'the oracle broadcast');

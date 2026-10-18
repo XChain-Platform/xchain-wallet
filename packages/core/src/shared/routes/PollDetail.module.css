@@ -55,7 +55,7 @@
     height: var(--xc-space-2);
     overflow: hidden;
     background: var(--xc-bg-muted);
-    border-radius: 999px;
+    border-radius: var(--xc-radius-pill);
 }
 
 .resultFill {

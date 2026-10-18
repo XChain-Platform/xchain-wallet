@@ -6,40 +6,72 @@
 
 /* AddressField: Input + one trailing icon action inside the field.
  * The icon button is anchored over the input box only, never the
- * hint/error lines below it, using the pinned label metrics (20px
- * label line + space-1 gap) and the Input size contract (36px md /
- * 48px lg). Adapted from Send's .inlineContactsButton, which this
- * component supersedes. */
+ * hint/error lines below it, using the pinned label metrics and the
+ * selected shared Button/Input size contract. Adapted from Send's
+ * .inlineContactsButton, which this component supersedes. */
 
 .wrap {
+    --address-control-height: var(--xc-control-h-md);
+    --address-paste-width: calc(var(--address-control-height) + var(--xc-space-8));
+    --xc-icon-size: var(--xc-control-icon-md, var(--xc-icon-md));
+    --address-control-padding-x: var(--xc-control-pad-x-md, var(--xc-control-pad-x));
+    --address-control-font-size: var(--xc-control-font-md, var(--xc-control-font));
     position: relative;
+}
+
+.sm {
+    --address-control-height: var(--xc-control-h-sm);
+    --xc-icon-size: var(--xc-control-icon-sm, var(--xc-icon-sm));
+    --address-control-padding-x: var(--xc-control-pad-x-sm, var(--xc-control-pad-x));
+    --address-control-font-size: var(--xc-control-font-sm, var(--xc-control-font));
+}
+
+.md {
+    --address-control-height: var(--xc-control-h-md);
+    --xc-icon-size: var(--xc-control-icon-md, var(--xc-icon-md));
+    --address-control-padding-x: var(--xc-control-pad-x-md, var(--xc-control-pad-x));
+    --address-control-font-size: var(--xc-control-font-md, var(--xc-control-font));
+}
+
+.lg {
+    --address-control-height: var(--xc-control-h-lg);
+    --xc-icon-size: var(--xc-control-icon-lg, var(--xc-icon-lg));
+    --address-control-padding-x: var(--xc-control-pad-x-lg, var(--xc-control-pad-x));
+    --address-control-font-size: var(--xc-control-font-lg, var(--xc-control-font));
 }
 
 .wrap label {
     line-height: 20px;
 }
 
+/* The input is forced left to right so an address always reads in order, which
+   makes its logical sides run opposite to the wrapper's in an RTL app. The
+   actions sit at the wrapper's end edge (the physical left in RTL), so the room
+   for them is reserved on whichever side of the input that is. */
+.wrap input {
+    padding-inline-end: var(--address-end-room, var(--address-control-padding-x));
+}
+
+:global([dir='rtl']) .wrap input {
+    padding-inline-start: var(--address-end-room, var(--address-control-padding-x));
+    padding-inline-end: var(--address-control-padding-x);
+    text-align: end;
+}
+
 .iconButton {
-    --xc-icon-size: var(--xc-icon-md);
     position: absolute;
     z-index: calc(var(--xc-z-base) + 1);
-    inset-inline-end: 4px;
+    inset-inline-end: 0;
     top: calc(20px + var(--xc-space-1));
-    height: 36px;
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    width: 44px;
-    padding: 0;
-    border: none;
-    border-radius: var(--xc-radius-sm);
-    background: transparent;
-    color: var(--xc-text-muted);
-    cursor: pointer;
 }
 
-.lg .iconButton {
-    height: 48px;
+.iconButton > button {
+    background: transparent;
+    border-color: transparent;
+    color: var(--xc-text-muted);
 }
 
 .noLabel .iconButton {
@@ -53,14 +85,15 @@
 .readOnlyValue {
     position: absolute;
     z-index: calc(var(--xc-z-base) + 1);
-    inset-inline-start: var(--xc-space-3);
-    inset-inline-end: 52px;
+    inset-inline-start: var(--address-control-padding-x);
+    inset-inline-end: calc(var(--address-control-height) + var(--xc-space-2));
     top: calc(20px + var(--xc-space-1));
-    min-height: 36px;
+    min-height: var(--address-control-height);
     display: flex;
     align-items: center;
     overflow: hidden;
     white-space: nowrap;
+    font-size: var(--address-control-font-size);
     pointer-events: none;
 }
 
@@ -91,12 +124,6 @@
     line-height: 1.35;
 }
 
-.lg .readOnlyValue {
-    inset-inline-start: var(--xc-space-4);
-    min-height: 48px;
-    font-size: var(--xc-text-lg);
-}
-
 .noLabel .readOnlyValue {
     top: 0;
 }
@@ -109,11 +136,56 @@
     visibility: hidden;
 }
 
-.iconButton:hover:not(:disabled) {
+.iconButton > button:hover:not(:disabled),
+.iconButton > button:focus-visible {
+    background: transparent;
+    border-color: transparent;
     color: var(--xc-text);
 }
 
-.iconButton:disabled {
-    opacity: 0.5;
-    cursor: not-allowed;
+.iconButton > button:disabled {
+    background: transparent;
+    border-color: transparent;
+}
+
+/* The in-field Paste, as on Send's recipient field (AddressCombobox): inset
+   from the field's end edge and vertically, at the field's inner height, so
+   it never meets the border. The icon action moves in to sit beside it. */
+.withPaste .iconButton {
+    inset-inline-end: var(--address-paste-width);
+}
+
+.pasteAction,
+.pasteAction > span {
+    display: contents !important;
+}
+
+.pasteAction button {
+    position: absolute;
+    z-index: calc(var(--xc-z-base) + 1);
+    inset-inline-end: var(--xc-space-1);
+    top: calc(20px + var(--xc-space-2));
+    flex: none;
+    width: auto;
+    min-width: max-content;
+    max-width: none;
+    height: calc(var(--address-control-height) - var(--xc-space-2));
+    min-height: calc(var(--address-control-height) - var(--xc-space-2));
+    gap: var(--xc-space-1);
+    padding-inline: calc(var(--xc-space-1) / 2);
+    white-space: nowrap;
+}
+
+.pasteAction button > span {
+    min-width: max-content;
+    white-space: nowrap;
+}
+
+.pasteAction [role='alert'] {
+    display: block;
+    margin-block-start: var(--xc-help-gap);
+}
+
+.noLabel .pasteAction button {
+    top: var(--xc-space-1);
 }

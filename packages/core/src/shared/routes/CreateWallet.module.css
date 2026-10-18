@@ -1,52 +1,8 @@
-.headPopup {
-    margin-bottom: var(--xc-space-3);
-}
-
-.headFull {
-    text-align: center;
-    margin-bottom: var(--xc-space-5);
-}
-
 .logo {
+    /* 96px preserves the brand artwork's intended display width. */
     width: 96px;
     height: auto;
     margin-bottom: var(--xc-space-3);
-}
-
-.titlePopup {
-    font-size: var(--xc-text-lg);
-    font-weight: 700;
-    margin: 0 0 var(--xc-space-1);
-    color: var(--xc-text);
-}
-
-.titleFull {
-    font-size: var(--xc-text-xl);
-    font-weight: 700;
-    margin: 0 0 var(--xc-space-2);
-    color: var(--xc-text);
-}
-
-.subtitlePopup {
-    font-size: var(--xc-text-xs);
-    color: var(--xc-text-muted);
-    line-height: 1.4;
-    margin: 0;
-}
-
-.subtitleFull {
-    font-size: var(--xc-text-sm);
-    color: var(--xc-text-muted);
-    line-height: 1.5;
-    margin: 0;
-}
-
-.copyRow {
-    display: flex;
-    flex-direction: column;
-    align-items: flex-start;
-    gap: var(--xc-space-2);
-    margin: var(--xc-space-3) 0 0;
 }
 
 .copyHint {
@@ -66,6 +22,7 @@
 }
 
 .confirmRow input[type="checkbox"] {
+    /* 2px optically aligns the native checkbox with its first text line. */
     margin-top: 2px;
 }
 
@@ -74,24 +31,8 @@
     overflow-wrap: anywhere;
 }
 
-.actionsPopup {
-    display: flex;
-    gap: var(--xc-space-2);
-    justify-content: flex-end;
-    margin-top: var(--xc-space-3);
-}
-
-.actionsFull {
-    display: flex;
-    gap: var(--xc-space-2);
-    justify-content: flex-end;
-    margin-top: var(--xc-space-5);
-}
-
 .wordCountRow {
-    border: 1px solid var(--xc-border);
-    border-radius: var(--xc-radius-md);
-    padding: var(--xc-space-2) var(--xc-space-3);
+    composes: card from '../../ui/Card.module.css';
     margin: var(--xc-space-3) 0 0;
     min-width: 0;
     width: 100%;
@@ -100,41 +41,12 @@
     gap: var(--xc-space-2);
 }
 
-.wordCountLegend {
-    font-size: var(--xc-text-xs);
-    color: var(--xc-text-muted);
-    padding: 0 var(--xc-space-1);
-    text-transform: uppercase;
-    letter-spacing: 0.04em;
-}
-
-.wordCountOption {
-    display: flex;
-    flex-wrap: wrap;
-    align-items: baseline;
-    gap: var(--xc-space-2);
-    min-width: 0;
-    font-size: var(--xc-text-sm);
-    color: var(--xc-text);
-    cursor: pointer;
-    /* State the WCAG 2.2 AA 2.5.8 pointer-target floor instead of
-       inheriting it from whichever line box the platform font produces. */
-    min-height: var(--xc-tap-min);
-}
-
-.wordCountOption input[type="radio"] {
-    margin: 0;
-}
-
-.wordCountLabel {
-    font-weight: 500;
-}
-
-.wordCountHint {
-    font-size: var(--xc-text-xs);
-    color: var(--xc-text-muted);
-    min-width: 0;
-    overflow-wrap: anywhere;
+/* The kit legend is full width, so as a rendered legend it sat in the top
+   border and erased all of it but the two corners. Floated, it is an
+   ordinary first item inside the box and the hairline stays whole. */
+.wordCountRow > legend {
+    float: left;
+    margin-block-end: 0;
 }
 
 .advancedRow {
@@ -180,68 +92,10 @@
     flex: 1;
 }
 
-.advancedWarning {
-    font-size: var(--xc-text-xs);
-    color: var(--xc-text);
-    background: var(--xc-warning-bg, var(--xc-bg-muted));
-    border: 1px solid var(--xc-warning, var(--xc-border));
-    border-radius: var(--xc-radius-sm);
-    padding: var(--xc-space-2) var(--xc-space-3);
-    margin: 0;
-    line-height: 1.4;
-}
-
-.error {
-    font-size: var(--xc-text-sm);
-    color: var(--xc-on-danger);
-    background: var(--xc-danger);
-    border: 1px solid var(--xc-danger);
-    padding: var(--xc-space-2) var(--xc-space-3);
-    border-radius: var(--xc-radius-md);
-    margin: var(--xc-space-3) 0 0;
-    text-align: center;
-    font-weight: 500;
-    line-height: 1.4;
-}
-
-/* Shown while the wallet is encrypted. The spinner animates only
-   transform, which the compositor keeps running even while the key
-   stretching holds the UI thread. */
-.persisting {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    text-align: center;
-    gap: var(--xc-space-3);
-    padding: var(--xc-space-6) var(--xc-space-3);
-}
-
-.persistingSpinner {
-    width: 40px;
-    height: 40px;
-    border-radius: 50%;
-    border: 3px solid var(--xc-border-strong);
-    border-top-color: var(--xc-accent-primary);
-    animation: persisting-spin 0.9s linear infinite;
-}
-
-@keyframes persisting-spin {
-    to { transform: rotate(360deg); }
-}
-
-@media (prefers-reduced-motion: reduce) {
-    .persistingSpinner {
-        animation: none;
-    }
-}
-
+/* 520px targets short landscape viewports without a matching layout token. */
 @media (max-height: 520px) {
-    .headPopup,
-    .headFull {
-        margin-bottom: var(--xc-space-2);
-    }
-
     .logo {
+        /* 64px preserves the compact artwork size in short viewports. */
         width: 64px;
         margin-bottom: var(--xc-space-1);
     }

@@ -46,6 +46,7 @@ function harness() {
 
 function failureHarness({ timeoutMs = 60_000 } = {}) {
     const tabRemoved = [];
+    const windowRemoved = [];
     const suspended = [];
     const remove = vi.fn(async () => {});
     vi.stubGlobal('chrome', {
@@ -58,17 +59,53 @@ function failureHarness({ timeoutMs = 60_000 } = {}) {
         windows: {
             create: vi.fn(async () => ({ id: 41 })),
             remove,
-            onRemoved: { addListener: vi.fn() },
+            onRemoved: { addListener: (fn) => windowRemoved.push(fn) },
         },
     });
     const broker = new ApprovalBroker({
         newId: () => 'failure-request',
         timeoutMs,
     });
-    return { broker, remove, suspended, tabRemoved };
+    return { broker, remove, suspended, tabRemoved, windowRemoved };
 }
 
 describe('ApprovalBroker action badge', () => {
+    it('shares one window and decision for concurrent connects from the same origin', async () => {
+        const { action, broker, flushBadge, windows } = harness();
+        const first = broker.connect({
+            origin: 'https://same.test',
+            requestedChains: ['bitcoin-mainnet'],
+        });
+        const second = broker.connect({
+            origin: 'https://same.test',
+            requestedChains: ['dogecoin-mainnet'],
+        });
+        await flushBadge();
+
+        expect(second).toBe(first);
+        expect(windows.create).toHaveBeenCalledTimes(1);
+        expect(broker._pendingSize()).toBe(1);
+        expect(action.setBadgeText).toHaveBeenLastCalledWith({ text: '1' });
+        expect(broker.fetch('request-2')).toBeNull();
+
+        const unrelated = broker.connect({ origin: 'https://other.test' });
+        await flushBadge();
+        expect(windows.create).toHaveBeenCalledTimes(2);
+        expect(broker._pendingSize()).toBe(2);
+        expect(action.setBadgeText).toHaveBeenLastCalledWith({ text: '2' });
+
+        const decision = {
+            approved: true,
+            chains: ['bitcoin-mainnet'],
+            accounts: ['account-1'],
+        };
+        await broker.resolve('request-1', decision);
+        await broker.resolve('request-2', { approved: false });
+        await expect(first).resolves.toEqual(decision);
+        await expect(second).resolves.toEqual(decision);
+        await expect(unrelated).resolves.toEqual({ approved: false });
+    });
+
     it('shows the pending count and clears it after decisions and closes', async () => {
         const { action, broker, flushBadge, removed } = harness();
         const first = broker.connect({ origin: 'https://one.test' });
@@ -227,15 +264,19 @@ describe('ApprovalBroker failure paths', () => {
         expect(remove).toHaveBeenCalledWith(41);
     });
 
-    it('rejects and drains an open approval before the background suspends', async () => {
-        const { broker, remove, suspended } = failureHarness();
+    it('keeps an approval pending when another extension surface closes', async () => {
+        const { broker, remove, suspended, windowRemoved } = failureHarness();
         const pending = broker.signPsbt({ origin: 'https://dapp.test' });
         await Promise.resolve();
 
-        suspended[0]();
+        expect(suspended).toEqual([]);
+        windowRemoved[0](99);
 
-        await expect(pending).resolves.toEqual({ approved: false });
-        expect(broker._pendingSize()).toBe(0);
-        await vi.waitFor(() => expect(remove).toHaveBeenCalledWith(41));
+        expect(broker._pendingSize()).toBe(1);
+        expect(remove).not.toHaveBeenCalled();
+
+        await broker.resolve('failure-request', { approved: true });
+        await expect(pending).resolves.toEqual({ approved: true });
+        expect(remove).toHaveBeenCalledWith(41);
     });
 });

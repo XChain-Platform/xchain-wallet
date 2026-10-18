@@ -13,6 +13,7 @@ import {
     AddressText,
     Button,
     ChainBadge,
+    Checkbox,
     FeeSelector,
     FormPage,
     Input,
@@ -24,6 +25,7 @@ import {
 } from '@xchain-wallet/core/ui';
 import { registry as registryLib } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
+import { useDemoGuard } from '../hooks/useDemoGuard.jsx';
 import { useActionConfirmFlow, useConfirmSubmit, isUserRejection } from '../hooks/useActionConfirmFlow.js';
 import { ActionConfirmScreen } from '../components/ActionConfirmScreen.jsx';
 import { submitFailureMessage } from '../utils/submitFailureMessage.js';
@@ -46,6 +48,7 @@ import { userFacingMessage } from '../utils/userFacingMessage.js';
 import { memoLengthError, MEMO_HINT } from '../utils/memoLimit.js';
 import { useTickBalance } from '../hooks/useTickBalance.js';
 import { compareDecimalStrings } from '../utils/amountFormat.js';
+import { latestBallotRows, pollResultPercentages } from './pollDisplay.js';
 
 const chainRegistry = registryLib.defaultRegistry();
 
@@ -83,17 +86,6 @@ function votePollRef(vote) {
     return vote?.poll_index ?? vote?.poll_action_index ?? vote?.poll_ref;
 }
 
-function latestBallotRows(rows, address) {
-    const matching = rows.filter((row) => String(row?.source ?? '') === String(address));
-    if (!matching.length) return [];
-    const latestAction = matching.reduce((latest, row) => {
-        const actionIndex = Number(row?.action_index);
-        return Number.isFinite(actionIndex) ? Math.max(latest, actionIndex) : latest;
-    }, Number.NEGATIVE_INFINITY);
-    if (!Number.isFinite(latestAction)) return matching;
-    return matching.filter((row) => Number(row?.action_index) === latestAction);
-}
-
 function ballotRowText(row, options, isSplit) {
     const option = Number(row?.choice ?? row?.option_index);
     const label = Number.isInteger(option) ? `${option}: ${options[option] ?? ''}` : 'Unknown option';
@@ -115,6 +107,7 @@ function ballotRowText(row, options, isSplit) {
  */
 export function PollDetail({ walletId, chainId, pollIndex, onBack }) {
     const { messaging, shell } = useMessaging();
+    const demoGuard = useDemoGuard(walletId, { onBack });
     const signerReady = useSignerReady(walletId);
     const variant = screenVariantFor(shell);
 
@@ -294,11 +287,7 @@ export function PollDetail({ walletId, chainId, pollIndex, onBack }) {
     const hasCountdown = Number.isFinite(endBlock) && currentHeight !== null;
     const blocksRemaining = hasCountdown ? endBlock - currentHeight : null;
     const isOpen = pollReportsOpen && (blocksRemaining === null || blocksRemaining >= 0);
-    const resultWeights = results?.map((row) => {
-        const weight = Number(row?.total_weight);
-        return Number.isFinite(weight) && weight > 0 ? weight : 0;
-    }) || [];
-    const totalResultWeight = resultWeights.reduce((total, weight) => total + weight, 0);
+    const resultPercentages = pollResultPercentages(results);
     const walletBallots = useMemo(() => {
         if (!walletVotes || !addressesByChain) return [];
         return (addressesByChain[chainId] || []).map(({ address }) => ({
@@ -426,7 +415,7 @@ export function PollDetail({ walletId, chainId, pollIndex, onBack }) {
 
     function handleReview(event) {
         event.preventDefault();
-        if (!fromAddress) { setFormError('No address on this chain to vote from.'); return; }
+        if (!fromAddress) { setFormError('No address on this network to vote from.'); return; }
         const voteBalanceComparison = compareDecimalStrings(voteBalance, '0');
         if (voteBalanceComparison !== null && voteBalanceComparison !== 1) {
             setFormError(`This address must hold some ${poll.tick || 'governance token'} to vote.`);
@@ -500,12 +489,20 @@ export function PollDetail({ walletId, chainId, pollIndex, onBack }) {
     }
 
     const header = <PageHeader onBack={onBack} title={`Poll #${String(pollIndex)}`} />;
-    const wrap = (children) => <Screen variant={variant} header={header}>{children}</Screen>;
+    const wrap = (children) => (
+        <Screen
+            variant={variant}
+            header={header}
+            restoreScroll={!(stage === 'review' || stage === 'submitting')}
+        >
+            {children}
+        </Screen>
+    );
 
     if (loadError) {
         return wrap(
             <>
-                <StatusMessage variant="error" className={styles.error}>{loadError}</StatusMessage>
+                <StatusMessage variant="error">{loadError}</StatusMessage>
             </>,
         );
     }
@@ -542,8 +539,12 @@ export function PollDetail({ walletId, chainId, pollIndex, onBack }) {
 
     const pollInfo = (
         <dl className={styles.detailsList}>
-            <dt className={styles.detailsLabel}>Chain</dt>
-            <dd className={styles.detailsValue}>{descriptor ? <ChainBadge descriptor={descriptor} size="sm" /> : chainId}</dd>
+            {descriptor ? (
+                <>
+                    <dt className={styles.detailsLabel}>Network</dt>
+                    <dd className={styles.detailsValue}><ChainBadge descriptor={descriptor} size="sm" showName={false} /></dd>
+                </>
+            ) : null}
             <dt className={styles.detailsLabel}>Token</dt>
             <dd className={styles.detailsValue}>{poll.tick || 'n/a'}</dd>
             {poll.question ? (<><dt className={styles.detailsLabel}>Question</dt><dd className={styles.detailsValue}>{poll.question}</dd></>) : null}
@@ -605,15 +606,14 @@ export function PollDetail({ walletId, chainId, pollIndex, onBack }) {
                 <ul className={detailStyles.resultList} aria-label="Poll results">
                     {results.map((r, index) => {
                         const optionText = `${r.option_index}: ${options[r.option_index] ?? ''}`;
-                        const percentage = totalResultWeight > 0
-                            ? Math.round((resultWeights[index] / totalResultWeight) * 100)
-                            : 0;
+                        const percentage = resultPercentages[index] || 0;
                         return (
                             <li className={detailStyles.resultItem} key={String(r.option_index)}>
                                 <div className={detailStyles.resultHeader}>
                                     <span className={detailStyles.resultOption}>{optionText}</span>
                                     <span className={detailStyles.resultValues}>
                                         <span>{String(r.total_weight ?? '0')} weight</span>
+                                        <span>{percentage}%</span>
                                         <span>{String(r.voter_count ?? '0')} voter{Number(r.voter_count) === 1 ? '' : 's'}</span>
                                     </span>
                                 </div>
@@ -678,10 +678,11 @@ export function PollDetail({ walletId, chainId, pollIndex, onBack }) {
             : ballot.map((i) => `${i}: ${options[i] ?? ''}`).join(' · ');
         return wrap(
             <FormPage
+                demoGuard={demoGuard}
                 label="Review vote"
                 onSubmit={handleSubmit}
                 status={(isWatcherMode || isHwSource) && submitError
-                    ? <StatusMessage variant="error" className={styles.error}>{submitError}</StatusMessage>
+                    ? <StatusMessage variant="error">{submitError}</StatusMessage>
                     : null}
                 actions={(
                     <>
@@ -693,7 +694,6 @@ export function PollDetail({ walletId, chainId, pollIndex, onBack }) {
                     </>
                 )}
             >
-                <p className={styles.summary}>Vote on poll #{String(pollIndex)} ({poll.tick}).</p>
                 <dl className={styles.detailsList}>
                     <dt className={styles.detailsLabel}>From</dt>
                     <dd className={styles.detailsValue}><AddressText address={fromAddress.address} /></dd>
@@ -734,10 +734,11 @@ export function PollDetail({ walletId, chainId, pollIndex, onBack }) {
             {resultsBlock}
             {isOpen ? (
                 <FormPage
+                    demoGuard={demoGuard}
                     className={detailStyles.ballotForm}
                     label={sourceBallot.length ? 'Change vote' : 'Vote'}
                     onSubmit={handleReview}
-                    status={formError ? <StatusMessage variant="error" className={styles.error}>{formError}</StatusMessage> : null}
+                    status={formError ? <StatusMessage variant="error">{formError}</StatusMessage> : null}
                     actions={<Button type="submit" variant="primary" disabled={!fromAddress || options.length === 0}>{sourceBallot.length ? 'Change vote' : 'Vote'}</Button>}
                 >
                     <span className={styles.fromLabel}>{isSplit ? 'Split your weight across options' : `Choose up to ${maxSel} option${maxSel > 1 ? 's' : ''}`}</span>
@@ -752,12 +753,14 @@ export function PollDetail({ walletId, chainId, pollIndex, onBack }) {
                                     </div>
                                 </div>
                             ) : (
-                                <label key={i} className={detailStyles.optionRow}>
-                                    <input type="checkbox" checked={approvalChoices.has(i)}
-                                        disabled={!approvalChoices.has(i) && approvalChoices.size >= maxSel}
-                                        onChange={() => toggleApproval(i)} />
-                                    <span className={detailStyles.optionLabel}>{i}: {label}</span>
-                                </label>
+                                <Checkbox
+                                    key={i}
+                                    className={detailStyles.optionRow}
+                                    label={<span className={detailStyles.optionLabel}>{i}: {label}</span>}
+                                    checked={approvalChoices.has(i)}
+                                    disabled={!approvalChoices.has(i) && approvalChoices.size >= maxSel}
+                                    onChange={() => toggleApproval(i)}
+                                />
                             )
                         ))}
                     </div>
@@ -773,7 +776,7 @@ export function PollDetail({ walletId, chainId, pollIndex, onBack }) {
                             customEstimate={feePick.mode === 'custom' ? feeCustomEstimate : null}
                         />
                     ) : null}
-                    {!fromAddress ? <p className={styles.hint}>No address on this chain. Use Receive to generate one, then vote.</p> : null}
+                    {!fromAddress ? <p className={styles.hint}>No address on this network. Use Receive to generate one, then vote.</p> : null}
                 </FormPage>
             ) : (
                 <p className={styles.hint} style={{ marginTop: '0.75rem' }}>Voting is closed for this poll.</p>

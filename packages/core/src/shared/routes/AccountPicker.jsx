@@ -24,9 +24,9 @@ function runRouteAction(action, ...args) {
 /**
  * AccountPicker: full-screen list of BIP44 accounts under the active
  * wallet, with thumb-reachable add and current-account management
- * actions. Reached from the gear popover's Account summary row. Picking
- * an account calls `onSwitch`
- * and returns to home.
+ * actions pinned in the footer, as on the Wallets screen. Reached from
+ * the gear popover's Account summary row. Picking an account calls
+ * `onSwitch` and returns to home.
  *
  * @param {object} props
  * @param {string} props.walletId
@@ -35,8 +35,9 @@ function runRouteAction(action, ...args) {
  * @param {() => void} props.onAddAccount
  * @param {(account: any) => void} [props.onRenameAccount]
  * @param {() => void} props.onBack
+ * @param {string} [props.backLabel]
  */
-export function AccountPicker({ walletId, activeAccountId, onSwitch, onAddAccount, onRenameAccount, onBack }) {
+export function AccountPicker({ walletId, activeAccountId, onSwitch, onAddAccount, onRenameAccount, onBack, backLabel }) {
     const { messaging, shell } = useMessaging();
     const variant = screenVariantFor(shell);
 
@@ -66,7 +67,13 @@ export function AccountPicker({ walletId, activeAccountId, onSwitch, onAddAccoun
         return () => { cancelled = true; };
     }, [walletId, messaging, reload]);
 
-    const header = <PageHeader onBack={() => runRouteAction(onBack)} title={t('accountPicker.title')} />;
+    const header = (
+        <PageHeader
+            onBack={() => runRouteAction(onBack)}
+            backLabel={backLabel}
+            title={t('accountPicker.title')}
+        />
+    );
     const activeAccount = accounts?.find((account) => account.id === activeAccountId) || null;
     const footer = (
         <div className={pickerStyles.footerActions}>
@@ -145,6 +152,8 @@ export function AccountPicker({ walletId, activeAccountId, onSwitch, onAddAccoun
                             {onRenameAccount ? (
                                 <Button
                                     type="button"
+                                    icon={<Icon.PencilIcon />}
+                                    variant="secondary"
                                     className={pickerStyles.rowMenuBtn}
                                     aria-label={t('accountPicker.renameLabel', { label })}
                                     title={t('accountPicker.renameTitle')}
@@ -152,9 +161,7 @@ export function AccountPicker({ walletId, activeAccountId, onSwitch, onAddAccoun
                                         e.stopPropagation();
                                         runRouteAction(onRenameAccount, a);
                                     }}
-                                >
-                                    <Icon.PencilIcon />
-                                </Button>
+                                />
                             ) : null}
                         </div>
                     );

@@ -31,12 +31,14 @@
 // accepted under either name.)
 
 import { useEffect, useMemo, useState } from 'react';
-import { AnimatedQrFrames, Button, StatusMessage } from '../../ui/index.js';
+import { AnimatedQrFrames, Button, RadioGroup, StatusMessage } from '../../ui/index.js';
 import { CopyButton, FormSection, Textarea } from '../../ui/index.js';
+import { AddressText } from '../../ui/index.js';
 import { encodeXcwChunks } from '../../uri/psbtQr.js';
 import { encodeBbqrPsbtFrames } from '../../uri/bbqrPsbt.js';
 import { useToast } from './ToastHost.jsx';
 import styles from './WatcherResultPanel.module.css';
+import { t } from '../../i18n/index.js';
 
 /**
  * @param {object} props
@@ -51,7 +53,7 @@ export function WatcherResultPanel({
     onBuildAnother,
     onSendAnother,
     onDone,
-    title = 'Unsigned transaction, ready for signing',
+    title = t('components.watcherResultPanel.unsignedTransactionReadyForSigning'),
 }) {
     const psbtHex = result?.psbtHex || '';
     const [qrFormat, setQrFormat] = useState('xcw');
@@ -75,89 +77,75 @@ export function WatcherResultPanel({
         <>
             <FormSection title={title}>
                 <p className={styles.successHint}>
-                    Take this transaction to your Signer-mode wallet. Paste the hex,
-                    or scan the animated QR. Signing authorizes this transaction
-                    only, so verify its details again on the signer. Then paste the
-                    signed transaction into a Normal-mode wallet to broadcast.
+                    {t('components.watcherResultPanel.takeThisTransactionToYour')}
                 </p>
                 {result?.encoding ? (
                     <dl className={styles.successSummary}>
                         <div className={styles.successRow}>
-                            <dt>Encoding</dt>
+                            <dt>{t('components.watcherResultPanel.encoding')}</dt>
                             <dd>{result.encoding}</dd>
                         </div>
                         {result.fromAddress ? (
                             <div className={styles.successRow}>
-                                <dt>From</dt>
+                                <dt>{t('send.fields.from')}</dt>
                                 <dd className={styles.successMono}>
-                                    {result.fromAddress.slice(0, 8)}…{result.fromAddress.slice(-6)}
+                                    <AddressText address={result.fromAddress} size="sm" />
                                 </dd>
                             </div>
                         ) : null}
                     </dl>
                 ) : null}
                 <div className={styles.successTxidBlock}>
-                    <p className={styles.successLabel}>Unsigned transaction (hex)</p>
+                    <p className={styles.successLabel}>{t('components.watcherResultPanel.unsignedTransactionHex')}</p>
                     <Textarea
                         readOnly
-                        aria-label="Unsigned transaction hex"
+                        aria-label={t('components.watcherResultPanel.unsignedTransactionHex2')}
                         value={psbtHex}
                         rows={6}
+                        className={styles.machineText}
                         style={{ width: '100%', fontFamily: 'monospace', fontSize: '0.75rem' }}
                     />
                     <div className={styles.successTxidRow}>
                         <CopyButton
                             key={psbtHex}
                             value={psbtHex}
-                            label="Copy hex"
-                            ariaLabel="Copy unsigned transaction hex"
+                            label={t('components.watcherResultPanel.copyHex')}
+                            ariaLabel={t('components.watcherResultPanel.copyUnsignedTransactionHex')}
                         />
                     </div>
                 </div>
                 <div className={styles.successTxidBlock}>
-                    <p className={styles.successLabel}>QR format</p>
-                    <div role="radiogroup" aria-label="Animated QR format">
-                        <label style={{ marginRight: '1rem' }}>
-                            {/* Native radio preserves group arrow-key behavior because the kit has no segmented-choice primitive. */}
-                            <input
-                                type="radio"
-                                name="watcher-qr-format"
-                                value="xcw"
-                                checked={qrFormat === 'xcw'}
-                                onChange={() => setQrFormat('xcw')}
-                            />{' '}
-                            XCW (this wallet)
-                        </label>
-                        <label>
-                            {/* Native radio preserves group arrow-key behavior because the kit has no segmented-choice primitive. */}
-                            <input
-                                type="radio"
-                                name="watcher-qr-format"
-                                value="bbqr"
-                                checked={qrFormat === 'bbqr'}
-                                onChange={() => setQrFormat('bbqr')}
-                            />{' '}
-                            BBQr (Sparrow / Coldcard / SeedSigner)
-                        </label>
-                    </div>
+                    <RadioGroup
+                        legend="QR format"
+                        name="watcher-qr-format"
+                        value={qrFormat}
+                        onChange={setQrFormat}
+                        options={[
+                            { value: 'xcw', label: 'XCW (this wallet)' },
+                            { value: 'bbqr', label: 'BBQr (Sparrow / Coldcard / SeedSigner)' },
+                        ]}
+                        role="radiogroup"
+                        aria-label={t('components.watcherResultPanel.animatedQrFormat')}
+                    />
                 </div>
                 {exportFrames && exportFrames.error ? (
                     <StatusMessage variant="error">{exportFrames.error}</StatusMessage>
                 ) : exportFrames && Array.isArray(exportFrames) ? (
                     <>
-                        <p className={styles.successLabel}>Animated QR ({formatLabel})</p>
+                        <p className={styles.successLabel}>{t('components.watcherResultPanel.animatedQr')}{formatLabel})</p>
                         <AnimatedQrFrames
                             frames={exportFrames}
-                            alt="Unsigned transaction animated QR"
+                            alt={t('components.watcherResultPanel.unsignedTransactionAnimatedQr')}
                             announceLoading={false}
                         />
                         <details>
-                            <summary className={styles.hint}>Plain-text chunks</summary>
+                            <summary className={styles.hint}>{t('components.watcherResultPanel.plainTextChunks')}</summary>
                             <Textarea
                                 readOnly
-                                aria-label={`Unsigned transaction ${formatLabel}`}
+                                aria-label={t('components.watcherResultPanel.unsignedTransaction', { formatLabel })}
                                 value={exportFrames.join('\n')}
                                 rows={6}
+                                className={styles.machineText}
                                 style={{ width: '100%', fontFamily: 'monospace', fontSize: '0.75rem' }}
                             />
                         </details>
@@ -167,10 +155,10 @@ export function WatcherResultPanel({
             <div className={styles.actions}>
                 {buildAnother ? (
                     <Button variant="secondary" onClick={buildAnother}>
-                        Build another
+                        {t('components.watcherResultPanel.buildAnother')}
                     </Button>
                 ) : null}
-                <Button variant="primary" onClick={onDone}>Done</Button>
+                <Button variant="primary" onClick={onDone}>{t('common.done')}</Button>
             </div>
         </>
     );

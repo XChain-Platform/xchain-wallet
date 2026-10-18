@@ -72,6 +72,7 @@ import {
     LICENSE_ACCEPTED_VERSION_KEY,
     createWallet,
     expect,
+    openPaletteCommand,
     test,
 } from '../../fixtures/wallet.js';
 import { LICENSE_VERSION } from '../../../../packages/core/src/buildInfo.js';
@@ -87,6 +88,7 @@ import {
     nudgeChain,
     switchToRegtest,
     unlockAfterReload,
+    selectPickerAsset,
 } from '../../fixtures/regtest.js';
 
 const PASSWORD = 'regtestpassword123';
@@ -163,15 +165,6 @@ async function openSecondWallet(browser) {
     return { context, page: await context.newPage() };
 }
 
-/** Reaches a destination through the command palette (see bet-roundtrip). */
-async function gotoPalette(page, title) {
-    await page.keyboard.press('ControlOrMeta+k');
-    const combobox = page.getByRole('combobox').first();
-    await expect(combobox).toBeVisible();
-    await combobox.fill(title);
-    await page.keyboard.press('Enter');
-}
-
 /** The wallet's shared confirm surface. */
 async function approveConfirm(page, what = 'this action') {
     // Through the fixture rather than a bare locator wait: this spec is GREEN
@@ -190,8 +183,15 @@ async function fillPasswordIfPresent(scope) {
     if (await field.count() > 0 && await field.isVisible()) await field.fill(PASSWORD);
 }
 
-/** Back to a clean unlocked Home, which is also how forms pick up new balances. */
+/**
+ * Back to a clean unlocked Home, which is also how forms pick up new balances.
+ *
+ * Home FIRST: the wallet resumes its last screen after a reload, and Dispenser
+ * detail is one it resumes, so reloading from the buy panel comes back there
+ * and the unlock wait for Home never ends.
+ */
 async function remount(page) {
+    await openPaletteCommand(page, 'Home');
     await page.reload();
     await unlockAfterReload(page, PASSWORD);
 }
@@ -249,14 +249,14 @@ async function waitForDispenser(source, giveTick, timeoutMs = 420_000) {
 
 /** Navigates the BUYER from an unlocked Home to the fixture's dispenser. */
 async function openDispenserAsBuyer(page, sellerAddress) {
-    await gotoPalette(page, 'Browse dispensers');
+    await openPaletteCommand(page, 'Browse dispensers');
 
     // Anchored on a CONTROL, not on the page title: PageHeader renders its
     // title as a plain <span>, so there is no heading role to wait for here.
     const byAddress = page.getByRole('radio', { name: 'By address' });
     await expect(byAddress).toBeVisible({ timeout: 30_000 });
 
-    // Pin the chain filter. Left at its "All chains" default this form fans
+    // Pin the network filter. Left at its "All networks" default this form fans
     // the query out over EVERY registered chain in parallel, mainnet Bitcoin,
     // Litecoin and Dogecoin included - which is both slower and a live
     // mainnet call from a regtest test. Narrowing it keeps the run entirely
@@ -266,11 +266,12 @@ async function openDispenserAsBuyer(page, sellerAddress) {
     // bcrt1 address nor an "on Bitcoin" string, so grepping for those found
     // nothing here while the browse filter still asked Bitcoin for a dispenser
     // this run had just created on Litecoin.
-    // Scoped to main: getByLabel substring-matches, and the app header has a
-    // "XChain platform sites" button whose label contains "Chain", so an
-    // unscoped lookup is a strict-mode violation. Only reachable once the
+    // Scoped to main and matched by exact role name: getByLabel substring-matches, and
+    // the app header carries controls whose labels contain "network", so an
+    // unscoped or partial lookup is a strict-mode violation. Only reachable once the
     // earlier chain fixes let the spec get this far.
-    await page.getByRole('main').getByLabel('Chain').selectOption(REGTEST_CHAIN_ID);
+    await page.getByRole('main').getByRole('combobox', { name: 'Network', exact: true })
+        .selectOption(REGTEST_CHAIN_ID);
 
     // Search by the SELLER's address rather than by ticker: the ticker lane
     // matches GIVE_TICK and GET_TICK both, so a search for XCHAIN would drag
@@ -324,7 +325,7 @@ test.describe('dispenser buy funding gate on regtest', () => {
             // one), and funding the wrong one produces a fixture signed by an
             // address this spec never funded - which only works by accident on
             // a chain that happens to carry stale coins.
-            await gotoPalette(seller, 'Issue token');
+            await openPaletteCommand(seller, 'Issue token');
             // IssueTokenForm picks its chain with a NetworkField that defaults
             // to Bitcoin, so the `From` read below is a BITCOIN address unless
             // the chain is chosen first - which is exactly what the address-shape
@@ -351,7 +352,7 @@ test.describe('dispenser buy funding gate on regtest', () => {
 
         await test.step('seller: issue the throwaway give token', async () => {
             const seller = sellerContext.pages()[0];
-            await gotoPalette(seller, 'Issue token');
+            await openPaletteCommand(seller, 'Issue token');
             // IssueTokenForm picks its chain with a NetworkField that defaults
             // to Bitcoin, so the `From` read below is a BITCOIN address unless
             // the chain is chosen first - which is exactly what the address-shape
@@ -379,7 +380,7 @@ test.describe('dispenser buy funding gate on regtest', () => {
 
         await test.step('seller: open a dispenser priced in XCHAIN', async () => {
             const seller = sellerContext.pages()[0];
-            await gotoPalette(seller, 'Create dispenser');
+            await openPaletteCommand(seller, 'Create dispenser');
 
             const main = seller.getByRole('main');
             // DispenserForm has its own NetworkField, defaulting to Bitcoin, so
@@ -393,12 +394,11 @@ test.describe('dispenser buy funding gate on regtest', () => {
             // The give tick comes from a picker, so it can only ever be one
             // this address actually holds.
             await main.getByRole('button', { name: /^Token:/ }).click();
-            await seller.getByLabel('Search coins or tokens').fill(GIVE_TICK);
-            await seller.locator(`[data-balance-key$=":${GIVE_TICK}"]`).first().click();
+            await selectPickerAsset(seller, GIVE_TICK);
 
             // AmountField folds the tick into its label once one is selected,
             // hence the prefix match rather than an exact name.
-            await main.getByLabel(/^Give amount \(per fill\)/).fill(GIVE_PER_FILL);
+            await main.getByLabel(/^Give amount per fill/).fill(GIVE_PER_FILL);
             await main.getByLabel(/^Escrow amount/).fill(GIVE_ESCROW);
 
             // THE FIXTURE'S WHOLE POINT: token-priced, not coin-priced. A
@@ -406,7 +406,7 @@ test.describe('dispenser buy funding gate on regtest', () => {
             // funding check, and every assertion below would be vacuous.
             await main.getByRole('radio', { name: 'A token' }).check();
             await main.getByLabel('Payment token', { exact: true }).fill('XCHAIN');
-            await main.getByLabel('Payment amount (per fill)', { exact: true })
+            await main.getByLabel('Payment amount per fill', { exact: true })
                 .fill(PRICE_PER_FILL);
 
             await fillPasswordIfPresent(main);
@@ -433,7 +433,7 @@ test.describe('dispenser buy funding gate on regtest', () => {
             // the seller's was read, so it is the address the wallet actually
             // composes from. On a wallet this fresh there is exactly one, which
             // is also the one the buy panel will pick (newest external HD).
-            await gotoPalette(page, 'Issue token');
+            await openPaletteCommand(page, 'Issue token');
             // IssueTokenForm picks its chain with a NetworkField that defaults
             // to Bitcoin, so the `From` read below is a BITCOIN address unless
             // the chain is chosen first - which is exactly what the address-shape

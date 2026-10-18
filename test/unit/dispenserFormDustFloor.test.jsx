@@ -105,7 +105,9 @@ describe('DispenserForm dust-floor guard', () => {
 
     it('rewrites the fields to the bundle on one click, and that dispenser composes', async () => {
         const { utils, calls } = await mountFilled('0.000001');
-        await flush(() => fireEvent.click(utils.getByRole('button', { name: 'Sell 60 per fill at 0.000006 BTC' })));
+        const fix = utils.getByRole('button', { name: 'Sell 60 per fill at 0.000006 BTC' });
+        expect(fix.closest('[data-field-note="error"]')).toBeTruthy();
+        await flush(() => fireEvent.click(fix));
         expect(utils.getByLabelText(/^Give amount/).value).toBe('60');
         expect(utils.getByLabelText(/^Trigger price/).value).toBe('0.000006');
         expect(utils.container.textContent).not.toContain('nobody can buy a single fill');

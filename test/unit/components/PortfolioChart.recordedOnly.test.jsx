@@ -14,7 +14,7 @@
 // keeps its synthesized chart and every range.
 
 import { describe, it, expect, afterEach, vi } from 'vitest';
-import { act, cleanup, render, screen, waitFor } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
 import {
     PortfolioChart,
@@ -119,6 +119,8 @@ describe('PortfolioChart on a real wallet', () => {
             /^Portfolio performance chart\. Range 7d\. Values range from .* USD\. Start .* USD\. End \$40,000\.00 USD\. Change \+/,
         ));
         expect(chart.querySelector('title')).toHaveTextContent('USD');
+        const change = screen.getByLabelText(/7d change\./);
+        expect(change).toHaveTextContent(/\(\+.*%\) · 7d/);
 
         const tablist = screen.getByRole('tablist', { name: 'Chart range' });
         const panel = screen.getByRole('tabpanel');
@@ -163,6 +165,15 @@ describe('PortfolioChart on a real wallet', () => {
         expect(document.querySelector('svg polyline').getAttribute('stroke'))
             .toBe('var(--xc-text-muted)');
         expect(screen.getByRole('img', { name: /^Portfolio performance chart\..*\(0\.00%\)/ })).toBeInTheDocument();
+    });
+
+    it('labels the chart calculation with the selected period', async () => {
+        const sparkline = Array.from({ length: 168 }, (_, index) => 100 - index / 10);
+        mount('real-wallet-1', { prices: { 'bitcoin-mainnet': { sparkline } } });
+
+        expect(await screen.findByLabelText(/7d change\. Decrease/)).toHaveTextContent('· 7d');
+        fireEvent.click(screen.getByRole('tab', { name: '24h' }));
+        expect(screen.getByLabelText(/24h change\. Decrease/)).toHaveTextContent('· 24h');
     });
 
     it('requests and formats chart history in the selected fiat currency', async () => {

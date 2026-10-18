@@ -17,6 +17,28 @@ describe('<StatusMessage>', () => {
         expect(screen.getByRole(role)).toHaveAttribute('aria-live', live);
     });
 
+    it.each([
+        ['warning', 'alert', 'assertive'],
+        ['error', 'status', 'polite'],
+    ])('lets a %s message announce as %s while keeping its tone', (variant, role, live) => {
+        render(<StatusMessage variant={variant} role={role}>Check this</StatusMessage>);
+        const message = screen.getByRole(role);
+        expect(message).toHaveAttribute('aria-live', live);
+        expect(message).toHaveAttribute('data-variant', variant);
+    });
+
+    it('renders a note as static context, not a live region', () => {
+        render(<StatusMessage variant="warning" role="note">Watch-only</StatusMessage>);
+        const message = screen.getByRole('note');
+        expect(message).not.toHaveAttribute('aria-live');
+        expect(message).not.toHaveAttribute('aria-atomic');
+    });
+
+    it('ignores an unknown role and keeps the variant semantics', () => {
+        render(<StatusMessage variant="error" role="banner">Failed</StatusMessage>);
+        expect(screen.getByRole('alert')).toHaveAttribute('aria-live', 'assertive');
+    });
+
     it('renders IDs, custom classes, and collapsed technical details', () => {
         render(
             <StatusMessage id="save-state" className="spaced" details="RPC 503">
@@ -44,6 +66,49 @@ describe('<StatusMessage>', () => {
     it('omits incomplete recovery controls', () => {
         render(<StatusMessage recovery={{ label: 'Retry' }}>Save failed</StatusMessage>);
         expect(screen.queryByRole('button')).not.toBeInTheDocument();
+    });
+
+    it('keeps role="alert" on a warning that must interrupt', () => {
+        render(<StatusMessage variant="warning" role="alert">Check the address</StatusMessage>);
+        const message = screen.getByRole('alert');
+        expect(message).toHaveAttribute('aria-live', 'assertive');
+        expect(message).toHaveAttribute('data-variant', 'warning');
+    });
+
+    it('drops the live region for a warning that is part of the page from the first paint', () => {
+        const { container } = render(<StatusMessage variant="warning" role={null}>Sharing is permanent.</StatusMessage>);
+        const message = container.firstElementChild;
+        expect(message).not.toHaveAttribute('role');
+        expect(message).not.toHaveAttribute('aria-live');
+        expect(message).not.toHaveAttribute('aria-atomic');
+        expect(message).toHaveAttribute('data-variant', 'warning');
+    });
+
+    it('passes a note role and a test hook through', () => {
+        render(<StatusMessage variant="warning" role="note" testId="outside-note">Outside address</StatusMessage>);
+        const message = screen.getByTestId('outside-note');
+        expect(message).toHaveAttribute('role', 'note');
+        expect(message).not.toHaveAttribute('aria-live');
+    });
+
+    it('holds several lines in one box and one announcement', () => {
+        render(
+            <StatusMessage variant="warning" role="alert">
+                <p>First line</p>
+                <p>Second line</p>
+            </StatusMessage>,
+        );
+        const [message] = screen.getAllByRole('alert');
+        expect(screen.getAllByRole('alert')).toHaveLength(1);
+        expect(message).toHaveTextContent('First line');
+        expect(message).toHaveTextContent('Second line');
+    });
+
+    it('opens the message with a bold lead-in sentence', () => {
+        render(<StatusMessage variant="warning" lead="Locking is permanent.">Each flag is a one-way switch.</StatusMessage>);
+        const lead = screen.getByText('Locking is permanent.');
+        expect(lead.tagName).toBe('STRONG');
+        expect(lead.closest('[data-variant]')).toHaveTextContent('Locking is permanent. Each flag is a one-way switch.');
     });
 
     it.each([null, undefined, ''])('renders nothing for empty content %#', (children) => {

@@ -9,11 +9,14 @@
 // contact legal@dankest.llc.
 
 import { useEffect, useMemo, useState } from 'react';
-import { Button, EmptyState, Icon, Input, ListPage, ListRow, PageHeader, Screen, Skeleton, StatusMessage } from '@xchain-wallet/core/ui';
+import { Button, EmptyState, Icon, ListPage, ListRow, PageHeader, Screen, Skeleton, StatusMessage } from '@xchain-wallet/core/ui';
 import { registry as registryLib } from '@xchain-wallet/core';
 import * as branding from '../../branding/branding.js';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
+import { ListToolbar } from '../components/ListToolbar.jsx';
 import { NetworkFilterDropdown } from '../components/NetworkFilterDropdown.jsx';
+import { OfflineEmptyState } from '../components/OfflineEmptyState.jsx';
+import { useNetworkOffline } from '../hooks/useNetworkOffline.js';
 import { coinFromChainId } from '../components/BalanceList.jsx';
 import { listLabel } from '../utils/listLabel.js';
 import styles from './ActionsMenu.module.css';
@@ -54,6 +57,7 @@ export function MyLists(props) {
 function MyListsScreen({ walletId, activeAccountId, onOpenList, onCreateList, onCreateUnionList, onOpenSharedLists, onBack }) {
     const { messaging, shell } = useMessaging();
     const variant = screenVariantFor(shell);
+    const { offline, recheck } = useNetworkOffline({ walletId });
 
     const [addressesByChain, setAddressesByChain] = useState(
         /** @type {Record<string, any[]> | null} */ (null),
@@ -87,6 +91,9 @@ function MyListsScreen({ walletId, activeAccountId, onOpenList, onCreateList, on
         if (!addressesByChain) return;
         const chains = Object.keys(addressesByChain);
         if (chains.length === 0) return;
+        // Offline the reads cannot finish; rows already shown stay, and the
+        // lists load again when the connection returns.
+        if (offline) return;
 
         const initial = {};
         for (const cid of chains) initial[cid] = { loading: true, rows: [], error: null };
@@ -135,7 +142,7 @@ function MyListsScreen({ walletId, activeAccountId, onOpenList, onCreateList, on
             });
         }
         return () => { cancelled = true; };
-    }, [addressesByChain, messaging, listsReload]);
+    }, [addressesByChain, messaging, listsReload, offline]);
 
     const allRows = useMemo(() => {
         /** @type {any[]} */
@@ -177,66 +184,62 @@ function MyListsScreen({ walletId, activeAccountId, onOpenList, onCreateList, on
             backLabel="Back to home"
             titleIcon={<Icon.TokenListIcon />}
             title="My lists"
-            // Only the round + belongs in the header: PageHeader styles every
-            // trailing button as a 38px circle, and the two text actions
-            // squeezed into circles spilled across the title at phone width.
-            // They live in the body's action row instead.
-            trailing={onCreateList ? (
-                <>
-                    {onCreateList ? (
-                        <Button
-                            type="button"
-                            className={local.addBtn}
-                            onClick={() => onCreateList()}
-                            aria-label="Create list"
-                            title="Create list"
-                        >
-                            <Icon.PlusIcon />
-                        </Button>
-                    ) : null}
-                </>
-            ) : undefined}
         />
     );
-    const secondaryActions = (onOpenSharedLists || onCreateUnionList) ? (
-        <div className={local.actions}>
-            {onOpenSharedLists ? (
-                <Button variant="secondary" size="sm" onClick={() => onOpenSharedLists()}>Shared lists</Button>
-            ) : null}
-            {onCreateUnionList ? (
-                <Button variant="secondary" size="sm" onClick={() => onCreateUnionList()}>Create union list</Button>
-            ) : null}
-        </div>
-    ) : null;
+    // The page header holds only the title and Back, so every action of the
+    // screen sits in the content's actions row, in every state. An empty
+    // list offers Create list from its EmptyState instead, so the screen
+    // never shows it twice.
+    const actionsFor = (emptyOffersCreate) => (
+        (onCreateList && !emptyOffersCreate) || onOpenSharedLists || onCreateUnionList ? (
+            <>
+                {onCreateList && !emptyOffersCreate ? (
+                    <Button
+                        type="button"
+                        variant="secondary"
+                        icon={<Icon.PlusIcon />}
+                        onClick={() => onCreateList()}
+                    >
+                        Create list
+                    </Button>
+                ) : null}
+                {onOpenSharedLists ? (
+                    <Button variant="secondary" onClick={() => onOpenSharedLists()}>Shared lists</Button>
+                ) : null}
+                {onCreateUnionList ? (
+                    <Button variant="secondary" onClick={() => onCreateUnionList()}>Create union list</Button>
+                ) : null}
+            </>
+        ) : null
+    );
 
-    // Every state of the screen carries the secondary actions, as the
-    // header did before they moved out of it.
-    const wrap = (children, toolbar) => (
+    const wrap = (children, toolbar, { notices = null, emptyOffersCreate = false } = {}) => (
         <Screen variant={variant} header={header}>
-            <ListPage toolbar={toolbar}>
-                {secondaryActions}
+            <ListPage notices={notices} actions={actionsFor(emptyOffersCreate)} toolbar={toolbar}>
                 {children}
             </ListPage>
         </Screen>
     );
 
     if (addressesError) {
-        return wrap(
-            <StatusMessage
-                variant="error"
-                className={styles.entryDescription}
-                recovery={{
-                    label: 'Try again',
-                    onAction: () => {
-                        setAddressesError(null);
-                        setAddressesByChain(null);
-                        setAddressesReload((value) => value + 1);
-                    },
-                }}
-            >
-                {addressesError}
-            </StatusMessage>,
-        );
+        return wrap(null, undefined, {
+            notices: (
+                <StatusMessage
+                    variant="error"
+                    className={styles.entryDescription}
+                    recovery={{
+                        label: 'Try again',
+                        onAction: () => {
+                            setAddressesError(null);
+                            setAddressesByChain(null);
+                            setAddressesReload((value) => value + 1);
+                        },
+                    }}
+                >
+                    {addressesError}
+                </StatusMessage>
+            ),
+        });
     }
     if (!addressesByChain) {
         return wrap(
@@ -249,53 +252,43 @@ function MyListsScreen({ walletId, activeAccountId, onOpenList, onCreateList, on
         return wrap(
             <EmptyState
                 title="No supported address"
-                body="Publishing a list requires an address on a supported chain."
+                body="Publishing a list requires an address on a supported network."
                 titleAs="p"
             />,
         );
     }
 
     const toolbar = (
-        <>
-            <div className={local.searchField}>
-                <Input
-                    type="search"
-                    enterKeyHint="search"
-                    autoCapitalize="off"
-                    className={local.search}
-                    placeholder="Search"
-                    value={query}
-                    onChange={(e) => setQuery(e.target.value)}
-                    autoComplete="off"
-                    autoCorrect="off"
-                    spellCheck={false}
-                    aria-label="Search lists"
-                />
-            </div>
+        <ListToolbar query={query} onQueryChange={setQuery} searchLabel="Search lists">
             <NetworkFilterDropdown value={network} onChange={setNetwork} />
-        </>
+        </ListToolbar>
     );
+
+    // Offline, the screen's one message is its offline state below.
+    const notices = loadErrors.length > 0 && !offline ? (
+        <StatusMessage
+            variant="error"
+            className={styles.entryDescription}
+            recovery={{
+                label: 'Try again',
+                onAction: () => {
+                    setListsByChain({});
+                    setListsReload((value) => value + 1);
+                },
+            }}
+        >
+            {/* Names the chains only: the raw fetch error carries API paths and
+                HTTP codes that mean nothing to the user. */}
+            Couldn't load your lists for {loadErrors.join(', ')}. Try again in a moment.
+        </StatusMessage>
+    ) : null;
+    const emptyOffersCreate = !anyLoading && loadErrors.length === 0 && allRows.length === 0;
 
     return wrap(
         <>
-            {loadErrors.length > 0 ? (
-                <StatusMessage
-                    variant="error"
-                    className={styles.entryDescription}
-                    recovery={{
-                        label: 'Try again',
-                        onAction: () => {
-                            setListsByChain({});
-                            setListsReload((value) => value + 1);
-                        },
-                    }}
-                >
-                    {/* Names the chains only: the raw fetch error carries API paths and
-                        HTTP codes that mean nothing to the user. */}
-                    Couldn't load your lists for {loadErrors.join(', ')}. Try again in a moment.
-                </StatusMessage>
-            ) : null}
-            {anyLoading && visibleRows.length === 0 ? (
+            {offline && allRows.length === 0 ? (
+                <OfflineEmptyState body="Your lists load when the connection returns." onRetry={recheck} />
+            ) : anyLoading && visibleRows.length === 0 ? (
                 <div role="status" aria-label="Loading lists">
                     <Skeleton.List rows={5} />
                 </div>
@@ -329,6 +322,7 @@ function MyListsScreen({ walletId, activeAccountId, onOpenList, onCreateList, on
             )}
         </>,
         toolbar,
+        { notices, emptyOffersCreate },
     );
 }
 
@@ -368,6 +362,7 @@ function MyListRow({ row, onSelect }) {
             subtitle={isFork
                 ? `Forked from #${row.list_action_index} (${row.edit === '2' ? 'removed items' : 'added items'})`
                 : 'Created list'}
+            trailingClassName={local.statusSlot}
             trailing={(
                 <span className={`${local.status} ${valid ? local.status_valid : local.status_invalid}`}>
                     {valid ? 'Valid' : status}

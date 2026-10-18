@@ -40,6 +40,11 @@ import {
 import { logConsole } from '@xchain-wallet/core/shared/utils/logConsole.js';
 import { MessageHost } from './MessageHost.js';
 import { registerBridgeHandlers } from '../bridge/handlers.js';
+import {
+    notifyAccountsChanged,
+    notifyDisconnectedSites,
+    notifyNetworkChanged,
+} from '../bridge/bridgeEvents.js';
 import { applyAutoLockSignal } from './autoLockState.js';
 import * as signerBridge from './signerBridge.js';
 import { createBroadcastQueueStorage } from './broadcastQueueStorage.js';
@@ -259,6 +264,7 @@ const {
     verifyAddressBalance,
     verifyAddressAction,
     getActiveNetwork,
+    filterChainIdsByActiveNetwork,
     createPriceOracle,
     isFiatRateSourceUrl,
     getMarkets,
@@ -900,6 +906,32 @@ async function announceWalletSwitch(req, vault, bridgeEvents) {
     return { ok: true };
 }
 
+async function announceNetworkChange(previous, next, vault, chainRegistry, bridgeEvents) {
+    if (getActiveNetwork(previous) === getActiveNetwork(next)) return;
+    if (typeof bridgeEvents?.chainChanged !== 'function') return;
+    const activeChainIds = filterChainIdsByActiveNetwork(
+        Object.keys(next?.fees ?? {}),
+        next,
+        chainRegistry,
+    );
+    const sites = await vault.connectedSites.list();
+    await notifyNetworkChanged({ events: bridgeEvents, sites, activeChainIds });
+}
+
+async function announceAccountChange(vault, bridgeEvents, changedAccountIds, sites) {
+    if (typeof bridgeEvents?.accountsChanged !== 'function') return;
+    const [accounts, connectedSites] = await Promise.all([
+        vault.accounts.list(),
+        sites ? Promise.resolve(sites) : vault.connectedSites.list(),
+    ]);
+    await notifyAccountsChanged({
+        events: bridgeEvents,
+        accounts,
+        sites: connectedSites,
+        changedAccountIds,
+    });
+}
+
 function toSafeWallet(w) {
     return {
         schemaVersion: w.schemaVersion,
@@ -1021,7 +1053,22 @@ export function createBackgroundHost(deps) {
         }
     }
 
+    // A send composed on one network must not sign or broadcast after the
+    // wallet switched to another: the undo hold and a second window both
+    // leave time for a switch between compose and broadcast.
+    async function assertActiveSendNetwork({ chainId, vault, chainRegistry }) {
+        const descriptor = chainRegistry?.get?.(chainId);
+        if (!descriptor) return;
+        const activeNetwork = getActiveNetwork(await vault.settings.get());
+        if (descriptor.networkKind !== activeNetwork) {
+            throw new Error(
+                `The active network changed to ${activeNetwork}. Return to Send and review the payment again.`,
+            );
+        }
+    }
+
     async function sendWithHold(req, flowDeps) {
+        await assertActiveSendNetwork({ ...req, ...flowDeps });
         const legs = Array.isArray(req?.legs) && req.legs.length > 0
             ? req.legs
             : [{ to: req?.to, tick: req?.tick, amount: req?.amount, memo: req?.memo }];
@@ -1044,11 +1091,17 @@ export function createBackgroundHost(deps) {
         activeSendIntents.add(intentKey);
         try {
             const opts = { ...req, ...flowDeps };
-            const beforeBroadcast = createHoldBeforeBroadcast({
+            const holdBeforeBroadcast = createHoldBeforeBroadcast({
                 sendHold,
                 holdId: opts.holdId,
                 undoSeconds: opts.undoSeconds,
             });
+            // The network check runs again after any hold, the last moment
+            // before the signed transaction leaves the wallet.
+            const beforeBroadcast = async (...args) => {
+                if (holdBeforeBroadcast) await holdBeforeBroadcast(...args);
+                await assertActiveSendNetwork(opts);
+            };
             return await sendToken({ ...opts, beforeBroadcast });
         } finally {
             activeSendIntents.delete(intentKey);
@@ -1400,7 +1453,11 @@ export function createBackgroundHost(deps) {
     });
 
     host.register('account.rename', async (req, { vault }) => {
+        const previous = await vault.accounts.get(req?.accountId);
         const updated = await renameAccount({ ...req, vault });
+        if (previous?.name !== updated.name) {
+            await announceAccountChange(vault, bridgeEvents, [updated.id]);
+        }
         return { account: updated };
     });
 
@@ -1445,6 +1502,7 @@ export function createBackgroundHost(deps) {
             chainRegistry,
             sdkRegistry,
         });
+        await announceAccountChange(vault, bridgeEvents, [r.account.id]);
         return { account: r.account, addresses: r.addresses };
     });
 
@@ -1547,6 +1605,7 @@ export function createBackgroundHost(deps) {
         if (typeof network !== 'string' || !network) {
             throw new Error('settings.setActiveNetwork: network is required');
         }
+        const previousSettings = await getSettings(vault);
         let settings = await updateSettings(vault, { activeNetwork: network });
 
         let addresses = { created: [], existing: [], failed: [], skipped: 'no-wallet' };
@@ -1574,14 +1633,25 @@ export function createBackgroundHost(deps) {
                 settings = await ensureSettings(vault, chainRegistry, networkChainIds);
             }
         }
+        await announceNetworkChange(
+            previousSettings,
+            settings,
+            vault,
+            chainRegistry,
+            bridgeEvents,
+        );
         await publishSurfaceState('network', { settings });
         return { settings, addresses };
     });
 
-    host.register('settings.update', async (req, { vault, sdkRegistry }) => {
+    host.register('settings.update', async (req, { vault, chainRegistry, sdkRegistry }) => {
         const patch = req && typeof req === 'object' && 'patch' in req
             ? /** @type {Record<string, unknown>} */ (req.patch)
             : /** @type {Record<string, unknown>} */ (req ?? {});
+        const previousSettings = patch
+            && Object.prototype.hasOwnProperty.call(patch, 'activeNetwork')
+            ? await getSettings(vault)
+            : null;
         const result = await updateSettings(vault, patch);
         // A saved endpoint takes effect on the next request, not
         // at the next wallet restart. Invalidates only the chains whose
@@ -1616,6 +1686,13 @@ export function createBackgroundHost(deps) {
             }
         }
         if (patch && Object.prototype.hasOwnProperty.call(patch, 'activeNetwork')) {
+            await announceNetworkChange(
+                previousSettings,
+                result,
+                vault,
+                chainRegistry,
+                bridgeEvents,
+            );
             await publishSurfaceState('network', { settings: result });
         }
         return result;
@@ -1754,9 +1831,11 @@ export function createBackgroundHost(deps) {
     // here so the service worker can lock the wallet after the popup closes,
     // when the foreground timer no longer runs. Sender-gated to the trusted
     // extension UI by the transport (not a `bridge.*` type).
+    // Forward the foreground `activity` flag: an activity report restarts the
+    // idle window and can never re-arm a disarmed record.
     host.register('session.autolock', async (req) => {
         await applyAutoLockSignal(
-            { armed: req?.armed === true, idleMs: req?.idleMs },
+            { armed: req?.armed === true, idleMs: req?.idleMs, activity: req?.activity === true },
             Date.now(),
         );
         return { ok: true };
@@ -2086,6 +2165,10 @@ export function createBackgroundHost(deps) {
         if (typeof walletId !== 'string' || !walletId) {
             throw new Error('wallet.remove: walletId is required');
         }
+        const [removedAccounts, sitesBefore] = await Promise.all([
+            vault.accounts.findBy('walletId', walletId),
+            vault.connectedSites.list(),
+        ]);
         const result = await removeWallet({ vault, walletId });
         if (signerPool && typeof signerPool.evict === 'function') {
             try { signerPool.evict(walletId); } catch { /* best-effort */ }
@@ -2096,6 +2179,31 @@ export function createBackgroundHost(deps) {
         // blob and rehydrate into every later boot, and no route can list them
         // again because the banner only ever asks for the active wallet.
         await pruneWalletFromQueue(walletId);
+        const removedAccountIds = new Set(removedAccounts.map((account) => account.id));
+        const affectedOrigins = new Set(sitesBefore
+            .filter((site) => {
+                if (removedAccountIds.size === 0) return false;
+                const grants = Array.isArray(site?.permissions?.accounts)
+                    ? site.permissions.accounts
+                    : [];
+                return grants.length === 0 || grants.some((id) => removedAccountIds.has(id));
+            })
+            .map((site) => site.origin));
+        const sitesAfter = await vault.connectedSites.list();
+        const survivingOrigins = new Set(sitesAfter.map((site) => site.origin));
+        await notifyDisconnectedSites({
+            events: bridgeEvents,
+            sites: sitesBefore.filter((site) => (
+                affectedOrigins.has(site.origin) && !survivingOrigins.has(site.origin)
+            )),
+            reason: 'wallet-removed',
+        });
+        await announceAccountChange(
+            vault,
+            bridgeEvents,
+            [],
+            sitesAfter.filter((site) => affectedOrigins.has(site.origin)),
+        );
         return result;
     });
 
@@ -2566,6 +2674,7 @@ export function createBackgroundHost(deps) {
     // gatedKeys access (PC-26): the send guard needs the pack key to
     // compose a valid gated send; no unlock or signing happens here.
     host.register('action.send.psbt', async (req, { vault, chainRegistry, sdkRegistry }) => {
+        await assertActiveSendNetwork({ ...req, vault, chainRegistry });
         return buildSendPsbt({ ...req, vault, chainRegistry, sdkRegistry });
     });
 
@@ -2595,6 +2704,7 @@ export function createBackgroundHost(deps) {
         if (typeof chainId !== 'string' || !chainId) {
             throw new Error('action.composeForConfirm: chainId is required');
         }
+        await assertActiveSendNetwork({ chainId, vault, chainRegistry });
         const source = normalizeSource(req?.from, 'action.composeForConfirm');
 
         // Build actionData/encoderOpts from either a generic payload or the
@@ -3038,7 +3148,9 @@ export function createBackgroundHost(deps) {
         }
         let valid = false;
         try {
-            valid = Boolean(sdk.auth.verifyMessage(address, message, signature));
+            // Read the SDK's { valid, error } answer by its field; the demo stubs answer a bare boolean
+            const verdict = sdk.auth.verifyMessage(address, message, signature);
+            valid = typeof verdict === 'boolean' ? verdict : verdict?.valid === true;
         } catch (_err) {
             valid = false;
         }
@@ -3363,12 +3475,17 @@ export function createBackgroundHost(deps) {
         try {
             broadcast = await sdk.encoder.broadcastTx(signed.txHex);
         } catch (err) {
-            await vault.pendingTxs.put({
-                ...pending,
-                status: 'failed',
-                error: err?.message ? String(err.message) : String(err),
-            });
-            throw err;
+            // An already-on-network answer means these exact bytes reached a node, so the
+            // replacement is live and the original evicted: settle it as delivered, as every broadcast lane does.
+            if (!flows.isAlreadyOnNetworkRejection(err)) {
+                await vault.pendingTxs.put({
+                    ...pending,
+                    status: 'failed',
+                    error: err?.message ? String(err.message) : String(err),
+                });
+                throw err;
+            }
+            broadcast = signed.txid;
         }
         const replacementTxHash = typeof broadcast === 'string'
             ? broadcast
@@ -5321,8 +5438,10 @@ export function createBackgroundHost(deps) {
         return walletBalances({ ...req, vault, chainRegistry, sdkRegistry, activeNetwork });
     });
 
-    host.register('balances.address', async (req, { sdkRegistry, chainRegistry }) => {
-        return addressBalances({ ...req, sdkRegistry, chainRegistry });
+    host.register('balances.address', async (req, { vault, sdkRegistry, chainRegistry }) => {
+        // The vault lets the read answer a demo wallet's address from its
+        // fixture instead of the explorer (issue #82).
+        return addressBalances({ ...req, vault, sdkRegistry, chainRegistry });
     });
 
     host.register('utxos.address', async (req, { sdkRegistry }) => {
@@ -5436,17 +5555,19 @@ export function createBackgroundHost(deps) {
                 return { ok: false, status: 0, error: 'price data disabled' };
             }
         }
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 8000);
         try {
             const resp = await globalThis.fetch(url, {
                 headers: { Accept: 'application/json' },
-                ...(typeof AbortSignal !== 'undefined' && AbortSignal.timeout
-                    ? { signal: AbortSignal.timeout(8000) }
-                    : {}),
+                signal: controller.signal,
             });
             if (!resp.ok) return { ok: false, status: resp.status };
             return { ok: true, status: resp.status, body: await resp.json() };
         } catch (err) {
             return { ok: false, status: 0, error: err?.message ? String(err.message) : String(err) };
+        } finally {
+            clearTimeout(timeoutId);
         }
     });
 

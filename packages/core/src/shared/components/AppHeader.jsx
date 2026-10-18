@@ -9,39 +9,31 @@
 // contact legal@dankest.llc.
 
 // AppHeader: persistent top strip that stays mounted across every
-// unlocked route. Brand on the left; the settings gear (wallet /
-// account / network), QR/address dropdown, lock, and the pancake-menu
-// button on the right. Living in the FullLayoutWithNav
+// unlocked route. Brand and wallet identity stay on the left. Lock and
+// one overflow menu stay on the right. Living in the FullLayoutWithNav
 // header slot means TokenDetail / Send / Receive / Settings all keep the
 // wallet's top-level affordances visible without re-rendering their own
-// copy. `onMenuOpen` fires when the pancake is tapped; the parent layout
-// owns the menu drawer mount so it can span the viewport.
+// copy. `onMenuOpen` fires from the overflow menu's More row; the parent
+// layout owns the full menu mount so it can span the viewport.
 //
-// The gear leads the right-side stack so switching wallet or
-// account is one tap from ANY unlocked route, not a walk through
-// Settings -> Accounts. It renders only when the host wires at least one
-// of the pickers or a complete network filter, so shells that supply
-// none of them keep the old minimal bar.
-
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useContext } from 'react';
 import * as branding from '../../branding/branding.js';
 import { Button, Icon } from '../../ui/index.js';
 import { HeaderSettingsButton } from './HeaderSettingsButton.jsx';
+import { HeaderActionMenu } from './HeaderActionMenu.jsx';
 import { WatchOnlyBadge } from './WatchOnlyBadge.jsx';
-import { useViewportClamp } from '../hooks/useViewportClamp.js';
-import { PlatformSwitcher } from './PlatformSwitcher.jsx';
 import { WalletIdentity } from './WalletIdentity.jsx';
-import { NetworkStatusIndicator } from './NetworkStatusIndicator.jsx';
+import { NavSurfaceContext } from './navSurface.js';
 import styles from './AppHeader.module.css';
-import { useBackHandler } from '../../ui/backStack.js';
+import { t } from '../../i18n/index.js';
 
 /**
  * @param {object} props
- * @param {() => void} [props.onMenuOpen]                            pancake-tap handler
- * @param {() => void} [props.onScan]                                when provided, the QR icon opens a dropdown with Scan plus the address options below
- * @param {() => void} [props.onManageAddresses]                     dropdown option under the QR icon: opens the address list
- * @param {() => void} [props.onViewAddress]                         dropdown option under the QR icon: opens the receive / view-address screen
- * @param {() => void} [props.onCommandPalette]                      when provided, renders a search button that opens the §33 command palette (Cmd/Ctrl+K)
+ * @param {() => void} [props.onMenuOpen]                            opens the full wallet menu from the More row
+ * @param {() => void} [props.onScan]                                adds a Scan row to the overflow menu
+ * @param {() => void} [props.onManageAddresses]                     adds a Manage addresses row
+ * @param {() => void} [props.onViewAddress]                         adds a View address row
+ * @param {() => void} [props.onCommandPalette]                      keeps the Open command palette action in the menu (Cmd/Ctrl+K)
  * @param {() => void} [props.onLock]                                when provided, renders a one-tap lock button; same action as the "Lock wallet" row in the pancake menu
  * @param {boolean} [props.locking]                                  disables the lock button while a lock is in flight
  * @param {boolean} [props.isWatcherMode]                            shows the persistent watch-only wallet badge
@@ -61,7 +53,7 @@ import { useBackHandler } from '../../ui/backStack.js';
  * @param {boolean} [props.developerMode]
  * @param {(network: 'mainnet'|'testnet'|'regtest') => Promise<void>} [props.onActiveNetworkChange]
  * @param {string} [props.platformCurrent]                           this surface's key in the *.xchain.io platform switcher (the web shell passes 'wallet'); omit to hide the switcher entirely, which is what the extension and desktop shells do
- * @param {() => void} [props.onOpenNetworkSettings]                 opens the per-chain endpoint settings screen
+ * @param {() => void} [props.onPopOut]                              opens this wallet surface in a separate browser window or extension tab
  */
 export function AppHeader({
     onMenuOpen,
@@ -88,8 +80,13 @@ export function AppHeader({
     developerMode = false,
     onActiveNetworkChange,
     platformCurrent,
-    onOpenNetworkSettings,
+    onPopOut,
 }) {
+    // Lock lives once: the sidebar or rail carries its own Lock row, so the
+    // header keeps the button only where the bottom tab bar (or no shell
+    // chrome at all, as in a bare popup) leaves Lock inside the More sheet.
+    const navSurface = useContext(NavSurfaceContext);
+    const showLock = Boolean(onLock) && navSurface !== 'sidebar';
     const networkWired = showNetworkFilter
         && Boolean(chainRegistry)
         && Array.isArray(coinFamilies)
@@ -105,9 +102,9 @@ export function AppHeader({
         // A labelled region, not a second banner: each screen's Screen header already
         // is the page banner, and a document may hold only one.
         <div
-            className={`${styles.bar} ${onMenuOpen ? styles.phoneCondensed : ''}`.trim()}
+            className={styles.bar}
             role="region"
-            aria-label="App header"
+            aria-label={t('shell.header.appHeader')}
         >
             <div className={styles.left}>
                 <img
@@ -115,18 +112,25 @@ export function AppHeader({
                     alt={branding.PRODUCT_NAME}
                     className={styles.logo}
                 />
-                <WalletIdentity wallet={activeWallet} namePrefix="Wallet: " />
+                <WalletIdentity wallet={activeWallet} namePrefix={t('shell.header.walletPrefix')} />
                 <WatchOnlyBadge visible={isWatcherMode} />
             </div>
             <div className={styles.right}>
-                {onOpenNetworkSettings ? (
-                    <span className={`${styles.actionSlot} ${styles.networkSlot}`}>
-                        <NetworkStatusIndicator onOpenNetworkSettings={onOpenNetworkSettings} />
-                    </span>
+                {showLock ? (
+                    <Button
+                        variant="secondary"
+                        icon={<Icon.LockIcon />}
+                        onClick={onLock}
+                        disabled={locking}
+                        aria-label={t('home.lockWallet')}
+                        title={t('home.lockWallet')}
+                        data-header-control
+                    />
                 ) : null}
-                {showSettings ? (
-                    <span className={`${styles.actionSlot} ${styles.phoneHidden}`} data-phone-secondary-action>
+                <HeaderActionMenu
+                    settingsControl={showSettings ? (
                         <HeaderSettingsButton
+                            menuRow
                             activeWallet={activeWallet}
                             activeAccount={activeAccount}
                             onOpenWalletPicker={onOpenWalletPicker}
@@ -142,186 +146,16 @@ export function AppHeader({
                             developerMode={developerMode}
                             onActiveNetworkChange={onActiveNetworkChange}
                         />
-                    </span>
-                ) : null}
-                {onCommandPalette ? (
-                    <span className={`${styles.actionSlot} ${styles.phoneHidden}`} data-phone-secondary-action>
-                        <Button
-                            variant="secondary"
-                            icon={<Icon.SearchIcon />}
-                            onClick={onCommandPalette}
-                            aria-label="Open command palette"
-                            aria-keyshortcuts="Meta+K Control+K"
-                            title="Search (Cmd/Ctrl+K)"
-                        />
-                    </span>
-                ) : null}
-                <span className={`${styles.actionSlot} ${styles.phoneHidden}`} data-phone-secondary-action>
-                    <ScanMenu
-                        onScan={onScan}
-                        onManageAddresses={onManageAddresses}
-                        onViewAddress={onViewAddress}
-                    />
-                </span>
-                {onLock ? (
-                    <Button
-                        variant="secondary"
-                        icon={<Icon.LockIcon />}
-                        onClick={onLock}
-                        disabled={locking}
-                        aria-label="Lock wallet"
-                        title="Lock wallet"
-                    />
-                ) : null}
-                <span className={`${styles.actionSlot} ${styles.phoneHidden}`} data-phone-secondary-action>
-                    <PlatformSwitcher current={platformCurrent} />
-                </span>
-                {onMenuOpen ? (
-                    <Button
-                        variant="secondary"
-                        icon={<Icon.MenuIcon />}
-                        onClick={onMenuOpen}
-                        aria-label="Open menu"
-                        aria-haspopup="dialog"
-                        title="Open menu"
-                    />
-                ) : null}
-            </div>
-        </div>
-    );
-}
-
-/**
- * QR-icon button that opens a small dropdown: Scan, Manage addresses,
- * View address. Only the options whose handler is supplied are shown.
- * Renders nothing when no handler is provided.
- *
- * @param {object} props
- * @param {() => void} [props.onScan]
- * @param {() => void} [props.onManageAddresses]
- * @param {() => void} [props.onViewAddress]
- */
-function ScanMenu({ onScan, onManageAddresses, onViewAddress }) {
-    const [open, setOpen] = useState(false);
-    const wrapRef = useRef(null);
-    const triggerRef = useRef(null);
-    const menuRef = useRef(null);
-    const focusOnOpenRef = useRef('first');
-    const closeMenu = useCallback(() => {
-        setOpen(false);
-        triggerRef.current?.querySelector('button')?.focus();
-    }, []);
-    // The system Back gesture and Escape close this before it leaves the
-    // screen; the shared stack consumes Escape, so focus goes back here.
-    useBackHandler(open ? closeMenu : undefined);
-
-    useEffect(() => {
-        if (!open) return undefined;
-        const onClick = (e) => {
-            if (wrapRef.current?.contains(e.target)) return;
-            closeMenu();
-        };
-        window.addEventListener('mousedown', onClick);
-        return () => window.removeEventListener('mousedown', onClick);
-    }, [closeMenu, open]);
-
-    useEffect(() => {
-        if (!open) return;
-        const items = Array.from(menuRef.current?.querySelectorAll('[role="menuitem"]') || []);
-        const target = focusOnOpenRef.current === 'last' ? items.at(-1) : items[0];
-        target?.focus();
-    }, [open]);
-
-    const items = [
-        { id: 'scan', label: 'Scan', Icon: Icon.ScanIcon, handler: onScan },
-        { id: 'manage', label: 'Manage addresses', Icon: Icon.AddressIcon, handler: onManageAddresses },
-        { id: 'view', label: 'View address', Icon: Icon.EyeIcon, handler: onViewAddress },
-    ].filter((it) => typeof it.handler === 'function');
-
-    // The clamp keeps the anchored menu reachable at phone widths.
-    const clamp = useViewportClamp(open);
-
-    const openMenu = (focus = 'first') => {
-        focusOnOpenRef.current = focus;
-        setOpen(true);
-    };
-
-    const onMenuKeyDown = (e) => {
-        if (e.key === 'Tab') {
-            setOpen(false);
-            return;
-        }
-        const menuItems = Array.from(menuRef.current?.querySelectorAll('[role="menuitem"]') || []);
-        if (menuItems.length === 0) return;
-        const index = menuItems.indexOf(document.activeElement);
-        if ((e.key === 'Enter' || e.key === ' ') && index >= 0) {
-            e.preventDefault();
-            menuItems[index].click();
-            return;
-        }
-        let nextIndex = null;
-        if (e.key === 'ArrowDown') nextIndex = (index + 1) % menuItems.length;
-        if (e.key === 'ArrowUp') nextIndex = (index - 1 + menuItems.length) % menuItems.length;
-        if (e.key === 'Home') nextIndex = 0;
-        if (e.key === 'End') nextIndex = menuItems.length - 1;
-        if (nextIndex === null) return;
-        e.preventDefault();
-        menuItems[nextIndex]?.focus();
-    };
-
-    if (items.length === 0) return null;
-
-    return (
-        <div ref={wrapRef} className={styles.scanWrap}>
-            <span ref={triggerRef} className={styles.scanTrigger}>
-                <Button
-                    variant="secondary"
-                    icon={<Icon.ScanIcon />}
-                    onClick={() => {
-                        if (open) setOpen(false);
-                        else openMenu();
-                    }}
-                    onKeyDown={(e) => {
-                        if (e.key !== 'ArrowDown' && e.key !== 'ArrowUp') return;
-                        e.preventDefault();
-                        openMenu(e.key === 'ArrowUp' ? 'last' : 'first');
-                    }}
-                    aria-haspopup="menu"
-                    aria-expanded={open ? 'true' : 'false'}
-                    aria-label="Scan and addresses"
-                    title="Scan and addresses"
+                    ) : null}
+                    onCommandPalette={onCommandPalette}
+                    onScan={onScan}
+                    onManageAddresses={onManageAddresses}
+                    onViewAddress={onViewAddress}
+                    onPopOut={onPopOut}
+                    onMore={onMenuOpen}
+                    platformCurrent={platformCurrent}
                 />
-            </span>
-            {open ? (
-                <div
-                    ref={(node) => {
-                        menuRef.current = node;
-                        clamp.ref.current = node;
-                    }}
-                    style={clamp.style}
-                    className={styles.scanMenu}
-                    role="menu"
-                    aria-label="Scan and addresses"
-                    onKeyDown={onMenuKeyDown}
-                >
-                    {/* Menu rows stay native buttons to preserve menuitem and full-row semantics. */}
-                    {items.map(({ id, label, Icon: ItemIcon, handler }) => (
-                        <button
-                            key={id}
-                            type="button"
-                            role="menuitem"
-                            className={styles.scanItem}
-                            onClick={() => { closeMenu(); handler(); }}
-                            title={label}
-                        >
-                            <span className={styles.scanItemIcon} aria-hidden="true">
-                                <ItemIcon />
-                            </span>
-                            <span>{label}</span>
-                        </button>
-                    ))}
-                </div>
-            ) : null}
+            </div>
         </div>
     );
 }

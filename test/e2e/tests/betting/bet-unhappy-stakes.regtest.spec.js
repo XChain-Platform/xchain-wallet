@@ -37,7 +37,7 @@
 //
 // Runs on Litecoin (XC_REGTEST_COIN=RLTC) for the reasons §3.5 records.
 
-import { createWallet, expect, test } from '../../fixtures/wallet.js';
+import { createWallet, expect, openPaletteCommand, test } from '../../fixtures/wallet.js';
 import {
     expectConfirmModal,
     EXPLORER_URL,
@@ -50,6 +50,7 @@ import {
     switchToRegtest,
     unlockAfterReload,
 } from '../../fixtures/regtest.js';
+import { rateLimitDelayMs } from '../../fixtures/venueHealth.js';
 
 const PASSWORD = 'regtestpassword123';
 const FUNDING = 1;
@@ -61,10 +62,23 @@ const DEADLINE_LEAD_SEC = 3_600;
 
 const RUN_TAG = `unhappy-${Date.now()}`;
 
+/**
+ * The raw body, error bodies included (`block/{tip}` before the parse lands is
+ * one this spec reads on purpose), except that a 429 is waited out, at most
+ * twice. The shared explorer rate-limits the whole suite at once, and its
+ * `{error, code: 'RATE_LIMITED'}` body has no `chain_tip`, which reads as a
+ * venue with no chain at all.
+ */
 async function explorerJson(path) {
-    const res = await fetch(`${EXPLORER_URL}/${REGTEST_COIN}/api/${path}`, {
-        signal: AbortSignal.timeout(15_000),
-    });
+    let res;
+    for (let attempt = 0; ; attempt += 1) {
+        res = await fetch(`${EXPLORER_URL}/${REGTEST_COIN}/api/${path}`, {
+            signal: AbortSignal.timeout(15_000),
+        });
+        const waitMs = rateLimitDelayMs(res.status, res.headers);
+        if (waitMs === null || attempt >= 2) break;
+        await new Promise((r) => setTimeout(r, waitMs));
+    }
     return res.json();
 }
 
@@ -152,21 +166,8 @@ async function betsOnFeed(feedIndex) {
     return (body?.data || []).map((b) => `${b.action_index}:${b.bet_status}`);
 }
 
-async function gotoPalette(page, title) {
-    await page.keyboard.press('ControlOrMeta+k');
-    const dialog = page.getByRole('dialog', { name: 'Command palette' });
-    await expect(dialog, 'the command palette did not open').toBeVisible({ timeout: 15_000 });
-    const combobox = dialog.getByRole('combobox').first();
-    await expect(combobox).toBeEditable({ timeout: 15_000 });
-    await combobox.fill(title);
-    const row = page.getByRole('option', { name: new RegExp(`^${title}\\b`) }).first();
-    await expect(row, `no palette command matching "${title}"`).toBeVisible();
-    await row.click();
-    await expect(dialog).toBeHidden({ timeout: 15_000 });
-}
-
 async function gotoBettingHub(page) {
-    await gotoPalette(page, 'Betting');
+    await openPaletteCommand(page, 'Betting');
     await expect(page.getByRole('button', { name: 'Create market', exact: true }))
         .toBeVisible({ timeout: 30_000 });
     await selectVenueChain(page.getByRole('main'));
@@ -179,10 +180,17 @@ async function fillPasswordIfPresent(scope) {
 
 /** Makes `address` the one the forms sign with (see the deadline-race spec). */
 async function useAddress(page, address) {
-    await gotoPalette(page, 'Addresses');
+    await openPaletteCommand(page, 'Addresses');
     await page.getByRole('button', { name: `View address ${address}` }).click();
     await page.getByRole('group', { name: 'Address actions' })
         .getByRole('button', { name: 'Use' }).click();
+    // Use awaits the active-address write and only then returns to Home, and
+    // any route change closes the command palette. A palette opened before
+    // that late navigation is unmounted under the next step, so leaving the
+    // detail screen is what marks the switch as done.
+    await expect(page.getByRole('group', { name: 'Address actions' }),
+        'Use never completed, so the active-address write is still in flight')
+        .toBeHidden({ timeout: 30_000 });
 }
 
 /** The address the create-market form would sign with on the venue chain. */
@@ -204,7 +212,7 @@ async function signingAddress(page) {
  * to Bitcoin.
  */
 async function generateVenueAddress(page) {
-    await gotoPalette(page, 'Addresses');
+    await openPaletteCommand(page, 'Addresses');
     const listed = async () => {
         const rows = page.getByRole('button', { name: /^View address / });
         await expect(rows.first()).toBeVisible({ timeout: 30_000 });
@@ -339,9 +347,16 @@ test.describe('BET unhappy stakes', () => {
         await test.step('a BLANK stake never reaches compose', async () => {
             const main = await openMarket();
             await main.getByRole('button', { name: 'Yes', exact: true }).click();
-            await expect(main.getByRole('button', { name: 'Review bet', exact: true }),
-                'an empty stake can be submitted')
-                .toBeDisabled();
+            // The button stays enabled and answers a blank stake in words, so the
+            // proof that it never reaches compose is the refusal plus no confirm
+            // screen.
+            await main.getByRole('button', { name: 'Review bet', exact: true }).click();
+            await expect(page.getByRole('alert').filter({ hasText: /positive bet amount/ }),
+                'a blank stake was not refused in words')
+                .toBeVisible({ timeout: 30_000 });
+            await expect(page.getByTestId('confirm-modal'),
+                'a blank stake reached the confirm screen')
+                .toBeHidden();
         });
 
         await test.step('a ZERO stake is refused in words, and nothing is broadcast', async () => {

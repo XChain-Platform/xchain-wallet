@@ -14,9 +14,13 @@ import { registry as registryLib, flows as flowsLib } from '@xchain-wallet/core'
 import { coinFromChainId } from '../components/BalanceList.jsx';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { useSupportedChains } from '../hooks/useSupportedChains.js';
+import { useSettings } from '../hooks/useSettings.js';
 import { TickerIcon } from '../components/TickerIcon.jsx';
+import { RelativeTime } from '../components/RelativeTime.jsx';
 import { TokenPicker } from './TokenPicker.jsx';
 import { useOracleFeeds } from '../hooks/useOracleFeeds.js';
+import { useNetworkOffline } from '../hooks/useNetworkOffline.js';
+import { OfflineEmptyState } from '../components/OfflineEmptyState.jsx';
 import {
     dispenserRateLabel,
     enrichOfferRows,
@@ -77,15 +81,25 @@ export function MarketActivity({ walletId, accountId, onBack, onOpenDispenser })
     const variant = screenVariantFor(shell);
 
     // Live registry read (re-rendered on every descriptor mutation), so a
-    // synced chain reaches the market picker without a restart.
+    // synced chain reaches the market picker without a restart. Scoped to
+    // the active network like the Dispenser explorer: the registry knows
+    // every network, and a wallet on Regtest must neither query mainnet
+    // feeds nor badge the featured token with the mainnet coin. Empty while
+    // settings load, so nothing escapes the filter; a shell that cannot read
+    // settings gets the default network.
+    const { settings, loading: settingsLoading } = useSettings();
     const supportedChains = useSupportedChains(chainRegistry);
-    const chains = useMemo(() => supportedChains.map((d) => d.id), [supportedChains]);
+    const chains = useMemo(() => {
+        if (settingsLoading) return [];
+        return flowsLib.filterChainIdsByActiveNetwork(supportedChains.map((d) => d.id), settings, chainRegistry);
+    }, [supportedChains, settings, settingsLoading]);
     // A representative chain for the featured-token icon (prefer Bitcoin).
     const defaultChainId = useMemo(
         () => chains.find((id) => coinFromChainId(id) === 'bitcoin') || chains[0] || null,
         [chains],
     );
 
+    const { offline, recheck } = useNetworkOffline({ walletId });
     const [selected, setSelected] = useState(FEATURED_MARKET);
     const [picking, setPicking] = useState(false);
     const [loading, setLoading] = useState(true);
@@ -105,11 +119,27 @@ export function MarketActivity({ walletId, accountId, onBack, onOpenDispenser })
 
     const tick = (selected.tick || '').toUpperCase();
 
+    // Return every feed to its first page when the market changes. This is
+    // done while rendering rather than in the load effect: an effect runs
+    // after paint, so a Load more click made in that gap queued its update
+    // first and the late reset then overwrote it with the first page.
+    const marketScope = `${walletId || ''}:${tick}:${chains.join(',')}`;
+    const [pageScope, setPageScope] = useState(marketScope);
+    if (pageScope !== marketScope) {
+        setPageScope(marketScope);
+        setVisibleCounts({
+            offers: ACTIVITY_PAGE_SIZE,
+            orders: ACTIVITY_PAGE_SIZE,
+            sales: ACTIVITY_PAGE_SIZE,
+            swaps: ACTIVITY_PAGE_SIZE,
+        });
+    }
+
     // Load the selected market on landing and whenever the user picks a
     // different coin/token. Demo wallets are served fabricated feeds; real
     // wallets fan out across every supported chain in parallel.
     useEffect(() => {
-        if (!tick) return undefined;
+        if (!tick || chains.length === 0) return undefined;
         let cancelled = false;
         const marketKey = `${walletId || ''}:${tick}:${chains.join(',')}`;
         const hasCachedRows = loadedMarketKeyRef.current === marketKey;
@@ -121,12 +151,6 @@ export function MarketActivity({ walletId, accountId, onBack, onOpenDispenser })
             setDexOrders(null);
             setDexSwaps(null);
         }
-        setVisibleCounts({
-            offers: ACTIVITY_PAGE_SIZE,
-            orders: ACTIVITY_PAGE_SIZE,
-            sales: ACTIVITY_PAGE_SIZE,
-            swaps: ACTIVITY_PAGE_SIZE,
-        });
 
         if (walletId && flowsLib.isDemoWallet(walletId)) {
             const demo = flowsLib.synthesizeDemoMarketActivity(tick, { chainIds: chains });
@@ -138,6 +162,13 @@ export function MarketActivity({ walletId, accountId, onBack, onOpenDispenser })
                 loadedMarketKeyRef.current = marketKey;
                 setLoading(false);
             }
+            return () => { cancelled = true; };
+        }
+
+        // Offline the feeds cannot be read; the screen says so once and
+        // loads again when the connection returns.
+        if (offline) {
+            setLoading(false);
             return () => { cancelled = true; };
         }
 
@@ -207,7 +238,7 @@ export function MarketActivity({ walletId, accountId, onBack, onOpenDispenser })
             setLoading(false);
         });
         return () => { cancelled = true; };
-    }, [tick, walletId, messaging, chains, reload]);
+    }, [tick, walletId, messaging, chains, reload, offline]);
 
     // A Mode B offer carries no price on this lane; it comes from its oracle.
     const oracleFeedsFor = useOracleFeeds(messaging, offers);
@@ -268,8 +299,22 @@ export function MarketActivity({ walletId, accountId, onBack, onOpenDispenser })
 
     return (
         <Screen variant={variant} header={header}>
-            <ListPage toolbar={marketSelector}>
-                <div role="region" aria-label="Marketplace activity" aria-busy={loading || undefined}>
+            <ListPage
+                notices={loadError ? (
+                    <StatusMessage
+                        variant="error"
+                        recovery={{ label: 'Try again', onAction: () => setReload((value) => value + 1) }}
+                    >
+                        Some marketplace activity could not be loaded.
+                    </StatusMessage>
+                ) : null}
+                toolbar={marketSelector}
+            >
+                <div className={styles.activity} role="region" aria-label="Marketplace activity" aria-busy={loading || undefined}>
+                    {offline && offers === null ? (
+                        <OfflineEmptyState body="Marketplace activity loads when the connection returns." onRetry={recheck} />
+                    ) : null}
+
                     {loading && offers === null ? (
                         <div className={styles.list} role="status" aria-label="Loading marketplace activity">
                             <Skeleton height={56} />
@@ -278,17 +323,8 @@ export function MarketActivity({ walletId, accountId, onBack, onOpenDispenser })
                         </div>
                     ) : null}
 
-                {loadError ? (
-                    <StatusMessage
-                        variant="error"
-                        recovery={{ label: 'Try again', onAction: () => setReload((value) => value + 1) }}
-                    >
-                        Some marketplace activity could not be loaded.
-                    </StatusMessage>
-                ) : null}
-
                 {offers !== null ? (
-                    <section className={styles.section} aria-label="Open dispensers">
+                    <section aria-label="Open dispensers">
                         <SectionHeader
                             as="h2"
                             title={(
@@ -340,7 +376,7 @@ export function MarketActivity({ walletId, accountId, onBack, onOpenDispenser })
                 ) : null}
 
                 {dexOrders !== null ? (
-                    <section className={styles.section} aria-label="Open DEX orders">
+                    <section aria-label="Open DEX orders">
                         <SectionHeader
                             as="h2"
                             title={(
@@ -388,7 +424,7 @@ export function MarketActivity({ walletId, accountId, onBack, onOpenDispenser })
                 ) : null}
 
                 {sales !== null ? (
-                    <section className={styles.section} aria-label="Recent dispenses">
+                    <section aria-label="Recent dispenses">
                         <SectionHeader
                             as="h2"
                             title={(
@@ -409,10 +445,7 @@ export function MarketActivity({ walletId, accountId, onBack, onOpenDispenser })
                                     const soldTick = row.give_tick || tick;
                                     const payAsset = row.get_tick || row.get_coin || '';
                                     const get = row.get_amount;
-                                    const ts = Number(row.timestamp || row.block_time || 0);
-                                    const dateLabel = ts > 0
-                                        ? new Date(ts * (ts > 1e12 ? 1 : 1000)).toLocaleString()
-                                        : '';
+                                    const timestamp = row.timestamp || row.block_time;
                                     return (
                                         <li key={marketRowIdentity({ chainId, row }) || `sale:${i}`}>
                                             <ListRow
@@ -424,7 +457,7 @@ export function MarketActivity({ walletId, accountId, onBack, onOpenDispenser })
                                                         {give && Number(get) > 0 && payAsset ? ` for ${formatDecimal(get)} ${payAsset}` : ''}
                                                     </>
                                                 )}
-                                                subtitle={dateLabel || undefined}
+                                                subtitle={timestamp ? <RelativeTime timestamp={timestamp} /> : undefined}
                                             />
                                         </li>
                                     );
@@ -441,7 +474,7 @@ export function MarketActivity({ walletId, accountId, onBack, onOpenDispenser })
                 ) : null}
 
                 {dexSwaps !== null ? (
-                    <section className={styles.section} aria-label="Recent DEX swaps">
+                    <section aria-label="Recent DEX swaps">
                         <SectionHeader
                             as="h2"
                             title={(
@@ -460,10 +493,7 @@ export function MarketActivity({ walletId, accountId, onBack, onOpenDispenser })
                                     const getTick = row.get_tick || row.get_coin || row.getTick || row.getCoin || '';
                                     const giveQty = row.give_amount ?? row.giveAmount ?? null;
                                     const getQty = row.get_amount ?? row.getAmount ?? null;
-                                    const ts = Number(row.timestamp || row.block_time || 0);
-                                    const dateLabel = ts > 0
-                                        ? new Date(ts * (ts > 1e12 ? 1 : 1000)).toLocaleString()
-                                        : '';
+                                    const timestamp = row.timestamp || row.block_time;
                                     const isSell = giveTick.toUpperCase() === tick;
                                     const title = isSell
                                         ? (giveQty != null && getQty != null
@@ -478,7 +508,7 @@ export function MarketActivity({ walletId, accountId, onBack, onOpenDispenser })
                                                 className={styles.row}
                                                 leading={<TickerIcon chainId={chainId} tick={tick} size={32} />}
                                                 title={title}
-                                                subtitle={dateLabel || undefined}
+                                                subtitle={timestamp ? <RelativeTime timestamp={timestamp} /> : undefined}
                                             />
                                         </li>
                                     );

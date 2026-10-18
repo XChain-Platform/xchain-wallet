@@ -43,6 +43,7 @@
 // neighbouring session crediting the same address mid-run, fails loudly
 // instead of passing on a threshold.
 
+import { readShownTxid } from '../../fixtures/pendingHistory.js';
 import { createWallet, expect, gotoSection, mainButton, test } from '../../fixtures/wallet.js';
 import {
     REGTEST_CHAIN_LABEL,
@@ -251,10 +252,16 @@ test.describe('multi-recipient SEND on regtest', () => {
             // itemised below it.
             const intent = page.getByTestId('action-intent');
             await expect(intent).toContainText(`Send ${TOTAL_SENT} XCHAIN on ${REGTEST_CHAIN_LABEL} to 3 recipients`);
+            // Each leg is its own detail row: the confirm surface labels them
+            // "To 1", "To 2", ... (ConfirmActionModal reviewDetailLabel), and
+            // the value names the amount and the full address of that leg, so
+            // a mis-ordered or missing leg fails on its own row.
             for (let i = 0; i < RECIPIENTS.length; i++) {
-                await expect(intent).toContainText(`Recipient ${i + 1}`);
-                await expect(intent)
-                    .toContainText(`${RECIPIENTS[i].amount} XCHAIN to ${RECIPIENTS[i].address}`);
+                const leg = intent.locator('dl > div')
+                    .filter({ has: page.locator('dt', { hasText: new RegExp(`^To ${i + 1}$`) }) });
+                await expect(leg, `the confirm surface lists no "To ${i + 1}" leg`).toHaveCount(1);
+                await expect(leg.locator('dd'))
+                    .toHaveText(`${RECIPIENTS[i].amount} XCHAIN to ${RECIPIENTS[i].address}`);
             }
 
             // A real dry-run against the indexer, on a three-leg action. The
@@ -263,8 +270,10 @@ test.describe('multi-recipient SEND on regtest', () => {
             // later, so a "Will likely fail" here is a real finding.
             await expect(page.getByTestId('preflight-chip')).toHaveText('Looks good');
 
+            // The footer action names what it signs: one verb over the SUM of
+            // the legs, so a leg dropped from the composed action shows here too.
             const approve = page.getByTestId('confirm-approve');
-            await expect(approve).toHaveText(/^Approve$/);
+            await expect(approve).toHaveText(`Send ${TOTAL_SENT} XCHAIN`);
             await expect(approve).toBeEnabled();
             await approve.click();
 
@@ -274,7 +283,7 @@ test.describe('multi-recipient SEND on regtest', () => {
             // must not be reported as the same outcome.
             await expect(page.getByText('Signed. Not broadcast yet.')).toHaveCount(0);
 
-            txid = (await page.getByRole('main').innerText()).match(/\b[0-9a-f]{64}\b/)?.[0];
+            txid = await readShownTxid(page.getByRole('main'));
             expect(txid, 'success screen showed no transaction id').toBeTruthy();
         });
 

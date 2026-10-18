@@ -122,6 +122,8 @@ describe('Receive QR copy and share toasts', () => {
         renderReceive();
 
         expect(await screen.findByRole('textbox', { name: 'Amount (BTC)' })).toBeInTheDocument();
+        expect(screen.getByRole('button', { name: 'Share QR payment link' }))
+            .toHaveTextContent(/^Share QR$/);
         expect(screen.queryByRole('slider', { name: /fee/i })).toBeNull();
         expect(screen.queryByText(/network fee|sat\/vB|fee estimate/i)).toBeNull();
         expect(screen.queryByText('0.000015 BTC')).toBeNull();
@@ -149,7 +151,7 @@ describe('Receive QR copy and share toasts', () => {
             });
 
             expect(await screen.findByText(MOBILE_ADDRESS)).toBeInTheDocument();
-            expect(screen.getByRole('button', { name: /^Token:/ })).toBeInTheDocument();
+            expect(screen.getByRole('button', { name: /^Change asset/ })).toBeInTheDocument();
             expect(screen.getByRole('textbox', { name: /^Amount/ })).toBeInTheDocument();
             expect(screen.getByRole('button', { name: 'Copy payment link' })).toBeInTheDocument();
             expect(screen.getByRole('button', { name: 'Share QR payment link' })).toBeInTheDocument();
@@ -190,7 +192,7 @@ describe('Receive QR copy and share toasts', () => {
             const copy = screen.getByRole('button', { name: 'Copy payment link' });
             const share = screen.getByRole('button', { name: 'Share QR payment link' });
             const generate = screen.getByRole('button', { name: 'Generate new address' });
-            const token = screen.getByRole('button', { name: /^Token:/ });
+            const token = screen.getByRole('button', { name: /^Change asset/ });
 
             expect(precedes(qr, address)).toBe(true);
             expect(precedes(address, copy)).toBe(true);
@@ -198,13 +200,12 @@ describe('Receive QR copy and share toasts', () => {
             expect(precedes(share, generate)).toBe(true);
             expect(precedes(generate, token)).toBe(true);
 
-            const phoneRules = receiveCss.slice(receiveCss.indexOf('@media (max-width: 420px)'));
-            expect(phoneRules).toMatch(
-                /\.receiveQrBox\s*\{[^}]*max-width:\s*14rem;/,
-            );
-            expect(phoneRules).toMatch(
-                /\.qrActions\s*\{[^}]*margin-top:\s*0;/,
-            );
+            // The shared QR frame fills the column up to the receive frame size,
+            // so it shrinks with a phone column instead of needing a phone rule.
+            const qrDisplayCss = readFileSync('packages/core/src/ui/QrDisplay.module.css', 'utf8');
+            expect(receiveCss).toMatch(/\.receiveQrDisplay\s*\{[^}]*--xc-qr-frame-size:\s*20rem;/);
+            expect(qrDisplayCss).toMatch(/\.frame\s*\{[^}]*width:\s*100%;[^}]*max-width:\s*var\(--xc-qr-frame-size\);/);
+            expect(receiveCss).toMatch(/\.qrActions\s*\{[^}]*margin-top:\s*0;/);
             expect(PHONE_QR_CARD_PX).toBeLessThan(360 - 2 * 16);
         } finally {
             if (widthDescriptor) Object.defineProperty(window, 'innerWidth', widthDescriptor);
@@ -218,7 +219,7 @@ describe('Receive QR copy and share toasts', () => {
         const user = userEvent.setup();
         renderReceive();
         const amount = await screen.findByRole('textbox', { name: 'Amount (BTC)' });
-        const token = await screen.findByRole('button', { name: /^Token:/ });
+        const token = await screen.findByRole('button', { name: /^Change asset/ });
         token.focus();
 
         await user.tab();
@@ -230,7 +231,7 @@ describe('Receive QR copy and share toasts', () => {
         expect(screen.getByRole('form', { name: 'Receive payment' })).toBeInTheDocument();
         expect(showToast).not.toHaveBeenCalled();
         await user.tab();
-        expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Switch input to USD' }));
+        expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Paste from clipboard' }));
     });
 
     it('adds and edits the label of the receive address shown', async () => {
@@ -256,6 +257,41 @@ describe('Receive QR copy and share toasts', () => {
         expect(setAddressLabel).toHaveBeenCalledTimes(2);
     });
 
+    it('offers the newest unused address and marks used addresses in the picker', async () => {
+        const unused = {
+            ...ADDRESS,
+            id: 'a1-unused',
+            address: 'bcrt1qunused',
+            label: 'Unused deposits',
+            derivationPath: "m/84'/0'/0'/0/4",
+        };
+        const used = {
+            ...ADDRESS,
+            id: 'a1-used',
+            address: 'bcrt1qused',
+            label: 'Used deposits',
+            derivationPath: "m/84'/0'/0'/0/5",
+        };
+        const getAddressHistory = vi.fn(async ({ chainId, address }) => {
+            expect(chainId).toBe('bitcoin-regtest');
+            return address === used.address ? [{ action_index: 1 }] : [];
+        });
+        renderReceive({
+            getAddressesByChain: async () => ({ 'bitcoin-regtest': [unused, used] }),
+            getNewestAddress: async () => used,
+            getAddressHistory,
+            getWalletBalances: async () => ({}),
+        });
+
+        await waitFor(() => expect(screen.getByDisplayValue(unused.address)).toBeInTheDocument());
+        expect(getAddressHistory).toHaveBeenCalledTimes(2);
+
+        fireEvent.click(screen.getByRole('button', { name: 'Choose receive address' }));
+        expect(await screen.findByText('Used')).toBeInTheDocument();
+        expect(screen.getByText('Used deposits')).toBeInTheDocument();
+        expect(screen.getByText('Unused deposits')).toBeInTheDocument();
+    });
+
     it('renders a four-module quiet zone at the measured device-pixel width', async () => {
         const originalResizeObserver = globalThis.ResizeObserver;
         const originalDevicePixelRatio = window.devicePixelRatio;
@@ -274,6 +310,7 @@ describe('Receive QR copy and share toasts', () => {
             await waitFor(() => expect(qrToDataURL).toHaveBeenCalledWith(
                 expect.any(String),
                 expect.objectContaining({
+                    errorCorrectionLevel: 'M',
                     margin: 4,
                     width: 800,
                     color: { dark: '#0F172A', light: '#FFFFFF' },
@@ -552,7 +589,7 @@ describe('Receive address handling', () => {
             </MessagingProvider>,
         );
 
-        expect(await screen.findByRole('button', { name: /Token:.*PEPE/i })).toBeInTheDocument();
+        expect(await screen.findByRole('button', { name: /Change asset \(currently PEPE on /i })).toBeInTheDocument();
         await waitFor(() => expect(qrToDataURL.mock.calls.some(
             ([value]) => value.includes('tick=PEPE'),
         )).toBe(true));

@@ -28,7 +28,7 @@ function historyRow(actionIndex, tick, source, secondsAgo) {
     };
 }
 
-function mountHistory() {
+function mountHistory(extraProps = {}) {
     const rows = {
         [LTC]: [
             historyRow(1, 'ALPHA', LTC_ADDRESS, 30),
@@ -53,7 +53,7 @@ function mountHistory() {
     const view = render(
         <MessagingProvider shell="web" messaging={messaging}>
             <ToastHost>
-                <History walletId="keyboard-wallet" accountId="a1" onBack={vi.fn()} />
+                <History walletId="keyboard-wallet" accountId="a1" onBack={vi.fn()} {...extraProps} />
             </ToastHost>
         </MessagingProvider>,
     );
@@ -81,6 +81,23 @@ afterEach(() => {
 });
 
 describe('History keyboard operation', () => {
+    it('marks rows that open the detail page as links, not disclosures', async () => {
+        const onSelectEntry = vi.fn();
+        const view = mountHistory({ onSelectEntry });
+        const rows = await rowButtons(view);
+
+        // Home's Activity rows carry no chevron and no expanded state; the
+        // same rows in History open the same detail page.
+        for (const row of rows) {
+            expect(row).not.toHaveAttribute('aria-expanded');
+            // The trailing cell, where the expand chevron sat, is empty.
+            expect(row.lastElementChild.childElementCount).toBe(0);
+        }
+        fireEvent.click(rows[0]);
+        expect(onSelectEntry).toHaveBeenCalledTimes(1);
+        expect(rows[0]).not.toHaveAttribute('aria-expanded');
+    });
+
     it('exposes a reachable list and moves between rows with arrow keys', async () => {
         const view = mountHistory();
         const rows = await rowButtons(view);
@@ -106,7 +123,7 @@ describe('History keyboard operation', () => {
         // jsdom needs the click that a browser synthesizes after Enter.
         fireEvent.keyDown(row, { key: 'Enter' });
         fireEvent.click(row);
-        expect(await screen.findByRole('region', { name: 'Action detail' }))
+        expect(await screen.findByRole('region', { name: 'Transaction details' }))
             .toBeInTheDocument();
         expect(row).toHaveAttribute('aria-expanded', 'true');
 
@@ -119,7 +136,7 @@ describe('History keyboard operation', () => {
         }
 
         await waitFor(() => {
-            expect(screen.queryByRole('region', { name: 'Action detail' })).toBeNull();
+            expect(screen.queryByRole('region', { name: 'Transaction details' })).toBeNull();
             expect(row).toHaveFocus();
         });
     });
@@ -128,12 +145,12 @@ describe('History keyboard operation', () => {
         const view = mountHistory();
         await rowButtons(view);
 
-        const disclosure = screen.getByRole('button', { name: 'Additional details' });
+        const disclosure = screen.getByRole('button', { name: 'More filters' });
         disclosure.focus();
         fireEvent.keyDown(disclosure, { key: 'Enter' });
         fireEvent.click(disclosure);
 
-        const chainTrigger = screen.getByRole('button', { name: 'All chains' });
+        const chainTrigger = screen.getByRole('button', { name: 'All networks' });
         chainTrigger.focus();
         fireEvent.keyDown(chainTrigger, { key: 'ArrowDown' });
         const chainOptions = await screen.findAllByRole('option');

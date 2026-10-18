@@ -9,14 +9,16 @@
 // contact legal@dankest.llc.
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { AddressField, Button, ChainBadge, EmptyState, FormPage, Icon, Input, ListPage, ListRow, PageHeader, Screen, SectionHeader, Select, Skeleton, StatusMessage, Textarea } from '@xchain-wallet/core/ui';
+import { AddressField, AddressText, Button, ChainBadge, EmptyState, FormPage, Icon, Input, ListPage, ListRow, PageHeader, Screen, SectionHeader, Select, Skeleton, StatusMessage, Textarea } from '@xchain-wallet/core/ui';
 import { registry as registryLib } from '@xchain-wallet/core';
 import { useFocusTrap } from '../utils/focusTrap.js';
 import { useBackHandler } from '../../ui/backStack.js';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { useToast } from '../components/ToastHost.jsx';
+import { ListToolbar } from '../components/ListToolbar.jsx';
 import { NETWORK_OPTIONS, NetworkFilterDropdown } from '../components/NetworkFilterDropdown.jsx';
 import { ConfirmModal } from '../components/ConfirmModal.jsx';
+import { IdentityAvatar } from '../components/WalletIdentity.jsx';
 import { useConfirmModal } from '../hooks/useConfirmModal.js';
 import { useFormLeaveGuard } from '../hooks/useFormLeaveGuard.js';
 import { isValidAddressAnyNetwork, detectAddressChain } from '../utils/addressValidation.js';
@@ -31,7 +33,6 @@ import {
     findContactByName,
     mergeContactGroup,
 } from '../utils/contactMerge.js';
-import styles from './IssueTokenForm.module.css';
 import picker from './ContactsList.module.css';
 
 const chainRegistry = registryLib.defaultRegistry();
@@ -60,16 +61,13 @@ function persistContactsSort(walletId, value) {
 }
 
 /**
- * Chain badge for a contact entry. The address selects the network kind so
- * testnet rows say testnet instead of relying on the coin artwork alone.
- * Unknown formats keep the question-mark fallback.
+ * Chain icon for a contact entry. The address selects the matching descriptor,
+ * while unknown formats keep the question-mark fallback.
  */
 function ChainCoinIcon({ chain, address }) {
     const chainId = chainIdFor(chain, address);
     const descriptor = chainId ? chainRegistry.get(chainId) : null;
     if (descriptor) return <ChainBadge descriptor={descriptor} size="sm" />;
-    const opt = NETWORK_OPTIONS.find((n) => n.value === chain);
-    if (opt) return <span>{opt.label}</span>;
     return (
         <span className={picker.unknownIcon} aria-label="Unknown network" title="Unknown network">?</span>
     );
@@ -590,6 +588,7 @@ export function ContactsList({ walletId, onSend, onSendMessage, onBack, scanPref
 
     const header = (
         <PageHeader
+            nested={mode !== 'list'}
             onBack={() => {
                 if (mode !== 'list') {
                     if (mode === 'edit') leaveGuard.guardedOnBack();
@@ -603,27 +602,44 @@ export function ContactsList({ walletId, onSend, onSendMessage, onBack, scanPref
                 : mode === 'detail' ? 'View Contact' : 'Contacts'}
             titleIcon={
                 mode === 'list' ? <Icon.UsersIcon />
-                    : mode === 'detail' ? <Icon.UserIcon />
+                    : mode === 'detail' && active ? (
+                        <IdentityAvatar
+                            name={active.name}
+                            seed={active.avatarSeed || active.id}
+                            context="header"
+                        />
+                    )
                     : (mode === 'edit' && active) ? <Icon.PencilIcon />
                     : (mode === 'edit' && !active) ? <Icon.PlusIcon />
                     : undefined
             }
-            trailing={mode === 'list' ? (
-                <Button
-                    type="button"
-                    className={picker.addButton}
-                    onClick={() => { setActiveId(null); startEdit(null); }}
-                    aria-label="Add contact"
-                    title="Add contact"
-                >
-                    <Icon.PlusIcon />
-                </Button>
-            ) : null}
         />
     );
+    // The page header holds only the title and Back, so Add contact sits in
+    // the list's actions row. An empty list offers Create first contact from
+    // its EmptyState instead, so the screen never shows the action twice.
+    const listActions = (emptyOffersCreate = false) => (mode === 'list' && !emptyOffersCreate ? (
+        <Button
+            type="button"
+            variant="secondary"
+            icon={<Icon.PlusIcon />}
+            onClick={() => { setActiveId(null); startEdit(null); }}
+        >
+            Add contact
+        </Button>
+    ) : null);
 
+    // The list keeps its own offset: a contact or the edit form swaps into
+    // this same Screen, and with one key the short detail view clamped the
+    // list offset to its own height, so Back returned to the top. Those
+    // views open at the top.
     const wrap = (children) => (
-        <Screen variant={variant} header={header}>
+        <Screen
+            variant={variant}
+            header={header}
+            scrollKey={mode === 'list' ? 'list' : mode}
+            restoreScroll={mode === 'list'}
+        >
             {children}
             {confirmDialog.request ? (
                 <ConfirmModal
@@ -638,33 +654,40 @@ export function ContactsList({ walletId, onSend, onSendMessage, onBack, scanPref
 
     if (loadError) {
         return wrap(
-            <StatusMessage
-                variant="error"
-                className={styles.error}
-                recovery={{
-                    label: 'Try again',
-                    onAction: () => {
-                        setContacts(null);
-                        return loadContacts();
-                    },
-                }}
-            >
-                {loadError}
-            </StatusMessage>,
+            <ListPage
+                notices={(
+                    <StatusMessage
+                        variant="error"
+                        recovery={{
+                            label: 'Try again',
+                            onAction: () => {
+                                setContacts(null);
+                                return loadContacts();
+                            },
+                        }}
+                    >
+                        {loadError}
+                    </StatusMessage>
+                )}
+                actions={listActions()}
+            />,
         );
     }
 
     if (contacts === null) {
         return wrap(
-            <div role="status" aria-label="Loading contacts">
-                <Skeleton.List rows={5} />
-            </div>,
+            <ListPage actions={listActions()}>
+                <div role="status" aria-label="Loading contacts">
+                    <Skeleton.List rows={5} />
+                </div>
+            </ListPage>,
         );
     }
 
     if (mode === 'scan') {
         return (
             <ScanRoute
+                nested
                 onBack={() => { setScanFromEdit(false); setMode(scanFromEdit ? 'edit' : 'list'); }}
                 onClassified={handleScanned}
                 chainRegistry={chainRegistry}
@@ -682,7 +705,7 @@ export function ContactsList({ walletId, onSend, onSendMessage, onBack, scanPref
                 label="New contact"
                 onSubmit={handleSave}
                 status={submitError ? (
-                    <StatusMessage variant="error" className={styles.error}>{submitError}</StatusMessage>
+                    <StatusMessage variant="error">{submitError}</StatusMessage>
                 ) : null}
                 actions={(
                     <Button type="submit" variant="primary" loading={submitting}>
@@ -693,6 +716,7 @@ export function ContactsList({ walletId, onSend, onSendMessage, onBack, scanPref
                 <Input label="Name" value={formName} onChange={(e) => setFormName(e.target.value)} />
                 <AddressField
                     label="Address"
+                    paste
                     value={entry0.address}
                     onChange={(e) => {
                         const address = e.target.value;
@@ -726,7 +750,7 @@ export function ContactsList({ walletId, onSend, onSendMessage, onBack, scanPref
                 label="Edit contact"
                 onSubmit={handleSave}
                 status={submitError ? (
-                    <StatusMessage variant="error" className={styles.error}>{submitError}</StatusMessage>
+                    <StatusMessage variant="error">{submitError}</StatusMessage>
                 ) : null}
                 actions={(
                     <Button type="submit" variant="primary" loading={submitting}>
@@ -766,8 +790,17 @@ export function ContactsList({ walletId, onSend, onSendMessage, onBack, scanPref
             <ListPage>
                 {notice ? <StatusMessage variant="success">{notice}</StatusMessage> : null}
                 <div className={picker.infoCard}>
-                    <div style={{ fontSize: 'var(--xc-text-sm)', color: 'var(--xc-text-muted)', fontWeight: 700, marginBottom: '0.25rem' }}>Name</div>
-                    <div style={{ fontSize: 'var(--xc-text-lg)', fontWeight: 600 }}>{active.name}</div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--xc-space-3)' }}>
+                        <IdentityAvatar
+                            name={active.name}
+                            seed={active.avatarSeed || active.id}
+                            context="hero"
+                        />
+                        <div style={{ minWidth: 0 }}>
+                            <div style={{ fontSize: 'var(--xc-text-sm)', color: 'var(--xc-text-muted)', fontWeight: 700, marginBottom: '0.25rem' }}>Name</div>
+                            <div style={{ fontSize: 'var(--xc-text-lg)', fontWeight: 600, overflowWrap: 'anywhere' }}>{active.name}</div>
+                        </div>
+                    </div>
                     {active.notes ? (
                         <>
                             <div style={{ fontSize: 'var(--xc-text-sm)', color: 'var(--xc-text-muted)', fontWeight: 700, margin: '0.75rem 0 0.25rem' }}>Notes</div>
@@ -841,7 +874,7 @@ export function ContactsList({ walletId, onSend, onSendMessage, onBack, scanPref
                                         onClick={() => runAction(addrPicker, e)}
                                     >
                                         <ChainCoinIcon chain={resolvedChain(e)} address={e.address} />
-                                        <span className={picker.addressText} title={e.address}>{e.address}</span>
+                                        <AddressText address={e.address} className={picker.addressText} />
                                         {e.label ? <span style={{ color: 'var(--xc-fg-muted)', marginLeft: '0.25rem' }}>({e.label})</span> : null}
                                     </Button>
                                 </li>
@@ -870,7 +903,7 @@ export function ContactsList({ walletId, onSend, onSendMessage, onBack, scanPref
                         return (
                             <li key={i} className={picker.addressCard}>
                                 <ChainCoinIcon chain={resolvedChain(e)} address={e.address} />
-                                <span className={picker.addressText} title={e.address}>{e.address}</span>
+                                <AddressText address={e.address} className={picker.addressText} />
                                 {e.label ? <span style={{ color: 'var(--xc-fg-muted)', marginLeft: '0.25rem' }}>({e.label})</span> : null}
                                 <Button
                                     type="button"
@@ -901,8 +934,10 @@ export function ContactsList({ walletId, onSend, onSendMessage, onBack, scanPref
                             <div id="xc-contact-add-address-title" className={picker.modalTitle}>Add address</div>
                             <AddressField
                                 label="Address"
+                                paste
                                 value={addAddrValue}
                                 onChange={(ev) => { setAddAddrValue(ev.target.value); setAddAddrChain(null); setAddAddrError(null); }}
+                                error={addAddrError}
                                 placeholder=""
                                 autoFocus
                                 autoComplete="off"
@@ -913,11 +948,8 @@ export function ContactsList({ walletId, onSend, onSendMessage, onBack, scanPref
                                 onPick={(chain) => { setAddAddrChain(chain); setAddAddrError(null); }}
                                 style={{ marginBottom: 'var(--xc-space-2)' }}
                             />
-                            {addAddrError ? (
-                                <p role="alert" className={styles.error} style={{ marginTop: '0.25rem' }}>{addAddrError}</p>
-                            ) : null}
                             <div className={picker.modalActions}>
-                                <Button type="button" variant="ghost" onClick={() => setAddAddrOpen(false)}>Cancel</Button>
+                                <Button type="button" variant="secondary" onClick={() => setAddAddrOpen(false)}>Cancel</Button>
                                 <Button type="button" variant="primary" loading={addAddrSaving} onClick={handleAddAddress}>Add</Button>
                             </div>
                         </div>
@@ -930,24 +962,50 @@ export function ContactsList({ walletId, onSend, onSendMessage, onBack, scanPref
     // mode === 'list'
     return wrap(
         <ListPage
-            toolbar={(
+            notices={(
                 <>
-                <div className={picker.search}>
-                    <Input
-                        type="search"
-                        enterKeyHint="search"
-                        autoCapitalize="off"
-                        placeholder="Search"
-                        value={query}
-                        onChange={(e) => setQuery(e.target.value)}
-                        autoComplete="off"
-                        autoCorrect="off"
-                        spellCheck={false}
-                        aria-label="Search contacts"
+                    {duplicateGroups.length > 0 ? (
+                        <StatusMessage
+                            id="contacts-duplicate-names"
+                            recovery={{ label: merging ? 'Merging…' : 'Merge', onAction: handleMergeDuplicates }}
+                        >
+                            {duplicateGroups.length === 1
+                                ? `${duplicateGroups[0].length} contacts are named ${duplicateGroups[0][0].name}.`
+                                : `${duplicateGroups.length} names are used by more than one contact.`}
+                            {' '}Merge them into one contact per person, with all of their addresses.
+                        </StatusMessage>
+                    ) : null}
+                    {unpublished > 0 && !nudgeDismissed && contacts.length > 0 ? (
+                        <StatusMessage
+                            id="contacts-publish-nudge"
+                            recovery={typeof onOpenBackup === 'function'
+                                ? { label: 'Open Backup', onAction: onOpenBackup }
+                                : { label: 'Dismiss', onAction: () => setNudgeDismissed(true) }}
+                        >
+                            {unpublished === 1
+                                ? 'One contact change is only on this device.'
+                                : `${unpublished} contact changes are only on this device.`}
+                            {' '}Publish labels on-chain from Settings &gt; Backup so restoring from your seed brings them back.
+                            {typeof onOpenBackup === 'function' ? (
+                                <>
+                                    {' '}
+                                    <Button type="button" variant="link" size="sm" icon={null} onClick={() => setNudgeDismissed(true)}>
+                                        Not now
+                                    </Button>
+                                </>
+                            ) : null}
+                        </StatusMessage>
+                    ) : null}
+                </>
+            )}
+            actions={listActions(contacts.length === 0)}
+            toolbar={(
+                <ListToolbar query={query} onQueryChange={setQuery} searchLabel="Search contacts">
+                    <NetworkFilterDropdown
+                        value={networkFilter}
+                        onChange={setNetworkFilter}
+                        announceNetworkCount
                     />
-                </div>
-                <NetworkFilterDropdown value={networkFilter} onChange={setNetworkFilter} />
-                <div className={picker.sort}>
                     <Select
                         value={sortBy}
                         onChange={(e) => {
@@ -962,42 +1020,9 @@ export function ContactsList({ walletId, onSend, onSendMessage, onBack, scanPref
                         {/* Native options remain because Select renders a native listbox. */}
                         <option value="newest">Newest</option>
                     </Select>
-                </div>
-                </>
+                </ListToolbar>
             )}
         >
-            {duplicateGroups.length > 0 ? (
-                <StatusMessage
-                    id="contacts-duplicate-names"
-                    recovery={{ label: merging ? 'Merging…' : 'Merge', onAction: handleMergeDuplicates }}
-                >
-                    {duplicateGroups.length === 1
-                        ? `${duplicateGroups[0].length} contacts are named ${duplicateGroups[0][0].name}.`
-                        : `${duplicateGroups.length} names are used by more than one contact.`}
-                    {' '}Merge them into one contact per person, with all of their addresses.
-                </StatusMessage>
-            ) : null}
-            {unpublished > 0 && !nudgeDismissed && contacts.length > 0 ? (
-                <StatusMessage
-                    id="contacts-publish-nudge"
-                    recovery={typeof onOpenBackup === 'function'
-                        ? { label: 'Open Backup', onAction: onOpenBackup }
-                        : { label: 'Dismiss', onAction: () => setNudgeDismissed(true) }}
-                >
-                    {unpublished === 1
-                        ? 'One contact change is only on this device.'
-                        : `${unpublished} contact changes are only on this device.`}
-                    {' '}Publish labels on-chain from Settings &gt; Backup so restoring from your seed brings them back.
-                    {typeof onOpenBackup === 'function' ? (
-                        <>
-                            {' '}
-                            <Button type="button" className={picker.linkButton} onClick={() => setNudgeDismissed(true)}>
-                                Not now
-                            </Button>
-                        </>
-                    ) : null}
-                </StatusMessage>
-            ) : null}
             {contacts.length === 0 ? (
                 <EmptyState
                     title="No contacts yet"
@@ -1033,6 +1058,13 @@ export function ContactsList({ walletId, onSend, onSendMessage, onBack, scanPref
                                     className={picker.row}
                                     onClick={() => { setActiveId(c.id); setMode('detail'); }}
                                     aria-label={c.name}
+                                    leading={(
+                                        <IdentityAvatar
+                                            name={c.name}
+                                            seed={c.avatarSeed || c.id}
+                                            context="list"
+                                        />
+                                    )}
                                     title={<span className={picker.rowName}>{c.name}</span>}
                                     trailing={(
                                         <span className={picker.rowChains}>

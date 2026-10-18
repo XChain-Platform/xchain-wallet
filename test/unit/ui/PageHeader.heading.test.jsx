@@ -14,8 +14,18 @@
 import { readFileSync } from 'node:fs';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { parse } from '@babel/parser';
+import _traverse from '@babel/traverse';
+import { Button } from '../../../packages/core/src/ui/Button.jsx';
 import { PageHeader } from '../../../packages/core/src/ui/PageHeader.jsx';
 import { Screen } from '../../../packages/core/src/ui/Screen.jsx';
+import * as Icons from '../../../packages/core/src/ui/icons/index.jsx';
+
+const traverse = _traverse.default || _traverse;
+const sharedSources = import.meta.glob(
+    '../../../packages/core/src/shared/**/*.jsx',
+    { query: '?raw', import: 'default', eager: true },
+);
 
 const pageHeaderCss = readFileSync('packages/core/src/ui/PageHeader.module.css', 'utf8');
 const screenCss = readFileSync('packages/core/src/ui/Screen.module.css', 'utf8');
@@ -24,6 +34,45 @@ const tokensCss = readFileSync('packages/core/src/ui/tokens.css', 'utf8');
 function rule(css, selector) {
     const escaped = selector.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
     return css.match(new RegExp(`${escaped}\\s*\\{([^}]+)\\}`))?.[1] || '';
+}
+
+function jsxName(node) {
+    if (!node) return '';
+    if (node.type === 'JSXIdentifier') return node.name;
+    if (node.type === 'JSXMemberExpression') return `${jsxName(node.object)}.${jsxName(node.property)}`;
+    return '';
+}
+
+function findNode(node, predicate) {
+    if (!node || typeof node !== 'object') return null;
+    if (predicate(node)) return node;
+    for (const [key, value] of Object.entries(node)) {
+        if (['loc', 'start', 'end'].includes(key)) continue;
+        if (Array.isArray(value)) {
+            for (const child of value) {
+                const found = findNode(child, predicate);
+                if (found) return found;
+            }
+        } else {
+            const found = findNode(value, predicate);
+            if (found) return found;
+        }
+    }
+    return null;
+}
+
+function findNodes(node, predicate, matches = []) {
+    if (!node || typeof node !== 'object') return matches;
+    if (predicate(node)) matches.push(node);
+    for (const [key, value] of Object.entries(node)) {
+        if (['loc', 'start', 'end'].includes(key)) continue;
+        if (Array.isArray(value)) {
+            for (const child of value) findNodes(child, predicate, matches);
+        } else {
+            findNodes(value, predicate, matches);
+        }
+    }
+    return matches;
 }
 
 afterEach(() => cleanup());
@@ -68,19 +117,157 @@ describe('PageHeader', () => {
         expect(onBack).not.toHaveBeenCalled();
     });
 
-    it('wraps a long title in a shrinkable lane between fixed actions at 320px', () => {
+    it('wraps a long title to two lines between mirrored fixed actions at every width', () => {
         const header = rule(pageHeaderCss, '.header');
+        const back = rule(pageHeaderCss, '.back');
         const title = rule(pageHeaderCss, '.title');
         const trailingButton = rule(pageHeaderCss, '.trailing button:not([role="menuitem"])');
 
-        expect(header).toMatch(/--xc-page-header-side:\s*38px/);
+        expect(header).toMatch(/--xc-page-header-side:\s*var\(--xc-control-h-md\)/);
         expect(header).toMatch(
             /grid-template-columns:\s*var\(--xc-page-header-side\)\s+minmax\(0,\s*1fr\)\s+var\(--xc-page-header-side\)/,
         );
+        expect(back).toMatch(/width:\s*var\(--xc-page-header-side\)/);
+        expect(back).toMatch(/height:\s*var\(--xc-page-header-side\)/);
+        expect(back).toMatch(/padding:\s*0/);
+        expect(back).toMatch(/border-radius:\s*var\(--xc-control-radius\)/);
         expect(title).toMatch(/overflow-wrap:\s*anywhere/);
         expect(title).toMatch(/white-space:\s*normal/);
-        expect(title).not.toMatch(/text-overflow:\s*ellipsis/);
-        expect(trailingButton).toMatch(/width:\s*var\(--xc-page-header-side\)/);
+        expect(title).toMatch(/-webkit-line-clamp:\s*2/);
+        expect(title).toMatch(/overflow:\s*hidden/);
+        expect(trailingButton).toMatch(/width:\s*var\(--xc-control-h-sm\)/);
+        expect(trailingButton).toMatch(/height:\s*var\(--xc-control-h-sm\)/);
+        expect(trailingButton).toMatch(/border-radius:\s*var\(--xc-control-radius\)/);
+        expect(trailingButton).toMatch(/--xc-icon-size:\s*var\(--xc-icon-md\)/);
+        expect(pageHeaderCss).not.toMatch(/@media/);
+    });
+
+    it('keeps every shared screen on the back row and renders a non-zero trailing action icon', () => {
+        let headerCount = 0;
+        const handRolledBackRows = [];
+        const invalidTrailingActions = [];
+        const pageHeaderActions = [];
+
+        for (const [file, source] of Object.entries(sharedSources)) {
+            const ast = parse(source, { sourceType: 'module', plugins: ['jsx'] });
+            traverse(ast, {
+                JSXElement(path) {
+                    const opening = path.node.openingElement;
+                    const name = jsxName(opening.name);
+                    if (['div', 'header'].includes(name)) {
+                        const className = opening.attributes.find(
+                            (attribute) => attribute.type === 'JSXAttribute'
+                                && attribute.name.name === 'className',
+                        );
+                        const usesHeaderClass = findNode(
+                            className?.value,
+                            (node) => node.type === 'MemberExpression'
+                                && node.property?.name === 'header',
+                        );
+                        const containsBackIcon = findNode(
+                            path.node.children,
+                            (node) => node.type === 'JSXOpeningElement'
+                                && jsxName(node.name).endsWith('BackIcon'),
+                        );
+                        if (usesHeaderClass && containsBackIcon) handRolledBackRows.push(file);
+                    }
+                    if (name !== 'PageHeader') return;
+                    headerCount += 1;
+                    const trailing = opening.attributes.find(
+                        (attribute) => attribute.type === 'JSXAttribute'
+                            && attribute.name.name === 'trailing',
+                    );
+                    if (!trailing) return;
+                    const actions = findNodes(
+                        trailing.value,
+                        (node) => node.type === 'JSXElement'
+                            && jsxName(node.openingElement.name) === 'Button',
+                    ).filter((action) => !action.openingElement.attributes.some(
+                        (attribute) => attribute.type === 'JSXAttribute'
+                            && attribute.name.name === 'role'
+                            && attribute.value?.value === 'menuitem',
+                    ));
+                    if (actions.length === 0) {
+                        invalidTrailingActions.push(file);
+                        return;
+                    }
+                    for (const action of actions) {
+                        const attributes = action.openingElement.attributes || [];
+                        const iconAttribute = attributes.find(
+                            (attribute) => attribute.type === 'JSXAttribute'
+                                && attribute.name.name === 'icon',
+                        );
+                        const hasLabel = attributes.some(
+                            (attribute) => attribute.type === 'JSXAttribute'
+                                && attribute.name.name === 'aria-label',
+                        );
+                        const propIconNode = findNode(
+                            iconAttribute?.value,
+                            (node) => node.type === 'JSXOpeningElement'
+                                && jsxName(node.name).startsWith('Icon.'),
+                        );
+                        const childIconNode = findNode(
+                            action.children,
+                            (node) => node.type === 'JSXOpeningElement'
+                                && jsxName(node.name).startsWith('Icon.'),
+                        );
+                        const iconNode = propIconNode || childIconNode;
+                        if (!hasLabel || !iconNode) {
+                            invalidTrailingActions.push(file);
+                            continue;
+                        }
+                        pageHeaderActions.push({
+                            file,
+                            iconName: jsxName(iconNode.name).slice(5),
+                            iconMode: propIconNode
+                                ? 'prop'
+                                : iconAttribute ? 'null-prop-child' : 'child',
+                        });
+                    }
+                },
+            });
+        }
+
+        expect(headerCount).toBeGreaterThan(90);
+        expect(handRolledBackRows).toEqual([]);
+        expect(invalidTrailingActions).toEqual([]);
+        expect(pageHeaderActions.length).toBeGreaterThan(0);
+
+        for (const { file, iconName, iconMode } of pageHeaderActions) {
+            const ActionIcon = Icons[iconName];
+            expect(ActionIcon, `${file} must use an exported icon`).toBeTypeOf('function');
+            const action = iconMode === 'prop' ? (
+                <Button icon={<ActionIcon />} aria-label={`Action from ${file}`} />
+            ) : (
+                <Button
+                    {...(iconMode === 'null-prop-child' ? { icon: null } : {})}
+                    aria-label={`Action from ${file}`}
+                >
+                    <ActionIcon />
+                </Button>
+            );
+            const view = render(
+                <PageHeader
+                    title="Action inventory"
+                    trailing={action}
+                />,
+            );
+            const svg = screen.getByRole('button', { name: `Action from ${file}` })
+                .querySelector('svg[data-xc-icon]');
+            expect(Number(svg?.getAttribute('width'))).toBeGreaterThan(0);
+            expect(Number(svg?.getAttribute('height'))).toBeGreaterThan(0);
+            view.unmount();
+        }
+
+        const trailingButton = rule(pageHeaderCss, '.trailing button:not([role="menuitem"])');
+        const trailingIcon = rule(
+            pageHeaderCss,
+            '.trailing button:not([role="menuitem"]) svg[data-xc-icon]',
+        );
+        expect(trailingButton).toMatch(/padding:\s*0/);
+        expect(trailingButton).toMatch(/gap:\s*0/);
+        expect(trailingIcon).toMatch(/min-width:\s*var\(--xc-icon-size\)/);
+        expect(trailingIcon).toMatch(/flex:\s*0 0 var\(--xc-icon-size\)/);
     });
 });
 
@@ -115,6 +302,7 @@ describe('Screen layout', () => {
         expect(scrollBody).toMatch(/min-height:\s*0/);
         expect(scrollBody).toMatch(/overflow-y:\s*auto/);
         expect(scrollBody).toMatch(/overflow-x:\s*hidden/);
-        expect(scrollBody).toMatch(/scrollbar-gutter:\s*stable/);
+        // Safari 16 lacks scrollbar-gutter, so the reservation sits behind @supports.
+        expect(screenCss).toMatch(/@supports \(scrollbar-gutter: stable\)\s*\{\s*\.body\s*\{[^}]*scrollbar-gutter:\s*stable/s);
     });
 });

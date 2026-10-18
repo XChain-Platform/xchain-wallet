@@ -12,6 +12,7 @@ import React from 'react';
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
 import { History } from '../../../packages/core/src/shared/routes/History.jsx';
 import historyStyles from '../../../packages/core/src/shared/routes/History.module.css';
+import buttonStyles from '../../../packages/core/src/ui/Button.module.css';
 import { userEvent } from '../../helpers/userEvent.js';
 
 const CHAIN = 'litecoin-regtest';
@@ -143,28 +144,42 @@ describe('History export button', () => {
         expect(screen.queryByText('There are no history rows to export.')).toBeNull();
     });
 
-    it('stacks the rendered footer and reserves the bottom bar at 360px', async () => {
+    it('keeps the kit controls together in a standard-height wrapping toolbar at 360px', async () => {
         const widthDescriptor = Object.getOwnPropertyDescriptor(window, 'innerWidth');
         Object.defineProperty(window, 'innerWidth', { configurable: true, value: 360 });
 
         try {
             mountHistory([historyRow()]);
             const trigger = await screen.findByRole('button', { name: 'Export…' });
-            const footer = trigger.closest(`.${historyStyles.resultsHeader}`);
-            const exportControls = trigger.closest(`.${historyStyles.exportControls}`);
+            const additionalDetails = screen.getByRole('button', { name: 'More filters' });
+            const showFiat = screen.getByRole('button', { name: 'Show fiat: Off' });
+            const grouping = screen.getByRole('radiogroup', { name: 'Grouping mode' });
+            const toolbar = additionalDetails.parentElement;
             const phone = mediaBlock(historyCss, 'not all and (min-width: 480px)');
 
             expect(window.innerWidth).toBe(360);
-            expect(footer).not.toBeNull();
-            expect(exportControls).not.toBeNull();
-            expect(ruleBody(phone, '.resultsHeader')).toMatch(
-                /flex-direction:\s*column[\s\S]*align-items:\s*stretch/,
+            expect(toolbar).not.toBeNull();
+            expect(additionalDetails.parentElement).toBe(toolbar);
+            expect(showFiat.parentElement).toBe(toolbar);
+            expect(grouping.parentElement).toBe(toolbar);
+            // Export sits in the page actions row beside Refresh, outside the
+            // foldable filter card, so it stays reachable while the filters
+            // are folded.
+            expect(trigger.parentElement).toHaveAttribute('data-xc-page-actions');
+            expect(trigger.closest('#history-filter-panel')).toBeNull();
+            expect(trigger.closest(`.${historyStyles.filterFooter}`)).toBeNull();
+            for (const control of [additionalDetails, showFiat, grouping, trigger]) {
+                expect(control).toHaveClass(historyStyles.toolbarControl);
+            }
+            expect(additionalDetails).toHaveAttribute('aria-pressed', 'false');
+            expect(showFiat).toHaveAttribute('aria-pressed', 'false');
+            expect(trigger).toHaveClass(buttonStyles.secondary);
+            expect(ruleBody(historyCss, '.filterFooter')).toMatch(
+                /display:\s*flex[\s\S]*flex-wrap:\s*wrap/,
             );
-            expect(ruleBody(phone, '.exportControls')).toMatch(
-                /flex-direction:\s*column[\s\S]*align-items:\s*stretch/,
+            expect(ruleBody(historyCss, '.toolbarControl')).toMatch(
+                /flex:\s*0 0 auto[\s\S]*height:\s*var\(--xc-control-h-md\)[\s\S]*min-height:\s*var\(--xc-control-h-md\)/,
             );
-            // The export trigger is a kit Button; the stretched column above
-            // gives it the full row width on a phone.
             expect(ruleBody(phone, '.body')).toMatch(
                 /padding-bottom:\s*calc\(3\.5rem \+ env\(safe-area-inset-bottom, 0px\)\)/,
             );
@@ -225,7 +240,7 @@ describe('large History export', () => {
         vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => {});
         vi.stubGlobal('Blob', NodeBlob);
         fireEvent.click(screen.getByRole('button', { name: 'Export…' }));
-        fireEvent.click(screen.getByLabelText(/^JSON/));
+        fireEvent.click(screen.getByRole('radio', { name: /^JSON/ }));
         fireEvent.click(screen.getByRole('button', { name: 'Export' }));
         await act(async () => { await vi.advanceTimersByTimeAsync(100); });
 

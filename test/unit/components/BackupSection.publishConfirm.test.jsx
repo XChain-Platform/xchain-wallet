@@ -89,7 +89,7 @@ describe('BackupSection label publication confirmation', () => {
         const messaging = mount();
 
         fireEvent.click(screen.getByRole('button', { name: 'Publish now…' }));
-        await screen.findByLabelText('Publish chain');
+        await screen.findByLabelText('Publish network');
         expect(screen.getByText(/labels \+ contacts are encrypted/i).textContent)
             .toMatch(/stored on the blockchain[\s\S]*seed can decrypt them/);
         const action = screen.getByRole('button', { name: 'Publish' });
@@ -160,6 +160,46 @@ describe('BackupSection label publication confirmation', () => {
 
         expect(await screen.findByText('compose failed')).toBeTruthy();
         expect(screen.getByLabelText('Wallet password')).toHaveValue('');
+    });
+
+    // The confirm-time tamper check refuses with its own sentence and a
+    // TAMPER_DETECTED code; the generic filter treats the code as developer
+    // output, so the form must use the shared submit wording to show it.
+    it('shows the confirm refusal sentence when the composed transaction fails its check', async () => {
+        const messaging = mount({
+            composeForConfirm: vi.fn(async () => {
+                throw Object.assign(
+                    new Error('The action encoded in the transaction does not match what you approved.'),
+                    { name: 'TamperDetectedError', code: 'TAMPER_DETECTED' },
+                );
+            }),
+        });
+
+        fireEvent.click(screen.getByRole('button', { name: 'Publish now…' }));
+        fireEvent.change(await screen.findByLabelText('Wallet password'), { target: { value: 'secret' } });
+        fireEvent.click(screen.getByRole('button', { name: 'Publish' }));
+
+        expect(await screen.findByText(
+            'The action encoded in the transaction does not match what you approved. Nothing was signed.',
+        )).toBeTruthy();
+        expect(screen.queryByText('Failed to publish labels.')).toBeNull();
+        expect(messaging.preflight).not.toHaveBeenCalled();
+        expect(messaging.publishLabelsRequest).not.toHaveBeenCalled();
+    });
+
+    it('keeps the plain fallback for a developer-only compose failure', async () => {
+        mount({
+            composeForConfirm: vi.fn(async () => {
+                throw new TypeError("Cannot read properties of undefined (reading 'inflateRawSync')");
+            }),
+        });
+
+        fireEvent.click(screen.getByRole('button', { name: 'Publish now…' }));
+        fireEvent.change(await screen.findByLabelText('Wallet password'), { target: { value: 'secret' } });
+        fireEvent.click(screen.getByRole('button', { name: 'Publish' }));
+
+        expect(await screen.findByText('Failed to publish labels.')).toBeTruthy();
+        expect(document.body.textContent).not.toMatch(/inflateRawSync/);
     });
 
     it('says the password is wrong when preparing the labels fails its seed decrypt', async () => {
@@ -282,7 +322,8 @@ describe('AboutSection copy confirmation', () => {
             const button = screen.getByRole('button', { name: 'Copy diagnostics' });
             fireEvent.click(button);
 
-            expect(await screen.findByRole('status')).toHaveTextContent(/^Copied/);
+            // The message row leads with its (aria-hidden) tone icon.
+            expect(await screen.findByRole('status')).toHaveTextContent(/^\W*Copied/);
             expect(writeText).toHaveBeenCalledOnce();
             expect(button).toHaveTextContent('Copied');
             act(() => vi.advanceTimersByTime(1501));

@@ -51,6 +51,12 @@ function visibleTerminologyIn(source) {
             if (path.parent.type === 'ObjectProperty'
                 && path.parent.key.type === 'Identifier'
                 && path.parent.key.name === 'keywords') return;
+            // Settings search rows carry their invisible alias terms as the second
+            // argument of row(); legacy words stay searchable there.
+            if (path.parent.type === 'CallExpression'
+                && path.parent.callee.type === 'Identifier'
+                && path.parent.callee.name === 'row'
+                && path.parent.arguments[1] === path.node) return;
             record(path.node, path.node.value);
         },
         JSXText(path) { record(path.node, path.node.value); },

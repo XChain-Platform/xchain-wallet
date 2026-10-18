@@ -4,21 +4,6 @@
     font-size: var(--xc-text-sm);
 }
 
-/* Inline filter toolbar: free-text search + the All/Coins/Tokens segments,
-   docked directly above the balance card. The toolbar and the balance card
-   are siblings in the same padded container, so they share the same width;
-   the search field shrinks (min-width:0) to keep search + segments on one
-   line within that shared right edge, even in the Chrome popup. */
-.toolbar {
-    display: flex;
-    flex-direction: row;
-    align-items: center;
-    gap: var(--xc-space-2);
-    width: 100%;
-    margin-bottom: var(--xc-space-3);
-    flex-wrap: nowrap;
-}
-
 .kindSegments {
     display: flex;
     flex: 0 0 auto;

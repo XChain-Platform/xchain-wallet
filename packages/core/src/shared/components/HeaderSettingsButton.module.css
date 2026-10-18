@@ -1,4 +1,7 @@
 .wrap {
+    /* raw-color-ok: a fixed 10% accent tint, since Chrome 102 cannot mix colors in CSS. */
+    --header-accent-bg-subtle: rgba(26, 123, 172, 0.10);
+
     position: relative;
     flex: 0 0 auto;
     display: inline-flex;
@@ -6,77 +9,21 @@
     gap: var(--xc-space-1);
 }
 
-/* The badge keeps its full text width; when the header is short of room
-   the logo side gives way, never the network name. */
-.networkBadge {
-    flex: 0 0 auto;
-    white-space: nowrap;
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    min-height: 24px;
-    padding: 2px 7px;
-    border: 1px solid var(--xc-border-strong);
-    border-radius: var(--xc-radius-pill);
-    color: var(--xc-text-muted);
-    background: var(--xc-surface);
-    font-size: var(--xc-text-xs);
-    font-weight: 700;
-    line-height: 1;
-}
-
-.networkBadgeNonMainnet {
-    color: var(--xc-accent-primary);
-    border-color: var(--xc-accent-primary);
-    background: color-mix(in srgb, var(--xc-accent-primary) 10%, var(--xc-surface));
-}
-
-.networkBadgeDot {
-    display: none;
-    width: 8px;
-    height: 8px;
-    border-radius: 50%;
-    background: currentColor;
-}
-
-/* Phones narrower than about 430px cannot fit the logo, the full badge
-   and the header buttons in one row, so below the 480px compact-controls
-   point on the documented scale the badge drops to a dot and
-   keeps the name for assistive tech (the badge's aria-label and title
-   carry it too). A viewport query rather than a container query because
-   Android WebView 102 predates container queries, and this header only
-   renders in the full-window web and mobile shells. */
-@media not all and (min-width: 480px) {
-    .networkBadge {
-        min-width: 24px;
-        padding: 2px 0;
-    }
-
-    .networkBadgeDot {
-        display: inline-block;
-    }
-
-    .networkBadgeText {
-        position: absolute;
-        width: 1px;
-        height: 1px;
-        padding: 0;
-        margin: -1px;
-        overflow: hidden;
-        clip: rect(0, 0, 0, 0);
-        white-space: nowrap;
-        border: 0;
-    }
-}
-
 .trigger {
     display: inline-flex;
+}
+
+.trigger > button {
+    width: var(--xc-control-h-md);
+    height: var(--xc-control-h-md);
+    border-radius: var(--xc-control-radius);
+    --xc-icon-size: var(--xc-control-icon-md, var(--xc-icon-md));
 }
 
 .trigger > button[data-active='true'] {
     color: var(--xc-accent-text);
     border-color: var(--xc-accent-primary);
-    background: color-mix(in srgb, var(--xc-accent-primary) 10%, transparent);
+    background: var(--header-accent-bg-subtle);
 }
 
 .dot {
@@ -98,7 +45,7 @@
     inset-inline-end: 0;
     z-index: var(--xc-z-dropdown);
     width: 320px;
-    max-width: calc(100vw - 24px);
+    max-width: calc(100vw - (2 * var(--xc-space-3)));
     background: var(--xc-surface);
     border: 1px solid var(--xc-border-strong);
     border-radius: var(--xc-radius-lg);
@@ -124,16 +71,10 @@
     color: var(--xc-text-muted);
 }
 
+/* Height, padding, border, surface and chevron come from the shared
+   dropdown rule in tokens.css. */
 .networkSelect {
     width: 100%;
-    min-height: 36px;
-    padding: var(--xc-space-1) var(--xc-space-2);
-    border: 1px solid var(--xc-border);
-    border-radius: var(--xc-radius-sm);
-    color: var(--xc-text);
-    background: var(--xc-bg);
-    font: inherit;
-    font-size: var(--xc-text-sm);
 }
 
 .empty {
@@ -144,11 +85,6 @@
 }
 
 /* ───── Account section ───── */
-
-.accountName {
-    font-weight: 600;
-    font-size: var(--xc-text-sm);
-}
 
 .walletName {
     flex: 1 1 auto;
@@ -166,6 +102,7 @@
     border: 1px solid var(--xc-border);
     border-radius: var(--xc-radius-md);
     width: 100%;
+    min-height: var(--xc-control-h-md);
     display: flex;
     align-items: center;
     gap: var(--xc-space-2);
@@ -203,4 +140,8 @@
     flex: 0 0 auto;
     color: var(--xc-text-muted);
     font-size: var(--xc-text-sm);
+}
+
+:global(html[dir='rtl']) .summaryChevron {
+    transform: scaleX(-1);
 }

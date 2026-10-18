@@ -3,28 +3,36 @@
    alignment rationale. */
 
 .header {
-    --xc-page-header-side: 38px;
+    --xc-page-header-side: var(--xc-control-h-md);
     display: grid;
     grid-template-columns: var(--xc-page-header-side) minmax(0, 1fr) var(--xc-page-header-side);
     align-items: center;
     gap: var(--xc-space-2);
     width: 100%;
+    /* Holds the row at the Back control's height (a small Button) when Back
+       is hidden on a top-level destination, so the header is the same height
+       whether Back shows or not. The side lane token is the larger trailing
+       control size and would make a Back-less header taller. */
+    min-height: var(--xc-control-h-sm);
 }
 
 .back {
-    --xc-icon-size: var(--xc-icon-xl);
+    --xc-icon-size: var(--xc-icon-md);
     justify-self: start;
+    width: var(--xc-page-header-side);
+    height: var(--xc-page-header-side);
+    min-width: var(--xc-page-header-side);
+    /* The header side token resolves to this global size; naming it here
+       keeps the stated tap floor readable outside the header scope. */
+    min-height: var(--xc-control-h-md);
     background: transparent;
     border: none;
     color: var(--xc-accent-text);
     font-size: var(--xc-text-sm);
     cursor: pointer;
-    padding: var(--xc-space-1) var(--xc-space-2) var(--xc-space-1) 0;
-    border-radius: var(--xc-radius-sm);
+    padding: 0;
+    border-radius: var(--xc-control-radius);
     transition: color 0.12s ease;
-    /* State the WCAG 2.2 AA 2.5.8 pointer-target floor instead of
-       inheriting it from whichever line box the platform font produces. */
-    min-height: var(--xc-tap-min);
     display: inline-flex;
     align-items: center;
     justify-content: center;
@@ -54,23 +62,30 @@
     overflow: hidden;
 }
 
+/* The icon is the first inline item of the title, so a title that wraps keeps
+   it beside the first line instead of floating at the edge of the group. */
 .titleIcon {
     --xc-icon-size: var(--xc-icon-md);
     display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    width: var(--xc-icon-lg);
-    height: var(--xc-icon-lg);
+    vertical-align: middle;
+    width: max-content;
+    height: max-content;
+    margin-inline-end: var(--xc-space-2);
     color: var(--xc-accent-text);
-    flex: 0 0 auto;
 }
 
 .title {
     margin: 0;
+    line-height: 1.25;
     font-size: var(--xc-type-page-title-size);
     font-weight: var(--xc-type-page-title-weight);
     color: var(--xc-text);
     text-align: center;
+    display: -webkit-box;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 2;
+    line-clamp: 2;
+    overflow: hidden;
     overflow-wrap: anywhere;
     white-space: normal;
     min-width: 0;
@@ -84,21 +99,25 @@
     gap: var(--xc-space-2);
 }
 
-/* Trailing action buttons read as circles, the round counterpart to the
-   AppHeader's square menu buttons. Same 38px footprint as .menuBtn up in
-   AppHeader, so a Page-header action sits directly under an App-header
-   button with edges aligned; only the border-radius differs. */
+/* Trailing actions take the Back control's size (a small Button) so a
+   screen with an action keeps the same header height as one without. The
+   lanes stay at the side token, so the title keeps its width and centre.
+   The grid aligns each box to the content edge while it centres its icon. */
 /* Excludes [role="menuitem"]: a trailing action may open a dropdown
    whose item buttons also live inside this slot (AddressList's + menu);
-   those are full-width rows, not 38px circles. */
+   those are full-width rows, not icon controls. */
 .trailing button:not([role="menuitem"]) {
+    --xc-icon-size: var(--xc-icon-md);
     appearance: none;
-    width: var(--xc-page-header-side);
-    height: var(--xc-page-header-side);
-    min-width: var(--xc-tap-min);
-    min-height: var(--xc-tap-min);
-    border-radius: 50%;
+    position: relative;
+    width: var(--xc-control-h-sm);
+    height: var(--xc-control-h-sm);
+    min-width: var(--xc-control-h-sm);
+    min-height: var(--xc-control-h-sm);
+    border-radius: var(--xc-control-radius);
     border: 1px solid var(--xc-border-strong);
+    padding: 0;
+    gap: 0;
     background: transparent;
     display: inline-flex;
     align-items: center;
@@ -106,6 +125,26 @@
     color: var(--xc-text);
     cursor: pointer;
     flex: 0 0 auto;
+}
+
+/* The hit target stays at the touch floor: --xc-control-hit-min is 44px on
+   touch screens, larger than the box, and smaller than the box on pointer
+   screens, where the area is just the button. Offsetting by half the
+   shortfall centres it in both writing directions, as Button.sm does. */
+.trailing button:not([role="menuitem"])::before {
+    content: '';
+    position: absolute;
+    inset-block-start: min(0px, calc(50% - var(--xc-control-hit-min, 24px) / 2));
+    inset-inline-start: min(0px, calc(50% - var(--xc-control-hit-min, 24px) / 2));
+    width: max(100%, var(--xc-control-hit-min, 24px));
+    height: max(100%, var(--xc-control-hit-min, 24px));
+}
+
+.trailing button:not([role="menuitem"]) svg[data-xc-icon] {
+    width: var(--xc-icon-size);
+    height: var(--xc-icon-size);
+    min-width: var(--xc-icon-size);
+    flex: 0 0 var(--xc-icon-size);
 }
 
 .trailing button:not([role="menuitem"]):hover {

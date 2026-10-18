@@ -152,6 +152,28 @@ describe('PSBT sign screen: a paste that cannot be read', () => {
         expect(text).not.toMatch(/Invalid Magic Number/);
     });
 
+    it('puts the error directly under the paste box with Clear as a link action inside it', async () => {
+        const utils = await mountAndPaste({
+            parsePsbtRequest: () => Promise.reject(new Error('Format Error: Invalid Magic Number')),
+        });
+        const textarea = utils.getByLabelText(/Unsigned transaction/i);
+        await domAct(async () => {
+            fireEvent.change(textarea, { target: { value: 'not a transaction' } });
+            await drainMicrotasks();
+        });
+        const note = utils.container.querySelector('[data-testid="psbt-sign-paste-error"]');
+        expect(note).toBeTruthy();
+        const clear = Array.from(note.querySelectorAll('button')).find((b) => /^Clear$/.test(b.textContent));
+        expect(clear).toBeTruthy();
+        const browse = findButton(utils, /Browse for \.psbt file/);
+        // Document order: textarea, then the error, then the Browse and Scan buttons.
+        expect(textarea.compareDocumentPosition(note) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+        expect(note.compareDocumentPosition(browse) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+        await domAct(async () => { fireEvent.click(clear); await drainMicrotasks(); });
+        expect(textarea.value).toBe('');
+        expect(utils.container.querySelector('[data-testid="psbt-sign-paste-error"]')).toBeNull();
+    });
+
     it('hides the SDK capability error', async () => {
         const utils = await mountAndPaste({
             parsePsbtRequest: () => Promise.reject(new Error('psbt.parse: SDK for "xcp-mainnet" lacks wallet.decomposePsbt')),

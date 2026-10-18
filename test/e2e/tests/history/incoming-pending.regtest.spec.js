@@ -80,7 +80,6 @@ import {
     pendingRowFor,
     pickAssetByChainAndTick,
     PINNED_SDK,
-    readOwnAddress,
     SDK_HAS_UNCONFIRMED,
     searchForTx,
     waitForMempoolRow,
@@ -91,6 +90,7 @@ import {
     fundAddress,
     minerRpc,
     mintXchain,
+    readReceiveAddress,
     REGTEST_CHAIN_ID,
     REGTEST_CHAIN_LABEL,
     REGTEST_COIN,
@@ -183,7 +183,7 @@ async function payTheSubject(browser, page, { beforePayment } = {}) {
     await test.step('onboard the SUBJECT wallet, which will only ever receive', async () => {
         await createWallet(page, { password: PASSWORD });
         await switchToRegtest(page, PASSWORD);
-        subject = await readOwnAddress(page);
+        subject = await readReceiveAddress(page);
         expect(subject, 'the subject wallet named no address to be paid at').toBeTruthy();
         // The notification specs change a setting on the subject BEFORE anyone
         // pays it, so the rail is measured against the setting the user had,
@@ -197,7 +197,7 @@ async function payTheSubject(browser, page, { beforePayment } = {}) {
         await createWallet(payer.page, { password: PASSWORD });
         await switchToRegtest(payer.page, PASSWORD);
 
-        const payerAddress = await readOwnAddress(payer.page);
+        const payerAddress = await readReceiveAddress(payer.page);
         // Two wallets that turned out to be one wallet would make every claim
         // below true by accident, and the failure would read as a pass.
         expect(payerAddress, 'the payer and the subject are the same address, so nothing below '

@@ -35,7 +35,9 @@ assert.ok(/sdk\.getLinks\(address, 'address', opts\)/.test(queriesSrc),
 
 // 2. History.jsx calls the query (via the messaging shim) and builds
 //    the peer-cache side metadata.
-const historySrc = read('packages/core/src/shared/routes/History.jsx');
+const historySrc = ['History', 'HistoryDetailCard', 'HistoryEntryRow', 'HistoryShared']
+    .map((n) => read(`packages/core/src/shared/routes/${n}.jsx`))
+    .join('\n');
 assert.ok(/messaging\.getLinksForAddress\(/.test(historySrc),
     'History calls messaging.getLinksForAddress (which routes to flows.linksForAddress in the host)');
 

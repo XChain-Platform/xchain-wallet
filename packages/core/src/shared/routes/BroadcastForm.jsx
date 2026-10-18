@@ -8,13 +8,15 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
+import { t } from '../../i18n/index.js';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { AddressField, AddressText, Button, ChainBadge, CopyButton, FeeSelector, FormPage, Icon, Input, NetworkField, PageHeader, Screen, StatusMessage, Textarea } from '@xchain-wallet/core/ui';
+import { AddressField, AddressText, Button, ChainBadge, ChainPicker, CopyButton, FeeSelector, FormNotice, FormPage, Input, PageHeader, RadioGroup, Screen, StatusMessage, Switch, Textarea } from '@xchain-wallet/core/ui';
 import {
     registry as registryLib,
     decoder as decoderLib,
 } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
+import { useDemoGuard } from '../hooks/useDemoGuard.jsx';
 import { useActionConfirmFlow, isUserRejection } from '../hooks/useActionConfirmFlow.js';
 import { ActionConfirmScreen } from '../components/ActionConfirmScreen.jsx';
 import { LockedTokenContext } from '../components/LockedTokenContext.jsx';
@@ -93,11 +95,11 @@ function rawTransactionMismatch(decoded, descriptor) {
     const types = new Set((descriptor.addressTypes || []).map(String));
     const hasTaproot = decoded.outputs.some((output) => scriptType(output.scriptPubKeyHex) === 'Taproot');
     if (hasTaproot && !types.has('p2tr')) {
-        return `This transaction contains a Taproot output, which ${descriptor.displayName} does not support here. Pick the network that created the transaction.`;
+        return 'This transaction contains a Taproot output that the active network does not support. Pick the network that created the transaction.';
     }
     const hasSegwit = decoded.outputs.some((output) => scriptType(output.scriptPubKeyHex) === 'SegWit');
     if (hasSegwit && !types.has('p2wpkh')) {
-        return `This transaction contains a SegWit output, which ${descriptor.displayName} does not support here. Pick the network that created the transaction.`;
+        return 'This transaction contains a SegWit output that the active network does not support. Pick the network that created the transaction.';
     }
     return null;
 }
@@ -131,32 +133,21 @@ function rawBroadcastFailure(err) {
 
 function BroadcastKindPicker({ value, onChange }) {
     return (
-        <fieldset className={styles.pickerLabel}>
-            <legend>What do you want to broadcast?</legend>
-            <label className={styles.radioOption}>
-                <input
-                    type="radio"
-                    name="broadcast-kind"
-                    checked={value === 'message'}
-                    onChange={() => onChange('message')}
-                />
-                Publish on-chain data
-            </label>
-            <label className={styles.radioOption}>
-                <input
-                    type="radio"
-                    name="broadcast-kind"
-                    checked={value === 'transaction'}
-                    onChange={() => onChange('transaction')}
-                />
-                Signed transaction
-            </label>
-        </fieldset>
+        <RadioGroup
+            legend="What do you want to broadcast?"
+            name="broadcast-kind"
+            value={value}
+            onChange={(nextValue) => onChange(nextValue)}
+            options={[
+                { value: 'message', label: 'Publish on-chain data' },
+                { value: 'transaction', label: 'Signed transaction' },
+            ]}
+        />
     );
 }
 
 function RawTransactionBroadcast({
-    walletId, chainId, setChainId, messaging, onKindChange, onBusyChange, onDone,
+    walletId, chainId, setChainId, messaging, onKindChange, onBusyChange, onDone, demoGuard,
 }) {
     const { settings } = useSettings();
     const [raw, setRaw] = useState('');
@@ -235,7 +226,6 @@ function RawTransactionBroadcast({
                 </div>
                 {txid ? (
                     <>
-                        <p><ChainBadge descriptor={descriptor} /></p>
                         <p className={styles.successLabel}>Transaction ID</p>
                         <code className={styles.txid}>{txid}</code>
                         <CopyButton value={txid} label="Copy transaction ID" />
@@ -266,10 +256,11 @@ function RawTransactionBroadcast({
     if (state === 'preview' || state === 'submitting') {
         return (
             <FormPage
+                demoGuard={demoGuard}
                 label="Review signed transaction"
                 onSubmit={broadcast}
                 status={error || mismatch ? (
-                    <StatusMessage variant="error" className={styles.error}>{error || mismatch}</StatusMessage>
+                    <StatusMessage variant="error">{error || mismatch}</StatusMessage>
                 ) : null}
                 actions={(
                     <>
@@ -287,7 +278,7 @@ function RawTransactionBroadcast({
                     </>
                 )}
             >
-                <ChainBadge descriptor={descriptor} size="sm" />
+                <ChainBadge descriptor={descriptor} size="sm" showName={false} />
                 <p>
                     This signed transaction spends {preview.decoded.inputs.length} input{preview.decoded.inputs.length === 1 ? '' : 's'}
                     {' '}and creates {preview.decoded.outputs.length} output{preview.decoded.outputs.length === 1 ? '' : 's'}.
@@ -306,7 +297,7 @@ function RawTransactionBroadcast({
                     />
                 </dl>
                 <p className={styles.hint}>
-                    Raw transaction data does not identify mainnet, testnet, or regtest. Confirm that the selected network is the one that created it.
+                    Raw transaction data does not identify its network. Confirm that the selected network is the one that created it.
                 </p>
                 {broadcastTime.showElapsed ? (
                     <p role="status" className={styles.hint} data-testid="raw-broadcast-elapsed">
@@ -314,9 +305,9 @@ function RawTransactionBroadcast({
                     </p>
                 ) : null}
                 {broadcastTime.timedOut ? (
-                    <StatusMessage variant="error" className={styles.error}>
+                    <FormNotice variant="error">
                         The relay has not responded. Check History or a block explorer before trying again. Closing this screen does not cancel a transaction the relay already received.
-                    </StatusMessage>
+                    </FormNotice>
                 ) : null}
             </FormPage>
         );
@@ -324,13 +315,14 @@ function RawTransactionBroadcast({
 
     return (
         <FormPage
+            demoGuard={demoGuard}
             label="Broadcast signed transaction"
             onSubmit={review}
-            status={error ? <StatusMessage variant="error" className={styles.error}>{error}</StatusMessage> : null}
+            status={error ? <StatusMessage variant="error">{error}</StatusMessage> : null}
             actions={<Button type="submit" variant="primary">Preview transaction</Button>}
         >
             <BroadcastKindPicker value="transaction" onChange={onKindChange} />
-            <NetworkField value={chainId} onChange={setChainId} chainIds={chainIds} chainRegistry={chainRegistry} />
+            <ChainPicker label="Network" value={chainId} onChange={setChainId} chainIds={chainIds} chainRegistry={chainRegistry} hideNetworkKind />
             <Textarea
                 label="Signed transaction hex"
                 hint="Spaces and line breaks are ignored. Only complete hexadecimal bytes are accepted."
@@ -381,6 +373,7 @@ function RawTransactionBroadcast({
  */
 export function BroadcastForm({ walletId, onBack, onDone, initialChainId, initialTick, initialFromAddress }) {
     const { messaging, shell } = useMessaging();
+    const demoGuard = useDemoGuard(walletId, { onBack });
     const { settings } = useSettings();
     const signerReady = useSignerReady(walletId);
     const variant = screenVariantFor(shell);
@@ -440,7 +433,7 @@ export function BroadcastForm({ walletId, onBack, onDone, initialChainId, initia
                 const first = Object.keys(byChain)[0];
                 if (!first) {
                     setLoadError(
-                        'No addresses on any chain yet. Use Receive to generate one before broadcasting.',
+                        'No addresses on any network yet. Use Receive to generate one before broadcasting.',
                     );
                     return;
                 }
@@ -782,7 +775,7 @@ export function BroadcastForm({ walletId, onBack, onDone, initialChainId, initia
         />
     );
     const wrap = (children) => (
-        <Screen variant={variant} header={header}>
+        <Screen variant={variant} header={header} restoreScroll={!(stage === 'review' || stage === 'submitting')}>
             {children}
         </Screen>
     );
@@ -791,6 +784,7 @@ export function BroadcastForm({ walletId, onBack, onDone, initialChainId, initia
         return wrap(
             <RawTransactionBroadcast
                 walletId={walletId}
+                demoGuard={demoGuard}
                 chainId={chainId}
                 setChainId={setChainId}
                 messaging={messaging}
@@ -806,7 +800,7 @@ export function BroadcastForm({ walletId, onBack, onDone, initialChainId, initia
                 {!lockedToken ? (
                     <BroadcastKindPicker value={broadcastKind} onChange={setBroadcastKind} />
                 ) : null}
-                <StatusMessage variant="error" className={styles.error}>{loadError}</StatusMessage>
+                <StatusMessage variant="error">{loadError}</StatusMessage>
             </>,
         );
     }
@@ -850,7 +844,6 @@ export function BroadcastForm({ walletId, onBack, onDone, initialChainId, initia
                 </div>
                 {txid ? (
                     <>
-                        <p><ChainBadge descriptor={descriptor} /></p>
                         <p className={styles.successLabel}>Transaction ID</p>
                         <code className={styles.txid}>{txid}</code>
                         <CopyButton value={txid} label="Copy transaction ID" />
@@ -874,10 +867,11 @@ export function BroadcastForm({ walletId, onBack, onDone, initialChainId, initia
     if (stage === 'review' || stage === 'submitting') {
         return wrap(
             <FormPage
+                demoGuard={demoGuard}
                 label="Review broadcast"
                 onSubmit={handleSubmit}
                 status={(isWatcherMode || isHwSource) && submitError ? (
-                    <StatusMessage variant="error" className={styles.error}>{submitError}</StatusMessage>
+                    <StatusMessage variant="error">{submitError}</StatusMessage>
                 ) : null}
                 actions={(
                     <Button
@@ -896,16 +890,12 @@ export function BroadcastForm({ walletId, onBack, onDone, initialChainId, initia
                             ? 'Create unsigned transaction'
                             : isHwSource
                                 ? `Sign on ${fromAddress.source === 'trezor' ? 'Trezor' : 'Ledger'}`
-                                : (descriptor ? `Sign on ${descriptor.displayName}` : 'Sign')}
+                                : 'Sign'}
                     </Button>
                 )}
             >
                 <p className={styles.summary}>{decoded?.summary}</p>
                 <dl className={styles.detailsList}>
-                    <dt className={styles.detailsLabel}>Chain</dt>
-                    <dd className={styles.detailsValue}>
-                        {descriptor ? <ChainBadge descriptor={descriptor} size="sm" /> : chainId}
-                    </dd>
                     <dt className={styles.detailsLabel}>From</dt>
                     <dd className={styles.detailsValue}>
                         <AddressText address={fromAddress.address} />
@@ -921,11 +911,7 @@ export function BroadcastForm({ walletId, onBack, onDone, initialChainId, initia
                     />
                 </dl>
                 {decoded && decoded.warnings.length > 0 ? (
-                    <div role="alert" className={styles.warnings}>
-                        {decoded.warnings.map((w, i) => (
-                            <p key={i} className={styles.warning}>{w}</p>
-                        ))}
-                    </div>
+                    <FormNotice variant="warning" role="alert" lines={decoded.warnings} />
                 ) : null}
                 {isWatcherMode ? (
                     <p className={styles.hint}>
@@ -962,7 +948,6 @@ export function BroadcastForm({ walletId, onBack, onDone, initialChainId, initia
             <ActionConfirmScreen
                 confirmAction={actionConfirm.confirmAction}
                 screenVariant={variant}
-                chainLabel={descriptor?.displayName || chainId}
                 feeText={feeEstimate?.coinAmount
                     ? `Network fee: ${feeEstimate.coinAmount} ${coinTicker}`.trim()
                     : undefined}
@@ -1000,10 +985,11 @@ export function BroadcastForm({ walletId, onBack, onDone, initialChainId, initia
 
     return wrap(
         <FormPage
+            demoGuard={demoGuard}
             label="Broadcast"
             onSubmit={handleReview}
             status={formError ? (
-                <StatusMessage variant="error" className={styles.error}>{formError}</StatusMessage>
+                <StatusMessage variant="error">{formError}</StatusMessage>
             ) : null}
             actions={(
                 <Button
@@ -1026,7 +1012,7 @@ export function BroadcastForm({ walletId, onBack, onDone, initialChainId, initia
                 <LockedTokenContext chainId={chainId} tick={initialTick.toUpperCase()} />
             ) : (
                 <>
-                    <NetworkField value={chainId} onChange={setChainId} chainIds={chainsWithAddresses.length ? chainsWithAddresses : (chainId ? [chainId] : [])} chainRegistry={chainRegistry} />
+                    <ChainPicker label="Network" value={chainId} onChange={setChainId} chainIds={chainsWithAddresses.length ? chainsWithAddresses : (chainId ? [chainId] : [])} chainRegistry={chainRegistry} hideNetworkKind />
                 </>
             )}
 
@@ -1041,9 +1027,9 @@ export function BroadcastForm({ walletId, onBack, onDone, initialChainId, initia
                     iconLabel="Choose source address"
                 />
             ) : (
-                <StatusMessage variant="error" className={styles.error}>
-                    No address on this chain. Use Receive to generate one first.
-                </StatusMessage>
+                <FormNotice variant="error">
+                    {t('send.source.noAddress')}
+                </FormNotice>
             )}
 
             <Input
@@ -1083,14 +1069,11 @@ export function BroadcastForm({ walletId, onBack, onDone, initialChainId, initia
                 onChange={(e) => setFeedFee(e.target.value)}
                 autoComplete="off"
             />
-            <label className={styles.pickerLabel}>
-                <input
-                    type="checkbox"
-                    checked={includeTimestamp}
-                    onChange={(e) => setIncludeTimestamp(e.target.checked)}
-                />
-                {' '}Prepend UTC timestamp to memo
-            </label>
+            <Switch
+                label="Prepend UTC timestamp to memo"
+                checked={includeTimestamp}
+                onChange={(e) => setIncludeTimestamp(e.target.checked)}
+            />
 
             {feeTiers ? (
                 <FeeSelector

@@ -134,6 +134,28 @@ describe('settings -> root attributes', () => {
             delete globalThis.Capacitor;
         }
     });
+
+    it.each([
+        [true, '#0B0F17', 'DARK'],
+        [false, '#FFFFFF', 'LIGHT'],
+    ])('follows the OS theme for native chrome when dark mode is %s', (matches, color, style) => {
+        const themeColor = document.createElement('meta');
+        themeColor.setAttribute('name', 'theme-color');
+        document.head.append(themeColor);
+        const setStyle = vi.fn(() => Promise.resolve());
+        vi.stubGlobal('matchMedia', vi.fn(() => ({ matches })));
+        globalThis.Capacitor = { Plugins: { SystemBars: { setStyle } } };
+
+        try {
+            applySettingsRootAttributes({ theme: 'system' });
+            expect(themeColor.getAttribute('content')).toBe(color);
+            expect(setStyle).toHaveBeenLastCalledWith({ style });
+        } finally {
+            vi.unstubAllGlobals();
+            themeColor.remove();
+            delete globalThis.Capacitor;
+        }
+    });
 });
 
 describe('reduced motion resolution', () => {
@@ -177,10 +199,13 @@ describe('LearnNote', () => {
         expect(note).not.toHaveAttribute('role');
         expect(body.textContent.match(/[.!?](?=\s|$)/g)).toHaveLength(1);
         expect(note.textContent).toContain(expected);
-        expect(screen.getByRole('link', { name: 'Learn more' })).toHaveAttribute(
+        const learnMore = screen.getByRole('link', { name: 'Learn more' });
+        expect(learnMore).toHaveAttribute(
             'href',
-            'https://docs.xchain.io/',
+            'https://docs.xchain.io/components/wallet/security#sign-screen-safety-rails',
         );
+        expect(learnMore).toHaveAttribute('target', '_blank');
+        expect(learnMore).toHaveAttribute('rel', 'noopener noreferrer');
     });
 
     it('keeps each dismissed confirmation note hidden after remounting', () => {

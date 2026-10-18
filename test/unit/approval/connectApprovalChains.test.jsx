@@ -60,7 +60,7 @@ afterEach(() => {
     shim.resolveApproval = async () => ({ approved: true });
 });
 
-describe('ConnectApproval chain checklist', () => {
+describe('ConnectApproval network checklist', () => {
     it('shows the host ending before the full origin and safely labels the dApp name', () => {
         const longOrigin = 'https://wallet.example.com.login.account.security.attacker.test';
         const { container } = render(
@@ -79,15 +79,17 @@ describe('ConnectApproval chain checklist', () => {
         expect(text.indexOf('security.attacker.test')).toBeLessThan(text.indexOf(longOrigin));
         expect(screen.getByTestId('request-origin-host-ending').textContent)
             .toBe('security.attacker.test');
+        expect(screen.getByTestId('request-origin-registrable-domain').textContent)
+            .toBe('attacker.test');
         expect(screen.getByTestId('request-origin-full').textContent).toBe(longOrigin);
         expect(screen.getByText('XChain Wallet␦security')).toBeTruthy();
         expect(screen.queryByText('XChain Wallet\u202Esecurity')).toBeNull();
-        expect(screen.getByText('The site calls itself')).toBeTruthy();
+        expect(screen.getByText('Site-provided name')).toBeTruthy();
         expect(screen.getByText('Requesting site')).toBeTruthy();
         expect(screen.queryByText('Verified site')).toBeNull();
         expect(screen.getByText(/Only connect if you recognize and trust this site/))
             .toHaveTextContent(
-                'Only connect if you recognize and trust this site. It can view the accounts and chains you select.',
+                'Only connect if you recognize and trust this site. It can view the accounts and networks you select.',
             );
     });
 
@@ -108,13 +110,34 @@ describe('ConnectApproval chain checklist', () => {
         expect(screen.queryByText('https://safe.test\u202E.example')).toBeNull();
     });
 
-    it('lists the granted capabilities and only offers chains the site requested', () => {
+    it('renders dApp origin titles containing markup as text in the approval', () => {
+        const origin = '<img src=x onerror="globalThis.originExecuted = true">';
+        const appName = '<script>globalThis.appNameExecuted = true</script>';
+        const { container } = render(
+            <ConnectApproval
+                id="markup-identity"
+                payload={{ origin, appName, requestedChains: [bundled.id] }}
+                onReject={() => {}}
+            />,
+        );
+
+        expect(screen.getByTestId('request-origin-full')).toHaveTextContent(origin);
+        expect(screen.getByText(appName)).toBeInTheDocument();
+        expect(container.querySelector('script')).toBeNull();
+        expect(container.querySelector('img[src="x"]')).toBeNull();
+        expect(globalThis.originExecuted).toBeUndefined();
+        expect(globalThis.appNameExecuted).toBeUndefined();
+    });
+
+    it('lists the granted capabilities and only offers networks the site requested', () => {
         mount([bundled.id]);
 
         const permissions = screen.getByRole('region', { name: 'Requested permissions' });
         expect(permissions.textContent).toContain('addresses and balances');
-        expect(permissions.textContent).toContain('only the chains you select');
+        expect(permissions.textContent).toContain('only the networks you select');
         expect(permissions.textContent).toContain('before signing any message or transaction');
+        expect(permissions.textContent).toContain('only if you choose');
+        expect(permissions.textContent).toContain('Revoke it anytime in Connected sites');
         expect(screen.getByLabelText(label(bundled))).toBeTruthy();
         expect(screen.queryByLabelText(label(notRequested))).toBeNull();
         expect(screen.queryByRole('checkbox', { name: /message signatures/i })).toBeNull();
@@ -138,7 +161,7 @@ describe('ConnectApproval chain checklist', () => {
         expect(onReject).toHaveBeenCalledTimes(1);
     });
 
-    it('offers and pre-selects a user-added chain that arrives with the settings read', async () => {
+    it('offers and pre-selects a user-added network that arrives with the settings read', async () => {
         const added = custom('operator-connect', 'Operator Connect');
         shim.getSettings = async () => ({ customChains: [added] });
 
@@ -150,7 +173,7 @@ describe('ConnectApproval chain checklist', () => {
         expect(defaultRegistry().has(added.id)).toBe(true);
     });
 
-    it('still renders the bundled chains when the settings read fails on a locked vault', async () => {
+    it('still renders the bundled networks when the settings read fails on a locked vault', async () => {
         shim.getSettings = async () => { throw new Error('vault is locked'); };
 
         mount([bundled.id]);
@@ -159,7 +182,7 @@ describe('ConnectApproval chain checklist', () => {
         expect(box.checked).toBe(true);
     });
 
-    it('leaves a chain the user unchecked unchecked when hydration lands after it', async () => {
+    it('leaves a network the user unchecked unchecked when hydration lands after it', async () => {
         const added = custom('operator-connect-late', 'Operator Late');
         let release = () => {};
         shim.getSettings = () => new Promise((resolve) => {
@@ -212,6 +235,7 @@ describe('ConnectApproval account checklist', () => {
         shim.resolveApproval = async (_id, decision) => { submitted.push(decision); return { approved: true }; };
         mountWithAccounts(ACCOUNTS);
 
+        expect(screen.getByText('Account 1')).toBeVisible();
         expect(screen.getByLabelText('Share Account 1').checked).toBe(true);
         expect(screen.getByLabelText('Share Account 2').checked).toBe(false);
 

@@ -17,7 +17,7 @@
 // coin.
 
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
 import { HomeTabs } from '../../../packages/core/src/shared/components/HomeTabs.jsx';
 import { TotalBalanceHero } from '../../../packages/core/src/shared/components/TotalBalanceHero.jsx';
@@ -26,6 +26,7 @@ import {
     configureFiatRateSource,
     _resetPriceLookupForTests,
 } from '../../../packages/core/src/flows/priceLookup.js';
+import { walletBalances } from '../../../packages/core/src/flows/balances.js';
 import { clearDemoWalletId, markDemoWallet } from '../../../packages/core/src/flows/demoMode.js';
 
 const NOW = Date.parse('2026-10-12T12:00:00Z');
@@ -77,8 +78,8 @@ const ZERO_COINS = {
     'dogecoin-mainnet': ['DOGE', '0'],
 };
 
-function mount({ balances, walletId = 'real-wallet-1', settings = {}, ...props }) {
-    const messaging = { getSettings: vi.fn(async () => settings) };
+function mount({ balances, walletId = 'real-wallet-1', settings = {}, messaging: messagingOverride, ...props }) {
+    const messaging = messagingOverride || { getSettings: vi.fn(async () => settings) };
     return render(
         <MessagingProvider shell="web" messaging={messaging}>
             <HomeTabs
@@ -107,6 +108,56 @@ afterEach(() => {
 });
 
 describe('Home native rows on a real wallet', () => {
+    it.each([
+        ['testnet', 'bitcoin-testnet', 'TBTC'],
+        ['regtest', 'bitcoin-regtest', 'RBTC'],
+    ])('never polls a price source for %s holdings, before or after settings load', async (activeNetwork, chainId, networkCode) => {
+        let resolveSettings;
+        const settings = new Promise((resolve) => { resolveSettings = resolve; });
+        const calls = [];
+        configureFiatRateSource({
+            now: () => NOW,
+            explorerUrlByCoin: { bitcoin: 'https://mainnet.test' },
+            fetch: async (url) => {
+                calls.push(url);
+                return {
+                    ok: true,
+                    json: async () => ({ data: [
+                        { coin_pair: 'BTC/USD', price: '80000', block_timestamp: FRESH_TS },
+                    ] }),
+                };
+            },
+        });
+        mount({ balances: balancesOf({ [chainId]: [networkCode, '1'] }), settings });
+
+        await new Promise((resolve) => setTimeout(resolve, 20));
+        expect(calls).toEqual([]);
+
+        resolveSettings({ activeNetwork });
+        await new Promise((resolve) => setTimeout(resolve, 20));
+        // Test networks carry no fiat value, so nothing is priced at all.
+        expect(calls).toEqual([]);
+    });
+
+    it('reaches no price source when the settings read fails', async () => {
+        const calls = [];
+        configureFiatRateSource({
+            now: () => NOW,
+            fetch: async (url) => {
+                calls.push(url);
+                return { ok: true, json: async () => ({ data: [] }) };
+            },
+        });
+        mount({
+            balances: balancesOf({ 'bitcoin-mainnet': ['BTC', '1'] }),
+            messaging: { getSettings: vi.fn(async () => { throw new Error('settings unavailable'); }) },
+        });
+
+        await new Promise((resolve) => setTimeout(resolve, 20));
+        // Without the privacy choice the CoinGecko fallback may be opted out.
+        expect(calls).toEqual([]);
+    });
+
     it('prices zero-balance coins from the oracle and drops the "not priced" note', async () => {
         const { calls, release } = venue();
         mount({ balances: balancesOf(ZERO_COINS) });
@@ -131,6 +182,55 @@ describe('Home native rows on a real wallet', () => {
         await waitFor(() => expect(within(hero()).getByText('$40,000.00')).toBeInTheDocument());
         expect(within(hero()).queryByText('Price unavailable')).toBeNull();
         expect(within(hero()).queryByText(/not priced/)).toBeNull();
+    });
+});
+
+describe('Home test-network fiat', () => {
+    const regtestBalances = {
+        'bitcoin-regtest': [{
+            address: 'bitcoin-regtest-addr',
+            balances: {
+                native: { tick: 'BTC', quantity: '100000000', divisibility: 8, fiatRate: 70000 },
+                tokens: [
+                    { tick: 'EXAMPLE', quantity: '200000000', divisibility: 8, fiatRate: 0.5 },
+                ],
+            },
+        }],
+    };
+
+    it('keeps fixture fiat in the demo hero, rows, and chart', async () => {
+        markDemoWallet('demo-wallet-1');
+        const messaging = {
+            getSettings: vi.fn(async () => ({})),
+            getNativePricesRequest: vi.fn(async () => ({ prices: {} })),
+        };
+        mount({ balances: regtestBalances, walletId: 'demo-wallet-1', messaging });
+
+        expect(within(hero()).getByText('$70,001.00')).toBeInTheDocument();
+        expect(document.querySelector('[data-balance-key="bitcoin-regtest:BTC"]')).toHaveTextContent('$70,000.00');
+        const chart = await screen.findByRole('img', { name: /Portfolio performance chart/ });
+        expect(chart).toHaveAccessibleName(expect.stringMatching(/End \$70,001\.00 USD\./));
+
+        fireEvent.click(screen.getByRole('tab', { name: 'Tokens' }));
+        expect(document.querySelector('[data-balance-key="bitcoin-regtest:EXAMPLE"]')).toHaveTextContent('$1.00');
+        expect(messaging.getNativePricesRequest).not.toHaveBeenCalled();
+    });
+
+    it('strips fixture fiat and the chart from a real test-network wallet', () => {
+        const messaging = {
+            getSettings: vi.fn(async () => ({})),
+            getNativePricesRequest: vi.fn(async () => ({ prices: {} })),
+        };
+        mount({ balances: regtestBalances, walletId: 'real-wallet-1', messaging });
+
+        expect(within(hero()).getByText('Test coins have no value')).toBeInTheDocument();
+        expect(document.querySelector('[data-balance-key="bitcoin-regtest:BTC"]')).not.toHaveTextContent('$');
+        expect(screen.queryByRole('region', { name: 'Portfolio performance' })).toBeNull();
+
+        fireEvent.click(screen.getByRole('tab', { name: 'Tokens' }));
+        expect(document.querySelector('[data-balance-key="bitcoin-regtest:EXAMPLE"]')).not.toHaveTextContent('$');
+        expect(screen.getByRole('region', { name: 'Unpriced tokens' })).toBeInTheDocument();
+        expect(messaging.getNativePricesRequest).not.toHaveBeenCalled();
     });
 });
 
@@ -200,13 +300,15 @@ describe('Home token rows on a real wallet', () => {
         });
 
         expect(within(hero()).getByText('3 tokens not priced')).toBeInTheDocument();
-        await waitFor(() => expect(within(hero()).getByText('2 tokens not priced')).toBeInTheDocument());
-        expect(within(hero()).getByText('$0.08')).toBeInTheDocument();
-        expect(within(hero()).getByText(/Updated/)).toBeInTheDocument();
+        expect(calls).toEqual([]);
+        expect(calls.some((url) => url.includes('/api/market/MARKET/BTC'))).toBe(false);
         expect(document.body.textContent).not.toContain('$80,000.00');
 
         fireEvent.click(screen.getByRole('tab', { name: 'Tokens' }));
-        expect(screen.getByText('$0.08 · DEX price')).toBeInTheDocument();
+        await waitFor(() => expect(screen.getByText('$0.08 · DEX price')).toBeInTheDocument());
+        expect(within(hero()).getByText('2 tokens not priced')).toBeInTheDocument();
+        expect(within(hero()).getByText('$0.08')).toBeInTheDocument();
+        expect(within(hero()).getByText(/Updated/)).toBeInTheDocument();
         const unpriced = screen.getByRole('region', { name: 'Unpriced tokens' });
         expect(unpriced.querySelector('[data-balance-key="bitcoin-mainnet:UNKNOWN"]')).toBeTruthy();
         expect(within(unpriced).queryByText('MARKET')).toBeNull();
@@ -214,6 +316,138 @@ describe('Home token rows on a real wallet', () => {
         expect(unknown.textContent).not.toContain('$');
         expect(calls.some((url) => url.includes('/api/market/MARKET/BTC'))).toBe(true);
         expect(calls.some((url) => url.includes('SPAM'))).toBe(false);
+
+        // Leaving the Tokens tab keeps the known token value in the total and
+        // sends no new price request.
+        const callsBeforeCoins = calls.length;
+        fireEvent.click(screen.getByRole('tab', { name: 'Coins' }));
+        await act(async () => {});
+        expect(within(hero()).getByText('$0.08')).toBeInTheDocument();
+        expect(within(hero()).getByText('2 tokens not priced')).toBeInTheDocument();
+        expect(calls).toHaveLength(callsBeforeCoins);
+    });
+});
+
+describe('Home cold-load request budget', () => {
+    function memCollection(rows) {
+        return {
+            list: async () => rows.map((row) => ({ ...row })),
+            findBy: async (field, value) => rows.filter((row) => row[field] === value).map((row) => ({ ...row })),
+        };
+    }
+
+    it('keeps a five-address, ten-token wallet at or below five requests before a token tab opens', async () => {
+        const requests = [];
+        const addresses = Array.from({ length: 5 }, (_, index) => `bc1qcold${index}`);
+        const vault = {
+            wallets: memCollection([{ id: 'wallet-cold', importedKeys: [] }]),
+            accounts: memCollection([{ id: 'account-cold', walletId: 'wallet-cold' }]),
+            addresses: memCollection(addresses.map((address, index) => ({
+                id: `address-${index}`,
+                accountId: 'account-cold',
+                chain: 'bitcoin',
+                network: 'mainnet',
+                address,
+                addressType: 'p2wpkh',
+                derivationPath: `m/84'/0'/0'/0/${index}`,
+                label: `Address ${index + 1}`,
+            }))),
+        };
+        const sdk = {
+            getBalancesBatch: vi.fn(async (batch) => {
+                requests.push('balances-batch');
+                return Object.fromEntries(batch.map((address, addressIndex) => [address, {
+                    address: { balances: { confirmed: addressIndex === 0 ? '1.00000000' : '0.00000000' } },
+                    balances: {
+                        data: Array.from({ length: 2 }, (_, tokenIndex) => ({
+                            tick: `TOKEN${addressIndex * 2 + tokenIndex + 1}`,
+                            amount: '1',
+                            decimals: 0,
+                        })),
+                    },
+                    error: null,
+                }]));
+            }),
+        };
+        const registry = defaultRegistry();
+        const balances = await walletBalances({
+            vault,
+            walletId: 'wallet-cold',
+            chainRegistry: registry,
+            sdkRegistry: { get: () => sdk },
+            activeNetwork: 'mainnet',
+        });
+        expect(balances['bitcoin-mainnet']).toHaveLength(5);
+        expect(new Set(balances['bitcoin-mainnet'].flatMap((entry) => (
+            entry.balances.tokens.map((token) => token.tick)
+        )))).toHaveProperty('size', 10);
+
+        configureFiatRateSource({
+            now: () => NOW,
+            explorerUrlByCoin: { bitcoin: 'https://explorer.test' },
+            fetch: async (url) => {
+                requests.push('fiat-rate');
+                if (url.includes('/api/market/')) {
+                    return { ok: true, json: async () => ({ data: [] }) };
+                }
+                expect(url).toContain('/BTC/api/price_snapshots/FINALIZED/status');
+                return {
+                    ok: true,
+                    json: async () => ({
+                        data: [{ coin_pair: 'BTC/USD', price: '80000', block_timestamp: FRESH_TS }],
+                    }),
+                };
+            },
+        });
+        const messaging = {
+            getSettings: vi.fn(async () => ({ fiatCurrency: 'USD' })),
+            getNativePricesRequest: vi.fn(async () => {
+                requests.push('native-prices');
+                return { prices: {} };
+            }),
+            verifyBalance: vi.fn(async () => {
+                requests.push('balance-proof');
+                return { status: 'verified' };
+            }),
+            getOwnedTokens: vi.fn(async () => {
+                requests.push('owned-tokens');
+                return [];
+            }),
+            getTokenInfo: vi.fn(async () => {
+                requests.push('token-info');
+                return null;
+            }),
+            getHoldersForToken: vi.fn(async () => {
+                requests.push('token-holders');
+                return [];
+            }),
+            getAddressHistory: vi.fn(async () => {
+                requests.push('history');
+                return [];
+            }),
+        };
+
+        mount({
+            balances,
+            walletId: 'wallet-cold',
+            messaging,
+            verifyProofsEnabled: true,
+        });
+        // Home shares one native price request across the hero, chart and rows.
+        await waitFor(() => expect(requests.filter((name) => name === 'native-prices').length).toBeGreaterThanOrEqual(1));
+        await waitFor(() => expect(requests.filter((name) => name === 'fiat-rate')).toHaveLength(1));
+
+        expect(requests.length).toBeLessThanOrEqual(5);
+        expect(requests.filter((name) => name === 'balances-batch')).toHaveLength(1);
+        expect(messaging.verifyBalance).not.toHaveBeenCalled();
+        expect(messaging.getOwnedTokens).not.toHaveBeenCalled();
+        expect(messaging.getTokenInfo).not.toHaveBeenCalled();
+        expect(messaging.getHoldersForToken).not.toHaveBeenCalled();
+        expect(messaging.getAddressHistory).not.toHaveBeenCalled();
+
+        fireEvent.click(screen.getByRole('tab', { name: 'Tokens' }));
+        await waitFor(() => expect(messaging.verifyBalance).toHaveBeenCalledTimes(10));
+        await waitFor(() => expect(messaging.getOwnedTokens).toHaveBeenCalledTimes(5));
     });
 });
 

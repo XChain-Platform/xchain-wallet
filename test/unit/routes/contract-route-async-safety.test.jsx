@@ -121,7 +121,7 @@ describe('contract route request isolation', () => {
 
         expect(screen.queryByLabelText('limit (number)')).toBeNull();
         expect(screen.getByLabelText('Method')).toHaveValue('');
-        expect(screen.getByLabelText('Params (optional)')).toHaveValue('');
+        expect(screen.getByLabelText('Arguments (optional)')).toHaveValue('');
     });
 
     it('clears positional values whenever a different declared method is selected', async () => {
@@ -174,7 +174,7 @@ describe('contract list failure containment', () => {
         )));
 
         await waitFor(() => {
-            expect(screen.getAllByText(/Couldn't load contracts on Bitcoin/)).toHaveLength(3);
+            expect(screen.getAllByText(/Couldn't load contracts\. Try again\./)).toHaveLength(3);
         });
     });
 
@@ -193,7 +193,7 @@ describe('contract list failure containment', () => {
             />
         )));
 
-        expect(await screen.findByText(/Couldn't load contracts on Bitcoin/)).toBeInTheDocument();
+        expect(await screen.findByText(/Couldn't load contracts\. Try again\./)).toBeInTheDocument();
     });
 });
 

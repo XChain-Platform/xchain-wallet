@@ -18,18 +18,20 @@
 //
 //     pnpm --filter @xchain-wallet/desktop build:renderer
 
-import { mkdtempSync } from 'node:fs';
+import { mkdtempSync, readFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { test, _electron as electron } from '@playwright/test';
-import { createSweep } from './sweep.js';
+import { expect, test, _electron as electron } from '@playwright/test';
+import { createSweep, measureControlRows, measureRulings } from './sweep.js';
+import { closeElectron, launchGuardedElectron } from '../fixtures/electron.js';
 
 const here = fileURLToPath(new URL('.', import.meta.url));
 const repo = resolve(here, '..', '..', '..');
 const desktopDir = join(repo, 'packages', 'desktop');
-const OUT_ROOT = join(repo, 'tmp', 'layout-sweep');
+// LAYOUT_SWEEP_OUT sends the lines and screenshots somewhere else.
+const OUT_ROOT = process.env.LAYOUT_SWEEP_OUT || join(repo, 'tmp', 'layout-sweep');
 
 // The window sizes: the app's minimum, its default, a mid-size and a large
 // one. The desktop shell is a resizable phone-first layout, so the sizes
@@ -46,22 +48,28 @@ const SIZES = process.env.LAYOUT_SIZES
 
 for (const [width, height] of SIZES) {
     test(`desktop layout sweep ${width}x${height}`, async () => {
-        test.setTimeout(30 * 60 * 1000);
+        test.setTimeout(75 * 60 * 1000);
         const venue = `macos-desktop-${width}x${height}`;
         const userDataDir = mkdtempSync(join(tmpdir(), 'xc-layout-sweep-'));
         const requireFromDesktop = createRequire(join(desktopDir, 'package.json'));
-        const app = await electron.launch({
+        const app = await launchGuardedElectron(electron, {
             executablePath: requireFromDesktop('electron'),
             args: ['.', `--user-data-dir=${userDataDir}`],
             cwd: desktopDir,
         });
         try {
             const page = await app.firstWindow();
-            await app.evaluate(({ BrowserWindow }, [w, h]) => {
+            // The display is recorded with the size the window really got: a
+            // request larger than the work area is clamped by the OS, and a
+            // clamped run must not be read as the size it asked for.
+            const sized = await app.evaluate(({ BrowserWindow, screen }, [w, h]) => {
                 const win = BrowserWindow.getAllWindows()[0];
                 win.setMinimumSize(Math.min(w, 360), Math.min(h, 600));
                 win.setContentSize(w, h);
+                const [cw, ch] = win.getContentSize();
+                return { workArea: screen.getPrimaryDisplay().workArea, content: { width: cw, height: ch } };
             }, [width, height]);
+            console.log(`window ${width}x${height}: content ${sized.content.width}x${sized.content.height}, work area ${sized.workArea.width}x${sized.workArea.height}`);
 
             // No fixture seeds the licence acceptance here, so take the
             // gate the way a user does whenever it appears.
@@ -88,12 +96,24 @@ for (const [width, height] of SIZES) {
                 }
             };
 
-            const sweep = createSweep(page, { venue, outDir: join(OUT_ROOT, venue), restart });
+            const outDir = join(OUT_ROOT, venue);
+            const sweep = createSweep(page, {
+                venue,
+                outDir,
+                restart,
+                onScreen: async (p) => ({
+                    rulings: await p.evaluate(measureRulings),
+                    controlRows: await p.evaluate(measureControlRows),
+                }),
+            });
             sweepRef = sweep;
             await sweep.onboarding({ demo: true });
             await sweep.unlocked();
+            // Check harness coverage, not findings: the walk wrote at least one parseable screen line.
+            const measured = readFileSync(join(outDir, 'results.jsonl'), 'utf8').split('\n').filter(Boolean).map((l) => JSON.parse(l));
+            expect(measured.length, 'harness coverage: the sweep measured no screen').toBeGreaterThan(0);
         } finally {
-            await app.close();
+            await closeElectron(app);
         }
     });
 }

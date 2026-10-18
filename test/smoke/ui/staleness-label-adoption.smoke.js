@@ -72,7 +72,9 @@ assert.ok(
     'TotalBalanceHero renders one <StalenessLabel> for balance and price freshness',
 );
 assert.ok(
-    /oldestFreshnessTimestamp\(\s*lastSyncedAt,\s*pricesFetchedAt,\s*stalePriceAsOf,\s*\)/.test(heroSrc)
+    /oldestFreshnessTimestamp\(\s*lastSyncedAt,\s*pricesFetchedAt,\s*stalePriceAsOf,\s*staleChangeAsOf,?\s*\)/.test(heroSrc)
+        // Test networks show no prices, so only the balance age counts there.
+        && /testCoinsOnly\s*\?\s*oldestFreshnessTimestamp\(lastSyncedAt\)/.test(heroSrc)
         && /hasUpdate \?/.test(heroSrc),
     'TotalBalanceHero uses the oldest successful balance or price update',
 );

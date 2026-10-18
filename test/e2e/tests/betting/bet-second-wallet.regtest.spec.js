@@ -47,7 +47,7 @@
 // address" when a concurrent session began driving Litecoin as well. Re-run it
 // on a quiet chain with the price sentinel kept fresh (campaign §3.5).
 
-import { createWallet, expect, test } from '../../fixtures/wallet.js';
+import { createWallet, expect, openPaletteCommand, test, addWallet, switchToWallet } from '../../fixtures/wallet.js';
 import {
     expectConfirmModal,
     EXPLORER_URL,
@@ -121,22 +121,8 @@ async function waitForToken(address, tick, min, timeoutMs = 300_000) {
     throw new Error(`${tick} balance never reached ${min} for ${address} (last=${last})`);
 }
 
-/** Runs a palette command by clicking its row (see the deadline-race spec). */
-async function gotoPalette(page, title) {
-    await page.keyboard.press('ControlOrMeta+k');
-    const dialog = page.getByRole('dialog', { name: 'Command palette' });
-    await expect(dialog, 'the command palette did not open').toBeVisible({ timeout: 15_000 });
-    const combobox = dialog.getByRole('combobox').first();
-    await expect(combobox).toBeEditable({ timeout: 15_000 });
-    await combobox.fill(title);
-    const row = page.getByRole('option', { name: new RegExp(`^${title}\\b`) }).first();
-    await expect(row, `no palette command matching "${title}"`).toBeVisible();
-    await row.click();
-    await expect(dialog).toBeHidden({ timeout: 15_000 });
-}
-
 async function gotoBettingHub(page) {
-    await gotoPalette(page, 'Betting');
+    await openPaletteCommand(page, 'Betting');
     await expect(page.getByRole('button', { name: 'Create market', exact: true }))
         .toBeVisible({ timeout: 30_000 });
     await selectVenueChain(page.getByRole('main'));
@@ -176,6 +162,8 @@ test.describe('BET across two wallets', () => {
         let oracle;
         let punter;
         let feedIndex;
+        /** The XCHAIN protocol fee the bet's confirm screen quoted, 0 when it quoted none. */
+        let betFeeXchain = 0;
 
         await test.step('wallet A: onboard, fund, and hold XCHAIN', async () => {
             await createWallet(page, { password: PASSWORD, name: 'Oracle Wallet' });
@@ -227,28 +215,11 @@ test.describe('BET across two wallets', () => {
         });
 
         await test.step('wallet B: a SECOND wallet, created inside the same session', async () => {
-            await gotoPalette(page, 'Switch wallet');
-            await page.getByRole('button', { name: 'Add wallet' }).click();
-            // navigate:false, because this add-wallet flow starts at the
-            // onboarding welcome INSIDE the unlocked shell; a goto('/') would
-            // throw away the session and land back on wallet A.
-            await createWallet(page, {
-                password: PASSWORD, name: 'Bettor Wallet', navigate: false,
-            });
-
-            // ADDING A WALLET DOES NOT SWITCH TO IT, which cost this spec a run.
-            // `CreateWallet mode="add"` finishes by calling App's `refresh`,
-            // which resets the view to home and re-reads the session but never
-            // touches `activeWalletId` - so the app comes back on the wallet you
-            // started from, with the new one merely present in the picker. The
-            // first version of this spec assumed otherwise and read wallet A's
-            // address back as if it were wallet B's, which surfaced as "wallet B
-            // derived the same address as wallet A". Switch explicitly.
-            await gotoPalette(page, 'Switch wallet');
-            await page.getByRole('button', { name: /Bettor Wallet/ }).first().click();
-            await expect(page.getByRole('button', { name: /Bettor Wallet/ }).first(),
-                'the app did not switch to the newly added wallet')
-                .toBeVisible({ timeout: 30_000 });
+            // Adding a wallet does not make it the active one, so addWallet
+            // switches and waits for the App header to name wallet B before any
+            // address is read: reading early returns wallet A's address as if it
+            // were wallet B's.
+            await addWallet(page, { name: 'Bettor Wallet', password: PASSWORD });
 
             // FORECAST, stated before the run: the active network is already
             // regtest, and `settings.setActiveNetwork` (the thing that derives an
@@ -286,7 +257,19 @@ test.describe('BET across two wallets', () => {
             await main.getByLabel(/^Stake/).fill(STAKE);
             await fillPasswordIfPresent(main);
             await main.getByRole('button', { name: 'Review bet', exact: true }).click();
-            await approveConfirm(page);
+            // On Bitcoin a bet pays its protocol fee in XCHAIN, out of the same
+            // balance the stake leaves, so the debit below is stake plus this
+            // fee. Read off the screen the user approved rather than hardcoded:
+            // the fee is a hub setting, and on the coin lane there is no line.
+            await expectConfirmModal(page, 'this action', 60_000);
+            await expect(page.getByTestId('confirm-approve')).toBeEnabled({ timeout: 60_000 });
+            const feeLine = page.getByTestId('confirm-protocol-fee');
+            if (await feeLine.count() > 0) {
+                const said = await feeLine.innerText();
+                betFeeXchain = Number(said.match(/([\d.]+)\s*XCHAIN/)?.[1]);
+                expect(Number.isFinite(betFeeXchain), `unparseable protocol-fee line: ${said}`).toBe(true);
+            }
+            await page.getByTestId('confirm-approve').click();
 
             await expect(page.getByTestId('bet-result'), 'no receipt after placing the bet')
                 .toBeVisible({ timeout: 120_000 });
@@ -315,17 +298,18 @@ test.describe('BET across two wallets', () => {
             // fails claiming the stake never left - which is a false accusation
             // against the wallet, and cost this spec a run. The round trip warns
             // about exactly this ("a balance read is a moving target here").
-            const want = MINT_XCHAIN - Number(STAKE);
+            const want = MINT_XCHAIN - Number(STAKE) - betFeeXchain;
             const untilDebit = Date.now() + 180_000;
             let held = null;
             while (Date.now() < untilDebit) {
                 const body = await explorerJson(`balances/${punter}`);
                 held = Number((body?.data || []).find((b) => b.tick === 'XCHAIN')?.amount ?? NaN);
-                if (held === want) break;
+                if (Math.abs(held - want) < 1e-9) break;
                 await nudgeChain();
                 await new Promise((r) => setTimeout(r, 2_000));
             }
-            expect(held, `the stake never left the bettor wallet (still ${held})`).toBe(want);
+            expect(held, `the stake never left the bettor wallet (still ${held}, `
+                + `want ${want} after a ${betFeeXchain} XCHAIN protocol fee)`).toBeCloseTo(want, 8);
 
             // And it did NOT come out of the oracle's wallet, which is the
             // assertion a single-wallet run can never make.
@@ -336,23 +320,21 @@ test.describe('BET across two wallets', () => {
 
         await test.step('MyBets is scoped to the wallet that placed the bet', async () => {
             // Wallet B placed it, so wallet B lists it.
-            await gotoPalette(page, 'My bets');
+            await openPaletteCommand(page, 'My bets');
             await expect(page.getByRole('main').getByText(new RegExp(`#${feedIndex}\\b`)),
                 'wallet B does not list a bet it placed').toBeVisible({ timeout: 30_000 });
 
             // Wallet A did not, so wallet A must not: a MyBets that reads the
             // chain rather than the wallet would show every bet on the venue.
-            await gotoPalette(page, 'Switch wallet');
-            await page.getByRole('button', { name: /Oracle Wallet/ }).first().click();
-            await unlockAfterReload(page, PASSWORD).catch(() => {});
+            await switchToWallet(page, 'Oracle Wallet');
 
-            await gotoPalette(page, 'My bets');
+            await openPaletteCommand(page, 'My bets');
             await expect(page.getByRole('main').getByText(new RegExp(`#${feedIndex}\\b`)),
                 'wallet A lists a bet placed by a different wallet')
                 .toBeHidden({ timeout: 30_000 });
 
             // And the market IS wallet A's, so its oracle console still claims it.
-            await gotoPalette(page, 'My markets');
+            await openPaletteCommand(page, 'My markets');
             await expect(page.getByRole('main').getByText(new RegExp(`#${feedIndex}\\b`)),
                 'wallet A does not list the market it created').toBeVisible({ timeout: 30_000 });
         });

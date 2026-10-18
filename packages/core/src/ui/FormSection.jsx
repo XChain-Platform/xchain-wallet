@@ -10,15 +10,14 @@
 
 import { useId } from 'react';
 import { SectionHeader } from './SectionHeader.jsx';
-// Shares FormPage's stylesheet: whether a section draws a card depends on
-// the form around it, and only one module can express that pairing.
+// Shares FormPage's stylesheet because the surrounding form defines the
+// section rhythm, and only one module can express that pairing.
 import styles from './FormPage.module.css';
 
 /**
- * One titled part of a long form. Inside `<FormPage sectioned>` it is a
- * card of its own when the viewport is wide and a bare block divided from
- * the previous one by its heading when narrow. Inside a plain FormPage it
- * is always the bare, heading-divided block, so a card never nests in a card.
+ * One titled part of a long form. Inside `<FormPage sectioned>` it is a bare
+ * block divided from the previous section inside the form's single card.
+ * Inside a plain FormPage it stays bare, so a card never nests in a card.
  *
  * The section is a named region (aria-labelledby its heading), so a screen
  * reader lists it among the page's landmarks.
@@ -26,11 +25,12 @@ import styles from './FormPage.module.css';
  * @param {object} props
  * @param {import('react').ReactNode} props.title
  * @param {import('react').ReactNode} [props.description]   one muted line under the title
+ * @param {import('react').ReactNode} [props.trailing]       inline affordance beside the title, such as an InfoTip
  * @param {'h2' | 'h3'} [props.headingLevel]                default h2
  * @param {string} [props.className]
  * @param {import('react').ReactNode} props.children
  */
-export function FormSection({ title, description, headingLevel = 'h2', className, children }) {
+export function FormSection({ title, description, trailing, headingLevel = 'h2', className, children }) {
     const headingId = useId();
     return (
         <section
@@ -42,9 +42,9 @@ export function FormSection({ title, description, headingLevel = 'h2', className
                 id={headingId}
                 title={title}
                 description={description}
-                className={styles.sectionHeader}
+                trailing={trailing}
             />
-            <div className={styles.sectionBody}>{children}</div>
+            <div className={styles.sectionBody} data-form-stack="">{children}</div>
         </section>
     );
 }

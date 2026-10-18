@@ -5,7 +5,7 @@
 
 import React from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
 import { ToastHost } from '../../../packages/core/src/shared/components/ToastHost.jsx';
 import { Home } from '../../../packages/core/src/shared/routes/Home.jsx';
@@ -75,7 +75,7 @@ describe('Home offline behavior', () => {
         };
         mountHome(messaging, onSend, { onSwap, onCreateToken });
 
-        await waitFor(() => expect(screen.getByText('BTC · Bitcoin')).toBeTruthy());
+        await waitFor(() => expect(screen.getByText('Bitcoin', { selector: '[title="Bitcoin"]' })).toBeTruthy());
         expect(screen.getByText(/^Updated /)).toBeTruthy();
 
         // A failed background read leaves the last successful rows and sync
@@ -84,7 +84,7 @@ describe('Home offline behavior', () => {
         vi.setSystemTime(Date.now() + flows.BALANCE_POLL_INTERVAL_MS);
         act(() => { window.dispatchEvent(new Event('focus')); });
         await waitFor(() => expect(messaging.getWalletBalances).toHaveBeenCalledTimes(2));
-        expect(screen.getByText('BTC · Bitcoin')).toBeTruthy();
+        expect(screen.getByText('Bitcoin', { selector: '[title="Bitcoin"]' })).toBeTruthy();
         expect(screen.queryByLabelText('Loading balances')).toBeNull();
 
         setNavigatorOnline(false);
@@ -116,6 +116,38 @@ describe('Home offline behavior', () => {
         expect(onSend).toHaveBeenCalledTimes(1);
     });
 
+    it('gives a fresh offline wallet its actions under the one offline message', async () => {
+        // Nothing saved yet and no network: the balances are unavailable, but
+        // Home still offers its actions instead of an empty page.
+        setNavigatorOnline(false);
+        const onSend = vi.fn();
+        const onReceive = vi.fn();
+        const messaging = {
+            listWallets: vi.fn().mockResolvedValue([WALLET]),
+            listAccounts: vi.fn().mockResolvedValue([]),
+            getWalletBalances: vi.fn(() => new Promise(() => {})),
+            getActiveAddresses: vi.fn().mockResolvedValue({}),
+            getSettings: vi.fn().mockResolvedValue({}),
+            getAddressesByChain: vi.fn().mockResolvedValue({}),
+        };
+        mountHome(messaging, onSend, { onReceive });
+
+        const actions = await screen.findByRole('group', { name: 'Quick actions' });
+        expect(screen.getAllByText('You are offline. Connect to load balances and use network actions.'))
+            .toHaveLength(1);
+        expect(screen.queryByLabelText('Loading balances')).toBeNull();
+        expect(messaging.getWalletBalances).not.toHaveBeenCalled();
+
+        const send = within(actions).getByRole('button', { name: 'Send' });
+        expect(send).toHaveAttribute('aria-disabled', 'true');
+        expect(send).toHaveAttribute('title', 'Send needs a network connection');
+        fireEvent.click(send);
+        expect(onSend).not.toHaveBeenCalled();
+
+        fireEvent.click(within(actions).getByRole('button', { name: 'Receive' }));
+        expect(onReceive).toHaveBeenCalledTimes(1);
+    });
+
     it('cold-starts from cached balances when services are offline but the device interface is online', async () => {
         setNavigatorOnline(true);
         reachability.overall = 'offline';
@@ -135,7 +167,7 @@ describe('Home offline behavior', () => {
 
         const view = mountHome(messaging, vi.fn());
 
-        expect(await screen.findByText('BTC · Bitcoin')).toBeTruthy();
+        expect(await screen.findByText('Bitcoin', { selector: '[title="Bitcoin"]' })).toBeTruthy();
         expect(screen.getByText(/Showing cached balances/)).toBeTruthy();
         expect(screen.queryByText(/Updating balances/)).toBeNull();
         expect(screen.queryByLabelText('Loading balances')).toBeNull();
@@ -152,5 +184,26 @@ describe('Home offline behavior', () => {
 
         await waitFor(() => expect(messaging.getWalletBalances).toHaveBeenCalledTimes(1));
         expect(screen.queryByText(/Showing cached balances/)).toBeNull();
+    });
+
+    it('drops a balance error that failed before the offline verdict arrived', async () => {
+        setNavigatorOnline(true);
+        const messaging = {
+            listWallets: vi.fn().mockResolvedValue([WALLET]),
+            listAccounts: vi.fn().mockResolvedValue([]),
+            getWalletBalances: vi.fn().mockRejectedValue(new Error('Failed to fetch')),
+            getActiveAddresses: vi.fn().mockResolvedValue({}),
+            getSettings: vi.fn().mockResolvedValue({}),
+            getAddressesByChain: vi.fn().mockResolvedValue({}),
+        };
+        mountHome(messaging, vi.fn());
+
+        await screen.findByText(/Couldn't load balances/);
+
+        setNavigatorOnline(false);
+        act(() => { window.dispatchEvent(new Event('offline')); });
+
+        await screen.findByText('You are offline. Connect to load balances and use network actions.');
+        expect(screen.queryByText(/Couldn't load balances/)).toBeNull();
     });
 });

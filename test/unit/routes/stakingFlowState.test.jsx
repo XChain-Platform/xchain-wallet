@@ -91,6 +91,27 @@ function withMessaging(child, methods = messaging()) {
 afterEach(() => cleanup());
 
 describe('staking chooser and list read states', () => {
+    it('does not repeat a staking row network kind beside its chain overlay', async () => {
+        const chainId = 'bitcoin-regtest';
+        withMessaging(
+            <StakingList walletId="w" onOpenStake={() => {}} onNewStake={() => {}} onBack={() => {}} />,
+            messaging({
+                getAddressesByChain: vi.fn().mockResolvedValue({ [chainId]: [ADDRESS_ROW] }),
+                getStakesForAddress: vi.fn().mockResolvedValue([{
+                    action_index: 1,
+                    amount: '10',
+                    status: 'valid',
+                    _ownerAddress: ADDRESS,
+                }]),
+            }),
+        );
+
+        await screen.findByRole('listitem');
+        expect(document.body).not.toHaveTextContent(/regtest|testnet|Not mainnet/i);
+        // The chain filter stays (operator ruling); it names chains, never network kinds.
+        expect(screen.getByRole('button', { name: 'Filter by network' })).toBeInTheDocument();
+    });
+
     it('surfaces an address read failure instead of presenting an empty chooser', async () => {
         withMessaging(
             <StakeNew walletId="w" onPickValidator={() => {}} onPickContract={() => {}} onBack={() => {}} />,
@@ -439,7 +460,7 @@ describe('delegation validation and review state', () => {
         expect(alert).not.toHaveTextContent('indexer.invalid');
     });
 
-    it('blocks review when an invalid custom fee would be omitted from the DELEGATE build', async () => {
+    it('blocks custom fee rates that would be omitted or exceed the supported range', async () => {
         const methods = delegationMessaging();
         withMessaging(
             <DelegationActionForm mode="delegate" walletId="w" chainId={CHAIN} onBack={() => {}} />,
@@ -451,6 +472,20 @@ describe('delegation validation and review state', () => {
         fireEvent.click(screen.getByRole('button', { name: 'Delegate signing key' }));
 
         expect(await screen.findByText('Enter a custom network fee rate greater than zero.')).toBeInTheDocument();
+
+        for (const rate of ['0', '-1']) {
+            fireEvent.change(screen.getByLabelText(/Custom fee rate/), { target: { value: rate } });
+            fireEvent.click(screen.getByRole('button', { name: 'Delegate signing key' }));
+            expect(await screen.findByText('Enter a custom network fee rate greater than zero.')).toBeInTheDocument();
+        }
+
+        fireEvent.change(screen.getByLabelText(/Custom fee rate/), { target: { value: '1.123456789' } });
+        fireEvent.click(screen.getByRole('button', { name: 'Delegate signing key' }));
+        expect(await screen.findByText('Custom network fee rate can have at most 8 decimal places.')).toBeInTheDocument();
+
+        fireEvent.change(screen.getByLabelText(/Custom fee rate/), { target: { value: '1001' } });
+        fireEvent.click(screen.getByRole('button', { name: 'Delegate signing key' }));
+        expect(await screen.findByText("Custom network fee rate is above this network's supported maximum.")).toBeInTheDocument();
         expect(methods.composeForConfirm).not.toHaveBeenCalled();
     });
 
@@ -572,7 +607,7 @@ describe.each([320, 360])('staking layout at %ipx', (width) => {
                 'packages/core/src/shared/routes/StakingList.module.css',
             ), 'not all and (min-width: 400px)');
             expect(ruleBody(listNarrow, '.row')).toMatch(
-                /grid-template-columns:\s*40px\s+minmax\(0, 1fr\)/,
+                /grid-template-columns:\s*var\(--xc-control-h-md\)\s+minmax\(0, 1fr\)/,
             );
             expect(ruleBody(listNarrow, '.trailing')).toMatch(/grid-column:\s*2/);
 

@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useId, useMemo, useRef, useState } from 'react';
 import { Button, Icon } from '@xchain-wallet/core/ui';
 import { sumFiatValue } from './BalanceList.jsx';
 import { StalenessLabel } from './StalenessLabel.jsx';
@@ -24,6 +24,53 @@ import {
     formatFiatAmountForSpeech,
 } from '../utils/fiatAmountFormat.js';
 import { percentChangeDisplay } from '../utils/percentFormat.js';
+import { isMainnetChainId } from '../utils/mainnetChain.js';
+import { t } from '../../i18n/index.js';
+
+const COMPACT_ACTIONS_QUERY = '(max-width: 479px)';
+
+function compactActionsMatch() {
+    if (typeof window === 'undefined') return false;
+    if (typeof window.matchMedia === 'function') {
+        return window.matchMedia(COMPACT_ACTIONS_QUERY).matches;
+    }
+    return window.innerWidth < 480;
+}
+
+function useCompactActions() {
+    const [compact, setCompact] = useState(compactActionsMatch);
+
+    useEffect(() => {
+        if (typeof window === 'undefined') return undefined;
+        if (typeof window.matchMedia !== 'function') {
+            const onResize = () => setCompact(compactActionsMatch());
+            window.addEventListener('resize', onResize);
+            return () => window.removeEventListener('resize', onResize);
+        }
+
+        const query = window.matchMedia(COMPACT_ACTIONS_QUERY);
+        const onChange = (event) => setCompact(event.matches);
+        setCompact(query.matches);
+        if (typeof query.addEventListener === 'function') {
+            query.addEventListener('change', onChange);
+            return () => query.removeEventListener('change', onChange);
+        }
+        if (typeof query.addListener === 'function') {
+            query.addListener(onChange);
+            return () => query.removeListener(onChange);
+        }
+        return undefined;
+    }, []);
+
+    return compact;
+}
+
+function enabledMenuItems(menu) {
+    return Array.from(menu?.querySelectorAll([
+        '[role="menuitem"]:not([aria-disabled="true"])',
+        '[role="menuitemcheckbox"]:not([aria-disabled="true"])',
+    ].join(',')) || []);
+}
 
 /**
  * Hero block at the top of Home: total fiat value across every
@@ -47,7 +94,13 @@ import { percentChangeDisplay } from '../utils/percentFormat.js';
  * @param {() => void} [props.onCommandPalette]  when provided, renders a search button that opens the §33 command palette. The extension popup passes it (no AppHeader/LeftNav to host a trigger there); web + desktop leave it unset.
  * @param {() => void} [props.onLockWallet]      when provided, renders a lock button. Same reason: the popup and side panel have no header, so without it the only ways to lock were a shortcut and the palette.
  */
-export function TotalBalanceHero({ rows, walletId, networkFilter, lastSyncedAt, pricesFetchedAt, onRefresh, refreshing = false, filterOpen, onToggleFilter, onCommandPalette, onOpenSettings, onLockWallet }) {
+export function TotalBalanceHero({ rows, walletId, networkFilter, lastSyncedAt, pricesFetchedAt, onRefresh, refreshing = false, filterOpen, onToggleFilter, onCommandPalette, onOpenSettings, onLockWallet, nativePriceMap }) {
+    const labelId = useId();
+    const rowsWithChain = (rows || []).filter((row) => typeof row?.chainId === 'string' && row.chainId);
+    // The demo wallet prices its synthetic test-network holdings on purpose.
+    const testCoinsOnly = !isDemoWallet(walletId)
+        && rowsWithChain.length > 0
+        && rowsWithChain.every((row) => !isMainnetChainId(row.chainId));
     const { total, unpriced, priceUnavailable } = useMemo(() => {
         const sum = sumFiatValue(rows);
         const meaningful = (rows || []).filter(hasNonZeroQuantity);
@@ -64,6 +117,11 @@ export function TotalBalanceHero({ rows, walletId, networkFilter, lastSyncedAt, 
     const fiatLocale = settings?.language || 'en-US';
     const [hidden, toggleHidden] = useBalancesHidden();
     const [chartVisible, toggleChartVisible] = usePortfolioChartVisible();
+    const compactActions = useCompactActions();
+    const [actionsOpen, setActionsOpen] = useState(false);
+    const actionsWrapRef = useRef(null);
+    const actionsTriggerRef = useRef(null);
+    const actionsMenuRef = useRef(null);
 
     // Fetch 24h change for every native chain that has a row in the
     // balance list. Tokens without a published 24h delta are treated as
@@ -74,7 +132,7 @@ export function TotalBalanceHero({ rows, walletId, networkFilter, lastSyncedAt, 
     const nativeChainIds = useMemo(() => {
         const set = new Set();
         for (const r of rows || []) {
-            if (r?.kind === 'native' && typeof r.chainId === 'string' && r.chainId) {
+            if (r?.kind === 'native' && isMainnetChainId(r.chainId)) {
                 set.add(r.chainId);
             }
         }
@@ -94,6 +152,7 @@ export function TotalBalanceHero({ rows, walletId, networkFilter, lastSyncedAt, 
 
     const [priceMap, setPriceMap] = useState(/** @type {Record<string, any>} */ ({}));
     useEffect(() => {
+        if (nativePriceMap !== undefined) return undefined;
         if (isDemo) {
             setPriceMap(synthesizeDemoNativePrices(nativeChainIds));
             return undefined;
@@ -111,7 +170,8 @@ export function TotalBalanceHero({ rows, walletId, networkFilter, lastSyncedAt, 
             })
             .catch(() => { if (!cancelled) setPriceMap({}); });
         return () => { cancelled = true; };
-    }, [messaging, nativeChainKey, isDemo, fiatCurrency]); // eslint-disable-line react-hooks/exhaustive-deps
+    }, [messaging, nativeChainKey, isDemo, fiatCurrency, nativePriceMap]); // eslint-disable-line react-hooks/exhaustive-deps
+    const effectivePriceMap = nativePriceMap ?? priceMap;
 
     // Compute 24h delta: for each native row with a known change pct,
     // back-derive the 24h-ago fiat value and accumulate the difference.
@@ -124,7 +184,7 @@ export function TotalBalanceHero({ rows, walletId, networkFilter, lastSyncedAt, 
             const cur = fiatValueOf(r);
             if (cur == null) continue;
             const pct = r.kind === 'native' && r.chainId
-                ? priceMap[r.chainId]?.change24hPct
+                ? effectivePriceMap[r.chainId]?.change24hPct
                 : null;
             if (typeof pct === 'number' && Number.isFinite(pct)) {
                 hasAny = true;
@@ -137,169 +197,245 @@ export function TotalBalanceHero({ rows, walletId, networkFilter, lastSyncedAt, 
         const delta = Number(total) - total24hAgo;
         const pct = (delta / total24hAgo) * 100;
         return { delta, pct };
-    }, [rows, priceMap, total]);
+    }, [rows, effectivePriceMap, total]);
 
     const filterLabel = networkFilter === 'all' ? null : networkFilter.toUpperCase();
     const hasUnpriced = unpriced > 0;
     const stalePriceAsOf = oldestStalePriceTimestamp(rows);
-    const portfolioUpdatedAt = oldestFreshnessTimestamp(
-        lastSyncedAt,
-        pricesFetchedAt,
-        stalePriceAsOf,
-    );
+    // A failed price refresh keeps the last 24h move on screen, so its age
+    // joins the one freshness line instead of reading as current.
+    const staleChangeAsOf = oldestStaleChangeTimestamp(rows, effectivePriceMap);
+    // Test networks show no fiat, but a saved balance still says how old it is.
+    const portfolioUpdatedAt = testCoinsOnly
+        ? oldestFreshnessTimestamp(lastSyncedAt)
+        : oldestFreshnessTimestamp(
+            lastSyncedAt,
+            pricesFetchedAt,
+            stalePriceAsOf,
+            staleChangeAsOf,
+        );
     const hasUpdate = portfolioUpdatedAt !== null;
     const hasChange = !hidden
         && change24h
         && Number.isFinite(change24h.delta)
         && Number.isFinite(change24h.pct);
     const changeDisplay = hasChange ? percentChangeDisplay(change24h.pct) : null;
-    const showMeta = !hidden && (hasChange || hasUnpriced || hasUpdate);
+    const showMeta = !hidden && (testCoinsOnly
+        ? hasUpdate
+        : (hasChange || hasUnpriced || hasUpdate));
+    const balanceDisplay = testCoinsOnly
+        ? 'Test coins have no value'
+        : priceUnavailable
+            ? 'Price unavailable'
+            : formatFiatAmount(total, fiatCurrency, fiatLocale, true);
+    const balanceSpeech = testCoinsOnly
+        ? 'Test coins have no value'
+        : priceUnavailable
+            ? 'Price unavailable'
+            : formatFiatAmountForSpeech(total, fiatCurrency, fiatLocale);
+    const balanceIsMessage = testCoinsOnly || priceUnavailable;
+    const actionItems = [
+        typeof onRefresh === 'function' ? {
+            id: 'refresh',
+            label: refreshing ? t('components.totalBalanceHero.refreshingPortfolio') : t('components.totalBalanceHero.refreshPortfolio'),
+            title: refreshing ? t('components.totalBalanceHero.refreshingPortfolio') : t('components.totalBalanceHero.refreshPortfolio'),
+            Icon: Icon.RefreshIcon,
+            handler: onRefresh,
+            disabled: refreshing,
+            className: refreshing ? styles.refreshing : '',
+        } : null,
+        typeof onOpenSettings === 'function' ? ({
+            id: 'settings', label: t('components.totalBalanceHero.openSettings'), title: t('home.settings'), Icon: Icon.GearIcon, handler: onOpenSettings,
+        }) : null,
+        typeof onCommandPalette === 'function' ? {
+            id: 'search', label: t('components.leftNav.openCommandPalette'), title: t('components.leftNav.searchCmdCtrlK'), Icon: Icon.SearchIcon, handler: onCommandPalette, keyShortcuts: 'Meta+K Control+K',
+        } : null,
+        typeof onToggleFilter === 'function' ? {
+            id: 'filter', label: filterOpen ? t('components.totalBalanceHero.hideFilters') : t('components.totalBalanceHero.showFilters'), title: filterOpen ? t('components.totalBalanceHero.hideFilters') : t('components.totalBalanceHero.showFilters'), Icon: Icon.FilterIcon, handler: onToggleFilter, pressed: filterOpen,
+        } : null,
+        !testCoinsOnly ? {
+            id: 'chart', label: chartVisible ? t('components.totalBalanceHero.hideChart') : t('components.totalBalanceHero.showChart'), title: chartVisible ? t('components.totalBalanceHero.hideChart') : t('components.totalBalanceHero.showChart'), Icon: Icon.LineChartIcon, handler: toggleChartVisible, pressed: chartVisible,
+        } : null,
+        {
+            id: 'privacy', label: hidden ? t('components.totalBalanceHero.showBalance') : t('components.totalBalanceHero.hideBalance'), title: hidden ? t('components.totalBalanceHero.showBalance') : t('components.totalBalanceHero.hideBalance'), Icon: hidden ? Icon.EyeOffIcon : Icon.EyeIcon, handler: toggleHidden,
+        },
+        typeof onLockWallet === 'function' ? {
+            id: 'lock', label: t('home.lockWallet'), title: t('home.lockWallet'), Icon: Icon.LockIcon, handler: onLockWallet,
+        } : null,
+    ].filter(Boolean);
+
+    useEffect(() => {
+        if (!actionsOpen) return undefined;
+        const onPointerDown = (event) => {
+            if (!actionsWrapRef.current?.contains(event.target)) setActionsOpen(false);
+        };
+        const onKeyDown = (event) => {
+            if (event.key !== 'Escape') return;
+            event.preventDefault();
+            setActionsOpen(false);
+            actionsTriggerRef.current?.focus();
+        };
+        // Tabbing out of the menu closes it, as the header menu does, so no
+        // menu stays open while focus sits on the page behind it.
+        const onFocusIn = (event) => {
+            if (!actionsWrapRef.current?.contains(event.target)) setActionsOpen(false);
+        };
+        window.addEventListener('mousedown', onPointerDown);
+        window.addEventListener('keydown', onKeyDown);
+        window.addEventListener('focusin', onFocusIn);
+        return () => {
+            window.removeEventListener('mousedown', onPointerDown);
+            window.removeEventListener('keydown', onKeyDown);
+            window.removeEventListener('focusin', onFocusIn);
+        };
+    }, [actionsOpen]);
+
+    useEffect(() => {
+        if (actionsOpen) enabledMenuItems(actionsMenuRef.current)[0]?.focus();
+    }, [actionsOpen]);
+
+    useEffect(() => {
+        if (!compactActions) setActionsOpen(false);
+    }, [compactActions]);
 
     return (
         // Home's rows hold only the ACTIVE address on each chain (Home.jsx), so
         // "Total balance" read as the whole wallet while the wallet's other
         // addresses went uncounted (xchain-wallet#57). The label says what the
         // figure is.
-        <section className={styles.hero} aria-label="Active address balance">
+        <section className={styles.hero} aria-labelledby={labelId}>
             <div className={styles.row}>
-                <span className={styles.label}>
-                    Active address balance
+                <span id={labelId} className={styles.label}>
+                    {t('components.totalBalanceHero.activeAddressBalance')}
                     {filterLabel ? (
                         <span className={styles.scope}>· {filterLabel}</span>
                     ) : null}
                 </span>
                 <div
-                    className={styles.amount}
-                    aria-label={hidden
-                        ? 'Balance hidden'
-                        : priceUnavailable
-                            ? 'Price unavailable'
-                            : formatFiatAmountForSpeech(total, fiatCurrency, fiatLocale)}
+                    className={`${styles.amount} ${balanceIsMessage ? styles.amountMessage : ''}`}
+                    aria-label={hidden ? t('balances.balanceHidden') : balanceSpeech}
                 >
                     {hidden ? (
                         <span className={styles.hidden}>•••••</span>
                     ) : (
                         <>
                             <span className={styles.amountValue}>
-                                {priceUnavailable
-                                    ? 'Price unavailable'
-                                    : formatFiatAmount(total, fiatCurrency, fiatLocale, true)}
+                                {balanceDisplay}
                             </span>
-                            {!priceUnavailable ? <span className={styles.amountCode}>{fiatCurrency}</span> : null}
+                            {!testCoinsOnly && !priceUnavailable ? <span className={styles.amountCode}>{fiatCurrency}</span> : null}
                         </>
                     )}
                 </div>
-                <div className={styles.actions}>
-                    {typeof onRefresh === 'function' ? (
+                {compactActions ? (
+                    <div ref={actionsWrapRef} className={styles.compactActions}>
                         <Button
-                            type="button"
-                            className={`${styles.eye} ${refreshing ? styles.refreshing : ''}`}
-                            onClick={onRefresh}
-                            disabled={refreshing}
-                            aria-label={refreshing ? 'Refreshing portfolio' : 'Refresh portfolio'}
-                            title={refreshing ? 'Refreshing portfolio' : 'Refresh portfolio'}
-                            icon={<Icon.RefreshIcon />}
-                        >
-                            {null}
-                        </Button>
-                    ) : null}
-                    {/* Shells with no navigation surface need a
-                        VISIBLE way into Settings. Only the MV3 popup passes
-                        this (web and desktop reach Settings from the nav
-                        rail), so nothing changes for them. Prop-gated rather
-                        than variant-sniffed: the shell that lacks the route
-                        is the one that knows it. */}
-                    {typeof onOpenSettings === 'function' ? (
-                        <Button
+                            ref={actionsTriggerRef}
                             type="button"
                             className={styles.eye}
-                            onClick={onOpenSettings}
-                            aria-label="Open settings"
-                            title="Settings"
-                            icon={<Icon.GearIcon />}
+                            onClick={() => setActionsOpen((open) => !open)}
+                            aria-label={t('components.totalBalanceHero.balanceActions')}
+                            aria-haspopup="menu"
+                            aria-expanded={actionsOpen ? 'true' : 'false'}
+                            title={t('components.totalBalanceHero.balanceActions')}
+                            icon={<Icon.MoreIcon />}
                         >
                             {null}
                         </Button>
-                    ) : null}
-                    {typeof onCommandPalette === 'function' ? (
-                        <Button
-                            type="button"
-                            className={styles.eye}
-                            onClick={onCommandPalette}
-                            aria-label="Open command palette"
-                            aria-keyshortcuts="Meta+K Control+K"
-                            title="Search (Cmd/Ctrl+K)"
-                            icon={<Icon.SearchIcon />}
-                        >
-                            {null}
-                        </Button>
-                    ) : null}
-                    {typeof onToggleFilter === 'function' ? (
-                        <Button
-                            type="button"
-                            className={`${styles.eye} ${filterOpen ? styles.eyeActive : ''}`}
-                            onClick={onToggleFilter}
-                            aria-pressed={filterOpen ? 'true' : 'false'}
-                            aria-label={filterOpen ? 'Hide filters' : 'Show filters'}
-                            title={filterOpen ? 'Hide filters' : 'Show filters'}
-                            icon={<Icon.FilterIcon />}
-                        >
-                            {null}
-                        </Button>
-                    ) : null}
-                    <Button
-                        type="button"
-                        className={`${styles.eye} ${chartVisible ? styles.eyeActive : ''}`}
-                        onClick={toggleChartVisible}
-                        aria-pressed={chartVisible ? 'true' : 'false'}
-                        aria-label={chartVisible ? 'Hide chart' : 'Show chart'}
-                        title={chartVisible ? 'Hide chart' : 'Show chart'}
-                        icon={<Icon.LineChartIcon />}
-                    >
-                        {null}
-                    </Button>
-                    <Button
-                        type="button"
-                        className={styles.eye}
-                        onClick={toggleHidden}
-                        aria-label={hidden ? 'Show balance' : 'Hide balance'}
-                        title={hidden ? 'Show balance' : 'Hide balance'}
-                        icon={hidden ? <Icon.EyeOffIcon /> : <Icon.EyeIcon />}
-                    >
-                        {null}
-                    </Button>
-                    {typeof onLockWallet === 'function' ? (
-                        <Button
-                            type="button"
-                            className={styles.eye}
-                            onClick={onLockWallet}
-                            aria-label="Lock wallet"
-                            title="Lock wallet"
-                            icon={<Icon.LockIcon />}
-                        >
-                            {null}
-                        </Button>
-                    ) : null}
-                </div>
+                        {actionsOpen ? (
+                            <div
+                                ref={actionsMenuRef}
+                                className={styles.actionMenu}
+                                role="menu"
+                                aria-label={t('components.totalBalanceHero.balanceActions')}
+                                onKeyDown={(event) => {
+                                    if (!event.target.closest?.('[role="menuitem"], [role="menuitemcheckbox"]')) return;
+                                    const items = enabledMenuItems(actionsMenuRef.current);
+                                    const index = items.indexOf(document.activeElement);
+                                    let nextIndex = null;
+                                    if (event.key === 'ArrowDown') nextIndex = (index + 1) % items.length;
+                                    if (event.key === 'ArrowUp') nextIndex = (index - 1 + items.length) % items.length;
+                                    if (event.key === 'Home') nextIndex = 0;
+                                    if (event.key === 'End') nextIndex = items.length - 1;
+                                    if (nextIndex === null || items.length === 0) return;
+                                    event.preventDefault();
+                                    items[nextIndex]?.focus();
+                                }}
+                            >
+                                {actionItems.map(({ id, label, Icon: ActionIcon, handler, disabled, pressed, keyShortcuts }) => (
+                                    <Button
+                                        key={id}
+                                        type="button"
+                                        role={pressed === undefined ? 'menuitem' : 'menuitemcheckbox'}
+                                        className={styles.actionRow}
+                                        disabled={disabled}
+                                        aria-disabled={disabled ? 'true' : undefined}
+                                        aria-checked={pressed === undefined ? undefined : String(Boolean(pressed))}
+                                        aria-keyshortcuts={keyShortcuts}
+                                        onClick={() => {
+                                            setActionsOpen(false);
+                                            handler();
+                                        }}
+                                        icon={<ActionIcon />}
+                                    >
+                                        {label}
+                                    </Button>
+                                ))}
+                            </div>
+                        ) : null}
+                    </div>
+                ) : (
+                    <div className={styles.actions}>
+                        {actionItems.map(({ id, label, title, Icon: ActionIcon, handler, disabled, pressed, keyShortcuts, className }) => (
+                            id === 'settings' ? (
+                                <Button
+                                    key={id}
+                                    type="button"
+                                    className={styles.eye}
+                                    onClick={handler}
+                                    aria-label={t('components.totalBalanceHero.openSettings')}
+                                    title={title}
+                                    icon={<ActionIcon />}
+                                >
+                                    {null}
+                                </Button>
+                            ) : (
+                                <Button
+                                    key={id}
+                                    type="button"
+                                    className={`${styles.eye} ${pressed ? styles.eyeActive : ''} ${className || ''}`}
+                                    onClick={handler}
+                                    disabled={disabled}
+                                    aria-pressed={pressed === undefined ? undefined : String(Boolean(pressed))}
+                                    aria-label={label}
+                                    aria-keyshortcuts={keyShortcuts}
+                                    title={title}
+                                    icon={<ActionIcon />}
+                                >
+                                    {null}
+                                </Button>
+                            )
+                        ))}
+                    </div>
+                )}
             </div>
             {showMeta ? (
-                <div className={styles.meta} aria-label="Balance summary">
+                <div className={styles.meta} aria-label={t('components.totalBalanceHero.balanceSummary')}>
                     <span className={styles.metaLeft}>
-                        {hasChange ? (
+                        {hasChange && !testCoinsOnly ? (
                             <span
                                 className={
                                     changeDisplay.direction === 'positive' ? styles.changePositive
                                         : changeDisplay.direction === 'negative' ? styles.changeNegative
                                         : styles.changeNeutral
                                 }
-                                aria-label={`${changeDisplay.label}; ${formatFiatAmountForSpeech(Math.abs(change24h.delta), fiatCurrency, fiatLocale)}`}
+                                aria-label={t('components.totalBalanceHero.24HourChange', { label: changeDisplay.label, formatFiatAmountForSpeechValue: formatFiatAmountForSpeech(Math.abs(change24h.delta), fiatCurrency, fiatLocale) })}
                             >
                                 {changeDisplay.direction === 'positive' ? '▲' : changeDisplay.direction === 'negative' ? '▼' : '-'}{' '}
                                 {formatFiatAmount(Math.abs(change24h.delta), fiatCurrency, fiatLocale)}{' '}
-                                ({changeDisplay.text})
+                                ({changeDisplay.text}{t('components.totalBalanceHero.24h')}
                             </span>
                         ) : null}
-                        {hasUnpriced ? (
+                        {hasUnpriced && !testCoinsOnly ? (
                             <span className={styles.metaUnpriced}>
                                 {unpricedLabel(rows)}
                             </span>
@@ -323,6 +459,19 @@ function oldestFreshnessTimestamp(...timestamps) {
         typeof timestamp === 'number' && Number.isFinite(timestamp) && timestamp > 0
     ));
     return valid.length > 0 ? Math.min(...valid) : null;
+}
+
+function oldestStaleChangeTimestamp(rows, priceMap) {
+    let oldest = null;
+    for (const row of rows || []) {
+        if (row?.kind !== 'native' || !row.chainId || fiatValueOf(row) == null) continue;
+        const entry = priceMap?.[row.chainId];
+        if (entry?.stale !== true || !Number.isFinite(entry.change24hPct)) continue;
+        const timestamp = Number(entry.fetchedAt);
+        if (!Number.isFinite(timestamp) || timestamp <= 0) continue;
+        if (oldest === null || timestamp < oldest) oldest = timestamp;
+    }
+    return oldest;
 }
 
 function oldestStalePriceTimestamp(rows) {

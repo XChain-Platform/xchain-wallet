@@ -20,6 +20,10 @@ import { __clearTokenInfoCache } from '../../packages/core/src/shared/hooks/useT
 import { PageHeader } from '../../packages/core/src/ui/PageHeader.jsx';
 import { resetBackStackForTests } from '../../packages/core/src/ui/backStack.js';
 
+vi.mock('../../packages/core/src/shared/components/MarketChart.jsx', () => ({
+    MarketChart: () => null,
+}));
+
 const WALLET = 'route-wallet';
 const MARKET = { chainId: 'bitcoin-mainnet', tick1: 'XCHAIN', tick2: 'BTC' };
 const savedResizeObserver = globalThis.ResizeObserver;
@@ -92,6 +96,24 @@ function LockCycleHarness() {
     );
 }
 
+function SecretRouteHarness() {
+    const [view, setView] = useState('home');
+    useLastView({
+        walletId: WALLET,
+        currentView: view,
+        onResume: setView,
+    });
+    return (
+        <>
+            <output>{view}</output>
+            <button type="button" onClick={() => setView('addresses')}>Addresses</button>
+            <button type="button" onClick={() => setView('view-private-key')}>Export key</button>
+            <button type="button" onClick={() => setView('migrate-bip39')}>Reveal recovery phrase</button>
+            <button type="button" onClick={() => setView('addresses')}>Leave export</button>
+        </>
+    );
+}
+
 beforeEach(() => {
     localStorage.clear();
     resetBackStackForTests();
@@ -132,6 +154,11 @@ describe('contextual route state', () => {
             chainId: 'bitcoin-mainnet',
             tick: 'ALPHA',
             quantity: '12',
+            balance: '12',
+            privateKey: 'private-key',
+            password: 'wallet-password',
+            psbt: 'unsigned-transaction',
+            seed: 'recovery words',
             ignored: { unsafe: true },
         });
         expect(readLastViewRoute(WALLET)).toEqual({
@@ -139,7 +166,6 @@ describe('contextual route state', () => {
             params: {
                 chainId: 'bitcoin-mainnet',
                 tick: 'ALPHA',
-                quantity: '12',
             },
         });
         writeLastView(WALLET, 'lists');
@@ -169,6 +195,33 @@ describe('contextual route state', () => {
 
         window.history.forward();
         await waitFor(() => expect(screen.getByText('market:XCHAIN/BTC')).toBeInTheDocument());
+    });
+
+    it.each([
+        ['Export key', 'view-private-key'],
+        ['Reveal recovery phrase', 'migrate-bip39'],
+    ])('replaces the %s route with the prior safe history snapshot', async (button, secretView) => {
+        render(<SecretRouteHarness />);
+        await waitFor(() => expect(window.history.state?.xcRoute?.view).toBe('home'));
+
+        fireEvent.click(screen.getByRole('button', { name: 'Addresses' }));
+        await waitFor(() => expect(window.history.state?.xcRoute?.view).toBe('addresses'));
+
+        const replaceState = vi.spyOn(window.history, 'replaceState');
+        fireEvent.click(screen.getByRole('button', { name: button }));
+        expect(screen.getByText(secretView)).toBeInTheDocument();
+        await waitFor(() => expect(window.history.state?.xcRoute?.view).toBe('addresses'));
+        expect(replaceState).toHaveBeenLastCalledWith(expect.objectContaining({
+            xcRoute: expect.objectContaining({ view: 'addresses' }),
+        }), '');
+
+        fireEvent.click(screen.getByRole('button', { name: 'Leave export' }));
+        window.history.back();
+        await waitFor(() => expect(screen.getByText('home')).toBeInTheDocument());
+
+        window.history.forward();
+        await waitFor(() => expect(screen.getByText('addresses')).toBeInTheDocument());
+        expect(screen.queryByText(secretView)).toBeNull();
     });
 
     it('renders a plain not-found state when a saved list no longer exists', async () => {

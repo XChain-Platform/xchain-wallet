@@ -39,7 +39,7 @@
 // duration-metered with 90 free days, so this spec sits OFF the fee lane that
 // §11 already covers and any coin movement here is escrow, not fee.
 
-import { createWallet, expect, test } from '../../fixtures/wallet.js';
+import { createWallet, expect, openPaletteCommand, test } from '../../fixtures/wallet.js';
 import {
     expectConfirmModal,
     EXPLORER_URL,
@@ -187,19 +187,6 @@ async function waitForBalanceAtLeast(address, tick, min, timeoutMs = 180_000) {
     throw new Error(`${tick} balance never reached ${min} for ${address} (last=${last})`);
 }
 
-async function gotoPalette(page, title) {
-    await page.keyboard.press('ControlOrMeta+k');
-    const dialog = page.getByRole('dialog', { name: 'Command palette' });
-    await expect(dialog, 'the command palette did not open').toBeVisible({ timeout: 15_000 });
-    const combobox = dialog.getByRole('combobox').first();
-    await expect(combobox).toBeEditable({ timeout: 15_000 });
-    await combobox.fill(title);
-    const row = page.getByRole('option', { name: new RegExp(`^${title}\\b`) }).first();
-    await expect(row, `no palette command matching "${title}"`).toBeVisible();
-    await row.click();
-    await expect(dialog).toBeHidden({ timeout: 15_000 });
-}
-
 /** Approves the open confirm screen and returns the broadcast txid. */
 async function approveAndGetTxid(page) {
     await page.getByTestId('confirm-approve').click();
@@ -218,7 +205,7 @@ async function onboardFundMint(page, walletName) {
     await createWallet(page, { password: PASSWORD, name: walletName });
     await switchToRegtest(page, PASSWORD);
 
-    await gotoPalette(page, 'Create order');
+    await openPaletteCommand(page, 'Create order');
     const main = page.getByRole('main');
     await expect(main.getByLabel('From address')).toBeVisible({ timeout: 30_000 });
     // Every action form carries its own chain picker and they all default to
@@ -244,7 +231,7 @@ async function onboardFundMint(page, walletName) {
  * indexed action once the chain has accepted it.
  */
 async function placeOrder(page) {
-    await gotoPalette(page, 'Create order');
+    await openPaletteCommand(page, 'Create order');
     const main = page.getByRole('main');
     await expect(main.getByLabel('From address')).toBeVisible({ timeout: 30_000 });
     await selectVenueChain(main);
@@ -316,7 +303,7 @@ test.describe(`the DEX ORDER lane on ${REGTEST_CHAIN_LABEL}`, () => {
         });
 
         await test.step('My orders lists it as open, on chain terms', async () => {
-            await gotoPalette(page, 'My orders');
+            await openPaletteCommand(page, 'My orders');
             const row = orderRow(page, orderIndex);
             await expect(row, `the order this wallet just placed (#${orderIndex}) is not in My orders`)
                 .toBeVisible({ timeout: 60_000 });
@@ -362,7 +349,7 @@ test.describe(`the DEX ORDER lane on ${REGTEST_CHAIN_LABEL}`, () => {
         await test.step('and the list agrees with the chain afterwards', async () => {
             await page.reload();
             await unlockAfterReload(page, PASSWORD);
-            await gotoPalette(page, 'My orders');
+            await openPaletteCommand(page, 'My orders');
             const row = orderRow(page, orderIndex);
             await expect(row, `#${orderIndex} vanished from My orders after being cancelled`)
                 .toBeVisible({ timeout: 60_000 });
@@ -404,7 +391,7 @@ test.describe(`the DEX ORDER lane on ${REGTEST_CHAIN_LABEL}`, () => {
         const expectedUnix = Math.floor(Date.parse(localInput) / 1000);
 
         await test.step('edit the expiration from My orders', async () => {
-            await gotoPalette(page, 'My orders');
+            await openPaletteCommand(page, 'My orders');
             const row = orderRow(page, orderIndex);
             await expect(row, `#${orderIndex} is not in My orders to edit`)
                 .toBeVisible({ timeout: 60_000 });
@@ -420,9 +407,12 @@ test.describe(`the DEX ORDER lane on ${REGTEST_CHAIN_LABEL}`, () => {
             // A blank edit is refused before anything is signed: the wire has
             // no way to say "change nothing", so an empty submit would spend a
             // miner fee to say nothing.
-            await expect(main.getByRole('button', { name: 'Edit order' }),
+            await main.getByRole('button', { name: 'Edit order' }).click();
+            await expect(main, 'a blank edit was not refused with the no-change notice')
+                .toContainText('Change at least one field', { timeout: 30_000 });
+            await expect(page.getByTestId('confirm-approve'),
                 'an edit with no change offers to broadcast')
-                .toBeDisabled();
+                .toHaveCount(0);
 
             await expiration.fill(localInput);
             await main.getByRole('button', { name: 'Edit order' }).click();

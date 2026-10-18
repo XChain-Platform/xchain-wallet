@@ -9,17 +9,17 @@
 // contact legal@dankest.llc.
 
 import { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react';
-import { Button, EmptyState, Icon, Input, ListPage, ListRow, PageHeader, Screen, Skeleton, StatusMessage, Tabs } from '@xchain-wallet/core/ui';
-import { registry as registryLib, branding as brandingLib, flows as flowsLib } from '@xchain-wallet/core';
+import { Button, Chip, EmptyState, Icon, Input, ListPage, ListRow, PageHeader, Screen, Skeleton, StatusMessage, Tabs } from '@xchain-wallet/core/ui';
+import { registry as registryLib, flows as flowsLib } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
-import { useReachability } from '../hooks/useReachability.js';
+import { useNetworkOffline } from '../hooks/useNetworkOffline.js';
+import { OfflineEmptyState } from '../components/OfflineEmptyState.jsx';
 import { DispenserBadge } from '../components/DispenserBadge.jsx';
-import { tickerColor } from '../components/BalanceList.jsx';
 import { TickerIcon } from '../components/TickerIcon.jsx';
-import styles from './IssueTokenForm.module.css';
-import receiveStyles from './Receive.module.css';
+import { AssetMark } from '../../ui/AssetMark.jsx';
 import marketsStyles from './MarketsList.module.css';
 import { percentChangeDisplay } from '../utils/percentFormat.js';
+import { formatDecimalAmount } from '../utils/amountFormat.js';
 import { withRequestTimeout } from '../utils/requestTimeout.js';
 
 const chainRegistry = registryLib.defaultRegistry();
@@ -56,8 +56,7 @@ export function MarketsList({
 }) {
     const { messaging, shell } = useMessaging();
     const variant = screenVariantFor(shell);
-    const { overall: reachabilityOverall } = useReachability({});
-    const networkOffline = reachabilityOverall === 'offline';
+    const { offline: networkOffline, recheck: recheckNetwork } = useNetworkOffline({ walletId });
     const tabsId = useId();
 
     const [markets, setMarkets] = useState(/** @type {Array<{ tick1: string, tick2: string, lastPrice?: string, change24h?: string, depth?: number }>} */ ([]));
@@ -150,7 +149,8 @@ export function MarketsList({
                 }
             });
         return () => { cancelled = true; };
-    }, [selectedAsset, messaging, walletId, marketsReload]);
+    // The connection coming back reads the markets again.
+    }, [selectedAsset, messaging, walletId, marketsReload, networkOffline]);
 
     const selectedAssetKey = selectedAsset
         ? `${selectedAsset.chainId}:${selectedAsset.tick}`
@@ -280,72 +280,55 @@ export function MarketsList({
             ? (selectedAsset.displayName || selectorTickUpper)
             : (selectorDescriptor?.displayName || selectorNativeTicker || selectorTickUpper))
         : 'Select coin or token';
-    const assetImageUrl = selectedAsset && selectorDescriptor
-        ? (isTokenSelection ? null : brandingLib.chainIconLargeUrl(selectorDescriptor.id))
-        : null;
-    const assetLetter = selectedAsset
-        ? (isTokenSelection
-            ? selectorTickUpper.slice(0, 1)
-            : (selectorNativeTicker || selectorDescriptor?.displayName || '?').slice(0, 1))
-        : '?';
-    const assetSub = selectedAsset && selectorDescriptor
-        ? (isTokenSelection
-            ? selectorTickUpper
-            : (selectorDescriptor.networkKind !== 'mainnet' ? selectorDescriptor.networkKind : (selectorDescriptor.displayName || '')))
-        : '';
-
+    // The load error is a page notice, shown first; the results region below
+    // renders nothing in its place.
+    // Offline, the results region's offline state is the page's one message.
+    const showLoadError = !!selectedAsset && !(marketsLoading && !hasCachedMarkets) && !!loadError
+        && !networkOffline;
+    const showOffline = !!selectedAsset && networkOffline
+        && ((marketsLoading && !hasCachedMarkets) || !!loadError);
     return (
         <Screen variant={variant} header={header}>
             <ListPage
+                notices={showLoadError ? (
+                    <StatusMessage
+                        variant="error"
+                        recovery={{
+                            label: 'Try again',
+                            onAction: () => {
+                                setSettledAssetKey(null);
+                                setLoading(true);
+                                setMarketsReload((value) => value + 1);
+                            },
+                        }}
+                    >
+                        {loadError}
+                    </StatusMessage>
+                ) : null}
                 toolbar={(
                     <div style={{ width: '100%' }}>
                         <Button
                             type="button"
-                            className={`${receiveStyles.assetCard} ${marketsStyles.assetButton}`}
+                            className={`${marketsStyles.assetCard} ${marketsStyles.assetButton}`}
                             icon={null}
                             onClick={onChangeAsset}
                             aria-label={selectedAsset
                                 ? `Change asset (currently ${assetName})`
                                 : 'Select coin or token'}
                         >
-                            <span className={receiveStyles.assetIconWrap}>
-                                {assetImageUrl ? (
-                                    <img
-                                        src={assetImageUrl}
-                                        alt=""
-                                        aria-hidden="true"
-                                        className={receiveStyles.assetIcon}
-                                        onError={(e) => { e.currentTarget.style.display = 'none'; }}
-                                    />
-                                ) : (
-                                    <span
-                                        className={receiveStyles.assetIconFallback}
-                                        style={{ background: tickerColor(selectorTickUpper || 'BTC') }}
-                                        aria-hidden="true"
-                                    >
-                                        {assetLetter}
-                                    </span>
-                                )}
-                                {isTokenSelection && selectorDescriptor ? (() => {
-                                    const chainPipUrl = brandingLib.chainIconSmallUrl(selectorDescriptor.id);
-                                    return chainPipUrl ? (
-                                        <img
-                                            src={chainPipUrl}
-                                            alt=""
-                                            aria-hidden="true"
-                                            title={selectorDescriptor.displayName}
-                                            className={receiveStyles.assetChainOverlay}
-                                        />
-                                    ) : null;
-                                })() : null}
+                            {selectedAsset && selectorDescriptor ? (
+                                <AssetMark
+                                    chainId={selectorDescriptor.id}
+                                    tick={selectorTickUpper}
+                                    isNative={!isTokenSelection}
+                                />
+                            ) : null}
+                            {/* The card names the selection: the chain for a native coin
+                                (without its network kind), the token name otherwise. */}
+                            <span className={marketsStyles.assetText}>
+                                <span className={marketsStyles.assetName}>{assetName}</span>
                             </span>
-                            <span className={receiveStyles.assetText}>
-                                <span className={receiveStyles.assetName}>{assetName}</span>
-                                {assetSub ? (
-                                    <span className={receiveStyles.assetSub}>{assetSub}</span>
-                                ) : null}
-                            </span>
-                            <span className={receiveStyles.assetChevron} aria-hidden="true">›</span>
+                            <span className={marketsStyles.assetChevron} aria-hidden="true">›</span>
                         </Button>
 
                         {selectedAsset ? (
@@ -393,7 +376,7 @@ export function MarketsList({
                                     }}
                                     panelId={`${tabsId}-panel`}
                                     aria-label="Markets view"
-                                    style={{ flexShrink: 0, width: 'auto' }}
+                                    className={marketsStyles.marketTabs}
                                 />
                             </div>
                         ) : null}
@@ -405,7 +388,7 @@ export function MarketsList({
                     role={selectedAsset ? 'tabpanel' : undefined}
                     aria-labelledby={selectedAsset ? `${tabsId}-tab-${tab}` : undefined}
                 >
-                    <div role="region" aria-label="Markets results" aria-busy={marketsLoading || undefined}>
+                    <div role="region" aria-label="Markets results" aria-busy={(marketsLoading && !showOffline) || undefined}>
                         {!selectedAsset ? (
                             <EmptyState
                                 title="No asset selected"
@@ -414,26 +397,13 @@ export function MarketsList({
                                 onAction={onChangeAsset}
                                 actionIcon={<Icon.MarketIcon />}
                             />
+                        ) : showOffline ? (
+                            <OfflineEmptyState body="Markets load when the connection returns." onRetry={recheckNetwork} />
                         ) : marketsLoading && !hasCachedMarkets ? (
                             <div role="status" aria-label="Loading markets">
                                 <Skeleton.List rows={5} rowHeight={60} avatarSize={36} />
                             </div>
-                        ) : loadError ? (
-                            <StatusMessage
-                                variant="error"
-                                className={styles.hint}
-                                recovery={{
-                                    label: 'Try again',
-                                    onAction: () => {
-                                        setSettledAssetKey(null);
-                                        setLoading(true);
-                                        setMarketsReload((value) => value + 1);
-                                    },
-                                }}
-                            >
-                                {loadError}
-                            </StatusMessage>
-                        ) : displayMarkets.length === 0 ? (
+                        ) : loadError ? null : displayMarkets.length === 0 ? (
                             <EmptyState
                                 title={filtersHideAllMarkets
                                     ? 'No results for these filters'
@@ -448,12 +418,12 @@ export function MarketsList({
                                     ? 'Matching markets appear here after you reset or change the filters.'
                                     : tab === 'watchlist'
                                         ? `Starred markets for ${selectedAsset.tick} appear here after you star one.`
-                                        : 'Market pairs involving this asset appear here when they become available on its chain.'}
+                                        : 'Market pairs involving this asset appear here when they become available on its network.'}
                                 actionLabel={filtersHideAllMarkets ? 'Reset filters' : undefined}
                                 onAction={filtersHideAllMarkets ? resetFilters : undefined}
                             />
                         ) : (
-                        <div className={receiveStyles.assetCard} style={{ display: 'block', padding: 0, marginBottom: 'var(--xc-space-3)' }}>
+                        <div className={marketsStyles.marketsCard}>
                             <ul ref={marketResultsRef} aria-label="Markets" style={{ listStyle: 'none', padding: 0, margin: 0 }}>
                                 {displayMarkets.slice(0, visibleMarketCount).map((m, idx) => (
                                     <MarketRow
@@ -478,7 +448,10 @@ export function MarketsList({
                             </ul>
                             {displayMarkets.length > visibleMarketCount ? (
                                 <div className={marketsStyles.pagination} aria-live="polite">
-                                    <span className={marketsStyles.paginationCount}>
+                                    <span
+                                        className={marketsStyles.paginationCount}
+                                        style={{ fontVariantNumeric: 'tabular-nums' }}
+                                    >
                                         {visibleMarketCount.toLocaleString('en-US')} of {displayMarkets.length.toLocaleString('en-US')} markets shown
                                     </span>
                                     <Button
@@ -529,7 +502,7 @@ function MarketRow({ chainId, selectedTick, tick1, tick2, name1, name2, lastPric
     const changeDisplay = percentChangeDisplay(changeNum);
     const changeColor = changeDisplay?.direction === 'positive'
         ? 'var(--xc-success)'
-        : changeDisplay?.direction === 'negative' ? 'var(--xc-danger)' : 'var(--xc-text-muted)';
+        : changeDisplay?.direction === 'negative' ? 'var(--xc-danger-fg)' : 'var(--xc-text-muted)';
     // Depth intensity: same accent hue, more saturated background as
     // depth grows. Five tiers tuned to feel meaningful from 1 → 30+.
     const depthPct = typeof depth === 'number' && Number.isFinite(depth)
@@ -563,30 +536,46 @@ function MarketRow({ chainId, selectedTick, tick1, tick2, name1, name2, lastPric
             <ListRow
                 type="button"
                 className={marketsStyles.marketButton}
+                style={{
+                    fontVariantNumeric: 'tabular-nums',
+                }}
                 onClick={onOpen}
                 disabled={openDisabled}
                 aria-label={`Open ${otherName || otherTick} market`}
                 tooltip={openDisabled ? 'Opening a market needs a network connection' : undefined}
                 data-market-result="true"
+                trailingClassName={marketsStyles.marketTrailing}
                 leading={<TickerIcon chainId={chainId} tick={otherTick} />}
                 title={(
                     <span
-                        style={{ display: 'flex', alignItems: 'baseline', gap: 'var(--xc-space-2)', flexWrap: 'wrap' }}
+                        style={{ display: 'flex', alignItems: 'baseline', gap: 'var(--xc-space-2)', flexWrap: 'wrap', minWidth: 0 }}
                     >
-                        <strong style={{ fontSize: 'var(--xc-text-md)' }}>{otherTick}</strong>
+                        {/* A ticker may run to 250 characters; the pair chip
+                            shortens it with an ellipsis inside the row rather
+                            than pushing the 24h change off the screen. */}
+                        <Chip className={marketsStyles.pairChip} title={`${tick1} / ${tick2}`}>
+                            <span className={marketsStyles.pairTick}>{tick1}</span>
+                            <span aria-hidden="true">{' / '}</span>
+                            <span className={marketsStyles.pairTick}>{tick2}</span>
+                        </Chip>
                         {otherName && otherName.toUpperCase() !== otherTick.toUpperCase() ? (
                             <span>{otherName}</span>
                         ) : null}
                         <DispenserBadge chainId={chainId} tick={otherTick} />
                     </span>
                 )}
-                subtitle={lastPrice ? <span>last {lastPrice}</span> : null}
+                subtitle={lastPrice ? (
+                    <span>
+                        last {formatDecimalAmount(lastPrice)} {tick2}
+                    </span>
+                ) : null}
                 trailing={(
                     <span style={{
                         display: 'flex',
                         flexDirection: 'column',
                         alignItems: 'flex-end',
                         gap: '2px',
+                        fontVariantNumeric: 'tabular-nums',
                     }}>
                         {change24h ? (
                             <span
@@ -612,12 +601,14 @@ function MarketRow({ chainId, selectedTick, tick1, tick2, name1, name2, lastPric
                             <span style={{
                                 display: 'inline-block',
                                 background: `color-mix(in srgb, var(--xc-accent-primary) ${depthPct}%, transparent)`,
-                                color: 'var(--xc-accent-text)',
+                                color: 'var(--xc-text)',
                                 fontWeight: 600,
                                 padding: '1px 8px',
                                 borderRadius: 999,
                                 fontSize: 11,
                                 lineHeight: 1.5,
+                                // A long pair name squeezed the pill into two lines.
+                                whiteSpace: 'nowrap',
                             }}>
                                 depth {depth}
                             </span>

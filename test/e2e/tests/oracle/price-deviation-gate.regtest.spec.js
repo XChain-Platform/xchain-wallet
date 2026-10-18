@@ -44,9 +44,10 @@
 //   cd test/e2e && XC_REGTEST_COIN=RLTC npx playwright test \
 //       --config=playwright.regtest.config.js tests/oracle/price-deviation-gate.regtest.spec.js
 
-import { createWallet, expect, test } from '../../fixtures/wallet.js';
+import { createWallet, expect, openPaletteCommand, test } from '../../fixtures/wallet.js';
 import {
     EXPLORER_URL,
+    expectConfirmModal,
     REGTEST_ADDRESS_RE,
     REGTEST_CHAIN_LABEL,
     REGTEST_COIN,
@@ -123,25 +124,12 @@ async function waitForOracleRow(address, tick, timeoutMs = 180_000) {
         : `no oracle_prices row for ${address}/${tick} ever reached the hub mirror`);
 }
 
-async function gotoPalette(page, title) {
-    await page.keyboard.press('ControlOrMeta+k');
-    const dialog = page.getByRole('dialog', { name: 'Command palette' });
-    await expect(dialog, 'the command palette did not open').toBeVisible({ timeout: 15_000 });
-    const combobox = dialog.getByRole('combobox').first();
-    await expect(combobox).toBeEditable({ timeout: 15_000 });
-    await combobox.fill(title);
-    const row = page.getByRole('option', { name: new RegExp(`^${title}\\b`) }).first();
-    await expect(row, `no palette command matching "${title}"`).toBeVisible();
-    await row.click();
-    await expect(dialog).toBeHidden({ timeout: 15_000 });
-}
-
-/** Fills the oracle form for this pair at `value` and reaches the review stage. */
+/** Fills the oracle form for this pair at `value` and opens the confirm screen. */
 async function stagePublish(page, value) {
     // Home first: a palette command for the route already mounted is a no-op
     // (D-117), and after a publish this route sits on its own result screen.
     await page.getByRole('button', { name: 'Home', exact: true }).first().click();
-    await gotoPalette(page, 'Publish oracle price');
+    await openPaletteCommand(page, 'Publish oracle price');
     const main = page.getByRole('main');
     await expect(main.getByLabel(/^Token ticker/)).toBeVisible({ timeout: 30_000 });
     // D-145: this form published on the wallet's first chain until it grew a
@@ -151,22 +139,22 @@ async function stagePublish(page, value) {
     await main.getByLabel('Currency').selectOption(FIAT);
     await main.getByLabel(/^Price of one/).fill(value);
     await main.getByLabel(/^Usage fee/).fill(USAGE_FEE);
-    await main.getByRole('button', { name: 'Preview' }).click();
-    const review = page.getByRole('main');
-    await expect(review.getByRole('button', { name: 'Publish price' }),
-        'the form never reached its review stage')
-        .toBeVisible({ timeout: 30_000 });
-    return review;
+    await main.getByRole('button', { name: 'Publish price' }).click();
+    // A full-mode wallet signs from the shared confirm screen, which carries the
+    // oracle notes, the typed PUBLISH box and the password.
+    return expectConfirmModal(page, 'the price publish', 60_000);
 }
 
 /** Signs the staged publish and returns the indexed action. */
 async function signPublish(page, review) {
-    const pw = page.getByLabel('Password');
+    const pw = review.getByLabel('Password', { exact: true });
     if (await pw.count() > 0) await pw.fill(PASSWORD);
-    await review.getByRole('button', { name: 'Publish price' }).click();
-    await expect(review, 'no transaction id ever appeared after Publish price')
+    await expect(page.getByTestId('confirm-approve')).toBeEnabled({ timeout: 60_000 });
+    await page.getByTestId('confirm-approve').click();
+    const done = page.getByRole('main');
+    await expect(done, 'no transaction id ever appeared after approving the publish')
         .toContainText(/[0-9a-f]{64}/, { timeout: 180_000 });
-    const txid = (await review.innerText()).match(/[0-9a-f]{64}/)?.[0];
+    const txid = (await done.innerText()).match(/[0-9a-f]{64}/)?.[0];
     return waitForIndexedAction(txid);
 }
 
@@ -192,7 +180,7 @@ test.describe(`the PRICE v1 deviation gate on ${REGTEST_CHAIN_LABEL}`, () => {
                 await createWallet(page, { password: PASSWORD, name: 'Deviation Operator' });
                 await switchToRegtest(page, PASSWORD);
 
-                await gotoPalette(page, 'Publish oracle price');
+                await openPaletteCommand(page, 'Publish oracle price');
                 const main = page.getByRole('main');
                 await expect(main.getByLabel(/^Token ticker/)).toBeVisible({ timeout: 30_000 });
                 await selectVenueChain(main);
@@ -275,7 +263,7 @@ test.describe(`the PRICE v1 deviation gate on ${REGTEST_CHAIN_LABEL}`, () => {
 
                 // THE ASSERTION THAT MATTERS: the button is not merely
                 // accompanied by a box, it is BLOCKED by it.
-                const publish = review.getByRole('button', { name: 'Publish price' });
+                const publish = page.getByTestId('confirm-approve');
                 await expect(publish,
                     'the typed confirm is decorative: Publish is enabled with the box empty')
                     .toBeDisabled();
@@ -313,7 +301,7 @@ test.describe(`the PRICE v1 deviation gate on ${REGTEST_CHAIN_LABEL}`, () => {
                     + 'one (3.00) - in which case every correction inside a 24h window is gated')
                     .toHaveCount(0);
 
-                await expect(review.getByRole('button', { name: 'Publish price' }),
+                await expect(page.getByTestId('confirm-approve'),
                     'Publish is blocked on a publish the form never gated')
                     .toBeEnabled();
             });

@@ -1,0 +1,172 @@
+.root {
+    /* The pointer target never drops below the WCAG 2.5.8 floor; a later
+       min-height or height here may raise it. */
+    min-block-size: var(--xc-tap-min);
+    --xc-switch-hit-size: 44px;
+    --xc-switch-track-width: var(--xc-control-h-md);
+    --xc-switch-track-height: calc(var(--xc-control-h-sm) - var(--xc-space-2));
+    --xc-switch-thumb-size: calc(var(--xc-switch-track-height) - 6px);
+
+    box-sizing: border-box;
+    display: flex;
+    flex: 1 1 100%;
+    align-items: center;
+    justify-content: space-between;
+    min-width: 0;
+    min-height: var(--xc-switch-hit-size);
+    gap: var(--xc-space-3);
+    color: var(--xc-text);
+    font-family: var(--xc-font-sans);
+    cursor: pointer;
+}
+
+.copy {
+    display: flex;
+    flex: 1 1 auto;
+    flex-direction: column;
+    min-width: 0;
+}
+
+.label {
+    color: var(--xc-text);
+    font-size: var(--xc-text-sm);
+    font-weight: 500;
+    overflow-wrap: anywhere;
+}
+
+.description {
+    margin-block-start: 2px;
+    color: var(--xc-text-muted);
+    font-size: var(--xc-text-xs);
+    line-height: 1.3;
+    overflow-wrap: anywhere;
+}
+
+.hitArea {
+    position: relative;
+    display: grid;
+    flex: 0 0 var(--xc-switch-hit-size);
+    width: var(--xc-switch-hit-size);
+    height: var(--xc-switch-hit-size);
+    place-items: center;
+}
+
+.input {
+    /* The invisible input fills the 44px hit area, so the control itself,
+       not only its label, is a full-size touch target. */
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    margin: 0;
+    /* Opacity 0 also hides the global focus ring on the input; the track
+       draws the visible ring below. */
+    /* Important: the global disabled rule in tokens.css sets opacity with !important,
+       which would otherwise paint a disabled switch's native checkbox over the track. */
+    opacity: 0 !important;
+    cursor: inherit;
+}
+
+/* The global disabled rule forces opacity with !important, which would make
+   this invisible native input paint over the drawn control; the module rule
+   outranks it and keeps the input hidden while disabled. */
+.input:disabled {
+    opacity: 0 !important;
+}
+
+.track {
+    box-sizing: border-box;
+    display: flex;
+    align-items: center;
+    justify-content: flex-start;
+    width: var(--xc-switch-track-width);
+    height: var(--xc-switch-track-height);
+    padding: 2px;
+    border: 1px solid var(--xc-control-border-hover);
+    border-radius: var(--xc-radius-pill);
+    background: var(--xc-control-bg);
+    pointer-events: none;
+    transition: background var(--xc-transition), border-color var(--xc-transition);
+}
+
+.thumb {
+    width: var(--xc-switch-thumb-size);
+    height: var(--xc-switch-thumb-size);
+    border-radius: var(--xc-radius-pill);
+    background: var(--xc-text-muted);
+    transition: background var(--xc-transition);
+}
+
+.input:checked + .track {
+    justify-content: flex-end;
+    border-color: var(--xc-control-selected);
+    background: var(--xc-control-selected);
+}
+
+.input:checked + .track .thumb {
+    background: var(--xc-control-selected-text);
+}
+
+.root:hover .input:not(:disabled):not(:checked) + .track {
+    border-color: var(--xc-control-border-hover);
+    background: var(--xc-control-bg-hover);
+}
+
+.root:hover .input:not(:disabled):checked + .track {
+    border-color: var(--xc-accent-primary-hover);
+    background: var(--xc-accent-primary-hover);
+}
+
+.input:focus-visible + .track {
+    outline: 2px solid var(--xc-control-focus-ring);
+    outline-offset: 2px;
+}
+
+.input:disabled + .track {
+    border-color: var(--xc-control-disabled-border);
+    filter: saturate(var(--xc-disabled-saturation));
+}
+
+.input:disabled:not(:checked) + .track {
+    background: var(--xc-control-disabled-bg);
+}
+
+.input:disabled:not(:checked) + .track .thumb {
+    background: var(--xc-control-disabled-text);
+}
+
+.disabled {
+    color: var(--xc-control-disabled-text);
+    cursor: not-allowed;
+}
+
+.disabled .label,
+.disabled .description {
+    color: var(--xc-control-disabled-text);
+}
+
+@media (forced-colors: active) {
+    .track {
+        border-color: ButtonText;
+        background: Canvas;
+        forced-color-adjust: none;
+    }
+
+    .thumb {
+        background: ButtonText;
+    }
+
+    .input:checked + .track {
+        border-color: Highlight;
+        background: Highlight;
+    }
+
+    .input:checked + .track .thumb {
+        background: HighlightText;
+    }
+
+    .input:disabled + .track {
+        border-color: GrayText;
+        filter: none;
+    }
+}

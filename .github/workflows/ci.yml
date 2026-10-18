@@ -51,7 +51,7 @@ jobs:
   # Unit + security + smoke. `pnpm run ci` is the same gate bin/ci-all.sh and the
   # pre-push hook run, so local and CI cannot disagree about what "green" means.
   test:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     env:
       # Where the docs checkout below lands. _docs-repo.js honours this ahead of
       # its relative default, which it has to: actions/checkout refuses a path
@@ -145,7 +145,7 @@ jobs:
   # brings in at the version a release would sign, so the guard compares the
   # wallet against the SDK it actually ships.
   drift-guards:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       # No sibling checkout: since DD6 the shells consume the PUBLISHED
       # @dankest-llc/xchain-sdk, so `pnpm install --frozen-lockfile` below
@@ -209,7 +209,7 @@ jobs:
   # Build the shipped shells, then run the gates that can ONLY be checked against a
   # real build artifact. None of this can live in the `test` job: it has no dist/.
   build:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
       - name: Enable pnpm (corepack)
@@ -255,7 +255,7 @@ jobs:
   # The thresholds live in test/vitest/unit.config.js and sit just under today's
   # numbers, so this job goes red on a REGRESSION, not on an aspiration.
   coverage:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
       - name: Enable pnpm (corepack)
@@ -280,7 +280,7 @@ jobs:
   # a dev server, which the unit gate must not depend on -- so it gets its own
   # job here, and now every push proves it.
   e2e:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
       - name: Enable pnpm (corepack)
@@ -319,9 +319,20 @@ jobs:
   # is not on GitHub's network. Without both, the job says in its summary that
   # the venue suite did NOT run, so a skipped gate is never read as a pass.
   e2e-regtest:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
+    # One run at a time on the shared regtest venue: concurrent runs starve each other past the
+    # 6 h job limit. A lone run of the 160-test suite measures about 70 s a test (139 min for
+    # the first 120 on 2026-10-17), so the cap leaves room for the whole suite plus waits.
+    timeout-minutes: 240
+    concurrency:
+      group: wallet-regtest-venue
+      cancel-in-progress: false
     env:
       XC_REGTEST_SSH_HOST: ${{ vars.XC_REGTEST_SSH_HOST }}
+      # Which regtest chain the suite drives (RBTC, RLTC or RDOGE). Bitcoin is the
+      # only live regtest chain on the CI venue; the repo variable XC_REGTEST_COIN
+      # moves a run to another chain without a commit.
+      XC_REGTEST_COIN: ${{ vars.XC_REGTEST_COIN || 'RBTC' }}
       XC_REGTEST_SSH_KEY: ${{ secrets.XC_REGTEST_SSH_KEY }}
     steps:
       - uses: actions/checkout@v4
@@ -372,7 +383,7 @@ jobs:
         env:
           NODE_OPTIONS: --max-old-space-size=6144
       - name: Upload Playwright report
-        if: failure()
+        if: failure() || cancelled()
         uses: actions/upload-artifact@v4
         with:
           name: playwright-report-regtest
@@ -386,7 +397,7 @@ jobs:
   # never reach a user, and blocking every push on them trains people to ignore the
   # gate. Production deps currently carry no high/critical advisory.
   audit:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
       - name: Enable pnpm (corepack)
@@ -424,7 +435,7 @@ jobs:
   # itself the account-level answer. A job that hit its time limit is red,
   # named by the step that hung.
   verdict:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     needs: [test, drift-guards, build, coverage, e2e, e2e-regtest, audit]
     # Runs whatever the others did. Gating it on success would silence it in
     # exactly the case it exists for.

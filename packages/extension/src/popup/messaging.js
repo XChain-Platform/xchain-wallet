@@ -2693,7 +2693,7 @@ export function updateSettings(patch) {
  * process bounds a keychain relaunch by the same window); plain web keeps the
  * key in memory only and has none.
  *
- * @param {{ armed: boolean, idleMs: number }} signal
+ * @param {{ armed: boolean, idleMs: number, activity?: boolean }} signal
  */
 export function reportAutoLock(signal) {
     return /** @type {any} */ (sendMessage('session.autolock', signal));

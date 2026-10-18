@@ -126,6 +126,11 @@ function recordingMessaging(overrides = {}) {
         }),
         // AdvancedActionsForm's action picker is populated from the host.
         listActions: () => Promise.resolve(['BROADCAST', 'SEND']),
+        validateAction: () => Promise.resolve({ valid: true, errors: [] }),
+        getAddressBalances: () => Promise.resolve({
+            native: { tick: 'BTC', quantity: '100000000000', divisibility: 8 },
+            tokens: [{ tick: 'JDOG', quantity: '100000000000', divisibility: 8 }],
+        }),
         // PollDetail renders its ballot editor from a loaded, OPEN poll.
         governancePoll: () => Promise.resolve({
             poll_index: 7, tick: 'JDOG', poll_status: 'open',
@@ -869,6 +874,42 @@ describe('Action forms confirm via the single-encode pipeline', () => {
         });
     });
 
+    // The review stage has no fee toggle, so a resumed AIRDROP can only pay
+    // the way the LIST did if the pending record carries that choice. Without
+    // it a Bitcoin airdrop whose LIST paid in BTC moved onto the XCHAIN balance.
+    it.each([
+        [true, true],
+        [false, undefined],
+        [undefined, undefined],
+    ])('AirdropForm resumes leg 2 on the fee lane the LIST chose (record %s)', async (recorded, expected) => {
+        const { calls } = await driveThroughConfirm({
+            Form: AirdropForm,
+            props: {
+                resumeId: 'pa-1',
+                messagingOverrides: {
+                    listPendingAirdropsForWallet: () => Promise.resolve([{
+                        id: 'pa-1',
+                        walletId: 'w',
+                        chainId: CHAIN,
+                        fromAddress: HD_ADDRESS.address,
+                        token: 'JDOG',
+                        amountPer: '5',
+                        recipients: ['bc1qrecipientone', 'bc1qrecipienttwo'],
+                        listTxid: 'listtx',
+                        listActionIndex: '77',
+                        stage: 'ready-to-airdrop',
+                        ...(recorded === undefined ? {} : { payFeeInNativeCoin: recorded }),
+                    }]),
+                },
+            },
+            actionLabel: /^Sign airdrop/,
+        });
+        const submit = expectSingleEncode(calls, { action: 'AIRDROP', submitMethod: 'airdropAction' });
+        const compose = calls.find((c) => c.method === 'composeForConfirm');
+        expect(compose.args.encoderOpts?.payFeeInNativeCoin).toBe(expected);
+        expect(submit.args.payFeeInNativeCoin).toBe(expected);
+    });
+
     it('DispenserForm composes DISPENSER and signs the prebuilt PSBT', async () => {
         const { calls } = await driveThroughConfirm({
             Form: DispenserForm,
@@ -1135,9 +1176,7 @@ describe('Action forms confirm via the single-encode pipeline', () => {
             actionLabel: 'Vote',
             fill: (utils) => {
                 // Approval mode: tick the first option.
-                const box = utils.container.querySelector('input[type="checkbox"]');
-                if (!box) throw new Error('no option checkbox on the ballot editor');
-                fireEvent.click(box);
+                fireEvent.click(utils.getByRole('checkbox', { name: '0: Yes' }));
             },
         });
 
@@ -1520,7 +1559,9 @@ const SUBMIT_FAILURES = [
 function expectFailureBesideAction(utils, spec, shown, hidden) {
     const message = utils.getByText(shown);
     const action = utils.getByRole('button', { name: spec.actionLabel });
-    expect(message.closest('form')).toBe(action.closest('form'));
+    // The failure leads the action's form page: the notice slot just above the
+    // form (its card, when wide), never a box inside it or another form's.
+    expect(action.closest('form').previousElementSibling).toContainElement(message);
     expect(utils.container.textContent || '').not.toContain(hidden);
     spec.expectValues(utils);
 }

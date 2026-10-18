@@ -151,7 +151,7 @@ export const WIRE_AUDIT = Object.freeze([
     // --- Egress on the EXTENSION only ---------------------------------------
     // The extension really does request these: it ships no
     // `content_security_policy` key, so MV3's default applies and the default
-    // does not restrict img-src, and `History.jsx` renders each explorer's
+    // does not restrict img-src, and `HistoryDetailCard.jsx` renders each explorer's
     // favicon as a plain <img src>. Every other shell injects the §51 CSP,
     // whose `img-src 'self' data: blob:` has no remote origin in either build
     // profile, so the browser/WebView never makes the request at all.
@@ -178,7 +178,7 @@ export const WIRE_AUDIT = Object.freeze([
         carries: 'the requesting IP, and that a transaction detail view was opened',
         control: 'none: no toggle exists, and the request fires as the view renders, before the user clicks anything',
         shells: ['extension'],
-        source: 'packages/core/src/shared/routes/History.jsx',
+        source: 'packages/core/src/shared/routes/HistoryDetailCard.jsx',
     },
     {
         host: 'blockstream.info',
@@ -187,7 +187,7 @@ export const WIRE_AUDIT = Object.freeze([
         carries: 'the requesting IP, and that a transaction detail view was opened',
         control: 'none: no toggle exists, and the request fires as the view renders, before the user clicks anything',
         shells: ['extension'],
-        source: 'packages/core/src/shared/routes/History.jsx',
+        source: 'packages/core/src/shared/routes/HistoryDetailCard.jsx',
     },
     {
         host: 'litecoinspace.org',
@@ -196,7 +196,7 @@ export const WIRE_AUDIT = Object.freeze([
         carries: 'the requesting IP, and that a transaction detail view was opened',
         control: 'none: no toggle exists, and the request fires as the view renders, before the user clicks anything',
         shells: ['extension'],
-        source: 'packages/core/src/shared/routes/History.jsx',
+        source: 'packages/core/src/shared/routes/HistoryDetailCard.jsx',
     },
     {
         host: 'blockchair.com',
@@ -205,7 +205,7 @@ export const WIRE_AUDIT = Object.freeze([
         carries: 'the requesting IP, and that a transaction detail view was opened',
         control: 'none: no toggle exists, and the request fires as the view renders, before the user clicks anything',
         shells: ['extension'],
-        source: 'packages/core/src/shared/routes/History.jsx',
+        source: 'packages/core/src/shared/routes/HistoryDetailCard.jsx',
     },
     {
         host: 'www.blockcypher.com',
@@ -214,7 +214,7 @@ export const WIRE_AUDIT = Object.freeze([
         carries: 'the requesting IP, and that a transaction detail view was opened',
         control: 'none: no toggle exists, and the request fires as the view renders, before the user clicks anything',
         shells: ['extension'],
-        source: 'packages/core/src/shared/routes/History.jsx',
+        source: 'packages/core/src/shared/routes/HistoryDetailCard.jsx',
     },
     {
         // Reachable only when the user pastes a restore link themselves, so it

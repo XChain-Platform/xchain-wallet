@@ -10,6 +10,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
+    FieldNote,
     Screen, PageHeader, Button, FormPage, FormSection, Input, Textarea, Icon,
     ListPage, StatusMessage, QrScanner, AnimatedQrFrames, CopyButton, InfoTip,
 } from '@xchain-wallet/core/ui';
@@ -22,6 +23,7 @@ import {
     XCW_PREFIX,
 } from '../../uri/psbtQr.js';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
+import { formatOrList } from '../../i18n/index.js';
 
 const MIN_PASSWORD_LENGTH = 8;
 const ACCEPTED_WORD_COUNTS = [12, 15, 18, 21, 24];
@@ -221,7 +223,9 @@ export function PairPartnerWallet({ onBack, onPaired, walletId: existingWalletId
         }
         const wordCount = trimmed.split(' ').length;
         if (!ACCEPTED_WORD_COUNTS.includes(wordCount)) {
-            setError(`Expected ${ACCEPTED_WORD_COUNTS.join(', ')} words, got ${wordCount}.`);
+            // Copy stays inline until this screen moves to the dictionary; the
+            // list still reads "12, 15, 18, 21, or 24" like the import screen.
+            setError(`Expected ${formatOrList(ACCEPTED_WORD_COUNTS)} words, got ${wordCount}.`);
             return;
         }
         if (password.length < MIN_PASSWORD_LENGTH) {
@@ -309,11 +313,6 @@ export function PairPartnerWallet({ onBack, onPaired, walletId: existingWalletId
             <Screen variant={variant} header={header}>
                 <ListPage>
                     <StepIndicator {...step} />
-                    <p style={COPY}>
-                        An air-gapped pair is one recovery phrase held by two wallets: an
-                        online watcher that builds transactions, and an offline signer that
-                        signs them. Pick which one this device is.
-                    </p>
                     <div style={STACK}>
                         <Button
                             variant="primary"
@@ -332,7 +331,7 @@ export function PairPartnerWallet({ onBack, onPaired, walletId: existingWalletId
                             This device signs. Pair a watcher
                         </Button>
                     </div>
-                    <InfoTip label="Both halves must come from the same recovery phrase. Write it down once, then type it into each device separately: it never travels between them." />
+                    <p style={COPY}>An air-gapped pair uses one recovery phrase on two wallets: an online watcher builds transactions and an offline signer signs them. Write the phrase down once, then type it into each device separately; it never travels between them.</p>
                 </ListPage>
             </Screen>
         );
@@ -344,7 +343,6 @@ export function PairPartnerWallet({ onBack, onPaired, walletId: existingWalletId
                 <FormPage
                     label="Pairing setup"
                     onSubmit={handleSeedSubmit}
-                    intro={lane.help}
                     status={error ? <StatusMessage variant="error">{error}</StatusMessage> : null}
                     actions={(
                         <Button type="submit" variant="primary" loading={busy} disabled={busy}>
@@ -361,7 +359,7 @@ export function PairPartnerWallet({ onBack, onPaired, walletId: existingWalletId
                     />
                     <Textarea
                         label="Shared recovery phrase"
-                        hint="The same phrase you used (or will use) on the other half of the pair."
+                        hint={lane.help}
                         rows={3}
                         value={mnemonic}
                         onChange={(e) => setMnemonic(e.target.value)}
@@ -400,13 +398,6 @@ export function PairPartnerWallet({ onBack, onPaired, walletId: existingWalletId
                     label="Partner code exchange"
                     onSubmit={handlePairSubmit}
                     sectioned
-                    intro={(
-                        <>
-                        Show this code to the other wallet, then bring its code back here.
-                        The code holds public keys only: no recovery phrase, no private key,
-                        and nothing that can spend.
-                        </>
-                    )}
                     status={error ? <StatusMessage variant="error">{error}</StatusMessage> : null}
                     actions={(
                         <>
@@ -432,7 +423,10 @@ export function PairPartnerWallet({ onBack, onPaired, walletId: existingWalletId
                     )}
                 >
                     <StepIndicator {...step} />
-                    <FormSection title="This wallet’s code">
+                    <FormSection
+                        title="This wallet’s code"
+                        trailing={<InfoTip label="Pairing codes contain public keys only: no recovery phrase, no private key, and nothing that can spend." />}
+                    >
                     {localCode ? (
                         <>
                             {localFrames ? (
@@ -446,17 +440,17 @@ export function PairPartnerWallet({ onBack, onPaired, walletId: existingWalletId
                                         // One text node on purpose: a sentence split across JSX
                                         // children renders as several text nodes, and both this
                                         // spec's unit matcher and a screen reader see it in pieces.
-                                        <StatusMessage>
+                                        <FieldNote variant="info" role="status">
                                             {`This code is too long for one QR, so it cycles through ${frameCount} frames. `
                                                 + 'Point the other wallet’s camera at it and hold still until it has them all.'}
-                                        </StatusMessage>
+                                        </FieldNote>
                                     ) : null}
                                 </>
                             ) : (
-                                <StatusMessage variant="error">
+                                <FieldNote variant="error">
                                     This wallet&rsquo;s pairing code could not be drawn as a QR.
                                     Copy the text below instead.
-                                </StatusMessage>
+                                </FieldNote>
                             )}
                             <div style={CODE_BOX}>{localCode}</div>
                             <CopyButton value={localCode} label="Copy pairing code" />
@@ -467,7 +461,7 @@ export function PairPartnerWallet({ onBack, onPaired, walletId: existingWalletId
                             ) : null}
                         </>
                     ) : (
-                        <StatusMessage>{busy ? 'Building this wallet\'s pairing code…' : 'No pairing code yet.'}</StatusMessage>
+                        <FieldNote variant="info" role="status">{busy ? 'Building this wallet\'s pairing code…' : 'No pairing code yet.'}</FieldNote>
                     )}
                     </FormSection>
 
@@ -476,10 +470,10 @@ export function PairPartnerWallet({ onBack, onPaired, walletId: existingWalletId
                         <>
                             <QrScanner onFrame={handleScanFrame} />
                             {partnerCollector.total ? (
-                                <StatusMessage>
+                                <FieldNote variant="info" role="status">
                                     Pairing frames received: {partnerCollector.receivedCount} of
                                     {' '}{partnerCollector.total}
-                                </StatusMessage>
+                                </FieldNote>
                             ) : null}
                         </>
                     ) : null}
@@ -511,10 +505,9 @@ export function PairPartnerWallet({ onBack, onPaired, walletId: existingWalletId
                 </StatusMessage>
                 {verification?.sharedChainIds?.length ? (
                     <p style={COPY}>
-                        Matching chains: {verification.sharedChainIds.join(', ')}.
+                        Matching networks: {verification.sharedChainIds.join(', ')}.
                     </p>
                 ) : null}
-                <p style={COPY}>{lane.help}</p>
                 <div style={STACK}>
                     <Button
                         variant="primary"
@@ -580,13 +573,11 @@ const STACK = {
     display: 'flex',
     flexDirection: 'column',
     gap: 'var(--xc-space-2)',
-    marginBlockStart: 'var(--xc-space-3)',
 };
 
 const COPY = {
     color: 'var(--xc-text-muted)',
     fontSize: 'var(--xc-text-sm)',
-    marginBlockEnd: 'var(--xc-space-3)',
 };
 
 const CODE_BOX = {
@@ -611,5 +602,5 @@ const STEP_INDICATOR = {
     color: 'var(--xc-text-muted)',
     fontSize: 'var(--xc-text-xs)',
     fontWeight: 600,
-    margin: '0 0 var(--xc-space-2)',
+    margin: 0,
 };

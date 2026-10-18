@@ -13,10 +13,12 @@
 // hide help for a different kind of signature.
 
 import { useState } from 'react';
+import { Button } from '@xchain-wallet/core/ui';
 import { useLearnMode } from '../hooks/useLearnMode.js';
 import styles from './LearnNote.module.css';
+import { t } from '../../i18n/index.js';
 
-const DOCS_URL = 'https://docs.xchain.io/';
+const DOCS_URL = 'https://docs.xchain.io/components/wallet/security#sign-screen-safety-rails';
 const DISMISSED_KEY_PREFIX = 'xc:learn-note:dismissed:';
 const DISMISS_LABEL = 'Dismiss learn note';
 const DISMISS_TEXT = 'Dismiss';
@@ -37,11 +39,11 @@ function readDismissed(key) {
 /**
  * @param {object} props
  * @param {'action'|'psbt'|'message'} [props.variant]   which confirmation surface this is
- * @param {string} [props.chainLabel]                   e.g. "Bitcoin"; named in the action copy
+ * @param {import('react').ReactNode} [props.chainLabel] text such as "Bitcoin" is named in the action copy; an icon element is not
  * @param {string} [props.title]
  * @param {import('react').ReactNode} [props.children]  overrides the built-in copy
  */
-export function LearnNote({ variant = 'action', chainLabel, title = 'Good to know', children }) {
+export function LearnNote({ variant = 'action', chainLabel, title = t('components.learnNote.goodToKnow'), children }) {
     const enabled = useLearnMode();
     const key = dismissalKey(variant);
     const [dismissedKey, setDismissedKey] = useState(
@@ -50,7 +52,8 @@ export function LearnNote({ variant = 'action', chainLabel, title = 'Good to kno
 
     if (!enabled || dismissedKey === key || readDismissed(key)) return null;
 
-    const network = chainLabel ? `the ${chainLabel} network` : 'the network';
+    // Callers may pass an icon element as the chain label; only text joins the sentence.
+    const network = typeof chainLabel === 'string' && chainLabel ? `the ${chainLabel} network` : 'the network';
     let body = children;
     if (!body) {
         if (variant === 'message') {
@@ -73,14 +76,16 @@ export function LearnNote({ variant = 'action', chainLabel, title = 'Good to kno
         <div className={styles.note} data-testid="learn-note">
             <div className={styles.header}>
                 <span className={styles.title}>{title}</span>
-                <button
+                <Button
                     type="button"
-                    className={styles.dismiss}
+                    variant="link"
+                    size="sm"
+                    icon={null}
                     onClick={dismiss}
                     aria-label={DISMISS_LABEL}
                 >
                     {DISMISS_TEXT}
-                </button>
+                </Button>
             </div>
             <p className={styles.body}>
                 {body}{' '}

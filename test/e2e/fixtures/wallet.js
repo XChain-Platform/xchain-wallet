@@ -29,6 +29,7 @@
 import { test as base, expect } from '@playwright/test';
 import { LICENSE_VERSION } from '../../../packages/core/src/buildInfo.js';
 import { kdfStepTimeout } from '../timeout-budget.js';
+import { stubPriceFeed } from './priceStub.js';
 
 // Every wait below that pays a real Argon2id derivation shares ONE budget,
 // scaled for the machine the run landed on. These were two hand-written
@@ -48,6 +49,8 @@ export const test = base.extend({
     acceptLicense: [true, { option: true }],
 
     page: async ({ page, acceptLicense }, use) => {
+        // No spec reaches the live price service; see priceStub.js.
+        await stubPriceFeed(page.context());
         if (acceptLicense) {
             await page.addInitScript(
                 ([atKey, versionKey, version]) => {
@@ -105,11 +108,29 @@ export function nav(page) {
  * (`packages/extension/src/popup/App.jsx:600-603` says so explicitly), so no
  * nav landmark exists there to wait on.
  *
- * The nav rail's Lock button is not usable for this either: below 600px it
+ * The nav rail's Lock button is not usable for this either: below 640px it
  * lives inside the More sheet, which is closed by default.
  */
 export function unlockedShell(page) {
     return page.getByRole('region', { name: 'Active address balance' }).first();
+}
+
+/**
+ * The unlocked shell on WHICHEVER screen it opens, for waits that follow a
+ * reload.
+ *
+ * An unlock after a reload resumes the wallet's last view (`useLastView`,
+ * §24 / G055), so a spec that reloaded on Addresses comes back on Addresses
+ * and Home's balance hero never renders. Every shell mounts the shared
+ * "App header" region only inside its unlocked layout (web, desktop, and the
+ * popup's non-Home views), and the popup's Home carries the hero instead, so
+ * one of the two is on screen once the wallet is open and neither is on the
+ * lock screen.
+ */
+export function unlockedAnyScreen(page) {
+    return unlockedShell(page)
+        .or(page.getByRole('region', { name: 'App header', exact: true }))
+        .first();
 }
 
 /**
@@ -131,14 +152,124 @@ export async function openSettings(page) {
     if (await gear.count() > 0) {
         await gear.click();
     } else {
-        await page.keyboard.press('ControlOrMeta+k');
-        const palette = page.getByRole('dialog', { name: 'Command palette' });
-        await palette.waitFor({ state: 'visible', timeout: 15_000 });
-        await palette.getByRole('combobox').fill('settings');
-        await palette.getByRole('option', { name: /^Settings/ }).first().click();
+        await openPaletteCommand(page, 'Settings');
     }
     await expect(page.getByRole('button', { name: /^Developer mode/ }))
         .toBeVisible({ timeout: 15_000 });
+}
+
+function escapeRegExp(text) {
+    return String(text).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+/** The command palette dialog, open or not. */
+export function commandPalette(page) {
+    return page.getByRole('dialog', { name: 'Command palette' });
+}
+
+/**
+ * Opens the command palette and types `query` into its own search field.
+ *
+ * The search field is found INSIDE the dialog by its name. A page-wide
+ * `getByRole('combobox').first()` resolves to whatever select sits earlier in
+ * the DOM (Home's "Sort balances", a form's Currency picker) and fails with
+ * "Element is not an <input>".
+ *
+ * Cmd/Ctrl+K toggles the palette, and the shell closes it on its own whenever
+ * the view changes under it (a screen still settling after an unlock or a
+ * wallet switch). So the shortcut is pressed only while the dialog is absent,
+ * and open-and-type retries as one step until the field really holds the
+ * query. Bounded, so a palette that never opens fails in seconds with that
+ * sentence instead of waiting out the test timeout.
+ *
+ * @returns {Promise<import('@playwright/test').Locator>} the open dialog
+ */
+export async function openPaletteSearch(page, query, { timeoutMs = 30_000 } = {}) {
+    const dialog = commandPalette(page);
+    const search = dialog.getByRole('combobox', { name: 'Search commands' });
+    await expect(async () => {
+        if (!(await dialog.isVisible())) await page.keyboard.press('ControlOrMeta+k');
+        await expect(search, 'the command palette did not open').toBeEditable({ timeout: 3_000 });
+        await search.fill(query, { timeout: 3_000 });
+        await expect(search).toHaveValue(query, { timeout: 2_000 });
+    }, `the command palette never opened with "${query}" typed into its search field`)
+        .toPass({ timeout: timeoutMs });
+    return dialog;
+}
+
+/**
+ * Runs one command palette entry by its title, and waits for the palette to
+ * close behind it.
+ *
+ * The option is matched as an anchored word prefix of its accessible name,
+ * because a row's name carries its subtitle after the title.
+ *
+ * @param {import('@playwright/test').Page} page
+ * @param {string} title  the command's visible title, typed as the search
+ * @param {{ option?: RegExp, timeoutMs?: number }} [opts]  `option` overrides the row match
+ */
+export async function openPaletteCommand(page, title, { option, timeoutMs = 30_000 } = {}) {
+    const dialog = await openPaletteSearch(page, title, { timeoutMs });
+    const row = dialog.getByRole('option', { name: option || new RegExp(`^${escapeRegExp(title)}\\b`) }).first();
+    await expect(row, `no palette command matching "${title}"`).toBeVisible({ timeout: 15_000 });
+    await row.click();
+    await expect(dialog, `the command palette stayed open after choosing "${title}"`)
+        .toBeHidden({ timeout: 15_000 });
+}
+
+/**
+ * The active wallet's identity in the App header.
+ *
+ * The header names the active wallet in a `WalletIdentity` span (not a
+ * button), and the wallet picker closes itself after a pick, so this is the
+ * one place a switch can be confirmed.
+ */
+export function activeWalletIdentity(page) {
+    return page.getByRole('region', { name: 'App header' }).getByTestId('wallet-identity');
+}
+
+/** Asserts the App header names `name` as the active wallet. */
+export async function expectActiveWallet(page, name, message, { timeoutMs = 30_000 } = {}) {
+    await expect(activeWalletIdentity(page).filter({ hasText: name }),
+        message || `the app did not switch to ${name}`)
+        .toBeVisible({ timeout: timeoutMs });
+}
+
+/**
+ * Switches to the wallet called `name` through the palette's Switch wallet
+ * screen, and confirms it in the App header.
+ *
+ * The row is told apart from its own "Wallet details for <name>" button,
+ * which carries the same name.
+ */
+export async function switchToWallet(page, name, { timeoutMs = 30_000 } = {}) {
+    await openPaletteCommand(page, 'Switch wallet');
+    const row = page.getByRole('main')
+        .getByRole('button', { name: new RegExp(`^(?!Wallet details for).*${escapeRegExp(name)}`) })
+        .first();
+    await expect(row, `the wallet picker lists no wallet named ${name}`).toBeVisible({ timeout: timeoutMs });
+    await row.click();
+    await expectActiveWallet(page, name, undefined, { timeoutMs });
+}
+
+/**
+ * Adds a second wallet inside the unlocked session, then switches to it.
+ *
+ * Adding a wallet does not make it active: the add flow ends on App's
+ * `refresh`, which returns to the wallet the session started on. So this
+ * switches explicitly and confirms the switch in the App header.
+ *
+ * @returns {Promise<string[]>} the new wallet's recovery phrase
+ */
+export async function addWallet(page, { name, password = DEFAULT_PASSWORD, ads = 'off' } = {}) {
+    if (!name) throw new Error('addWallet needs a name, so the switch to it can be confirmed');
+    await openPaletteCommand(page, 'Switch wallet');
+    await page.getByRole('button', { name: 'Add wallet', exact: true }).click();
+    // navigate:false: the add flow starts at the onboarding welcome inside the
+    // unlocked shell, and a goto('/') would drop the session.
+    const words = await createWallet(page, { password, name, ads, navigate: false });
+    await switchToWallet(page, name);
+    return words;
 }
 
 /**
@@ -166,13 +297,53 @@ function navDestination(scope, name) {
     };
 }
 
+// A destination can sit in the DOM of a collapsed nav without being shown
+// (the phone bar keeps its More sheet rows mounted off screen); only one that
+// is visible inside the viewport is a click target, otherwise the caller
+// falls through to More.
+async function onScreen(locator) {
+    if (!(await locator.isVisible())) return false;
+    const box = await locator.boundingBox({ timeout: 2_000 }).catch(() => null);
+    if (!box) return false;
+    const viewport = locator.page().viewportSize();
+    if (!box || !viewport) return Boolean(box);
+    return box.x + box.width > 0 && box.y + box.height > 0
+        && box.x < viewport.width && box.y < viewport.height;
+}
+
+// The landscape icon rail and the open More sheet both scroll inside a short
+// viewport (or under enlarged text spacing), so a row can be scrolled out of
+// view; bring it back before the on-screen check. The closed phone bar's
+// off-screen sheet rows are neither, so they still fall through to More.
+// A resize can unmount the row between the count and these calls, so each
+// is bounded and a vanished row simply counts as not on screen.
+async function revealInScroller(locator) {
+    if (await locator.count() === 0) return;
+    try {
+        const scrolls = await locator.first().evaluate((el) => {
+            const navEl = el.closest('nav');
+            if (navEl && navEl.getAttribute('aria-label') === 'Primary navigation') return true;
+            const sheet = el.closest('[role="dialog"]');
+            return Boolean(sheet && sheet.getAttribute('aria-labelledby')
+                && document.getElementById(sheet.getAttribute('aria-labelledby'))?.textContent?.trim() === 'More');
+        }, undefined, { timeout: 2_000 });
+        if (scrolls && await locator.first().isVisible()) {
+            await locator.first().scrollIntoViewIfNeeded({ timeout: 2_000 });
+        }
+    } catch {
+        // Gone mid-resize: the caller's on-screen check decides.
+    }
+}
+
 async function clickDestination(scope, name) {
     const { exact, prefixed } = navDestination(scope, name);
-    if (await exact.count() > 0) {
+    await revealInScroller(exact);
+    await revealInScroller(prefixed);
+    if (await exact.count() > 0 && await onScreen(exact.first())) {
         await exact.first().click();
         return true;
     }
-    if (await prefixed.count() > 0) {
+    if (await prefixed.count() > 0 && await onScreen(prefixed.first())) {
         await prefixed.first().click();
         return true;
     }
@@ -189,12 +360,36 @@ async function clickDestination(scope, name) {
 export async function gotoSection(page, name) {
     const bar = nav(page);
     if (await bar.count() > 0) {
-        if (await clickDestination(bar, name)) return;
-
-        await bar.getByRole('button', { name: 'More', exact: true }).click();
-        const sheet = page.getByRole('dialog', { name: 'More', exact: true });
-        await sheet.waitFor({ state: 'visible', timeout: 15_000 });
-        if (await clickDestination(sheet, name)) return;
+        // Landscape phones can show the rail and the bottom bar together, so
+        // try every nav on screen before opening the More sheet. Right after
+        // a resize the shell can still be swapping the bottom bar for the
+        // rail, so a More button that vanishes means "look again", not
+        // "wait for it forever".
+        const navs = [
+            page.getByRole('navigation', { name: 'Primary navigation' }),
+            page.getByRole('navigation', { name: 'Bottom navigation' }),
+        ];
+        const more = page.getByRole('button', { name: 'More', exact: true });
+        for (let attempt = 0; attempt < 3; attempt += 1) {
+            for (const candidate of navs) {
+                if (await candidate.count() === 0) continue;
+                if (await clickDestination(candidate.first(), name)) return;
+            }
+            if (await more.count() === 0) {
+                await page.waitForTimeout(500);
+                continue;
+            }
+            try {
+                await more.first().click({ timeout: 10_000 });
+            } catch {
+                await page.waitForTimeout(500);
+                continue;
+            }
+            const sheet = page.getByRole('dialog', { name: 'More', exact: true });
+            await sheet.waitFor({ state: 'visible', timeout: 15_000 });
+            if (await clickDestination(sheet, name)) return;
+            break;
+        }
         throw new Error(`no nav destination named "${name}" in the nav or the More sheet`);
     }
 
@@ -212,9 +407,9 @@ export function mainButton(page, name) {
 }
 
 /**
- * The nav rail's "Lock" button. The header also carries a "Lock wallet"
- * button, so a substring match on "Lock" resolves to two elements and
- * trips strict mode. Anchor on the exact accessible name.
+ * The nav rail's "Lock" button. Only the phone layout's header carries a
+ * "Lock wallet" button (never beside the rail), but a substring match on
+ * "Lock" would still hit it, so anchor on the exact accessible name.
  */
 export function lockButton(page) {
     return page.getByRole('button', { name: 'Lock', exact: true });
@@ -289,7 +484,7 @@ export async function completeRecoveryPhraseChallenge(page, words) {
  * onboarding walk itself is identical, and keeping one copy of it is the
  * reason this fixture exists at all.
  *
- * Pass `bip39Passphrase` to take the "Add a BIP39 passphrase (advanced)"
+ * Pass `bip39Passphrase` to take the "Use a BIP39 passphrase (advanced)"
  * branch. That produces an ORDINARY wallet: the passphrase typed here is
  * sealed onto the record under the wallet's own master key, and every later
  * unlock pools a signer from the password alone. It is no longer a way to reach
@@ -323,7 +518,7 @@ export async function createWallet(page, options = {}) {
     // below reveals directly underneath it.
     await page.getByLabel(/^Confirm( password)?$/).fill(password);
     if (bip39Passphrase !== null) {
-        await page.getByLabel(/^Add a BIP39 passphrase/).check();
+        await page.getByLabel(/^Use a BIP39 passphrase/).check();
         await page.getByLabel('BIP39 passphrase', { exact: true }).fill(bip39Passphrase);
         await page.getByLabel('Confirm passphrase', { exact: true }).fill(bip39Passphrase);
     }
@@ -462,7 +657,7 @@ export async function turnOffDonations(page) {
     await expect(unlockedShell(page)).toBeVisible({ timeout: KDF_STEP_MS });
     await openSettings(page);
     await page.getByRole('button', { name: /^Automatic donation system/ }).click();
-    const toggle = page.getByRole('switch', { name: 'Automatic Donation System', exact: true });
+    const toggle = page.getByRole('switch', { name: 'Turn on Automatic Donation System', exact: true });
     await expect(toggle).toBeVisible();
     if (await toggle.isChecked()) {
         // Click, not check(): the input is controlled by PERSISTED settings,

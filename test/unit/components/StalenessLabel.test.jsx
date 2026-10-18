@@ -15,6 +15,29 @@ afterEach(() => {
 });
 
 describe('StalenessLabel', () => {
+    it('keeps seeded elapsed-time labels concise at every supported scale', () => {
+        vi.useFakeTimers();
+        const now = new Date('2026-07-08T14:05:00Z');
+        vi.setSystemTime(now);
+        let state = 0x51a1e123;
+        const timestamps = Array.from({ length: 24 }, () => {
+            state = (Math.imul(state, 1664525) + 1013904223) >>> 0;
+            return now.getTime() - (state % (30 * 24 * 60 * 60 * 1000));
+        });
+
+        render(<>{timestamps.map((lastSyncedAt) => (
+            <StalenessLabel key={lastSyncedAt} lastSyncedAt={lastSyncedAt} />
+        ))}</>);
+
+        const labels = screen.getAllByRole('status');
+        expect(labels).toHaveLength(timestamps.length);
+        for (const label of labels) {
+            expect(label.textContent).toMatch(/^Updated /);
+            expect(label.textContent.length).toBeLessThanOrEqual(32);
+            expect(label).toHaveAttribute('aria-live', 'off');
+        }
+    });
+
     it('uses the shared relative wording and exposes a local absolute time', () => {
         vi.useFakeTimers();
         vi.setSystemTime(new Date('2026-07-08T14:05:00Z'));

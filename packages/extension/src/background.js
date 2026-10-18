@@ -32,6 +32,7 @@ import {
     notifications as notificationsLib,
 } from '@xchain-wallet/core';
 import { WALLET_VERSION } from '@xchain-wallet/core/buildInfo.js';
+import { logConsole } from '@xchain-wallet/core/shared/utils/logConsole.js';
 import {
     ChromeMetaBackend,
     ChromeSessionBackend,
@@ -67,11 +68,20 @@ import {
     clearAutoLockState,
     shouldAutoLock,
 } from './background/autoLockState.js';
-import { createLockBackstop, createHostBuildFlight, createKeepaliveTick } from './background/walletLock.js';
-import { createBridgeEventBroadcaster } from './bridge/bridgeEvents.js';
+import {
+    createLockBackstop,
+    createHostBuildFlight,
+    createKeepaliveTick,
+    sequenceUnlockedSession,
+} from './background/walletLock.js';
+import {
+    createBridgeEventBroadcaster,
+    notifyDisconnectedSites,
+} from './bridge/bridgeEvents.js';
 import {
     applyLayoutMode,
     attachLayoutModeListener,
+    currentLayoutMode,
     readLayoutMode,
 } from './background/layoutMode.js';
 import { attachExtensionCommandListener } from './background/extensionCommands.js';
@@ -81,10 +91,12 @@ import { createSurfaceStateBroadcaster } from './shared/surfaceStateSync.js';
 import { createChromeNotifier } from './background/chromeNotifications.js';
 import { createRestartStringSetStorage } from './background/restartStateStorage.js';
 
+logConsole.attach();
+
 // Apply the user's saved layout mode (popup vs sidepanel) at worker
 // boot, then watch storage for live changes from the in-wallet
-// settings UI. The user's preference is honoured the next time they
-// click the toolbar icon; no extension reload needed.
+// settings UI. The controller keeps the applied mode in memory so a
+// keyboard gesture can call chrome.sidePanel.open synchronously.
 (async () => {
     const mode = await readLayoutMode();
     await applyLayoutMode(mode);
@@ -199,6 +211,13 @@ const connectedTabs = createConnectedTabRegistry();
 if (typeof chrome !== 'undefined' && chrome.tabs) {
     connectedTabs.attach(chrome.tabs);
 }
+const bridgeEvents = typeof chrome !== 'undefined' && chrome.tabs
+    ? createBridgeEventBroadcaster({
+        tabs: chrome.tabs,
+        runtime: chrome.runtime,
+        connectedTabs,
+    })
+    : undefined;
 
 let host = null;
 let vault = null;
@@ -379,13 +398,7 @@ async function buildHost() {
         // from chrome.tabs.query: MV3 withholds Tab.url from a manifest
         // holding no "tabs" or host permission, which left the URL match
         // skipping every tab and delivering nothing.
-        bridgeEvents: typeof chrome !== 'undefined' && chrome.tabs
-            ? createBridgeEventBroadcaster({
-                tabs: chrome.tabs,
-                runtime: chrome.runtime,
-                connectedTabs,
-            })
-            : undefined,
+        bridgeEvents,
         // §50 / Cluster L FOLLOWUP 4: shell-specific diagnostic env + build.
         getDiagnosticContext: async () => ({
             env: {
@@ -578,6 +591,10 @@ async function buildHost() {
 function tearDownHost() {
     hostEpoch += 1;
     const cancelApprovals = approvalBroker.cancelAll();
+    let connectedSites = Promise.resolve([]);
+    if (vault) {
+        connectedSites = vault.connectedSites.list().catch(() => []);
+    }
     if (notificationService) {
         try { notificationService.stop(); } catch (_err) { /* best-effort */ }
         notificationService = null;
@@ -619,7 +636,12 @@ function tearDownHost() {
     signerPool = new signersLib.SignerPool();
     // The queue store stays: a lock drops the host, not the queue it served.
     host = null;
-    return cancelApprovals;
+    const disconnectSites = connectedSites.then((sites) => notifyDisconnectedSites({
+        events: bridgeEvents,
+        sites,
+        reason: 'wallet-locked',
+    }));
+    return Promise.all([cancelApprovals, disconnectSites]).then(() => undefined);
 }
 
 /**
@@ -699,13 +721,11 @@ const { lockWalletNow, maybeAutoLock } = lockBackstop;
 
 attachExtensionCommandListener({
     commandsApi: typeof chrome === 'undefined' ? null : chrome.commands,
-    openWallet: async (tab) => {
-        if (await readLayoutMode() === 'sidepanel' && chrome.sidePanel?.open) {
-            let windowId = tab?.windowId;
-            if (!Number.isInteger(windowId)) {
-                const lastFocused = await chrome.windows.getLastFocused();
-                windowId = lastFocused?.id;
-            }
+    openWallet: (tab) => {
+        if (currentLayoutMode() === 'sidepanel' && chrome.sidePanel?.open) {
+            const windowId = Number.isInteger(tab?.windowId)
+                ? tab.windowId
+                : chrome.windows?.WINDOW_ID_CURRENT;
             if (Number.isInteger(windowId)) return chrome.sidePanel.open({ windowId });
         }
         return chrome.action.openPopup();
@@ -733,16 +753,18 @@ attachSessionMetaListener({
     // unlock cycles. (See sessionMeta.js handling of `signerPool`.)
     signerPool: () => signerPool,
     onUnlocked: () => {
-        // Drop any stale cross-session auto-lock state; the popup re-arms the
-        // backstop (with the correct idleMs + demo-skip) once Home mounts.
-        clearAutoLockState().catch(() => { /* best-effort */ });
         lastActivityStampAt = 0;
         lockBackstop.noteUnlocked();
-        return ensureHost()
-            .then(() => surfaceStateEvents.publish('session', { state: 'unlocked' }))
-            .catch((err) => {
-                console.error('[xchain] ensureHost after unlock failed:', err);
-            });
+        // Drop an earlier session's deadline before publishing unlocked. The
+        // popup re-arms with the current timeout once it receives that state.
+        return sequenceUnlockedSession({
+            clearAutoLockState,
+            continueUnlock: () => ensureHost()
+                .then(() => surfaceStateEvents.publish('session', { state: 'unlocked' }))
+                .catch((err) => {
+                    console.error('[xchain] ensureHost after unlock failed:', err);
+                }),
+        });
     },
     startLabelSyncRestore: (opts) => startLabelSyncRestoreTask({
         walletId: opts.walletId,

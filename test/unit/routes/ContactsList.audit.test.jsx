@@ -129,14 +129,14 @@ describe('ContactsList audited behavior', () => {
 
     it('leaves an empty contact form directly but confirms before discarding real input', async () => {
         mount(makeMessaging([]));
-        const add = await screen.findByRole('button', { name: 'Add contact' });
+        const add = await screen.findByRole('button', { name: 'Create first contact' });
 
         fireEvent.click(add);
         fireEvent.click(screen.getByRole('button', { name: 'Back to previous screen' }));
         expect(screen.queryByRole('dialog')).toBeNull();
         expect(screen.getByRole('heading', { name: 'Contacts' })).toBeTruthy();
 
-        fireEvent.click(screen.getByRole('button', { name: 'Add contact' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Create first contact' }));
         fireEvent.change(screen.getByLabelText('Name'), { target: { value: 'Alice' } });
         fireEvent.click(screen.getByRole('button', { name: 'Back to previous screen' }));
         expect(screen.getByRole('dialog')).toHaveTextContent('Discard changes?');
@@ -176,7 +176,10 @@ describe('ContactsList audited behavior', () => {
         fireEvent.change(screen.getByLabelText('Address'), { target: { value: BTC } });
         fireEvent.click(screen.getByRole('button', { name: 'Add' }));
 
-        expect(await screen.findByText('This address is already saved for Alice.')).toBeTruthy();
+        const error = await screen.findByText('This address is already saved for Alice.');
+        const address = screen.getByLabelText('Address');
+        expect(address).toHaveAttribute('aria-invalid', 'true');
+        expect(address.getAttribute('aria-describedby').split(' ')).toContain(error.id);
         expect(messaging.saveContact).not.toHaveBeenCalled();
     });
 
@@ -250,7 +253,7 @@ describe('ContactsList audited behavior', () => {
         mount(messaging);
         await screen.findByText('No contacts yet');
 
-        fireEvent.click(screen.getByRole('button', { name: 'Add contact' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Create first contact' }));
         fireEvent.change(screen.getByLabelText('Name'), { target: { value: 'Testnet friend' } });
         fireEvent.change(screen.getByLabelText('Address'), { target: { value: AMBIGUOUS_TESTNET } });
         fireEvent.change(screen.getByLabelText('Network for this address'), { target: { value: 'litecoin' } });
@@ -271,7 +274,7 @@ describe('ContactsList audited behavior', () => {
         mount(messaging);
         await screen.findByText('No contacts yet');
 
-        fireEvent.click(screen.getByRole('button', { name: 'Add contact' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Create first contact' }));
         fireEvent.change(screen.getByLabelText('Name'), { target: { value: 'Alice' } });
         fireEvent.change(screen.getByLabelText('Address'), { target: { value: BTC } });
         fireEvent.click(screen.getByRole('button', { name: 'Save' }));

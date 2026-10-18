@@ -15,17 +15,17 @@
 // has its own preferences about how to bundle/polyfill it. Shells pass
 // in an SDKFactory; core just calls it.
 
-import { installExplorerRateLimit, sharedExplorerLimiter } from './explorerRateLimit.js';
+import { installSdkNetworkPolicy, sharedExplorerLimiter } from './explorerRateLimit.js';
 
 /**
  * @typedef {Object} SDKConstructorOpts
  * @property {string} network           chainId, e.g. 'bitcoin-mainnet'
  * @property {string} explorerUrl       fully-formed URL
  * @property {string} encoderUrl
- * @property {string} hubUrl
+ * @property {string} [hubUrl]
  * @property {number} [timeout] per-request ms budget (; see DEFAULT_SDK_NETWORK_OPTIONS)
  * @property {{ maxRetries: number, baseDelay: number, maxDelay: number,
- *              retryAfterMaxDelay: number }} [retry]
+ *              retryAfterMaxDelay: number, maxRateLimitRetries: number }} [retry]
  */
 
 /**
@@ -42,7 +42,7 @@ import { installExplorerRateLimit, sharedExplorerLimiter } from './explorerRateL
  * @property {(txHex: string, encoder?: unknown) => Promise<{ txid: string }>} wallet.broadcastTx
  * @property {Object} auth
  * @property {(message: string, wif: string, opts?: { segwitNative?: boolean, segwitRedeemScript?: boolean }) => string} auth.signMessage
- * @property {(address: string, message: string, signature: string, network?: string) => boolean} auth.verifyMessage
+ * @property {(address: string, message: string, signature: string, network?: string) => { valid: boolean, error: string|null }} auth.verifyMessage
  * @property {(address: string, opts?: { message?: string }) => string} auth.generateChallenge
  * @property {() => Promise<void>} [init]
  * @property {() => void} [close]
@@ -85,20 +85,15 @@ const ENDPOINT_FIELDS = Object.freeze([
  * fail loudly in seconds; callers that genuinely need more patience can
  * override via the `networkOptions` constructor opt.
  *
- * ONE EXCEPTION, and it is deliberate (rate-limits spec, M4): a 429 whose
- * `Retry-After` the origin actually named is waited out up to
- * `retryAfterMaxDelay`, not clamped to `maxDelay`. The 2 s cap made the
- * wallet's single retry worthless against a rate limit - it re-asked while the
- * bucket was still empty, spent its one retry, and surfaced the failure anyway,
- * which is a request the limiter counts for nothing. So a 429 may now hold ONE
- * request for up to 60 s (the SDK retries a rate limit once), while every other
- * retryable failure, 5xx included, keeps the 2 s backoff cap and the fast, loud
- * failure this block exists for.
+ * The process-wide host gate applies this budget only to idempotent reads and
+ * handles the jitter. Every 4xx is final for its call. A 429 may pause later
+ * calls through Retry-After, but it never replays the request that received it.
  */
 export const DEFAULT_SDK_NETWORK_OPTIONS = Object.freeze({
     timeout: 10_000,
     retry: Object.freeze({
         maxRetries: 1, baseDelay: 500, maxDelay: 2_000, retryAfterMaxDelay: 60_000,
+        maxRateLimitRetries: 0,
     }),
 });
 
@@ -117,10 +112,11 @@ export class SDKRegistry {
      * @param {SDKFactory} opts.sdkFactory
      * @param {Record<string, EndpointOverride>} [opts.endpointOverrides]
      * @param {{ timeout?: number, retry?: { maxRetries?: number, baseDelay?: number,
-     *           maxDelay?: number, retryAfterMaxDelay?: number } }} [opts.networkOptions]
+     *           maxDelay?: number, retryAfterMaxDelay?: number,
+     *           maxRateLimitRetries?: number } }} [opts.networkOptions]
      *        overrides for DEFAULT_SDK_NETWORK_OPTIONS (merged shallowly)
      * @param {import('./explorerRateLimit.js').HostRateLimiter|null} [opts.rateLimiter]
-     *        explorer request gate; the process-wide one by default, null turns it off
+     *        SDK request gate; the process-wide one by default, null turns it off
      */
     constructor({
         chainRegistry, sdkFactory, endpointOverrides = {}, networkOptions = {},
@@ -251,19 +247,20 @@ export class SDKRegistry {
         const d = this._chainRegistry.get(chainId);
         if (!d) throw new UnknownChainError(chainId);
         const over = this._endpointOverrides[chainId] ?? {};
+        const hubUrl = overrideUrl(over.hubUrl) ?? joinEndpoint(d.hub);
         const sdk = this._sdkFactory({
             network: chainId,
             explorerUrl: overrideUrl(over.explorerUrl) ?? joinEndpoint(d.explorer),
             encoderUrl: overrideUrl(over.encoderUrl) ?? joinEndpoint(d.encoder),
-            hubUrl: overrideUrl(over.hubUrl) ?? joinEndpoint(d.hub),
+            ...(hubUrl ? { hubUrl } : {}),
             // Bounded network patience: the real XChainSDK honors
             // `timeout` + `retry` per client; the dev mock ignores them.
             timeout: this._networkOptions.timeout,
             retry: this._networkOptions.retry,
             ...(this._networkOptions.pool ? { pool: this._networkOptions.pool } : {}),
         });
-        // Every chain's explorer traffic shares one per-host gate (429 waits, pacing, coalescing).
-        return this._rateLimiter ? installExplorerRateLimit(sdk, this._rateLimiter) : sdk;
+        // Every chain's SDK traffic shares one per-host gate for retries and pacing.
+        return this._rateLimiter ? installSdkNetworkPolicy(sdk, this._rateLimiter) : sdk;
     }
 
     /**
@@ -355,9 +352,10 @@ export function endpointOverridesFromSettings(settings, chainRegistry) {
             const value = overrideUrl(entry[field]);
             if (!value) continue;
             const endpoint = descriptor[key];
-            if (!endpoint) continue;
-            if (value === joinEndpoint(endpoint)) continue;
-            if (value === endpoint.defaultUrl) continue;
+            if (endpoint) {
+                if (value === joinEndpoint(endpoint)) continue;
+                if (value === endpoint.defaultUrl) continue;
+            }
             over[field] = value;
         }
         if (Object.keys(over).length > 0) out[chainId] = over;

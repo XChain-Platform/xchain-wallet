@@ -9,9 +9,10 @@
 // contact legal@dankest.llc.
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { AddressField, AddressText, Button, ChainBadge, FeeSelector, FormPage, Icon, Input, NetworkField, PageHeader, Screen, Select, StatusMessage } from '@xchain-wallet/core/ui';
+import { AddressField, AddressText, Button, ChainBadge, Checkbox, FeeSelector, FormPage, Icon, Input, NetworkField, PageHeader, Screen, Select, StatusMessage } from '@xchain-wallet/core/ui';
 import { registry as registryLib } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
+import { useDemoGuard } from '../hooks/useDemoGuard.jsx';
 import { useActionConfirmFlow, useConfirmSubmit, isUserRejection } from '../hooks/useActionConfirmFlow.js';
 import { ActionConfirmScreen } from '../components/ActionConfirmScreen.jsx';
 import { submitFailureMessage } from '../utils/submitFailureMessage.js';
@@ -33,6 +34,7 @@ import { externalIndexOf, preferredSourceId } from '../addressSelection.js';
 import { pickDefaultChainId } from '../chainSelection.js';
 import { QueuedResultPanel } from '../components/QueuedResultPanel.jsx';
 import { isValidAddressForChain } from '../utils/addressValidation.js';
+import { controllerBindValidationError } from '../../flows/controllerBind.js';
 
 const chainRegistry = registryLib.defaultRegistry();
 
@@ -47,6 +49,11 @@ const PROTOCOL_COIN_TICKER = {
 // future, wherever no class-specific controller covers one) and 'ownership'
 // gates a token's ownership deed-over rather than its balances.
 const FALLBACK_ACTION_CLASSES = ['transfer', 'trade', 'burn', 'mint', 'stake', 'ownership', 'all'];
+
+function decimalPlaces(value) {
+    const [mantissa, exponentText] = String(value ?? '').toLowerCase().split('e');
+    return Math.max(0, (mantissa.split('.')[1]?.length || 0) - Number(exponentText || 0));
+}
 
 /**
  * Controller-bind authoring form: Phase F (Part 3b).
@@ -80,6 +87,7 @@ export function ControllerBindForm({ walletId, chainId: initialChainId, tick, on
     // Seeded from the launching context; the Network field lets the user retarget.
     const [chainId, setChainId] = useState(initialChainId);
     const { messaging, shell } = useMessaging();
+    const demoGuard = useDemoGuard(walletId, { onBack });
     const signerReady = useSignerReady(walletId);
     const variant = screenVariantFor(shell);
 
@@ -99,6 +107,7 @@ export function ControllerBindForm({ walletId, chainId: initialChainId, tick, on
     const [password, setPassword] = useState('');
 
     const [actionClasses, setActionClasses] = useState(/** @type {string[]} */ (FALLBACK_ACTION_CLASSES));
+    const [actionClassesChainId, setActionClassesChainId] = useState(/** @type {string | null} */ (null));
 
     const [stage, setStage] = useState(
         /** @type {'form' | 'review' | 'submitting' | 'done'} */ ('form'),
@@ -136,7 +145,7 @@ export function ControllerBindForm({ walletId, chainId: initialChainId, tick, on
                 if (!cid) {
                     cid = pickDefaultChainId(byChain, { settings });
                     if (!cid) {
-                        setLoadError('No addresses on any chain yet. Use Receive to generate one first.');
+                        setLoadError('No addresses on any network yet. Use Receive to generate one first.');
                         return;
                     }
                     setChainId(cid);
@@ -145,7 +154,7 @@ export function ControllerBindForm({ walletId, chainId: initialChainId, tick, on
                     (a) => a.source === 'hd' && externalIndexOf(a.derivationPath) !== null,
                 );
                 if (addrs.length === 0) {
-                    setLoadError('No address on this chain to sign from. Use Receive to generate one first.');
+                    setLoadError('No address on this network to sign from. Use Receive to generate one first.');
                     return;
                 }
                 setFromAddressId(preferredSourceId(addrs, active?.[cid]));
@@ -159,18 +168,28 @@ export function ControllerBindForm({ walletId, chainId: initialChainId, tick, on
     // Action-class list from the SDK (degrades to the locked-fact list).
     useEffect(() => {
         if (!chainId) return undefined;
-        if (typeof messaging?.getControllerActionClasses !== 'function') return undefined;
         let cancelled = false;
+        setActionClasses(FALLBACK_ACTION_CLASSES);
+        setActionClassesChainId(null);
+        if (typeof messaging?.getControllerActionClasses !== 'function') {
+            setActionClassesChainId(chainId);
+            return undefined;
+        }
         messaging.getControllerActionClasses({ chainId })
             .then((res) => {
                 if (cancelled) return;
-                const list = Array.isArray(res?.actionClasses) ? res.actionClasses : null;
+                const list = Array.isArray(res?.actionClasses)
+                    ? [...new Set(res.actionClasses.map((value) => String(value).trim().toLowerCase()).filter(Boolean))]
+                    : null;
                 if (list && list.length > 0) {
                     setActionClasses(list);
-                    if (!list.includes(actionClass)) setActionClass(list[0]);
+                    setActionClass((current) => (list.includes(current) ? current : list[0]));
                 }
+                setActionClassesChainId(chainId);
             })
-            .catch(() => { /* keep the fallback list */ });
+            .catch(() => {
+                if (!cancelled) setActionClassesChainId(chainId);
+            });
         return () => { cancelled = true; };
     }, [chainId, messaging]);
 
@@ -242,6 +261,17 @@ export function ControllerBindForm({ walletId, chainId: initialChainId, tick, on
         return target === 'token' ? `${verb} controller on ${String(tick).trim()}` : `${verb} address controller`;
     };
 
+    const bindRequest = () => ({
+        chainId,
+        target,
+        unbind,
+        tick: target === 'token' ? String(tick ?? '').trim() : undefined,
+        controller: String(controller).trim(),
+        actionClass: String(actionClass).trim().toLowerCase(),
+        ...(!unbind && cooldownBlocks.trim() !== '' && { cooldownBlocks: cooldownBlocks.trim() }),
+        ...(memo.trim() !== '' && { memo: memo.trim() }),
+    });
+
     async function openConfirmScreen() {
         const from = {
             address: fromAddress.address,
@@ -253,16 +283,7 @@ export function ControllerBindForm({ walletId, chainId: initialChainId, tick, on
         };
         setSubmitError(null);
         try {
-            const { action, params } = await messaging.buildControllerBindParams({
-                chainId,
-                target,
-                unbind,
-                tick: target === 'token' ? String(tick).trim() : undefined,
-                controller: String(controller).trim(),
-                actionClass,
-                ...(!unbind && cooldownBlocks.trim() !== '' && { cooldownBlocks: cooldownBlocks.trim() }),
-                ...(memo.trim() !== '' && { memo: memo.trim() }),
-            });
+            const { action, params } = await messaging.buildControllerBindParams(bindRequest());
             const res = await actionConfirm.run({
                 chainId,
                 from,
@@ -304,36 +325,25 @@ export function ControllerBindForm({ walletId, chainId: initialChainId, tick, on
             setFormError('The selected source address is not valid for this network.');
             return;
         }
-        if (target === 'token' && (!tick || !String(tick).trim())) {
-            setFormError('No token selected to bind. Open this form from a token you issued.');
+        if (actionClassesChainId !== chainId) {
+            setFormError('Action classes are still refreshing for this network. Try again in a moment.');
             return;
         }
-        // An UNBIND names no contract: the wire field is empty and the indexer
-        // resolves the live binding for ACTION_CLASS itself, ignoring anything
-        // sent here (xchain-indexer issue.js format 6). Requiring it made the
-        // ONLY surface that releases a token from a guard demand a number the
-        // action does not use - and, since the submit button was gated on the
-        // same emptiness with no message, it simply sat disabled.
-        if (!unbind) {
-            if (!String(controller).trim()) {
-                setFormError('Guard contract is required (the action number of a deployed contract).');
-                return;
-            }
-            if (Number.isNaN(Number(controller)) || Number(controller) < 0 || !Number.isInteger(Number(controller))) {
-                setFormError('Guard contract must be a whole number that is zero or greater (the contract’s action number).');
-                return;
-            }
-        }
-        if (!actionClass) {
-            setFormError('Pick an action class to gate.');
+        const validationError = controllerBindValidationError(bindRequest());
+        if (validationError) {
+            setFormError(validationError);
             return;
         }
-        if (!unbind && cooldownBlocks.trim() !== '') {
-            const cb = Number(cooldownBlocks.trim());
-            if (!Number.isInteger(cb) || cb < 0) {
-                setFormError('Cooldown blocks must be a non-negative whole number.');
-                return;
+        if (feePick.mode === 'custom' && feePerKb === null) {
+            const rate = Number(feePick.customRate);
+            if (!Number.isFinite(rate) || rate <= 0) {
+                setFormError('Custom network fee rate must be greater than zero.');
+            } else if (decimalPlaces(feePick.customRate) > 8) {
+                setFormError('Custom network fee rate can have at most 8 decimal places.');
+            } else {
+                setFormError('Custom network fee rate is outside the supported range.');
             }
+            return;
         }
         setFormError(null);
         if (singleEncode) { openConfirmScreen(); return; }
@@ -348,16 +358,7 @@ export function ControllerBindForm({ walletId, chainId: initialChainId, tick, on
         setStage('submitting');
         setSubmitError(null);
         try {
-            const { action, params } = await messaging.buildControllerBindParams({
-                chainId,
-                target,
-                unbind,
-                tick: target === 'token' ? String(tick).trim() : undefined,
-                controller: String(controller).trim(),
-                actionClass,
-                ...(!unbind && cooldownBlocks.trim() !== '' && { cooldownBlocks: cooldownBlocks.trim() }),
-                ...(memo.trim() !== '' && { memo: memo.trim() }),
-            });
+            const { action, params } = await messaging.buildControllerBindParams(bindRequest());
             const base = {
                 walletId,
                 chainId,
@@ -444,13 +445,13 @@ export function ControllerBindForm({ walletId, chainId: initialChainId, tick, on
         />
     );
     const wrap = (children) => (
-        <Screen variant={variant} header={header}>{children}</Screen>
+        <Screen variant={variant} header={header} restoreScroll={!(stage === 'review' || stage === 'submitting')}>{children}</Screen>
     );
 
     if (loadError) {
         return wrap(
             <>
-                <StatusMessage variant="error" className={styles.error}>{loadError}</StatusMessage>
+                <StatusMessage variant="error">{loadError}</StatusMessage>
             </>,
         );
     }
@@ -494,10 +495,11 @@ export function ControllerBindForm({ walletId, chainId: initialChainId, tick, on
     if (stage === 'review' || stage === 'submitting') {
         return wrap(
             <FormPage
+                demoGuard={demoGuard}
                 label={`Review ${verb.toLowerCase()} controller`}
                 onSubmit={handleSubmit}
                 status={(isWatcherMode || isHwSource) && submitError ? (
-                    <StatusMessage variant="error" className={styles.error}>{submitError}</StatusMessage>
+                    <StatusMessage variant="error">{submitError}</StatusMessage>
                 ) : null}
                 actions={(
                     <Button
@@ -514,7 +516,7 @@ export function ControllerBindForm({ walletId, chainId: initialChainId, tick, on
                             ? `Create unsigned transaction: ${verb.toLowerCase()} controller`
                             : isHwSource
                                 ? `Sign on ${fromAddress.source === 'trezor' ? 'Trezor' : 'Ledger'}: ${verb.toLowerCase()} controller`
-                                : `Sign${descriptor ? ` on ${descriptor.displayName}` : ''}: ${verb.toLowerCase()} controller`}
+                                : `Sign: ${verb.toLowerCase()} controller`}
                     </Button>
                 )}
             >
@@ -522,13 +524,17 @@ export function ControllerBindForm({ walletId, chainId: initialChainId, tick, on
                     {unbind
                         ? `Stop gating the ${actionClass} actions of ${subjectLabel}. `
                             + 'Whichever contract currently guards that class is released.'
-                        : `Bind guard contract #${String(controller).trim()} over the ${actionClass} actions of ${subjectLabel}.`}
+                        : `Bind guard contract #${String(controller).trim()} over the ${String(actionClass).trim().toLowerCase()} actions of ${subjectLabel}.`}
                 </p>
                 <dl className={styles.detailsList}>
-                    <dt className={styles.detailsLabel}>Chain</dt>
-                    <dd className={styles.detailsValue}>
-                        {descriptor ? <ChainBadge descriptor={descriptor} size="sm" /> : chainId}
-                    </dd>
+                    {descriptor ? (
+                        <>
+                            <dt className={styles.detailsLabel}>Network</dt>
+                            <dd className={styles.detailsValue}>
+                                <ChainBadge descriptor={descriptor} size="sm" />
+                            </dd>
+                        </>
+                    ) : null}
                     <dt className={styles.detailsLabel}>Signing from</dt>
                     <dd className={styles.detailsValue}>
                         <AddressText address={fromAddress.address} />
@@ -542,7 +548,7 @@ export function ControllerBindForm({ walletId, chainId: initialChainId, tick, on
                         </>
                     ) : null}
                     <dt className={styles.detailsLabel}>Action class</dt>
-                    <dd className={styles.detailsValue}>{actionClass}</dd>
+                    <dd className={styles.detailsValue}>{String(actionClass).trim().toLowerCase()}</dd>
                     <dt className={styles.detailsLabel}>Operation</dt>
                     <dd className={styles.detailsValue}>{unbind ? 'Unbind' : 'Bind'}</dd>
                     {!unbind && cooldownBlocks.trim() !== '' ? (
@@ -639,32 +645,31 @@ export function ControllerBindForm({ walletId, chainId: initialChainId, tick, on
 
     return wrap(
         <FormPage
+            demoGuard={demoGuard}
             label={`${verb} controller`}
             onSubmit={handleReview}
-            intro={(
-                <>
-                    Binding lets a guard contract approve or block the selected actions for this token or address.
-                    {' '}Use Unbind on this screen to remove the guard later, after any cooldown finishes.
-                    {' '}You will review the source address, guard, action class, and fee before signing.
-                    {isWatcherMode
-                        ? ' Watch-only mode creates an unsigned transaction here and cannot sign it.'
-                        : ''}
-                </>
-            )}
             status={formError ? (
-                <StatusMessage variant="error" className={styles.error}>{formError}</StatusMessage>
+                <StatusMessage variant="error">{formError}</StatusMessage>
             ) : null}
             actions={(
                 <Button
                     type="submit"
                     variant="primary"
                     loading={actionConfirm.composing}
-                    disabled={!fromAddress || (!unbind && !String(controller).trim()) || actionConfirm.composing}
+                    disabled={!fromAddress || actionConfirm.composing}
                 >
                     {singleEncode ? (unbind ? 'Unbind' : 'Bind') : 'Preview'}
                 </Button>
             )}
         >
+            <details>
+                <summary>How controller bindings work</summary>
+                <p className={styles.hintLeft}>
+                    A guard contract approves or blocks the selected actions for this token or address. Unbind
+                    removes the guard after any cooldown finishes.
+                    {isWatcherMode ? ' Watch-only mode creates an unsigned transaction and cannot sign it.' : ''}
+                </p>
+            </details>
             <NetworkField value={chainId} onChange={(cid) => { setChainId(cid); setFromAddressId(null); }} chainIds={addressesByChain ? Object.keys(addressesByChain) : [chainId]} chainRegistry={chainRegistry} />
             {fromAddress ? (
                 <AddressField
@@ -734,15 +739,12 @@ export function ControllerBindForm({ walletId, chainId: initialChainId, tick, on
                         : 'The native actions this guard is asked about. One binding per class.'}
             </p>
 
-            <label className={styles.checkRow}>
-                {/* The kit has no checkbox primitive, so the native control preserves checkbox semantics. */}
-                <input
-                    type="checkbox"
-                    checked={unbind}
-                    onChange={(e) => setUnbind(e.target.checked)}
-                />
-                <span>Unbind (remove the controller) instead of binding</span>
-            </label>
+            <Checkbox
+                className={styles.checkRow}
+                label="Unbind (remove the controller) instead of binding"
+                checked={unbind}
+                onChange={(e) => setUnbind(e.target.checked)}
+            />
 
             {!unbind ? (
                 <Input

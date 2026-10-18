@@ -25,7 +25,7 @@
  * THE CAMPAIGN'S OWN MAP SAYS WHY THERE ARE TWO OF THEM. Its widget table
  * records that forms pick a chain three different ways and that a grep for one
  * reports the others as "has no picker". `CrossChainSwapForm` uses two of the
- * three AT ONCE: `ChainPicker`s labelled `Give chain` / `Get chain`
+ * three AT ONCE: `ChainPicker`s labelled `Give network` / `Get network`
  * (:628, :678) and `TokenField`s labelled `Give token` / `Get token`
  * (:646, :697). The frontier row for this area recorded that ONE helper was
  * missing; measured at HEAD it is two, and the second is the widget class that
@@ -56,7 +56,7 @@ import { expect } from '@playwright/test';
  * option is matched on both halves and the trigger is asserted whole.
  *
  * @param {import('@playwright/test').Locator | import('@playwright/test').Page} scope
- * @param {string} field       the picker's label, e.g. 'Get chain'
+ * @param {string} field       the picker's label, e.g. 'Get network'
  * @param {string} chainLabel  the chain's display name, e.g. 'Dogecoin'
  * @param {string} [networkKind]  the network suffix the picker renders, e.g. 'regtest'
  */
@@ -65,7 +65,10 @@ export async function selectNamedChain(scope, field, chainLabel, networkKind = '
     await expect(trigger, `no "${field}" chain picker on this screen`)
         .toBeVisible({ timeout: 30_000 });
 
-    const want = `${field}: ${chainLabel} · ${networkKind}`;
+    // Pickers name the chain without its network kind (operator ruling); the
+    // active Settings network already scopes the options to one network.
+    void networkKind;
+    const want = `${field}: ${chainLabel}`;
     if (((await trigger.getAttribute('aria-label')) || '') === want) return;
 
     await trigger.click();
@@ -74,14 +77,14 @@ export async function selectNamedChain(scope, field, chainLabel, networkKind = '
     // matched: the label alone would also select the mainnet entry sitting
     // beside it whenever the wallet holds an address on one.
     await scope.getByRole('option', {
-        name: new RegExp(`^${chainLabel}\\b.*\\b${networkKind}\\b`),
+        name: new RegExp(`^${chainLabel}\\b`),
     }).first().click();
 
     // Assert the switch took, WHOLE. The picker closes on click whether or not
     // the option was the one intended, so an unasserted click is a silent
     // wrong-chain run - the same hazard `selectVenueChain` ends on, and the
     // reason both helpers end this way.
-    await expect(trigger, `the "${field}" picker did not settle on ${chainLabel} · ${networkKind}`)
+    await expect(trigger, `the "${field}" picker did not settle on ${chainLabel}`)
         .toHaveAttribute('aria-label', want, { timeout: 15_000 });
 }
 
@@ -120,8 +123,10 @@ export async function selectNamedToken(page, field, { chainId, chainLabel, tick 
 
     // Already showing this chain's asset: nothing to do. Anchored on the whole
     // name so a tick that merely CONTAINS the chain name cannot satisfy it.
+    // The field names the chain without its network kind.
+    const chainName = chainLabel.replace(/\s*·\s*(?:mainnet|testnet|regtest)$/i, '');
     const selected = (await trigger().getAttribute('aria-label')) || '';
-    if (selected === `${field}: ${tick} on ${chainLabel}`) return;
+    if (selected === `${field}: ${tick} on ${chainName}`) return;
 
     await trigger().click();
 
@@ -144,5 +149,5 @@ export async function selectNamedToken(page, field, { chainId, chainLabel, tick 
     // the picker closes on click either way, so an unasserted click is a
     // silent wrong-chain run.
     await expect(trigger(), `the "${field}" field did not settle on ${tick} / ${chainLabel}`)
-        .toHaveAttribute('aria-label', `${field}: ${tick} on ${chainLabel}`, { timeout: 15_000 });
+        .toHaveAttribute('aria-label', `${field}: ${tick} on ${chainName}`, { timeout: 15_000 });
 }

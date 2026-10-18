@@ -42,7 +42,7 @@ assert.match(
 );
 assert.match(
     sendSrc,
-    /const \{ settings \} = useSettings\(\)/,
+    /const \{ settings(?:, loading: settingsLoading)? \} = useSettings\(\)/,
     'hook called',
 );
 
@@ -106,14 +106,16 @@ assert.match(
 );
 const formRender = sendSrc.slice(sendSrc.indexOf('id="send-form"'));
 assert.ok(formRender.length > 0, 'compose form found');
+// The banner is one of the compose form's status notices, so it leads the page
+// content above the form card.
 assert.match(
     formRender,
-    /\{testSendGateBanner\}/,
+    /status=\{\[[\s\S]*?,\s*testSendGateBanner\s*[,\]]/,
     'banner renders on the compose form',
 );
 assert.match(
     formRender,
-    /type="submit"[\s\S]{0,200}disabled=\{networkOffline \|\| !!testSendGate \|\| maxUnavailable\}/,
+    /type="submit"[\s\S]{0,200}disabled=\{(?:isDemo \|\| )?networkOffline \|\| !!testSendGate \|\| maxUnavailable\}/,
     'compose-form Send button disabled while offline, gated, or Max is unavailable',
 );
 assert.match(

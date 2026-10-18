@@ -95,13 +95,13 @@ export function nativeFeeErrorMessage(
         const amount = quoted ? ` (${quoted} ${coin})` : '';
         return mandatory
             ? `This action's protocol fee${amount} is too small to send as a ${coin} payment, and ${coin} is ` +
-              `the only way to pay a protocol fee on this chain, so it cannot be submitted here.`
+              `the only way to pay a protocol fee on this network, so it cannot be submitted here.`
             : `This action's protocol fee${amount} is too small to send as a ${coin} payment - the network will ` +
               `not relay it. ${untick}${mint}`;
     }
     if (reason === 'unsupported') {
         return mandatory
-            ? `This action cannot be submitted on this chain: its protocol fee has no ${coin} price, ` +
+            ? `This action cannot be submitted on this network: its protocol fee has no ${coin} price, ` +
               `and ${coin} is the only way to pay a protocol fee here.`
             : `Paying the protocol fee in ${coin} is not available for this action. ${untick}${mint}`;
     }
@@ -222,6 +222,34 @@ function oracleVerdictMessage(detail, coin) {
     }
     return `The network would refuse this action as it stands: ${detail}. Nothing was signed or `
         + 'sent. Waiting will not change this, so adjust the action and try again.';
+}
+
+/**
+ * The sentence for an OracleFeeUnpayableError, the refusal the oracle pre-flight
+ * raises on the XCHAIN fee lane, where the native-fee quote never runs.
+ *
+ * The oracle fee quote carries the same indexer verdicts as the native-fee quote,
+ * so the same table names the remedy. Only the three verdicts with a known remedy
+ * are answered; anything else returns null so the caller's generic copy applies
+ * rather than wire wording.
+ *
+ * @param {unknown} err
+ * @param {{ coinTicker?: string }} [chain]
+ * @returns {string | null}
+ */
+export function oracleFeeRefusalMessage(err, { coinTicker } = {}) {
+    if (!err || typeof err !== 'object' || /** @type {any} */ (err).name !== 'OracleFeeUnpayableError') {
+        return null;
+    }
+    const m = /oracle usage fee pre-flight failed \([a-z]+\): (.+)$/s
+        .exec(String(/** @type {any} */ (err).message || ''));
+    const detail = m ? m[1].trim().replace(/^invalid:\s*/i, '') : '';
+    if (!/^ORACLE_ADDRESS\b/i.test(detail)
+        || !/no effective oracle price|no validator price|missing oracle fee output|insufficient oracle fee/i
+            .test(detail)) {
+        return null;
+    }
+    return oracleVerdictMessage(detail, coinTicker || 'the native coin');
 }
 
 // The indexer's verdict, recovered from the message the constructor built. Same

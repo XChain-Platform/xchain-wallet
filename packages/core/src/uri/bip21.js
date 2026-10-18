@@ -46,6 +46,67 @@ function amountDecimalsFor(params) {
 }
 const STANDARD_PARAM_KEYS = new Set(['amount', 'label', 'message']);
 
+// Bound every field before it reaches form state. These limits cover the
+// protocol-sized values the wallet accepts while keeping one link from
+// allocating unbounded text on a signing-adjacent screen.
+export const URI_MAX_LENGTH = 16_384;
+export const URI_PARAMETER_LIMITS = Object.freeze({
+    amount: 128,
+    label: 250,
+    message: 250,
+    memo: 250,
+    tick: 250,
+    to: 512,
+    chain: 64,
+    feePriority: 16,
+    kind: 16,
+    contract: 20,
+    method: 64,
+    params: 4_096,
+});
+
+const URI_PARAMETER_NAMES = new Set(Object.keys(URI_PARAMETER_LIMITS));
+const CHAIN_ID_RE = /^[a-z0-9][a-z0-9-]{0,63}$/i;
+const FEE_PRIORITIES = new Set(['low', 'normal', 'fast']);
+
+/**
+ * Validate one recognized URI parameter without changing its value.
+ * Unknown optional parameters return false so BIP21 forward compatibility
+ * means ignoring them, never carrying them into wallet state.
+ *
+ * @param {string} name
+ * @param {string} value
+ * @param {{ deferChainShape?: boolean }} [opts]  BIP21 callers keep a malformed chain so the Send screen can refuse it by name; the route gate (safeChainIdParam) still rejects it
+ * @returns {boolean}
+ */
+export function isSafeUriParameter(name, value, opts = {}) {
+    if (!URI_PARAMETER_NAMES.has(name)) return false;
+    if (typeof value !== 'string' || value.length > URI_PARAMETER_LIMITS[name]) {
+        throw new Error(`${name} exceeds its URI parameter limit`);
+    }
+    // The amount's decimal places depend on whether a tick is present, so the
+    // parser checks them after every parameter is read; only length binds here.
+    if (name === 'chain' && !opts.deferChainShape && !CHAIN_ID_RE.test(value)) {
+        throw new Error('chain must be a registry id');
+    }
+    if (name === 'feePriority' && !FEE_PRIORITIES.has(value.toLowerCase())) {
+        throw new Error('feePriority must be low, normal, or fast');
+    }
+    if (name === 'kind' && value !== 'send' && value !== 'receive') {
+        throw new Error('kind must be send or receive');
+    }
+    if (name === 'method' && /[|;]/.test(value)) {
+        throw new Error('method contains a forbidden delimiter');
+    }
+    if (name === 'params') {
+        const args = value === '' ? [] : value.split('|');
+        if (args.length > 64 || args.some((arg) => arg.length === 0 || arg.length > 1_024 || arg.includes(';'))) {
+            throw new Error('params contains invalid contract arguments');
+        }
+    }
+    return true;
+}
+
 /**
  * Return the canonical BIP21 decimal representation of an amount.
  * Empty values omit the parameter. Monetary values stay as strings so a
@@ -84,7 +145,7 @@ function encodeRfc3986Component(value) {
  * @property {string} [amount]                   decimal string
  * @property {string} [label]
  * @property {string} [message]
- * @property {Record<string, string>} params     ALL non-required params (includes standard ones too for easy access)
+ * @property {Record<string, string>} params     recognized non-required params; unknown optional fields are ignored
  * @property {string[]} required                 names of `req-*` params (with req- prefix stripped)
  */
 
@@ -97,6 +158,9 @@ function encodeRfc3986Component(value) {
 export function parseBip21Uri(uri) {
     if (typeof uri !== 'string' || uri.length === 0) {
         throw new InvalidBip21Error('uri must be a non-empty string', uri);
+    }
+    if (uri.length > URI_MAX_LENGTH) {
+        throw new InvalidBip21Error(`uri exceeds ${URI_MAX_LENGTH} characters`, uri);
     }
 
     const colonIdx = uri.indexOf(':');
@@ -148,7 +212,13 @@ export function parseBip21Uri(uri) {
                     params[`req-${bare}`] = decodedVal;
                 } else {
                     const key = STANDARD_PARAM_KEYS.has(lowerKey) ? lowerKey : decodedKey;
-                    params[key] = decodedVal;
+                    try {
+                        if (isSafeUriParameter(key, decodedVal, { deferChainShape: true })) {
+                            params[key] = decodedVal;
+                        }
+                    } catch (err) {
+                        throw new InvalidBip21Error(err?.message || `invalid ${key}`, uri);
+                    }
                 }
             }
         }

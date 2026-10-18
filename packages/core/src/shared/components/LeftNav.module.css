@@ -20,16 +20,24 @@
     color: var(--xc-text);
 }
 
-/* Skip-to-content link (WCAG 2.4.1): the sidebar sits ahead of the page in tab
-   order, so a keyboard user would otherwise Tab past every destination on
-   every screen. Parked above the window until it takes focus. */
+/* Skip-to-content link (WCAG 2.4.1): persistent navigation and header chrome
+   sit around every route at all widths. Park the link above the window until
+   it takes focus, then expose the direct path to the active screen. */
+/* Parked as a one-pixel clipped box rather than a negative offset: the
+   layout sits below the top safe-area inset, so a parked offset would land
+   behind the status bar clock. Focus brings it into view. */
 .skipLink {
     position: absolute;
     inset-inline-start: var(--xc-space-3);
-    top: -40px;
+    top: 0;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
     background: var(--xc-text);
     color: var(--xc-bg);
-    padding: var(--xc-space-2) var(--xc-space-3);
+    padding: 0;
     border-radius: var(--xc-radius-sm);
     font-size: var(--xc-text-sm);
     font-weight: 600;
@@ -40,6 +48,11 @@
 .skipLink:focus,
 .skipLink:focus-visible {
     top: var(--xc-space-3);
+    width: auto;
+    height: auto;
+    padding: var(--xc-space-2) var(--xc-space-3);
+    overflow: visible;
+    clip-path: none;
     outline: 2px solid var(--xc-accent-primary, var(--xc-text));
     outline-offset: 2px;
 }
@@ -87,18 +100,27 @@
     background: var(--xc-surface);
 }
 
-/* Stacked banners (QueuedBroadcastBanner, ReachabilityBanner, ...) under
-   the header row. They are the part that can grow, so the cap lives here
-   rather than on .header. */
+/* The notices host (QueuedBroadcastBanner, ReachabilityBanner, ...). It is
+   page content, not toolbar: the route's Screen moves it to the top of its
+   scrolling body, so it takes the body's gutter and full content width and
+   scrolls with the page. Empty when no notice is showing. */
 .notices {
-    flex: 0 0 auto;
+    display: flex;
+    flex-direction: column;
+    gap: var(--xc-space-2);
+    min-width: 0;
 }
 
-/* Keep stacked notices from consuming the route on phone-sized layouts. */
-.layout[data-xc-tier='compact'] .notices {
-    max-height: 45%;
-    overflow-y: auto;
-    overscroll-behavior: contain;
+.notices:empty {
+    display: none;
+}
+
+.notices:not(:empty) {
+    margin-bottom: var(--xc-space-3);
+}
+
+.notices > * {
+    margin: 0;
 }
 
 .mainBody {
@@ -156,7 +178,7 @@
 
 /* Match the short-landscape tab row so an invisible 12px spacer does not
    remain below the route after the visible bar becomes shorter. */
-@media (orientation: landscape) and (max-height: 480px) {
+@media (orientation: landscape) and (max-height: 480px) and (min-aspect-ratio: 3/2) {
     .layoutWithBottomBar > .main {
         padding-bottom: calc(44px + env(safe-area-inset-bottom, 0));
     }
@@ -167,6 +189,7 @@
 }
 
 .nav {
+    composes: scrollArea from '../../ui/Screen.module.css';
     display: flex;
     flex-direction: column;
     height: 100%;
@@ -179,7 +202,6 @@
     padding-bottom: calc(var(--xc-space-3) + env(safe-area-inset-bottom, 0px));
     overflow-y: auto;
     overscroll-behavior: contain;
-    scrollbar-color: var(--xc-border) var(--xc-surface-raised);
 }
 
 .nav > .brand,
@@ -247,6 +269,11 @@
     margin: var(--xc-space-1) var(--xc-space-3) 0;
 }
 
+.action > button {
+    gap: var(--xc-space-3);
+    padding-inline: calc(var(--xc-space-1) - 1px);
+}
+
 .itemActive {
     background: var(--xc-surface);
     font-weight: 600;
@@ -272,17 +299,27 @@
     white-space: nowrap;
 }
 
-/* Unread/attention count pill pinned to the right of a nav row. */
+/* Unread/attention count pill pinned to the right of a nav row. Its block
+   margin cancels the pill's height beyond the icon's, so a row showing the
+   pill keeps the height of every other row. */
 .badge {
+    /* Centre the count in the pill; as a plain block its line box sat at
+       the top of the taller pill. */
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
     flex: 0 0 auto;
-    min-width: 1.1rem;
-    padding: 0 0.35rem;
-    border-radius: var(--xc-radius-pill);
+    box-sizing: border-box;
+    margin-block: calc((var(--xc-icon-md) - var(--xc-badge-height-sm)) / 2);
+    min-width: var(--xc-badge-height-sm);
+    height: var(--xc-badge-height-sm);
+    padding: 0 var(--xc-badge-padding-inline-sm);
+    border-radius: var(--xc-badge-radius);
     background: var(--xc-accent-primary, #0b84ff);
     color: var(--xc-on-accent);
-    font-size: var(--xc-text-xs);
-    font-weight: 700;
-    line-height: 1.25rem;
+    font-size: var(--xc-badge-font-size-sm);
+    font-weight: var(--xc-badge-font-weight);
+    line-height: 1;
     text-align: center;
 }
 
@@ -301,42 +338,6 @@
     padding-top: var(--xc-space-2);
     display: flex;
     flex-direction: column;
-}
-
-.walletSwitcher {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: var(--xc-space-2);
-    width: 100%;
-    padding: var(--xc-space-2) var(--xc-space-4);
-    background: transparent;
-    border: 0;
-    color: var(--xc-text);
-    font: inherit;
-    font-size: var(--xc-text-sm);
-    font-weight: 600;
-    text-align: start;
-    cursor: pointer;
-}
-
-.walletSwitcher:hover,
-.walletSwitcher:focus-visible {
-    background: var(--xc-surface);
-    outline: none;
-}
-
-.walletSwitcher:focus-visible {
-    outline: 2px solid var(--xc-accent-primary, var(--xc-text));
-    outline-offset: -2px;
-}
-
-.walletName {
-    flex: 1 1 auto;
-    min-width: 0;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
 }
 
 @media (prefers-contrast: more) {
@@ -366,19 +367,16 @@
 }
 
 .layout[data-xc-tier='rail'] {
-    --xc-page-gutter: var(--xc-space-4);
     --xc-page-top: var(--xc-space-4);
 }
 
 .layout[data-xc-tier='full'] {
-    --xc-page-gutter: var(--xc-space-6);
     --xc-page-top: var(--xc-space-4);
 }
 
-/* The brand wordmark and the wallet switcher have no icon-only form.
-   Both stay reachable from the app header at this width. */
-.layout[data-xc-tier='rail'] .brand,
-.layout[data-xc-tier='rail'] .walletSwitcher {
+/* The brand wordmark has no icon-only form. The app header keeps the
+   product identity visible at this width. */
+.layout[data-xc-tier='rail'] .brand {
     display: none;
 }
 
@@ -418,20 +416,25 @@
    to sit beside. Kept as a readable number, not a bare dot. */
 .layout[data-xc-tier='rail'] .badge {
     position: absolute;
+    margin-block: 0;
     top: 2px;
     inset-inline-end: 6px;
-    min-width: 0.9rem;
-    padding: 0 0.25rem;
-    font-size: 9px;
-    line-height: 0.9rem;
+    min-width: var(--xc-badge-height-sm);
+    padding: 0 var(--xc-badge-padding-inline-sm);
 }
 
 .layout[data-xc-tier='rail'] .divider {
     margin-inline: var(--xc-space-2);
 }
 
-@media (orientation: landscape) and (max-height: 480px) {
+@media (orientation: landscape) and (max-height: 480px) and (min-aspect-ratio: 3/2) {
     .layout[data-xc-tier] {
         --xc-page-top: var(--xc-space-2);
     }
+}
+
+/* The header menu trigger is redundant when it would hold only Search and a
+   visible rail already shows a Search button. */
+.layout[data-xc-rail='shown'] :global([data-header-menu='search-only']) {
+    display: none;
 }

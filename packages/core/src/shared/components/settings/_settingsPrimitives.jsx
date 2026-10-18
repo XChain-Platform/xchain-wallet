@@ -16,27 +16,38 @@
 // other directories shouldn't import from here.
 
 import { cloneElement, useId } from 'react';
+import { StatusMessage, Switch } from '@xchain-wallet/core/ui';
 import { userFacingMessage } from '../../utils/userFacingMessage.js';
+import cardStyles from '../../../ui/Card.module.css';
 
-export const ROW = {
+// A row's layout. The rows below draw their surface with the shared card
+// class (ui/Card.module.css), so a row inside a wide form card flattens.
+export const ROW_LAYOUT = {
     display: 'flex',
     flexDirection: 'row',
     flexWrap: 'wrap',
     alignItems: 'center',
     justifyContent: 'space-between',
-    padding: 'var(--xc-space-2) var(--xc-space-3)',
-    background: 'var(--xc-surface-raised)',
-    border: '1px solid var(--xc-border)',
-    borderRadius: 'var(--xc-radius-md)',
     fontSize: 'var(--xc-text-sm)',
     gap: 'var(--xc-space-3)',
+};
+// The same row as one inline style, drawn from the card tokens, for callers
+// that spread it into their own style object.
+export const ROW = {
+    ...ROW_LAYOUT,
+    padding: 'var(--xc-card-pad)',
+    background: 'var(--xc-card-bg)',
+    border: 'var(--xc-card-border)',
+    borderRadius: 'var(--xc-card-radius)',
 };
 export const STACK = {
     display: 'flex',
     flexDirection: 'column',
-    gap: 'var(--xc-space-1)',
+    gap: 'var(--xc-settings-row-gap)',
 };
 export const ROW_LABEL = { color: 'var(--xc-text-muted)' };
+// A row's own title: full-strength text so every card in one list reads alike.
+export const ROW_TITLE = { color: 'var(--xc-text)', fontWeight: 500 };
 export const ROW_VALUE = { color: 'var(--xc-text)', fontWeight: 500 };
 export const ROW_HINT = {
     color: 'var(--xc-text-muted)',
@@ -44,23 +55,34 @@ export const ROW_HINT = {
     marginTop: 2,
     lineHeight: 1.3,
 };
+// Settings dropdowns take the shared dropdown look from tokens.css (the
+// Network picker's height, padding, border, surface and chevron), so the
+// inline style only keeps the control inside its row.
 export const SELECT = {
-    background: 'var(--xc-bg)',
+    maxWidth: '100%',
+};
+// Settings inputs take the shared field metrics (border colour, radius, height,
+// padding and type size) so a number box in a row matches the dropdown beside it.
+export const INPUT = {
+    background: 'var(--xc-surface)',
     color: 'var(--xc-text)',
-    border: '1px solid var(--xc-border)',
-    borderRadius: 'var(--xc-radius-sm)',
-    padding: 'var(--xc-space-1) var(--xc-space-2)',
-    fontSize: 'var(--xc-text-sm)',
+    border: '1px solid var(--xc-control-border)',
+    borderRadius: 'var(--xc-control-radius)',
+    boxSizing: 'border-box',
+    height: 'var(--xc-control-h-md)',
+    minHeight: 'var(--xc-control-h-md)',
+    padding: '0 var(--xc-control-pad-x-md)',
+    fontSize: 'var(--xc-control-font-md)',
+    lineHeight: 'var(--xc-control-line)',
     fontFamily: 'inherit',
 };
-export const INPUT = {
-    background: 'var(--xc-bg)',
-    color: 'var(--xc-text)',
-    border: '1px solid var(--xc-border)',
-    borderRadius: 'var(--xc-radius-sm)',
-    padding: 'var(--xc-space-1) var(--xc-space-2)',
-    fontSize: 'var(--xc-text-sm)',
-    fontFamily: 'inherit',
+// What a disabled settings input adds: the shared disabled colours, as a disabled Button.
+export const INPUT_DISABLED = {
+    background: 'var(--xc-control-disabled-bg)',
+    borderColor: 'var(--xc-control-disabled-border)',
+    color: 'var(--xc-control-disabled-text)',
+    WebkitTextFillColor: 'var(--xc-control-disabled-text)',
+    cursor: 'not-allowed',
 };
 
 export const ROW_COPY = {
@@ -69,7 +91,18 @@ export const ROW_COPY = {
     flex: '1 1 280px',
     minWidth: 'min(100%, 280px)',
 };
-const EMBEDDED_ROW = {
+// The control keeps to the row end beside the copy. On a phone the Settings
+// page stylesheet widens this slot to the full row once it wraps under the
+// copy, so a kit Select, whose own wrapper would otherwise shrink-wrap, fills
+// the line like a native select does.
+const CONTROL_SLOT = {
+    display: 'flex',
+    justifyContent: 'flex-end',
+    marginInlineStart: 'auto',
+    minWidth: 0,
+    maxWidth: '100%',
+};
+export const EMBEDDED_ROW = {
     ...ROW,
     padding: 'var(--xc-space-1) 0',
     background: 'transparent',
@@ -97,19 +130,61 @@ export function SettingsFieldRow({ label, hint, children, embedded = false }) {
     });
 
     return (
-        <div style={embedded ? EMBEDDED_ROW : ROW}>
+        <div className={embedded ? undefined : cardStyles.card} style={embedded ? EMBEDDED_ROW : ROW_LAYOUT}>
             <div style={ROW_COPY}>
                 <label htmlFor={controlId} style={ROW_VALUE}>{label}</label>
                 {hint ? <span id={hintId} style={ROW_HINT}>{hint}</span> : null}
             </div>
-            {control}
+            <div data-settings-control="" style={CONTROL_SLOT}>{control}</div>
         </div>
     );
 }
 
+const ACTION_TITLE = {
+    ...ROW_VALUE,
+    margin: 0,
+    fontSize: 'inherit',
+    lineHeight: 1.3,
+    overflowWrap: 'anywhere',
+};
+const ACTION_HINT = { ...ROW_HINT, margin: 0, overflowWrap: 'anywhere' };
+// When the row wraps on a narrow screen the actions keep to the row end, the
+// same edge a switch or select sits on.
+const ACTION_SLOT = {
+    display: 'flex',
+    flexWrap: 'wrap',
+    justifyContent: 'flex-end',
+    gap: 'var(--xc-space-2)',
+    marginInlineStart: 'auto',
+    maxWidth: '100%',
+};
+
 /**
- * Two-column row with a label + hint on the left and an `<input
- * type="checkbox">` styled as a toggle on the right.
+ * A settings row whose control is one or more action buttons: the same
+ * bordered row, label and hint as a toggle or field row, with the actions at
+ * the row end. The label stays a heading so screen readers can jump between
+ * rows.
+ *
+ * @param {object} props
+ * @param {string} props.label
+ * @param {import('react').ReactNode} [props.hint]
+ * @param {'h2' | 'h3'} [props.headingLevel]
+ * @param {import('react').ReactNode} [props.children]   the row's actions
+ */
+export function SettingsActionRow({ label, hint, headingLevel: Heading = 'h2', children }) {
+    return (
+        <section className={cardStyles.card} style={ROW_LAYOUT}>
+            <div style={ROW_COPY}>
+                <Heading style={ACTION_TITLE}>{label}</Heading>
+                {hint ? <p style={ACTION_HINT}>{hint}</p> : null}
+            </div>
+            {children ? <div style={ACTION_SLOT}>{children}</div> : null}
+        </section>
+    );
+}
+
+/**
+ * Two-column row with a label, hint, and on-off control.
  *
  * @param {object} props
  * @param {string} props.label
@@ -130,58 +205,55 @@ export function ToggleRow({
     embedded = false,
 }) {
     return (
-        <SettingsFieldRow label={label} hint={hint} embedded={embedded}>
-            <input
-                type="checkbox"
-                role="switch"
+        <div className={embedded ? undefined : cardStyles.card} style={embedded ? EMBEDDED_ROW : ROW_LAYOUT}>
+            <Switch
+                label={label}
+                description={hint}
                 aria-label={accessibleLabel}
-                aria-checked={checked}
                 checked={checked}
                 disabled={disabled}
                 onChange={(e) => onChange(e.target.checked)}
-                style={{
-                    appearance: 'none',
-                    WebkitAppearance: 'none',
-                    width: 40,
-                    minWidth: 40,
-                    margin: 0,
-                    border: `1px solid ${checked ? 'var(--xc-accent-primary)' : 'var(--xc-border-strong)'}`,
-                    borderRadius: 999,
-                    backgroundColor: checked ? 'var(--xc-accent-primary)' : 'var(--xc-surface)',
-                    backgroundImage: `radial-gradient(circle, ${checked ? 'var(--xc-on-accent)' : 'var(--xc-text-muted)'} 0 7px, transparent 8px)`,
-                    backgroundPosition: checked ? 'right 2px center' : 'left 2px center',
-                    backgroundRepeat: 'no-repeat',
-                    backgroundSize: '20px 20px',
-                    // Keep the visible track and pointer target at the shared accessibility floor.
-                    height: 'var(--xc-tap-min)',
-                    flexShrink: 0,
-                    cursor: disabled ? 'not-allowed' : 'pointer',
-                    transition: 'background-color 120ms ease, background-position 120ms ease, border-color 120ms ease',
-                }}
             />
-        </SettingsFieldRow>
+        </div>
     );
 }
 
 /**
+ * A settings message: the shared StatusMessage row, so a settings error or
+ * status looks like every other inline message in the wallet (it was an
+ * outlined box for errors and a dashed box otherwise).
+ *
  * @param {object} props
  * @param {string} props.text
- * @param {'error'|'muted'} [props.tone]
+ * @param {'error'|'warning'|'success'|'muted'} [props.tone]   muted (the default) is a plain status
  * @param {string} [props.id]
  */
 export function Status({ text, tone, id }) {
+    const variant = tone === 'error' || tone === 'warning' || tone === 'success' ? tone : 'status';
     return (
-        <div id={id} role={tone === 'error' ? 'alert' : undefined} style={{
-            padding: 'var(--xc-space-3) var(--xc-space-4)',
-            background: 'var(--xc-surface-raised)',
-            border: tone === 'error'
-                ? '1px solid var(--xc-danger-fg)'
-                : '1px dashed var(--xc-border)',
-            borderRadius: 'var(--xc-radius-md)',
-            color: tone === 'error' ? 'var(--xc-danger-fg)' : 'var(--xc-text-muted)',
-            fontSize: 'var(--xc-text-sm)',
-        }}>
+        <StatusMessage variant={variant} id={id}>
             {text}
+        </StatusMessage>
+    );
+}
+
+/**
+ * The one shape of an inline form on a settings card. A message about a single
+ * field goes under that field (the field's own `error`); a message about the
+ * form as a whole is the first item of the section, above the form's card at
+ * the full width, never a box drawn inside the card. The wrapper is always
+ * there, so a message coming or going never remounts the form being typed in.
+ *
+ * @param {object} props
+ * @param {string | null | undefined} [props.error]   the form-level error, if any
+ * @param {{ label: string, onAction: () => void | Promise<void> }} [props.recovery]   a one-click fix shown with the error
+ * @param {import('react').ReactNode} props.children  the form and its card
+ */
+export function SettingsInlineForm({ error, recovery, children }) {
+    return (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--xc-space-2)' }}>
+            {error ? <StatusMessage variant="error" recovery={recovery}>{error}</StatusMessage> : null}
+            {children}
         </div>
     );
 }

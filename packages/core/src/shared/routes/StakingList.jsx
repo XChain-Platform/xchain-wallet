@@ -9,7 +9,7 @@
 // contact legal@dankest.llc.
 
 import { useEffect, useMemo, useState } from 'react';
-import { Button, ChainBadge, EmptyState, Icon, Input, ListPage, PageHeader, Screen, Skeleton, StatusMessage } from '@xchain-wallet/core/ui';
+import { Button, EmptyState, Icon, Input, ListPage, PageHeader, Screen, Skeleton, StatusMessage } from '@xchain-wallet/core/ui';
 import { registry as registryLib } from '@xchain-wallet/core';
 import {
     isDemoWallet,
@@ -26,8 +26,11 @@ import {
     unclaimedRewards,
     cooldownStatus,
     cooldownText,
+    stakingLockStatus,
+    stakingLockText,
+    stakingRowState,
+    stakingActivationBlock,
     toBaseUnits,
-    effectiveStakingRows,
     latestEffectiveStakingRow,
     isPendingContractUnstake,
 } from '../../flows/stakingDashboard.js';
@@ -67,8 +70,7 @@ const VALIDATOR_COIN = 'bitcoin';
  *     positions still releasing (cooldown) after an unstake.
  *
  * Toolbar offers free-text search (token, amount, contract, address,
- * pubkey, capability) plus the standard network filter. The header's
- * "+" opens the new-stake flow. Clicking a row opens StakeDetail via
+ * pubkey, capability). The header's "+" opens the new-stake flow. Clicking a row opens StakeDetail via
  * `onOpenStake` with a ref describing the position.
  *
  * Contract-stake explorer/SDK queries are a Phase 7 follow-up and
@@ -118,8 +120,8 @@ export function StakingList({ walletId, activeAccountId, onOpenStake, onNewStake
     const [addressesReload, setAddressesReload] = useState(0);
     const [stakingReload, setStakingReload] = useState(0);
 
-    // In-page filters: free-text search + network dropdown, mirroring
-    // the dispensers / contacts toolbars.
+    // In-page filters: free-text search plus a chain filter that names each
+    // chain without its network kind.
     const [query, setQuery] = useState('');
     const [network, setNetwork] = useState('all');
 
@@ -378,44 +380,46 @@ export function StakingList({ walletId, activeAccountId, onOpenStake, onNewStake
             backLabel="Back to home"
             titleIcon={<Icon.StakeIcon />}
             title="Staking"
-            trailing={onNewStake ? (
-                <Button
-                    type="button"
-                    className={local.addBtn}
-                    onClick={() => onNewStake()}
-                    aria-label="New stake"
-                    title="New stake"
-                >
-                    <Icon.PlusIcon />
-                </Button>
-            ) : undefined}
         />
     );
-    const wrap = (children, toolbar) => (
+    // The page header holds only the title and Back, so New stake sits in the
+    // content's actions row. An empty list offers it from its EmptyState
+    // instead, so the screen never shows it twice.
+    const wrap = (children, { toolbar, notices, emptyOffersCreate = false } = {}) => (
         <Screen variant={variant} header={header}>
-            <ListPage toolbar={toolbar}>
+            <ListPage
+                notices={notices}
+                actions={onNewStake && !emptyOffersCreate ? (
+                    <Button variant="secondary" icon={<Icon.PlusIcon />} onClick={() => onNewStake()}>
+                        New stake
+                    </Button>
+                ) : null}
+                toolbar={toolbar}
+            >
                 {children}
             </ListPage>
         </Screen>
     );
 
     if (addressesError) {
-        return wrap(
-            <StatusMessage
-                variant="error"
-                className={styles.entryDescription}
-                recovery={{
-                    label: 'Try again',
-                    onAction: () => {
-                        setAddressesError(null);
-                        setAddressesByChain(null);
-                        setAddressesReload((value) => value + 1);
-                    },
-                }}
-            >
-                {addressesError}
-            </StatusMessage>,
-        );
+        return wrap(null, {
+            notices: (
+                <StatusMessage
+                    variant="error"
+                    className={styles.entryDescription}
+                    recovery={{
+                        label: 'Try again',
+                        onAction: () => {
+                            setAddressesError(null);
+                            setAddressesByChain(null);
+                            setAddressesReload((value) => value + 1);
+                        },
+                    }}
+                >
+                    {addressesError}
+                </StatusMessage>
+            ),
+        });
     }
     if (!addressesByChain) {
         return wrap(
@@ -435,13 +439,13 @@ export function StakingList({ walletId, activeAccountId, onOpenStake, onNewStake
     }
 
     const toolbar = (
-        <>
+        <div className={local.toolbar}>
             <div className={local.searchField}>
                 <Input
                     type="search"
+                    size="md"
                     enterKeyHint="search"
                     autoCapitalize="off"
-                    className={local.search}
                     placeholder="Search"
                     value={query}
                     onChange={(e) => setQuery(e.target.value)}
@@ -451,9 +455,26 @@ export function StakingList({ walletId, activeAccountId, onOpenStake, onNewStake
                     aria-label="Search staking positions"
                 />
             </div>
-            <NetworkFilterDropdown value={network} onChange={setNetwork} />
-        </>
+            <NetworkFilterDropdown size="md" value={network} onChange={setNetwork} />
+        </div>
     );
+
+    const loadErrorNotice = loadErrors.length > 0 ? (
+        <StatusMessage
+            variant="error"
+            className={styles.entryDescription}
+            recovery={{
+                label: 'Try again',
+                onAction: () => {
+                    setStateByChain({});
+                    setStakingReload((value) => value + 1);
+                },
+            }}
+        >
+            Couldn't load some staking data. {loadErrors.join('; ')}
+        </StatusMessage>
+    ) : null;
+    const emptyOffersCreate = !anyLoading && allRows.length === 0 && loadErrors.length === 0 && Boolean(onNewStake);
 
     return wrap(
         <>
@@ -475,21 +496,6 @@ export function StakingList({ walletId, activeAccountId, onOpenStake, onNewStake
                     ) : null}
                 </div>
             ) : null}
-            {loadErrors.length > 0 ? (
-                <StatusMessage
-                    variant="error"
-                    className={styles.entryDescription}
-                    recovery={{
-                        label: 'Try again',
-                        onAction: () => {
-                            setStateByChain({});
-                            setStakingReload((value) => value + 1);
-                        },
-                    }}
-                >
-                    Couldn't load some staking data. {loadErrors.join('; ')}
-                </StatusMessage>
-            ) : null}
             {anyLoading && visibleRows.length === 0 ? (
                 <div role="status" aria-label="Loading staking positions">
                     <Skeleton.List rows={5} />
@@ -507,7 +513,7 @@ export function StakingList({ walletId, activeAccountId, onOpenStake, onNewStake
                         ? (loadErrors.length > 0
                             ? "No staking positions could be loaded, so try again later."
                             : "Staking positions created by this wallet appear here.")
-                        : "Try a different search or network filter."}
+                        : "Try a different search."}
                     actionLabel={allRows.length === 0 && loadErrors.length === 0 && onNewStake ? "New stake" : undefined}
                     onAction={allRows.length === 0 && loadErrors.length === 0 ? onNewStake : undefined}
                     titleAs="p"
@@ -518,24 +524,29 @@ export function StakingList({ walletId, activeAccountId, onOpenStake, onNewStake
                         <StakeRow
                             key={row.key}
                             row={row}
-                            cooldown={cooldownText(cooldownStatus({
-                                unstake: { cooldown_end_block: row.cooldownEndBlock },
-                                height: heightByChain[row.chainId],
-                                coin: chainRegistry.get(row.chainId)?.coin,
-                            }), row.kind)}
+                            period={row.cooldownEndBlock != null
+                                ? cooldownText(cooldownStatus({
+                                    unstake: { cooldown_end_block: row.cooldownEndBlock },
+                                    height: heightByChain[row.chainId],
+                                    coin: chainRegistry.get(row.chainId)?.coin,
+                                }), row.kind)
+                                : stakingLockText(stakingLockStatus({
+                                    stake: { activation_block: row.lockEndBlock },
+                                    height: heightByChain[row.chainId],
+                                    coin: chainRegistry.get(row.chainId)?.coin,
+                                }))}
                             onSelect={() => onOpenStake(row.ref)}
                         />
                     ))}
                 </div>
             )}
         </>,
-        toolbar,
+        { toolbar, notices: loadErrorNotice, emptyOffersCreate },
     );
 }
 
-function StakeRow({ row, cooldown, onSelect }) {
+function StakeRow({ row, period, onSelect }) {
     const chainIconUrl = branding.chainIconSmallUrl(row.chainId);
-    const descriptor = chainRegistry.get(row.chainId);
     return (
         /* Stake entries stay native buttons because each control is the complete clickable row. */
         <button
@@ -565,9 +576,6 @@ function StakeRow({ row, cooldown, onSelect }) {
             </div>
             <div className={local.body}>
                 <div className={local.name}>{row.name}</div>
-                <div className={local.subtitle}>
-                    {descriptor ? <ChainBadge descriptor={descriptor} size="sm" /> : row.chainId}
-                </div>
                 <div className={local.subtitle}>{row.subtitle}</div>
                 {row.subtitle2 ? <div className={local.subtitle}>{row.subtitle2}</div> : null}
             </div>
@@ -576,7 +584,7 @@ function StakeRow({ row, cooldown, onSelect }) {
                     {row.status}
                 </span>
                 <span className={local.amount}>{row.amountLabel}</span>
-                {cooldown ? <span className={local.duration}>{cooldown}</span> : null}
+                {period ? <span className={local.duration}>{period}</span> : null}
                 {row.rewardLabel ? (
                     <span className={local.rewardChip}>{row.rewardLabel}</span>
                 ) : null}
@@ -615,11 +623,12 @@ export function buildRows({
         : null;
 
     const primaryDelegation = latestEffectiveStakingRow(delegations, height);
-    for (const s of effectiveStakingRows(stakes, height)) {
+    for (const s of visibleStakingRows(stakes, height)) {
         const amt = fmtAmount(s.amount ?? s.AMOUNT ?? s.quantity);
         const asset = s.asset ?? s.ASSET ?? 'XCHAIN';
         const label = s.capability_label || s.capability || 'Validator stake';
-        const status = normalizeStatus(s.status) || 'active';
+        const state = stakingRowState(s, height);
+        const status = state === 'pending' ? 'locked' : normalizeStatus(s.status ?? s.STATUS) || 'active';
         const addr = String(s._ownerAddress || '');
         rows.push({
             key: `v:${chainId}:${String(s.stake_id ?? s.action_index ?? addr)}`,
@@ -632,6 +641,7 @@ export function buildRows({
             amountLabel: `${amt} ${asset}`,
             rewardLabel,
             status,
+            lockEndBlock: state === 'pending' ? stakingActivationBlock(s) : null,
             blockIndex: s.block_index,
             ref: { kind: 'validator', chainId, address: addr },
             searchHaystack: [
@@ -642,7 +652,7 @@ export function buildRows({
         });
     }
 
-    const activeContractStakes = effectiveStakingRows(contractStakes, height);
+    const activeContractStakes = visibleStakingRows(contractStakes, height);
     for (const s of activeContractStakes) {
         const idx = String(s.target_contract_index ?? '?');
         const addr = String(s._ownerAddress || '');
@@ -685,8 +695,15 @@ export function buildRows({
             subtitle: `${fmtAmount(s.amount)} ${tick}`,
             subtitle2: short(addr),
             amountLabel: `${fmtAmount(s.amount)} ${tick}`,
-            status: inCooldown ? 'cooldown' : 'active',
+            status: inCooldown
+                ? 'cooldown'
+                : stakingRowState(s, height) === 'pending'
+                    ? 'locked'
+                    : normalizeStatus(s.status ?? s.STATUS) || 'active',
             cooldownEndBlock,
+            lockEndBlock: stakingRowState(s, height) === 'pending'
+                ? stakingActivationBlock(s)
+                : null,
             blockIndex: s.block_index,
             ref: { kind: 'contract', chainId, address: addr, contractActionIndex: idx },
             searchHaystack: [
@@ -729,6 +746,12 @@ export function buildRows({
     }
 
     return rows;
+}
+
+function visibleStakingRows(rows, height) {
+    return (Array.isArray(rows) ? rows : []).filter((row) => (
+        ['active', 'unknown', 'pending', 'unexpected'].includes(stakingRowState(row, height))
+    ));
 }
 
 /**

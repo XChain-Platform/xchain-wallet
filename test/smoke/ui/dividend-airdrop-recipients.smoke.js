@@ -203,11 +203,10 @@ for (const shellPath of shells) {
 
 // ─── 6. History.jsx mounts RecipientsBlock + consumes shims ─────────────
 
-const historySrc = readFileSync(
-    join(wsRoot, 'packages/core/src/shared/routes/History.jsx'),
-    'utf8',
-);
-assert.match(historySrc, /<RecipientsBlock entry=\{entry\} \/>/, 'RecipientsBlock mounted');
+const historySrc = ['History', 'HistoryDetailCard', 'HistoryEntryRow', 'HistoryShared']
+    .map((n) => readFileSync(join(wsRoot, 'packages/core/src/shared/routes', `${n}.jsx`), 'utf8'))
+    .join('\n');
+assert.match(historySrc, /<RecipientsBlock entry=\{entry\} walletId=\{walletId\} \/>/, 'RecipientsBlock mounted');
 assert.match(historySrc, /function RecipientsBlock\(/, 'RecipientsBlock component declared');
 assert.match(historySrc, /messaging\.getDividendRecipients/, 'consumes getDividendRecipients');
 assert.match(historySrc, /messaging\.getAirdropRecipients/, 'consumes getAirdropRecipients');

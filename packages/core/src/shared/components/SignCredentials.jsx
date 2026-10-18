@@ -34,9 +34,10 @@
 //   />
 
 import { useCallback } from 'react';
-import { Input, StatusMessage } from '../../ui/index.js';
+import { Input, FieldNote } from '../../ui/index.js';
 import { HwSignBlock } from './HwSignBlock.jsx';
 import { SigningReadyNote } from '../safety/PanicFreezeNotice.jsx';
+import { t } from '../../i18n/index.js';
 
 /**
  * @param {object} props
@@ -129,11 +130,11 @@ export function SignCredentials({
                             color: 'var(--xc-text-muted)',
                         }}
                     >
-                        <span aria-hidden="true">🔓</span> Wallet unlocked. No password needed.
+                        <span aria-hidden="true">🔓</span> {t('send.walletUnlocked')}
                     </p>
                 </SigningReadyNote>
                 {submitError ? (
-                    <StatusMessage variant="error">{submitError}</StatusMessage>
+                    <FieldNote variant="error">{submitError}</FieldNote>
                 ) : null}
             </>
         );
@@ -142,8 +143,8 @@ export function SignCredentials({
         <Input
             ref={passwordRef}
             type="password"
-            label="Password"
-            hint="Required to sign."
+            label={t('common.password')}
+            hint={t('components.messageConfirmScreen.requiredToSign')}
             value={password || ''}
             onChange={(e) => onPasswordChange?.(e.target.value)}
             autoComplete="current-password"

@@ -25,6 +25,7 @@
 import { useCallback, useId, useMemo, useRef, useState } from 'react';
 import {
     Button,
+    FieldNote,
     FormPage,
     Icon,
     PageHeader,
@@ -38,6 +39,7 @@ import { parseXchainUri, hardenUriIntentText, safeChainIdParam } from '../../uri
 import { neutralizeControlText } from '../utils/textHardening.js';
 import { isValidAddressAnyNetwork, isValidAddressForChain } from '../utils/addressValidation.js';
 import { t } from '../../i18n/index.js';
+import { ClipboardPasteButton } from '../../ui/ClipboardPasteButton.jsx';
 import { defaultRegistry } from '../../registry/index.js';
 
 const DEFAULT_CHAIN_REGISTRY = defaultRegistry();
@@ -92,9 +94,11 @@ function resolvePaymentChain({ address, chainId, scheme, chainRegistry }) {
  * @param {() => void} [props.onBack]
  * @param {import('../../registry/index.js').ChainRegistry} [props.chainRegistry]
  * @param {boolean} [props.embedded]
+ * @param {boolean} [props.nested] the scanner opens inside another screen (a
+ *   contact form), so its Back stays even under a nav-linked route
  * @param {string} [props.titleId]
  */
-export function ScanRoute({ onClassified, onBack, chainRegistry, embedded = false, titleId }) {
+export function ScanRoute({ onClassified, onBack, chainRegistry, embedded = false, nested = false, titleId }) {
     const generatedHeadingId = useId();
     const headingId = titleId || generatedHeadingId;
     const [paste, setPaste] = useState('');
@@ -282,13 +286,14 @@ export function ScanRoute({ onClassified, onBack, chainRegistry, embedded = fals
 
     const header = useMemo(() => (
         <PageHeader
+            nested={nested || embedded}
             onBack={onBack}
             backLabel={t('common.back')}
             title={t('scan.title')}
             titleId={headingId}
             titleIcon={<Icon.CameraIcon />}
         />
-    ), [headingId, onBack]);
+    ), [headingId, onBack, nested, embedded]);
 
     return (
         <Screen
@@ -307,22 +312,19 @@ export function ScanRoute({ onClassified, onBack, chainRegistry, embedded = fals
                 actions={(
                     <Button
                         type="submit"
-                        size="sm"
                         variant="secondary"
                         disabled={!paste.trim() || stopped}
                     >
                         {t('scan.classifyPaste')}
                     </Button>
                 )}
+                status={status ? <StatusMessage variant="error">{status}</StatusMessage> : undefined}
             >
                 {!stopped ? (
                     <QrScanner onFrame={handleFrame} alt={t('scan.scannerAlt')} />
                 ) : (
-                    <StatusMessage variant="success">{t('scan.routing')}</StatusMessage>
+                    <FieldNote variant="success">{t('scan.routing')}</FieldNote>
                 )}
-                {status ? (
-                    <StatusMessage variant="error">{status}</StatusMessage>
-                ) : null}
                 <Textarea
                     label={t('scan.pasteLabel')}
                     value={paste}
@@ -332,6 +334,15 @@ export function ScanRoute({ onClassified, onBack, chainRegistry, embedded = fals
                     spellCheck={false}
                     autoComplete="off"
                     autoCorrect="off"
+                    actions={(
+                        <ClipboardPasteButton
+                            disabled={stopped}
+                            onPaste={(text) => { setPaste(text); setStatus(''); }}
+                            // Inside the box a clipboard failure has no room of its
+                            // own, so it becomes the screen's status line.
+                            onMessage={(message) => { if (message) setStatus(message); }}
+                        />
+                    )}
                 />
             </FormPage>
         </Screen>

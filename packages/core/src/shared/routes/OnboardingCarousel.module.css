@@ -2,20 +2,24 @@
     display: flex;
     flex-direction: column;
     height: 100%;
+    max-height: 100%;
     min-height: 0;
     width: 100%;
     gap: var(--xc-space-3);
+    overflow: hidden;
 }
 
-.rootFull {
+.centeredFull {
     display: flex;
     flex-direction: column;
     height: 100%;
+    max-height: 100%;
     min-height: 0;
     width: 100%;
     max-width: 480px;
-    margin: 0 auto;
+    margin-inline: auto;
     gap: var(--xc-space-4);
+    overflow: hidden;
 }
 
 .skipRow {
@@ -24,20 +28,39 @@
     flex: 0 0 auto;
 }
 
+/* Skip reads as quiet text but keeps a kit control's target: the small
+   control height (above the --xc-tap-min floor at every width) and, on a
+   touch screen, the --xc-control-hit-min area a kit Button adds. At 24px tall
+   with no hit area it was the smallest target on the first onboarding
+   screen. */
 .skipBtn {
-    background: none;
-    border: none;
-    padding: var(--xc-space-1) var(--xc-space-2);
-    font-size: var(--xc-text-sm);
-    color: var(--xc-text-muted);
-    cursor: pointer;
-    border-radius: var(--xc-radius-sm);
-    /* State the WCAG 2.2 AA 2.5.8 pointer-target floor instead of
-       inheriting it from whichever line box the platform font produces. */
-    min-height: var(--xc-tap-min);
+    position: relative;
     display: inline-flex;
     align-items: center;
     justify-content: center;
+    min-block-size: var(--xc-tap-min);
+    min-height: max(var(--xc-tap-min), var(--xc-control-h-sm));
+    min-width: max(var(--xc-tap-min), var(--xc-control-h-sm));
+    padding: var(--xc-space-1) var(--xc-space-2);
+    border: none;
+    border-radius: var(--xc-radius-sm);
+    background: none;
+    color: var(--xc-text-muted);
+    font: inherit;
+    font-size: var(--xc-text-sm);
+    cursor: pointer;
+}
+
+/* Centred on the box in both writing directions, as Button.sm does. */
+@media (pointer: coarse), (hover: none) {
+    .skipBtn::before {
+        content: '';
+        position: absolute;
+        inset-block-start: min(0px, calc(50% - var(--xc-control-hit-min, 24px) / 2));
+        inset-inline-start: min(0px, calc(50% - var(--xc-control-hit-min, 24px) / 2));
+        width: max(100%, var(--xc-control-hit-min, 24px));
+        height: max(100%, var(--xc-control-hit-min, 24px));
+    }
 }
 
 .skipBtn:hover {
@@ -46,7 +69,7 @@
 
 .skipBtn:focus-visible {
     outline: 2px solid var(--xc-focus-ring);
-    outline-offset: 2px;
+    outline-offset: calc(var(--xc-space-1) / 2);
 }
 
 .frameViewport {
@@ -66,7 +89,12 @@
     text-align: center;
     padding: var(--xc-space-4);
     max-width: 360px;
+    --xc-frame-enter-offset: var(--xc-space-4);
     animation: frameEnter 360ms cubic-bezier(0.2, 0.8, 0.3, 1) both;
+}
+
+:global([dir='rtl']) .frame {
+    --xc-frame-enter-offset: calc(-1 * var(--xc-space-4));
 }
 
 /* Author display rules outrank the browser's hidden-state rule. Preserve the
@@ -78,7 +106,7 @@
 @keyframes frameEnter {
     from {
         opacity: 0;
-        transform: translateX(16px);
+        transform: translateX(var(--xc-frame-enter-offset));
     }
     to {
         opacity: 1;
@@ -90,8 +118,8 @@
     display: flex;
     align-items: center;
     justify-content: center;
-    width: 64px;
-    height: 64px;
+    width: calc(var(--xc-space-8) * 2);
+    height: calc(var(--xc-space-8) * 2);
     margin-bottom: var(--xc-space-4);
     border-radius: var(--xc-radius-pill);
     background: var(--xc-bg-muted);
@@ -149,15 +177,15 @@
 .dotActive::before {
     content: '';
     display: block;
-    width: 8px;
-    height: 8px;
+    width: var(--xc-space-2);
+    height: var(--xc-space-2);
     border-radius: var(--xc-radius-pill);
     background: var(--xc-border-strong);
     transition: width 200ms ease, background 200ms ease;
 }
 
 .dotActive::before {
-    width: 20px;
+    width: var(--xc-space-5);
     background: var(--xc-accent-primary);
 }
 
@@ -171,7 +199,7 @@
 .dot:focus-visible::before,
 .dotActive:focus-visible::before {
     outline: 2px solid var(--xc-focus-ring);
-    outline-offset: 2px;
+    outline-offset: calc(var(--xc-space-1) / 2);
 }
 
 .nav {
@@ -180,6 +208,10 @@
     align-items: center;
     gap: var(--xc-space-2);
     flex: 0 0 auto;
+}
+
+:global([dir='rtl']) .nav > :first-child svg {
+    transform: scaleX(-1);
 }
 
 .actions {
@@ -222,9 +254,9 @@
 
 /* The active explanation scrolls within its lane when translated text is
    taller than a short landscape screen. Navigation remains outside it. */
-@media (orientation: landscape) and (max-height: 480px) {
+@media (orientation: landscape) and (max-height: 480px) and (min-aspect-ratio: 3/2) {
     .rootPopup,
-    .rootFull {
+    .centeredFull {
         gap: var(--xc-space-2);
     }
 
@@ -238,8 +270,8 @@
     }
 
     .frameIcon {
-        width: 40px;
-        height: 40px;
+        width: calc(var(--xc-space-5) * 2);
+        height: calc(var(--xc-space-5) * 2);
         margin-bottom: var(--xc-space-1);
     }
 

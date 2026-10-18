@@ -3,7 +3,9 @@
  * `prefers-reduced-motion: reduce` (the @media block at the bottom). */
 
 .skeleton {
-    background-color: var(--xc-surface-raised, #1f2937);
+    /* A token of its own: raised surfaces are white in the light themes, which
+       left the placeholders invisible on the white page. */
+    background-color: var(--xc-skeleton, var(--xc-surface-raised, #1f2937));
     background-image: linear-gradient(
         90deg,
         transparent 0%,
@@ -14,7 +16,7 @@
     background-repeat: no-repeat;
     background-position: -100% 0;
     border-radius: var(--xc-radius-sm);
-    animation: xc-skeleton-shimmer 1.4s ease-in-out infinite;
+    animation: xc-skeleton-shimmer var(--xc-motion-duration-ambient) var(--xc-motion-ease-ambient) infinite;
     /* Stable layout - block-level, fills the parent's width unless an
      * explicit `width` prop is set inline. */
     display: block;
@@ -60,9 +62,11 @@
 }
 
 .row {
+    box-sizing: border-box;
     display: flex;
     align-items: center;
     gap: var(--xc-space-3);
+    min-height: var(--xc-control-h-lg);
     padding: var(--xc-space-2) 0;
 }
 
@@ -89,8 +93,13 @@
  * a static gray block. The placeholder still occupies the same layout
  * footprint; only the moving gradient stops. */
 @media (prefers-reduced-motion: reduce) {
-    .skeleton {
+    :global(:root:not([data-xc-reduced-motion='no-preference'])) .skeleton {
         animation: none;
         background-image: none;
     }
+}
+
+:global(:root[data-xc-reduced-motion='reduce']) .skeleton {
+    animation: none;
+    background-image: none;
 }

@@ -9,7 +9,7 @@
 // contact legal@dankest.llc.
 
 import { useEffect, useState } from 'react';
-import { Button, EmptyState, ListPage, NetworkField, PageHeader, Screen, StatusMessage } from '@xchain-wallet/core/ui';
+import { Button, EmptyState, Icon, ListPage, NetworkField, PageHeader, Screen, StatusMessage } from '@xchain-wallet/core/ui';
 import { registry as registryLib } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { useChainIdsWithAction } from '../hooks/useSupportedChains.js';
@@ -177,7 +177,7 @@ export function BetFeedsList({ walletId, onOpenMarket, onCreate, onMyBets, onMyM
             <ListPage>
                 <EmptyState
                     title="No betting address"
-                    body="Betting requires an address on a supported chain."
+                    body="Betting requires an address on a supported network."
                 />
             </ListPage>,
         );
@@ -196,7 +196,6 @@ export function BetFeedsList({ walletId, onOpenMarket, onCreate, onMyBets, onMyM
             <ListPage>
                 <StatusMessage
                     variant="error"
-                    className={styles.error}
                     recovery={{ label: 'Try again', onAction: () => setAddressesReload((value) => value + 1) }}
                 >
                     {error}
@@ -205,40 +204,53 @@ export function BetFeedsList({ walletId, onOpenMarket, onCreate, onMyBets, onMyM
         );
     }
 
+    // This screen is the whole betting family's entry point, so the two personal
+    // views hang off it rather than each needing its own slot in the actions
+    // menu. The actions sit in the actions row like every other list screen's. Every button is secondary: the status filter below says which
+    // side is on with aria-pressed, so nothing here competes as the primary.
+    const actions = onCreate || onMyBets || onMyMarkets ? (
+        <>
+            {onCreate ? (
+                <Button type="button" variant="secondary" icon={<Icon.PlusIcon />} onClick={() => onCreate(chainId)}>
+                    Create market
+                </Button>
+            ) : null}
+            {onMyBets ? <Button type="button" variant="secondary" onClick={onMyBets}>My bets</Button> : null}
+            {onMyMarkets ? <Button type="button" variant="secondary" onClick={onMyMarkets}>My markets</Button> : null}
+        </>
+    ) : null;
+
     return wrap(
         <ListPage
-            toolbar={(
-                <>
-                    <NetworkField value={chainId} onChange={setChainId} chainIds={betChains.length ? betChains : (chainId ? [chainId] : [])} chainRegistry={chainRegistry} />
-                    <div className={styles.betActions}>
-                        {/* A two-way filter: the colour shows the active side, and
-                            aria-pressed says the same to a screen reader. */}
-                        <Button variant={openOnly ? 'primary' : 'ghost'} aria-pressed={openOnly} onClick={() => setOpenOnly(true)}>Taking bets</Button>
-                        <Button variant={openOnly ? 'ghost' : 'primary'} aria-pressed={!openOnly} onClick={() => setOpenOnly(false)}>All markets</Button>
-                        {onCreate ? <Button variant="ghost" onClick={() => onCreate(chainId)}>Create market</Button> : null}
-                    </div>
-                </>
-            )}
-        >
-            {/* This screen is the whole family's entry point (the GovernancePolls
-                pattern), so the two personal views hang off it rather than each
-                needing its own slot in the actions menu. */}
-            {onMyBets || onMyMarkets ? (
-                <div className={styles.betActions}>
-                    {onMyBets ? <Button variant="ghost" onClick={onMyBets}>My bets</Button> : null}
-                    {onMyMarkets ? <Button variant="ghost" onClick={onMyMarkets}>My markets</Button> : null}
-                </div>
-            ) : null}
-
-            {error ? (
+            actions={actions}
+            notices={error ? (
                 <StatusMessage
                     variant="error"
-                    className={styles.error}
                     recovery={{ label: 'Try again', onAction: () => setFeedsReload((value) => value + 1) }}
                 >
                     {error}
                 </StatusMessage>
             ) : null}
+            toolbar={(
+                <div className={local.toolbarRow}>
+                    <div className={local.toolbarNetwork}>
+                        <NetworkField
+                            value={chainId}
+                            onChange={setChainId}
+                            chainIds={betChains.length ? betChains : (chainId ? [chainId] : [])}
+                            chainRegistry={chainRegistry}
+                            size="md"
+                        />
+                    </div>
+                    <div className={`${styles.betActions} ${local.toolbarActions}`}>
+                        {/* A two-way filter: the pressed ring shows the active side, and
+                            aria-pressed says the same to a screen reader. */}
+                        <Button size="md" variant="secondary" aria-pressed={openOnly} onClick={() => setOpenOnly(true)}>Taking bets</Button>
+                        <Button size="md" variant="secondary" aria-pressed={!openOnly} onClick={() => setOpenOnly(false)}>All markets</Button>
+                    </div>
+                </div>
+            )}
+        >
             {chainId && !rows && !error ? (
                 <div role="status" aria-label="Loading betting markets" aria-busy="true">
                     Loading betting markets…
@@ -247,7 +259,7 @@ export function BetFeedsList({ walletId, onOpenMarket, onCreate, onMyBets, onMyM
             {rows && rows.length === 0 ? (
                 <EmptyState
                     title="No markets"
-                    body={openOnly ? 'No markets are taking bets on this chain right now.' : 'Markets created on this chain appear here.'}
+                    body={openOnly ? 'No markets are taking bets on this network right now.' : 'Markets created on this network appear here.'}
                 />
             ) : null}
 
@@ -260,7 +272,7 @@ export function BetFeedsList({ walletId, onOpenMarket, onCreate, onMyBets, onMyM
                         const label = m.label || '(untitled market)';
                         const outcomes = typeof m.outcomes === 'string' ? m.outcomes.split(',') : [];
                         return (
-                            <li key={String(id)} className={local.marketItem}>
+                            <li key={String(id)}>
                                 <Button
                                     type="button"
                                     onClick={() => onOpenMarket(chainId, id)}

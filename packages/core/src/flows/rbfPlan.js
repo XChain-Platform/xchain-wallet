@@ -233,11 +233,13 @@ export function signalsReplaceability(tx) {
  * Speed up a pending send: replace it when it is RBF-flagged, otherwise offer
  * a CPFP child on its wallet-owned change at a feeRate covering parent plus
  * child. Cancel and restore stay RBF-only because a child cannot evict.
+ * `network` (the SDK network params) is required on the CPFP branch, which
+ * sizes the child against that chain's dust floor and segwit support.
  *
  * @returns {{ method: 'rbf'|'cpfp', plan: object }}
  */
 export function planSpeedUp({
-    conflict, parentTxid, sourceAddress, ownAddresses, feeRate, transactionBytes, childVbytes,
+    conflict, parentTxid, sourceAddress, ownAddresses, feeRate, transactionBytes, childVbytes, network,
 } = {}) {
     if (signalsReplaceability(conflict)) {
         return {
@@ -257,6 +259,7 @@ export function planSpeedUp({
             feeRate,
             parentVbytes: transactionBytes,
             childVbytes,
+            network,
         }),
     };
 }

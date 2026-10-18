@@ -91,6 +91,7 @@ import {
     fakeOwnedTokensFor,
     fakeTokenInfoFor,
     fakeDispensersFor,
+    fakeDispenserByActionIndex,
     fakeOrdersFor,
     fakeSwapsFor,
     fakeHoldersFor,
@@ -350,6 +351,12 @@ const createDevMockSdk = import.meta.env?.PROD ? null : (constructorOpts) => {
                     if (type === 'token' && query) return fakeDispensersFor(query, chainId);
                     return [];
                 };
+            }
+            if (prop === 'getAction') {
+                // The dispenser detail page reads one dispenser by action
+                // index; answer for rows the token-scoped list served, and keep
+                // the empty answer every other lookup got before.
+                return async (actionIndex) => fakeDispenserByActionIndex(actionIndex, chainId) || [];
             }
             if (prop === 'getOrders') {
                 return async (query, type /* , opts */) => {
@@ -1477,6 +1484,7 @@ export async function importMnemonicLocal(req) {
         activeChainIds = DEFAULT_ACTIVE_CHAIN_IDS,
         origin,
         chainId,
+        activeNetwork,
     } = req;
     if (importingWif && (typeof chainId !== 'string' || chainId.length === 0)) {
         throw new Error('wallet.import: chainId is required for a WIF private key');
@@ -1538,6 +1546,10 @@ export async function importMnemonicLocal(req) {
                 // Same password, same params: the wallet seal reuses the vault
                 // key instead of paying a second Argon2id round.
                 masterKey,
+                // The network the caller asked to land on (demo mode asks for
+                // mainnet). Undefined keeps the flow's own inference from the
+                // first chain id.
+                activeNetwork,
             });
         await v.save();
         vault = v;

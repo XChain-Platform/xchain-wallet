@@ -13,6 +13,7 @@ import {
     AddressText,
     Button,
     ChainBadge,
+    FormNotice,
     FormPage,
     Input,
     PageHeader,
@@ -21,6 +22,7 @@ import {
 } from '@xchain-wallet/core/ui';
 import { registry as registryLib } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
+import { useDemoGuard } from '../hooks/useDemoGuard.jsx';
 import { ActionConfirmScreen } from '../components/ActionConfirmScreen.jsx';
 import { WatcherResultPanel } from '../components/WatcherResultPanel.jsx';
 import { NativeFeeToggle } from '../components/NativeFeeToggle.jsx';
@@ -94,6 +96,7 @@ function ListRenameFormScreen({ walletId, listRef, onBack, onDone = onBack }) {
     const listActionIndex = String(listRef.actionIndex);
     const listActionIndexValid = /^[1-9][0-9]*$/.test(listActionIndex);
     const { messaging, shell } = useMessaging();
+    const demoGuard = useDemoGuard(walletId, { onBack });
     const variant = screenVariantFor(shell);
     const descriptor = chainRegistry.get(chainId);
     const coinTicker = TICKER_BY_COIN[descriptor?.coin] || '';
@@ -131,7 +134,7 @@ function ListRenameFormScreen({ walletId, listRef, onBack, onDone = onBack }) {
             setAddressesByChain(byChain || {});
             setActiveByChain(active || {});
             if (!(byChain?.[chainId] || []).length) {
-                setLoadError('No address on this chain yet. Use Receive to generate one first.');
+                setLoadError('No address on this network yet. Use Receive to generate one first.');
             }
         }).catch((err) => {
             if (!cancelled) setLoadError(err?.message || 'Failed to load addresses.');
@@ -224,7 +227,7 @@ function ListRenameFormScreen({ walletId, listRef, onBack, onDone = onBack }) {
     function validate() {
         if (!listActionIndexValid) { setFormError('List reference must be a positive whole number.'); return false; }
         if (sdkSupported !== true) { setFormError(SDK_REASON); return false; }
-        if (!fromAddress) { setFormError('No signing address available on this chain.'); return false; }
+        if (!fromAddress) { setFormError('No signing address available on this network.'); return false; }
         if (nameError || descriptionError) {
             setFormError('Fix the list name and description first.');
             return false;
@@ -286,7 +289,7 @@ function ListRenameFormScreen({ walletId, listRef, onBack, onDone = onBack }) {
                 {...lane.confirmProps}
                 walletId={walletId}
                 screenVariant={variant}
-                chainLabel={descriptor?.displayName || chainId}
+                chainLabel={null}
                 chainId={chainId}
                 coinTicker={coinTicker}
                 signerReady={signerReady}
@@ -330,6 +333,7 @@ function ListRenameFormScreen({ walletId, listRef, onBack, onDone = onBack }) {
     const formDisabled = sdkSupported !== true;
     return wrap(
         <FormPage
+            demoGuard={demoGuard}
             label="Rename list"
             onSubmit={handleReview}
             status={(sdkSupported === false || formError) ? (
@@ -360,9 +364,9 @@ function ListRenameFormScreen({ walletId, listRef, onBack, onDone = onBack }) {
                 <dd className={styles.detailsValue}>
                     {detail.description ? neutralizeControlText(detail.description) : 'Not set'}
                 </dd>
-                <dt className={styles.detailsLabel}>Chain</dt>
+                <dt className={styles.detailsLabel}>Network</dt>
                 <dd className={styles.detailsValue}>
-                    {descriptor ? <ChainBadge descriptor={descriptor} size="sm" /> : chainId}
+                    {descriptor ? <ChainBadge descriptor={descriptor} size="sm" showName={false} /> : 'Selected network'}
                 </dd>
                 <dt className={styles.detailsLabel}>From</dt>
                 <dd className={styles.detailsValue}>
@@ -371,12 +375,9 @@ function ListRenameFormScreen({ walletId, listRef, onBack, onDone = onBack }) {
             </dl>
 
             {missingOwner ? (
-                <div role="alert" className={styles.warnings}>
-                    <p className={styles.warning}>
-                        The current owner, {shortAddress(owner)}, is not an address in this wallet.
-                        A rename signed by another address will be refused by the network.
-                    </p>
-                </div>
+                <FormNotice variant="warning" role="alert">
+                    {`The current owner, ${shortAddress(owner)}, is not an address in this wallet. A rename signed by another address will be refused by the network.`}
+                </FormNotice>
             ) : null}
 
             <Input

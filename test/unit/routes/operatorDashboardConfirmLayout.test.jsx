@@ -98,14 +98,15 @@ describe('operator dashboard confirm layout', () => {
         const methods = mount(HARD_FAIL);
         const modal = await reachConfirm();
         const confirm = within(modal);
-        const approve = confirm.getByTestId('confirm-approve');
+        // Approve sits in the pinned footer outside the scrolling review body.
+        const approve = screen.getByTestId('confirm-approve');
         await waitFor(() => expect(methods.preflight).toHaveBeenCalledTimes(1));
 
         expect(await confirm.findByText('The dry run rejected this action.')).toBeTruthy();
         expect(confirm.getByTestId('confirm-fee')).toHaveTextContent('Network fee: 0.00001234 BTC');
         expect(within(confirm.getByTestId('action-intent'))
             .getByText('Publish 123.45 to feed 700')).toBeTruthy();
-        expect(confirm.getByTestId('confirm-reject')).toBeEnabled();
+        expect(screen.getByTestId('confirm-reject')).toBeEnabled();
         expect(approve).toBeDisabled();
 
         fireEvent.click(approve);
@@ -117,7 +118,8 @@ describe('operator dashboard confirm layout', () => {
         const methods = mount({ verdict: 'pass', findings: [] });
         const modal = await reachConfirm();
         const confirm = within(modal);
-        const approve = confirm.getByTestId('confirm-approve');
+        // Approve sits in the pinned footer outside the scrolling review body.
+        const approve = screen.getByTestId('confirm-approve');
         await waitFor(() => expect(methods.preflight).toHaveBeenCalledTimes(1));
 
         await waitFor(() => expect(approve).toBeEnabled());

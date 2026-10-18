@@ -180,9 +180,9 @@ describe('style guide primitive coverage', () => {
         );
 
         const chainPicker = sectionSource('ChainPickerSection.jsx', 'ChainPickerSection');
-        expect(chainPicker).toMatch(
-            /<LiveExample label="Scoped context:[^>]+>[\s\S]*?<ChainPicker[\s\S]*?hideNetworkKind/,
-        );
+        // The picker shows no testnet or regtest suffix, so the guide documents
+        // neither the suffix nor a prop that hid it.
+        expect(chainPicker).not.toMatch(/hideNetworkKind|· testnet|· regtest/);
 
         const states = sectionSource('StatesSection.jsx', 'StatesSection');
         for (const shape of ['row', 'text', 'title', 'avatar', 'badge', 'card', 'tile']) {

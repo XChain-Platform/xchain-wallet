@@ -22,11 +22,10 @@
 //      recovery phrase in front of the camera has to produce a message and
 //      nothing else - no navigation, no vault write.
 //
-// AND ONE PROPERTY THAT IS DELIBERATE AND WORTH PINNING: the address classifier is
-// LOOSE on purpose ("Beyond that the caller validates" - any 20-90 char single
-// alphanumeric token classifies as an address), so a garbage blob DOES route to
-// Send. What protects the user there is Send's own validation, not the scanner, and
-// that is asserted rather than assumed.
+// AND ONE PROPERTY WORTH PINNING: the address classifier is loose (any 20-90 char
+// single alphanumeric token classifies as an address), so the route itself validates
+// the address before it navigates, and a garbage blob is refused on Scan rather than
+// left for Send's destination check.
 //
 // TWO INPUT PATHS, BOTH DRIVEN. `classify()` is shared by the camera and by the
 // paste box, so the camera tests prove the lens reaches the classifier and the
@@ -102,7 +101,7 @@ async function openScan(page) {
  * Returns 'routed' when the route claimed it, or the error text otherwise.
  */
 async function classifyPaste(page, text) {
-    const box = page.getByRole('textbox').first();
+    const box = page.getByRole('textbox', { name: 'Or paste it here', exact: true });
     await box.fill(text);
     await page.getByRole('button', { name: 'Use pasted text' }).click();
 
@@ -116,10 +115,9 @@ async function classifyPaste(page, text) {
     // its subtree, and a bare getByRole('alert') picks whichever comes first in
     // the DOM - which is the scanner's. That read as a classification result and
     // made a chunk refusal look like the wrong message entirely. The status row
-    // this route sets is a DIRECT child of the route container, so scope to that.
-    // (Second time this screen has punished an any-alert assertion; see the Send
-    // refusal step further down.)
-    const failed = page.getByTestId('scan-route').locator(':scope > [role="alert"]');
+    // this route sets renders as a sibling placed before the form, so scope to
+    // the form's preceding sibling and the scanner's own alert stays out of it.
+    const failed = page.getByTestId('scan-route').locator('xpath=preceding-sibling::*//*[@role="alert"]');
     let outcome = null;
     await expect.poll(async () => {
         if (await routed.count() === 0) outcome = 'routed';
@@ -151,11 +149,34 @@ async function deviceFacing(qrText, walletName) {
     return { page, close: () => browser.close() };
 }
 
+/**
+ * Skips the calling test on a browser with no Shape Detection API. `QrScanner`
+ * reads frames through the native `BarcodeDetector`, which Chromium ships on
+ * macOS, Windows and Android but not on Linux, so a Linux venue runner cannot
+ * read any camera QR no matter what the wallet does. Probed on a real
+ * localhost origin because the API is secure-context only. Only the camera
+ * tests call it; the paste tests reach the same classifier without a detector.
+ *
+ * @param {import('@playwright/test').Browser} browser
+ */
+async function skipWithoutBarcodeDetector(browser) {
+    const context = await browser.newContext();
+    try {
+        const probe = await context.newPage();
+        await probe.goto(BASE_URL, { waitUntil: 'domcontentloaded' });
+        const present = await probe.evaluate(() => typeof window.BarcodeDetector === 'function');
+        test.skip(!present, 'this browser has no BarcodeDetector (Chromium on Linux), so no camera QR can be read');
+    } finally {
+        await context.close();
+    }
+}
+
 test.describe('scan and classify (§24.3)', () => {
     test.use({ actionTimeout: 30_000 });
     test.setTimeout(900_000);
 
-    test('a payment QR reaches Send with the destination and amount it carried', async () => {
+    test('a payment QR reaches Send with the destination and amount it carried', async ({ browser }) => {
+        await skipWithoutBarcodeDetector(browser);
         const { page, close } = await deviceFacing(PAYMENT_QR, 'Scanner Wallet');
         try {
             await openScan(page);
@@ -187,14 +208,15 @@ test.describe('scan and classify (§24.3)', () => {
         }
     });
 
-    test('a recovery phrase in front of the camera is refused, not imported', async () => {
+    test('a recovery phrase in front of the camera is refused, not imported', async ({ browser }) => {
+        await skipWithoutBarcodeDetector(browser);
         const { page, close } = await deviceFacing(PHRASE_QR, 'Refusal Wallet');
         try {
             await openScan(page);
 
-            await expect(page.getByRole('alert'),
+            await expect(page.getByTestId('scan-route').locator('xpath=preceding-sibling::*//*[@role="alert"]'),
                 'a recovery phrase was scanned and the screen said nothing about it')
-                .toContainText(/recovery phrase was scanned/i, { timeout: 60_000 });
+                .toContainText(/This is a recovery phrase/i, { timeout: 60_000 });
 
             // The promise is not just the message: nothing may happen. Give the
             // scanner several more seconds of frames and require the route to
@@ -211,7 +233,7 @@ test.describe('scan and classify (§24.3)', () => {
         }
     });
 
-    test('the classification table: secrets refused, garbage refused, an address routed', async ({ page }) => {
+    test('the classification table: secrets refused, garbage refused', async ({ page }) => {
         // No camera in this browser on purpose: `QrScanner` fires on every
         // decoded frame, so a QR in view would overwrite the status between
         // these assertions. The paste box feeds the SAME `classify()`.
@@ -223,7 +245,7 @@ test.describe('scan and classify (§24.3)', () => {
             expect(result === 'routed',
                 'a WIF pasted into the scan box was ACTED ON rather than refused')
                 .toBe(false);
-            expect(/private key \(WIF\) was scanned/i.test(result),
+            expect(/This is a private key.*Import wallet/i.test(result),
                 'the WIF was not acted on, but the screen does not say a private key was scanned '
                 + 'nor point at the Import lane that adds one deliberately')
                 .toBe(true);
@@ -232,43 +254,26 @@ test.describe('scan and classify (§24.3)', () => {
         await test.step('an unclassifiable payload is refused', async () => {
             const result = await classifyPaste(page, UNCLASSIFIABLE);
             expect(result === 'routed', 'unrecognized content was routed somewhere').toBe(false);
-            expect(/not recognized/i.test(result),
+            expect(/text the wallet doesn't know how to use/i.test(result),
                 'unrecognized content was refused without saying so').toBe(true);
         });
 
-        await test.step('a garbage blob DOES route: the loose classifier is the documented design', async () => {
-            // `detectQrContent`'s step 6 takes any 20-90 char single
-            // alphanumeric token as a probable address, on purpose, leaving
-            // validation to the caller. Pinned so the looseness is a decision
-            // on the record rather than a surprise - and so the NEXT assertion
-            // (that Send refuses it) is known to be the thing protecting the
-            // user here.
-            expect(await classifyPaste(page, GARBAGE_BLOB),
-                'the loose address heuristic no longer routes a garbage blob to Send. If that is '
-                + 'deliberate, this test should now assert the refusal instead')
-                .toBe('routed');
-
-            const to = page.getByLabel('To', { exact: true });
-            await expect(to).toBeVisible({ timeout: 30_000 });
-            expect(await to.inputValue(), 'the blob did not reach the To field').toBe(GARBAGE_BLOB);
-        });
-
-        await test.step('and Send is what refuses it, since the scanner did not', async () => {
-            // The destination check runs on REVIEW, not while typing, so the
-            // spec has to press the button a user would press. That timing is
-            // worth knowing: a scanned blob sits in the To field looking
-            // accepted until the moment of submit.
-            await page.getByLabel(AMOUNT_LABEL).first().fill('0.001');
-            await page.getByRole('main').getByRole('button', { name: 'Send', exact: true }).click();
-
-            // Asserted on the SPECIFIC wording, not on "some alert is showing":
-            // the Send screen carries other alerts, and an any-alert assertion
-            // passed here while the destination check was never reached at all.
-            await expect(page.getByText(/not a valid .* address/i).first(),
-                'a scanned garbage destination reached Send and Send did not refuse it. The '
-                + 'classifier is loose by design, so this check is the only thing standing '
-                + 'between a mis-scanned blob and a signed transaction')
-                .toBeVisible({ timeout: 30_000 });
+        await test.step('a garbage blob is refused before it can reach Send', async () => {
+            // `detectQrContent` still takes any 20-90 char single alphanumeric
+            // token as a probable address, but the route now validates the
+            // address before it navigates, so a mis-scanned blob never lands in
+            // Send's To field looking accepted.
+            const result = await classifyPaste(page, GARBAGE_BLOB);
+            expect(result === 'routed',
+                'a garbage blob was routed to Send, so a mis-scanned token reached a money screen '
+                + 'with nothing but the destination check on Send standing between it and a signature')
+                .toBe(false);
+            expect(/text the wallet doesn't know how to use/i.test(result),
+                'the garbage blob was refused without saying so').toBe(true);
+            await expect(page.getByTestId('scan-route'),
+                'the refused blob navigated the wallet away from Scan').toBeVisible();
+            await expect(page.getByLabel('To', { exact: true }),
+                'the refused blob opened the Send screen').toHaveCount(0);
         });
     });
     test('the URI intents route where they say, and a scanned PSBT arrives with them', async ({ page }) => {
@@ -300,7 +305,7 @@ test.describe('scan and classify (§24.3)', () => {
                 'an xchain: receive intent was not routed').toBe('routed');
             // Anchored on a Receive-only control rather than the title: PageHeader
             // renders its title as a <span>, so there is no heading role to match.
-            await expect(page.getByRole('button', { name: 'Copy QR' }),
+            await expect(page.getByRole('button', { name: 'Copy QR code', exact: true }),
                 'a receive intent did not open the Receive screen')
                 .toBeVisible({ timeout: 30_000 });
             await expect(page.getByLabel('To', { exact: true }),
@@ -318,11 +323,11 @@ test.describe('scan and classify (§24.3)', () => {
             const result = await classifyPaste(page, frames[0]);
             expect(result === 'routed', 'a single chunk of a multi-frame transaction was routed as '
                 + 'though it were a whole one').toBe(false);
-            expect(/chunk 1\/\d+/i.test(result),
+            expect(/Part 1 of \d+/i.test(result),
                 'the chunk was refused without naming which frame it was, so the user cannot tell '
                 + 'how many more there are')
                 .toBe(true);
-            expect(/Sign panel/i.test(result),
+            expect(/screen that asked for this code/i.test(result),
                 'the chunk refusal does not point at the screen that can collect every frame')
                 .toBe(true);
         });

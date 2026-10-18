@@ -21,7 +21,10 @@
 // Order matters: `seedPrices` talks to the explorer and the miner, so it would
 // report a down tunnel as a price problem if it ran first.
 
-import { assertVenueReachable, healVenueClock, seedPrices, runInIndexer, REGTEST_COIN } from './fixtures/regtest.js';
+import {
+    assertVenueReachable, healVenueClock, seedPrices, runInIndexer, REGTEST_COIN,
+    assertGasHeadroom, readGasHeadroom, GAS_HEADROOM_FLOOR,
+} from './fixtures/regtest.js';
 import { readStateScript } from './fixtures/priceSeed.js';
 import { startPriceKeeper } from './fixtures/priceKeeper.js';
 import { ensureGasToken } from './fixtures/gasToken.js';
@@ -102,6 +105,11 @@ export default async function globalSetup(config) {
     const baseURL = config?.projects?.[0]?.use?.baseURL
         || `http://localhost:${process.env.XC_PREVIEW_PORT || 4173}`;
     await ensureGasToken({ baseURL, log: console.log });
+    // An issued gas token can still be minted out: every confirm screen then
+    // refuses the mint and each spec waits out its timeout on a disabled
+    // Approve. Stop the run here instead.
+    await assertGasHeadroom(GAS_HEADROOM_FLOOR);
+    console.log(`[regtest ${REGTEST_COIN}] XCHAIN mint headroom: ${(await readGasHeadroom()) ?? 'uncapped'}`);
 
     // A seed checked ONCE is not a priced venue, it is a priced first minute.
     // The margin is spent in chain seconds and a chain that mines on demand can

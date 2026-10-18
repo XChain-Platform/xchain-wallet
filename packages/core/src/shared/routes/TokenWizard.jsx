@@ -8,14 +8,16 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
+import { t } from '../../i18n/index.js';
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { AddressField, AddressText, Button, ChainBadge, CopyButton, FormPage, FormSection, Input, ListPage, NetworkField, PageHeader, Screen, SectionHeader, StatusMessage } from '@xchain-wallet/core/ui';
+import { AddressField, AddressText, Button, ChainBadge, ChainPicker, Checkbox, CopyButton, FormNotice, FormPage, FormSection, Input, ListPage, ListRow, PageHeader, Screen, SectionHeader, StatusMessage, Switch } from '@xchain-wallet/core/ui';
 import {
     registry as registryLib,
     decoder as decoderLib,
     flows as flowsLib,
 } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
+import { useDemoGuard } from '../hooks/useDemoGuard.jsx';
 import { useActionConfirmFlow, isUserRejection } from '../hooks/useActionConfirmFlow.js';
 import { useWalletMode } from '../hooks/useWalletMode.js';
 import { ActionConfirmScreen } from '../components/ActionConfirmScreen.jsx';
@@ -23,6 +25,7 @@ import { WatcherResultPanel } from '../components/WatcherResultPanel.jsx';
 import { useSignerReady } from '../hooks/useSignerReady.js';
 import { ListPickerScreen } from '../components/ListPickerScreen.jsx';
 import { OwnAddressPickerScreen } from '../components/OwnAddressPickerScreen.jsx';
+import { ContactsPickerScreen } from '../components/ContactsPickerScreen.jsx';
 import { blockDateEstimateText } from '../utils/blockDateEstimate.js';
 import {
     LOCK_FLAGS,
@@ -50,7 +53,8 @@ import { isValidAddressForChain } from '../utils/addressValidation.js';
 import { estimateNativeSendFee } from '../../flows/feeEstimate.js';
 import { useFeeFiat } from '../hooks/useFeeFiat.js';
 import { useSettings } from '../hooks/useSettings.js';
-import { useOnlineStatus } from '../hooks/useOnlineStatus.js';
+import { useNetworkOffline } from '../hooks/useNetworkOffline.js';
+import { useHideReachabilityNotice } from '../components/hideReachabilityNotice.js';
 
 const chainRegistry = registryLib.defaultRegistry();
 
@@ -99,7 +103,10 @@ function isValidIssueAddress(value, descriptor) {
  */
 export function TokenWizard({ walletId, onBack }) {
     const { messaging, shell } = useMessaging();
-    const networkAvailable = useOnlineStatus();
+    const demoGuard = useDemoGuard(walletId, { onBack });
+    const { offline: networkOffline } = useNetworkOffline({ walletId });
+    const networkAvailable = !networkOffline;
+    useHideReachabilityNotice(networkOffline);
     const variant = screenVariantFor(shell);
     const { isWatcherMode } = useWalletMode();
     const { settings } = useSettings();
@@ -129,6 +136,19 @@ export function TokenWizard({ walletId, onBack }) {
     // deliberate choice straight back to the default address.
     const [sourcePickerOpen, setSourcePickerOpen] = useState(false);
     const [sourceChosenFor, setSourceChosenFor] = useState(/** @type {string | null} */ (null));
+    // The address book behind the two recipient fields, as on Issue token:
+    // one picker, and which field it is filling.
+    const [contactsPickerOpen, setContactsPickerOpen] = useState(false);
+    const [contactsTarget, setContactsTarget] = useState(/** @type {'owner' | 'supply'} */ ('owner'));
+    const [contacts, setContacts] = useState(/** @type {any[]} */ ([]));
+    useEffect(() => {
+        let cancelled = false;
+        if (typeof messaging.listContacts !== 'function') return undefined;
+        messaging.listContacts()
+            .then((rows) => { if (!cancelled) setContacts(rows || []); })
+            .catch(() => { if (!cancelled) setContacts([]); });
+        return () => { cancelled = true; };
+    }, [messaging]);
 
     // Details form state (some fields are only visible for certain
     // templates (see renderDetailsStage). Keeping all state here so
@@ -208,7 +228,7 @@ export function TokenWizard({ walletId, onBack }) {
                 if (Object.keys(signingByChain).length === 0) {
                     setLoadError(hasAnyAddress(byChain)
                         ? WATCH_ONLY_SIGNING_MESSAGE
-                        : 'No addresses on any chain yet. Use Receive to generate one before issuing a token.');
+                        : 'No addresses on any network yet. Use Receive to generate one before issuing a token.');
                     return;
                 }
                 // `byChain` is in address-creation order, so opening on its
@@ -282,6 +302,7 @@ export function TokenWizard({ walletId, onBack }) {
         [chainId],
     );
     const { formatNativeFee, formatProtocolFee } = useFeeFiat({
+        chainId: descriptor?.id,
         chainCoin: descriptor?.coin,
         nativeTicker: coinTicker,
         settings,
@@ -576,7 +597,7 @@ export function TokenWizard({ walletId, onBack }) {
         />
     );
     const wrap = (children) => (
-        <Screen variant={variant} header={header}>
+        <Screen variant={variant} header={header} restoreScroll={stage !== 'preview'}>
             {!networkAvailable ? (
                 <StatusMessage variant="warning">Creating a token needs a network connection.</StatusMessage>
             ) : null}
@@ -585,7 +606,7 @@ export function TokenWizard({ walletId, onBack }) {
     );
 
     if (loadError) {
-        return wrap(<ListPage><StatusMessage variant="error" className={styles.error}>{loadError}</StatusMessage></ListPage>);
+        return wrap(<ListPage><StatusMessage variant="error">{loadError}</StatusMessage></ListPage>);
     }
     if (!addressesByChain || !chainId) {
         return wrap(<ListPage><p className={styles.hint}>Loading…</p></ListPage>);
@@ -620,6 +641,21 @@ export function TokenWizard({ walletId, onBack }) {
     // signed by anyone else, and no field on this screen could change who
     // signed. Same picker, so the coin filtering and the address list are the
     // wallet's own rather than this form's.
+    if (contactsPickerOpen) {
+        return (
+            <ContactsPickerScreen
+                variant={variant}
+                contacts={contacts}
+                onPick={(entry) => {
+                    if (contactsTarget === 'supply') setTransferSupplyTo(entry.address);
+                    else setTransferTo(entry.address);
+                    setContactsPickerOpen(false);
+                }}
+                onBack={() => setContactsPickerOpen(false)}
+            />
+        );
+    }
+
     if (sourcePickerOpen) {
         return (
             <OwnAddressPickerScreen
@@ -681,6 +717,7 @@ export function TokenWizard({ walletId, onBack }) {
             <>
                 <WizardProgress stage={stage} />
                 {renderChainStage({
+                    demoGuard,
                     chainsWithAddresses,
                     chainId,
                     setChainId,
@@ -698,6 +735,7 @@ export function TokenWizard({ walletId, onBack }) {
         return wrap(<>
             <WizardProgress stage={stage} />
             {renderDetailsStage({
+            demoGuard,
             template,
             name, setName,
             displayName, setDisplayName,
@@ -708,6 +746,7 @@ export function TokenWizard({ walletId, onBack }) {
             lockOnCreate, setLockOnCreate,
             transferTo, setTransferTo,
             transferSupplyTo, setTransferSupplyTo,
+            onPickContact: (target) => { setContactsTarget(target); setContactsPickerOpen(true); },
             imageUrl, setImageUrl,
             parentToken, setParentToken,
             perAddressMax, setPerAddressMax,
@@ -726,7 +765,6 @@ export function TokenWizard({ walletId, onBack }) {
                 }),
                 callbackTickDecimals,
                 currentHeight,
-                chainLabel: descriptor?.displayName || chainId,
                 allowListIdx, blockListIdx, allowListCount, blockListCount,
                 allowListName, blockListName,
                 onPickList: setListPickerFor,
@@ -796,13 +834,14 @@ export function TokenWizard({ walletId, onBack }) {
         <>
             <WizardProgress stage={stage} />
             <FormPage
+                demoGuard={demoGuard}
                 label="Review token issuance"
                 onSubmit={(event) => {
                     event.preventDefault();
                     openConfirmScreen();
                 }}
                 status={formError ? (
-                    <StatusMessage variant="error" className={styles.error}>{formError}</StatusMessage>
+                    <StatusMessage variant="error">{formError}</StatusMessage>
                 ) : null}
                 actions={(
                     <Button
@@ -823,10 +862,12 @@ export function TokenWizard({ walletId, onBack }) {
                     {displayName.trim() ? (
                         <DetailRow label="Display name (not in transaction)" value={displayName.trim()} />
                     ) : null}
-                    <dt className={styles.detailsLabel}>Chain</dt>
-                    <dd className={styles.detailsValue}>
-                        {descriptor ? <ChainBadge descriptor={descriptor} size="sm" /> : chainId}
-                    </dd>
+                    {descriptor ? (
+                        <>
+                            <dt className={styles.detailsLabel}>Network</dt>
+                            <dd className={styles.detailsValue}><ChainBadge descriptor={descriptor} size="sm" /></dd>
+                        </>
+                    ) : null}
                     {fromAddress ? (
                         <>
                             <dt className={styles.detailsLabel}>From</dt>
@@ -843,7 +884,7 @@ export function TokenWizard({ walletId, onBack }) {
                         value={feeEstimate
                             ? `${feeEstimate.coinAmount} ${coinTicker}${feeEstimate.rate ? ` (${feeEstimate.rate})` : ''}`
                                 + (feeFiat ? ` (${feeFiat})` : '')
-                            : 'Fee estimate unavailable for this chain.'}
+                            : 'Fee estimate unavailable for this network.'}
                     />
                     <DetailRow
                         label="Protocol fee paid in"
@@ -851,16 +892,10 @@ export function TokenWizard({ walletId, onBack }) {
                     />
                 </dl>
                 {payFeeInNativeCoin ? (
-                    <div role="alert" className={styles.warnings}>
-                        <p className={styles.warning}>{NATIVE_FEE_WARNING}</p>
-                    </div>
+                    <FormNotice variant="warning" role="alert">{NATIVE_FEE_WARNING}</FormNotice>
                 ) : null}
                 {decoded && decoded.warnings.length > 0 ? (
-                    <div role="alert" className={styles.warnings}>
-                        {decoded.warnings.map((w, i) => (
-                            <p key={i} className={styles.warning}>{w}</p>
-                        ))}
-                    </div>
+                    <FormNotice variant="warning" role="alert" lines={decoded.warnings} />
                 ) : null}
             </FormPage>
         </>,
@@ -1136,30 +1171,22 @@ const TEMPLATES = [
 
 function renderTemplateStage({ onPick }) {
     return (
-        <ListPage intro="Choose a template.">
+        <ListPage>
             {/* Native list markup preserves template-list semantics because the UI kit has no list primitive. */}
             <ul className={styles.templateGrid}>
                 {TEMPLATES.map((t) => (
                     // Native list items preserve list semantics because the UI kit has no list-item primitive.
                     <li key={t.id}>
-                        <Button
+                        <ListRow
                             type="button"
-                            variant="secondary"
-                            block
-                            icon={null}
+                            className={styles.templateCard}
+                            title={t.name}
+                            subtitle={t.tagline}
                             onClick={() => t.interactive && onPick(t.id)}
                             disabled={!t.interactive}
                             aria-disabled={!t.interactive}
-                            title={t.interactive ? undefined : 'No dedicated form for this template yet. Use the Custom template instead.'}
-                        >
-                            <span className={styles.templateContent}>
-                                <span className={styles.templateName}>{t.name}</span>
-                                <span className={styles.templateTag}>{t.tagline}</span>
-                                {!t.interactive ? (
-                                    <span className={styles.templateSoon}>Use the Custom template for now</span>
-                                ) : null}
-                            </span>
-                        </Button>
+                            tooltip={t.interactive ? undefined : 'No dedicated form for this template yet. Use the Custom template instead.'}
+                        />
                     </li>
                 ))}
             </ul>
@@ -1179,16 +1206,16 @@ function renderTemplateStage({ onPick }) {
 
 function renderChainStage({
     chainsWithAddresses, chainId, setChainId, descriptor, fromAddress,
-    subtoken, onPickSource, onNext,
+    subtoken, onPickSource, onNext, demoGuard,
 }) {
     return (
         <FormPage
-            label="Choose token chain"
+            demoGuard={demoGuard}
+            label="Choose token network"
             onSubmit={(event) => {
                 event.preventDefault();
                 if (fromAddress) onNext();
             }}
-            intro="Which chain should record this token's issuance?"
             actions={(
                 <Button
                     type="submit"
@@ -1199,7 +1226,7 @@ function renderChainStage({
                 </Button>
             )}
         >
-            <NetworkField value={chainId} onChange={setChainId} chainIds={chainsWithAddresses.length ? chainsWithAddresses : (chainId ? [chainId] : [])} chainRegistry={chainRegistry} />
+            <ChainPicker label="Network" value={chainId} onChange={setChainId} chainIds={chainsWithAddresses.length ? chainsWithAddresses : (chainId ? [chainId] : [])} chainRegistry={chainRegistry} hideNetworkKind />
 
             {fromAddress ? (
                 <AddressField
@@ -1215,9 +1242,9 @@ function renderChainStage({
                         : undefined}
                 />
             ) : (
-                <StatusMessage variant="error" className={styles.error}>
-                    No address on this chain. Use Receive to generate one first.
-                </StatusMessage>
+                <FormNotice variant="error">
+                    {t('send.source.noAddress')}
+                </FormNotice>
             )}
         </FormPage>
     );
@@ -1257,6 +1284,7 @@ const TEMPLATE_FIELDS = {
 };
 
 function renderDetailsStage({
+    demoGuard,
     template,
     name, setName,
     displayName, setDisplayName,
@@ -1267,6 +1295,7 @@ function renderDetailsStage({
     lockOnCreate, setLockOnCreate,
     transferTo, setTransferTo,
     transferSupplyTo, setTransferSupplyTo,
+    onPickContact,
     imageUrl, setImageUrl,
     parentToken, setParentToken,
     perAddressMax, setPerAddressMax,
@@ -1281,12 +1310,12 @@ function renderDetailsStage({
     const isEdition = resolved === 'edition';
     return (
         <FormPage
+            demoGuard={demoGuard}
             label="Token details"
             onSubmit={onSubmit}
             onChangeCapture={onEdit}
-            intro={<>Template: <strong>{resolved}</strong></>}
             status={formError ? (
-                <StatusMessage variant="error" className={styles.error}>{formError}</StatusMessage>
+                <StatusMessage variant="error">{formError}</StatusMessage>
             ) : null}
             actions={(
                 <Button type="submit" variant="primary" loading={submitLoading}>
@@ -1341,15 +1370,11 @@ function renderDetailsStage({
                 />
             ) : null}
             {show.divisible ? (
-                <label className={styles.checkRow}>
-                    {/* Native checkbox remains because the UI kit has no checkbox control. */}
-                    <input
-                        type="checkbox"
-                        checked={divisible}
-                        onChange={(e) => setDivisible(e.target.checked)}
-                    />
-                    <span>Divisible (8 decimal places)</span>
-                </label>
+                <Switch
+                    label="Divisible (8 decimal places)"
+                    checked={divisible}
+                    onChange={(e) => setDivisible(e.target.checked)}
+                />
             ) : null}
             {show.description ? (
                 <Input
@@ -1418,22 +1443,20 @@ function renderDetailsStage({
                 />
             ) : null}
             {show.lockOnCreate ? (
-                <label className={styles.checkRow}>
-                    {/* Native checkbox remains because the UI kit has no checkbox control. */}
-                    <input
-                        type="checkbox"
-                        checked={lockOnCreate}
-                        onChange={(e) => setLockOnCreate(e.target.checked)}
-                    />
-                    <span>Lock supply + minting immediately (irreversible)</span>
-                </label>
+                <Switch
+                    label="Lock supply + minting immediately (irreversible)"
+                    checked={lockOnCreate}
+                    onChange={(e) => setLockOnCreate(e.target.checked)}
+                />
             ) : null}
             {show.transferTo ? (
                 <AddressField
                     label="Transfer ownership to (optional)"
+                    icon="contacts"
                     hint="Leave blank to keep control. Transferring ownership does not move the minted tokens; use the field below to send those too."
                     value={transferTo}
                     onChange={(e) => setTransferTo(e.target.value)}
+                    onIconClick={() => onPickContact('owner')}
                     autoComplete="off"
                     autoCapitalize="off"
                     autoCorrect="off"
@@ -1442,9 +1465,11 @@ function renderDetailsStage({
             {show.transferSupplyTo ? (
                 <AddressField
                     label="Send the initial mint to (optional)"
+                    icon="contacts"
                     hint="Leave blank to keep the minted tokens at the issuing address."
                     value={transferSupplyTo}
                     onChange={(e) => setTransferSupplyTo(e.target.value)}
+                    onIconClick={() => onPickContact('supply')}
                     autoComplete="off"
                     autoCapitalize="off"
                     autoCorrect="off"
@@ -1481,7 +1506,6 @@ function AdvancedIssuePanel({
     callbackBlockEstimate,
     callbackTickDecimals,
     currentHeight,
-    chainLabel,
     allowListIdx, blockListIdx, allowListCount, blockListCount,
     allowListName, blockListName,
     onPickList, onClearList,
@@ -1526,23 +1550,21 @@ function AdvancedIssuePanel({
                                 const forced = !!forcedByShortcut[f.key];
                                 return (
                                     <div key={f.key} className={styles.lockFlagRow}>
-                                        <label className={styles.checkRow}>
-                                            {/* Native checkbox remains because the UI kit has no checkbox control. */}
-                                            <input
-                                                type="checkbox"
-                                                checked={forced || !!lockChecks[f.key]}
-                                                disabled={forced}
-                                                onChange={(e) => setLockChecks({
-                                                    ...lockChecks,
-                                                    [f.key]: e.target.checked,
-                                                })}
-                                            />
-                                            <span>
-                                                {f.label}
-                                                {forced ? ' (set by "Lock supply + minting immediately")' : ''}
-                                            </span>
-                                        </label>
-                                        <p className={styles.lockFlagHint}>{f.hint}</p>
+                                        <Checkbox
+                                            label={(
+                                                <>
+                                                    {f.label}
+                                                    {forced ? ' (set by "Lock supply + minting immediately")' : ''}
+                                                </>
+                                            )}
+                                            description={f.hint}
+                                            checked={forced || !!lockChecks[f.key]}
+                                            disabled={forced}
+                                            onChange={(e) => setLockChecks({
+                                                ...lockChecks,
+                                                [f.key]: e.target.checked,
+                                            })}
+                                        />
                                     </div>
                                 );
                             })}
@@ -1586,7 +1608,7 @@ function AdvancedIssuePanel({
                         />
                         {currentHeight != null ? (
                             <p className={styles.hint}>
-                                Current block on {chainLabel}: {currentHeight.toLocaleString('en-US')}.
+                                Current block: {currentHeight.toLocaleString('en-US')}.
                                 Date above is a rough estimate; real block times vary.
                             </p>
                         ) : null}
@@ -1644,11 +1666,7 @@ function AdvancedIssuePanel({
                     </FormSection>
 
                     {warnings.length > 0 ? (
-                        <div role="alert" className={styles.warnings}>
-                            {warnings.map((w) => (
-                                <p key={w} className={styles.warning}>{w}</p>
-                            ))}
-                        </div>
+                        <FormNotice variant="warning" role="alert" lines={warnings} />
                     ) : null}
                 </div>
             )}

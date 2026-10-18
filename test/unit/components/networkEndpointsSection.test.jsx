@@ -67,6 +67,14 @@ beforeEach(() => {
 afterEach(() => cleanup());
 
 describe('NetworkEndpointsSection', () => {
+    it('renders each endpoint group as a card', () => {
+        render(<NetworkEndpointsSection />);
+
+        const groups = screen.getAllByRole('region');
+        expect(groups.length).toBeGreaterThan(1);
+        expect(groups.every((group) => group.className.includes('endpointCard'))).toBe(true);
+    });
+
     it('seeds every field with the port the wallet actually uses', () => {
         render(<NetworkEndpointsSection />);
         const block = ltcRegtestBlock();
@@ -156,8 +164,8 @@ describe('NetworkEndpointsSection', () => {
             target: { value: 'https://private.example.com/BTC' },
         });
 
-        expect(within(block).getByText(/host is not contacted/)).toHaveTextContent(
-            /If it is unreachable, this chain's balances, history and transactions may be unavailable\./,
+        expect(within(block).getByText(/host isn't contacted/)).toHaveTextContent(
+            /If it's unreachable, this network's balances, history and transactions may be unavailable\./,
         );
     });
 

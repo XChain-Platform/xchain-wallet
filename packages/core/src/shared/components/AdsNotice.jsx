@@ -8,9 +8,9 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-import { useEffect, useRef } from 'react';
 import { Button, Icon } from '@xchain-wallet/core/ui';
 import { t } from '../../i18n/index.js';
+import styles from './AdsNotice.module.css';
 
 /**
  * §36.1 ADS notice: the one-time screen at the end of onboarding, after a
@@ -20,61 +20,27 @@ import { t } from '../../i18n/index.js';
  * live in Settings -> ADS, the same shape FreeWallet desktop uses (operator
  * ruling 2026-10-12).
  *
- * The route supplies its own header classes so the notice matches the
- * screens before it.
+ * The caller places it inside a FormPage, so create and import end on the same
+ * screen at every width.
  *
  * @param {object} props
  * @param {() => void} props.onContinue
- * @param {boolean} props.isFull
- * @param {string} props.headClass
- * @param {string} props.titleClass
- * @param {string} props.subtitleClass
- * @param {string} props.actionsClass
  * @param {boolean} [props.busy]
  */
-export function AdsNotice({
-    onContinue,
-    isFull,
-    headClass,
-    titleClass,
-    subtitleClass,
-    actionsClass,
-    busy = false,
-}) {
-    const headingRef = useRef(/** @type {HTMLHeadingElement | null} */ (null));
-
-    useEffect(() => {
-        headingRef.current?.focus();
-    }, []);
-
+export function AdsNotice({ onContinue, busy = false }) {
     return (
         <>
-            <header className={headClass}>
-                <h1 ref={headingRef} tabIndex={-1} className={titleClass}>{t('adsNotice.title')}</h1>
-                <p className={subtitleClass}>{t('adsNotice.subtitle')}</p>
-            </header>
-            <ul style={{
-                margin: 0,
-                padding: 'var(--xc-space-2) var(--xc-space-3) var(--xc-space-2) var(--xc-space-5)',
-                background: 'var(--xc-surface-raised)',
-                border: '1px solid var(--xc-border)',
-                borderRadius: 'var(--xc-radius-md)',
-                fontSize: 'var(--xc-text-sm)',
-                color: 'var(--xc-text-muted)',
-                display: 'flex',
-                flexDirection: 'column',
-                gap: 'var(--xc-space-1)',
-            }}>
+            <p className={styles.subtitle}>{t('adsNotice.subtitle')}</p>
+            <ul className={styles.list}>
                 <li>{t('adsNotice.defaultBehavior')}</li>
                 <li>{t('adsNotice.optional')}</li>
                 <li>{t('adsNotice.settings')}</li>
             </ul>
-            <div className={actionsClass}>
+            <div className={styles.actions}>
                 <Button
                     variant="primary"
                     onClick={onContinue}
-                    block={!isFull}
-                    size={isFull ? undefined : 'sm'}
+                    block
                     icon={<Icon.CheckIcon />}
                     loading={busy}
                     disabled={busy}

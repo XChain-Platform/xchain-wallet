@@ -5,10 +5,13 @@
 
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { readFileSync } from 'node:fs';
 import { Input } from '../../../packages/core/src/ui/Input.jsx';
 import { Select } from '../../../packages/core/src/ui/Select.jsx';
 import { Textarea } from '../../../packages/core/src/ui/Textarea.jsx';
+import { AddressField } from '../../../packages/core/src/ui/AddressField.jsx';
 import { FeeSelector } from '../../../packages/core/src/ui/FeeSelector.jsx';
+import { AmountField } from '../../../packages/core/src/shared/components/AmountField.jsx';
 import { PriceAlertForm } from '../../../packages/core/src/shared/components/PriceAlertForm.jsx';
 import { TickItemsEditor } from '../../../packages/core/src/shared/components/TickItemsEditor.jsx';
 import { TokenField } from '../../../packages/core/src/shared/components/TokenField.jsx';
@@ -44,6 +47,13 @@ describe('form field error references', () => {
                     <option value="">Choose</option>
                 </Select>
                 <Textarea label="Textarea field" error="Textarea error" />
+                <AddressField label="Address field" error="Address error" value="bad" onChange={() => {}} />
+                <AmountField
+                    label="Amount field"
+                    amount=""
+                    error="Amount error"
+                    onAmountFieldChange={() => {}}
+                />
                 <TokenField
                     label="Token field"
                     value={null}
@@ -86,10 +96,26 @@ describe('form field error references', () => {
         expectLinkedError(screen.getByLabelText('Input field'), 'Input error');
         expectLinkedError(screen.getByLabelText('Select field'), 'Select error');
         expectLinkedError(screen.getByLabelText('Textarea field'), 'Textarea error');
+        expectLinkedError(screen.getByLabelText('Address field'), 'Address error');
+        expectLinkedError(screen.getByLabelText('Amount field'), 'Amount error');
         expectLinkedError(screen.getByRole('button', { name: /Token field/ }), 'Token error');
         expectLinkedError(screen.getByLabelText('Tokens (one per line)'), 'Not a token name: bad token');
         expectLinkedError(screen.getByLabelText('Target price'), 'Enter a price greater than zero.');
         expectLinkedError(fee, 'Enter a custom fee rate.');
+
+        const fieldErrors = [
+            'Input error',
+            'Select error',
+            'Textarea error',
+            'Address error',
+            'Amount error',
+            'Token error',
+        ].map((message) => screen.getByText(message));
+        expect(new Set(fieldErrors.map((node) => node.className)).size).toBe(1);
+
+        const fieldCss = readFileSync('packages/core/src/ui/Input.module.css', 'utf8');
+        expect(fieldCss).toMatch(/\.error\s*\{[^}]*gap:\s*var\(--xc-space-1\)/s);
+        expect(fieldCss).toMatch(/\.error::before\s*\{[^}]*content:\s*'!'/s);
     });
 
     it('keeps error descriptions scoped when multiple compact forms render together', () => {

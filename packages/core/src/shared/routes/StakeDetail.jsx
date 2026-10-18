@@ -278,7 +278,7 @@ export function StakeDetail({
     );
 
     if (loading) return wrap(<StatusMessage variant="status">Loading staking position…</StatusMessage>);
-    if (loadError) return wrap(<StatusMessage variant="error" className={styles.error}>{loadError}</StatusMessage>);
+    if (loadError) return wrap(<StatusMessage variant="error">{loadError}</StatusMessage>);
 
     const tabs = kind === 'validator'
         ? [
@@ -294,7 +294,6 @@ export function StakeDetail({
 
     return wrap(
         <>
-            <SectionHeader title="Position details" />
             {/* Hero: what's staked, where, how it's doing. */}
             <dl className={styles.detailsList}>
                 <dt className={styles.detailsLabel}>Staked</dt>
@@ -421,6 +420,7 @@ export function StakeDetail({
                                     block
                                     icon={<Icon.UnlinkIcon />}
                                     role="menuitem"
+                                    data-destructive="true"
                                     onClick={onRevokeDelegation ? () => { setMoreOpen(false); onRevokeDelegation(); } : undefined}
                                     disabled={!onRevokeDelegation || !primaryDelegation}
                                 >

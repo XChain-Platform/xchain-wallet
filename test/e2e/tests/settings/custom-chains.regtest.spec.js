@@ -90,11 +90,11 @@ const DESCRIPTOR = {
     adsDonationAddress: 'PLACEHOLDER_REPLACE_BEFORE_MAINNET',
 };
 
-/** Opens Settings and walks into the Developer Mode page, with the toggle on. */
+/** Opens Settings and walks into the Developer mode page, with the toggle on. */
 async function openDeveloperMode(page) {
     await openSettings(page);
-    await page.getByRole('button', { name: /^Developer Mode/ }).click();
-    const devToggle = page.getByRole('switch', { name: 'Developer Mode', exact: true });
+    await page.getByRole('button', { name: /^Developer mode\b/ }).click();
+    const devToggle = page.getByRole('switch', { name: 'Turn on developer mode', exact: true });
     await expect(devToggle).toBeVisible({ timeout: 30_000 });
     if (!(await devToggle.isChecked())) {
         // `.check()` cannot be used: the input is controlled by PERSISTED
@@ -120,13 +120,13 @@ test.describe('Settings: custom chains', () => {
             await openDeveloperMode(page);
 
             await test.step('it refuses a descriptor that is not valid, naming the field', async () => {
-                await page.getByRole('button', { name: 'Add custom chain' }).click();
-                const json = page.getByLabel('Custom chain descriptor JSON');
+                await page.getByRole('button', { name: 'Add custom network' }).click();
+                const json = page.getByLabel('Custom network descriptor JSON');
                 // Valid JSON, invalid DESCRIPTOR: the two failures are handled
                 // by different code and only the second one proves the
                 // validator runs at all.
                 await json.fill(JSON.stringify({ ...DESCRIPTOR, wifVersionByte: 999 }));
-                await page.getByRole('button', { name: 'Add chain' }).click();
+                await page.getByRole('button', { name: 'Add network' }).click();
 
                 // Anchored on the refusal, not on the word: `wifVersionByte`
                 // alone also matches the form's own field-list label AND the
@@ -142,13 +142,13 @@ test.describe('Settings: custom chains', () => {
             });
 
             await test.step('a valid descriptor is added and enters the live registry', async () => {
-                const json = page.getByLabel('Custom chain descriptor JSON');
+                const json = page.getByLabel('Custom network descriptor JSON');
                 await json.fill(JSON.stringify(DESCRIPTOR));
-                await page.getByRole('button', { name: 'Add chain' }).click();
+                await page.getByRole('button', { name: 'Add network' }).click();
 
                 await expect(page.getByText(`Added "${CHAIN_ID}".`),
                     'the add never reported a result').toBeVisible({ timeout: 30_000 });
-                await expect(page.getByRole('button', { name: `Remove custom chain ${CHAIN_ID}` }),
+                await expect(page.getByRole('button', { name: `Remove custom network ${CHAIN_ID}` }),
                     'the added chain is not listed in Custom chains').toBeVisible({ timeout: 30_000 });
             });
 
@@ -170,7 +170,7 @@ test.describe('Settings: custom chains', () => {
             });
 
             await test.step('remove takes it out of the registry too', async () => {
-                await page.getByRole('button', { name: `Remove custom chain ${CHAIN_ID}` }).click();
+                await page.getByRole('button', { name: `Remove custom network ${CHAIN_ID}` }).click();
                 await expect(page.getByText(`Removed "${CHAIN_ID}".`),
                     'the remove never reported a result').toBeVisible({ timeout: 30_000 });
 
@@ -182,7 +182,7 @@ test.describe('Settings: custom chains', () => {
                     'a removed custom chain is still in the ChainRegistry after a reload, so the '
                     + 'wallet still offers a chain the user deleted')
                     .toHaveCount(0);
-                await expect(page.getByRole('button', { name: `Remove custom chain ${CHAIN_ID}` }),
+                await expect(page.getByRole('button', { name: `Remove custom network ${CHAIN_ID}` }),
                     'the removed chain is still listed in Custom chains').toHaveCount(0);
             });
         });

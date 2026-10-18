@@ -62,6 +62,9 @@ const THROTTLED_VENUE_MAX_RPM = 60;
 const COPY_RE = /asked the wallet to slow down for (\d+) seconds; retrying/;
 const WIRE_RE = /Explorer returned HTTP|error 429|temporarily unavailable/i;
 
+// Each burst probe aborts on its own after this long.
+const PROBE_TIMEOUT_MS = 5_000;
+
 // Holds the venue's bucket full: 30 a minute against a 20-a-minute window.
 function startBurst() {
     let stopped = false;
@@ -70,19 +73,23 @@ function startBurst() {
         if (stopped) return;
         inflight += 1;
         try {
-            await fetch(`${EXPLORER_URL}/${REGTEST_COIN}/api/status`, { signal: AbortSignal.timeout(5_000) });
+            await fetch(`${EXPLORER_URL}/${REGTEST_COIN}/api/status`, { signal: AbortSignal.timeout(PROBE_TIMEOUT_MS) });
         } catch { /* a refused or timed-out probe still did its job */ }
         inflight -= 1;
     };
     const timer = setInterval(tick, 2_000);
     void tick();
     return {
+        // Resolves true once every probe settled, false if the drain deadline passed first.
         stop: async () => {
             stopped = true;
             clearInterval(timer);
-            // Let the last probe settle so it cannot land inside the window
-            // the recovery half is waiting to reset.
-            while (inflight > 0) await new Promise((r) => setTimeout(r, 200));
+            // Let the last probe settle so it cannot land inside the window the
+            // recovery half is waiting to reset; a probe aborts at its own timeout,
+            // so twice that bounds the drain even if an abort never fires.
+            const drainDeadline = Date.now() + 2 * PROBE_TIMEOUT_MS;
+            while (inflight > 0 && Date.now() < drainDeadline) await new Promise((r) => setTimeout(r, 200));
+            return inflight === 0;
         },
     };
 }
@@ -91,6 +98,11 @@ test.describe('rate-limit copy and recovery against a throttled explorer (AT6)',
     // Two windows to reach the copy (the honoured wait plus the failed retry),
     // one countdown, one more window to recover: six minutes is the budget.
     test.setTimeout(720_000);
+    // The regtest config's `**/*.regtest.spec.js` match picks this file up too,
+    // where localhost:18080 is the shared explorer. It runs only under
+    // playwright.ratelimit.config.js, which demands XC_RATE_LIMIT_AT6=1.
+    test.skip(process.env.XC_RATE_LIMIT_AT6 !== '1',
+        'needs the throttled explorer (EXPLORER_RATE_LIMIT_RPM=20), not the shared regtest venue; run it with playwright.ratelimit.config.js and XC_RATE_LIMIT_AT6=1');
 
     test.beforeAll(async () => {
         const res = await fetch(`${EXPLORER_URL}/${REGTEST_COIN}/api/status`, { signal: AbortSignal.timeout(10_000) });
@@ -108,6 +120,7 @@ test.describe('rate-limit copy and recovery against a throttled explorer (AT6)',
         await expect(unlockedShell(page)).toBeVisible({ timeout: kdfStepTimeout() });
 
         const burst = startBurst();
+        let drained = false;
         try {
             // A cold open is the one path that surfaces a load failure (a silent
             // poll never stomps a screen the user is looking at), so reload.
@@ -132,8 +145,10 @@ test.describe('rate-limit copy and recovery against a throttled explorer (AT6)',
                 expect.arrayContaining([expect.stringMatching(WIRE_RE)]),
             );
         } finally {
-            await burst.stop();
+            drained = await burst.stop();
         }
+        // Checked after the finally so a drain overrun never masks the case's own failure.
+        expect(drained, 'a burst probe outlived its own abort timeout').toBe(true);
 
         // The window passes: the countdown reaches zero, Home re-loads, the SDK
         // waits out whatever the fresh 429 says, and the load lands. Nothing is

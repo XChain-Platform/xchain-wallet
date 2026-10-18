@@ -67,6 +67,29 @@ async function persistGeneratedKey(vault, record) {
 export const MAX_GATED_PLAINTEXT_BYTES = 6500;
 
 /**
+ * Validate the canonical decimal spelling accepted by FILE.GATE_MIN_AMOUNT.
+ * The decimal-place bound is supplied by token state in the form and defaults
+ * to the wallet's fixed comparison scale in the compose flow.
+ *
+ * @param {unknown} value
+ * @param {number} [maxDecimals]
+ * @returns {string | null}
+ */
+export function gateMinAmountValidationError(value, maxDecimals = 18) {
+    const raw = String(value ?? '').trim();
+    if (raw.length > 40) return 'Unlock threshold can have at most 40 characters.';
+    if (!/^\d+(\.\d+)?$/.test(raw) || !/[1-9]/.test(raw)) {
+        return 'Unlock threshold must be a positive decimal amount.';
+    }
+    if (/^0\d/.test(raw)) return 'Unlock threshold cannot have leading zeros.';
+    const decimals = raw.split('.')[1]?.length || 0;
+    if (decimals > maxDecimals) {
+        return `Unlock threshold can have at most ${maxDecimals} decimal places for this token.`;
+    }
+    return null;
+}
+
+/**
  * @typedef {Object} GatedPublishOpts
  * @property {import('../storage/Vault.js').Vault} vault
  * @property {string} walletId
@@ -155,9 +178,8 @@ async function prepareGatedPublish(opts, caller) {
     let gateMinAmount = null;
     if (opts.gateMinAmount != null && String(opts.gateMinAmount).trim() !== '') {
         const raw = String(opts.gateMinAmount).trim();
-        if (!/^\d+(\.\d+)?$/.test(raw) || Number(raw) <= 0) {
-            throw new Error(`${caller}: gateMinAmount must be a positive decimal amount`);
-        }
+        const thresholdError = gateMinAmountValidationError(raw);
+        if (thresholdError) throw new Error(`${caller}: ${thresholdError}`);
         const active = await resolveGateMinAmountActive({
             chainId: opts.chainId,
             heights: opts._activationHeights,

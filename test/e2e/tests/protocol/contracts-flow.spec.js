@@ -4,16 +4,14 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 import {
-    dismissIntroCarousel,
+    createWallet,
     expect,
     gotoSection,
     test,
-    unlockedShell,
 } from '../../fixtures/wallet.js';
 import {
     describeOffenders,
     documentOverflow,
-    enterDemoWallet,
     overflowingElements,
 } from '../../fixtures/responsive.js';
 
@@ -22,7 +20,12 @@ const CONTRACT_NAME = 'E2E Escrow';
 const CONTRACT_LABEL = `${CONTRACT_NAME} v1.2.3 (C:BTC:${CONTRACT_INDEX})`;
 const CALL_AMOUNT = '12.50000000';
 const DEPOSIT_AMOUNT = '1.25';
-const DEPOSIT_TICK = 'EXAMPLE';
+// A token every created wallet holds on Bitcoin in the dev-mock balance set.
+const DEPOSIT_TICK = 'XCP';
+// A created wallet, not the demo one: a demo wallet keeps every compose
+// submit disabled behind its demo note, so it can never reach a review. A
+// created wallet's Bitcoin chain is mainnet.
+const FIXTURE_CHAIN = 'bitcoin-mainnet';
 const DEPLOY_GAS = '250000';
 const DEPLOY_SOURCE = [
     'module.exports = {',
@@ -63,8 +66,7 @@ async function installContractFixture(page) {
             },
         },
     };
-    // The demo wallet's Bitcoin chain.
-    const onFixtureChain = request?.chainId === 'bitcoin-regtest';
+    const onFixtureChain = request?.chainId === '${FIXTURE_CHAIN}';
     if (type === 'contracts.forSource' || type === 'contracts.browseAll') {
         return onFixtureChain ? [fixtureContract] : [];
     }
@@ -74,7 +76,7 @@ async function installContractFixture(page) {
         return { action_index: ${CONTRACT_INDEX}, params: { GAS_LIMIT: '175000' } };
     }
     if (type === 'contracts.state') return { released: '${CALL_AMOUNT}' };
-    if (type === 'contracts.balance') return { EXAMPLE: '500' };
+    if (type === 'contracts.balance') return { ${DEPOSIT_TICK}: '500' };
     if (type === 'executions.forContract') return [];
     if (type === 'contracts.manifest') return { permissions: [], maxTakeBps: null };
     if (type === 'contracts.getExportedMeta') {
@@ -225,7 +227,7 @@ async function walkExecute(page, viewport) {
     await main.getByRole('button', { name: /^Deposit \(optional\):/ }).click();
     await expectScreen(page, viewport, 'Token to deposit');
     await main.getByLabel('Search coins or tokens').fill(DEPOSIT_TICK);
-    await main.locator(`[data-balance-key="bitcoin-regtest:${DEPOSIT_TICK}"]`).first().click();
+    await main.locator(`[data-balance-key="${FIXTURE_CHAIN}:${DEPOSIT_TICK}"]`).first().click();
     await main.getByRole('textbox', { name: /^Deposit amount/ }).fill(DEPOSIT_AMOUNT);
 
     await main.evaluate((element) => { element.scrollTop = element.scrollHeight; });
@@ -234,7 +236,7 @@ async function walkExecute(page, viewport) {
     await expect(definitionValue(main, 'Contract')).toHaveText(`#${CONTRACT_INDEX}`);
     await expect(definitionValue(main, 'Deposit')).toHaveText(`${DEPOSIT_AMOUNT} ${DEPOSIT_TICK}`);
     await expect(definitionValue(main, 'Method')).toHaveText('release');
-    await expect(definitionValue(main, 'Params')).toContainText(CALL_AMOUNT);
+    await expect(definitionValue(main, 'Arguments')).toContainText(CALL_AMOUNT);
 
     await page.getByRole('button', { name: 'Back to previous screen' }).click();
     await expect(page.getByRole('heading', { name: `Call contract #${CONTRACT_INDEX}`, exact: true })).toBeVisible();
@@ -246,7 +248,7 @@ async function walkDeploy(page, viewport) {
     await page.getByRole('button', { name: 'Back to contracts list' }).click();
     const main = page.getByRole('main');
     await main.getByRole('button', { name: '+ Publish contract', exact: true }).click();
-    await expectScreen(page, viewport, 'Publish contract on Bitcoin');
+    await expectScreen(page, viewport, 'Publish contract');
 
     await main.getByLabel('Code source', { exact: true }).fill(DEPLOY_SOURCE);
     await main.getByLabel('Gas limit', { exact: true }).fill(DEPLOY_GAS);
@@ -260,7 +262,7 @@ async function walkDeploy(page, viewport) {
     await expect(definitionValue(main, 'Constructor')).toHaveText(CALL_AMOUNT);
 
     await page.getByRole('button', { name: 'Back to previous screen' }).click();
-    await expect(page.getByRole('heading', { name: 'Publish contract on Bitcoin', exact: true })).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'Publish contract', exact: true })).toBeVisible();
     await page.getByRole('button', { name: 'Back to previous screen' }).click();
     await expect(page.getByRole('heading', { name: 'Contracts', exact: true })).toBeVisible();
 }
@@ -268,12 +270,17 @@ async function walkDeploy(page, viewport) {
 test('contract browse, detail, execute, and deploy reviews fit phone and desktop', async ({ page }) => {
     test.slow();
     await installContractFixture(page);
-    await enterDemoWallet(page, { dismissIntroCarousel, expect, unlockedShell });
+    await createWallet(page);
     await setWatcherMode(page);
 
     for (const viewport of VIEWPORTS) {
         await test.step(viewport.name, async () => {
             await page.setViewportSize({ width: viewport.width, height: viewport.height });
+            // The shell swaps the bottom bar for the rail after a resize; wait
+            // for the new nav before navigating so the walk uses the right one.
+            await expect(page.getByRole('navigation', {
+                name: viewport.width < 640 ? 'Bottom navigation' : 'Primary navigation',
+            })).toBeVisible();
             await openContract(page);
 
             await page.getByRole('button', { name: 'Back to contracts list' }).click();

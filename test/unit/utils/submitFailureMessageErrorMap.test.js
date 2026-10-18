@@ -1,7 +1,17 @@
 import { describe, expect, it } from 'vitest';
-import { submitFailureMessage } from '../../../packages/core/src/shared/utils/submitFailureMessage.js';
+import {
+    submitFailureDetails,
+    submitFailureMessage,
+} from '../../../packages/core/src/shared/utils/submitFailureMessage.js';
+import {
+    KNOWN_SDK_ERROR_CODES,
+    knownSdkErrorMessage,
+} from '../../../packages/core/src/sdk/sdkErrorMessages.js';
+import { OracleFeeUnpayableError } from '../../../packages/core/src/sdk/oracleFeePreflight.js';
+import { NativeFeeForfeitError } from '../../../packages/core/src/sdk/nativeFeePreflight.js';
 import {
     isDeveloperMessage,
+    isShowableRefusal,
     userFacingMessage,
 } from '../../../packages/core/src/shared/utils/userFacingMessage.js';
 
@@ -18,8 +28,8 @@ describe('submitFailureMessage SDK error map', () => {
     const unsafe = 'privateFunction: request failed for https://private.example/RBTC/api/feequote';
     const cases = [
         ['hub unavailable by code', codedError('Error', 'HUB_UNAVAILABLE', unsafe)],
-        ['hub error', codedError('SDKHubError', 'HUB_NOT_CONFIGURED', unsafe)],
-        ['SDK configuration', codedError('SDKConfigError', 'CONFIG_INVALID', unsafe)],
+        ['hub error', codedError('SDKHubError', 'HUB_UNAVAILABLE', unsafe)],
+        ['SDK configuration', codedError('SDKConfigError', 'HUB_NOT_CONFIGURED', unsafe)],
         ['validation', codedError('SDKValidationError', 'BATCH_CONSTRAINT',
             'betting.placeBetParams: amount must be a positive stake')],
         ['format', codedError('SDKFormatError', 'UNKNOWN_ACTION', unsafe)],
@@ -28,14 +38,13 @@ describe('submitFailureMessage SDK error map', () => {
         ['authorization', codedError('SDKAuthError', 'INVALID_WIF', unsafe)],
         ['messaging', codedError('SDKMessagingError', 'INVALID_MESSAGE', unsafe)],
         ['action', codedError('SDKActionError', 'ACTION_REJECTED', unsafe)],
-        ['shared signature', codedError('SDKMuSigError', 'SIGN_FAILED', unsafe)],
+        ['shared signature', codedError('SDKMuSigError', 'SIG_AGG_FAILED', unsafe)],
         ['protected file', codedError('SDKGatedFileError', 'INVALID_PAYLOAD', unsafe)],
         ['compression', codedError('SDKCompressionError', 'INPUT_TOO_LARGE', unsafe)],
-        ['policy', codedError('SDKPolicyError', 'POLICY_DENIED', unsafe)],
-        ['service payment', codedError('SDKX402Error', 'X402_PAYMENT_NOT_FOUND', unsafe)],
+        ['policy', codedError('SDKPolicyError', 'POLICY_INVALID', unsafe)],
+        ['service payment', codedError('SDKX402Error', 'X402_CONFIG', unsafe)],
         ['preflight', codedError('SDKPreflightError', 'PREFLIGHT_FAIL', unsafe)],
         ['generic rate limit', codedError('SDKRateLimitedError', 'RATE_LIMITED', unsafe)],
-        ['base SDK error', codedError('SDKError', 'SOMETHING_NEW', unsafe)],
         ['oracle fee', codedError('OracleFeeUnpayableError', undefined, unsafe)],
         ['non-finite amount', codedError('Error', 'NON_FINITE_AMOUNT', unsafe)],
         ['invalid satoshi amount', codedError('Error', 'INVALID_SATS_AMOUNT', unsafe)],
@@ -88,6 +97,49 @@ describe('submitFailureMessage SDK error map', () => {
         if (err.code) expect(message).not.toContain(err.code);
     });
 
+    it.each(KNOWN_SDK_ERROR_CODES)('maps known $name code $code to plain copy', ({ name, code, message: plain }) => {
+        const raw = 'privateFunction: request failed for https://private.example/api/value\n'
+            + '    at privateFunction (/private/source.js:1:2)';
+        const err = codedError(name, code, raw);
+        const message = submitFailureMessage(err);
+
+        expect(knownSdkErrorMessage(err)).toBe(plain);
+        expect(message).toMatch(/^[A-Z]/);
+        expect(message).not.toContain(code);
+        expect(message).not.toContain(name);
+        expect(message).not.toMatch(STACK_OR_URL);
+        expect(submitFailureDetails(err, message)).toBe('');
+    });
+
+    it.each([
+        ['SDKError', 'SOMETHING_NEW'],
+        ['SDKFormatError', 'FUTURE_FORMAT_CODE'],
+        ['SDKEncoderError', 'ENCODER_FUTURE_CODE'],
+        ['SDKValidationError', 'FUTURE_VALIDATION_CODE'],
+        ['Error', 'ENCODER_FUTURE_BOUNDARY_CODE'],
+    ])('keeps unknown %s code %s only in technical details', (name, code) => {
+        const raw = 'privateFunction: secret transport detail\n'
+            + '    at privateFunction (/private/source.js:1:2)';
+        const err = codedError(name, code, raw);
+        const message = submitFailureMessage(err);
+        const details = submitFailureDetails(err, message);
+
+        expect(message).toBe("Couldn't complete this. Something went wrong. Try again.");
+        expect(message).not.toContain(code);
+        expect(message).not.toContain('secret transport detail');
+        expect(message).not.toMatch(STACK_OR_URL);
+        expect(details).toBe(code);
+        expect(details).not.toContain('privateFunction');
+    });
+
+    it('keeps a known encoder code safe when only the code crosses the boundary', () => {
+        const err = codedError('Error', 'NO_UTXOS', 'no spendable UTXOs\n    at encoder (/private/source.js:1:2)');
+        const message = submitFailureMessage(err, { coinTicker: 'BTC' });
+
+        expect(message).not.toMatch(/utxo|private\/source/i);
+        expect(submitFailureDetails(err, message)).toBe('');
+    });
+
     it.each([
         new Error('mystery failure at /RBTC/api/private'),
         new Error('{"token":"secret"}'),
@@ -103,6 +155,69 @@ describe('submitFailureMessage SDK error map', () => {
         const err = new Error('request failed for /RBTC/api/private');
         expect(submitFailureMessage(err, { fallback: `Send failed. ${err.message}` }))
             .toBe("Couldn't complete this. Something went wrong. Try again.");
+    });
+});
+
+describe('submitFailureMessage oracle pre-flight refusals', () => {
+    // Built by the real constructor so the message shape the classifier reads
+    // is the one the pre-flight throws on the XCHAIN fee lane.
+    const refusal = (error) => new OracleFeeUnpayableError({ reason: 'unquotable', quote: { valid: false, error } });
+
+    it('tells the user an unmatured oracle price starts pricing after 24 hours', () => {
+        const message = submitFailureMessage(
+            refusal('invalid: ORACLE_ADDRESS (no effective oracle price)'), { coinTicker: 'BTC' },
+        );
+        expect(message).toMatch(/no price in effect yet/);
+        expect(message).toMatch(/24 hours/);
+        expect(message).not.toMatch(/temporarily unavailable|try again in a moment|ORACLE_ADDRESS|pre-flight/i);
+    });
+
+    it('names a missing validator rate as a short wait on the chain coin', () => {
+        const message = submitFailureMessage(
+            refusal('invalid: ORACLE_ADDRESS (no validator price to value the oracle fee)'), { coinTicker: 'BTC' },
+        );
+        expect(message).toMatch(/no current BTC rate/);
+        expect(message).not.toMatch(/ORACLE_ADDRESS|pre-flight/);
+    });
+
+    it('keeps the catalog copy for a refusal with no known verdict', () => {
+        const err = new OracleFeeUnpayableError({ reason: 'unavailable', quote: null });
+        expect(submitFailureMessage(err)).toBe(knownSdkErrorMessage(err));
+        expect(submitFailureMessage(refusal('invalid: ORACLE_ADDRESS (something new)')))
+            .toBe(knownSdkErrorMessage(err));
+    });
+});
+
+describe('submitFailureMessage native-fee verdicts', () => {
+    // The popup boundary keeps only name and message, so the error is passed in
+    // that shape, the one a Mint form on Litecoin or Dogecoin receives.
+    const verdict = (detail) => {
+        const err = new NativeFeeForfeitError({ reason: 'invalid', quote: { valid: false, error: detail } });
+        return { name: err.name, message: err.message };
+    };
+
+    it.each([
+        ['invalid: mint exceeds MINT_ADDRESS_MAX', 'mint exceeds MINT_ADDRESS_MAX'],
+        ['invalid: MINT_START_BLOCK (not reached)', 'MINT_START_BLOCK (not reached)'],
+    ])('shows the refused field for %s instead of the generic line', (detail, shown) => {
+        const message = submitFailureMessage(verdict(detail), { coinTicker: 'LTC', mandatory: true });
+        expect(message).toBe(`The network would refuse this action as it stands: ${shown}. Nothing was `
+            + 'signed or sent. Waiting will not change this, so adjust the action and try again.');
+    });
+
+    it('still hides a verdict that carries wire text', () => {
+        const message = submitFailureMessage(
+            verdict('invalid: upstream failed for https://private.example/RLTC/api/x'),
+            { coinTicker: 'LTC', mandatory: true },
+        );
+        expect(message).toBe("Couldn't complete this. Something went wrong. Try again.");
+    });
+
+    it('accepts a field name but not developer output as a showable refusal', () => {
+        expect(isShowableRefusal('The network would refuse this: mint exceeds MINT_ADDRESS_MAX.')).toBe(true);
+        expect(isShowableRefusal('TypeError: x is not a function')).toBe(false);
+        expect(isShowableRefusal('fetchQuote: {"token":"secret"}')).toBe(false);
+        expect(isShowableRefusal('')).toBe(false);
     });
 });
 

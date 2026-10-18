@@ -27,6 +27,7 @@ vi.mock('@xchain-wallet/core/ui', () => ({
     ListRow: ({ title, subtitle, onClick, ...props }) => (
         <button type="button" onClick={onClick} {...props}>{title}{subtitle}</button>
     ),
+    Input: ({ size, ...props }) => <input data-size={size} {...props} />,
     Icon: { UsersIcon: () => <span /> },
 }));
 
@@ -86,7 +87,7 @@ describe('ContactsPickerScreen empty and listing states', () => {
         expect(screen.getByText('Saved contacts with addresses appear here.')).toBeInTheDocument();
         expect(screen.getByTestId('list-page')).toContainElement(screen.getByTestId('empty-state'));
         expect(screen.getByTestId('empty-state')).not.toHaveAttribute('role');
-        expect(screen.queryByRole('textbox', { name: 'Search contacts' })).toBeNull();
+        expect(screen.queryByRole('searchbox', { name: 'Search contacts' })).toBeNull();
     });
 
     it('lists every saved address in case-insensitive contact-name order', () => {
@@ -120,6 +121,17 @@ describe('ContactsPickerScreen empty and listing states', () => {
         expect(screen.getAllByRole('listitem')).toHaveLength(2);
         expect(consoleError.mock.calls.flat().join(' ')).not.toContain('same key');
     });
+
+    it('renders contact names containing markup as text in the list', () => {
+        const name = '<img src=x onerror="globalThis.contactExecuted = true">';
+        const { container } = mount({
+            contacts: [{ id: 'markup', name, entries: [bitcoinEntry] }],
+        });
+
+        expect(screen.getByText(name)).toBeInTheDocument();
+        expect(container.querySelector('img')).toBeNull();
+        expect(globalThis.contactExecuted).toBeUndefined();
+    });
 });
 
 describe('ContactsPickerScreen filters', () => {
@@ -130,7 +142,9 @@ describe('ContactsPickerScreen filters', () => {
     ])('filters case-insensitively by %s', (_field, query, expectedAddress) => {
         mount();
 
-        fireEvent.change(screen.getByRole('textbox', { name: 'Search contacts' }), {
+        const search = screen.getByRole('searchbox', { name: 'Search contacts' });
+        expect(search).toHaveAttribute('data-size', 'md');
+        fireEvent.change(search, {
             target: { value: query },
         });
         const rows = screen.getAllByRole('listitem');
@@ -140,7 +154,7 @@ describe('ContactsPickerScreen filters', () => {
 
     it('shows feedback when search matches no addresses', () => {
         mount();
-        fireEvent.change(screen.getByRole('textbox', { name: 'Search contacts' }), {
+        fireEvent.change(screen.getByRole('searchbox', { name: 'Search contacts' }), {
             target: { value: 'not saved' },
         });
 

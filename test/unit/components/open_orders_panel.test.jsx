@@ -155,7 +155,7 @@ describe('OpenOrdersPanel cancellation confirmation', () => {
         const side = await screen.findByText('Sell');
         const price = screen.getByText('2.00000000');
         expect(screen.getByText('10.00000000')).toBeInTheDocument();
-        expect(side.style.color).toBe('var(--xc-danger)');
+        expect(side.style.color).toBe('var(--xc-danger-fg)');
         expect(price.style.textAlign).toBe('right');
         expect(price.style.fontVariantNumeric).toBe('tabular-nums');
         expect(screen.getByText('Price').parentElement.parentElement.style.overflowX).toBe('auto');
@@ -215,6 +215,25 @@ describe('OpenOrdersPanel cancellation confirmation', () => {
         expect(screen.getByText('CoinPay auto-pay on')).toBeInTheDocument();
     });
 
+    it('exposes immediate auto-pay changes as a switch', async () => {
+        const setAutopayEnabled = vi.fn().mockResolvedValue(undefined);
+        mountPanel([orderRow()], {
+            listAutopayOrders: vi.fn().mockResolvedValue([{
+                id: 'consent-17', orderActionIndex: 17, autopay: true,
+            }]),
+            setAutopayEnabled,
+        });
+
+        const toggle = await screen.findByRole('switch', { name: 'CoinPay auto-pay on' });
+        expect(toggle).toBeChecked();
+        fireEvent.click(toggle);
+
+        await waitFor(() => expect(setAutopayEnabled).toHaveBeenCalledWith({
+            id: 'consent-17',
+            enabled: false,
+        }));
+    });
+
     it('gives duplicate order responses distinct React keys', async () => {
         const secondOwner = { ...OWNER, id: 'address-2', address: 'bc1qsecondowner' };
         const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {});
@@ -266,7 +285,7 @@ describe('OpenOrdersPanel cancellation confirmation', () => {
 
         fireEvent.click(await screen.findByRole('button', { name: 'Cancel' }));
         expect(screen.getByText(/Cancel order #17\?/)).toBeTruthy();
-        expect(screen.getByText('This submits a cancellation transaction for the remaining order. Once confirmed, it cannot be undone.')).toBeTruthy();
+        expect(screen.getByText('This submits a cancellation transaction for the remaining order. Once confirmed, it can\'t be undone.')).toBeTruthy();
         fireEvent.click(screen.getByRole('button', { name: 'Cancel order' }));
 
         expect(await screen.findByLabelText('Confirm Cancel order (#17)')).toBeTruthy();

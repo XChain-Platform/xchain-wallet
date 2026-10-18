@@ -33,13 +33,21 @@ export const DEV_PREFIX = /^[a-z][A-Za-z0-9_$]*(?:\.[A-Za-z0-9_$]+)*:\s/;
 
 // Library / runtime internals that carry no meaning for the person reading
 // them, whether or not they arrive with a function prefix.
-const INTERNALS = /non-base58|cannot read propert|is not a function|is not defined|is not iterable|typeerror|referenceerror|\[object|assertion failed|unexpected token/i;
+const INTERNALS = /non-base58|cannot read propert|is not a function|is not defined|is not iterable|typeerror|referenceerror|\[object|assertion failed|unexpected token|a listener indicated an asynchronous response|the message port closed before a response was received/i;
 const ERROR_CODE = /\b(?:ERR_[A-Z0-9_]+|E_[A-Z0-9_]+|[A-Z][A-Z0-9]*(?:_[A-Z0-9]+)+)\b/;
 const INTERNAL_NAME = /\b[A-Z][A-Za-z0-9]+(?:Error|Exception)\b/;
 const WIRE_TEXT = /https?:\/\/|(?:\/[A-Za-z0-9_-]+)?\/api(?:\/|\b)|(?:^|\n)\s*at\s+\S+|\b[A-Za-z0-9_.-]+\.(?:[cm]?js|jsx|ts|tsx):\d+:\d+\b|request failed with status code\s+\d{3}|^(?:rpc|http)\s+(?:error|code)\b/i;
 const SERIALIZED_DATA = /(?:^|:\s*)[{[]\s*["'][^\n]*[}\]]/;
 const ENCODER_REFUSAL_PREFIX = /^Encoder RPC error:\s*/i;
 const MAX_REFUSAL_REASON_LENGTH = 500;
+// Codes on errors the wallet itself raises with a sentence written for the user
+// (the confirm page's refusals); the code names the case and is not developer
+// output, so it must not hide that sentence.
+const USER_COPY_CODES = new Set(['NATIVE_FEE_CHANGED', 'INPUTS_SPENT']);
+// The encoder's coin-selection shortfall is a build failure, not a rule the
+// node enforced, so it keeps the encoder copy that says nothing was signed or
+// sent instead of being shown as a bare reason.
+const COIN_SELECTION_SHORTFALL = /^insufficient funds: (?:selected inputs total|all \d+ candidate input)/i;
 
 /**
  * True when text contains a machine error code or an internal error type.
@@ -103,10 +111,31 @@ export function protocolRefusalReason(err) {
     const message = errorText(err);
     if (!ENCODER_REFUSAL_PREFIX.test(message)) return null;
     const reason = message.replace(ENCODER_REFUSAL_PREFIX, '').trim();
-    if (!reason || INTERNALS.test(reason) || WIRE_TEXT.test(reason) || SERIALIZED_DATA.test(reason)) {
+    if (!reason || COIN_SELECTION_SHORTFALL.test(reason) || INTERNALS.test(reason) || WIRE_TEXT.test(reason) || SERIALIZED_DATA.test(reason)) {
         return null;
     }
     return reason.slice(0, MAX_REFUSAL_REASON_LENGTH).trimEnd();
+}
+
+/**
+ * True when `text`, a wallet sentence quoting a network verdict, may be shown
+ * as written. A verdict names the protocol field it refused (`MINT_ADDRESS_MAX`,
+ * `ORACLE_ADDRESS`), which the general filter reads as an error code; that is
+ * the user's one clue to what to change, so only the checks that mark real
+ * developer output apply here, the same ones `protocolRefusalReason` uses.
+ *
+ * @param {unknown} text
+ * @returns {boolean}
+ */
+export function isShowableRefusal(text) {
+    const value = typeof text === 'string' ? text.trim() : '';
+    return Boolean(value)
+        && value.length <= MAX_REFUSAL_REASON_LENGTH
+        && !DEV_PREFIX.test(value)
+        && !INTERNALS.test(value)
+        && !INTERNAL_NAME.test(value)
+        && !WIRE_TEXT.test(value)
+        && !SERIALIZED_DATA.test(value);
 }
 
 /**
@@ -139,7 +168,7 @@ export function isDeveloperMessage(err) {
         if (/^SDK[A-Za-z]*Error$/.test(String(e.name || ''))) return true;
         if (RUNTIME_ERROR_NAMES.has(String(e.name || ''))) return true;
         if (isPlatformException(e)) return true;
-        if (typeof e.code === 'string' && /^[A-Z][A-Z0-9_]+$/.test(e.code)) return true;
+        if (typeof e.code === 'string' && !USER_COPY_CODES.has(e.code) && /^[A-Z][A-Z0-9_]+$/.test(e.code)) return true;
     }
     return DEV_PREFIX.test(text) || INTERNALS.test(text)
         || containsInternalErrorIdentifier(text)

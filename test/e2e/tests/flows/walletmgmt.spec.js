@@ -70,10 +70,6 @@ async function expectSameLineHeight(controls, label, { matchHeights = true } = {
         .toBeLessThanOrEqual(2);
 }
 
-// PageHeader draws Back as a bare chevron and trailing actions as 38px
-// circles by design, so a header pair shares a centre line, not a height.
-const HEADER_PAIR = { matchHeights: false };
-
 async function expectGroupedControlHeights(group, label) {
     const boxes = await group.getByRole('button').evaluateAll((buttons) => buttons
         .filter((button) => {
@@ -155,16 +151,14 @@ for (const viewport of VIEWPORTS) {
                 await expect(details, 'wallet details do not show the wallet format')
                     .toContainText('TypeBIP39');
                 await expect(details, 'wallet details do not show the wallet origin')
-                    .toContainText('Origindemo');
+                    .toContainText('OriginCreated for demo mode');
 
                 await page.getByRole('button', { name: 'Rename wallet' }).click();
                 await expectScreen(page, 'Rename wallet', `${size} rename wallet`, { atTop: true });
                 const walletName = page.getByLabel('Wallet name');
                 await expect(walletName).toHaveValue(ORIGINAL_WALLET);
-                await expectSameLineHeight([
-                    page.getByRole('button', { name: 'Back to previous screen' }),
-                    page.getByRole('button', { name: 'Save' }),
-                ], `${size} rename wallet header`, HEADER_PAIR);
+                // The page header holds only the title and Back; Save closes the form.
+                await expect(page.getByRole('main').getByRole('button', { name: 'Save' })).toBeVisible();
                 await walletName.fill(RENAMED_WALLET);
                 await page.getByRole('button', { name: 'Save' }).click();
 
@@ -193,15 +187,13 @@ for (const viewport of VIEWPORTS) {
                 await expectScreen(page, 'Accounts', `${size} account picker`, { atTop: true });
                 await expectSameLineHeight([
                     page.getByRole('button', { name: 'Add account' }),
-                    page.getByRole('button', { name: 'Manage account' }),
+                    // The footer action reads "Manage" so the pair stays on one line.
+                    page.getByRole('button', { name: 'Manage', exact: true }),
                 ], `${size} account picker footer`);
 
                 await page.getByRole('button', { name: /^Rename / }).first().click();
                 await expectScreen(page, 'Rename account', `${size} rename account`, { atTop: true });
-                await expectSameLineHeight([
-                    page.getByRole('button', { name: 'Back to previous screen' }),
-                    page.getByRole('button', { name: 'Save' }),
-                ], `${size} rename account header`, HEADER_PAIR);
+                await expect(page.getByRole('main').getByRole('button', { name: 'Save' })).toBeVisible();
                 await page.getByLabel('Account name').fill(RENAMED_ACCOUNT);
                 await page.getByRole('button', { name: 'Save' }).click();
 

@@ -39,6 +39,7 @@ import {
     mintXchain,
     readReceiveAddress,
     REGTEST_DESTINATION,
+    selectVenueSendAsset,
     switchToRegtest,
     unlockAfterReload,
     waitForTokenBalance,
@@ -57,17 +58,10 @@ const POPUP = { width: 360, height: 600 };
 async function composeTokenSend(page, amount) {
     await gotoSection(page, 'Send');
 
-    // The picker is only opened when the form is not already on XCHAIN. Each
-    // test composes twice (once per width) and the form keeps its asset, so
-    // re-opening the picker on the second pass both does nothing and races the
-    // re-render behind it - the button detaches mid-click.
-    const assetButton = page.getByRole('button', { name: /Change asset/ });
-    await expect(assetButton).toBeVisible();
-    if (!/currently XCHAIN/i.test(await assetButton.getAttribute('aria-label') || '')) {
-        await assetButton.click();
-        await page.getByLabel('Search coins or tokens').fill('XCHAIN');
-        await page.getByLabel(/Open XCHAIN details/i).click();
-    }
+    // Each test composes twice (once per width) and the form keeps its asset;
+    // the fixture leaves an already-selected XCHAIN alone and otherwise picks
+    // the venue chain's XCHAIN row by its balance key.
+    await selectVenueSendAsset(page, 'XCHAIN');
 
     await page.getByLabel('To', { exact: true }).fill(REGTEST_DESTINATION);
     await page.getByRole('textbox', { name: /^Amount/ }).fill(amount);

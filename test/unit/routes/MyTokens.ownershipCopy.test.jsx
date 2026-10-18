@@ -92,6 +92,29 @@ describe('My Tokens copy matches its ownership query (D-82)', () => {
         expect(row).not.toHaveTextContent(/issued/i);
     });
 
+    it('renders token names and descriptions containing markup as text in the list', async () => {
+        const tokenName = '<script>globalThis.tokenNameExecuted = true</script>';
+        const description = '<img src=x onerror="globalThis.tokenDescriptionExecuted = true">';
+        const container = mountMyTokens({
+            tokens: [{
+                tick: tokenName,
+                description,
+                locked: false,
+                divisibility: 0,
+                totalSupply: '1',
+                maxSupply: null,
+                youOwn: true,
+            }],
+        });
+
+        expect(await screen.findByText(tokenName)).toBeInTheDocument();
+        expect(screen.getByText(description)).toBeInTheDocument();
+        expect(container.querySelector('script')).toBeNull();
+        expect(container.querySelector('img[src="x"]')).toBeNull();
+        expect(globalThis.tokenNameExecuted).toBeUndefined();
+        expect(globalThis.tokenDescriptionExecuted).toBeUndefined();
+    });
+
     it('reports an ownership lookup failure instead of claiming the wallet is empty', async () => {
         const container = mountMyTokens({ error: new Error('explorer offline') });
 
@@ -110,5 +133,22 @@ describe('My Tokens copy matches its ownership query (D-82)', () => {
         // "issued" stays a search keyword: someone hunting for the tokens
         // they created should still land here, the label just stops lying.
         expect(entry.keywords).toContain('issued');
+    });
+});
+
+describe('My tokens long tickers', () => {
+    afterEach(() => cleanup());
+
+    it('gives a long ticker its own truncating span ahead of the lock mark', async () => {
+        const longTick = 'L'.repeat(120);
+        mountMyTokens({ tokens: [{ tick: longTick, locked: true, description: 'A long one.' }] });
+
+        const name = await screen.findByTitle(longTick);
+        expect(name).toHaveTextContent(longTick);
+        const lock = screen.getByTitle('Supply locked');
+        // The lock is the name's sibling, so the ellipsis on the name stops
+        // before it instead of the text running underneath.
+        expect(name.parentElement).toBe(lock.parentElement);
+        expect(name.contains(lock)).toBe(false);
     });
 });

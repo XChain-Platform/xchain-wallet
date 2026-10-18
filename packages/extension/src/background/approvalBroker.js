@@ -35,9 +35,10 @@
 // rejection: the deferred resolves with `{ approved: false }`, which
 // the bridge surfaces as `USER_REJECTED` to the dApp.
 //
-// Multiple concurrent approvals are supported; each gets its own id
-// and its own popup window. The broker's map is keyed by id so a user
-// can triage them in any order.
+// Multiple concurrent approvals are supported; each gets its own id and popup
+// window. Concurrent connect requests from one origin share the pending choice
+// so a page cannot stack duplicate connection windows. Other requests remain
+// independently reviewable, and the map stays keyed by id for resolution.
 
 import { sessionRandomUUID } from './uuid.js';
 
@@ -56,7 +57,6 @@ import { sessionRandomUUID } from './uuid.js';
  * @property {(path: string) => string} [getUrl]             chrome.runtime.getURL replacement
  * @property {BrokerWindowDeps} [windows]                    chrome.windows replacement
  * @property {{ onRemoved?: { addListener(fn: (tabId: number) => void): void } }} [tabs] chrome.tabs replacement
- * @property {{ onSuspend?: { addListener(fn: () => void): void } }} [runtime] chrome.runtime replacement
  * @property {{ setBadgeText?: (details: { text: string }) => Promise<void> | void }} [action] chrome.action replacement
  * @property {string} [approvalPath]                         default 'approval.html'
  * @property {{ width?: number, height?: number }} [windowSize]
@@ -92,7 +92,6 @@ export class ApprovalBroker {
                 globalThis.chrome?.windows
             );
         this._tabs = deps.tabs ?? globalThis.chrome?.tabs;
-        this._runtime = deps.runtime ?? globalThis.chrome?.runtime;
         this._action = deps.action ?? globalThis.chrome?.action;
         this._timeoutMs = deps.timeoutMs ?? APPROVAL_TIMEOUT_MS;
         // Wrapped, not stored bare: Chrome throws "Illegal invocation" when the
@@ -117,16 +116,22 @@ export class ApprovalBroker {
             this._onTabRemoved = this._onTabRemoved.bind(this);
             this._tabs.onRemoved.addListener(this._onTabRemoved);
         }
-        if (this._runtime?.onSuspend?.addListener) {
-            this._onRuntimeSuspend = this._onRuntimeSuspend.bind(this);
-            this._runtime.onSuspend.addListener(this._onRuntimeSuspend);
-        }
     }
 
     // -- Approvals interface (called by the bridge handlers) -------------
 
     /** @param {import('../bridge/Approvals.js').ConnectApprovalRequest} req */
-    connect(req) { return this._request('connect', req); }
+    connect(req) {
+        const origin = typeof req?.origin === 'string' ? req.origin : '';
+        if (origin) {
+            for (const entry of this._pending.values()) {
+                if (entry.kind === 'connect' && entry.payload?.origin === origin) {
+                    return entry.deferred.promise;
+                }
+            }
+        }
+        return this._request('connect', req);
+    }
     /** @param {import('../bridge/Approvals.js').SignApprovalRequest} req */
     signAction(req) { return this._request('signAction', req); }
     /** @param {import('../bridge/Approvals.js').SignApprovalRequest} req */
@@ -320,10 +325,6 @@ export class ApprovalBroker {
         for (const [id, entry] of this._pending) {
             if (entry.requesterTabId === tabId) this._rejectPending(id);
         }
-    }
-
-    _onRuntimeSuspend() {
-        void this.cancelAll();
     }
 
     /** @param {string} id */

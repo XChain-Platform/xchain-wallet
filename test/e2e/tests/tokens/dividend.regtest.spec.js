@@ -8,6 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
+import { waitForShownTxid } from '../../fixtures/pendingHistory.js';
 import {
     createWallet,
     expect,
@@ -15,6 +16,7 @@ import {
     LICENSE_ACCEPTED_AT_KEY,
     LICENSE_ACCEPTED_VERSION_KEY,
     mainButton,
+    openPaletteCommand,
     test,
 } from '../../fixtures/wallet.js';
 import { selectNamedToken } from '../../fixtures/crossChain.js';
@@ -59,16 +61,6 @@ async function newDevice(browser) {
     return context.newPage();
 }
 
-async function gotoPalette(page, title) {
-    await page.keyboard.press('ControlOrMeta+k');
-    const dialog = page.getByRole('dialog', { name: 'Command palette' });
-    await expect(dialog).toBeVisible({ timeout: 15_000 });
-    const search = dialog.getByRole('combobox').first();
-    await search.fill(title);
-    await dialog.getByRole('option', { name: new RegExp(`^${title}\\b`) }).first().click();
-    await expect(dialog).toBeHidden({ timeout: 15_000 });
-}
-
 async function approveAndReadTxid(page, what) {
     await expectConfirmModal(page, what);
     const password = page.getByLabel('Password', { exact: true });
@@ -79,11 +71,13 @@ async function approveAndReadTxid(page, what) {
     await expect(approve).toBeEnabled({ timeout: 120_000 });
     await approve.click();
 
-    const main = page.getByRole('main');
-    await expect(main).toContainText(/[0-9a-f]{64}/, { timeout: 180_000 });
-    const txid = (await main.innerText()).match(/[0-9a-f]{64}/)?.[0];
-    expect(txid, `${what} success screen showed no transaction id`).toBeTruthy();
-    return txid;
+    // The Send success screen draws the id truncated; waitForShownTxid reads
+    // the full id from its accessible name, and from the text on screens
+    // that print it whole.
+    return waitForShownTxid(page.getByRole('main'), {
+        timeout: 180_000,
+        message: `${what} success screen showed no transaction id`,
+    });
 }
 
 async function fundWithFees(page, address) {
@@ -97,7 +91,7 @@ async function fundWithFees(page, address) {
 }
 
 async function issueHolderToken(page, source) {
-    await gotoPalette(page, 'Issue token');
+    await openPaletteCommand(page, 'Issue token');
     const main = page.getByRole('main');
     await expect(main.getByLabel('Ticker')).toBeVisible({ timeout: 30_000 });
     await selectVenueChain(main);
@@ -183,7 +177,7 @@ test.describe('DIVIDEND on regtest', () => {
         let dividendTxid;
 
         await test.step('drive the dividend form through the real confirm screen', async () => {
-            await gotoPalette(issuer, 'Pay a dividend');
+            await openPaletteCommand(issuer, 'Pay a dividend');
             const main = issuer.getByRole('main');
             await expect(main.getByRole('button', { name: /^Holder-of token:/ }))
                 .toBeVisible({ timeout: 30_000 });

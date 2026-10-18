@@ -40,9 +40,11 @@
 // exactly like the wallet having stopped relaying the dry-run. See
 // `warmPreflight` in fixtures/regtest.js.
 
+import { readShownTxid } from '../../fixtures/pendingHistory.js';
 import { createWallet, expect, gotoSection, mainButton, test } from '../../fixtures/wallet.js';
 import {
     expectConfirmModal,
+    expectIntentSentence,
     fundAddress,
     mintXchain,
     readReceiveAddress,
@@ -146,11 +148,13 @@ test.describe('pre-flight gate on regtest', () => {
         await expect(chip).toHaveText('Will likely fail');
         await expect(page.getByTestId('preflight-panel')).toHaveAttribute('data-verdict', 'fail');
 
-        // §4.2: the finding quotes the network's own words rather than
-        // paraphrasing them. The indexer's status string is the evidence, and
-        // a wallet that reworded it would be hiding which party said what.
+        // §4.2: the finding carries the network's own reason rather than a
+        // paraphrase of it. The panel frames the indexer's status as a pre-send
+        // check ("This action would be refused because <reason>."), and the
+        // reason after "because" is the indexer's text verbatim; a wallet that
+        // reworded it would be hiding which party said what.
         const panel = page.getByTestId('preflight-panel');
-        await expect(panel).toContainText(/The network reports this will fail: .*insufficient funds/i);
+        await expect(panel).toContainText(/would be refused because insufficient funds/i);
 
         // Both tiers speak, independently, and BOTH are network-sourced: Tier 1
         // relays the handler's verdict, and Tier 2's balance check is only as
@@ -223,17 +227,20 @@ test.describe('pre-flight gate on regtest', () => {
         // §1.1 / §5.2.2: the intent describes the COMPOSED action string. This
         // is the token path, so it goes through a real `decoder.parse()` of
         // what the encoder built - not the native-payment shortcut, and not
-        // the form params the surface used to describe.
-        await expect(page.getByTestId('action-intent'))
-            .toContainText(`Send ${AFFORDABLE} XCHAIN on ${REGTEST_CHAIN_LABEL} to ${REGTEST_DESTINATION}`);
+        // the raw form params.
+        // The sentence draws the recipient truncated, so it is matched by the
+        // full address in its accessible name.
+        await expectIntentSentence(page, `Send ${AFFORDABLE} XCHAIN on ${REGTEST_CHAIN_LABEL} to `,
+            REGTEST_DESTINATION);
 
         // No override control at all, because there is nothing to override.
         // Its presence would mean the previous report leaked into this one.
         await expect(page.getByTestId('ack-DRYRUN_INVALID')).toHaveCount(0);
         await expect(page.getByTestId('ack-BALANCE_INSUFFICIENT')).toHaveCount(0);
 
+        // The footer action names what it signs: the verb, the amount and the token.
         const approve = page.getByTestId('confirm-approve');
-        await expect(approve).toHaveText(/^Approve$/);
+        await expect(approve).toHaveText(`Send ${AFFORDABLE} XCHAIN`);
         await expect(approve).toBeEnabled();
         await approve.click();
 
@@ -244,7 +251,8 @@ test.describe('pre-flight gate on regtest', () => {
         // that closes the loop: pre-flight PREDICTED `valid`, so the handler
         // has to agree. A `pass` the indexer then rejects is the false-allow
         // the §8.2 harness bounds, and it is invisible from inside the wallet.
-        const txid = (await page.getByRole('main').innerText()).match(/\b[0-9a-f]{64}\b/)?.[0];
+        // The success screen draws the id truncated; read it from its accessible name.
+        const txid = await readShownTxid(page.getByRole('main'));
         expect(txid, 'success screen showed no transaction id').toBeTruthy();
         const action = await waitForValidAction(txid);
         expect(action.action).toBe('SEND');

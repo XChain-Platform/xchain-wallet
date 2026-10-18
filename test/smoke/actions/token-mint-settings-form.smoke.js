@@ -83,8 +83,8 @@ assert.ok(
     'TokenAdminForm imports useTokenInfo (getToken current-value + lock-flag read)',
 );
 assert.ok(
-    /useTokenInfo\(\s*\{[^}]*skip:\s*mode !== 'mint-settings'/s.test(src),
-    'useTokenInfo call is scoped to mint-settings mode only',
+    /const assetInfo = useTokenInfo\(\{ chainId, tick: ticker \}\)/.test(src),
+    'every admin mode reads current token state before composing',
 );
 assert.ok(/assetInfo\.mintMax/.test(src), 'prefills MAX_MINT from assetInfo.mintMax');
 assert.ok(/assetInfo\.mintAddressMax/.test(src), 'prefills MINT_ADDRESS_MAX from assetInfo.mintAddressMax');

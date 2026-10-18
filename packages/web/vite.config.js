@@ -39,6 +39,11 @@ import { SURFACE_MODULES, hiddenSurfacesFor } from './src/surfaces/registry.js';
 // `fullnode.regtest.json` literal beside it) out of a `store` bundle. Inert in
 // every other profile; fails the build shut if a marker survives.
 import { regtestSidecarPlugin } from './regtestSidecar.js';
+import {
+    WEB_INITIAL_CSS_SIZE_LIMIT,
+    WEB_INITIAL_JS_SIZE_LIMIT,
+    initialBundleSizes,
+} from './bundleBudget.js';
 
 const BUILD_PROFILE = resolveBuildProfile();
 const HIDDEN_SURFACES = hiddenSurfacesFor(BUILD_PROFILE);
@@ -115,21 +120,18 @@ const httpsEnabled = process.env.VITE_HTTPS === '1' || process.env.HTTPS === '1'
 // Vite otherwise rejects any Host it doesn't recognize.
 const devAllowedHost = process.env.VITE_DEV_ALLOWED_HOST || null;
 
-export const WEB_ENTRY_CHUNK_SIZE_LIMIT = 1_000_000;
-
-const entryChunkSizePlugin = {
-    name: 'xchain-web-entry-chunk-size',
+const initialBundleSizePlugin = {
+    name: 'xchain-web-initial-bundle-size',
     generateBundle(_options, bundle) {
-        const entry = Object.values(bundle).find((output) => (
-            output.type === 'chunk'
-            && output.isEntry
-            && output.name === 'index'
-        ));
-        if (!entry) this.error('web entry chunk was not emitted');
-        const bytes = Buffer.byteLength(entry.code);
-        if (bytes > WEB_ENTRY_CHUNK_SIZE_LIMIT) {
+        const { jsBytes, cssBytes } = initialBundleSizes(bundle);
+        if (jsBytes > WEB_INITIAL_JS_SIZE_LIMIT) {
             this.error(
-                `web entry chunk is ${bytes} bytes; limit is ${WEB_ENTRY_CHUNK_SIZE_LIMIT}`,
+                `web initial JavaScript is ${jsBytes} bytes; limit is ${WEB_INITIAL_JS_SIZE_LIMIT}`,
+            );
+        }
+        if (cssBytes > WEB_INITIAL_CSS_SIZE_LIMIT) {
+            this.error(
+                `web initial CSS is ${cssBytes} bytes; limit is ${WEB_INITIAL_CSS_SIZE_LIMIT}`,
             );
         }
     },
@@ -215,6 +217,9 @@ const httpBrowserShim = fileURLToPath(
 );
 const replBrowserShim = fileURLToPath(
     new URL('../core/src/shims/repl-browser.js', import.meta.url),
+);
+const zlibBrowserShim = fileURLToPath(
+    new URL('../core/src/shims/zlib-browser.js', import.meta.url),
 );
 
 // Vite-plugin-node-polyfills rewrites Buffer/process/global
@@ -317,6 +322,10 @@ export default defineConfig({
             // src/cli/repl.js. The wallet never calls startREPL, so the
             // shim throws loudly if anything does.
             { find: 'repl', replacement: replBrowserShim },
+            // xchain-sdk's carrier verifier inflates a compressed rawData push
+            // with zlib.inflateRawSync; unshimmed, the bundle hands it an empty
+            // module and every compressed chunk-lane compose reads as tampered.
+            { find: 'zlib', replacement: zlibBrowserShim },
             // Point the bare musig subpath at its real file (see note above).
             { find: '@brandonblack/musig/base_crypto', replacement: musigBaseCrypto },
         ],
@@ -444,7 +453,7 @@ export default defineConfig({
     },
     plugins: [
         polyfillShimResolver,
-        entryChunkSizePlugin,
+        initialBundleSizePlugin,
         react(),
         ...(httpsEnabled ? [basicSsl()] : []),
         nodePolyfills({

@@ -50,11 +50,12 @@ const DEFAULT_TOLERANCE_MIN = 0.95;
 const DEFAULT_TOLERANCE_MAX = 1.10;
 
 /**
- * @typedef {'none'|'ok'|'short'|'excess'|'unavailable'} NativeFeeRequoteVerdict
- *   - `none`        the composed action attaches no native-coin fee; nothing to check
+ * @typedef {'none'|'ok'|'short'|'excess'|'invalid'|'unavailable'} NativeFeeRequoteVerdict
+ *   - `none`        the composed action has no native-fee quote to refresh
  *   - `ok`          the attached amount is still inside the current band
  *   - `short`       below `minAcceptable`: the chain WILL reject and keep the fee
  *   - `excess`      above `maxAcceptable`: accepted, but materially overpaid
+ *   - `invalid`     the fresh quote says the action is no longer priceable
  *   - `unavailable` the fee could not be re-quoted (offline, busy, unsupported)
  */
 
@@ -66,7 +67,7 @@ const DEFAULT_TOLERANCE_MAX = 1.10;
  * @property {number|null} minSats     lowest amount consensus would accept now
  * @property {number|null} maxSats     highest amount worth paying now
  * @property {string|null} coin        the quote's own ticker, when it carries one
- * @property {string|null} reason      why an `unavailable` verdict could not judge
+ * @property {string|null} reason      why an `unavailable` or `invalid` verdict could not proceed
  */
 
 /**
@@ -86,7 +87,7 @@ export function compareNativeFeeQuote({ composed, fresh } = {}) {
     const rawPaidSats = composed && composed.requiredFeeSats;
     const paidSats = intOrNull(rawPaidSats);
     const base = { paidSats: paidSats || 0, expectedSats: null, minSats: null, maxSats: null, coin: null, reason: null };
-    if (rawPaidSats === null || rawPaidSats === undefined || paidSats === 0) {
+    if (rawPaidSats === null || rawPaidSats === undefined) {
         return { ...base, verdict: 'none' };
     }
     if (paidSats === null) {
@@ -95,15 +96,18 @@ export function compareNativeFeeQuote({ composed, fresh } = {}) {
 
     const coin = fresh && typeof fresh.coin === 'string' ? fresh.coin : null;
     if (!fresh || typeof fresh !== 'object') return { ...base, verdict: 'unavailable', reason: 'no quote' };
-    // `supported:false` and `valid:false` both mean the indexer did not price
-    // the action THIS time. That is not evidence the composed amount is wrong,
-    // and a busy quote (its admission cap) lands here too, so it cannot be
-    // allowed to refuse an otherwise good transaction.
+    // A missing endpoint or an admission-cap response cannot judge the
+    // transaction. A non-retryable `valid:false` response can: the venue
+    // freshly evaluated these exact bytes and says the action is no longer
+    // priceable, so signing would forfeit any attached fee.
     if (fresh.supported === false) {
         return { ...base, coin, verdict: 'unavailable', reason: fresh.error || 'not quotable' };
     }
     if (fresh.valid === false) {
-        return { ...base, coin, verdict: 'unavailable', reason: fresh.error || 'not priceable' };
+        if (fresh.busy === true || fresh.retryable === true) {
+            return { ...base, coin, verdict: 'unavailable', reason: fresh.error || 'quote service is busy' };
+        }
+        return { ...base, coin, verdict: 'invalid', reason: fresh.error || 'the action is no longer priceable' };
     }
     const identityMismatch = quoteIdentityMismatch(composed, fresh);
     if (identityMismatch) {
@@ -151,7 +155,7 @@ export function compareNativeFeeQuote({ composed, fresh } = {}) {
 
 /** True when a comparison means "do not broadcast this". */
 export function isNativeFeeRefusal(cmp) {
-    return !!cmp && (cmp.verdict === 'short' || cmp.verdict === 'excess');
+    return !!cmp && (cmp.verdict === 'short' || cmp.verdict === 'excess' || cmp.verdict === 'invalid');
 }
 
 /**
@@ -171,6 +175,10 @@ export function nativeFeeRequoteMessage(cmp, { coinTicker } = {}) {
     const unit = coin ? ` ${coin}` : '';
     const paid = satsToCoinDecimal(Number(cmp && cmp.paidSats) || 0);
     const now = satsToCoinDecimal(Number(cmp && cmp.expectedSats) || 0);
+    if (cmp && cmp.verdict === 'invalid') {
+        return `The protocol fee quote expired while this was on screen. The network no longer accepts this action at the quoted fee. `
+            + `Nothing was signed or sent. Go back and start the action again to get a current quote.`;
+    }
     if (cmp && cmp.verdict === 'excess') {
         return `The protocol fee changed while this was on screen: it now costs ${now}${unit}, `
             + `but this transaction pays ${paid}${unit}. Nothing was signed or sent. `

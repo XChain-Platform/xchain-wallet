@@ -13,6 +13,10 @@ import React from 'react';
 import { clearDemoWalletId, markDemoWallet } from '../../../packages/core/src/flows/demoMode.js';
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
 import { History } from '../../../packages/core/src/shared/routes/History.jsx';
+import {
+    clearHistoryCacheForWallet,
+    writeHistoryCache,
+} from '../../../packages/core/src/shared/utils/historyCache.js';
 
 const CHAIN = 'litecoin-regtest';
 
@@ -38,9 +42,59 @@ function mount(props = {}) {
 afterEach(() => {
     cleanup();
     clearDemoWalletId();
+    clearHistoryCacheForWallet('desktop-wallet');
 });
 
 describe('History empty state', () => {
+    it('keeps desktop on skeleton rows until the first history page replaces an empty cache', async () => {
+        let resolveHistory;
+        const historyPage = new Promise((resolve) => { resolveHistory = resolve; });
+        writeHistoryCache('desktop-wallet', 'desktop-account', {
+            entries: [],
+            addressesByChain: { [CHAIN]: [{ address: 'mtkx2FQ7QhPPZmVyLKVWMkfmYmvQRUXCmi' }] },
+            fetchedAt: Date.now(),
+        });
+        const messaging = {
+            getAddressesByChain: vi.fn().mockResolvedValue({
+                [CHAIN]: [{ address: 'mtkx2FQ7QhPPZmVyLKVWMkfmYmvQRUXCmi' }],
+            }),
+            getAddressHistory: vi.fn(() => historyPage),
+            getLinksForAddress: vi.fn().mockResolvedValue([]),
+            getAddressMempool: vi.fn().mockResolvedValue([]),
+            getPendingTxsForAddress: vi.fn().mockResolvedValue([]),
+            getIndexerWatermark: vi.fn().mockResolvedValue({ watermark: null }),
+            getMultisigReceiveAddress: vi.fn().mockRejectedValue(new Error('none')),
+            getSettings: vi.fn().mockResolvedValue({}),
+        };
+        render(
+            <MessagingProvider shell="desktop" messaging={messaging}>
+                <History walletId="desktop-wallet" accountId="desktop-account" />
+            </MessagingProvider>,
+        );
+
+        await waitFor(() => expect(messaging.getAddressHistory).toHaveBeenCalled());
+        expect(screen.getByRole('status', { name: 'Loading history' })).toBeInTheDocument();
+        expect(screen.queryByText('No activity yet')).toBeNull();
+
+        await act(async () => resolveHistory([{
+            action_index: '7',
+            block_index: 100,
+            action: 'SEND',
+            timestamp: Math.floor(Date.now() / 1000),
+            tx_hash: 'desktop-loading-proof',
+            details: {
+                source: 'mtkx2FQ7QhPPZmVyLKVWMkfmYmvQRUXCmi',
+                destination: 'moV6MFm6cLkPXAhLKGRAGyPTPtFYPMYLW1',
+                tick: 'LTC',
+                amount: '1',
+            },
+        }]));
+
+        expect(await screen.findByRole('button', { name: /Send.*Confirmed/i })).toBeInTheDocument();
+        expect(screen.queryByRole('status', { name: 'Loading history' })).toBeNull();
+        expect(screen.queryByText('No activity yet')).toBeNull();
+    });
+
     it('loads chain history for a real wallet while another id is marked as demo', async () => {
         markDemoWallet('demo-wallet');
         const messaging = mount();

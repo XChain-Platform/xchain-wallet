@@ -71,7 +71,10 @@ export function ActionsMenu({ entries, onBack }) {
                     return (
                         <section key={group.id} aria-labelledby={headingId}>
                             <SectionHeader id={headingId} title={group.label} />
-                            <ul className={isFull ? styles.listFull : styles.listPopup}>
+                            <ul
+                                className={isFull ? styles.listFull : styles.listPopup}
+                                data-xc-menu-list="cards"
+                            >
                                 {group.entries.map((entry) => {
                                     const EntryIcon = Icon.iconForLabel(entry.label);
                                     const descriptionId = entry.description
@@ -85,6 +88,8 @@ export function ActionsMenu({ entries, onBack }) {
                                             <Button
                                                 type="button"
                                                 className={styles.entry}
+                                                data-xc-menu-item
+                                                data-destructive={entry.id === 'destroy' ? 'true' : undefined}
                                                 onClick={entry.disabled ? undefined : entry.onSelect}
                                                 aria-disabled={entry.disabled ? 'true' : undefined}
                                                 aria-describedby={[descriptionId, reasonId].filter(Boolean).join(' ') || undefined}

@@ -16,6 +16,8 @@
 
 import { describe, it, expect, afterEach } from 'vitest';
 import { render, screen, cleanup } from '@testing-library/react';
+import { readFileSync, readdirSync } from 'node:fs';
+import { join } from 'node:path';
 import { BalanceChanges } from '../../../packages/core/src/shared/components/BalanceChanges.jsx';
 import { ActionIntentSummary } from '../../../packages/core/src/shared/components/ActionIntentSummary.jsx';
 
@@ -57,13 +59,13 @@ describe('protocol-fee row rendering', () => {
         expect(screen.getByText('Network fee')).toBeTruthy();
         // The two amounts stay distinct: the miner fee is not restated as the
         // total, and the protocol fee is not folded into the "Network fee".
-        expect(screen.getByText(/BTC 0\.00002$/)).toBeTruthy();
+        expect(screen.getByText(/−0\.00002 BTC$/)).toBeTruthy();
     });
 
     it('ActionIntentSummary prices the protocol fee instead of printing a bare arrow', () => {
         render(<ActionIntentSummary decoded={DECODED} simulation={SIMULATION} />);
         expect(screen.getByText('Protocol fee')).toBeTruthy();
-        expect(screen.getByText('BTC 0.00002')).toBeTruthy();
+        expect(screen.getByText('0.00002 BTC')).toBeTruthy();
         // The balance row is the post-state the user checks against the chain.
         expect(screen.getByText('2.99993667 → 2.99990491')).toBeTruthy();
     });
@@ -79,5 +81,49 @@ describe('protocol-fee row rendering', () => {
         };
         const { container } = render(<ActionIntentSummary decoded={DECODED} simulation={paired} />);
         expect(container.querySelectorAll('[data-testid="action-intent-deltas"] > div')).toHaveLength(1);
+    });
+
+    it('renders memos and broadcast messages containing markup as text in review', () => {
+        const broadcastMessage = '<img src=x onerror="globalThis.broadcastExecuted = true">';
+        const memo = '<script>globalThis.memoExecuted = true</script>';
+        const { container } = render(
+            <ActionIntentSummary
+                decoded={{
+                    summary: broadcastMessage,
+                    details: [{ label: 'Memo', value: memo }],
+                    warnings: [],
+                }}
+                simulation={null}
+            />,
+        );
+
+        expect(screen.getByText(broadcastMessage)).toBeInTheDocument();
+        expect(screen.getByText(memo)).toBeInTheDocument();
+        expect(container.querySelector('script')).toBeNull();
+        expect(container.querySelector('img')).toBeNull();
+        expect(globalThis.broadcastExecuted).toBeUndefined();
+        expect(globalThis.memoExecuted).toBeUndefined();
+    });
+
+    it('keeps production JSX free of dangerouslySetInnerHTML', () => {
+        const roots = [
+            join(process.cwd(), 'packages/core/src/shared'),
+            join(process.cwd(), 'packages/extension/src/approval'),
+        ];
+        const pending = [...roots];
+        const violations = [];
+        while (pending.length > 0) {
+            const directory = pending.pop();
+            for (const entry of readdirSync(directory, { withFileTypes: true })) {
+                const path = join(directory, entry.name);
+                if (entry.isDirectory()) pending.push(path);
+                else if (entry.name.endsWith('.jsx')
+                    && readFileSync(path, 'utf8').includes('dangerouslySetInnerHTML')) {
+                    violations.push(path);
+                }
+            }
+        }
+
+        expect(violations).toEqual([]);
     });
 });

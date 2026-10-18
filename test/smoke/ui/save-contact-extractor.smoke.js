@@ -25,7 +25,9 @@ const here = dirname(fileURLToPath(import.meta.url));
 const root = join(here, '..', '..', '..');
 const read = (p) => readFileSync(join(root, p), 'utf8');
 
-const historySrc = read('packages/core/src/shared/routes/History.jsx');
+const historySrc = ['History', 'HistoryDetailCard', 'HistoryEntryRow', 'HistoryShared']
+    .map((n) => read(`packages/core/src/shared/routes/${n}.jsx`))
+    .join('\n');
 
 // 1. Header tags the FOLLOWUP id and notes the DIVIDEND / AIRDROP
 //    derived-recipient branch; the v0.328.0 close mounts these via

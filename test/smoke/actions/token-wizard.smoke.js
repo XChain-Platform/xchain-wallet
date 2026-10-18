@@ -29,7 +29,7 @@
 //   5. Review continues into the shared confirmation flow, whose approval
 //      calls messaging.issueToken with the prebuilt transaction.
 //   6. Ticker text passes through unchanged to the decoder and backend.
-//   7. The CSS module ships matching class names for the stage UIs and progress.
+//   7. The CSS module ships the stage UI, card, and responsive grid styles.
 
 import { strict as assert } from 'node:assert';
 import { readFileSync, existsSync } from 'node:fs';
@@ -315,9 +315,8 @@ assert.ok(
 for (const cls of [
     '.progress',
     '.templateGrid',
-    '.templateContent',
+    '.templateCard',
     '.detailsList',
-    '.warnings',
     '.actions',
 ]) {
     assert.ok(
@@ -325,10 +324,21 @@ for (const cls of [
         `TokenWizard.module.css defines ${cls}`,
     );
 }
+assert.ok(!/^\.warnings\s*\{/m.test(css), 'TokenWizard warnings render through StatusMessage, not a route box');
+assert.ok(/<(?:StatusMessage|FormNotice) variant="warning" role="alert"/.test(src), 'TokenWizard warnings use the shared warning message');
 assert.ok(src.includes('<FormPage'), 'TokenWizard delegates its page card to FormPage');
 assert.ok(
-    /<Button[\s\S]*?variant="secondary"[\s\S]*?styles\.templateContent/.test(src),
-    'TokenWizard delegates template actions to Button',
+    /<ListRow[\s\S]*?styles\.templateCard[\s\S]*?title={t\.name}[\s\S]*?subtitle={t\.tagline}/.test(src),
+    'TokenWizard delegates template cards to ListRow',
+);
+assert.ok(
+    /\.templateCard\s*\{[^}]*border:\s*1px solid var\(--xc-border-strong\)/s.test(css),
+    'template cards use the shared strong border token',
+);
+assert.ok(
+    /\.templateGrid\s*\{[^}]*grid-template-columns:\s*1fr/s.test(css)
+        && /@media \(min-width: 480px\)[\s\S]*?\.templateGrid\s*\{[^}]*grid-template-columns:\s*repeat\(2, 1fr\)/.test(css),
+    'template cards use one phone column and two wide-screen columns',
 );
 assert.ok(!/<button\b/.test(src), 'TokenWizard has no route-level raw button');
 assert.ok(!/(^|\n)\.card\s*\{/.test(css), 'TokenWizard has no route-level page card');

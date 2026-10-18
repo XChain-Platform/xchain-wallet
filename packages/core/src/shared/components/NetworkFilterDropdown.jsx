@@ -11,6 +11,7 @@
 import * as branding from '../../branding/branding.js';
 import { NetworkFilter } from './NetworkFilter.jsx';
 import styles from './NetworkFilterDropdown.module.css';
+import { t } from '../../i18n/index.js';
 
 // Each entry carries the icon URL at module load time so the dropdown renders
 // without any async work. Uses mainnet icons because callers store coin
@@ -39,16 +40,27 @@ const chainRegistry = {
  * @param {'all' | string} props.value      currently selected network
  * @param {(value: string) => void} props.onChange
  * @param {'sm' | 'md' | 'lg'} [props.size]
+ * @param {boolean} [props.announceNetworkCount]
  */
-export function NetworkFilterDropdown({ value, onChange, size = 'md' }) {
+export function NetworkFilterDropdown({
+    value,
+    onChange,
+    size = 'md',
+    announceNetworkCount = false,
+}) {
+    const selectedValue = value || 'all';
+    const ariaLabel = announceNetworkCount && selectedValue === 'all'
+        ? t('components.networkFilterDropdown.filterByNetworkAll', { count: NETWORK_OPTIONS.length })
+        : t('home.filter.filterByNetwork');
+
     return (
         <div className={`${styles.networkWrap} ${styles[size] || ''}`.trim()}>
             <NetworkFilter
                 chainRegistry={chainRegistry}
                 coinFamilies={NETWORK_OPTIONS.map((entry) => entry.value)}
-                value={value || 'all'}
+                value={selectedValue}
                 onChange={onChange}
-                ariaLabel="Filter by network"
+                ariaLabel={ariaLabel}
                 size={size}
             />
         </div>

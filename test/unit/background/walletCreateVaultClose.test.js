@@ -123,7 +123,7 @@ describe('pre-host onboarding closes its Vault on every exit', () => {
         it(`${lane.name}: a refused vault save still zeros the Vault's key copy`, async () => {
             const deps = makeDeps();
             deps.storageBackend.save = async () => { throw new Error('disk full'); };
-            await expect(lane.call(deps)).rejects.toThrow('disk full');
+            await expect(lane.call(deps)).rejects.toThrow('Storage is full');
             expect(built).toHaveLength(1);
             expect(built[0].closes).toBe(1);
             expect(zeroed(built[0].key)).toBe(true);
@@ -182,5 +182,29 @@ describe('pre-host mnemonic import hands label restore to the unlocked host', ()
 
         const imported = await handleWalletImport({ password: 'pw', mnemonic: 'abandon about' }, deps);
         await expect(waitForLabelSyncRestoreTask(imported.labelSyncToken)).resolves.toBeNull();
+    });
+});
+
+describe('pre-host mnemonic import lands on the network the caller asked for', () => {
+    // Demo mode asks for mainnet. Without `activeNetwork` the import flow
+    // infers the network from the first chain id, so the field must reach it.
+    it('forwards activeNetwork to the import flow', async () => {
+        const importMnemonic = vi.fn(async () => ({ format: 'bip39', wallet: { id: 'w1', name: 'Demo Wallet' } }));
+        flowBehaviour.importMnemonic = importMnemonic;
+        await handleWalletImport({
+            password: 'pw',
+            mnemonic: 'abandon about',
+            origin: 'demo',
+            activeChainIds: ['bitcoin-mainnet', 'bitcoin-regtest'],
+            activeNetwork: 'mainnet',
+        }, makeDeps());
+        expect(importMnemonic).toHaveBeenCalledWith(expect.objectContaining({ activeNetwork: 'mainnet' }));
+    });
+
+    it('leaves activeNetwork unset when the caller names none', async () => {
+        const importMnemonic = vi.fn(async () => ({ format: 'bip39', wallet: { id: 'w1', name: 'Imported Wallet' } }));
+        flowBehaviour.importMnemonic = importMnemonic;
+        await handleWalletImport({ password: 'pw', mnemonic: 'abandon about' }, makeDeps());
+        expect(importMnemonic.mock.calls[0][0].activeNetwork).toBeUndefined();
     });
 });

@@ -45,50 +45,17 @@
 // takes. Routing every path through one helper is what makes "did this form
 // get swept?" a question with one answer.
 
-import { nativeFeeErrorMessage } from '../../sdk/nativeFeePreflight.js';
+import { nativeFeeErrorMessage, oracleFeeRefusalMessage } from '../../sdk/nativeFeePreflight.js';
 import { encoderErrorMessage } from '../../sdk/encoderErrors.js';
 import { explorerErrorMessage } from '../../sdk/explorerErrors.js';
+import { knownSdkErrorMessage, unknownSdkErrorCode } from '../../sdk/sdkErrorMessages.js';
 import { validationErrorMessage } from '../../sdk/validationErrors.js';
 import { broadcastFailureKindFromError } from '../../flows/broadcastPermanence.js';
+import { OFFER_LIFECYCLE_REFUSAL } from '../../flows/marketExpiry.js';
 import { humanizeError } from './humanizeError.js';
 import { actionDisplayLabel } from './actionDisplayLabel.js';
 import { CHUNK_LANE_OPENER_RE } from './chunkLaneCopy.js';
-import { protocolRefusalReason, userFacingMessage } from './userFacingMessage.js';
-
-const SDK_ERROR_MESSAGES = Object.freeze({
-    SDKHubError: 'The wallet could not reach its service directory. Check your connection and try again.',
-    SDKConfigError: 'The wallet is not configured for this request. Check the selected network in Settings and try again.',
-    SDKFormatError: 'The wallet could not prepare this action from the form values. Review the form and try again.',
-    SDKContractError: 'The contract request could not be prepared. Check the contract details and try again.',
-    SDKWalletError: 'The wallet could not prepare or sign this request. Check the wallet details and try again.',
-    SDKAuthError: 'The wallet could not authorize this request. Check the account details and try again.',
-    SDKMessagingError: 'The wallet could not prepare this message. Check the recipient and message, then try again.',
-    SDKActionError: 'The action could not be completed. Check its status and try again.',
-    SDKMuSigError: 'The wallet could not complete the shared signature. Reconnect every signer and try again.',
-    SDKGatedFileError: 'The protected file could not be prepared. Check the file and key, then try again.',
-    SDKCompressionError: 'The file could not be compressed for this action. Choose a smaller file and try again.',
-    SDKPolicyError: 'This request does not meet the signing policy. Review the policy and try again.',
-    SDKX402Error: 'The service payment could not be verified. Check the payment details and try again.',
-    SDKPreflightError: 'This action would be rejected before it confirms. Review the form and try again.',
-    SDKRateLimitedError: 'The service is receiving too many requests. Wait a moment and try again.',
-    SDKError: 'The wallet service could not complete this request. Try again, and report it if it continues.',
-    OracleFeeUnpayableError: 'The wallet could not confirm the required oracle fee. Check the oracle settings and try again.',
-    NonFiniteAmountError: 'A wallet service returned an invalid amount. Try again, and report it if it continues.',
-    InvalidSatsAmountError: 'A wallet service returned an invalid amount. Try again, and report it if it continues.',
-    UnknownChainError: 'The wallet does not recognize the selected network. Choose a supported network in Settings and try again.',
-    RevealInputsRefusedError: 'The follow-up transaction did not match the transaction already sent, so it was not signed. Retry the reveal, and report it if it continues.',
-});
-
-function knownSdkErrorMessage(err) {
-    if (!err || typeof err !== 'object') return null;
-    const e = /** @type {any} */ (err);
-    if (e.code === 'HUB_UNAVAILABLE') return SDK_ERROR_MESSAGES.SDKHubError;
-    if (e.code === 'NON_FINITE_AMOUNT' || e.code === 'INVALID_SATS_AMOUNT') {
-        return SDK_ERROR_MESSAGES[e.code === 'NON_FINITE_AMOUNT' ? 'NonFiniteAmountError' : 'InvalidSatsAmountError'];
-    }
-    if (e.code === 'REVEAL_INPUTS_REFUSED') return SDK_ERROR_MESSAGES.RevealInputsRefusedError;
-    return SDK_ERROR_MESSAGES[String(e.name || '')] || null;
-}
+import { isShowableRefusal, protocolRefusalReason, userFacingMessage } from './userFacingMessage.js';
 
 const NEXT_STEP_RE = /\b(?:add|check|choose|enter|give|reconnect|report|retry(?:ing)?|review|try|update|wait)\b/i;
 const SIGNER_CANCELLED_RE = /\b(?:user (?:cancelled|canceled)|(?:cancelled|canceled) (?:by the user|on (?:the )?device)|user rejected on (?:the )?device)\b/i;
@@ -168,6 +135,20 @@ export function isWatcherChunkLane(err) {
     // carry (submitWithSigner.js#EnvelopeConfirmLaneError).
     if (e.name === 'EnvelopeConfirmLaneError') return true;
     return CHUNK_LANE_OPENER_RE.test(String(e.message || ''));
+}
+
+/**
+ * A confirm-lane tamper refusal (flows/confirmChecks.js#TamperDetectedError),
+ * keyed on name because only `{ name, message }` crosses the messaging boundary
+ * (MessageHost.serializeError); the code covers an in-process caller.
+ *
+ * @param {unknown} err
+ * @returns {boolean}
+ */
+function isTamperDetected(err) {
+    if (!err || typeof err !== 'object') return false;
+    const e = /** @type {any} */ (err);
+    return e.name === 'TamperDetectedError' || e.code === 'TAMPER_DETECTED';
 }
 
 /**
@@ -256,7 +237,7 @@ export function chainGateErrorMessage(err) {
     m = NOT_ON_BITCOIN_RE.exec(message);
     if (m) {
         return `${actionDisplayLabel(m[1])} version ${m[2]} cannot be sent from a Bitcoin address. `
-            + 'Send it from an address on another chain, or remove that action.';
+            + 'Send it from an address on another network, or remove that action.';
     }
     if (VALIDATOR_LANE_RE.test(message)) {
         return 'Validator staking works only on Bitcoin. Send it from a Bitcoin address.';
@@ -293,18 +274,43 @@ export function submitFailureMessage(
     const generic = `Couldn't ${verb}. Something went wrong. Try again.`;
     const protocolRefusal = protocolRefusalReason(err);
     if (protocolRefusal) return protocolRefusal;
+    if (unknownSdkErrorCode(err)) return generic;
     if (isSignerCancellation(err)) {
         return 'Signing was cancelled. Nothing was signed. Review the details and try again when you are ready.';
     }
     if (isNativeFeeForfeit(err)) {
-        return userFacingMessage(
-            nativeFeeErrorMessage(err, { coinTicker, mandatory, chainId, networkKind }), generic,
-        );
+        // The sentence can quote the indexer's verdict, which names the field
+        // it refused ("mint exceeds MINT_ADDRESS_MAX"). The general filter
+        // reads that field name as an error code and would hide the one thing
+        // the user can act on, so the verdict gets the protocol-refusal check.
+        const copy = nativeFeeErrorMessage(err, { coinTicker, mandatory, chainId, networkKind });
+        return isShowableRefusal(copy) ? copy : userFacingMessage(copy, generic);
     }
+    // The oracle pre-flight's refusal names its remedy only through the
+    // indexer verdict it carries, and "wait a day" and "try again" are both
+    // possible answers, so the verdict is read before the name-only SDK copy.
+    const oracleRefusal = oracleFeeRefusalMessage(err, { coinTicker });
+    if (oracleRefusal) return userFacingMessage(oracleRefusal, generic);
     // Before every other classifier and before the fallback: the error already
     // carries the whole remedy, and nothing else here would recognise it.
     if (isWatcherChunkLane(err)) {
         return userFacingMessage(String(/** @type {any} */ (err).message || ''), generic);
+    }
+    // A refused build check: its message is the wallet's own sentence about
+    // the bytes it refused to sign. Forms pass that message as their fallback,
+    // which the tail treats as raw wire text, so it would surface as the generic
+    // line and hide that nothing was signed because the transaction differed.
+    if (isTamperDetected(err)) {
+        return userFacingMessage(
+            `${String(/** @type {any} */ (err).message || '').trim()} Nothing was signed.`, generic,
+        );
+    }
+    // The referenced order, swap or dispenser is expired, or its expiry cannot
+    // be checked against a current chain height. The sentence is the wallet's
+    // own and names the next step; forms pass it as their fallback too, which
+    // the tail treats as raw wire text and would replace with the generic line.
+    if (/** @type {any} */ (err)?.name === OFFER_LIFECYCLE_REFUSAL) {
+        return userFacingMessage(String(/** @type {any} */ (err).message || '').trim(), generic);
     }
     if (isCommitFeeTooLowBroadcast(err)) return NETWORK_FEE_TOO_LOW_MESSAGE;
     const broadcastKind = broadcastFailureKindFromError(err);
@@ -357,6 +363,9 @@ export function submitFailureMessage(
  * @returns {string}
  */
 export function submitFailureDetails(err, message) {
+    const unknownCode = unknownSdkErrorCode(err);
+    if (unknownCode) return unknownCode;
+    if (knownSdkErrorMessage(err)) return '';
     const details = String(humanizeError(err).details || '').trim();
     if (!details) return '';
     const fold = (text) => String(text || '').toLowerCase().replace(/[\s.!?]+$/, '');

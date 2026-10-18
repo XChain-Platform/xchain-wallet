@@ -9,9 +9,10 @@
 // contact legal@dankest.llc.
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { AddressText, Button, ChainBadge, FeeSelector, FormPage, Input, PageHeader, Screen, StatusMessage, Textarea } from '@xchain-wallet/core/ui';
+import { AddressText, Button, ChainBadge, FeeSelector, FormNotice, FormPage, Input, PageHeader, Screen, StatusMessage, Textarea } from '@xchain-wallet/core/ui';
 import { registry as registryLib } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
+import { useDemoGuard } from '../hooks/useDemoGuard.jsx';
 import { SignCredentials, isHwSource } from '../components/SignCredentials.jsx';
 import { useSignerReady } from '../hooks/useSignerReady.js';
 import { useWalletMode } from '../hooks/useWalletMode.js';
@@ -71,6 +72,7 @@ const PROTOCOL_COIN_TICKER = {
  */
 export function ProjectRosterForm({ walletId, chainId, tick, issuerAddress = null, onBack }) {
     const { messaging, shell } = useMessaging();
+    const demoGuard = useDemoGuard(walletId, { onBack });
     const signerReady = useSignerReady(walletId);
     const variant = screenVariantFor(shell);
 
@@ -133,7 +135,7 @@ export function ProjectRosterForm({ walletId, chainId, tick, issuerAddress = nul
                 setAddressesByChain(byChain || {});
                 setActiveByChain(active || {});
                 if (!byChain || !(byChain[chainId] || []).length) {
-                    setLoadError('No address on this chain yet. Use Receive to generate one first.');
+                    setLoadError('No address on this network yet. Use Receive to generate one first.');
                 }
             })
             .catch((err) => {
@@ -327,7 +329,7 @@ export function ProjectRosterForm({ walletId, chainId, tick, issuerAddress = nul
     function handleReviewList(event) {
         event.preventDefault();
         if (!fromAddress) {
-            setFormError('No signing address available on this chain.');
+            setFormError('No signing address available on this network.');
             return;
         }
         if (!rosterChecked) {
@@ -480,7 +482,11 @@ export function ProjectRosterForm({ walletId, chainId, tick, issuerAddress = nul
         />
     );
     const wrap = (children) => (
-        <Screen variant={variant} header={header}>
+        <Screen
+            variant={variant}
+            header={header}
+            restoreScroll={stage !== 'review-list' && stage !== 'review-link'}
+        >
             {children}
         </Screen>
     );
@@ -502,13 +508,13 @@ export function ProjectRosterForm({ walletId, chainId, tick, issuerAddress = nul
     }
 
     if (loadError) {
-        return wrap(<StatusMessage variant="error" className={styles.error}>{loadError}</StatusMessage>);
+        return wrap(<StatusMessage variant="error">{loadError}</StatusMessage>);
     }
     if (!addressesByChain) {
         return wrap(<p className={styles.hint}>Loading wallet…</p>);
     }
     if (rosterLoadError) {
-        return wrap(<StatusMessage variant="error" className={styles.error}>{rosterLoadError}</StatusMessage>);
+        return wrap(<StatusMessage variant="error">{rosterLoadError}</StatusMessage>);
     }
 
     if (actionConfirm.open) {
@@ -592,14 +598,16 @@ export function ProjectRosterForm({ walletId, chainId, tick, issuerAddress = nul
     if (stage === 'review-list' && fromAddress) {
         return wrap(
             <FormPage
+                demoGuard={demoGuard}
                 label="Review official token list"
                 onSubmit={handleSignList}
                 status={hw && submitError ? (
-                    <StatusMessage variant="error" className={styles.error}>{submitError}</StatusMessage>
+                    <StatusMessage variant="error">{submitError}</StatusMessage>
                 ) : null}
                 actions={(
                     <>
-                        <Button variant="ghost" type="button" onClick={() => setStage('compose')} disabled={submitting}>
+                        {/* Prevent the reconciled button from submitting the compose form. */}
+                        <Button variant="ghost" type="button" onClick={(event) => { event.preventDefault(); setStage('compose'); }} disabled={submitting}>
                             Back
                         </Button>
                         <Button
@@ -618,10 +626,12 @@ export function ProjectRosterForm({ walletId, chainId, tick, issuerAddress = nul
                     {' '}({memberTicks.length} token{memberTicks.length === 1 ? '' : 's'}).
                 </p>
                 <dl className={styles.detailsList}>
-                    <dt className={styles.detailsLabel}>Chain</dt>
-                    <dd className={styles.detailsValue}>
-                        {descriptor ? <ChainBadge descriptor={descriptor} size="sm" /> : chainId}
-                    </dd>
+                    {descriptor ? (
+                        <>
+                            <dt className={styles.detailsLabel}>Network</dt>
+                            <dd className={styles.detailsValue}><ChainBadge descriptor={descriptor} size="sm" showName={false} /></dd>
+                        </>
+                    ) : null}
                     <dt className={styles.detailsLabel}>From</dt>
                     <dd className={styles.detailsValue}>
                         <AddressText address={fromAddress.address} />
@@ -658,10 +668,11 @@ export function ProjectRosterForm({ walletId, chainId, tick, issuerAddress = nul
     if (stage === 'review-link' && fromAddress) {
         return wrap(
             <FormPage
+                demoGuard={demoGuard}
                 label="Review official token link"
                 onSubmit={handleSignLink}
                 status={hw && submitError ? (
-                    <StatusMessage variant="error" className={styles.error}>{submitError}</StatusMessage>
+                    <StatusMessage variant="error">{submitError}</StatusMessage>
                 ) : null}
                 actions={(
                     <Button
@@ -679,10 +690,12 @@ export function ProjectRosterForm({ walletId, chainId, tick, issuerAddress = nul
                     project's official-token list.
                 </p>
                 <dl className={styles.detailsList}>
-                    <dt className={styles.detailsLabel}>Chain</dt>
-                    <dd className={styles.detailsValue}>
-                        {descriptor ? <ChainBadge descriptor={descriptor} size="sm" /> : chainId}
-                    </dd>
+                    {descriptor ? (
+                        <>
+                            <dt className={styles.detailsLabel}>Network</dt>
+                            <dd className={styles.detailsValue}><ChainBadge descriptor={descriptor} size="sm" showName={false} /></dd>
+                        </>
+                    ) : null}
                     <dt className={styles.detailsLabel}>From</dt>
                     <dd className={styles.detailsValue}>
                         <AddressText address={fromAddress.address} />
@@ -699,13 +712,9 @@ export function ProjectRosterForm({ walletId, chainId, tick, issuerAddress = nul
                     </dd>
                 </dl>
                 {ownerMismatch ? (
-                    <div role="alert" className={styles.warnings}>
-                        <p className={styles.warning}>
-                            This wallet isn't signing from the project's owner
-                            address ({issuerAddress}). The link will only be
-                            honoured if it's signed by the current owner.
-                        </p>
-                    </div>
+                    <FormNotice variant="warning" role="alert">
+                        {`This wallet isn't signing from the project's owner address (${issuerAddress}). The link will only be honoured if it's signed by the current owner.`}
+                    </FormNotice>
                 ) : null}
                 <SignCredentials
                     unlocked={signerReady}
@@ -730,10 +739,11 @@ export function ProjectRosterForm({ walletId, chainId, tick, issuerAddress = nul
     const hasRoster = Array.isArray(currentRoster?.members) && currentRoster.members.length > 0;
     return wrap(
         <FormPage
+            demoGuard={demoGuard}
             label="Official token list"
             onSubmit={handleReviewList}
             status={formError ? (
-                <StatusMessage variant="error" className={styles.error}>{formError}</StatusMessage>
+                <StatusMessage variant="error">{formError}</StatusMessage>
             ) : null}
             actions={(
                 <Button
@@ -744,11 +754,8 @@ export function ProjectRosterForm({ walletId, chainId, tick, issuerAddress = nul
                 </Button>
             )}
         >
-            <p className={styles.summary}>
-                The official-token list is {tick}'s on-chain seal of
-                approval: tokens on it show an "Official" badge in the
-                explorer and wallets. Publishing a new list replaces the
-                old one.
+            <p className={styles.hint}>
+                Tokens on {tick}'s official-token list show an "Official" badge in explorers and wallets. Publishing a new list replaces the old one.
             </p>
             {rosterChecked && hasRoster ? (
                 <p className={styles.hint}>
@@ -792,13 +799,11 @@ export function ProjectRosterForm({ walletId, chainId, tick, issuerAddress = nul
                 autoComplete="off"
             />
             {ownerMismatch ? (
-                <div role="alert" className={styles.warnings}>
-                    <p className={styles.warning}>
+                <FormNotice variant="warning" role="alert">
                         This wallet doesn't hold the project's owner address.
                         the final link step will only be honoured if signed
                         by the current owner.
-                    </p>
-                </div>
+                </FormNotice>
             ) : null}
             {feeTiers ? (
                 <FeeSelector

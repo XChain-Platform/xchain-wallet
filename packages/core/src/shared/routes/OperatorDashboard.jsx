@@ -48,6 +48,19 @@ const chainRegistry = registryLib.defaultRegistry();
  * @param {() => void} props.onBack
  */
 export function OperatorDashboard({ walletId, chainId, address, onBack }) {
+    const scopeKey = JSON.stringify([walletId, chainId, address]);
+    return (
+        <OperatorDashboardView
+            key={scopeKey}
+            walletId={walletId}
+            chainId={chainId}
+            address={address}
+            onBack={onBack}
+        />
+    );
+}
+
+function OperatorDashboardView({ walletId, chainId, address, onBack }) {
     const { messaging, shell } = useMessaging();
     const variant = screenVariantFor(shell);
 
@@ -60,7 +73,7 @@ export function OperatorDashboard({ walletId, chainId, address, onBack }) {
     const [broadcasts, setBroadcasts] = useState(/** @type {Section} */ (empty()));
     const [validators, setValidators] = useState(/** @type {Section} */ (empty()));
     const [height, setHeight] = useState(/** @type {number | null} */ (null));
-    const [latestFeed, setLatestFeed] = useState(null);
+    const [latestFeed, setLatestFeed] = useState({ loading: true, value: null, error: null });
     const [refreshing, setRefreshing] = useState(false);
     const refreshRef = useRef(/** @type {() => void} */ (() => {}));
 
@@ -95,7 +108,7 @@ export function OperatorDashboard({ walletId, chainId, address, onBack }) {
                 setBroadcasts(empty());
                 setValidators(empty());
                 setHeight(null);
-                setLatestFeed(null);
+                setLatestFeed({ loading: true, value: null, error: null });
             }
 
             const tasks = [];
@@ -117,8 +130,17 @@ export function OperatorDashboard({ walletId, chainId, address, onBack }) {
                     .catch(() => { if (!cancelled && !background) setHeight(null); }));
             }
             tasks.push(latestFeedCreateForAddress({ messaging, chainId, address })
-                .then((feed) => { if (!cancelled) setLatestFeed(feed); })
-                .catch(() => { if (!cancelled && !background) setLatestFeed(null); }));
+                .then((feed) => {
+                    if (!cancelled) setLatestFeed({ loading: false, value: feed, error: null });
+                })
+                .catch((err) => {
+                    if (cancelled) return;
+                    setLatestFeed((current) => ({
+                        loading: false,
+                        value: background ? current.value : null,
+                        error: userFacingMessage(err, "Couldn't load the latest feed. Try again."),
+                    }));
+                }));
             await Promise.allSettled(tasks);
             inFlight = false;
             if (!cancelled) setRefreshing(false);
@@ -180,7 +202,7 @@ export function OperatorDashboard({ walletId, chainId, address, onBack }) {
                 </Button>
             )}>
                 <header className={styles.identity}>
-                    {descriptor ? <ChainBadge descriptor={descriptor} size="md" /> : <span>{chainId}</span>}
+                    {descriptor ? <ChainBadge descriptor={descriptor} size="md" showName={false} /> : null}
                     <AddressText address={address} />
                 </header>
 
@@ -296,7 +318,9 @@ export function OperatorDashboard({ walletId, chainId, address, onBack }) {
                     walletId={walletId}
                     chainId={chainId}
                     address={address}
-                    feed={latestFeed}
+                    feed={latestFeed.value}
+                    feedLoading={latestFeed.loading}
+                    feedError={latestFeed.error}
                     messaging={messaging}
                     variant={variant}
                 />

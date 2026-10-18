@@ -82,6 +82,14 @@ describe('createPendingAirdrop', () => {
         expect(p.listType).toBe('2');
     });
 
+    it('records the native-coin fee lane only when it was chosen', () => {
+        expect(createPendingAirdrop(BASE_INPUT).payFeeInNativeCoin).toBe(false);
+        expect(createPendingAirdrop({ ...BASE_INPUT, payFeeInNativeCoin: true }).payFeeInNativeCoin)
+            .toBe(true);
+        expect(createPendingAirdrop({ ...BASE_INPUT, payFeeInNativeCoin: 'yes' }).payFeeInNativeCoin)
+            .toBe(false);
+    });
+
     it('defaults memo to null', () => {
         const p = createPendingAirdrop(BASE_INPUT);
         expect(p.memo).toBeNull();
@@ -237,6 +245,21 @@ describe('validatePendingAirdrop', () => {
     it('accepts empty string memo', () => {
         const p = createPendingAirdrop(BASE_INPUT);
         expect(validatePendingAirdrop({ ...p, memo: '' }).ok).toBe(true);
+    });
+
+    it('accepts a record with no payFeeInNativeCoin, and either boolean', () => {
+        const p = createPendingAirdrop(BASE_INPUT);
+        const { payFeeInNativeCoin, ...withoutLane } = p;
+        expect(validatePendingAirdrop(withoutLane).ok).toBe(true);
+        expect(validatePendingAirdrop({ ...p, payFeeInNativeCoin: true }).ok).toBe(true);
+        expect(validatePendingAirdrop({ ...p, payFeeInNativeCoin: false }).ok).toBe(true);
+    });
+
+    it('rejects a non-boolean payFeeInNativeCoin', () => {
+        const p = createPendingAirdrop(BASE_INPUT);
+        const r = validatePendingAirdrop({ ...p, payFeeInNativeCoin: 'true' });
+        expect(r.ok).toBe(false);
+        expect(r.errors.some((e) => e.includes('payFeeInNativeCoin'))).toBe(true);
     });
 
     it('rejects non-string non-null memo', () => {

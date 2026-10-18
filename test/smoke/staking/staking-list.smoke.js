@@ -90,23 +90,24 @@ for (const call of ['isDemoWallet', 'synthesizeDemoStaking', 'synthesizeDemoCont
     assert.ok(listSrc.includes(call), `StakingList uses ${call}`);
 }
 
-// 5. List-pattern chrome: header "+", search, network filter, rows
+// 5. List-pattern chrome: the "New stake" action, search, and rows
 // that hand a { kind, chainId, address, contractActionIndex? } ref up.
-assert.ok(/NetworkFilterDropdown/.test(listSrc),
-    'StakingList renders the network filter dropdown');
+// Operator ruling: the chain filter stays; it names chains, never network kinds.
+assert.ok(/<NetworkFilterDropdown\b/.test(listSrc),
+    'StakingList keeps its chain filter');
 assert.ok(/aria-label="Search staking positions"/.test(listSrc),
     'StakingList renders the free-text search input');
-assert.ok(/local\.addBtn/.test(listSrc) && /Icon\.PlusIcon/.test(listSrc),
-    'StakingList renders the header "+" (new stake) button');
-assert.ok(/aria-label="New stake"/.test(listSrc),
-    'StakingList labels the "+" button');
+assert.ok(/Icon\.PlusIcon/.test(listSrc) && /New stake\s*<\/Button>/.test(listSrc),
+    'StakingList renders the "New stake" button in the content actions row');
+assert.ok(!/trailing=/.test(listSrc),
+    'StakingList keeps its action out of the page header');
 assert.ok(/onNewStake/.test(listSrc), 'StakingList exposes onNewStake');
 assert.ok(/onOpenStake\(row\.ref\)/.test(listSrc),
     'StakingList rows hand their position ref to onOpenStake');
 assert.ok(/kind:\s*'validator'/.test(listSrc) && /kind:\s*'contract'/.test(listSrc),
     'StakingList builds both validator and contract row refs');
-assert.ok(/coinFromChainId/.test(listSrc),
-    'StakingList filters rows by coin family');
+assert.ok(/network !== 'all' && coinFromChainId\(row\.chainId\) !== network/.test(listSrc),
+    'StakingList filters rows by the chosen chain only');
 
 // 6. §42.7.4 at-a-glance rewards stay on the root, as a per-row chip
 // on the validator rows (the root is kind-neutral: no page-level
@@ -210,5 +211,5 @@ assert.ok(!/'stake-detail'/.test(lastView) && !/'stake-new'/.test(lastView),
     'stake-detail / stake-new are not resumable (they need stakingRef)');
 
 console.log(
-    'OK: staking list smoke (StakingList unified validator+contract rows + search/network filter + header "+" + silent contract-lane degrade + flows + bg handlers + 3-shell messaging + Home onStaking + resume safety)',
+    'OK: staking list smoke (StakingList unified validator+contract rows + search + header "+" + silent contract-lane degrade + flows + bg handlers + 3-shell messaging + Home onStaking + resume safety)',
 );

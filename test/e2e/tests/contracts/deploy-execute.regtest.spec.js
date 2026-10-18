@@ -51,7 +51,7 @@
 //    method wrote proves the VM RAN the deployed body, which is the only thing
 //    that distinguishes a real round trip from a well-formed no-op.
 
-import { createWallet, expect, gotoSection, test } from '../../fixtures/wallet.js';
+import { createWallet, expect, gotoSection, openPaletteCommand, test } from '../../fixtures/wallet.js';
 import { searchForTx } from '../../fixtures/pendingHistory.js';
 import {
     EXPLORER_URL,
@@ -112,24 +112,8 @@ async function approveConfirm(page) {
     await page.getByTestId('confirm-approve').click();
 }
 
-/**
- * Navigates through the command palette, the way a returning user reaches
- * anything that is not one of the four primary tabs.
- *
- * Contracts is not a nav destination at any width; it hangs off Home's
- * secondary actions and off the palette. The palette is the surface that works
- * identically in every shell, so it is the one driven here.
- */
-async function gotoPalette(page, title) {
-    await page.keyboard.press('ControlOrMeta+k');
-    const combobox = page.getByRole('combobox').first();
-    await expect(combobox).toBeVisible();
-    await combobox.fill(title);
-    await page.keyboard.press('Enter');
-}
-
 async function gotoDeployForm(page) {
-    await gotoPalette(page, 'Contracts');
+    await openPaletteCommand(page, 'Contracts');
     const deploy = page.getByRole('button', { name: '+ Publish contract' });
     await expect(deploy).toBeVisible({ timeout: 30_000 });
     await deploy.click();
@@ -331,7 +315,7 @@ test.describe('contract DEPLOY + EXECUTE from the wallet, on regtest', () => {
         });
 
         await test.step('call a method on it', async () => {
-            await gotoPalette(page, 'Contracts');
+            await openPaletteCommand(page, 'Contracts');
 
             // Reach the contract the way a user does: find it in the list, open
             // it, and call a method from the detail page.
@@ -354,7 +338,8 @@ test.describe('contract DEPLOY + EXECUTE from the wallet, on regtest', () => {
             // wallet recognises the deploy as its own.
             await page.getByRole('tab', { name: REGTEST_CHAIN_LABEL, exact: true }).click();
             const rowLabel = `${META_NAME} v${META_VERSION} (C:${REGTEST_TICKER}:${contractIndex})`;
-            const row = page.getByRole('button', { name: rowLabel, exact: true });
+            // The list row carries its identity as an aria-label with an "Open" prefix.
+            const row = page.getByRole('button', { name: `Open ${rowLabel}`, exact: true });
             await expect(row.first()).toBeVisible({ timeout: 60_000 });
             // The two sections load independently ("My contracts" is a
             // per-address query, browse-all a paginated one), so the second

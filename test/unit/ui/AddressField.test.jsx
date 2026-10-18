@@ -4,9 +4,19 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 import { useState } from 'react';
+import { readFileSync } from 'node:fs';
 import { describe, expect, it, vi } from 'vitest';
 import { fireEvent, render, screen } from '@testing-library/react';
 import { AddressField } from '../../../packages/core/src/ui/AddressField.jsx';
+import { AddressCombobox } from '../../../packages/core/src/ui/AddressCombobox.jsx';
+import { AmountField } from '../../../packages/core/src/shared/components/AmountField.jsx';
+import buttonStyles from '../../../packages/core/src/ui/Button.module.css';
+import inputStyles from '../../../packages/core/src/ui/Input.module.css';
+
+const addressComboboxStyles = readFileSync(
+    'packages/core/src/ui/AddressCombobox.module.css',
+    'utf8',
+);
 
 function ControlledField(props) {
     const { value: initialValue = '', ...rest } = props;
@@ -22,6 +32,66 @@ function ControlledField(props) {
 }
 
 describe('<AddressField>', () => {
+    it.each([320, 360])('keeps the destination Paste action on one line at %ipx', (width) => {
+        render(
+            <div style={{ width }}>
+                <AddressCombobox
+                    label="To"
+                    value=""
+                    onChange={() => {}}
+                    icon="contacts"
+                    onIconClick={() => {}}
+                />
+            </div>,
+        );
+
+        const input = screen.getByRole('combobox', { name: 'To' });
+        const paste = screen.getByRole('button', { name: 'Paste from clipboard' });
+        expect(input.style.getPropertyValue('--address-end-room')).toContain('--address-control-height');
+        expect(paste.textContent).toBe('Paste');
+        expect(addressComboboxStyles).toMatch(
+            /--address-paste-width:\s*calc\(var\(--address-control-height\) \+ var\(--xc-space-8\)\)/,
+        );
+        expect(addressComboboxStyles).toMatch(/\.wrap input\s*\{[^}]*min-width:\s*0/s);
+        expect(addressComboboxStyles).toMatch(
+            /\.pasteAction button > span\s*\{[^}]*min-width:\s*max-content[^}]*white-space:\s*nowrap/s,
+        );
+    });
+
+    it.each(['md', 'lg'])('gives the input and inline actions the same %s size class', (size) => {
+        const { unmount } = render(
+            <AddressField
+                label="From"
+                size={size}
+                icon="addresses"
+                value="bc1qsource"
+                readOnly
+                onChange={() => {}}
+            />,
+        );
+
+        const input = screen.getByLabelText('From');
+        expect(input.parentElement.parentElement).toHaveClass(inputStyles[size]);
+        expect(screen.getByRole('button', { name: 'Choose address' }))
+            .toHaveClass(buttonStyles[size]);
+        unmount();
+
+        render(
+            <AmountField
+                size={size}
+                amount="1"
+                tick="BTC"
+                onAmountFieldChange={() => {}}
+                onMax={() => {}}
+            />,
+        );
+
+        const amountInput = screen.getByRole('textbox', { name: 'Amount (BTC)' });
+        expect(amountInput.parentElement.parentElement).toHaveClass(inputStyles[size]);
+        expect(screen.getByRole('button', { name: 'Use max available amount' }))
+            .toHaveClass(buttonStyles[size]);
+    });
+
     it('trims surrounding whitespace from a plain pasted address', () => {
         render(<ControlledField />);
 

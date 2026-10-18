@@ -69,6 +69,15 @@ describe('ensureNetworkAddresses', () => {
         expect(receiveAddress.mock.calls[0][0].signer).toBeTruthy();
     });
 
+    it('names index 0 so no chain waits on a network history probe', async () => {
+        receiveAddress.mockResolvedValue({ address: 'bcrt1qexample' });
+        await ensureNetworkAddresses(harness());
+
+        for (const [opts] of receiveAddress.mock.calls) {
+            expect(opts.derivationIndex).toBe(0);
+        }
+    });
+
     it('leaves chains that already have an address alone', async () => {
         receiveAddress.mockResolvedValue({ address: 'bcrt1qexample' });
         const res = await ensureNetworkAddresses(harness({

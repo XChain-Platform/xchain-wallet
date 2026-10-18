@@ -4,15 +4,13 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 import {
-    dismissIntroCarousel,
     expect,
     test,
-    unlockedShell,
+    createWallet,
 } from '../../fixtures/wallet.js';
 import {
     describeOffenders,
     documentOverflow,
-    enterDemoWallet,
     overflowingElements,
 } from '../../fixtures/responsive.js';
 
@@ -146,12 +144,13 @@ async function configurePolicy(page) {
 
     const perAction = page.getByRole('group', { name: 'Per-action amount limits' });
     await perAction.getByRole('button', { name: '+ Add limit' }).click();
-    await perAction.getByLabel('Action').selectOption('SEND');
+    await perAction.getByLabel('Action', { exact: true }).selectOption('SEND');
     await perAction.getByLabel('Token').fill('BTC');
     await perAction.getByLabel('Max amount').fill('0.25');
 
     const rolling = page.getByRole('group', { name: 'Rolling limit' });
-    await rolling.getByRole('checkbox', { name: 'Enforce a rolling limit' }).check();
+    // The kit Switch exposes the switch role.
+    await rolling.getByRole('switch', { name: 'Enforce a rolling limit' }).check();
     await rolling.getByLabel('Window length (hours)').fill('12');
     await rolling.getByLabel('Max actions per window').fill('4');
 
@@ -179,7 +178,9 @@ async function expectReviewAtTop(page, label) {
 async function walkCoSignerScreens(page, viewport) {
     await page.setViewportSize({ width: viewport.width, height: viewport.height });
     await installCoSignerDerivationStub(page);
-    await enterDemoWallet(page, { dismissIntroCarousel, expect, unlockedShell });
+    // Demo wallets hide create and multisig commands, so this walk
+    // uses a real dev wallet.
+    await createWallet(page);
 
     await openAgentAccounts(page);
     await expectScreen(page, 'Agent accounts', `${viewport.name} account list`);
@@ -189,6 +190,11 @@ async function walkCoSignerScreens(page, viewport) {
     await expectScreen(page, 'New agent account', `${viewport.name} provisioning`);
     await configurePolicy(page);
     await expectScreen(page, 'New agent account', `${viewport.name} expanded policy editor`);
+
+    // The form opens a review of every value before anything is created.
+    await page.getByRole('button', { name: 'Review agent account', exact: true }).click();
+    await expectScreen(page, 'Review agent account', `${viewport.name} provisioning check`);
+    await expect(definitionValue(page, 'Account name')).toHaveText(ACCOUNT_NAME);
 
     const create = page.getByRole('button', { name: 'Create agent account', exact: true });
     await expect(create).toBeEnabled();

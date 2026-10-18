@@ -84,12 +84,51 @@ describe('classifyBroadcastFailure', () => {
 });
 
 describe('isAlreadyOnNetworkRejection', () => {
+    const sdkEncoderError = (details) => Object.assign(
+        new Error('Encoder RPC error: Transaction broadcast failed'),
+        { name: 'SDKEncoderError', code: 'ENCODER_RPC_ERROR', details },
+    );
+
     it('matches both already-known rejects, nested causes included', () => {
         expect(isAlreadyOnNetworkRejection(new Error('txn-already-known'))).toBe(true);
         expect(isAlreadyOnNetworkRejection('txn-already-in-mempool')).toBe(true);
         expect(isAlreadyOnNetworkRejection({
             message: 'Encoder RPC error', cause: { response: { data: { error: 'txn-already-in-mempool' } } },
         })).toBe(true);
+    });
+
+    it('matches SDKEncoderError details for TX_ALREADY_IN_CHAIN', () => {
+        expect(isAlreadyOnNetworkRejection(sdkEncoderError({
+            rpcError: {
+                code: -32010,
+                message: 'Transaction broadcast failed',
+                data: { reason: 'TX_ALREADY_IN_CHAIN', node_code: -27 },
+            },
+            context: { reason: 'TX_ALREADY_IN_CHAIN', node_code: -27 },
+        }))).toBe(true);
+    });
+
+    it('matches RPC_VERIFY_ALREADY_IN_CHAIN node_code -27 with another reason', () => {
+        expect(isAlreadyOnNetworkRejection(sdkEncoderError({
+            rpcError: { code: -32010, data: { reason: 'NODE_REJECTED', node_code: -27 } },
+        }))).toBe(true);
+        expect(isAlreadyOnNetworkRejection({
+            data: { reason: 'TX_ALREADY_IN_CHAIN' },
+        })).toBe(true);
+    });
+
+    it('reads structured already-in-chain details from a nested cause', () => {
+        expect(isAlreadyOnNetworkRejection({
+            message: 'wrapped',
+            cause: sdkEncoderError({ context: { reason: 'TX_ALREADY_IN_CHAIN' } }),
+        })).toBe(true);
+    });
+
+    it('does not treat NODE_REJECTED node_code -26 as delivered', () => {
+        expect(isAlreadyOnNetworkRejection(sdkEncoderError({
+            rpcError: { code: -32010, data: { reason: 'NODE_REJECTED', node_code: -26 } },
+            context: { reason: 'NODE_REJECTED', node_code: -26 },
+        }))).toBe(false);
     });
 
     it('does not match a dead or an unreachable transaction', () => {

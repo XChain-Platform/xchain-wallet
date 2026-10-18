@@ -14,12 +14,13 @@ import { registry as registryLib, flows as flowsLib } from '@xchain-wallet/core'
 import * as branding from '@xchain-wallet/core/branding/branding.js';
 import { t } from '../../i18n/index.js';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
-import { DetailCard } from './History.jsx';
+import { DetailCard, detailTransferDirection } from './History.jsx';
 import { actionDisplayLabel } from '../utils/actionDisplayLabel.js';
 import { normalizeHistoryRow } from '../utils/historyRow.js';
 import { useActionProofVerification } from '../hooks/useProofVerification.js';
 import { useSettings } from '../hooks/useSettings.js';
-import { useOnlineStatus } from '../hooks/useOnlineStatus.js';
+import { useNetworkOffline } from '../hooks/useNetworkOffline.js';
+import { useHideReachabilityNotice } from '../components/hideReachabilityNotice.js';
 import { userFacingMessage } from '../utils/userFacingMessage.js';
 import styles from './History.module.css';
 
@@ -37,7 +38,9 @@ const OFFLINE_ACTION_REASON = 'This action needs a network connection.';
 export function ActionDetail({ entry: entryProp, walletId, chainTip, indexerWatermark, onBack }) {
     const { messaging, shell } = useMessaging();
     const variant = screenVariantFor(shell);
-    const browserOnline = useOnlineStatus();
+    const { offline: networkOffline } = useNetworkOffline({ walletId });
+    const browserOnline = !networkOffline;
+    useHideReachabilityNotice(networkOffline);
 
     // M2.3: the shells hand this page a SNAPSHOT of the row the user clicked
     // and never revisit it, which is harmless for a confirmed action and wrong
@@ -60,6 +63,9 @@ export function ActionDetail({ entry: entryProp, walletId, chainTip, indexerWate
         if (!browserOnline) return undefined;
         if (!entryProp?.chainId || !entryProp?.address) return undefined;
         if (typeof messaging.getAddressHistory !== 'function') return undefined;
+        // A demo wallet's pending sample row never confirms, and a demo wallet's
+        // addresses never go to an explorer (issue #82).
+        if (flowsLib.isDemoWallet(walletId)) return undefined;
         const { chainId, address } = entryProp;
         let cancelled = false;
         const look = () => {
@@ -91,7 +97,7 @@ export function ActionDetail({ entry: entryProp, walletId, chainTip, indexerWate
             look();
         }, flowsLib.BALANCE_POLL_INTERVAL_MS);
         return () => { cancelled = true; clearInterval(id); };
-    }, [pendingTxHash, confirmed, entryProp, messaging, browserOnline]);
+    }, [pendingTxHash, confirmed, entryProp, messaging, browserOnline, walletId]);
 
     // Local peer cache: fetched once on mount when the entry is one
     // side of a cross-chain LINK pair. DetailCard handles loading +
@@ -182,6 +188,13 @@ export function ActionDetail({ entry: entryProp, walletId, chainTip, indexerWate
     const actionIndexLabel = /^\d+$/.test(rawActionIndex)
         ? BigInt(rawActionIndex).toLocaleString('en-US')
         : '';
+    // A transfer is named by its direction, as its History row is: the
+    // protocol calls both sides SEND, and an incoming one titled "Send"
+    // reads as money leaving the wallet.
+    const direction = detailTransferDirection(entry, entry.detailContext?.walletAddresses);
+    const titleAction = direction === 'in' ? actionDisplayLabel('RECEIVE')
+        : direction === 'out' || direction === 'self' ? actionDisplayLabel('SEND')
+        : actionDisplayLabel(entry.action);
     const header = (
         <PageHeader
             onBack={onBack}
@@ -190,8 +203,8 @@ export function ActionDetail({ entry: entryProp, walletId, chainTip, indexerWate
                 // A pending action has no index, and the fallback here
                 // rendered it as "#0", an index that belongs to a real
                 // action on every chain.
-                ? actionDisplayLabel(entry.action)
-                : `${actionDisplayLabel(entry.action)} #${actionIndexLabel}`}
+                ? titleAction
+                : `${titleAction} #${actionIndexLabel}`}
             titleIcon={iconUrl ? (
                 <img
                     src={iconUrl}

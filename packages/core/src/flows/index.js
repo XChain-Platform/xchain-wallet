@@ -144,6 +144,7 @@ export {
     buildGatedPublishPsbtRequest,
     composeGatedPublishForConfirm,
     MAX_GATED_PLAINTEXT_BYTES,
+    gateMinAmountValidationError,
 } from './gatedPublishAction.js';
 export {
     MAX_COMPILED_ACTION_BYTES,

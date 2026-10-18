@@ -28,7 +28,20 @@
     font-weight: 700;
     line-height: 1;
     cursor: help;
-    transition: color 120ms ease, border-color 120ms ease, background 120ms ease;
+    transition: color var(--xc-transition), border-color var(--xc-transition), background var(--xc-transition);
+    position: relative;
+}
+
+/* The help dot keeps its 16px glyph. On a touch screen a transparent layer grows the tap area to 44px, centred on the control, without changing its painted size (the Button .sm pattern). */
+@media (pointer: coarse), (hover: none) {
+    .trigger::before {
+        content: '';
+        position: absolute;
+        inset-block-start: min(0px, calc(50% - var(--xc-control-hit-min, 24px) / 2));
+        inset-inline-start: min(0px, calc(50% - var(--xc-control-hit-min, 24px) / 2));
+        width: max(100%, var(--xc-control-hit-min, 24px));
+        height: max(100%, var(--xc-control-hit-min, 24px));
+    }
 }
 
 .glyph {
@@ -40,7 +53,7 @@
     border: 1px solid var(--xc-border);
     border-radius: 50%;
     background: var(--xc-bg-muted);
-    transition: color 120ms ease, border-color 120ms ease, background 120ms ease;
+    transition: color var(--xc-transition), border-color var(--xc-transition), background var(--xc-transition);
 }
 
 .trigger:hover,
@@ -67,7 +80,12 @@
 
 .bubble {
     position: absolute;
+    /* The start edge sits on the trigger centre and --xc-tip-center pulls
+       the bubble back by half its width toward the start side, the physical
+       left in LTR and the physical right in RTL. The measured clamp in
+       InfoTip.jsx is a physical translateX, so it holds in both directions. */
     inset-inline-start: 50%;
+    --xc-tip-center: -50%;
     z-index: var(--xc-z-dropdown);
     box-sizing: border-box;
     min-width: min(180px, calc(100vw - 2 * var(--xc-space-2)));
@@ -75,6 +93,7 @@
     padding: var(--xc-space-2) var(--xc-space-3);
     background: var(--xc-text);
     color: var(--xc-bg);
+    border: 1px solid var(--xc-border);
     border-radius: var(--xc-radius-sm);
     font-size: var(--xc-text-xs);
     font-weight: 400;
@@ -84,7 +103,11 @@
     overflow-wrap: anywhere;
     overflow-y: auto;
     pointer-events: none;
-    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.18);
+    box-shadow: var(--xc-shadow-md);
+}
+
+:global([dir='rtl']) .bubble {
+    --xc-tip-center: 50%;
 }
 
 .placementTop {

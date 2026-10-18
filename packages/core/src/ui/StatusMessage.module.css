@@ -1,5 +1,8 @@
 .row {
     display: flex;
+    /* With large text the recovery action drops under the message instead of
+       squeezing the message into a narrow column. */
+    flex-wrap: wrap;
     align-items: center;
     gap: var(--xc-space-2);
     margin: var(--xc-space-2) 0;
@@ -10,9 +13,19 @@
 }
 
 .text {
-    flex: 1;
+    flex: 1 1 8rem;
     min-width: 0;
+    max-width: var(--xc-prose-max-width);
+    margin-inline-end: auto;
     overflow-wrap: anywhere;
+}
+
+.icon {
+    flex: 0 0 auto;
+    align-self: flex-start;
+    font-size: var(--xc-icon-sm);
+    font-weight: 700;
+    line-height: 1.4;
 }
 
 .details {
@@ -29,12 +42,14 @@
 
 .recovery {
     flex: 0 0 auto;
-    background: rgba(255, 255, 255, 0.18);
+    margin-inline-start: auto;
+    background: transparent;
     color: inherit;
     border: 1px solid currentColor;
     border-radius: var(--xc-radius-sm);
     padding: 2px var(--xc-space-2);
-    font-size: var(--xc-text-xs);
+    /* The action reads at the notice text size, not a step below it. */
+    font-size: inherit;
     font-weight: 600;
     cursor: pointer;
     line-height: 1.2;
@@ -45,11 +60,31 @@
     display: inline-flex;
     align-items: center;
     justify-content: center;
+    position: relative;
 }
 
+/* The notice action keeps its look. On a touch screen a transparent layer grows the tap area to 44px, centred on the control, without changing its painted size (the Button .sm pattern). */
+@media (pointer: coarse), (hover: none) {
+    .recovery::before {
+        content: '';
+        position: absolute;
+        inset-block-start: min(0px, calc(50% - var(--xc-control-hit-min, 24px) / 2));
+        inset-inline-start: min(0px, calc(50% - var(--xc-control-hit-min, 24px) / 2));
+        width: max(100%, var(--xc-control-hit-min, 24px));
+        height: max(100%, var(--xc-control-hit-min, 24px));
+    }
+}
+
+.recovery:disabled {
+    cursor: wait;
+    opacity: 0.7;
+}
+
+/* A light overlay on a dark notice drags the label below 4.5:1, so the
+   hover tint is a faint share of the label's own colour instead. */
 .recovery:hover,
 .recovery:focus-visible {
-    background: rgba(255, 255, 255, 0.3);
+    background: color-mix(in srgb, currentColor 8%, transparent);
     outline: 2px solid currentColor;
     outline-offset: 1px;
 }
@@ -61,10 +96,17 @@
    Add addresses page that produced danger-red text on a danger-red
    background: a blank red bar where the message should be. Two classes
    outrank one, so the banner's colours are the banner's own. */
-.row.status {
-    background: var(--xc-bg-muted);
-    color: var(--xc-text);
-    border: 1px solid var(--xc-border);
+.row.status,
+.row.info {
+    background: var(--xc-info-bg);
+    color: var(--xc-info-text);
+    border: 1px solid var(--xc-info);
+}
+
+.row.warning {
+    background: var(--xc-warning-bg);
+    color: var(--xc-warning-text);
+    border: 1px solid var(--xc-warning);
 }
 
 .row.error {
@@ -76,6 +118,25 @@
 
 .row.success {
     background: var(--xc-success-bg, rgba(20, 111, 52, 0.10));
-    color: var(--xc-text);
+    color: var(--xc-success);
     border: 1px solid var(--xc-success, var(--xc-border));
+}
+
+/* A multi-line message passes one paragraph or list item per line; the lines
+   sit tight inside the one box instead of carrying page paragraph margins. */
+.body > p,
+.body > ul,
+.body > ol {
+    margin: 0;
+}
+
+.body > ul,
+.body > ol {
+    padding: 0;
+    list-style: none;
+}
+
+.body > * + *,
+.body li + li {
+    margin-top: var(--xc-space-1);
 }

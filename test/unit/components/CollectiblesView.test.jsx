@@ -121,10 +121,12 @@ describe('CollectiblesView cards', () => {
             <TickerIcon chainId="bitcoin-mainnet" tick="BTC" size={32} />,
         );
 
+        // A legacy size of 32 renders in the 40px list avatar context, so the
+        // image declares the rendered size, not the requested one.
         const icon = container.querySelector('img');
-        expect(icon).toHaveAttribute('width', '32');
-        expect(icon).toHaveAttribute('height', '32');
-        expect(icon).toHaveAttribute('sizes', '32px');
+        expect(icon).toHaveAttribute('width', '40');
+        expect(icon).toHaveAttribute('height', '40');
+        expect(icon).toHaveAttribute('sizes', '40px');
         expect(icon.getAttribute('srcset')).toMatch(/bitcoin-mainnet-icon-20\.png.*144w/);
         expect(icon.getAttribute('srcset')).toMatch(/bitcoin-mainnet-500\.png.*500w/);
     });

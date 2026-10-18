@@ -40,9 +40,10 @@
 //    (wrong outcome index, wrong tick, wrong stake) passes the first and fails
 //    the second.
 
-import { createWallet, expect, test } from '../../fixtures/wallet.js';
+import { createWallet, expect, openPaletteCommand, test } from '../../fixtures/wallet.js';
 import {
     EXPLORER_URL,
+    explorerJson as venueJson,
     REGTEST_ADDRESS_RE,
     REGTEST_COIN,
     fundAddress,
@@ -52,6 +53,7 @@ import {
     mintXchain,
     switchToRegtest,
     unlockAfterReload,
+    betDetailRefusal,
 } from '../../fixtures/regtest.js';
 
 const PASSWORD = 'regtestpassword123';
@@ -141,6 +143,25 @@ async function fillPasswordIfPresent(scope) {
 }
 
 /**
+ * How far past the create the market closes, in seconds of WALL time.
+ *
+ * The deadline is crossed in real time and never by jumping the node clock.
+ * The indexer holds each block until the hub attestation stream has reached
+ * that block's time, and the stream follows wall time, so a block stamped
+ * ahead of wall time stalls indexing of the whole chain until wall time
+ * catches up. Measured 2026-10-17: a `set_mock_time` to deadline+120 stamped
+ * RBTC block 1097 at 1792203886, about 31 minutes ahead; the indexer deferred
+ * it from 01:54Z for the whole of that gap, this spec's close wait expired on
+ * a market still `open`, and every later spec on the chain read empty
+ * balances for mints that had broadcast fine.
+ *
+ * Sized just longer than the bet takes to place (funding, a mint, two
+ * remounts and a signed action: about 5 minutes on this venue), because the
+ * remainder is paid in wall time by the close step.
+ */
+const DEADLINE_LEAD_SEC = 900;
+
+/**
  * Mines one block, but ONLY while the decode/index pipeline is keeping up.
  *
  * A poll loop that mines every pass looks harmless and is not: the decoder
@@ -152,45 +173,6 @@ async function fillPasswordIfPresent(scope) {
  * pipeline being in step, and blocks are only ever needed to advance state, not
  * to make an already-mined action visible.
  */
-/**
- * Whether THIS chain's regtest miner can move the node's clock.
- *
- * Measured 2026-08-27, and it is a venue fact rather than a protocol one: the
- * three miner containers on this stack run three different images (litecoin
- * 2026-07-11, bitcoin 2026-07-23, dogecoin 2026-08-09), and the litecoin one
- * predates `set_mock_time` entirely - `grep -c set_mock_time api.js` is 0 there
- * and 1 on the other two. So a spec that jumps the clock to cross a deadline
- * works on two of the three chains and dies on the third with
- * `Method not found`, which reads as a wallet or protocol failure and is
- * neither, and the gap is tracked.
- *
- * Probed rather than keyed off REGTEST_COIN, because the answer is about which
- * IMAGE a container happens to be running and will change the moment somebody
- * redeploys it - a coin list would then be wrong in the safe-looking direction
- * (falling back to a slow wall-clock wait forever on a venue that no longer
- * needs it). The probe is the same tip+5 pin `beforeAll` already does, so it
- * costs nothing and cannot leave the clock anywhere new.
- *
- * @returns {Promise<boolean>}
- */
-let mockTimeSupport = null;
-async function supportsMockTime() {
-    if (mockTimeSupport !== null) return mockTimeSupport;
-    const tip = await chainTime();
-    try {
-        await minerRpc('set_mock_time', { timestamp: tip + 5 });
-        mockTimeSupport = true;
-    } catch (err) {
-        // Only the missing METHOD is a capability answer. Anything else (the
-        // miner down, a bad timestamp) is a real failure and has to keep
-        // travelling, or this helper would quietly turn every venue outage
-        // into "no mocktime here" and the slow path would hide it.
-        if (!/Method not found/i.test(String(err?.message || err))) throw err;
-        mockTimeSupport = false;
-    }
-    return mockTimeSupport;
-}
-
 async function nudgeChain() {
     let lag = 0;
     try {
@@ -243,22 +225,6 @@ async function tokenBalance(address, tick) {
 }
 
 /**
- * Navigates to a Betting view from wherever the wallet currently is.
- *
- * Through the command palette rather than the nav rail, because Betting is not
- * a nav destination: it lives inside the Token Actions catalogue, two clicks
- * deep behind More -> More actions. The palette is also the surface a returning
- * user reaches for, so driving it here keeps these entries covered.
- */
-async function gotoPalette(page, title) {
-    await page.keyboard.press('ControlOrMeta+k');
-    const combobox = page.getByRole('combobox').first();
-    await expect(combobox).toBeVisible();
-    await combobox.fill(title);
-    await page.keyboard.press('Enter');
-}
-
-/**
  * Opens the Create-market form ON THIS RUN'S CHAIN.
  *
  * CreateBetFeedForm selects its chain with a NetworkField, which re-defaults to
@@ -274,7 +240,7 @@ async function openCreateMarket(page) {
 }
 
 async function gotoBettingHub(page) {
-    await gotoPalette(page, 'Betting');
+    await openPaletteCommand(page, 'Betting');
     await expect(page.getByRole('button', { name: 'Create market', exact: true }))
         .toBeVisible({ timeout: 30_000 });
     // The HUB has a NetworkField of its own (BetFeedsList), separate from the
@@ -298,17 +264,17 @@ test.describe('BET round trip on regtest', () => {
     // and this venue is shared: when another suite is also driving it the decode
     // and index pipeline runs minutes behind the node, so the per-step waits and
     // this budget are sized for a busy stack rather than an idle one. The budget
-    // also has to cover the WALL-CLOCK deadline wait below, which is what this
-    // spec falls back to on a miner that cannot jump the clock.
+    // also has to cover the WALL-CLOCK deadline wait below, which is how this
+    // spec crosses the deadline.
     test.setTimeout(2_700_000);
 
     test.beforeAll(async () => {
-        // Heal the shared node's clock BEFORE trusting it. This spec pins mocktime
-        // to cross a deadline, and the afterAll below puts it back - but a killed
-        // run (Ctrl-C, a lost preview server, a contended port) never reaches that
-        // teardown, and the next suite then inherits whatever clock was left
-        // behind. `healVenueClock` hands the node back its real clock when real
-        // time is above the tip and only pins when the chain sits in the future,
+        // Heal the shared node's clock BEFORE trusting it. Other suites on this
+        // venue pin mocktime, and a killed run (Ctrl-C, a lost preview server, a
+        // contended port) never reaches its teardown, so the next suite inherits
+        // whatever clock was left behind. `healVenueClock` hands the node back
+        // its real clock when real time is above the tip and only pins when the
+        // chain sits in the future,
         // which is the half that matters here: the deadline below is computed
         // from the CHAIN's clock and validated by the form against the BROWSER's,
         // so a chain left frozen in the past refuses every create with "Betting
@@ -323,13 +289,19 @@ test.describe('BET round trip on regtest', () => {
         // clock does not tick, so every later block carried the frozen instant and
         // the next run pinned again from there. `healVenueClock` releases whenever
         // real time is above the tip, and keeps the pin only for the case it was
-        // written for - a chain this spec has jumped into the future, where
+        // written for - a chain some suite has jumped into the future, where
         // releasing would drop the node under median-time-past and wedge block
         // production for everyone.
         await healVenueClock();
     });
 
     test('a market authored in the wallet takes a bet and pays it out', async ({ page }) => {
+        // Probed before any wallet work: this spec ends on a BET action's
+        // detail, and a venue whose indexer predates a BET table refuses every
+        // such read. A conditional skip, so it runs again once the venue is current.
+        const betGap = await betDetailRefusal();
+        test.skip(!!betGap, `the venue cannot serve BET action detail here. ${betGap}`);
+
         let oracle;
         let punter;
         let feedIndex;
@@ -403,16 +375,9 @@ test.describe('BET round trip on regtest', () => {
 
             // Venue fact 1: from the CHAIN's clock. Far enough out that the bet
             // below lands while the market is still open, short enough that the
-            // jump to close it does not need to be large.
+            // close step's wall-clock wait stays small (see DEADLINE_LEAD_SEC).
             const now = await chainTime();
-            // How far out the deadline goes depends on how it will be CROSSED.
-            // With a clock the miner can jump, a long lead is free and keeps the
-            // bet comfortably inside the open window. Without one the remainder
-            // is paid in wall time, so the lead is the whole cost of the close
-            // step and is sized to be just longer than the bet takes to place
-            // (funding, a mint, two remounts and a signed action: ~5 minutes on
-            // this venue) rather than to be generous.
-            deadlineSec = now + (await supportsMockTime() ? 1_800 : 900);
+            deadlineSec = now + DEADLINE_LEAD_SEC;
             await main.getByLabel('Betting closes').fill(toLocalDateTimeInput(deadlineSec));
 
             await main.getByLabel('Your fee (optional)').fill(FEE_PCT);
@@ -453,7 +418,7 @@ test.describe('BET round trip on regtest', () => {
         await test.step('generate a second address and fund it as the bettor', async () => {
             // Addresses is not on the nav rail (and this layout has no "More"
             // button either), so it is reached the same way a user reaches it.
-            await gotoPalette(page, 'Addresses');
+            await openPaletteCommand(page, 'Addresses');
             await page.getByRole('button', { name: 'Add or import address' }).click();
             await page.getByRole('menuitem', { name: 'Add address' }).click();
             // Generate on THIS RUN'S chain. AddAddressModal carries its own
@@ -560,30 +525,38 @@ test.describe('BET round trip on regtest', () => {
         // the badge disagree with what the market screen then does, the defect is
         // in the wallet and this step is where it shows.
         await test.step('make the bettor the active address, and check it took', async () => {
-            await gotoPalette(page, 'Addresses');
+            await openPaletteCommand(page, 'Addresses');
             await page.getByRole('button', { name: `View address ${punter}` }).click();
-            await page.getByRole('group', { name: 'Address actions' })
-                .getByRole('button', { name: 'Use' }).click();
+            const actions = page.getByRole('group', { name: 'Address actions' });
+            await expect(actions, 'the address screen did not open').toBeVisible({ timeout: 30_000 });
+            // The address screen offers Use only on an address that is not the
+            // chain's active one already. The form picker above can have made the
+            // bettor active, in which case there is nothing to press and the
+            // "Active" badge check below is the precondition that matters.
+            const use = actions.getByRole('button', { name: 'Use' });
+            if (await use.count() > 0) {
+                await use.click();
 
-            // WAIT FOR USE TO FINISH BEFORE NAVIGATING, and this is a race that
-            // really bit: `setAsActive` (AddressList.jsx:820) AWAITS the write
-            // and only then calls `onBack()`, so pressing Use and walking
-            // straight back to Addresses lands there and is knocked to Home by
-            // the late navigation. The click below then waits out its budget on
-            // a screen with no addresses on it. Measured in the whole-suite run
-            // 2026-08-27: this spec passed standalone and failed here, with the
-            // failure screenshot showing HOME, which is the whole tell.
-            // Leaving the detail screen IS the write having completed, so that
-            // is what gets waited on rather than a timeout.
-            await expect(page.getByRole('group', { name: 'Address actions' }),
-                'Use never completed, so the active-address write is still in flight')
-                .toBeHidden({ timeout: 30_000 });
+                // WAIT FOR USE TO FINISH BEFORE NAVIGATING, and this is a race that
+                // really bit: `setAsActive` (AddressList.jsx:820) AWAITS the write
+                // and only then calls `onBack()`, so pressing Use and walking
+                // straight back to Addresses lands there and is knocked to Home by
+                // the late navigation. The click below then waits out its budget on
+                // a screen with no addresses on it. Measured in the whole-suite run
+                // 2026-08-27: this spec passed standalone and failed here, with the
+                // failure screenshot showing HOME, which is the whole tell.
+                // Leaving the detail screen IS the write having completed, so that
+                // is what gets waited on rather than a timeout.
+                await expect(page.getByRole('group', { name: 'Address actions' }),
+                    'Use never completed, so the active-address write is still in flight')
+                    .toBeHidden({ timeout: 30_000 });
 
-            // Use navigates back to Home on success, so the badge has to be read
-            // by walking in again - the same §5 screen fact the WIF-import spec
-            // recorded about this control.
-            await gotoPalette(page, 'Addresses');
-            await page.getByRole('button', { name: `View address ${punter}` }).click();
+                // Use navigates back to Home on success, so the badge has to be read
+                // by walking in again - the same §5 screen fact the WIF-import spec
+                // recorded about this control.
+                await openPaletteCommand(page, 'Addresses');
+                await page.getByRole('button', { name: `View address ${punter}` }).click();
+            }
             await expect(page.getByRole('main').getByText('Active', { exact: true }),
                 'the bettor did not become the active address, so the market screen will '
                 + 'refuse the bet as a self-bet').toBeVisible({ timeout: 15_000 });
@@ -591,7 +564,15 @@ test.describe('BET round trip on regtest', () => {
 
         await test.step('place a bet from the second address', async () => {
             await gotoBettingHub(page);
-            await page.getByRole('button', { name: new RegExp(`#${feedIndex}\\b`) }).click();
+            // The hub reads its market list once per visit, and on the shared
+            // venue that read can draw an HTTP 429; the wallet retries it about
+            // 20 seconds later, which measured 25 ms past a 30 s click budget in
+            // CI. The row is waited for on a budget that covers one throttled
+            // retry before it is clicked.
+            const market = page.getByRole('button', { name: new RegExp(`#${feedIndex}\\b`) });
+            await expect(market, `the betting hub never listed market #${feedIndex}`)
+                .toBeVisible({ timeout: 120_000 });
+            await market.click();
 
             const main = page.getByRole('main');
             // Anchored on a CONTROL, not on the page title: PageHeader renders
@@ -639,26 +620,22 @@ test.describe('BET round trip on regtest', () => {
 
         await test.step('cross the deadline and let the chain latch the market closed', async () => {
             // The latch is written by the end-of-block pass, so it needs blocks
-            // stamped past DEADLINE, not merely a clock that has moved. Two ways
-            // to get one, and which is available is a property of this chain's
-            // miner image rather than of the chain (see supportsMockTime).
-            if (await supportsMockTime()) {
-                await minerRpc('set_mining_time', { max_time: 3_600_000, tx_added_time: 3_600_000 });
-                await minerRpc('set_mock_time', { timestamp: deadlineSec + 120 });
-            } else {
-                // No clock to jump, so the deadline is crossed the way a user's
-                // would be: in real time. A block generated with no mocktime in
-                // force is stamped at the node's wall clock, and this venue's
-                // chain clock tracks it (measured: tip timestamp 78s behind
-                // wall, which is just the age of the last block), so waiting
-                // past DEADLINE and then mining is what stamps a block over it.
-                // Polled rather than slept in one go so a run that is already
-                // past the deadline - the common case, since placing the bet
-                // eats most of the lead - pays nothing.
-                while (Math.floor(Date.now() / 1000) <= deadlineSec + 30) {
-                    await new Promise((r) => setTimeout(r, 5_000));
-                }
+            // stamped past DEADLINE, not merely a clock that has moved. The
+            // deadline is crossed the way a user's would be: in real time
+            // (DEADLINE_LEAD_SEC says why the node clock is never jumped). A
+            // block generated with no mocktime in force is stamped at the
+            // node's wall clock, and this venue's chain clock tracks it
+            // (measured: tip timestamp 78s behind wall, which is just the age
+            // of the last block), so waiting past DEADLINE and then mining is
+            // what stamps a block over it. Polled rather than slept in one go
+            // so a run that is already past the deadline pays nothing.
+            while (Math.floor(Date.now() / 1000) <= deadlineSec + 30) {
+                await new Promise((r) => setTimeout(r, 5_000));
             }
+            // A clock a neighbour pinned during the wait would stamp both
+            // blocks below at the frozen instant, before the deadline, and the
+            // market would never latch.
+            await healVenueClock();
             await minerRpc('generate_blocks', { count: 2 });
 
             const feed = await waitForFeed(feedIndex, (f) => f?.feed_status === 'closed', 'closed');
@@ -667,7 +644,7 @@ test.describe('BET round trip on regtest', () => {
 
         await test.step('resolve from the oracle console and pay the winner', async () => {
             // Back to the oracle address: only the feed's source may resolve.
-            await gotoPalette(page, 'Addresses');
+            await openPaletteCommand(page, 'Addresses');
             await page.getByRole('button', { name: `View address ${oracle}` }).click();
             await page.getByRole('group', { name: 'Address actions' })
                 .getByRole('button', { name: 'Use' }).click();
@@ -679,10 +656,13 @@ test.describe('BET round trip on regtest', () => {
                 'Use never completed, so the active-address write is still in flight')
                 .toBeHidden({ timeout: 30_000 });
 
-            await gotoPalette(page, 'My markets');
+            await openPaletteCommand(page, 'My markets');
 
             const main = page.getByRole('main');
-            await expect(main.getByText(new RegExp(`#${feedIndex}\\b`))).toBeVisible({ timeout: 30_000 });
+            // This list reads the shared explorer too, so it gets the hub's
+            // throttled-retry budget.
+            await expect(main.getByText(new RegExp(`#${feedIndex}\\b`)),
+                `My markets never listed market #${feedIndex}`).toBeVisible({ timeout: 120_000 });
             await main.getByRole('button', { name: 'Resolve', exact: true }).first().click();
             await main.getByRole('button', { name: 'Yes', exact: true }).click();
             await fillPasswordIfPresent(main);
@@ -702,7 +682,10 @@ test.describe('BET round trip on regtest', () => {
             // cannot drift with sampling time.
             const resolved = (feed.timeline || []).find((t) => t.status === 'resolved');
             expect(resolved?.action_index, 'the resolve is an action on the timeline').toBeTruthy();
-            const action = await explorerJson(`action/${resolved.action_index}`);
+            // Through the fixture reader, which throws on an error body: a venue
+            // whose explorer cannot serve this action answers `{error, code}`,
+            // which has no credits and would read as the winner going unpaid.
+            const action = await venueJson(`action/${resolved.action_index}`);
             const credits = (action.credits || []).filter((c) => c.tick === 'XCHAIN');
 
             const toWinner = credits.find((c) => c.address === punter);

@@ -36,6 +36,8 @@
 // Screenshots of each stop land in `test-results/forced-colors/` as the record
 // of the walk.
 
+import { fileURLToPath } from 'node:url';
+
 import {
     createWallet,
     dismissIntroCarousel,
@@ -55,7 +57,9 @@ import {
 // that turns a silent regression here back into a failure.
 test.use({ contextOptions: { forcedColors: 'active' } });
 
-const SHOT_DIR = 'test-results/forced-colors';
+// Anchored to the wallet root: a bare relative path followed the caller's cwd
+// and dropped the shots into whatever checkout launched the run.
+const SHOT_DIR = fileURLToPath(new URL('../../../../test-results/forced-colors', import.meta.url));
 
 /**
  * Fail loudly if the emulation is not on. Everything below would pass
@@ -193,6 +197,9 @@ test.describe('forced-colors: license gate', () => {
 test.describe('forced-colors: onboarding', () => {
     test('intro carousel', async ({ page }) => {
         await page.goto('/');
+        // Wait for the carousel itself: the first paint is the loading splash,
+        // which has nothing focusable, and walking it checks no control.
+        await expect(page.getByRole('button', { name: 'Skip' })).toBeVisible({ timeout: 60_000 });
         // The carousel's pips ring an inner pseudo-element rather than the
         // 24px hit box, which is the shape most likely to be lost in this mode.
         await inspect(page, 'Intro carousel');

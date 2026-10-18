@@ -22,7 +22,7 @@
 //
 // So the lane appears to be unreachable from both sides, while the form's own
 // summary promises it: past the inline cap it renders "Too large for one
-// transaction: deploys as N chunk transactions plus 1 assembling transaction".
+// transaction: publishing requires N chunk transactions plus 1 assembling transaction".
 //
 // This spec exists to settle that by OBSERVATION rather than by reading, which
 // is the campaign's own trust order. It deliberately makes no claim about which
@@ -37,11 +37,13 @@
 
 import { createHash } from 'node:crypto';
 
-import { createWallet, expect, test } from '../../fixtures/wallet.js';
+import { createWallet, expect, openPaletteCommand, test } from '../../fixtures/wallet.js';
 import {
     EXPLORER_URL,
     REGTEST_ADDRESS_RE,
+    REGTEST_CHAIN_LABEL,
     REGTEST_COIN,
+    REGTEST_TICKER,
     fundAddress,
     minerRpc,
     selectVenueChain,
@@ -113,6 +115,9 @@ function uniqueChunkedSource(tag) {
     return `//${'x'.repeat(6102)}\n${MINIMAL_BODY} // ${tag}`;
 }
 
+/** The review screen's summary line; the form stage and the review stage both carry a Publish button, so this is what tells them apart. */
+const REVIEW_SUMMARY = /^Publish contract .*with gas limit/;
+
 const codeHashOf = (source) => createHash('sha256').update(Buffer.from(source, 'utf8')).digest('hex');
 
 /** Every DEPLOY action on chain carrying `codeHash`, newest-first page. */
@@ -174,25 +179,12 @@ async function contractFor(codeHash) {
     return (list?.data || []).find((c) => c.code_hash === codeHash) || null;
 }
 
-async function gotoPalette(page, title) {
-    await page.keyboard.press('ControlOrMeta+k');
-    const dialog = page.getByRole('dialog', { name: 'Command palette' });
-    await expect(dialog, 'the command palette did not open').toBeVisible({ timeout: 15_000 });
-    const combobox = dialog.getByRole('combobox').first();
-    await expect(combobox).toBeEditable({ timeout: 15_000 });
-    await combobox.fill(title);
-    const row = page.getByRole('option', { name: new RegExp(`^${title}\\b`) }).first();
-    await expect(row, `no palette command matching "${title}"`).toBeVisible();
-    await row.click();
-    await expect(dialog).toBeHidden({ timeout: 15_000 });
-}
-
 /** Opens the deploy form from the Contracts route. */
 async function openDeployForm(page) {
-    await gotoPalette(page, 'Contracts');
+    await openPaletteCommand(page, 'Contracts');
     const main = page.getByRole('main');
-    const deploy = main.getByRole('button', { name: /deploy/i }).first();
-    await expect(deploy, 'the Contracts route offers no Deploy control').toBeVisible({ timeout: 30_000 });
+    const deploy = main.getByRole('button', { name: '+ Publish contract', exact: true });
+    await expect(deploy, 'the Contracts route offers no Publish contract control').toBeVisible({ timeout: 30_000 });
     await deploy.click();
     await expect(main.getByLabel('Gas limit'), 'the deploy form did not open')
         .toBeVisible({ timeout: 30_000 });
@@ -250,11 +242,11 @@ test.describe('§11.3: the chunked deploy lane', () => {
             const promise = await main.getByText(/too large for one transaction/i).textContent();
             // eslint-disable-next-line no-console
             console.log(`[§11.3 chunked] the form promises:\n  ${(promise || '').trim()}`);
-            expect(promise, 'the summary does not name a chunk count').toMatch(/deploys as 2 chunk/i);
+            expect(promise, 'the summary does not name a chunk count').toMatch(/requires 2 chunk transactions/i);
         });
 
         await test.step('submit in FULL mode and record which lane runs', async () => {
-            const submit = main.getByRole('button', { name: 'Preview', exact: true }).first();
+            const submit = main.getByRole('button', { name: 'Publish', exact: true }).first();
             const label = (await submit.textContent() || '').trim();
             await submit.click();
 
@@ -262,8 +254,8 @@ test.describe('§11.3: the chunked deploy lane', () => {
             // the plan was honoured: it is the chunked lane's entry point, and in
             // full mode it renders the signing credentials that lane needs.
             const confirm = page.getByTestId('confirm-modal');
-            const review = page.getByRole('button', { name: /^Publish on / });
-            const chunkProgress = page.getByText(/chunk \d+ of \d+|chunking/i);
+            const review = page.getByText(REVIEW_SUMMARY);
+            const chunkProgress = page.getByText(/Publishing \d+ chunk transactions/i);
             const refusal = page.getByRole('alert').filter({ hasText: /\S/ });
             await expect(confirm.or(review).or(chunkProgress).or(refusal).first(),
                 'the form did nothing observable at all after submit')
@@ -306,7 +298,9 @@ test.describe('§11.3: the chunked deploy lane', () => {
         await test.step('the chunked run actually starts from that screen', async () => {
             const password = page.getByLabel('Password', { exact: true });
             if (await password.count() > 0 && await password.isVisible()) await password.fill(PASSWORD);
-            const go = page.getByRole('button', { name: /^Publish on / });
+            await expect(page.getByText(REVIEW_SUMMARY), 'the review screen that starts a chunked run never appeared')
+                .toBeVisible({ timeout: 60_000 });
+            const go = page.getByRole('button', { name: 'Publish', exact: true });
             await expect(go).toBeEnabled({ timeout: 30_000 });
 
             // Each leg must be CONFIRMED and indexed before the next is built, and
@@ -327,11 +321,11 @@ test.describe('§11.3: the chunked deploy lane', () => {
                 // during `submitting`, which is THIS screen. It used to live in the
                 // form-stage JSX, i.e. on a screen the user has already left, so a
                 // multi-minute run showed nothing but a spinning button.
-                await expect(page.getByText(/Deploying \d+ chunk transactions/i).first(),
+                await expect(page.getByText(/Publishing \d+ chunk transactions/i).first(),
                     'the chunked run started but said nothing on the screen it runs on (D-124), or it '
                     + 'never started at all')
                     .toBeVisible({ timeout: 120_000 });
-                const outcome = await page.getByText(/Deploying \d+ chunk transactions/i)
+                const outcome = await page.getByText(/Publishing \d+ chunk transactions/i)
                     .first().textContent().catch(() => null);
                 // eslint-disable-next-line no-console
                 console.log(`[§11.3 chunked] the run reports: ${JSON.stringify((outcome || '').trim().slice(0, 160))}`);
@@ -401,20 +395,22 @@ test.describe('§11.3: the chunked deploy lane', () => {
                 + '(re-derive the padding from chunkHelper.planDeploy)')
                 .toBeVisible({ timeout: 60_000 });
             expect(await promise.textContent(), 'the summary does not name 2 chunks')
-                .toMatch(/deploys as 2 chunk/i);
+                .toMatch(/requires 2 chunk transactions/i);
         });
 
         let doneTxid = null;
 
         await test.step('run all three legs', async () => {
-            await main.getByRole('button', { name: 'Preview', exact: true }).first().click();
+            await main.getByRole('button', { name: 'Publish', exact: true }).first().click();
 
             // The review screen is identified by its SUBMIT button, not by the
             // password field: SignCredentials renders no password box when the
             // vault is already unlocked for the session, and asserting on it
             // cost this spec its first run - a wallet that is behaving
             // correctly simply had nothing to type into.
-            const go = page.getByRole('button', { name: /^Publish on / });
+            await expect(page.getByText(REVIEW_SUMMARY), 'the review screen that starts a chunked run never appeared')
+                .toBeVisible({ timeout: 60_000 });
+            const go = page.getByRole('button', { name: 'Publish', exact: true });
             await expect(go, 'the review screen that starts a chunked run never appeared')
                 .toBeVisible({ timeout: 60_000 });
             const password = page.getByLabel('Password', { exact: true });
@@ -443,7 +439,7 @@ test.describe('§11.3: the chunked deploy lane', () => {
                 // several minutes: the progress copy renders during `submitting`,
                 // which is the review screen. It used to sit in the form-stage
                 // JSX, i.e. on a screen the run has already left.
-                await expect(page.getByText(/Deploying \d+ chunk transactions/i).first(),
+                await expect(page.getByText(/Publishing \d+ chunk transactions/i).first(),
                     'the chunked run said nothing on the screen it runs on (D-124)')
                     .toBeVisible({ timeout: 120_000 });
 
@@ -609,8 +605,10 @@ test.describe('§11.3: the chunked deploy lane', () => {
                 'the padded counter no longer crosses the inline cap')
                 .toBeVisible({ timeout: 60_000 });
 
-            await main.getByRole('button', { name: 'Preview', exact: true }).first().click();
-            const go = page.getByRole('button', { name: /^Publish on / });
+            await main.getByRole('button', { name: 'Publish', exact: true }).first().click();
+            await expect(page.getByText(REVIEW_SUMMARY), 'the review screen that starts a chunked run never appeared')
+                .toBeVisible({ timeout: 60_000 });
+            const go = page.getByRole('button', { name: 'Publish', exact: true });
             await expect(go, 'the review screen never appeared').toBeVisible({ timeout: 60_000 });
             const password = page.getByLabel('Password', { exact: true });
             if (await password.count() > 0 && await password.isVisible()) await password.fill(PASSWORD);
@@ -677,22 +675,26 @@ test.describe('§11.3: the chunked deploy lane', () => {
         });
 
         await test.step('call inc() and read the state the VM wrote', async () => {
-            await gotoPalette(page, 'Contracts');
-            const row = page.getByRole('button', { name: `Contract ${contractIndex}`, exact: true });
+            await openPaletteCommand(page, 'Contracts');
+            await page.getByRole('tab', { name: REGTEST_CHAIN_LABEL, exact: true }).click();
+            // The label is "<meta.name> v<version> (C:<coin>:<index>)"; the list row prefixes it with "Open".
+            const labelPattern = `Wallet Counter v1\\.0\\.0 \\(C:${REGTEST_TICKER}:${contractIndex}\\)`;
+            const rowLabel = new RegExp(`^${labelPattern}$`);
+            const row = page.getByRole('button', { name: new RegExp(`^Open ${labelPattern}$`) });
             await expect(row.first(), 'the deployed contract is not in the list')
                 .toBeVisible({ timeout: 60_000 });
             await row.first().click();
 
             const scope = page.getByRole('main');
-            await expect(page.getByText(`Contract #${contractIndex}`).first())
+            await expect(page.getByRole('heading', { name: rowLabel }).first())
                 .toBeVisible({ timeout: 30_000 });
             await page.getByRole('button', { name: 'Call method', exact: true }).click();
-            // ExecuteContractForm is a SECOND NetworkField, separate from the
-            // deploy form's, and it defaults to Bitcoin like every other one -
-            // so a contract this run deployed on the venue chain would be
-            // executed against Bitcoin, and the compose never opens a confirm
-            // modal. Converting the deploy form alone left this failing here.
-            await selectVenueChain(scope, 'Network');
+            // ExecuteContractForm has no network picker: the contract's own
+            // chain fixes it. The Caller address is what proves the call
+            // signs on the venue chain, and from the address that deployed.
+            await expect(scope.getByLabel('Caller', { exact: true }),
+                `the call form is not signing from this run's ${REGTEST_COIN} address`)
+                .toHaveValue(payer, { timeout: 30_000 });
             await scope.getByLabel('Method', { exact: true }).fill('inc');
             // No gas-limit field: EXECUTE runs at the protocol gas ceiling.
             await scope.getByRole('button', { name: 'Call contract', exact: true }).click();
@@ -797,8 +799,10 @@ test.describe('§11.3: the chunked deploy lane', () => {
             await main.getByLabel('Gas limit').fill(GAS_LIMIT);
             await expect(main.getByText(/too large for one transaction/i)).toBeVisible({ timeout: 60_000 });
 
-            await main.getByRole('button', { name: 'Preview', exact: true }).first().click();
-            const go = page.getByRole('button', { name: /^Publish on / });
+            await main.getByRole('button', { name: 'Publish', exact: true }).first().click();
+            await expect(page.getByText(REVIEW_SUMMARY), 'the review screen that starts a chunked run never appeared')
+                .toBeVisible({ timeout: 60_000 });
+            const go = page.getByRole('button', { name: 'Publish', exact: true });
             await expect(go).toBeVisible({ timeout: 60_000 });
             const password = page.getByLabel('Password', { exact: true });
             if (await password.count() > 0 && await password.isVisible()) await password.fill(PASSWORD);
@@ -877,8 +881,10 @@ test.describe('§11.3: the chunked deploy lane', () => {
             // regression by supplying the value the wallet was supposed to keep.
             expect(resumedGas, 'nothing to submit with').toBe(GAS_LIMIT);
 
-            await main.getByRole('button', { name: 'Preview', exact: true }).first().click();
-            const go = page.getByRole('button', { name: /^Publish on / });
+            await main.getByRole('button', { name: 'Publish', exact: true }).first().click();
+            await expect(page.getByText(REVIEW_SUMMARY), 'the review screen that starts a chunked run never appeared')
+                .toBeVisible({ timeout: 60_000 });
+            const go = page.getByRole('button', { name: 'Publish', exact: true });
             await expect(go).toBeVisible({ timeout: 60_000 });
             const password = page.getByLabel('Password', { exact: true });
             if (await password.count() > 0 && await password.isVisible()) await password.fill(PASSWORD);

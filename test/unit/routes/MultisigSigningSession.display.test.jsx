@@ -98,6 +98,14 @@ afterEach(() => {
 });
 
 describe('MultisigSigningSession contribution display', () => {
+    it('starts with the session list without repeating its interaction as lead copy', async () => {
+        messaging.listMultisigSigningSessions.mockResolvedValue([session()]);
+        render(<MultisigSigningSession walletId="wallet-1" onBack={() => {}} />);
+
+        expect(await screen.findByRole('list', { name: 'Multisig sessions' })).toBeTruthy();
+        expect(screen.queryByText('Pick a session to inspect its contribution state.')).toBeNull();
+    });
+
     it('identifies each signer and states how many signatures remain', async () => {
         await mountAndOpen(session({ signatures: [signature(PK_A)] }));
 

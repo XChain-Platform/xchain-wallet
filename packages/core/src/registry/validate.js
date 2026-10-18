@@ -91,7 +91,7 @@ export const FEE_STRATEGY_NAMES = /** @type {const} */ ([
  * @property {Array<{ id: string, label: string, url: string, iconImg?: string }>} [transactionExplorers] HTTPS transaction URL templates containing `{txid}`
  * @property {EndpointConfig} explorer
  * @property {EndpointConfig} encoder
- * @property {EndpointConfig} hub
+ * @property {EndpointConfig} [hub]
  * @property {string} adsDonationAddress          §36.3 destination for Automatic Donation System output; `ADS_DONATION_ADDRESS_PLACEHOLDER` disables submission
  * @property {{ perTxAmountSats: number, triggerAmountSats: number }} [adsDefaults]  §36.1 per-coin ADS seed values in the chain's base unit; absent = generic ADS_DEFAULT_* fallback
  * @property {string[]} [platformListOwners]      display-only platform list-owner addresses; never consensus
@@ -335,7 +335,9 @@ export function validateChainDescriptor(record) {
     const endpointMsg = 'must be a well-formed https/wss endpoint (http/ws only on regtest or loopback)';
     check(errors, 'explorer', isEndpoint(r.explorer, allowInsecure), endpointMsg);
     check(errors, 'encoder', isEndpoint(r.encoder, allowInsecure), endpointMsg);
-    check(errors, 'hub', isEndpoint(r.hub, allowInsecure), endpointMsg);
+    if (r.hub !== undefined) {
+        check(errors, 'hub', isEndpoint(r.hub, allowInsecure), endpointMsg);
+    }
     check(
         errors,
         'adsDonationAddress',

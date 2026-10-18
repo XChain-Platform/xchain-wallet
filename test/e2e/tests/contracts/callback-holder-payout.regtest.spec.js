@@ -1,6 +1,7 @@
 // Copyright © 2025–2026 Dankest, LLC
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
+import { waitForShownTxid } from '../../fixtures/pendingHistory.js';
 import {
     createWallet,
     expect,
@@ -8,6 +9,7 @@ import {
     LICENSE_ACCEPTED_AT_KEY,
     LICENSE_ACCEPTED_VERSION_KEY,
     mainButton,
+    openPaletteCommand,
     test,
     unlockedShell,
 } from '../../fixtures/wallet.js';
@@ -61,19 +63,6 @@ async function newDevice(browser) {
     return context.newPage();
 }
 
-async function gotoPalette(page, title) {
-    await page.keyboard.press('ControlOrMeta+k');
-    const dialog = page.getByRole('dialog', { name: 'Command palette' });
-    await expect(dialog, 'the command palette did not open').toBeVisible({ timeout: 15_000 });
-    const combobox = dialog.getByRole('combobox').first();
-    await expect(combobox).toBeEditable({ timeout: 15_000 });
-    await combobox.fill(title);
-    const row = dialog.getByRole('option', { name: new RegExp(`^${title}\\b`) }).first();
-    await expect(row, `no command matching "${title}"`).toBeVisible();
-    await row.click();
-    await expect(dialog).toBeHidden({ timeout: 15_000 });
-}
-
 async function approveAndReadTxid(page, what, { typedCallback = false } = {}) {
     await expectConfirmModal(page, what, 90_000);
     if (typedCallback) {
@@ -91,22 +80,19 @@ async function approveAndReadTxid(page, what, { typedCallback = false } = {}) {
         .toBeEnabled({ timeout: 120_000 });
     await approve.click();
 
-    const main = page.getByRole('main');
-    await expect(main, `${what} did not show a transaction id`)
-        .toContainText(/[0-9a-f]{64}/, { timeout: 180_000 });
-    const txid = (await main.innerText()).match(/\b[0-9a-f]{64}\b/)?.[0];
-    expect(txid, `${what} result had no transaction id`).toBeTruthy();
-    return txid;
+    return waitForShownTxid(page.getByRole('main'), {
+        timeout: 180_000,
+        message: `${what} did not show a transaction id`,
+    });
 }
 
 async function openManageToken(page) {
-    await page.getByRole('button', { name: 'Open menu' }).click();
-    await page.getByRole('button', { name: 'My tokens', exact: true }).click();
+    await openPaletteCommand(page, 'My tokens');
     const main = page.getByRole('main');
     const search = main.getByLabel('Search your tokens by ticker or description');
     await expect(search, 'My Tokens did not render').toBeVisible({ timeout: 30_000 });
     await search.fill(TICK);
-    const row = main.getByRole('button', { name: new RegExp(`^${TICK}\\b`) }).first();
+    const row = main.getByRole('button', { name: `Open ${TICK} token details`, exact: true }).first();
     await expect(row, `${TICK} is missing from My Tokens`).toBeVisible({ timeout: 60_000 });
     await row.click();
     await expect(main.getByRole('heading', { name: TICK, exact: true }))
@@ -143,26 +129,37 @@ async function openExecuteCallbackWhenConfigured(page, timeoutMs = 180_000) {
 }
 
 async function readCurrentHeight(main) {
-    const hint = main.getByText(/^Current block on /);
+    const hint = main.getByText(/^Current block: /);
     await expect(hint, 'Callback settings did not show the current block')
         .toBeVisible({ timeout: 30_000 });
     const text = await hint.innerText();
-    const match = text.match(/Current block on [^:]+:\s*([\d,]+)\./);
+    const match = text.match(/Current block:\s*([\d,]+)\./);
     expect(match, `could not parse the current block from: ${text}`).toBeTruthy();
     return Number(match[1].replace(/,/g, ''));
 }
 
+/**
+ * Mines until the INDEXER's processed height (`last_block`) reaches `target`.
+ *
+ * The callback form refuses before review while the wallet's indexer
+ * watermark is below the token's callback block ("Callback is not allowed
+ * until block N. The network is at M."), and that watermark is `last_block`,
+ * which trails `chain_tip` by a few blocks while the indexer catches up. A
+ * wait on the node's tip alone opens the form that short of the block.
+ */
 async function mineToHeight(target, timeoutMs = 300_000) {
     const deadline = Date.now() + timeoutMs;
-    let tip = -1;
+    let tip = null;
+    let indexed = null;
     while (Date.now() < deadline) {
-        await nudgeChain();
-        const status = await explorerJson('status');
+        const status = await explorerJson('status').catch(() => null);
         tip = Number(status?.chain_tip?.[REGTEST_COIN]);
-        if (Number.isFinite(tip) && tip >= target) return tip;
+        indexed = Number(status?.last_block?.[REGTEST_COIN]);
+        if (Number.isFinite(indexed) && indexed >= target) return indexed;
+        if (!Number.isFinite(tip) || tip < target) await nudgeChain();
         await new Promise((resolve) => setTimeout(resolve, 2_000));
     }
-    throw new Error(`chain tip never reached block ${target}; last seen ${tip}`);
+    throw new Error(`the indexer never reached block ${target} (chain tip ${tip}, indexed ${indexed})`);
 }
 
 async function waitForExactBalance(address, tick, expected, timeoutMs = 300_000) {
@@ -233,7 +230,7 @@ test.describe(`holder-payout callback on ${REGTEST_CHAIN_LABEL}`, () => {
         });
 
         await test.step('issue the token and configure its holder payout', async () => {
-            await gotoPalette(ownerPage, 'Issue token');
+            await openPaletteCommand(ownerPage, 'Issue token');
             let main = ownerPage.getByRole('main');
             await expect(main.getByLabel('Ticker')).toBeVisible({ timeout: 30_000 });
             await selectVenueChain(main);
@@ -294,7 +291,6 @@ test.describe(`holder-payout callback on ${REGTEST_CHAIN_LABEL}`, () => {
             const ownerXchainBefore = await tokenBalance(owner, PAYOUT_TICK);
             const holderXchainBefore = await tokenBalance(holder, PAYOUT_TICK);
             const expectedHolderPayout = HOLDER_UNITS * PAYOUT_AMOUNT;
-            const expectedOwnerXchainAfter = ownerXchainBefore - expectedHolderPayout;
             expect(holderXchainBefore).toBe(0);
 
             await mineToHeight(callbackBlock);
@@ -318,6 +314,21 @@ test.describe(`holder-payout callback on ${REGTEST_CHAIN_LABEL}`, () => {
             const callback = await waitForValidAction(txid);
             expect(callback.action).toBe('CALLBACK');
             expect(callback.source).toBe(owner);
+
+            // CALLBACK carries a unified-gas protocol fee (CALLBACK_BASE plus a
+            // per-recipient term). On Bitcoin it is paid from the owner's XCHAIN
+            // balance, so the owner loses the payout AND the fee. The fee is read
+            // off the chain's own record of this action rather than hard-coded,
+            // since the gas schedule is protocol data, and summed in millionths
+            // so a binary float cannot turn 41 - 0.051 into 40.948999.
+            const fee = callback.fee || {};
+            const xchainFee = String(fee.tick || '').toUpperCase() === PAYOUT_TICK
+                ? Number(fee.amount || 0) : 0;
+            expect(Number.isFinite(xchainFee) && xchainFee >= 0,
+                `the CALLBACK fee record is unreadable: ${JSON.stringify(callback.fee)}`).toBe(true);
+            const micro = (n) => Math.round(n * 1e6);
+            const expectedOwnerXchainAfter = (micro(ownerXchainBefore) - micro(expectedHolderPayout)
+                - micro(xchainFee)) / 1e6;
 
             const callbackRows = await explorerJson(`callbacks/${TICK}/token`);
             expect((callbackRows?.data || []).some((row) => row.tx_hash === txid)).toBe(true);

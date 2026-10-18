@@ -8,16 +8,18 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
+import { t } from '../../i18n/index.js';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { NativeFeeToggle } from '../components/NativeFeeToggle.jsx';
 import { NATIVE_FEE_WARNING } from '../../sdk/nativeFeePreflight.js';
 import { submitFailureMessage } from '../utils/submitFailureMessage.js';
-import { AddressField, AddressText, Button, ChainBadge, FeeSelector, FormPage, Icon, Input, NetworkField, PageHeader, Screen, Select, StatusMessage, Textarea } from '@xchain-wallet/core/ui';
+import { AddressField, AddressText, Button, ChainPicker, FeeSelector, FieldNote, FormNotice, FormPage, Icon, Input, PageHeader, Screen, Select, StatusMessage, Textarea } from '@xchain-wallet/core/ui';
 import {
     registry as registryLib,
     decoder as decoderLib,
 } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
+import { useDemoGuard } from '../hooks/useDemoGuard.jsx';
 import { useGatedTickNotice } from '../hooks/useGatedTickNotice.js';
 import { useActionConfirmFlow, useConfirmSubmit, isUserRejection } from '../hooks/useActionConfirmFlow.js';
 import { ActionConfirmScreen } from '../components/ActionConfirmScreen.jsx';
@@ -126,6 +128,7 @@ const ACTIONS_WITH_DEDICATED_FORMS = dedicatedFormActions({
  */
 export function AdvancedActionsForm({ walletId, onBack, hasDexSurface = true }) {
     const { messaging, shell } = useMessaging();
+    const demoGuard = useDemoGuard(walletId, { onBack });
     const signerReady = useSignerReady(walletId);
     const variant = screenVariantFor(shell);
 
@@ -199,7 +202,7 @@ export function AdvancedActionsForm({ walletId, onBack, hasDexSurface = true }) 
                 setActiveByChain(active || {});
                 if (Object.keys(byChain || {}).length === 0) {
                     setLoadError(
-                        'No addresses on any chain yet. Use Receive to generate one before authoring an action.',
+                        'No addresses on any network yet. Use Receive to generate one before authoring an action.',
                     );
                     return;
                 }
@@ -553,6 +556,8 @@ export function AdvancedActionsForm({ walletId, onBack, hasDexSurface = true }) 
         setStage('form');
     }
 
+        // Name the action in words on the review stage, as the queued and success copy do.
+        const actionLabelLower = actionDisplayLabel(action).toLowerCase() || 'action';
         const header = (
         <PageHeader
             onBack={stage === 'review'
@@ -560,12 +565,12 @@ export function AdvancedActionsForm({ walletId, onBack, hasDexSurface = true }) 
                 : onBack}
             backDisabled={stage === 'submitting'}
             title={stage === 'review' || stage === 'submitting'
-                    ? `Review ${action || 'action'}`
+                    ? `Review ${actionLabelLower}`
                     : 'Advanced action'}
         />
     );
     const wrap = (children) => (
-        <Screen variant={variant} header={header}>
+        <Screen variant={variant} header={header} restoreScroll={!(stage === 'review' || stage === 'submitting')}>
             {children}
         </Screen>
     );
@@ -580,7 +585,7 @@ export function AdvancedActionsForm({ walletId, onBack, hasDexSurface = true }) 
         );
     }
     if (loadError) {
-        return wrap(<StatusMessage variant="error" className={styles.error}>{loadError}</StatusMessage>);
+        return wrap(<StatusMessage variant="error">{loadError}</StatusMessage>);
     }
     if (!addressesByChain || !chainId) {
         return wrap(<p className={styles.hint}>Loading…</p>);
@@ -629,10 +634,11 @@ export function AdvancedActionsForm({ walletId, onBack, hasDexSurface = true }) 
     if (stage === 'review' || stage === 'submitting') {
         return wrap(
             <FormPage
+                demoGuard={demoGuard}
                 label="Review advanced action"
                 onSubmit={handleSubmit}
                 status={(isWatcherMode || isHwSource) && submitError ? (
-                    <StatusMessage variant="error" className={styles.error}>{submitError}</StatusMessage>
+                    <StatusMessage variant="error">{submitError}</StatusMessage>
                 ) : null}
                 actions={(
                     <Button
@@ -648,19 +654,15 @@ export function AdvancedActionsForm({ walletId, onBack, hasDexSurface = true }) 
                         }
                     >
                         {isWatcherMode
-                            ? `Create unsigned transaction: ${action || 'action'}`
+                            ? `Create unsigned transaction: ${actionLabelLower}`
                             : isHwSource
-                                ? `Sign on ${fromAddress.source === 'trezor' ? 'Trezor' : 'Ledger'}: ${action || 'action'}`
-                                : `Sign${descriptor ? ` on ${descriptor.displayName}` : ''}: ${action || 'action'}`}
+                                ? `Sign on ${fromAddress.source === 'trezor' ? 'Trezor' : 'Ledger'}: ${actionLabelLower}`
+                                : `Sign: ${actionLabelLower}`}
                     </Button>
                 )}
             >
                 <p className={styles.summary}>{decoded?.summary}</p>
                 <dl className={styles.detailsList}>
-                    <dt className={styles.detailsLabel}>Chain</dt>
-                    <dd className={styles.detailsValue}>
-                        {descriptor ? <ChainBadge descriptor={descriptor} size="sm" /> : chainId}
-                    </dd>
                     <dt className={styles.detailsLabel}>From</dt>
                     <dd className={styles.detailsValue}>
                         <AddressText address={fromAddress.address} />
@@ -676,16 +678,10 @@ export function AdvancedActionsForm({ walletId, onBack, hasDexSurface = true }) 
                     />
                 </dl>
                 {payFeeInNativeCoin ? (
-                    <div role="alert" className={styles.warnings}>
-                        <p className={styles.warning}>{NATIVE_FEE_WARNING}</p>
-                    </div>
+                    <FormNotice variant="warning" role="alert">{NATIVE_FEE_WARNING}</FormNotice>
                 ) : null}
                 {decoded && decoded.warnings.length > 0 ? (
-                    <div role="alert" className={styles.warnings}>
-                        {decoded.warnings.map((w, i) => (
-                            <p key={i} className={styles.warning}>{w}</p>
-                        ))}
-                    </div>
+                    <FormNotice variant="warning" role="alert" lines={decoded.warnings} />
                 ) : null}
                 {isWatcherMode ? (
                     <p className={styles.hint}>
@@ -721,7 +717,6 @@ export function AdvancedActionsForm({ walletId, onBack, hasDexSurface = true }) 
             <ActionConfirmScreen
                 confirmAction={actionConfirm.confirmAction}
                 screenVariant={variant}
-                chainLabel={descriptor?.displayName || chainId}
                 feeText={feeEstimate?.coinAmount
                     ? `Network fee: ${feeEstimate.coinAmount} ${coinTicker}`.trim()
                     : undefined}
@@ -759,10 +754,11 @@ export function AdvancedActionsForm({ walletId, onBack, hasDexSurface = true }) 
     // stage === 'compose'
     return wrap(
         <FormPage
+            demoGuard={demoGuard}
             label="Compose advanced action"
             onSubmit={handleReview}
             status={formError ? (
-                <StatusMessage variant="error" className={styles.error}>{formError}</StatusMessage>
+                <StatusMessage variant="error">{formError}</StatusMessage>
             ) : null}
             actions={(
                 <Button
@@ -777,7 +773,7 @@ export function AdvancedActionsForm({ walletId, onBack, hasDexSurface = true }) 
                 </Button>
             )}
         >
-            <NetworkField value={chainId} onChange={handleChainChange} chainIds={chainsWithAddresses.length ? chainsWithAddresses : (chainId ? [chainId] : [])} chainRegistry={chainRegistry} />
+            <ChainPicker label="Network" value={chainId} onChange={handleChainChange} chainIds={chainsWithAddresses.length ? chainsWithAddresses : (chainId ? [chainId] : [])} chainRegistry={chainRegistry} hideNetworkKind />
 
             {fromAddress ? (
                 <AddressField
@@ -790,9 +786,9 @@ export function AdvancedActionsForm({ walletId, onBack, hasDexSurface = true }) 
                     iconLabel="Choose source address"
                 />
             ) : (
-                <StatusMessage variant="error" className={styles.error}>
-                    No address on this chain. Use Receive to generate one first.
-                </StatusMessage>
+                <FormNotice variant="error">
+                    {t('send.source.noAddress')}
+                </FormNotice>
             )}
 
             <Select
@@ -813,22 +809,22 @@ export function AdvancedActionsForm({ walletId, onBack, hasDexSurface = true }) 
             </Select>
 
             {action === 'SEND' || action === 'BATCH' ? (
-                <div role="alert" className={styles.warnings}>
-                    <p className={styles.warning}>
-                        Token-gated content rule: a SEND of a tick with active gated files is
-                        REJECTED by the network unless it rides in a BATCH with a MESSAGE v2
-                        handing the unlock key to the same destination. This raw form composes
-                        exactly what you type and does not add that pairing; use the Send form
-                        for gated tokens unless you are building the BATCH yourself.
-                    </p>
-                    {gatedRawNotice.gated ? (
-                        <p className={styles.warning}>
-                            {String(values.TICK || '').trim().toUpperCase()} HAS active gated
-                            content ({gatedRawNotice.packCount} pack{gatedRawNotice.packCount === 1 ? '' : 's'}):
-                            a bare SEND of it will be rejected.
-                        </p>
-                    ) : null}
-                </div>
+                <FormNotice
+                    variant="warning"
+                    role="alert"
+                    lines={[
+                        'Token-gated content rule: a SEND of a tick with active gated files is '
+                            + 'REJECTED by the network unless it rides in a BATCH with a MESSAGE v2 '
+                            + 'handing the unlock key to the same destination. This raw form composes '
+                            + 'exactly what you type and does not add that pairing; use the Send form '
+                            + 'for gated tokens unless you are building the BATCH yourself.',
+                        ...(gatedRawNotice.gated
+                            ? [`${String(values.TICK || '').trim().toUpperCase()} HAS active gated content `
+                                + `(${gatedRawNotice.packCount} pack${gatedRawNotice.packCount === 1 ? '' : 's'}): `
+                                + 'a bare SEND of it will be rejected.']
+                            : []),
+                    ]}
+                />
             ) : null}
 
             {action && formats && Object.keys(formats).length > 1 ? (
@@ -888,13 +884,7 @@ export function AdvancedActionsForm({ walletId, onBack, hasDexSurface = true }) 
             })}
 
             {validation && !validation.valid && validation.errors.length > 0 ? (
-                <div role="alert" className={styles.warnings}>
-                    {validation.errors.map((err, i) => (
-                        <p key={i} className={styles.warning}>
-                            {formatValidationError(err)}
-                        </p>
-                    ))}
-                </div>
+                <FieldNote variant="warning" role="alert" lines={validation.errors.map((err) => formatValidationError(err))} />
             ) : null}
 
             {feeTiers ? (

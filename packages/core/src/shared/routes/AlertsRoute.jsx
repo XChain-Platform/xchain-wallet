@@ -103,7 +103,7 @@ export function AlertsRoute({ onBack, walletId, alerts = [] }) {
             </span>
             <Button
                 variant="secondary"
-                size="sm"
+                size="md"
                 icon={null}
                 disabled={unreadAlerts.length === 0}
                 onClick={() => {
@@ -121,7 +121,7 @@ export function AlertsRoute({ onBack, walletId, alerts = [] }) {
             </Button>
             <Button
                 variant="ghost"
-                size="sm"
+                size="md"
                 icon={null}
                 data-alert-focus="clear"
                 onClick={() => {

@@ -241,7 +241,14 @@ export function PairSignerForm({
             backDisabled={stage === 'saving'}
             title="Pair hardware signer"
             trailing={onOpenInTab && (stage === 'vendor' || stage === 'error') ? (
-                <Button variant="ghost" size="sm" onClick={onOpenInTab}>Open in tab</Button>
+                <Button
+                    variant="ghost"
+                    size="sm"
+                    icon={<Icon.ExternalLinkIcon />}
+                    onClick={onOpenInTab}
+                    aria-label="Open in tab"
+                    title="Open in tab"
+                />
             ) : null}
         />
     );
@@ -270,7 +277,6 @@ export function PairSignerForm({
                 ) : notice ? <StatusMessage variant="success">{notice}</StatusMessage> : null}
             >
                 <StepIndicator current={1} />
-                <p className={styles.stageHint}>Which kind of device are you pairing?</p>
                 {pairedSigners.length > 0 ? (
                     <PairedDeviceList
                         records={pairedSigners}
@@ -390,9 +396,10 @@ export function PairSignerForm({
         <FormPage
             label="Confirm hardware signer"
             onSubmit={handleSave}
-            status={error ? (
-                <StatusMessage variant="error" className={styles.error}>{error}</StatusMessage>
-            ) : null}
+            status={[
+                error ? <StatusMessage variant="error">{error}</StatusMessage> : null,
+                verdict ? <FirmwareBanner key="firmware" verdict={verdict} vendor={pairingInfo?.vendor} /> : null,
+            ]}
             actions={(
                 <>
                     <Button variant="ghost" onClick={handleCancel} disabled={stage === 'saving'}>
@@ -410,9 +417,6 @@ export function PairSignerForm({
             )}
         >
             <StepIndicator current={3} />
-            <p className={styles.stageHint}>
-                Confirm the device you just paired.
-            </p>
             <dl className={styles.detailsList}>
                 <dt className={styles.detailsLabel}>Vendor</dt>
                 <dd className={styles.detailsValue}>{labelFor(pairingInfo?.vendor)}</dd>
@@ -429,7 +433,6 @@ export function PairSignerForm({
                     <code className={styles.code}>{pairingInfo?.deviceIdentifier}</code>
                 </dd>
             </dl>
-            {verdict ? <FirmwareBanner verdict={verdict} vendor={pairingInfo?.vendor} /> : null}
             <Input
                 label="Label"
                 hint="Shows wherever this signer appears in the UI."
@@ -459,12 +462,12 @@ function isPairingCancellation(err) {
 
 function FirmwareBanner({ verdict, vendor }) {
     if (verdict.status === 'ok') return null;
-    const variantClass = verdict.status === 'vulnerable' || verdict.status === 'unsupported'
-        ? styles.errorBanner
-        : styles.warningBanner;
+    const tone = verdict.status === 'vulnerable' || verdict.status === 'unsupported'
+        ? 'error'
+        : 'warning';
     const updateUrl = safeHttpUrl(verdict.updateUrl);
     return (
-        <StatusMessage variant="error" className={variantClass}>
+        <StatusMessage variant={tone} role="alert">
             <p className={styles.bannerDetail}>
                 {verdict.status === 'unsupported'
                     ? firmwareUpdateAdvice(vendor, verdict.recommended)

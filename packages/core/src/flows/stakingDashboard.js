@@ -184,12 +184,13 @@ function lifecycleBlock(row, lower, upper) {
  *
  * @param {any} row
  * @param {number|string|null|undefined} height
- * @returns {'active'|'pending'|'inactive'|'invalid'|'unknown'}
+ * @returns {'active'|'pending'|'inactive'|'invalid'|'unknown'|'unexpected'}
  */
 export function stakingRowState(row, height) {
     if (!row || typeof row !== 'object') return 'invalid';
     const status = String(row.status ?? row.STATUS ?? '').trim().toLowerCase();
-    if (status && !['valid', 'active', 'open'].includes(status)) return 'invalid';
+    if (/^(invalid|rejected|completed|inactive)(?::|$)/.test(status)) return 'invalid';
+    if (status && !['valid', 'active', 'open'].includes(status)) return 'unexpected';
 
     const activation = lifecycleBlock(row, 'activation_block', 'ACTIVATION_BLOCK');
     const deactivation = lifecycleBlock(row, 'deactivation_block', 'DEACTIVATION_BLOCK');
@@ -201,6 +202,12 @@ export function stakingRowState(row, height) {
     if (activation !== null && activation > tip) return 'pending';
     if (deactivation !== null && deactivation <= tip) return 'inactive';
     return 'active';
+}
+
+/** Return a positive lifecycle height from either explorer field casing. */
+export function stakingActivationBlock(row) {
+    const block = lifecycleBlock(row, 'activation_block', 'ACTIVATION_BLOCK');
+    return block !== null && Number.isFinite(block) && block > 0 ? block : null;
 }
 
 /** Keep rows effective at the indexed tip, with compatibility fallbacks. */
@@ -274,6 +281,45 @@ export function cooldownStatus({ unstake, height, coin } = {}) {
         endBlock,
         maturityEstimate: estimateBlockDate({ coin, currentHeight: current, targetBlock: endBlock }),
     };
+}
+
+/**
+ * Countdown until a newly committed stake becomes active and can be unstaked.
+ *
+ * @param {object} args
+ * @param {{ activation_block?: number | string | null }} args.stake
+ * @param {number | string | null | undefined} args.height
+ * @param {string | null | undefined} [args.coin]
+ * @returns {{ state: 'unlocked'|'locked'|'unknown', blocksRemaining: number|null, endBlock: number|null, maturityEstimate: Date|null }}
+ */
+export function stakingLockStatus({ stake, height, coin } = {}) {
+    const endBlock = stakingActivationBlock(stake);
+    const current = height == null || height === '' ? NaN : Number(height);
+    if (endBlock === null || !Number.isFinite(current)) {
+        return { state: 'unknown', blocksRemaining: null, endBlock, maturityEstimate: null };
+    }
+    const blocksRemaining = endBlock - current;
+    if (blocksRemaining <= 0) {
+        return { state: 'unlocked', blocksRemaining: 0, endBlock, maturityEstimate: null };
+    }
+    return {
+        state: 'locked',
+        blocksRemaining,
+        endBlock,
+        maturityEstimate: estimateBlockDate({ coin, currentHeight: current, targetBlock: endBlock }),
+    };
+}
+
+/** Plain-language activation countdown for a locked stake. */
+export function stakingLockText(status) {
+    if (!status || status.state !== 'locked') return null;
+    const blocks = status.blocksRemaining;
+    const plural = blocks === 1 ? 'block' : 'blocks';
+    if (!status.maturityEstimate) return `Locked: ${blocks} ${plural} to go`;
+    const when = status.maturityEstimate.toLocaleDateString(undefined, {
+        month: 'short', day: 'numeric',
+    });
+    return `Locked: ${blocks} ${plural} to go (~${when})`;
 }
 
 /**

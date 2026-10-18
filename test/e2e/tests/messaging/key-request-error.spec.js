@@ -73,8 +73,8 @@
 // WHAT WOULD BE FALSE IF THIS PASSED VACUOUSLY. Four things, each guarded:
 //   - "an error is shown" would pass on the missing-key banner itself, which is
 //     a `role="alert"` on screen BEFORE the button is pressed. `pressOutcome`
-//     reads only the banner's DESCENDANTS, which is where the key request's own
-//     answer renders, and the pre-press state is asserted to carry no failure.
+//     reads only the banner's block minus the banner itself, which is where the
+//     key request's own answer renders, and the pre-press state is asserted to carry no failure.
 //   - "something appeared" would pass instantly on the fee readout further down
 //     the form, which is a permanent `role="status"`. Same scoping answers it,
 //     and it matters more than it looks: an outcome wait that passes at once
@@ -121,13 +121,13 @@ const UNKNOWN_RECIPIENT = 'bc1qw508d6qejxtdg4y5r3zarvary0c5xw7kv8f3t4';
 /**
  * Opens a fresh compose screen.
  *
- * SCREEN FACT: "New conversation" is the Messaging inbox's trailing header
- * button (`MessagingInbox.jsx` renders it as an icon with no visible text, so
- * its accessible name is the only handle on it).
+ * SCREEN FACT: the Messaging inbox offers compose once: "New conversation"
+ * in its actions row when it lists conversations, or the empty state's "New
+ * message" when it has none (a fresh wallet).
  */
 async function gotoNewConversation(page) {
     await gotoSection(page, 'Messaging');
-    const compose = page.getByRole('button', { name: 'New conversation' });
+    const compose = page.getByRole('main').getByRole('button', { name: /^(New conversation|New message)$/ });
     await expect(compose, 'no "New conversation" entry point on the Messaging screen')
         .toBeVisible({ timeout: 30_000 });
     await compose.click();
@@ -147,6 +147,15 @@ function missingPubkeyBanner(scope) {
     return scope.getByRole('alert').filter({ hasText: "don't know the recipient's public key" });
 }
 
+/**
+ * The block the banner heads: the banner message, then the key-request button
+ * and whatever the press reports, each as its own shared status message below
+ * the banner rather than nested inside it.
+ */
+function keyRequestBlock(scope) {
+    return missingPubkeyBanner(scope).locator('xpath=..');
+}
+
 function requestButton(scope) {
     return scope.getByRole('button', { name: /Request encrypted session/i });
 }
@@ -157,11 +166,11 @@ async function alertText(scope) {
 }
 
 /**
- * Whatever the press itself put on screen: the alert or status INSIDE the
- * missing-key banner, which is where `ComposeMessage` renders both the key
- * request's failure and its "Key request sent" confirmation.
+ * Whatever the press itself put on screen: the alert or status in the
+ * missing-key banner's block, which is where `ComposeMessage` renders both the
+ * key request's failure and its "Key request sent" confirmation.
  *
- * Scoped to the banner's descendants for two reasons, and both were live
+ * Scoped to the banner's block for two reasons, and both were live
  * mistakes in this file before it went green. The banner is itself a
  * `role="alert"` that exists before anything is pressed, so a page-wide read
  * lets the box supply the answer the button was supposed to give. And the fee
@@ -170,8 +179,9 @@ async function alertText(scope) {
  * assertions after it are racing the async handler rather than waiting for it.
  */
 function pressOutcome(scope) {
-    const banner = missingPubkeyBanner(scope);
-    return banner.getByRole('alert').or(banner.getByRole('status'));
+    const block = keyRequestBlock(scope);
+    return block.getByRole('alert').filter({ hasNotText: "don't know the recipient's public key" })
+        .or(block.getByRole('status'));
 }
 
 /** Fills the recipient and waits for the handshake button to be reachable. */

@@ -11,6 +11,7 @@ import { markDemoWallet, clearDemoWalletId } from '../../../packages/core/src/fl
 import { MessagingContext } from '../../../packages/core/src/shared/MessagingContext.js';
 import { ActionConfirmScreen } from '../../../packages/core/src/shared/components/ActionConfirmScreen.jsx';
 import { ActionIntentSummary } from '../../../packages/core/src/shared/components/ActionIntentSummary.jsx';
+import { ActivityRow } from '../../../packages/core/src/shared/components/ActivityRow.jsx';
 import { AdsNotice } from '../../../packages/core/src/shared/components/AdsNotice.jsx';
 import { AlertsOverlay } from '../../../packages/core/src/shared/components/AlertsOverlay.jsx';
 import { AmountField } from '../../../packages/core/src/shared/components/AmountField.jsx';
@@ -18,13 +19,13 @@ import { AppHeader } from '../../../packages/core/src/shared/components/AppHeade
 import { BackupReminderCard } from '../../../packages/core/src/shared/components/BackupReminderCard.jsx';
 import { BalanceChanges } from '../../../packages/core/src/shared/components/BalanceChanges.jsx';
 import { BalanceList } from '../../../packages/core/src/shared/components/BalanceList.jsx';
+import { BalancesUncheckedState } from '../../../packages/core/src/shared/components/BalancesUncheckedState.jsx';
 import { BottomTabBar } from '../../../packages/core/src/shared/components/BottomTabBar.jsx';
 import { CollectiblesView } from '../../../packages/core/src/shared/components/CollectiblesView.jsx';
 import { ConfirmActionModal } from '../../../packages/core/src/shared/components/ConfirmActionModal.jsx';
 import { ConfirmModal } from '../../../packages/core/src/shared/components/ConfirmModal.jsx';
 import { ContactsPickerScreen } from '../../../packages/core/src/shared/components/ContactsPickerScreen.jsx';
 import { ContractConsentPanel } from '../../../packages/core/src/shared/components/ContractConsentPanel.jsx';
-import { DemoBanner } from '../../../packages/core/src/shared/components/DemoBanner.jsx';
 import { DemoExitConfirm } from '../../../packages/core/src/shared/components/DemoExitConfirm.jsx';
 import { DerivationPathCrossCheck } from '../../../packages/core/src/shared/components/DerivationPathCrossCheck.jsx';
 import { DiagnosticDetails } from '../../../packages/core/src/shared/components/DiagnosticDetails.jsx';
@@ -32,6 +33,7 @@ import { DispenserBadge, __clearDispenserBadgeCache } from '../../../packages/co
 import { DraftDiscardButton } from '../../../packages/core/src/shared/components/DraftDiscardButton.jsx';
 import { EmptyStateNudge } from '../../../packages/core/src/shared/components/EmptyStateNudge.jsx';
 import { GatedFileViewer } from '../../../packages/core/src/shared/components/GatedFileViewer.jsx';
+import { HeaderActionMenu } from '../../../packages/core/src/shared/components/HeaderActionMenu.jsx';
 import { HeaderSettingsButton } from '../../../packages/core/src/shared/components/HeaderSettingsButton.jsx';
 import { HomeFilterBar } from '../../../packages/core/src/shared/components/HomeFilterBar.jsx';
 import { HomeTabs } from '../../../packages/core/src/shared/components/HomeTabs.jsx';
@@ -41,6 +43,7 @@ import { KeyQR } from '../../../packages/core/src/shared/components/KeyQR.jsx';
 import { LayoutModeToggle } from '../../../packages/core/src/shared/components/LayoutModeToggle.jsx';
 import { LearnNote } from '../../../packages/core/src/shared/components/LearnNote.jsx';
 import { LeftNav } from '../../../packages/core/src/shared/components/LeftNav.jsx';
+import { ListToolbar } from '../../../packages/core/src/shared/components/ListToolbar.jsx';
 import { ListPickerScreen } from '../../../packages/core/src/shared/components/ListPickerScreen.jsx';
 import { LockedTokenContext } from '../../../packages/core/src/shared/components/LockedTokenContext.jsx';
 import { LogConsole } from '../../../packages/core/src/shared/components/LogConsole.jsx';
@@ -112,7 +115,24 @@ const fixtures = [
             simulation={{ deltas: [{ tick: 'BTC', before: '2', after: '1' }] }}
         />
     )],
-    ['AdsNotice', () => <AdsNotice onContinue={noop} isFull />],
+    ['ActivityRow', () => (
+        <ul>
+            <li>
+                <ActivityRow
+                    chainId="bitcoin-mainnet"
+                    tick="BTC"
+                    isNative
+                    label="Sent"
+                    context="bc1qexampleexampleexampleexampleexample0"
+                    amount="-0.01 BTC"
+                    status="confirmed"
+                    timestamp={1700000000}
+                    onClick={noop}
+                />
+            </li>
+        </ul>
+    )],
+    ['AdsNotice', () => <AdsNotice onContinue={noop} />],
     ['AlertsOverlay', () => (
         <AlertsOverlay
             alerts={[{
@@ -159,6 +179,9 @@ const fixtures = [
             divisibility: 8,
         }]} onSelectToken={noop} />
     )],
+    ['BalancesUncheckedState', () => (
+        <BalancesUncheckedState onRetry={noop} onReceive={noop} />
+    )],
     ['BottomTabBar', () => (
         <BottomTabBar currentView="home" onSelect={noop} onLock={noop} onOpenSettings={noop} />
     )],
@@ -204,7 +227,6 @@ const fixtures = [
             <ContractConsentPanel manifest={{ status: 'declared', permissions: ['SEND'], maxTakeBps: 100 }} />
         </dl>
     )],
-    ['DemoBanner', () => withMessaging(<DemoBanner activeWalletId="demo-wallet" />)],
     ['DemoExitConfirm', () => (
         <DemoExitConfirm busy={false} error={null} onConfirm={noop} onCancel={noop} />
     )],
@@ -236,6 +258,13 @@ const fixtures = [
             declaredType="text/plain"
             plaintextBase64="SGVsbG8sIHdhbGxldC4="
             onClose={noop}
+        />
+    )],
+    ['HeaderActionMenu', () => (
+        <HeaderActionMenu
+            onCommandPalette={noop}
+            onScan={noop}
+            onManageAddresses={noop}
         />
     )],
     ['HeaderSettingsButton', () => (
@@ -305,6 +334,9 @@ const fixtures = [
             onSelect={noop}
             onBack={noop}
         />
+    )],
+    ['ListToolbar', () => (
+        <ListToolbar query="" onQueryChange={noop} searchLabel="Search items" />
     )],
     ['LockedTokenContext', () => <LockedTokenContext chainId="bitcoin-mainnet" tick="XCHAIN" />],
     ['LogConsole', () => <LogConsole />],

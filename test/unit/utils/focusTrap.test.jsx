@@ -139,6 +139,36 @@ function OpenerHarness({ autoFocusInside = false }) {
     );
 }
 
+function RemovedOpenerHarness() {
+    const [open, setOpen] = useState(false);
+    const [finished, setFinished] = useState(false);
+    const ref = useRef(null);
+    useFocusTrap(ref, { active: open });
+    if (finished) {
+        return <main><h1>Destination</h1></main>;
+    }
+    return (
+        <div>
+            <button data-testid="removed-opener" onClick={() => setOpen(true)}>open</button>
+            {open ? (
+                <div ref={ref} role="dialog">
+                    <button onClick={() => { setOpen(false); setFinished(true); }}>continue</button>
+                </div>
+            ) : null}
+        </div>
+    );
+}
+
+function ContainerInitialHarness() {
+    const ref = useRef(null);
+    useFocusTrap(ref, { active: true, initialFocusRef: ref });
+    return (
+        <div ref={ref} role="dialog" aria-modal="true" aria-label="Scanner" tabIndex={-1}>
+            <button type="button">Back to wallet</button>
+        </div>
+    );
+}
+
 function FocusLayer({ name, onClose, children }) {
     const ref = useRef(null);
     useFocusTrap(ref, { active: true });
@@ -181,6 +211,12 @@ describe('useFocusTrap opener handling', () => {
         fireEvent.click(screen.getByTestId('inside'));
         await flush();
         expect(document.activeElement).toBe(opener);
+    });
+
+    it('prefers the first meaningful control when the requested target is the dialog', async () => {
+        render(<ContainerInitialHarness />);
+        await flush();
+        expect(screen.getByRole('button', { name: 'Back to wallet' })).toHaveFocus();
     });
 
     it.each([
@@ -228,6 +264,21 @@ describe('useFocusTrap opener handling', () => {
         fireEvent.click(screen.getByTestId('inside'));
         await flush();
         expect(document.activeElement).toBe(opener);
+    });
+
+    it('focuses the destination heading when the opener is removed on close', async () => {
+        render(<RemovedOpenerHarness />);
+        const opener = screen.getByTestId('removed-opener');
+        opener.focus();
+        fireEvent.click(opener);
+        await flush();
+
+        fireEvent.click(screen.getByRole('button', { name: 'continue' }));
+        await flush();
+
+        const heading = screen.getByRole('heading', { name: 'Destination' });
+        expect(heading).toHaveFocus();
+        expect(heading).toHaveAttribute('tabindex', '-1');
     });
 
     it('does not pull focus back when something else claimed it on close', async () => {

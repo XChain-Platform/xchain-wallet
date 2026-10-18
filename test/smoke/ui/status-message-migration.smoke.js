@@ -17,15 +17,13 @@
 // are written down, because a residual `role="alert"` is otherwise
 // indistinguishable from one the sweep simply missed:
 //
-//   (a) warning-styled rows. `<StatusMessage>` ships status / error /
-//       success and has no `warning`. Its `error` variant paints solid
-//       `--xc-danger` with white text, so migrating an amber
-//       `.warnings` container would silently promote every warning on the
-//       send path into an error. Those keep their own markup until the
-//       primitive grows a fourth variant.
-//   (b) rows carrying `data-testid`. `<StatusMessage>` has no pass-through
-//       for it, and the confirm-refusal / psbt-undecodable hooks are what
-//       the fail-closed regression tests query.
+//   (a) retired: the route forms' warning boxes (`styles.warnings`) now render
+//       through the primitive's warning variant, which takes a `role` override
+//       so an interrupting warning keeps role="alert". The skip below stays for
+//       any warning-named class a component still owns.
+//   (b) rows carrying `data-testid` that have not moved yet. The primitive
+//       takes the hook as its `testId` prop; the confirm-refusal /
+//       psbt-undecodable hooks are what the fail-closed regression tests query.
 //   (c) rows carrying inline `style`. Migrating drops the bespoke palette
 //       rather than translating it; that is a per-row design call, not a
 //       mechanical one.
@@ -33,8 +31,10 @@
 //       name: they need bespoke role layouts.
 //   (e) alert-role PANELS rather than message rows: block children (a
 //       heading, several paragraphs, a button group). `<StatusMessage>`
-//       wraps its children in a `<span>`, so a panel migrated through it
-//       would put block content inside inline content.
+//       now wraps its children in a block body, so a paragraph-per-line
+//       warning fits; a panel with a heading and controls still stays out.
+//   (f) field errors. These use the compact shared Input error row because
+//       the control references the message through `aria-describedby`.
 //
 // Static source-analysis smoke, matching error-recovery-sweep.smoke.js.
 
@@ -89,14 +89,15 @@ for (const f of adopters) {
     );
 }
 
-// --- 3. carve-out (a): no warning-styled row wears the error variant ---
+// --- 3. warning-styled message rows use the warning variant ------------
 
 for (const el of elements) {
     const cls = /className=\{styles\.([A-Za-z0-9_]+)\}/.exec(el.attrs);
-    assert.ok(
-        !cls || !/warn/i.test(cls[1]),
-        `${el.file}: <StatusMessage> carries the warning-styled class \`${cls && cls[1]}\`; `
-        + 'the primitive has no warning variant, so its error styling would recolour a warning as an error',
+    if (!cls || !/warn/i.test(cls[1])) continue;
+    assert.match(
+        el.attrs,
+        /variant="warning"/,
+        `${el.file}: a warning-styled <StatusMessage> must use variant="warning"`,
     );
 }
 
@@ -128,6 +129,7 @@ for (const f of files) {
         if (!/role="alert"/.test(tag)) continue;
         if (/style=/.test(tag)) continue;                                    // (c)
         if (/data-testid/.test(tag)) continue;                               // (b)
+        if (/className=\{inputStyles\.error\}/.test(tag)) continue;          // (f)
         const cls = /className=\{styles\.([A-Za-z0-9_]+)\}/.exec(tag);
         if (cls && /warn/i.test(cls[1])) continue;                           // (a)
         // (e): peek at the body. A row whose children are block elements is a
@@ -147,9 +149,9 @@ assert.deepEqual(
 // --- 6. named call sites, so a wholesale revert cannot pass -----------
 
 const named = {
-    'packages/core/src/shared/components/TokenField.jsx': /<StatusMessage variant="error" id=\{errorId\} className=\{styles\.error\}>\{error\}<\/StatusMessage>/,
+    'packages/core/src/shared/components/TokenField.jsx': /<div id=\{errorId\} className=\{inputStyles\.error\} role="alert">\{error\}<\/div>/,
     'packages/core/src/shared/routes/ResumeConfirm.jsx': /<StatusMessage variant="error">\{error\}<\/StatusMessage>/,
-    'packages/core/src/shared/routes/Send.jsx': /<StatusMessage variant="error" className=\{styles\.error\}>\{loadError\}<\/StatusMessage>/,
+    'packages/core/src/shared/routes/Send.jsx': /<StatusMessage variant="error">\{loadError\}<\/StatusMessage>/,
 };
 for (const [path, re] of Object.entries(named)) {
     const f = files.find((x) => x.path === path);
@@ -159,25 +161,37 @@ for (const [path, re] of Object.entries(named)) {
 
 // --- 7. the carve-outs are still real, not stale -----------------------
 
-// Send.jsx is the canonical warning-styled surface: if `.warnings` ever stops
-// being amber-on-amber the (a) carve-out should be revisited, not inherited.
-const sendCss = readFileSync(join(shared, 'routes/Send.module.css'), 'utf8');
-assert.match(
-    sendCss,
-    /\.warnings \{[^}]*--xc-warning/s,
-    'Send.module.css.warnings no longer keys off --xc-warning; revisit carve-out (a)',
-);
+// The four warning-box copies (Send, TokenWizard, IssueTokenForm and
+// ActionIntentSummary) are gone: their warnings render through the primitive.
+for (const path of [
+    'routes/Send.module.css',
+    'routes/TokenWizard.module.css',
+    'routes/IssueTokenForm.module.css',
+    'components/ActionIntentSummary.module.css',
+]) {
+    const css = readFileSync(join(shared, path), 'utf8');
+    assert.ok(
+        !/^\.(warnings|warning)\s*\{/m.test(css),
+        `${path} draws its own warning box again; render the warning through <StatusMessage variant="warning">`,
+    );
+}
 
-// StatusMessage still ships exactly three variants, which is why (a) exists.
+// StatusMessage owns the complete semantic status set.
 const primitive = readFileSync(join(root, 'packages/core/src/ui/StatusMessage.jsx'), 'utf8');
 assert.match(
     primitive,
-    /'status' \| 'error' \| 'success'/,
-    'StatusMessage variant set changed; re-run the sweep against the new variants',
+    /'status' \| 'info' \| 'warning' \| 'error' \| 'success'/,
+    'StatusMessage must expose info, warning, error and success variants',
 );
-assert.ok(
-    !/data-testid/.test(primitive),
-    'StatusMessage grew a data-testid pass-through; carve-out (b) can now be swept',
+assert.match(
+    primitive,
+    /data-testid=\{testId\}/,
+    'StatusMessage takes a test hook as its testId prop',
+);
+assert.match(
+    primitive,
+    /role: roleOverride/,
+    'StatusMessage lets a caller keep role="alert" on a warning',
 );
 
 // The banner owns its colours. Callers pass `className` for layout, and ten
@@ -187,10 +201,10 @@ assert.ok(
 // public tester saw "a blank red bar", 2026-09-02). Compound selectors keep
 // the variant colours above any single-class caller override.
 const primitiveCss = readFileSync(join(root, 'packages/core/src/ui/StatusMessage.module.css'), 'utf8');
-for (const variant of ['status', 'error', 'success']) {
+for (const variant of ['status', 'info', 'warning', 'error', 'success']) {
     assert.match(
         primitiveCss,
-        new RegExp(`^\\.row\\.${variant} \\{`, 'm'),
+        new RegExp(`^\\.row\\.${variant}(?:,| \\{)`, 'm'),
         `StatusMessage.module.css paints the ${variant} variant through the compound .row.${variant} selector`,
     );
     assert.ok(

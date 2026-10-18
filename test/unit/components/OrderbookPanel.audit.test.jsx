@@ -84,6 +84,8 @@ describe('OrderbookPanel market display', () => {
         expect(priceHeader).toHaveAttribute('scope', 'col');
         expect(priceHeader.className).toContain('numeric');
         expect(bids.querySelectorAll('th[scope="col"]')).toHaveLength(3);
+        // The book stays a three-column table on a phone, never stacked rows.
+        expect(bids.className).toContain('keepColumns');
 
         expect(screen.getByText('Buy bids')).toBeInTheDocument();
         expect(screen.getByText('Sell asks')).toBeInTheDocument();
@@ -166,14 +168,15 @@ describe('OrderbookPanel market display', () => {
 });
 
 describe('market data table semantics', () => {
-    it('stacks labeled cells below 600px', () => {
+    it('stacks labeled cells below 600px unless a table keeps its columns', () => {
         const css = readFileSync(
             'packages/core/src/shared/components/DataTable.module.css',
             'utf8',
         );
 
         expect(css).toMatch(/@media not all and \(min-width: 600px\)/);
-        expect(css).toMatch(/\.table \.cell\s*\{[\s\S]*display: grid/);
+        expect(css).toMatch(/\.table:not\(\.keepColumns\) \.cell\s*\{[\s\S]*display: grid/);
+        expect(css).toMatch(/\.keepColumns \.cell,[\s\S]*white-space: nowrap/);
         expect(css).toMatch(/content: attr\(data-label\)/);
     });
 
@@ -193,6 +196,9 @@ describe('market data table semantics', () => {
 
         const table = await screen.findByRole('table', { name: 'Recent trades' });
         expect(table.querySelectorAll('th[scope="col"]')).toHaveLength(4);
+        expect(table.className).toContain('keepColumns');
+        // The Time heading sits over its right-aligned times.
+        expect(screen.getByRole('columnheader', { name: 'Time' }).className).toContain('numeric');
         expect(screen.getByRole('columnheader', { name: 'Price' }).className).toContain('numeric');
         expect(table.querySelector('td[data-label="Size (XCHAIN)"]').className).toContain('numeric');
     });

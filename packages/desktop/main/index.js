@@ -40,12 +40,17 @@
 //     cache is silently disabled; the user re-enters their password
 //     every launch rather than having the key written insecurely.
 
-import { app, BrowserWindow, Menu, ipcMain, powerMonitor, safeStorage, screen, session, shell, Notification } from 'electron';
+// First import on purpose: the test network guard must be in place before
+// any other module evaluates (see networkGuardBoot.js). Off unless a test
+// harness sets XCHAIN_TEST_NETWORK_GUARD or --xchain-test-network-guard.
+import { networkGuard, runNetworkGuardProbeAndExit } from './networkGuardBoot.js';
+import { app, BrowserWindow, Menu, ipcMain, powerMonitor, safeStorage, screen, session, shell, Notification, Tray } from 'electron';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import { registry as registryLib, sdk as sdkLib } from '@xchain-wallet/core';
 import { WALLET_VERSION } from '@xchain-wallet/core/buildInfo.js';
+import { logConsole } from '@xchain-wallet/core/shared/utils/logConsole.js';
 import * as sdkModule from 'xchain-sdk';
 
 import { IPC_CHANNEL } from './messageHost.js';
@@ -58,7 +63,7 @@ import { FileUnlockThrottleStore, unlockThrottlePathFor } from './unlockThrottle
 import { FileAutoLockStore, autoLockStatePathFor } from './autoLockState.js';
 import {
     attachRendererCspHeaders,
-    isHttpUrl,
+    allowlistedExternalUrl,
     hasNoIpcArguments,
     isValidDesktopIpcMessage,
     normalizeOpenWindowArgs,
@@ -83,6 +88,7 @@ import {
     runMainTask,
 } from './errorBoundary.js';
 import { stateChangeForMessage } from './multiWindowState.js';
+import { createQuitDeferral, isQuitDeferringMessage } from './quitGuard.js';
 import {
     FileWindowBoundsStore,
     MIN_WINDOW_BOUNDS,
@@ -109,6 +115,8 @@ import {
     wipeRuntimeStores,
 } from './runtime.js';
 
+logConsole.attach();
+
 const here = dirname(fileURLToPath(import.meta.url));
 installProcessErrorHandlers();
 
@@ -117,6 +125,12 @@ installProcessErrorHandlers();
 // `win.loadFile(...)` target in createWindow: they are the same directory
 // said twice, and a drift between them locks the app out of its own IPC.
 const APP_ROOT = join(here, '..', 'renderer', 'dist');
+// Pinch zoom may magnify but never shrink below 1: a lower floor lets
+// Chromium show the page at that scale, which widens the layout viewport past
+// the window so the fixed-height shell fills only part of it and the whole
+// document scrolls.
+const MIN_VISUAL_ZOOM_LEVEL = 1;
+const MAX_VISUAL_ZOOM_LEVEL = 3;
 
 /**
  * Sender-trust gate for the privileged IPC channels, bound to this app's
@@ -143,6 +157,7 @@ let rememberedWindowBounds = /** @type {{ x?: number, y?: number, width: number,
 let windowBoundsSaveTimer = /** @type {ReturnType<typeof setTimeout> | null} */ (null);
 let isQuitting = false;
 let canCreateWindows = false;
+let tray = /** @type {Tray | null} */ (null);
 
 // The latest deep link no renderer has claimed yet (see forwardDeepLink).
 const deepLinkSlot = createDeepLinkSlot();
@@ -152,6 +167,10 @@ const deepLinkSlot = createDeepLinkSlot();
 let deepLinkRecipient = null;
 // Windows opened on a pinned view (open-window), which never take a deep link.
 const detachedWindows = /** @type {WeakSet<BrowserWindow>} */ (new WeakSet());
+// Windows whose close is under way. Electron tears a closing window down
+// after its 'close' event, and showing it in that gap (a renderer load the
+// close aborted reports failure there) crashes the main process.
+const closingWindows = /** @type {WeakSet<BrowserWindow>} */ (new WeakSet());
 
 // §9.7 / G007: boot-time chain-registry sync promise. Main owns the
 // network fetch (the renderer CSP pins connect-src 'self'); the verified
@@ -279,16 +298,18 @@ function hardenWebContents(contents) {
         }
         // Open real external links in the user's browser, never in a
         // preload-bearing Electron window.
-        if (isHttpUrl(url)) {
-            void runMainTask(() => shell.openExternal(url), 'external link open');
+        const externalUrl = allowlistedExternalUrl(url);
+        if (externalUrl) {
+            void runMainTask(() => shell.openExternal(externalUrl), 'external link open');
         }
         return { action: 'deny' };
     });
     contents.on('will-navigate', (event, url) => {
         if (shouldBlockNavigation(url, APP_ROOT)) {
             event.preventDefault();
-            if (isHttpUrl(url)) {
-                void runMainTask(() => shell.openExternal(url), 'external navigation open');
+            const externalUrl = allowlistedExternalUrl(url);
+            if (externalUrl) {
+                void runMainTask(() => shell.openExternal(externalUrl), 'external navigation open');
             }
         }
     });
@@ -349,17 +370,24 @@ function hasVisibleWindow() {
 
 /**
  * Apply the native close-button convention without interfering with an
- * explicit application quit.
+ * explicit application quit. Only the last visible primary window hides,
+ * which keeps the app in the dock or tray; any other window closes for
+ * real, because a hidden one would stay alive with its renderer running
+ * until quit and could later be revealed after the user dismissed it.
  *
  * @param {BrowserWindow} win
  * @param {{ preventDefault: () => void }} event
- * @param {{ platform?: string, quitting?: boolean }} [options]
+ * @param {{ platform?: string, quitting?: boolean, otherVisible?: boolean, detached?: boolean }} [options]
  * @returns {boolean} true when the close becomes a hide
  */
 export function applyWindowCloseConvention(win, event, options = {}) {
     const platform = options.platform ?? process.platform;
     const quitting = options.quitting ?? isQuitting;
-    if (platform !== 'darwin' || quitting) return false;
+    if (!['darwin', 'win32', 'linux'].includes(platform) || quitting) return false;
+    const otherVisible = options.otherVisible
+        ?? liveWindows().some((other) => other !== win && other.isVisible());
+    const detached = options.detached ?? detachedWindows.has(win);
+    if (otherVisible || detached) return false;
     event.preventDefault();
     win.hide();
     return true;
@@ -395,7 +423,26 @@ function forwardDeepLink(event) {
     const target = pickDeepLinkTarget(live, BrowserWindow.getFocusedWindow(), (w) => detachedWindows.has(w));
     // Only detached windows are open: a fresh window claims the link on mount
     if (!target) {
-        if (canCreateWindows) void runMainTask(openWindowAfterIdleCheck, 'deep-link window open');
+        if (canCreateWindows) {
+            // A dock or tray restore already in flight owns the next window;
+            // hand the link to it instead of racing a second window open.
+            const pendingRestore = reopenInFlight;
+            if (!pendingRestore) {
+                void runMainTask(openWindowAfterIdleCheck, 'deep-link window open');
+            } else {
+                void runMainTask(() => pendingRestore.then(() => {
+                    const current = pickDeepLinkTarget(
+                        liveWindows(),
+                        BrowserWindow.getFocusedWindow(),
+                        (w) => detachedWindows.has(w),
+                    );
+                    if (!current) return openWindowAfterIdleCheck();
+                    current.webContents.send('xchain:uri', event);
+                    revealWindow(current);
+                    return undefined;
+                }), 'deep-link window open');
+            }
+        }
         return;
     }
     deepLinkRecipient = target.webContents;
@@ -540,6 +587,7 @@ export function createWindow(opts = {}) {
             nodeIntegration: false,
             sandbox: true,
             webSecurity: true,
+            zoomFactor: 1,
             // A console in the shipped wallet invites "paste this to fix
             // your wallet" scams against a page that holds unlocked keys;
             // the mobile shells ship with WebView debugging off for the
@@ -548,6 +596,13 @@ export function createWindow(opts = {}) {
         },
         show: false,
     });
+    void runMainTask(
+        () => win.webContents.setVisualZoomLevelLimits(
+            MIN_VISUAL_ZOOM_LEVEL,
+            MAX_VISUAL_ZOOM_LEVEL,
+        ),
+        'window zoom limits',
+    );
 
     // Renderer is built into packages/desktop/renderer/dist by Step 19's
     // packaging pipeline (vite build). In packaged mode that's what
@@ -557,10 +612,10 @@ export function createWindow(opts = {}) {
     void runMainTask(
         () => win.loadFile(join(APP_ROOT, 'index.html'), loadOpts),
         'renderer load',
-        { recover: () => { if (!win.isDestroyed()) win.show(); } },
+        { recover: () => { if (!win.isDestroyed() && !closingWindows.has(win)) win.show(); } },
     );
     win.once('ready-to-show', () => {
-        runMainCallback(() => { if (!win.isDestroyed()) win.show(); }, 'renderer reveal');
+        runMainCallback(() => { if (!win.isDestroyed() && !closingWindows.has(win)) win.show(); }, 'renderer reveal');
     });
     win.on('move', () => { runMainCallback(() => rememberWindowBounds(win), 'window move'); });
     win.on('resize', () => { runMainCallback(() => rememberWindowBounds(win), 'window resize'); });
@@ -570,7 +625,11 @@ export function createWindow(opts = {}) {
             // Synchronous: on quit the process can exit before an async write
             // lands, which left window-bounds.json holding stale values.
             flushWindowBoundsSync();
-            if (applyWindowCloseConvention(win, event) && !hasVisibleWindow()) {
+            if (!applyWindowCloseConvention(win, event)) closingWindows.add(win);
+            // Hidden or closing, this window no longer counts as one in use.
+            // A hidden window elsewhere keeps window-all-closed from firing,
+            // so the windowless idle check starts here.
+            if (!isQuitting && !liveWindows().some((other) => other !== win && other.isVisible())) {
                 startWindowlessIdleLock();
             }
         }, 'window close');
@@ -651,7 +710,13 @@ let reopenInFlight = /** @type {Promise<void> | null} */ (null);
 let runUpdaterCheck = /** @type {null | (() => Promise<void>)} */ (null);
 let updaterCheckInFlight = /** @type {Promise<void> | null} */ (null);
 let updateCheckVisible = false;
-let activeWalletOperations = 0;
+// Sends that sign and then broadcast or persist; reads are never counted.
+let activeSendOperations = 0;
+let activeUpdateDownloads = 0;
+const quitDeferral = createQuitDeferral({
+    isBusy: () => activeSendOperations > 0 || activeUpdateDownloads > 0,
+    quit: () => app.quit(),
+});
 
 function requestUpdateCheck({ visible = false } = {}) {
     if (!runUpdaterCheck) return Promise.resolve();
@@ -760,6 +825,46 @@ function restoreWindowAfterIdleCheck() {
 }
 
 /**
+ * Keep a Windows or Linux app reachable after its last window is hidden.
+ * macOS uses the dock's activate event for the same transition.
+ *
+ * @param {{ platform?: string }} [options]
+ * @returns {Tray | null}
+ */
+export function installTray({ platform = process.platform } = {}) {
+    if (platform === 'darwin' || tray) return tray;
+    tray = new Tray(join(here, '..', 'build', 'icon.png'));
+    tray.setToolTip(DESKTOP_PRODUCT_NAME);
+    tray.setContextMenu(Menu.buildFromTemplate([
+        {
+            label: `Show ${DESKTOP_PRODUCT_NAME}`,
+            click: () => { void restoreWindowAfterIdleCheck(); },
+        },
+        { type: 'separator' },
+        { role: 'quit' },
+    ]));
+    tray.on('click', () => { void restoreWindowAfterIdleCheck(); });
+    return tray;
+}
+
+/**
+ * Reload only the focused renderer so the main-process vault, signer pool, and
+ * cached session keep the same unlocked state across Cmd/Ctrl+R.
+ *
+ * @param {BrowserWindow | undefined} menuWindow
+ * @param {boolean} [ignoreCache]
+ * @returns {boolean}
+ */
+export function reloadRendererWindow(menuWindow, ignoreCache = false) {
+    const target = menuWindow ?? BrowserWindow.getFocusedWindow();
+    const contents = target?.webContents;
+    if (!contents || contents.isDestroyed?.()) return false;
+    if (ignoreCache) contents.reloadIgnoringCache();
+    else contents.reload();
+    return true;
+}
+
+/**
  * Wire the application menu. File > New Window runs the idle-lock gate;
  * direct-download builds also expose a visible update check, and every
  * platform can open the version-pinned native About panel.
@@ -820,8 +925,16 @@ export function installApplicationMenu({
         {
             label: '&View',
             submenu: [
-                { role: 'reload' },
-                { role: 'forceReload' },
+                {
+                    label: 'Reload',
+                    accelerator: 'CmdOrCtrl+R',
+                    click: (_item, win) => { reloadRendererWindow(win); },
+                },
+                {
+                    label: 'Force Reload',
+                    accelerator: 'CmdOrCtrl+Shift+R',
+                    click: (_item, win) => { reloadRendererWindow(win, true); },
+                },
                 ...(app.isPackaged ? [] : [{ role: 'toggleDevTools' }]),
                 { type: 'separator' },
                 { role: 'resetZoom' },
@@ -835,8 +948,8 @@ export function installApplicationMenu({
             label: '&Window',
             submenu: [
                 { role: 'minimize' },
-                { role: 'zoom' },
                 ...(isMac ? [
+                    { role: 'zoom' },
                     { type: 'separator' },
                     { role: 'front' },
                 ] : [
@@ -901,6 +1014,12 @@ function ensureRendererCspHeaders() {
 
 void runMainTask(async () => {
     await app.whenReady();
+    // Before anything in main can fetch or open a window.
+    networkGuard.attachSession(session.defaultSession, 'default session');
+    if (networkGuard.probe) {
+        await runNetworkGuardProbeAndExit();
+        return;
+    }
     ensureRendererCspHeaders();
 
     windowBoundsStore = new FileWindowBoundsStore(windowBoundsPathFor(app.getPath('userData')));
@@ -980,7 +1099,7 @@ void runMainTask(async () => {
                 lastUpdaterEvent = event;
                 broadcastToWindows('xchain:updater', event);
             },
-            canRestart: () => activeWalletOperations === 0,
+            canRestart: () => activeSendOperations === 0,
         });
         downloadAndInstall = downloadUpdate;
         restartAndInstall = restart;
@@ -1022,7 +1141,15 @@ void runMainTask(async () => {
                 return { ok: true };
             }
             if (action === 'restart') return await restartAndInstall();
-            return await downloadAndInstall();
+            // Counted so a quit during the fetch or signature check waits
+            // for the verdict instead of cutting it off.
+            activeUpdateDownloads += 1;
+            try {
+                return await downloadAndInstall();
+            } finally {
+                activeUpdateDownloads -= 1;
+                quitDeferral.settle();
+            }
         } catch (error) {
             reportMainFailure('updater IPC action', error);
             return { ok: false, reason: 'desktop: update action failed' };
@@ -1050,7 +1177,8 @@ void runMainTask(async () => {
                 error: { name: 'Error', message: 'desktop: runtime not initialized' },
             };
         }
-        activeWalletOperations += 1;
+        const holdsQuit = isQuitDeferringMessage(message);
+        if (holdsQuit) activeSendOperations += 1;
         try {
             const response = await handleIpcMessage(runtime, message);
             const change = stateChangeForMessage(message, response);
@@ -1063,7 +1191,10 @@ void runMainTask(async () => {
                 error: { name: 'Error', message: 'desktop: message handling failed' },
             };
         } finally {
-            activeWalletOperations -= 1;
+            if (holdsQuit) {
+                activeSendOperations -= 1;
+                quitDeferral.settle();
+            }
         }
     });
 
@@ -1181,6 +1312,7 @@ void runMainTask(async () => {
     // moment the renderer focuses.
     buildApplicationMenu();
     canCreateWindows = true;
+    installTray();
     createWindow();
 
     app.on('activate', () => {
@@ -1188,6 +1320,11 @@ void runMainTask(async () => {
     });
 }, 'desktop startup', {
     recover: () => {
+        networkGuard.attachSession(session.defaultSession, 'default session');
+        if (networkGuard.probe) {
+            app.exit(1);
+            return;
+        }
         ensureRendererCspHeaders();
         canCreateWindows = true;
         if (liveWindows().length === 0) createWindow();
@@ -1196,13 +1333,23 @@ void runMainTask(async () => {
 
 app.on('window-all-closed', () => {
     runMainCallback(() => {
-        if (process.platform !== 'darwin') { app.quit(); return; }
-        // macOS keeps the app, and with it the open vault, alive with no window.
+        // Keep the vault alive for dock, tray, or second-instance reopening.
         startWindowlessIdleLock();
     }, 'all windows closed');
 });
 
-app.on('before-quit', () => {
+app.on('before-quit', (event) => {
+    // A send can be between signing and persistence, and an update download
+    // can be between its network fetch and signature verdict. Hold the quit
+    // until that work settles or the deadline passes, then quit on our own;
+    // a repeated quit request or SIGTERM during the wait rides the same
+    // clock, so quit always completes.
+    const deferral = quitDeferral.request();
+    if (deferral) {
+        event?.preventDefault();
+        if (deferral === 'defer') void restoreWindowAfterIdleCheck();
+        return;
+    }
     // Zero the master key + close the encrypted doc. The OS already
     // treats process-exit memory as freed, but explicit zeroing catches
     // cases where a GC'd buffer might otherwise linger until
@@ -1212,6 +1359,8 @@ app.on('before-quit', () => {
         isQuitting = true;
         stopWindowlessIdleLock();
         flushWindowBoundsSync();
+        tray?.destroy();
+        tray = null;
         if (runtime) tearDownHost(runtime);
     }, 'desktop shutdown');
 });

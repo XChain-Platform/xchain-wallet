@@ -22,6 +22,8 @@
 // MultisigConfig this flow writes.
 
 import { buildMultisigConfig } from '../schemas/multisigConfig.js';
+import { defaultRegistry } from '../registry/index.js';
+import { isCompressedPublicKey, validateCosignerXpub } from '../shared/utils/multisigXpub.js';
 
 /**
  * @typedef {Object} CosignerInput
@@ -83,23 +85,45 @@ export async function createMultisigConfig(opts) {
         );
     }
 
+    const descriptor = defaultRegistry().get(opts.chainId);
+    if (!descriptor || descriptor.coin !== 'bitcoin') {
+        throw new Error(`createMultisigConfig: chainId "${opts.chainId}" is not a Bitcoin network`);
+    }
+
     // Cosigner shape sanity: surface clear errors before we hit the
     // schema validator with a half-formed record.
+    const seenPubkeys = new Set();
     opts.cosigners.forEach((c, i) => {
-        const tag = `cosigners[${i}]`;
+        const tag = `Cosigner ${i + 1}`;
         if (!c || typeof c !== 'object') throw new Error(`createMultisigConfig: ${tag} must be an object`);
-        if (typeof c.name !== 'string' || c.name.length === 0) throw new Error(`createMultisigConfig: ${tag}.name is required`);
-        if (typeof c.pubkey !== 'string' || !/^[0-9a-fA-F]+$/.test(c.pubkey)) throw new Error(`createMultisigConfig: ${tag}.pubkey must be hex`);
-        if (typeof c.fingerprint !== 'string' || !/^[0-9a-fA-F]{8}$/.test(c.fingerprint)) throw new Error(`createMultisigConfig: ${tag}.fingerprint must be 8 hex chars`);
-        if (!['local', 'external-xpub', 'external-hardware'].includes(c.origin)) throw new Error(`createMultisigConfig: ${tag}.origin must be local | external-xpub | external-hardware`);
+        if (typeof c.name !== 'string' || c.name.length === 0) throw new Error(`createMultisigConfig: ${tag} name is required`);
+        if (!isCompressedPublicKey(c.pubkey)) {
+            throw new Error(`createMultisigConfig: ${tag} public key must be a 33-byte compressed secp256k1 key in hex`);
+        }
+        const normalizedPubkey = c.pubkey.toLowerCase();
+        if (seenPubkeys.has(normalizedPubkey)) {
+            throw new Error(`createMultisigConfig: ${tag} duplicates an earlier cosigner public key`);
+        }
+        seenPubkeys.add(normalizedPubkey);
+        if (typeof c.fingerprint !== 'string' || !/^[0-9a-fA-F]{8}$/.test(c.fingerprint)) throw new Error(`createMultisigConfig: ${tag} fingerprint must be 8 hex chars`);
+        if (!['local', 'external-xpub', 'external-hardware'].includes(c.origin)) throw new Error(`createMultisigConfig: ${tag} origin must be local | external-xpub | external-hardware`);
         if (c.origin === 'local' && (typeof c.localSignerId !== 'string' || c.localSignerId.length === 0)) {
-            throw new Error(`createMultisigConfig: ${tag}.localSignerId is required when origin='local'`);
+            throw new Error(`createMultisigConfig: ${tag} localSignerId is required when origin='local'`);
         }
         if (c.origin === 'external-xpub' && (typeof c.xpub !== 'string' || c.xpub.length === 0)) {
-            throw new Error(`createMultisigConfig: ${tag}.xpub is required when origin='external-xpub'`);
+            throw new Error(`createMultisigConfig: ${tag} xpub is required when origin='external-xpub'`);
         }
         if (typeof c.derivationPath !== 'string' || c.derivationPath.length === 0) {
-            throw new Error(`createMultisigConfig: ${tag}.derivationPath is required`);
+            throw new Error(`createMultisigConfig: ${tag} derivationPath is required`);
+        }
+        if (c.origin === 'external-xpub') {
+            const xpubError = validateCosignerXpub(
+                c.xpub,
+                descriptor.networkKind,
+                c.derivationPath,
+                c.pubkey,
+            );
+            if (xpubError) throw new Error(`createMultisigConfig: ${tag}: ${xpubError}`);
         }
     });
 

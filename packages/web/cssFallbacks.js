@@ -8,37 +8,17 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// Build-time CSS fallbacks for old-but-capable WebViews.
+// Build-time CSS fallbacks for engines without `color-mix()`.
 //
-// `src/platform/webviewFloor.js` promises that an engine below the soft floor
-// is "advice, not a gate": the wallet must stay usable there. The stylesheet
-// broke that promise. `color-mix()` needs Chromium 111, and an engine that
-// does not know it drops the WHOLE declaration, so a card whose background is
-// `linear-gradient(..., color-mix(...))` renders with no background at all.
-// Measured on an LG K51's stock WebView 102 (2026-10-12): the balance hero
-// was white text on a white card, i.e. the user's balance was invisible.
+// Each modern declaration gets a plain declaration immediately before it and
+// an old-engine-only copy of its rule. The pair preserves the conventional CSS
+// fallback contract for static audits and declarations that fail at parse
+// time. The guarded copy also covers declarations containing `var()`, whose
+// validation can be deferred until computed-value time.
 //
-// WHY NOT THE USUAL FALLBACK PAIR. The oldest trick in CSS is a plain
-// declaration first and the modern one after it, so an engine that cannot
-// parse the second keeps the first. It does not work here, and the first
-// version of this file proved it on the device: almost every one of these
-// values contains `var()`, and a declaration containing `var()` is not
-// validated when it is parsed. It WINS the cascade as an opaque token list
-// and is only found invalid later, at computed-value time, by which point the
-// plain declaration in front of it has already lost. The property then falls
-// to its initial value, which for `background` is transparent.
-//
-// So the fallback is delivered the only way that survives: a copy of the rule
-// behind `@supports not (color: color-mix(...))`, placed straight after the
-// rule it mirrors. Engines that understand `color-mix()` never read it, so
-// this changes nothing at all for them; engines that do not get a plain
-// colour. Writing that by hand at every use (over a hundred) would rot the
-// first time someone added one, so this plugin writes it at build time.
-//
-// The fallback is an APPROXIMATION by design: each `color-mix()` collapses to
-// whichever operand carries more weight. The operands are almost always
-// `var(--token)`, which no build step can resolve, so there is no exact
-// answer to compute; a readable card in roughly the right colour is the goal.
+// Semantic translucent colours use the palette's precomputed theme tokens.
+// Other mixes collapse to their dominant operand, which keeps the fallback
+// readable when a build step cannot resolve a runtime colour token.
 
 /**
  * Split on a separator at parenthesis depth zero.
@@ -84,8 +64,32 @@ function parseOperand(operand) {
     return { color: rest.join(' '), pct };
 }
 
+const TRANSLUCENT_THEME_TOKENS = new Map([
+    ['--xc-accent-primary', 'var(--xc-info-bg)'],
+    ['--xc-danger', 'var(--xc-danger-bg)'],
+    ['--xc-success', 'var(--xc-success-bg)'],
+    ['--xc-warning', 'var(--xc-warning-bg)'],
+]);
+
+function tokenName(color) {
+    return /^var\(\s*(--[\w-]+)/.exec(color)?.[1] ?? null;
+}
+
+function fallbackOperand(a, b) {
+    if (b.color.toLowerCase() === 'transparent') {
+        const themed = TRANSLUCENT_THEME_TOKENS.get(tokenName(a.color));
+        if (themed) return themed;
+    }
+    if (a.color.toLowerCase() === 'transparent') {
+        const themed = TRANSLUCENT_THEME_TOKENS.get(tokenName(b.color));
+        if (themed) return themed;
+    }
+    return b.pct > a.pct ? b.color : a.color;
+}
+
 /**
- * Replace every `color-mix()` in a value with its dominant operand.
+ * Replace every `color-mix()` in a value with a compatible token or its
+ * dominant operand.
  *
  * Nested mixes collapse inside-out. A mix this cannot read (wrong arity) is
  * left untouched, which makes the caller emit no fallback for it rather than
@@ -125,7 +129,7 @@ export function flattenColorMix(value) {
             if (pa === null && pb === null) { pa = 50; pb = 50; }
             else if (pa === null) pa = 100 - pb;
             else if (pb === null) pb = 100 - pa;
-            out += pb > pa ? b.color : a.color;
+            out += fallbackOperand({ ...a, pct: pa }, { ...b, pct: pb });
         }
         i = j;
     }
@@ -157,7 +161,8 @@ export function fallbackDeclarations(decls) {
 }
 
 /**
- * PostCSS plugin: after each rule that uses `color-mix()`, append
+ * PostCSS plugin: insert each flattened declaration before its modern
+ * declaration, then append
  *
  *     @supports not (color: color-mix(in srgb, red, blue)) {
  *         <same selector> { <same properties, mixes flattened> }
@@ -177,13 +182,16 @@ export function colorMixFallback() {
                 // Already mirrored (a second pass over our own output).
                 const next = rule.next();
                 if (next && next.type === 'atrule' && next.name === 'supports' && next.params === NO_COLOR_MIX) return;
-                const decls = rule.nodes.filter((node) => node.type === 'decl');
-                const fallbacks = fallbackDeclarations(decls);
-                if (fallbacks.length > 0) targets.push({ rule, fallbacks });
+                const entries = rule.nodes
+                    .filter((node) => node.type === 'decl')
+                    .map((decl) => ({ decl, fallback: fallbackDeclarations([decl])[0] }))
+                    .filter(({ fallback }) => fallback);
+                if (entries.length > 0) targets.push({ rule, entries });
             });
-            for (const { rule, fallbacks } of targets) {
+            for (const { rule, entries } of targets) {
+                for (const { decl, fallback } of entries) decl.cloneBefore(fallback);
                 const copy = new Rule({ selector: rule.selector });
-                for (const decl of fallbacks) copy.append(decl);
+                for (const { fallback } of entries) copy.append(fallback);
                 const gate = new AtRule({ name: 'supports', params: NO_COLOR_MIX });
                 gate.append(copy);
                 rule.after(gate);

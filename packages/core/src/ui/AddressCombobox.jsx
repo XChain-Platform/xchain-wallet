@@ -8,31 +8,22 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-import { forwardRef, useCallback, useId, useMemo, useRef, useState } from 'react';
+import { forwardRef, useCallback, useId, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { Input } from './Input.jsx';
 import { ClipboardPasteButton } from './ClipboardPasteButton.jsx';
+import { inspectClipboardPaste, syncPasteWidth } from './inFieldPaste.js';
 import { UsersIcon, ScanIcon } from './icons/index.jsx';
+import { AddressText } from './AddressText.jsx';
 import { filterSuggestions } from '../flows/recentDestinations.js';
 import styles from './AddressCombobox.module.css';
+import { t } from '../i18n/index.js';
+
+export { syncPasteWidth };
 
 const ICONS = {
     contacts: { Component: UsersIcon, defaultLabel: 'Open address book' },
     addresses: { Component: ScanIcon, defaultLabel: 'Choose address' },
 };
-
-function inspectClipboardPaste(value) {
-    const edges = /^[\s\u200B-\u200D\u2060\uFEFF]+|[\s\u200B-\u200D\u2060\uFEFF]+$/g;
-    const hiddenCharacters = /[\u0000-\u001F\u007F-\u009F\u200B-\u200F\u202A-\u202E\u2060\u2066-\u2069\uFEFF]/;
-    const normalized = String(value ?? '').replace(edges, '');
-    const hidden = hiddenCharacters.test(normalized);
-    return hidden
-        ? {
-            ok: false,
-            value: normalized,
-            error: 'Pasted text contains hidden characters. Check it and try again.',
-        }
-        : { ok: true, value: normalized, error: null };
-}
 
 /**
  * AddressCombobox: destination input for Send / authoring forms, with
@@ -63,7 +54,7 @@ function inspectClipboardPaste(value) {
  *                             trailing button when set.
  *   - onIconClick           handler for the trailing icon button.
  *   - iconLabel             accessible label override for the icon button.
- *   - size                  'md' | 'lg'; forwarded to `<Input>`.
+ *   - size                  'sm' | 'md' | 'lg'; forwarded to `<Input>`.
  *   - everything else       forwarded to `<Input>` (label, hint, error,
  *                             placeholder, autoComplete, etc.).
  *
@@ -77,7 +68,7 @@ function inspectClipboardPaste(value) {
  * @property {() => void} [onIconClick]
  * @property {string} [iconLabel]
  */
-export const AddressCombobox = forwardRef(function AddressCombobox(
+export const AddressCombobox = /* @__PURE__ */ forwardRef(function AddressCombobox(
     {
         value,
         onChange,
@@ -104,6 +95,17 @@ export const AddressCombobox = forwardRef(function AddressCombobox(
     const [pasteError, setPasteError] = useState('');
     const containerRef = useRef(/** @type {HTMLDivElement | null} */ (null));
     const inputRef = useRef(/** @type {HTMLInputElement | null} */ (null));
+    const pasteSlotRef = useRef(/** @type {HTMLSpanElement | null} */ (null));
+
+    useLayoutEffect(() => {
+        const wrap = containerRef.current;
+        const paste = pasteSlotRef.current?.querySelector('button') ?? null;
+        syncPasteWidth(wrap, paste);
+        if (!paste || typeof ResizeObserver !== 'function') return undefined;
+        const observer = new ResizeObserver(() => syncPasteWidth(wrap, paste));
+        observer.observe(paste);
+        return () => observer.disconnect();
+    }, []);
 
     const filtered = useMemo(
         () => filterSuggestions(suggestions, value),
@@ -161,7 +163,7 @@ export const AddressCombobox = forwardRef(function AddressCombobox(
     const { Component: IconComponent, defaultLabel } = ICONS[icon] || {};
     const wrapClass = [
         styles.wrap,
-        size === 'lg' ? styles.lg : '',
+        styles[size] || '',
         label ? '' : styles.noLabel,
     ].filter(Boolean).join(' ');
 
@@ -178,12 +180,19 @@ export const AddressCombobox = forwardRef(function AddressCombobox(
                 aria-controls={listboxId}
                 aria-autocomplete="list"
                 aria-activedescendant={activeId}
-                placeholder="Address"
+                placeholder={t('verifySignature.address')}
                 label={label}
                 size={size}
                 disabled={disabled}
+                dir="ltr"
                 autoComplete="off"
-                style={IconComponent ? { paddingInlineEnd: '48px', ...style } : style}
+                style={{
+                    // Room for Paste, and for the icon action beside it.
+                    '--address-end-room': IconComponent
+                        ? 'calc(var(--address-paste-width) + var(--address-control-height))'
+                        : 'var(--address-paste-width)',
+                    ...style,
+                }}
                 value={value}
                 onChange={(e) => {
                     setPasteError('');
@@ -233,11 +242,10 @@ export const AddressCombobox = forwardRef(function AddressCombobox(
                     <IconComponent />
                 </button>
             ) : null}
-            {/* After the in-field icon button so focus follows the visual order:
-                field, its trailing icon, then the paste control below it. */}
-            <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 4 }}>
+            <span className={styles.pasteAction} ref={pasteSlotRef}>
                 <ClipboardPasteButton
                     disabled={disabled}
+                    onMessage={(message) => { if (message) setPasteError(message); }}
                     onPaste={(text) => {
                         const inspected = inspectClipboardPaste(text);
                         if (!inspected.ok) {
@@ -258,7 +266,7 @@ export const AddressCombobox = forwardRef(function AddressCombobox(
                         setActiveIndex(-1);
                     }}
                 />
-            </div>
+            </span>
             {showDropdown ? (
                 <ul
                     id={listboxId}
@@ -281,13 +289,13 @@ export const AddressCombobox = forwardRef(function AddressCombobox(
                             <span className={styles.label}>
                                 {s.label}
                                 <span className={styles.badge}>
-                                    {s.source === 'contact' ? 'Contact' : 'Recent'}
+                                    {s.source === 'contact' ? t('ui.addressCombobox.contact') : t('ui.addressCombobox.recent')}
                                 </span>
                             </span>
                             {s.sublabel ? (
                                 <span className={styles.sublabel}>{s.sublabel}</span>
                             ) : null}
-                            <span className={styles.sublabel}>{s.address}</span>
+                            <AddressText address={s.address} className={styles.sublabel} size="sm" focusable={false} />
                         </li>
                     ))}
                 </ul>

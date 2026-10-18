@@ -142,8 +142,47 @@ export function classifyBroadcastFailure(err) {
  * @returns {boolean}
  */
 export function isAlreadyOnNetworkRejection(err) {
-    return /txn-already-known|txn-already-in-mempool|already\s+in\s+(?:the\s+)?block\s*chain/i
-        .test(extractReason(err));
+    return hasAlreadyOnNetworkDetails(err)
+        || /txn-already-known|txn-already-in-mempool|already\s+in\s+(?:the\s+)?block\s*chain/i
+            .test(extractReason(err));
+}
+
+function hasAlreadyOnNetworkDetails(err) {
+    if (err == null) return false;
+    const pending = [err];
+    const seen = new Set();
+    while (pending.length > 0 && seen.size < 16) {
+        const value = pending.shift();
+        if (value == null || typeof value !== 'object' || seen.has(value)) continue;
+        seen.add(value);
+
+        try { if (isAlreadyOnNetworkPayload(value.data)) return true; } catch { /* ignore unreadable fields */ }
+
+        let details;
+        try { details = value.details; } catch { /* ignore unreadable fields */ }
+        if (details != null && typeof details === 'object') {
+            try { if (isAlreadyOnNetworkPayload(details.context)) return true; } catch { /* ignore unreadable fields */ }
+            let rpcError;
+            try { rpcError = details.rpcError; } catch { /* ignore unreadable fields */ }
+            if (rpcError != null && typeof rpcError === 'object') {
+                try { if (isAlreadyOnNetworkPayload(rpcError.data)) return true; } catch { /* ignore unreadable fields */ }
+            }
+        }
+
+        try { if (value.cause != null) pending.push(value.cause); } catch { /* ignore unreadable causes */ }
+        try {
+            const nested = value.response?.data?.error;
+            if (nested != null) pending.push(nested);
+        } catch { /* ignore unreadable responses */ }
+    }
+    return false;
+}
+
+function isAlreadyOnNetworkPayload(payload) {
+    if (payload == null || typeof payload !== 'object') return false;
+    try { if (payload.reason === 'TX_ALREADY_IN_CHAIN') return true; } catch { /* ignore unreadable fields */ }
+    try { if (payload.node_code === -27) return true; } catch { /* ignore unreadable fields */ }
+    return false;
 }
 
 // Pull the most specific reject string out of the error shape. A

@@ -43,35 +43,39 @@ import { VaultUnavailable } from '@xchain-wallet/core/shared/routes/VaultUnavail
 import { RouteNotFound } from '@xchain-wallet/core/shared/routes/RouteNotFound.jsx';
 import { Onboarding } from '@xchain-wallet/core/shared/routes/Onboarding.jsx';
 import { vaultErrorKind } from '../../core/src/storage/backend.js';
-import { readActiveAccount, writeActiveAccount } from '@xchain-wallet/core/shared/utils/activeAccountMemory.js';
+import { clearActiveAccount, writeActiveAccount } from '@xchain-wallet/core/shared/utils/activeAccountMemory.js';
+import { reconcileActiveAccount } from '@xchain-wallet/core/shared/utils/activeAccountScope.js';
 import { readActiveWallet, writeActiveWallet } from '@xchain-wallet/core/shared/utils/activeWalletMemory.js';
 import { takePostDemoIntent } from '@xchain-wallet/core/shared/utils/demoGraduation.js';
 import { createLaunchRouteState } from '@xchain-wallet/core/shared/utils/launchRouteState.js';
 import { historyScopeForAsset } from '@xchain-wallet/core/shared/utils/historyEntryScope.js';
+import { defaultDexAssetForNetwork, syncDexAssetToNetwork } from '@xchain-wallet/core/shared/chainSelection.js';
 import { lockImmediately } from '@xchain-wallet/core/shared/utils/lockAction.js';
+import { persistActiveNetwork } from '@xchain-wallet/core/shared/utils/activeNetworkSwitch.js';
 import { useMessagingUnread } from '@xchain-wallet/core/shared/hooks/useMessagingUnread.js';
 import { CoinpayObligationsProvider, useSharedCoinpayObligations } from '@xchain-wallet/core/shared/hooks/useCoinpayObligations.js';
+import { useDemoAutoWipe } from '@xchain-wallet/core/shared/hooks/useDemoAutoWipe.js';
 import { Locked } from '@xchain-wallet/core/shared/routes/Locked.jsx';
+import { isDemoWallet } from '../../core/src/flows/demoMode.js';
 import { ToastHost, useToast } from '@xchain-wallet/core/shared/components/ToastHost.jsx';
 import { RouteErrorBoundary } from '@xchain-wallet/core/shared/components/RouteErrorBoundary.jsx';
 import { ShellRouteOutlet } from '@xchain-wallet/core/shared/components/ShellRouteOutlet.jsx';
+import {
+    applySendAssetPick,
+    beginSendAssetSwitch,
+    cancelSendAssetSwitch,
+} from '@xchain-wallet/core/shared/utils/sendAssetSwitch.js';
 import { NOTIFICATION_EVENT } from './notifications/webNotifyAdapter.js';
 import { ReachabilityBanner } from '@xchain-wallet/core/shared/components/ReachabilityBanner.jsx';
 // §6 / D4. Renders nothing unless a shell installed a direct-update
 // provider, which only a sideloaded Android APK does; see flows/directUpdate.js.
 import { UpdateNoticeBanner } from '@xchain-wallet/core/shared/components/UpdateNoticeBanner.jsx';
-import { isDemoWallet } from '../../core/src/flows/demoMode.js';
 import { QueuedBroadcastBanner } from '@xchain-wallet/core/shared/components/QueuedBroadcastBanner.jsx';
-import { DemoBanner } from '@xchain-wallet/core/shared/components/DemoBanner.jsx';
-import { NetworkBanner } from '@xchain-wallet/core/shared/components/NetworkBanner.jsx';
 import { LeftNav, FullLayoutWithNav } from '@xchain-wallet/core/shared/components/LeftNav.jsx';
 import { AppHeader } from '@xchain-wallet/core/shared/components/AppHeader.jsx';
-import { CommandPalette } from '@xchain-wallet/core/shared/commandPalette/CommandPalette.jsx';
 import { useCommandPalette } from '@xchain-wallet/core/shared/commandPalette/useCommandPalette.js';
-import { buildCommands, contactsToCommands, parseFreeformCommands, balancesToCommands, sitesToCommands, settingsSectionsToCommands, helpToCommands } from '@xchain-wallet/core/shared/commandPalette/commandRegistry.js';
 import { useKeyboardShortcuts } from '@xchain-wallet/core/shared/keyboard/useKeyboardShortcuts.js';
-import { ShortcutHelp } from '@xchain-wallet/core/shared/keyboard/ShortcutHelp.jsx';
-import { dismissAllOverlays } from '@xchain-wallet/core/ui/backStack.js';
+import { dismissAllOverlays, useBackHandler } from '@xchain-wallet/core/ui/backStack.js';
 import { defaultRegistry } from '../../core/src/registry/index.js';
 import { coinFamiliesForUser } from '../../core/src/registry/visibility.js';
 import { withResolvedIssuer } from '@xchain-wallet/core/shared/utils/tokenDetailIssuer.js';
@@ -100,10 +104,17 @@ import { subscribeToNativeDeepLinks } from './deeplinks/nativeDeepLinks.js';
 import { canApplyNativeIntent, useNativeAppLifecycle } from './platform/nativeAppLifecycle.js';
 import { ExtensionBanner } from './components/ExtensionBanner.jsx';
 import { useActiveVariant, shellForVariant } from './devVariant.js';
-import { DevVariantBadge } from './DevVariantBadge.jsx';
+import { deferNonCriticalWork } from './deferNonCriticalWork.js';
 import devShellStyles from './DevVariantShell.module.css';
 
 const lazyRoute = (load, name) => lazy(() => load().then((module) => ({ default: module[name] })));
+
+// Overlays opened by a key or a developer toggle, never needed for first
+// paint. App mounts each one the first time it opens, then keeps it mounted.
+const loadCommandPaletteHost = () => import('./CommandPaletteHost.jsx');
+const CommandPaletteHost = lazyRoute(loadCommandPaletteHost, 'CommandPaletteHost');
+const ShortcutHelp = lazyRoute(() => import('@xchain-wallet/core/shared/keyboard/ShortcutHelp.jsx'), 'ShortcutHelp');
+const DevVariantBadge = lazyRoute(() => import('./DevVariantBadge.jsx'), 'DevVariantBadge');
 
 const AddAccountForm = lazyRoute(() => import('@xchain-wallet/core/shared/routes/AddAccountForm.jsx'), 'AddAccountForm');
 const WalletPicker = lazyRoute(() => import('@xchain-wallet/core/shared/routes/WalletPicker.jsx'), 'WalletPicker');
@@ -278,7 +289,11 @@ function BottomTabBarWithObligations({ badges, ...rest }) {
 function GatedDevVariantBadge({ state }) {
     const { settings } = useSettings();
     if (!settings?.developerMode || !settings?.showVariantBadge) return null;
-    return <DevVariantBadge state={state} />;
+    return (
+        <Suspense fallback={null}>
+            <DevVariantBadge state={state} />
+        </Suspense>
+    );
 }
 
 function AppInner() {
@@ -302,6 +317,7 @@ function AppInner() {
         /** @returns {'welcome' | 'create' | 'import' | 'import-freewallet' | 'pair-partner'} */
         () => takePostDemoIntent() || 'welcome',
     );
+    const preserveInitialOnboardingStep = useRef(onboardingStep !== 'welcome');
     const [unlockedView, setUnlockedView] = useState(
         /** @type {'home' | 'send' | 'receive' | 'receive-picker' | 'wizard' | 'actions' | 'my-tokens' | 'manage-token' | 'market-activity' | 'issue' | 'mint' | 'destroy' | 'sweep' | 'lock' | 'mint-settings' | 'callback-settings' | 'execute-callback' | 'access-lists' | 'bridge-settings' | 'bridge-move' | 'pause-token' | 'lock-address' | 'description' | 'transfer' | 'broadcast' | 'oracle' | 'dispenser' | 'dispensers-list' | 'dispenser-detail' | 'dispenser-explorer' | 'dividend' | 'resume-confirm' | 'airdrop' | 'advanced' | 'migrate-bip39' | 'pair-signer' | 'markets' | 'markets-picker' | 'market' | 'create-order' | 'my-orders' | 'my-swaps' | 'coinpay' | 'obligations' | 'swap' | 'sell-name' | 'messaging' | 'compose-message' | 'contacts' | 'lists' | 'list-detail' | 'list-create' | 'list-fork' | 'list-share' | 'list-transfer' | 'list-rename' | 'list-union' | 'shared-lists' | 'contracts-list' | 'contract-detail' | 'contract-deploy' | 'contract-execute' | 'contract-deposit' | 'contract-withdraw' | 'controller-bind' | 'staking-dashboard' | 'stake-detail' | 'stake-new' | 'stake-form' | 'staking-unstake' | 'staking-claim' | 'staking-delegate' | 'staking-revoke' | 'operator-dashboard' | 'history' | 'action-detail' | 'token-detail' | 'link-form' | 'attach-content' | 'gated-publish' | 'publish-file' | 'project-roster' | 'parallel-compose' | 'batch-compose' | 'cross-chain-swap' | 'cross-chain-order' | 'cross-chain-templates' | 'multisig-create' | 'multisig-sign' | 'cosigner-accounts' | 'cosigner-provision' | 'cosigner-detail' | 'addresses' | 'address-preferences' | 'add-wallet' | 'add-account' | 'wallet-picker' | 'account-picker' | 'wallet-details' | 'wallet-rename' | 'account-rename' | 'scan'} */ ('home'),
     );
@@ -431,9 +447,10 @@ function AppInner() {
         active: globalScannerOpen,
         initialFocusRef: globalScannerRef,
     });
-    // The overlay covers the content area but not the navigation, so the
-    // bottom bar, the rail and the header stay live underneath it. Any
-    // navigation therefore closes it; otherwise the scanner (and the camera)
+    // Escape and the system Back gesture close the scanner like any other
+    // modal; its own Back control is a route-level handler that Escape skips.
+    useBackHandler(globalScannerOpen ? () => setGlobalScannerOpen(false) : undefined);
+    // Any view change closes the scanner; otherwise it (and the camera)
     // stayed on screen over whatever view the user had moved to (LG K51,
     // 2026-10-12: palette "Scan a QR code", then Home, then History). The nav
     // handlers also close it directly, for a tap on the view already shown.
@@ -498,7 +515,7 @@ function AppInner() {
     // only destination-network addresses, balances, and history.
     const handleActiveNetworkChange = useCallback(async (network) => {
         if (!activeWalletId) throw new Error('An active wallet is required to switch networks.');
-        await messaging.setActiveNetwork({ walletId: activeWalletId, network });
+        await persistActiveNetwork({ messaging, walletId: activeWalletId, network });
         window.location.reload();
     }, [activeWalletId]);
     // Unread-message count for the active wallet + account, surfaced as a badge
@@ -546,6 +563,20 @@ function AppInner() {
     // help modal. Disabled while locked, while the palette owns the keys, and
     // while the help modal itself is open.
     const [shortcutHelpOpen, setShortcutHelpOpen] = useState(false);
+    // The palette and the help modal are lazy chunks. Each mounts the first
+    // time it opens and stays mounted after, so later opens and closes behave
+    // exactly as an always-mounted overlay does.
+    const paletteMounted = useRef(false);
+    if (palette.open) paletteMounted.current = true;
+    const shortcutHelpMounted = useRef(false);
+    if (shortcutHelpOpen) shortcutHelpMounted.current = true;
+    // Fetch the palette chunk once the wallet is unlocked and the screen has
+    // painted, so the first Cmd/Ctrl+K opens without waiting on the network.
+    const unlockedNow = status.state === 'unlocked';
+    useEffect(() => {
+        if (!unlockedNow) return undefined;
+        return deferNonCriticalWork(() => { loadCommandPaletteHost().catch(() => {}); });
+    }, [unlockedNow]);
     // Which Settings section a palette deep-link should open.
     // Cleared when the user backs out of Settings.
     const [settingsInitialSection, setSettingsInitialSection] = useState(
@@ -623,14 +654,15 @@ function AppInner() {
     );
     // The coin/token the user picked to scope the Markets list to.
     // Carried between MarketsList and the picker (`markets-picker`) so
-    // re-entering Markets restores the selection. Defaults to BTC mainnet.
+    // re-entering Markets restores the selection.
     const [marketsAsset, setMarketsAsset] = useState(
-        /** @type {{ chainId: string, tick: string, displayName?: string, kind?: string } | null} */ ({
-            chainId: 'bitcoin-mainnet',
-            tick: 'BTC',
-            kind: 'native',
-        }),
+        /** @type {{ chainId: string, tick: string, displayName?: string, kind?: string } | null} */ (
+            () => defaultDexAssetForNetwork(settings?.activeNetwork)
+        ),
     );
+    useEffect(() => {
+        setMarketsAsset((current) => syncDexAssetToNetwork(current, settings?.activeNetwork));
+    }, [settings?.activeNetwork]);
     // §47 / Cluster L FOLLOWUP 1: deep-link prefill for Send. Populated
     // once on mount from `?uri=` in `location.search`; consumed by the
     // 'send' route below and cleared after the user submits or backs out.
@@ -642,8 +674,8 @@ function AppInner() {
     // `sendPrefill` above, which is what the send outcome has always done.
     const [scannedPsbt, setScannedPsbt] = useState(/** @type {string | null} */ (null));
     // Which view Send should return to when the user hits Back. Defaults
-    // to 'home'; SendPicker → Send sets it to 'send-picker' so backing
-    // out lands on the token list the user was just browsing.
+    // to 'home'. The asset picker is a step of Send and leaves it alone, so
+    // Send's Back still returns to whatever opened Send.
     const [sendBackTo, setSendBackTo] = useState(
         /** @type {'home' | 'send-picker' | 'token-detail' | 'contacts'} */ ('home'),
     );
@@ -664,7 +696,13 @@ function AppInner() {
 
     const refresh = useCallback(() => {
         setStatus({ state: 'loading' });
-        setOnboardingStep('welcome');
+        setOnboardingStep((step) => {
+            if (preserveInitialOnboardingStep.current) {
+                preserveInitialOnboardingStep.current = false;
+                return step;
+            }
+            return 'welcome';
+        });
         setUnlockedView('home');
         getSessionStatus()
             .then((next) => {
@@ -694,6 +732,21 @@ function AppInner() {
                     errorKind: vaultErrorKind(err),
                 }),
             );
+    }, []);
+    useDemoAutoWipe(activeWalletId, refresh);
+
+    const finishFreshWalletCreation = useCallback(() => {
+        const next = { hasWallet: true, hasSession: true, state: 'unlocked' };
+        const launchView = launchRouteState.current.takeForSession(next);
+        setOnboardingStep('welcome');
+        setUnlockedView(launchView || 'home');
+        nativeSuspendedRef.current = false;
+        setStatus(next);
+        if (typeof window !== 'undefined') {
+            try {
+                window.dispatchEvent(new CustomEvent('xc:session-changed'));
+            } catch { /* CustomEvent unsupported: non-fatal */ }
+        }
     }, []);
 
     function clearTransientActionState() {
@@ -884,10 +937,7 @@ function AppInner() {
                     : [];
                 // Restore the last selected account for this wallet if it
                 // still exists; otherwise fall back to the lowest index.
-                const persisted = readActiveAccount(activeWalletId);
-                const chosen = (persisted && sorted.some((a) => a.id === persisted))
-                    ? persisted
-                    : (sorted[0]?.id || null);
+                const chosen = reconcileActiveAccount(activeWalletId, sorted);
                 setActiveAccountId(chosen);
             })
             .catch(() => { if (!cancelled) setActiveAccountId(null); });
@@ -897,17 +947,33 @@ function AppInner() {
     // Switch the active wallet and remember it, so a reload returns to it
     // instead of snapping back to the first wallet. Twin of the account
     // handler below.
-    const handleSwitchWallet = (id) => {
+    const handleSwitchWallet = (id, name) => {
         setActiveAccountId(null);
         setActiveWalletId(id);
-        if (id) writeActiveWallet(id, walletList.find((wallet) => wallet.id === id)?.name);
+        if (id) writeActiveWallet(id, name || walletList.find((wallet) => wallet.id === id)?.name);
+    };
+
+    const handleWalletAdded = (wallet) => {
+        if (wallet?.id) {
+            setWalletList((list) => (
+                list.some((entry) => entry.id === wallet.id)
+                    ? list.map((entry) => (entry.id === wallet.id ? { ...entry, ...wallet } : entry))
+                    : [...list, wallet]
+            ));
+            handleSwitchWallet(wallet.id, wallet.name);
+            showToast({ message: `${wallet.name || 'New wallet'} is now active.`, variant: 'success' });
+        }
+        refresh();
     };
 
     // Switch the active account and remember it per wallet, so a reload
     // returns to it instead of snapping back to the lowest-index account.
     const handleSwitchAccount = (id) => {
-        setActiveAccountId(id);
-        if (activeWalletId && id) writeActiveAccount(activeWalletId, id);
+        const nextId = typeof id === 'string' && id ? id : null;
+        setActiveAccountId(nextId);
+        if (!activeWalletId) return;
+        if (nextId) writeActiveAccount(activeWalletId, nextId);
+        else clearActiveAccount(activeWalletId);
     };
 
     // Two gates, because the lanes stopped agreeing. Staking,
@@ -1012,7 +1078,7 @@ function AppInner() {
                     <Suspense fallback={<Loading />}>
                         <CreateWallet
                             onBack={() => setOnboardingStep('welcome')}
-                            onCreated={refresh}
+                            onCreated={finishFreshWalletCreation}
                         />
                     </Suspense>
                 );
@@ -1126,7 +1192,7 @@ function AppInner() {
                         }}
                         prefill={sendPrefill}
                         onChangeAsset={(carry) => {
-                            setSendPrefill({ assetSwitchDraft: carry });
+                            setSendPrefill((prev) => beginSendAssetSwitch(prev, carry));
                             setUnlockedView('send-picker');
                         }}
                     />
@@ -1142,35 +1208,12 @@ function AppInner() {
                         kindFilter={globalKindFilter}
                         onKindFilterChange={setGlobalKindFilter}
                         hideOwnFilter
-                        onBack={() => { setSendPrefill(null); setUnlockedView('home'); }}
+                        onBack={() => {
+                            setSendPrefill(cancelSendAssetSwitch);
+                            setUnlockedView('send');
+                        }}
                         onSelect={(sel) => {
-                            setSendPrefill((prev) => ({
-                                chainId: sel.chainId,
-                                tick: sel.tick,
-                                kind: sel.kind,
-                                displayName: sel.displayName,
-                                imageUrl: sel.imageUrl,
-                                address: prev?.assetSwitchDraft?.chainId === sel.chainId
-                                    ? (prev.assetSwitchDraft.address || undefined)
-                                    : undefined,
-                                amount: prev?.assetSwitchDraft?.chainId === sel.chainId
-                                    && prev.assetSwitchDraft.tick?.trim().toUpperCase()
-                                        === String(sel.tick || '').trim().toUpperCase()
-                                    ? (prev.assetSwitchDraft.amount || undefined)
-                                    : undefined,
-                                feeSelection: prev?.assetSwitchDraft?.chainId === sel.chainId
-                                    ? prev.assetSwitchDraft.feeSelection
-                                    : undefined,
-                                assetSwitchNotice: prev?.assetSwitchDraft
-                                    ? (prev.assetSwitchDraft.chainId !== sel.chainId
-                                        ? 'Chain changed. Recipient, amount, and fee rate were reset.'
-                                        : prev.assetSwitchDraft.tick?.trim().toUpperCase()
-                                            !== String(sel.tick || '').trim().toUpperCase()
-                                            ? 'Token changed. Amount was reset for the new token precision.'
-                                            : undefined)
-                                    : undefined,
-                            }));
-                            setSendBackTo('send-picker');
+                            setSendPrefill((prev) => applySendAssetPick(prev, sel));
                             setUnlockedView('send');
                         }}
                     />
@@ -1479,6 +1522,7 @@ function AppInner() {
             if (unlockedView === 'list-detail' && activeWalletId && listRef) {
                 return (
                     <ListDetail
+                        walletId={activeWalletId}
                         chainId={listRef.chainId}
                         actionIndex={listRef.actionIndex}
                         onBack={() => setUnlockedView(listRef.origin === 'shared' ? 'shared-lists' : 'lists')}
@@ -2052,6 +2096,7 @@ function AppInner() {
                 return (
                     <CoSignerAccountDetail
                         accountId={coSignerAccountId}
+                        walletId={activeWalletId}
                         onBack={() => setUnlockedView('cosigner-accounts')}
                     />
                 );
@@ -2419,6 +2464,8 @@ function AppInner() {
                         divisibility={tokenDetailRef.divisibility}
                         fiatRate={tokenDetailRef.fiatRate}
                         fiatRateSource={tokenDetailRef.fiatRateSource}
+                        fiatRateStale={tokenDetailRef.fiatRateStale === true}
+                        fiatRateFetchedAt={tokenDetailRef.fiatRateFetchedAt || null}
                         quantity={tokenDetailRef.quantity}
                         imageUrl={tokenDetailRef.imageUrl}
                         onBack={() => setUnlockedView('home')}
@@ -2709,6 +2756,7 @@ function AppInner() {
                             setUnlockedView('account-rename');
                         }}
                         onBack={() => setUnlockedView(accountPickerBackTo)}
+                        backLabel={accountPickerBackTo === 'settings' ? t('shell.settings.back') : undefined}
                     />
                 );
             }
@@ -2747,7 +2795,7 @@ function AppInner() {
                         <CreateWallet
                             mode="add"
                             onBack={() => setOnboardingStep('welcome')}
-                            onCreated={refresh}
+                            onCreated={handleWalletAdded}
                         />
                     );
                 }
@@ -2756,7 +2804,7 @@ function AppInner() {
                         <ImportWallet
                             mode="add"
                             onBack={() => setOnboardingStep('welcome')}
-                            onImported={refresh}
+                            onImported={handleWalletAdded}
                         />
                     );
                 }
@@ -2766,7 +2814,7 @@ function AppInner() {
                             mode="add"
                             variant="freewallet"
                             onBack={() => setOnboardingStep('welcome')}
-                            onImported={refresh}
+                            onImported={handleWalletAdded}
                         />
                     );
                 }
@@ -2791,13 +2839,9 @@ function AppInner() {
             // across every unlocked view, not only Home.
             return (
                 <Fragment key={`${activeWalletId}:${activeAccountId || 'all'}`}>
-                    {/* `demoBannerInHeader`: this shell mounts
-                        DemoBanner in the layout header, which already renders
-                        above Home, so Home must not mount a second one. */}
                     <Home
                         activeWalletId={activeWalletId}
                         resumeKey={nativeResumeKey}
-                        demoBannerInHeader
                         networkFilter={globalNetworkFilter}
                         onNetworkFilterChange={setGlobalNetworkFilter}
                         tokenQuery={globalTokenQuery}
@@ -2810,7 +2854,7 @@ function AppInner() {
                         onReceive={activeWalletId ? () => { setReceivePrefill(null); setUnlockedView('receive'); } : undefined}
                         onSwap={DEX_SURFACE_ENABLED && activeWalletId ? () => setUnlockedView('swap') : undefined}
                         onExchange={DEX_SURFACE_ENABLED && activeWalletId ? () => {
-                            setMarketsAsset({ chainId: 'bitcoin-mainnet', tick: 'BTC', kind: 'native' });
+                            setMarketsAsset(defaultDexAssetForNetwork(settings?.activeNetwork));
                             setUnlockedView('markets');
                         } : undefined}
                         onCreateToken={activeWalletId ? () => setUnlockedView('wizard') : undefined}
@@ -2907,6 +2951,8 @@ function AppInner() {
                 // no longer exists.
                 hasDexSurface: DEX_SURFACE_ENABLED,
                 isSignerMode,
+                isWatcherMode,
+                isDemoWallet: isDemoWallet(activeWalletId),
             };
             // entity handlers: tokens open TokenDetail with the full
             // ref the row already carries; sites land on the Connected Sites
@@ -2923,19 +2969,13 @@ function AppInner() {
                 openSettings: openSettingsSection,
                 openHelp: () => setShortcutHelpOpen(true),
             };
-            const paletteCommands = [
-                ...buildCommands(paletteCtx),
-                ...balancesToCommands(paletteTokenRows, paletteEntityCtx),
-                ...contactsToCommands(paletteContacts, { navigate: palette.navigate }),
-                ...sitesToCommands(paletteSites, paletteEntityCtx),
-                ...settingsSectionsToCommands(paletteEntityCtx),
-                ...helpToCommands(paletteEntityCtx),
-            ];
             // §33.3: free-form intents like "send 100 MYTOKEN" open Send
             // prefilled. Send falls back to the first chain when the prefill
             // carries no chainId, so amount + tick alone is enough. A
             // txid/date-shaped query offers "search history".
-            const paletteParseQuery = (q) => parseFreeformCommands(q, {
+            const paletteParseCtx = {
+                isSignerMode,
+                isDemoWallet: isDemoWallet(activeWalletId),
                 composeSend: ({ amount, tick }) => {
                     setSendPrefill({ amount, tick });
                     setSendBackTo('home');
@@ -2947,7 +2987,7 @@ function AppInner() {
                     setHistoryReturnTo('home');
                     palette.navigate('history');
                 },
-            });
+            };
             // Assigned rather than returned directly so the whole unlocked
             // tree (both nav surfaces AND the route, Home included) sits under
             // one CoinpayObligationsProvider, which is the tree's only
@@ -3028,26 +3068,19 @@ function AppInner() {
                                     activeNetwork={activeNetwork}
                                     developerMode={developerMode}
                                     onActiveNetworkChange={handleActiveNetworkChange}
-                                    onOpenNetworkSettings={() => openSettingsSection('network-endpoints')}
                                     // Cross-site navigation for the *.xchain.io family.
                                     // Web only: the extension popup and desktop app do
                                     // not pass this, so they render no switcher.
                                     platformCurrent="wallet"
                                 />
-                                <NetworkBanner activeNetwork={activeNetwork} />
                             </>
                         ) : null
                     }
                     notices={
                         activeWalletId ? (
                             <>
-                                {/* Cluster J FOLLOWUP 2: DemoBanner persists across every
-                                    unlocked view via the shared layout notices slot, not
-                                    just Home. The notices sit apart from the header row
-                                    so their compact-tier scroll cap cannot clip the
-                                    header popovers. */}
-                                <DemoBanner activeWalletId={activeWalletId} onExited={refresh} />
                                 <QueuedBroadcastBanner walletId={activeWalletId} />
+                                {/* Demo data is fixture data and never stale, so no reachability notice. */}
                                 {isDemoWallet(activeWalletId) ? null : <ReachabilityBanner />}
                                 <UpdateNoticeBanner />
                             </>
@@ -3056,6 +3089,7 @@ function AppInner() {
                 >
                     <ShellRouteOutlet
                         routeKey={unlockedView}
+                        walletId={activeWalletId}
                         resetKey={`${unlockedView}:${palette.navigationKey}`}
                         onHome={() => setUnlockedView('home')}
                         fallback={<Skeleton.List rows={5} />}
@@ -3083,53 +3117,74 @@ function AppInner() {
                             aria-labelledby="xc-global-scanner-title"
                             tabIndex={-1}
                             style={{
-                                position: 'absolute',
+                                // A modal: it inerts the header and navigation, so it
+                                // covers them too rather than leaving dead controls on show.
+                                position: 'fixed',
                                 inset: 0,
-                                zIndex: 50,
+                                boxSizing: 'border-box',
+                                padding: 'env(safe-area-inset-top, 0px) env(safe-area-inset-right, 0px) env(safe-area-inset-bottom, 0px) env(safe-area-inset-left, 0px)',
+                                zIndex: 'var(--xc-z-overlay)',
                                 background: 'var(--xc-bg)',
                                 display: 'flex',
                                 flexDirection: 'column',
                             }}
                         >
-                            <ScanRoute
-                                embedded
-                                titleId="xc-global-scanner-title"
-                                onBack={() => setGlobalScannerOpen(false)}
-                                onClassified={(outcome) => {
-                                    setGlobalScannerOpen(false);
-                                    if (outcome.kind === 'send') {
-                                        if (unlockedView === 'contacts') {
-                                            setContactScanPrefill({
-                                                address: outcome.address,
-                                                chainId: outcome.chainId,
-                                            });
-                                        } else {
-                                            setSendPrefill({
-                                                address: outcome.address,
-                                                amount: outcome.amount,
-                                                tick: outcome.tick,
-                                                chainId: outcome.chainId,
-                                                memo: outcome.memo,
-                                            });
-                                            setUnlockedView('send');
+                            {/* ScanRoute is a lazy chunk; without its own boundary the first
+                                open suspends the whole shell into the route error screen. */}
+                            <Suspense fallback={<Loading />}>
+                                <ScanRoute
+                                    embedded
+                                    titleId="xc-global-scanner-title"
+                                    onBack={() => setGlobalScannerOpen(false)}
+                                    onClassified={(outcome) => {
+                                        setGlobalScannerOpen(false);
+                                        if (outcome.kind === 'send') {
+                                            if (unlockedView === 'contacts') {
+                                                setContactScanPrefill({
+                                                    address: outcome.address,
+                                                    chainId: outcome.chainId,
+                                                });
+                                            } else {
+                                                setSendPrefill({
+                                                    address: outcome.address,
+                                                    amount: outcome.amount,
+                                                    tick: outcome.tick,
+                                                    chainId: outcome.chainId,
+                                                    memo: outcome.memo,
+                                                });
+                                                setUnlockedView('send');
+                                            }
+                                        } else if (outcome.kind === 'receive') {
+                                            setUnlockedView('receive');
+                                        } else if (outcome.kind === 'psbt') {
+                                            setScannedPsbt(outcome.psbtHex || null);
+                                            setUnlockedView('sign-psbt');
                                         }
-                                    } else if (outcome.kind === 'receive') {
-                                        setUnlockedView('receive');
-                                    } else if (outcome.kind === 'psbt') {
-                                        setScannedPsbt(outcome.psbtHex || null);
-                                        setUnlockedView('sign-psbt');
-                                    }
-                                }}
-                            />
+                                    }}
+                                />
+                            </Suspense>
                         </div>
                     ) : null}
-                    <CommandPalette
-                        open={palette.open}
-                        onClose={palette.closePalette}
-                        commands={paletteCommands}
-                        parseQuery={paletteParseQuery}
-                    />
-                    <ShortcutHelp open={shortcutHelpOpen} onClose={() => setShortcutHelpOpen(false)} overrides={settings?.keyboard?.bindings} />
+                    {paletteMounted.current ? (
+                        <Suspense fallback={null}>
+                            <CommandPaletteHost
+                                open={palette.open}
+                                onClose={palette.closePalette}
+                                ctx={paletteCtx}
+                                entityCtx={paletteEntityCtx}
+                                tokenRows={paletteTokenRows}
+                                contacts={paletteContacts}
+                                sites={paletteSites}
+                                navigate={palette.navigate}
+                                parseCtx={paletteParseCtx}
+                            />
+                        </Suspense>
+                    ) : null}
+                    {shortcutHelpMounted.current ? (
+                        <Suspense fallback={null}>
+                            <ShortcutHelp open={shortcutHelpOpen} onClose={() => setShortcutHelpOpen(false)} overrides={settings?.keyboard?.bindings} />
+                        </Suspense>
+                    ) : null}
                 </FullLayoutWithNav>
             );
             return (

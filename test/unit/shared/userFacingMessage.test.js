@@ -103,11 +103,24 @@ describe('userFacingMessage', () => {
     });
 
     it.each([
+        'A listener indicated an asynchronous response by returning true, but the message channel closed before a response was received',
+        'The message port closed before a response was received.',
+    ])('keeps Chrome runtime failures out of display copy: %s', (raw) => {
+        expect(userFacingMessage(new Error(raw), FALLBACK)).toBe(FALLBACK);
+        expect(isDeveloperMessage(raw)).toBe(true);
+    });
+
+    it.each([
         ['InvalidPasswordError', 'Incorrect password.'],
         ['HardwareSigningRetryError', 'Your hardware wallet is locked. Unlock it, then select Approve again.'],
         ['RbfPlanError', 'Already confirmed.'],
     ])('keeps the copy an app-defined %s carries', (name, message) => {
         expect(userFacingMessage(Object.assign(new Error(message), { name }), FALLBACK)).toBe(message);
+    });
+
+    it.each(['NATIVE_FEE_CHANGED', 'INPUTS_SPENT'])('keeps the sentence a wallet refusal carries under code %s', (code) => {
+        const message = 'The protocol fee changed while this was on screen. Nothing was signed or sent.';
+        expect(userFacingMessage(Object.assign(new Error(message), { code }), FALLBACK)).toBe(message);
     });
 
     it('hides platform storage exceptions, with or without their class', () => {
@@ -129,6 +142,11 @@ describe('userFacingMessage', () => {
         expect(protocolRefusalReason(err)).toBe(reason.trim());
         expect(userFacingMessage(err, FALLBACK)).toBe(reason.trim());
         expect(isDeveloperMessage(err)).toBe(false);
+    });
+
+    it('leaves an encoder coin-selection shortfall to the build-failure copy', () => {
+        const reason = 'insufficient funds: selected inputs total 1000 but 3206 is required (outputs 2000 + fee 1206)';
+        expect(protocolRefusalReason(protocolRefusal(reason))).toBeNull();
     });
 
     it('caps a protocol refusal reason', () => {
