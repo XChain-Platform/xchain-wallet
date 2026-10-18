@@ -288,8 +288,10 @@ describe('testnet treasury top-up CLI', () => {
     it('reports a direct refusal on one stderr line without the key or either address', () => {
         const source = generatedKey();
         const destination = generatedKey();
-        const sourceFile = walletFile(source);
-        fs.writeFileSync(sourceFile, `{"wif":"${source.wif}"`, { mode: 0o600 });
+        const sourceFile = path.join(
+            os.tmpdir(),
+            `${source.wif}-${source.address}-${destination.address}.json`,
+        );
         const result = spawnSync(process.execPath, [
             TOP_UP_PATH,
             sourceFile,
@@ -298,7 +300,7 @@ describe('testnet treasury top-up CLI', () => {
 
         expect(result.status).toBe(1);
         expect(result.stdout).toBe('');
-        expect(result.stderr.trim().split('\n')).toHaveLength(1);
+        expect(result.stderr).toBe('testnet top-up refused\n');
         expect(result.stderr).not.toContain(source.wif);
         expect(result.stderr).not.toContain(source.address);
         expect(result.stderr).not.toContain(destination.address);

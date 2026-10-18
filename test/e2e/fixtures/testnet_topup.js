@@ -158,9 +158,8 @@ function invokedDirectly() {
 if (invokedDirectly()) {
     try {
         process.exitCode = await main();
-    } catch (error) {
-        const line = String(error?.message || error).replace(/\s+/g, ' ').trim();
-        process.stderr.write(`${line}\n`);
+    } catch {
+        process.stderr.write('testnet top-up refused\n');
         process.exitCode = 1;
     }
 }
