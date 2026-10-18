@@ -187,6 +187,16 @@ deadline names the action index and, when the last poll failed, that failure as
 the HTTP status or an error code. A refused or misrouted stakes request
 therefore reads differently from a residual that is not yet indexed.
 
+Both testnet staking specs drive the wallet through
+`test/e2e/fixtures/testnet_walk.js`. It exports `WALLET_UNLOCK`, the unlock
+password the specs set on the wallets they create; `approve(page, password)`,
+which waits for the confirm modal, fills the password when it is asked for and
+clicks approve; `gotoPalette(page, title)`, which opens the command palette and
+picks the page by title; and `readDoneTxid(page)`, which reads the txid from the
+done screen. It imports nothing from `fixtures/testnet.js`, so a new testnet
+spec imports these helpers instead of declaring its own and a change to the
+confirm modal or the done screen is made once.
+
 Before the venue check and before stdin is read, `global-setup.testnet.js`
 runs `assertOriginsAllowed` from `test/e2e/fixtures/testnet_origin.js`. It sends
 one `OPTIONS` request carrying the suite origin to each encoder, explorer and
