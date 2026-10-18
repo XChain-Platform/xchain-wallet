@@ -14,6 +14,12 @@ import os from 'node:os';
 import path from 'node:path';
 import { createWallet, expect, test } from '../../fixtures/wallet.js';
 import {
+    WALLET_UNLOCK,
+    approve,
+    gotoPalette,
+    readDoneTxid,
+} from '../../fixtures/testnet_walk.js';
+import {
     GAS_TICK,
     INDEXED_WAIT_MS,
     TESTNET_COIN,
@@ -35,7 +41,6 @@ import {
 import { FUNDING_SATS } from '../../fixtures/testnet_preflight.js';
 import { waitForResidualStake } from '../../fixtures/testnet_stakes.js';
 
-const WALLET_UNLOCK = 'testnetpassword123';
 const STAKE_AMOUNT = '100';
 const UNSTAKE_AMOUNT = '30';
 const MINT_AMOUNT = 200;
@@ -73,32 +78,6 @@ async function fundAddress(treasury, destination) {
     const result = await venue.broadcast(tx.txHex);
     const txid = result?.txid || tx.txid;
     await waitForFundingConfirmed(venue, destination, txid, { timeoutMs: INCLUSION_TIMEOUT });
-    return txid;
-}
-
-async function approve(page) {
-    const confirm = page.getByTestId('confirm-modal');
-    await expect(confirm).toBeVisible({ timeout: 120_000 });
-    const password = page.getByLabel('Password', { exact: true });
-    if (await password.count() && await password.isVisible()) await password.fill(WALLET_UNLOCK);
-    await expect(page.getByTestId('confirm-approve')).toBeEnabled({ timeout: 120_000 });
-    await page.getByTestId('confirm-approve').click();
-}
-
-async function gotoStaking(page) {
-    await page.keyboard.press('ControlOrMeta+k');
-    const dialog = page.getByRole('dialog', { name: 'Command palette' });
-    await expect(dialog).toBeVisible({ timeout: 30_000 });
-    await dialog.getByRole('combobox').fill('Staking');
-    await dialog.getByRole('option', { name: /^Staking\b/ }).first().click();
-}
-
-async function readDoneTxid(page) {
-    const value = page.getByRole('main').locator('code, dd')
-        .filter({ hasText: /^[0-9a-f]{64}$/ }).first();
-    await expect(value).toBeVisible({ timeout: 120_000 });
-    const txid = (await value.innerText()).trim();
-    expect(txid).toMatch(/^[0-9a-f]{64}$/);
     return txid;
 }
 
@@ -154,7 +133,7 @@ test.describe('STAKE and partial UNSTAKE on Bitcoin testnet', () => {
 
         await test.step('stake under a new signing key', async () => {
             pubkey = signingPubkey();
-            await gotoStaking(page);
+            await gotoPalette(page, 'Staking');
             await page.getByRole('button', { name: 'New stake', exact: true }).click();
             await page.getByRole('button', { name: /^Validator staking/ }).click();
             const main = page.getByRole('main');
@@ -183,7 +162,7 @@ test.describe('STAKE and partial UNSTAKE on Bitcoin testnet', () => {
         });
 
         await test.step('partially unstake and wait for the valid action', async () => {
-            await gotoStaking(page);
+            await gotoPalette(page, 'Staking');
             const row = page.getByRole('listitem', { name: 'Open Validator stake', exact: true });
             await expect(row).toBeVisible({ timeout: 120_000 });
             await row.click();
