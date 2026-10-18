@@ -14,6 +14,7 @@ import { describe, expect, it, vi } from 'vitest';
 import {
     assertOriginsAllowed,
     suiteOrigin,
+    suitePort,
 } from '../../e2e/fixtures/testnet_origin.js';
 
 const ORIGIN = 'http://localhost:4193';
@@ -159,14 +160,19 @@ describe('testnet origin preflight', () => {
 });
 
 describe('testnet suite origin', () => {
-    it('uses a positive integer preview port', () => {
-        expect(suiteOrigin({ XC_PREVIEW_PORT: '5077' })).toBe('http://localhost:5077');
-    });
+    it.each([
+        ['5077', 5077],
+        [undefined, 4193],
+        ['', 4193],
+        ['0', 4193],
+        ['-1', 4193],
+        ['4193.5', 4193],
+        ['65536', 4193],
+        ['not-a-port', 4193],
+    ])('resolves preview port %s to %i', (XC_PREVIEW_PORT, expectedPort) => {
+        const env = { XC_PREVIEW_PORT };
 
-    it.each(['', '0', '-1', '4193.5', 'not-a-port', undefined])(
-        'falls back to 4193 for preview port %s',
-        (XC_PREVIEW_PORT) => {
-            expect(suiteOrigin({ XC_PREVIEW_PORT })).toBe(ORIGIN);
-        },
-    );
+        expect(suitePort(env)).toBe(expectedPort);
+        expect(suiteOrigin(env)).toBe(`http://localhost:${suitePort(env)}`);
+    });
 });

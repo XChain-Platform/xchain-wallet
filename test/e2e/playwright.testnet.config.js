@@ -24,10 +24,11 @@
 // spec sets an explicit budget for its full chain sequence.
 
 import { defineConfig, devices } from '@playwright/test';
+import { suiteOrigin, suitePort } from './fixtures/testnet_origin.js';
 
 // Distinct from the regtest venue's 4183 and vite preview's 4173, so a testnet
 // pass can run beside either without either being mistaken for it.
-const PREVIEW_PORT = Number(process.env.XC_PREVIEW_PORT) || 4193;
+const PREVIEW_PORT = suitePort();
 
 export default defineConfig({
     testDir: './tests',
@@ -46,7 +47,7 @@ export default defineConfig({
     globalSetup: './global-setup.testnet.js',
     reporter: process.env.CI ? [['github'], ['html', { open: 'never' }]] : 'list',
     use: {
-        baseURL: `http://localhost:${PREVIEW_PORT}`,
+        baseURL: suiteOrigin(),
         trace: 'retain-on-failure',
         video: 'retain-on-failure',
         screenshot: 'only-on-failure',
