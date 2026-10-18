@@ -199,10 +199,14 @@ describe('testnet global setup', () => {
             liveVenue: vi.fn(() => ({})),
             readRunInput: vi.fn(() => INPUT),
             stageRunInput: vi.fn(async () => ({ cleanup, file: 'staged-input' })),
-            testnetEndpoints: vi.fn(() => ({})),
+            testnetEndpoints: vi.fn(() => ({ explorerUrl: 'explorer' })),
         }));
         vi.doMock('../../e2e/fixtures/testnet_preflight.js', () => ({
             preflightRunInput: vi.fn(async () => { throw refusal; }),
+        }));
+        vi.doMock('../../e2e/fixtures/testnet_origin.js', () => ({
+            assertOriginsAllowed: vi.fn(async () => {}),
+            suiteOrigin: vi.fn(() => 'http://localhost:4193'),
         }));
 
         try {
@@ -212,6 +216,7 @@ describe('testnet global setup', () => {
         } finally {
             vi.doUnmock('../../e2e/fixtures/testnet.js');
             vi.doUnmock('../../e2e/fixtures/testnet_preflight.js');
+            vi.doUnmock('../../e2e/fixtures/testnet_origin.js');
             vi.resetModules();
             log.mockRestore();
         }
