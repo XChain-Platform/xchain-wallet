@@ -196,9 +196,28 @@ Three things differ from regtest on purpose:
   funded wallet's phrase owner-only under the `xchain-wallet-testnet-recovery`
   directory in the OS temporary directory.
 
+`node test/e2e/fixtures/testnet_run_input.js <treasury.json> <claimant.json>`
+assembles that one run-input object from the stored treasury wallet file and
+the validator claimant file. It refuses either file when it is readable by
+group or other users, and refuses to write to a terminal, so the object only
+ever goes down a pipe. Starting that pipe remains the operator's act:
+
 ```bash
-cat <testnet run-input JSON> | pnpm test:e2e:testnet   # the operator's act, never a script's
+node test/e2e/fixtures/testnet_run_input.js <treasury.json> <claimant.json> | pnpm test:e2e:testnet
 ```
+
+After staging the input and before any spec runs, `global-setup.testnet.js`
+checks it with `test/e2e/fixtures/testnet_preflight.js`. The preflight refuses
+when confirmed treasury value cannot cover `FUNDING_SATS` plus the fee for two
+outputs, when the `claimant` is absent, or when the claimant's largest confirmed
+UTXO is below `MIN_CLAIM_UTXO_SATS`. A refusal names sats held, sats needed and
+the shortfall, but never a key or an address.
+
+When the treasury is short,
+`node test/e2e/fixtures/testnet_topup.js <source-wallet.json> <destination> [--broadcast]`
+refills it by sweeping every confirmed UTXO of a stored testnet key into one
+output to the destination. It prints one JSON line carrying `txid`, `txHex`,
+`fee`, `swept` and `inputs`, and broadcasts only when `--broadcast` is present.
 
 One worker, no retries: the specs share one treasury and one chain, and a
 retry on a public chain spends it twice. Bitcoin only, since staking is
