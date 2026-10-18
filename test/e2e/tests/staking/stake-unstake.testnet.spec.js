@@ -144,8 +144,11 @@ test.describe('STAKE and partial UNSTAKE on Bitcoin testnet', () => {
         const view = await venue.utxos(fundedAddress).catch(() => null);
         const left = (view?.utxos || []).reduce((sum, u) => sum + Number(u.value), 0);
         if (left > 0) {
+            const destination = treasury?.address || '<destination>';
             console.warn(`[testnet ${TESTNET_COIN}] ${left} sats remain on ${fundedAddress}; `
-                + `restore the wallet from ${recoveryFile} to recover them`);
+                + `recovery file: ${recoveryFile}; dry run: `
+                + `node test/e2e/fixtures/testnet_recover.js ${recoveryFile} ${destination}; `
+                + 'add --broadcast to send it');
         }
     });
 
