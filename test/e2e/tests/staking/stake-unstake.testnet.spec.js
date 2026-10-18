@@ -33,6 +33,7 @@ import {
     waitForValidAction,
 } from '../../fixtures/testnet.js';
 import { FUNDING_SATS } from '../../fixtures/testnet_preflight.js';
+import { waitForResidualStake } from '../../fixtures/testnet_stakes.js';
 
 const WALLET_UNLOCK = 'testnetpassword123';
 const STAKE_AMOUNT = '100';
@@ -99,29 +100,6 @@ async function readDoneTxid(page) {
     const txid = (await value.innerText()).trim();
     expect(txid).toMatch(/^[0-9a-f]{64}$/);
     return txid;
-}
-
-async function explorerRows(path) {
-    const response = await fetch(`${explorerUrl}/${TESTNET_COIN}/api/${path}`, {
-        signal: AbortSignal.timeout(30_000),
-    });
-    if (!response.ok) throw new Error(`explorer returned HTTP ${response.status} for ${path}`);
-    const body = await response.json();
-    if (Array.isArray(body)) return body;
-    if (Array.isArray(body?.data)) return body.data;
-    if (Array.isArray(body?.rows)) return body.rows;
-    return [];
-}
-
-async function waitForResidual(address, actionIndex) {
-    const deadline = Date.now() + INCLUSION_TIMEOUT;
-    while (Date.now() < deadline) {
-        const rows = await explorerRows(`stakes/${address}/source`).catch(() => []);
-        const row = rows.find((item) => Number(item.action_index) === Number(actionIndex));
-        if (row) return row;
-        await new Promise((resolve) => setTimeout(resolve, 30_000));
-    }
-    throw new Error(`residual stake for action ${actionIndex} was not indexed`);
 }
 
 test.describe('STAKE and partial UNSTAKE on Bitcoin testnet', () => {
@@ -226,7 +204,11 @@ test.describe('STAKE and partial UNSTAKE on Bitcoin testnet', () => {
             expect(Number(unstake.amount)).toBeCloseTo(Number(UNSTAKE_AMOUNT), 8);
             expect(String(unstake.tx_data).split('|')).toHaveLength(4);
 
-            const residual = await waitForResidual(address, unstake.action_index);
+            const residual = await waitForResidualStake(address, unstake.action_index, {
+                explorerUrl,
+                coin: TESTNET_COIN,
+                timeoutMs: INCLUSION_TIMEOUT,
+            });
             expect(residual.status).toBe('valid');
             expect(Number(residual.version)).toBe(2);
             expect(String(residual.signing_pubkey).toLowerCase()).toBe(pubkey);
