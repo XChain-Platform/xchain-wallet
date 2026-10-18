@@ -22,7 +22,6 @@ import {
     TESTNET_COIN,
     checkTestnetVenue,
     liveVenue,
-    mintXchain,
     readRunInput,
     readTestnetReceiveAddress,
     switchToTestnet,
@@ -33,6 +32,7 @@ import {
     waitForValidAction,
 } from '../../fixtures/testnet.js';
 import { fundTestnetAddress } from '../../fixtures/testnet_funding.js';
+import { mintTestnetXchain } from '../../fixtures/testnet_mint.js';
 import { leftoverNotice, writeRecoveryRecord } from '../../fixtures/testnet_recover.js';
 import { waitForResidualStake } from '../../fixtures/testnet_stakes.js';
 
@@ -92,7 +92,7 @@ test.describe('STAKE and partial UNSTAKE on Bitcoin testnet', () => {
             });
             await page.reload();
             await unlockAfterReload(page, WALLET_UNLOCK);
-            await mintXchain(page, MINT_AMOUNT);
+            await mintTestnetXchain(page, MINT_AMOUNT, { explorerUrl, coin: TESTNET_COIN });
             await waitForTokenBalance(venue, address, GAS_TICK, MINT_AMOUNT, {
                 timeoutMs: INCLUSION_TIMEOUT,
             });
