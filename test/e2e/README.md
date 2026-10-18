@@ -229,11 +229,31 @@ outputs, when the `claimant` is absent, or when the claimant's largest confirmed
 UTXO is below `MIN_CLAIM_UTXO_SATS`. A refusal names sats held, sats needed and
 the shortfall, but never a key or an address.
 
+After that run-input preflight and before any spec runs,
+`global-setup.testnet.js` runs `preflightClaimantReward` from
+`test/e2e/fixtures/testnet_rewards.js`. It reads the claimant's accrued rewards
+and valid collects from the testnet explorer. When the claimant has no
+unclaimed partial validator reward, or a set `claimant.amount` is not a valid
+partial of that reward, setup stops the run with one error starting
+`Claimant reward preflight refused`. The error names the reward seen but never
+a key or an address, so a claimant with nothing to claim fails in seconds
+instead of after stake-unstake has spent treasury and hours of block time.
+
 When the treasury is short,
 `node test/e2e/fixtures/testnet_topup.js <source-wallet.json> <destination> [--broadcast]`
 refills it by sweeping every confirmed UTXO of a stored testnet key into one
 output to the destination. It prints one JSON line carrying `txid`, `txHex`,
 `fee`, `swept` and `inputs`, and broadcasts only when `--broadcast` is present.
+
+`node test/e2e/fixtures/testnet_recover.js <recovery-wallet.json> <destination> [--broadcast]`
+takes one recovery file that stake-unstake wrote under the
+`xchain-wallet-testnet-recovery` directory. It derives that wallet's key from
+its phrase the way the wallet does, refuses a file readable by group or other
+users, and sweeps every confirmed UTXO of the recovered address into one output
+to the destination. It prints one JSON line carrying `txid`, `txHex`, `fee`,
+`swept` and `inputs`, and broadcasts only when `--broadcast` is present. This is
+how sats left on a funded wallet go back to the treasury without a by-hand
+wallet restore.
 
 One worker, no retries: the specs share one treasury and one chain, and a
 retry on a public chain spends it twice. Bitcoin only, since staking is
