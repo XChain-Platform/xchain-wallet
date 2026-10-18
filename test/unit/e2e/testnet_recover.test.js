@@ -21,7 +21,11 @@ import {
     assertTreasuryKey,
     outputScriptHex,
 } from '../../e2e/fixtures/testnet.js';
-import { main, recoverKey } from '../../e2e/fixtures/testnet_recover.js';
+import {
+    main,
+    recoverKey,
+    writeRecoveryRecord,
+} from '../../e2e/fixtures/testnet_recover.js';
 
 const { WalletUtils } = xchainSdk;
 const PHRASE = 'abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about';
@@ -112,6 +116,50 @@ describe('testnet recovery key derivation', () => {
 });
 
 describe('testnet recovery CLI', () => {
+    it('writes an owner-only record from phrase words that the CLI can sweep', async () => {
+        const source = independentKey(0, 9);
+        const destination = independentKey(0, 10);
+        const parent = fs.mkdtempSync(path.join(os.tmpdir(), 'xchain-recover-writer-'));
+        tempDirs.push(parent);
+        const directory = path.join(parent, 'records');
+        const file = writeRecoveryRecord(source.address, PHRASE.split(' '), { dir: directory });
+        const venue = fakeVenue(source);
+        const stdout = capture();
+
+        expect(fs.statSync(directory).mode & 0o777).toBe(0o700);
+        expect(fs.statSync(file).mode & 0o777).toBe(0o600);
+        await expect(main([file, destination.address], { venue, stdout: stdout.stream }))
+            .resolves.toBe(0);
+        const output = JSON.parse(stdout.text());
+        const transaction = bitcoin.Transaction.fromHex(output.txHex);
+
+        expect(transaction.outs).toHaveLength(1);
+        expect(bitcoin.address.fromOutputScript(transaction.outs[0].script, TESTNET_NETWORK))
+            .toBe(destination.address);
+        expect(venue.utxos).toHaveBeenCalledOnce();
+        expect(venue.broadcast).not.toHaveBeenCalled();
+    });
+
+    it('tightens a pre-existing recovery directory and its record', () => {
+        const source = independentKey(1, 9);
+        const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'xchain-recover-writer-'));
+        tempDirs.push(directory);
+        fs.chmodSync(directory, 0o755);
+        const expectedFile = path.join(directory, `stake-unstake-${source.address}.json`);
+        fs.writeFileSync(expectedFile, '{}', { mode: 0o644 });
+        fs.chmodSync(expectedFile, 0o644);
+
+        const file = writeRecoveryRecord(source.address, PHRASE, { dir: directory });
+
+        expect(file).toBe(expectedFile);
+        expect(fs.statSync(directory).mode & 0o777).toBe(0o700);
+        expect(fs.statSync(file).mode & 0o777).toBe(0o600);
+        expect(JSON.parse(fs.readFileSync(file, 'utf8'))).toEqual({
+            address: source.address,
+            phrase: PHRASE,
+        });
+    });
+
     it('returns the usage exit when fewer than two positional arguments are given', async () => {
         const stdout = capture();
         const stderr = capture();

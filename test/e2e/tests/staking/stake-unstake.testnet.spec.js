@@ -9,9 +9,6 @@
 // contact legal@dankest.llc.
 
 import { randomBytes } from 'node:crypto';
-import { mkdirSync, writeFileSync } from 'node:fs';
-import os from 'node:os';
-import path from 'node:path';
 import { createWallet, expect, test } from '../../fixtures/wallet.js';
 import {
     WALLET_UNLOCK,
@@ -39,6 +36,7 @@ import {
     waitForValidAction,
 } from '../../fixtures/testnet.js';
 import { FUNDING_SATS } from '../../fixtures/testnet_preflight.js';
+import { writeRecoveryRecord } from '../../fixtures/testnet_recover.js';
 import { waitForResidualStake } from '../../fixtures/testnet_stakes.js';
 
 const STAKE_AMOUNT = '100';
@@ -53,15 +51,6 @@ const { explorerUrl } = testnetEndpoints();
 
 // The funded wallet has a random seed, so its phrase is the only way back to the
 // sats sent to it. It is written here, owner-only, before any funding is sent.
-const RECOVERY_DIR = path.join(os.tmpdir(), 'xchain-wallet-testnet-recovery');
-
-function recordRecovery(address, phrase) {
-    mkdirSync(RECOVERY_DIR, { recursive: true, mode: 0o700 });
-    const file = path.join(RECOVERY_DIR, `stake-unstake-${address}.json`);
-    writeFileSync(file, JSON.stringify({ address, phrase: phrase.join(' ') }), { mode: 0o600 });
-    return file;
-}
-
 function signingPubkey() {
     return randomBytes(32).toString('hex');
 }
@@ -119,7 +108,7 @@ test.describe('STAKE and partial UNSTAKE on Bitcoin testnet', () => {
             await switchToTestnet(page, WALLET_UNLOCK);
             address = await readTestnetReceiveAddress(page);
             fundedAddress = address;
-            recoveryFile = recordRecovery(address, phrase);
+            recoveryFile = writeRecoveryRecord(address, phrase);
             await fundAddress(treasury, address);
             await page.reload();
             await unlockAfterReload(page, WALLET_UNLOCK);
