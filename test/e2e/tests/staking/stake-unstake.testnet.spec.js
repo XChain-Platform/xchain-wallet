@@ -20,8 +20,6 @@ import {
     GAS_TICK,
     INDEXED_WAIT_MS,
     TESTNET_COIN,
-    assertTreasuryKey,
-    buildTreasuryFunding,
     checkTestnetVenue,
     liveVenue,
     mintXchain,
@@ -31,11 +29,10 @@ import {
     testnetEndpoints,
     unlockAfterReload,
     waitForActivationHeight,
-    waitForFundingConfirmed,
     waitForTokenBalance,
     waitForValidAction,
 } from '../../fixtures/testnet.js';
-import { FUNDING_SATS } from '../../fixtures/testnet_preflight.js';
+import { fundTestnetAddress } from '../../fixtures/testnet_funding.js';
 import { writeRecoveryRecord } from '../../fixtures/testnet_recover.js';
 import { waitForResidualStake } from '../../fixtures/testnet_stakes.js';
 
@@ -53,21 +50,6 @@ const { explorerUrl } = testnetEndpoints();
 // sats sent to it. It is written here, owner-only, before any funding is sent.
 function signingPubkey() {
     return randomBytes(32).toString('hex');
-}
-
-async function fundAddress(treasury, destination) {
-    assertTreasuryKey(treasury);
-    const view = await venue.utxos(treasury.address);
-    const tx = buildTreasuryFunding({
-        treasury,
-        utxos: Array.isArray(view?.utxos) ? view.utxos : [],
-        destination,
-        sendSats: FUNDING_SATS,
-    });
-    const result = await venue.broadcast(tx.txHex);
-    const txid = result?.txid || tx.txid;
-    await waitForFundingConfirmed(venue, destination, txid, { timeoutMs: INCLUSION_TIMEOUT });
-    return txid;
 }
 
 test.describe('STAKE and partial UNSTAKE on Bitcoin testnet', () => {
@@ -109,7 +91,9 @@ test.describe('STAKE and partial UNSTAKE on Bitcoin testnet', () => {
             address = await readTestnetReceiveAddress(page);
             fundedAddress = address;
             recoveryFile = writeRecoveryRecord(address, phrase);
-            await fundAddress(treasury, address);
+            await fundTestnetAddress(venue, treasury, address, {
+                timeoutMs: INCLUSION_TIMEOUT,
+            });
             await page.reload();
             await unlockAfterReload(page, WALLET_UNLOCK);
             await mintXchain(page, MINT_AMOUNT);
