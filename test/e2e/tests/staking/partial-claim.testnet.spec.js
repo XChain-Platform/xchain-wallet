@@ -10,6 +10,12 @@
 
 import { createWallet, expect, test } from '../../fixtures/wallet.js';
 import {
+    WALLET_UNLOCK,
+    approve,
+    gotoPalette,
+    readDoneTxid,
+} from '../../fixtures/testnet_walk.js';
+import {
     INDEXED_WAIT_MS,
     TESTNET_COIN,
     addressTypeOf,
@@ -30,28 +36,10 @@ import {
     unclaimedReward,
 } from '../../fixtures/testnet_rewards.js';
 
-const WALLET_UNLOCK = 'testnetpassword123';
 const INCLUSION_TIMEOUT = INDEXED_WAIT_MS;
 
 const venue = liveVenue();
 const { explorerUrl } = testnetEndpoints();
-
-async function approve(page) {
-    const confirm = page.getByTestId('confirm-modal');
-    await expect(confirm).toBeVisible({ timeout: 120_000 });
-    const password = page.getByLabel('Password', { exact: true });
-    if (await password.count() && await password.isVisible()) await password.fill(WALLET_UNLOCK);
-    await expect(page.getByTestId('confirm-approve')).toBeEnabled({ timeout: 120_000 });
-    await page.getByTestId('confirm-approve').click();
-}
-
-async function gotoPalette(page, title) {
-    await page.keyboard.press('ControlOrMeta+k');
-    const dialog = page.getByRole('dialog', { name: 'Command palette' });
-    await expect(dialog).toBeVisible({ timeout: 30_000 });
-    await dialog.getByRole('combobox').fill(title);
-    await dialog.getByRole('option', { name: new RegExp(`^${title}\\b`) }).first().click();
-}
 
 async function importClaimant(page, claimant) {
     // The live validators stake from P2PKH addresses, so the key is proven
@@ -85,15 +73,6 @@ async function importClaimant(page, claimant) {
     await expect(use).toHaveAttribute('title', 'Make this the active address');
     await use.click();
     await expect(use).toBeHidden({ timeout: 120_000 });
-}
-
-async function readDoneTxid(page) {
-    const value = page.getByRole('main').locator('code, dd')
-        .filter({ hasText: /^[0-9a-f]{64}$/ }).first();
-    await expect(value).toBeVisible({ timeout: 120_000 });
-    const txid = (await value.innerText()).trim();
-    expect(txid).toMatch(/^[0-9a-f]{64}$/);
-    return txid;
 }
 
 test.describe('partial validator reward claim on Bitcoin testnet', () => {
