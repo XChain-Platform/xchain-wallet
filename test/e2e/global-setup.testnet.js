@@ -38,6 +38,7 @@ import {
 } from './fixtures/testnet.js';
 import { assertOriginsAllowed, suiteOrigin } from './fixtures/testnet_origin.js';
 import { preflightRunInput } from './fixtures/testnet_preflight.js';
+import { preflightClaimantReward } from './fixtures/testnet_rewards.js';
 
 export default async function globalSetup() {
     const endpoints = testnetEndpoints();
@@ -53,7 +54,12 @@ export default async function globalSetup() {
 
     const staged = await stageRunInput(process.stdin);
     try {
-        await preflightRunInput(venue, readRunInput(staged.file));
+        const input = readRunInput(staged.file);
+        await preflightRunInput(venue, input);
+        await preflightClaimantReward(input, {
+            explorerUrl: endpoints.explorerUrl,
+            coin: TESTNET_COIN,
+        });
     } catch (error) {
         staged.cleanup();
         throw error;
