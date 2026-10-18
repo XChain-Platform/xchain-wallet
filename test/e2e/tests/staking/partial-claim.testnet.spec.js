@@ -23,6 +23,12 @@ import {
     waitForValidAction,
 } from '../../fixtures/testnet.js';
 import { MIN_CLAIM_UTXO_SATS } from '../../fixtures/testnet_preflight.js';
+import {
+    claimAmount,
+    partialAmount,
+    rewardTotal,
+    unclaimedReward,
+} from '../../fixtures/testnet_rewards.js';
 
 const WALLET_UNLOCK = 'testnetpassword123';
 const INCLUSION_TIMEOUT = INDEXED_WAIT_MS;
@@ -90,53 +96,6 @@ async function readDoneTxid(page) {
     return txid;
 }
 
-async function explorerRows(path) {
-    const response = await fetch(`${explorerUrl}/${TESTNET_COIN}/api/${path}`, {
-        signal: AbortSignal.timeout(30_000),
-    });
-    if (!response.ok) throw new Error(`explorer returned HTTP ${response.status} for ${path}`);
-    const body = await response.json();
-    if (Array.isArray(body)) return body;
-    if (Array.isArray(body?.data)) return body.data;
-    if (Array.isArray(body?.rows)) return body.rows;
-    return [];
-}
-
-function rewardTotal(rewards, claims) {
-    const accrued = rewards.reduce((sum, row) => sum + Number(row.amount || 0), 0);
-    const claimed = claims
-        .filter((row) => String(row.status).toLowerCase() === 'valid')
-        .reduce((sum, row) => sum + Number(row.amount || 0), 0);
-    return accrued - claimed;
-}
-
-async function unclaimed(address) {
-    const [rewards, claims] = await Promise.all([
-        explorerRows(`rewards/${address}/address`),
-        explorerRows(`collects/${address}/address`),
-    ]);
-    return rewardTotal(rewards, claims);
-}
-
-// A caller may name a smaller claim (claimant.amount) so a live validator's
-// reward is barely touched; it must still leave part of the reward pending.
-function claimAmount(total, requested) {
-    if (requested === undefined) return partialAmount(total);
-    const amount = String(requested);
-    if (!/^\d+(\.\d{1,8})?$/.test(amount) || !(Number(amount) > 0) || !(Number(amount) < total)) {
-        throw new Error('claimant.amount must be a positive decimal below the unclaimed reward');
-    }
-    return amount;
-}
-
-function partialAmount(total) {
-    const units = BigInt(Math.floor(total * 100_000_000));
-    const partial = units > 1n ? units / 2n : 1n;
-    const whole = partial / 100_000_000n;
-    const fraction = (partial % 100_000_000n).toString().padStart(8, '0').replace(/0+$/, '');
-    return fraction ? `${whole}.${fraction}` : String(whole);
-}
-
 test.describe('partial validator reward claim on Bitcoin testnet', () => {
     test.use({ actionTimeout: 120_000 });
     // One indexed wait, plus an hour for the wallet walk and the reads around it.
@@ -161,7 +120,7 @@ test.describe('partial validator reward claim on Bitcoin testnet', () => {
             amount: claimantInput.amount,
         };
 
-        const before = await unclaimed(claimant.address);
+        const before = await unclaimedReward(claimant.address, { explorerUrl, coin: TESTNET_COIN });
         if (before <= 0.00000001) {
             throw new Error('the supplied claimant has no partial validator reward available');
         }
@@ -218,7 +177,7 @@ test.describe('partial validator reward claim on Bitcoin testnet', () => {
             expect(Number(action.amount)).toBeCloseTo(Number(amount), 8);
             expect(String(action.tx_data).split('|')).toHaveLength(3);
 
-            const after = await unclaimed(claimant.address);
+            const after = await unclaimedReward(claimant.address, { explorerUrl, coin: TESTNET_COIN });
             expect(after).toBeGreaterThanOrEqual(before - Number(amount) - 0.00000001);
             expect(after).toBeGreaterThan(0);
         });
