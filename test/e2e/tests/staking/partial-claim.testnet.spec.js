@@ -28,11 +28,10 @@ import {
     unlockAfterReload,
     waitForValidAction,
 } from '../../fixtures/testnet.js';
-import { MIN_CLAIM_UTXO_SATS } from '../../fixtures/testnet_preflight.js';
+import { preflightClaimantUtxo } from '../../fixtures/testnet_preflight.js';
 import {
     claimAmount,
-    partialAmount,
-    rewardTotal,
+    preflightClaimantReward,
     unclaimedReward,
 } from '../../fixtures/testnet_rewards.js';
 
@@ -88,30 +87,9 @@ test.describe('partial validator reward claim on Bitcoin testnet', () => {
     });
 
     test('claims part of an existing validator reward and leaves the remainder pending', async ({ page }) => {
-        const claimantInput = input.claimant ?? input.validator;
-        if (typeof claimantInput?.wif !== 'string'
-            || typeof (claimantInput?.address ?? claimantInput?.segwitAddress) !== 'string') {
-            throw new Error('testnet stdin needs claimant { wif, address } for the partial-claim spec');
-        }
-        const claimant = {
-            wif: claimantInput.wif,
-            address: claimantInput.address ?? claimantInput.segwitAddress,
-            amount: claimantInput.amount,
-        };
-
-        const before = await unclaimedReward(claimant.address, { explorerUrl, coin: TESTNET_COIN });
-        if (before <= 0.00000001) {
-            throw new Error('the supplied claimant has no partial validator reward available');
-        }
-        const confirmed = (await venue.utxos(claimant.address))?.utxos
-            ?.filter((row) => Number(row.confirmations) >= 1) ?? [];
-        const largestConfirmed = confirmed.reduce(
-            (largest, row) => Math.max(largest, Number(row.value) || 0),
-            0,
-        );
-        if (largestConfirmed < MIN_CLAIM_UTXO_SATS) {
-            throw new Error(`the supplied claimant needs one confirmed UTXO of at least ${MIN_CLAIM_UTXO_SATS} sats`);
-        }
+        const claimant = input.claimant;
+        const before = await preflightClaimantReward(input, { explorerUrl, coin: TESTNET_COIN });
+        await preflightClaimantUtxo(venue, claimant.address);
 
         await test.step('import and activate the validator claimant', async () => {
             await createWallet(page, { password: WALLET_UNLOCK });

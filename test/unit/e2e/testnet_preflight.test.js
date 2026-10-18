@@ -14,6 +14,7 @@ import { describe, expect, it, vi } from 'vitest';
 import {
     FUNDING_SATS,
     MIN_CLAIM_UTXO_SATS,
+    preflightClaimantUtxo,
     preflightRunInput,
 } from '../../e2e/fixtures/testnet_preflight.js';
 
@@ -52,6 +53,61 @@ async function captureRefusal(run, input = INPUT) {
     expect(refusal.message).toMatch(/held \d+ sats, needed \d+ sats, shortfall \d+ sats/);
     return refusal;
 }
+
+describe('testnet claimant UTXO preflight', () => {
+    it('refuses a view holding only unconfirmed UTXOs', async () => {
+        const venue = fakeVenue({
+            claimant: [row(MIN_CLAIM_UTXO_SATS, 0), row(MIN_CLAIM_UTXO_SATS * 2, 0)],
+        });
+
+        const error = await captureRefusal(
+            () => preflightClaimantUtxo(venue, INPUT.claimant.address),
+        );
+
+        expect(error.message).toContain(
+            `held 0 sats, needed ${MIN_CLAIM_UTXO_SATS} sats, shortfall ${MIN_CLAIM_UTXO_SATS} sats`,
+        );
+    });
+
+    it('refuses a largest confirmed UTXO one sat below the minimum', async () => {
+        const venue = fakeVenue({
+            claimant: [row(MIN_CLAIM_UTXO_SATS - 1), row(MIN_CLAIM_UTXO_SATS, 0)],
+        });
+
+        const error = await captureRefusal(
+            () => preflightClaimantUtxo(venue, INPUT.claimant.address),
+        );
+
+        expect(error.message).toContain(
+            `held ${MIN_CLAIM_UTXO_SATS - 1} sats, needed ${MIN_CLAIM_UTXO_SATS} sats, shortfall 1 sats`,
+        );
+    });
+
+    it('returns the held and needed values at the exact minimum', async () => {
+        const venue = fakeVenue({ claimant: [row(MIN_CLAIM_UTXO_SATS)] });
+
+        await expect(preflightClaimantUtxo(venue, INPUT.claimant.address)).resolves.toEqual({
+            held: MIN_CLAIM_UTXO_SATS,
+            needed: MIN_CLAIM_UTXO_SATS,
+        });
+    });
+
+    it('does not name the claimant key or address in a refusal', async () => {
+        const input = {
+            ...INPUT,
+            claimant: {
+                wif: 'private-key-that-must-not-leak',
+                address: 'address-that-must-not-leak',
+            },
+        };
+        const venue = fakeVenue({ claimant: [row(MIN_CLAIM_UTXO_SATS - 1)] });
+
+        await captureRefusal(
+            () => preflightClaimantUtxo(venue, input.claimant.address),
+            input,
+        );
+    });
+});
 
 describe('testnet run-input preflight', () => {
     it('refuses confirmed treasury value that cannot cover funding and its two-output fee', async () => {
@@ -148,6 +204,10 @@ describe('testnet global setup', () => {
         vi.doMock('../../e2e/fixtures/testnet_preflight.js', () => ({
             preflightRunInput: vi.fn(async () => { throw refusal; }),
         }));
+        vi.doMock('../../e2e/fixtures/testnet_origin.js', () => ({
+            assertOriginsAllowed: vi.fn(async () => {}),
+            suiteOrigin: vi.fn(() => 'http://localhost:4193'),
+        }));
 
         try {
             const { default: globalSetup } = await import('../../e2e/global-setup.testnet.js');
@@ -156,6 +216,7 @@ describe('testnet global setup', () => {
         } finally {
             vi.doUnmock('../../e2e/fixtures/testnet.js');
             vi.doUnmock('../../e2e/fixtures/testnet_preflight.js');
+            vi.doUnmock('../../e2e/fixtures/testnet_origin.js');
             vi.resetModules();
             log.mockRestore();
         }
