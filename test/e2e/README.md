@@ -197,6 +197,17 @@ done screen. It imports nothing from `fixtures/testnet.js`, so a new testnet
 spec imports these helpers instead of declaring its own and a change to the
 confirm modal or the done screen is made once.
 
+Stake-unstake funds each wallet it creates through `fundTestnetAddress(venue,
+treasury, destination, options)` in `test/e2e/fixtures/testnet_funding.js`.
+The helper refuses a destination that is not a Bitcoin testnet address before
+it reads any key or calls the venue, proves that the treasury key derives its
+declared address, builds and broadcasts one payment of `FUNDING_SATS` (or the
+`sendSats` option) from the treasury's confirmed UTXOs, waits through
+`waitForFundingConfirmed` until the destination shows it confirmed, and returns
+its txid. It reads nothing from stdin, so a new testnet spec funds a wallet by
+passing it the treasury from the staged run input instead of composing those
+steps itself.
+
 Before the venue check and before stdin is read, `global-setup.testnet.js`
 runs `assertOriginsAllowed` from `test/e2e/fixtures/testnet_origin.js`. It sends
 one `OPTIONS` request carrying the suite origin to each encoder, explorer and
