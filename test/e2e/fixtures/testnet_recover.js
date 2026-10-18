@@ -4,6 +4,8 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 import wifCodec from 'wif';
 import xchainSdk from 'xchain-sdk';
@@ -15,6 +17,21 @@ import { buildTopUp } from './testnet_topup.js';
 
 const { WalletUtils } = xchainSdk;
 const USAGE = 'usage: node test/e2e/fixtures/testnet_recover.js <recovery-wallet.json> <destination> [--broadcast]';
+export const RECOVERY_DIR = path.join(os.tmpdir(), 'xchain-wallet-testnet-recovery');
+
+export function writeRecoveryRecord(address, phrase, { dir = RECOVERY_DIR } = {}) {
+    const phraseText = Array.isArray(phrase) ? phrase.join(' ') : phrase;
+    if (typeof address !== 'string' || typeof phraseText !== 'string') {
+        throw new TypeError('recovery record requires an address and phrase');
+    }
+
+    fs.mkdirSync(dir, { recursive: true, mode: 0o700 });
+    fs.chmodSync(dir, 0o700);
+    const file = path.join(dir, `stake-unstake-${address}.json`);
+    fs.writeFileSync(file, JSON.stringify({ address, phrase: phraseText }), { mode: 0o600 });
+    fs.chmodSync(file, 0o600);
+    return file;
+}
 
 export function recoverKey({ address, phrase } = {}) {
     if (typeof address !== 'string' || typeof phrase !== 'string') {
