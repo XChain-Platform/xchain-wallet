@@ -15,9 +15,14 @@ function defaultSleep(ms) {
 }
 
 function failureDetail(error) {
-    if (error?.code) return String(error.code);
-    if (error?.message) return error.message;
-    return String(error);
+    if (Number.isInteger(error?.httpStatus)) return `HTTP ${error.httpStatus}`;
+
+    const code = typeof error?.cause?.code === 'string'
+        ? error.cause.code
+        : typeof error?.code === 'string'
+            ? error.code
+            : error?.name;
+    return typeof code === 'string' && /^[A-Za-z_]{2,40}$/.test(code) ? code : 'unknown';
 }
 
 async function explorerRows(address, { explorerUrl, coin, fetch }) {
@@ -25,7 +30,7 @@ async function explorerRows(address, { explorerUrl, coin, fetch }) {
         signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
     });
     if (!response.ok) {
-        throw new Error(`HTTP ${response.status}`);
+        throw Object.assign(new Error(), { httpStatus: response.status });
     }
     const body = await response.json();
     if (Array.isArray(body)) return body;
