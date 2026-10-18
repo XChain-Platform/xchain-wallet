@@ -33,7 +33,7 @@ import {
     waitForValidAction,
 } from '../../fixtures/testnet.js';
 import { fundTestnetAddress } from '../../fixtures/testnet_funding.js';
-import { writeRecoveryRecord } from '../../fixtures/testnet_recover.js';
+import { leftoverNotice, writeRecoveryRecord } from '../../fixtures/testnet_recover.js';
 import { waitForResidualStake } from '../../fixtures/testnet_stakes.js';
 
 const STAKE_AMOUNT = '100';
@@ -46,8 +46,6 @@ const ACTIVATION_TIMEOUT = INDEXED_WAIT_MS + 60 * 60_000;
 const venue = liveVenue();
 const { explorerUrl } = testnetEndpoints();
 
-// The funded wallet has a random seed, so its phrase is the only way back to the
-// sats sent to it. It is written here, owner-only, before any funding is sent.
 function signingPubkey() {
     return randomBytes(32).toString('hex');
 }
@@ -69,15 +67,11 @@ test.describe('STAKE and partial UNSTAKE on Bitcoin testnet', () => {
 
     test.afterAll(async () => {
         if (!fundedAddress) return;
-        const view = await venue.utxos(fundedAddress).catch(() => null);
-        const left = (view?.utxos || []).reduce((sum, u) => sum + Number(u.value), 0);
-        if (left > 0) {
-            const destination = treasury?.address || '<destination>';
-            console.warn(`[testnet ${TESTNET_COIN}] ${left} sats remain on ${fundedAddress}; `
-                + `recovery file: ${recoveryFile}; dry run: `
-                + `node test/e2e/fixtures/testnet_recover.js ${recoveryFile} ${destination}; `
-                + 'add --broadcast to send it');
-        }
+        const notice = await leftoverNotice(venue, fundedAddress, {
+            file: recoveryFile,
+            destination: treasury?.address,
+        });
+        if (notice) console.warn(notice);
     });
 
     test('mints, stakes, waits for activation, and partially unstakes', async ({ page }) => {
@@ -90,6 +84,8 @@ test.describe('STAKE and partial UNSTAKE on Bitcoin testnet', () => {
             await switchToTestnet(page, WALLET_UNLOCK);
             address = await readTestnetReceiveAddress(page);
             fundedAddress = address;
+            // The funded wallet has a random seed, so its phrase is the only way back to the
+            // sats sent to it. It is written here, owner-only, before any funding is sent.
             recoveryFile = writeRecoveryRecord(address, phrase);
             await fundTestnetAddress(venue, treasury, address, {
                 timeoutMs: INCLUSION_TIMEOUT,

@@ -22,6 +22,7 @@ import {
     outputScriptHex,
 } from '../../e2e/fixtures/testnet.js';
 import {
+    leftoverNotice,
     main,
     recoverKey,
     writeRecoveryRecord,
@@ -82,6 +83,58 @@ function fakeVenue(source, broadcastResult = { txid: 'broadcast-id' }) {
         broadcast: vi.fn(async () => broadcastResult),
     };
 }
+
+describe('testnet recovery leftover notice', () => {
+    it('sums UTXOs and names the recovery file and dry-run command', async () => {
+        const venue = {
+            utxos: vi.fn(async () => ({ utxos: [{ value: 1200 }, { value: '34' }] })),
+        };
+
+        await expect(leftoverNotice(venue, 'tb1qfunded', {
+            file: '/tmp/recovery.json',
+            destination: 'tb1qtreasury',
+        })).resolves.toBe(
+            '[testnet TBTC] 1234 sats remain on tb1qfunded; '
+            + 'recovery file: /tmp/recovery.json; dry run: '
+            + 'node test/e2e/fixtures/testnet_recover.js /tmp/recovery.json tb1qtreasury; '
+            + 'add --broadcast to send it',
+        );
+        expect(venue.utxos).toHaveBeenCalledWith('tb1qfunded');
+    });
+
+    it('returns null for an empty UTXO view', async () => {
+        const venue = { utxos: vi.fn(async () => ({ utxos: [] })) };
+
+        await expect(leftoverNotice(venue, 'tb1qempty', { file: '/tmp/empty.json' }))
+            .resolves.toBeNull();
+    });
+
+    it.each([
+        ['a throwing read', vi.fn(async () => { throw new Error('private venue failure'); })],
+        ['a view without a UTXO array', vi.fn(async () => ({ error: 'private venue failure' }))],
+    ])('reports an unreadable balance for %s without exposing the venue error', async (_, utxos) => {
+        const notice = await leftoverNotice({ utxos }, 'tb1qunreadable', {
+            file: '/tmp/unreadable.json',
+            destination: 'tb1qtreasury',
+        });
+
+        expect(notice).toContain('[testnet TBTC] leftover balance could not be read');
+        expect(notice).toContain('recovery file: /tmp/unreadable.json');
+        expect(notice).toContain(
+            'node test/e2e/fixtures/testnet_recover.js /tmp/unreadable.json tb1qtreasury',
+        );
+        expect(notice).not.toContain('private venue failure');
+    });
+
+    it('uses the destination placeholder when no destination is set', async () => {
+        const venue = { utxos: vi.fn(async () => ({ utxos: [{ value: 1 }] })) };
+
+        await expect(leftoverNotice(venue, 'tb1qfunded', { file: '/tmp/recovery.json' }))
+            .resolves.toContain(
+                'node test/e2e/fixtures/testnet_recover.js /tmp/recovery.json <destination>',
+            );
+    });
+});
 
 describe('testnet recovery key derivation', () => {
     it('recovers a receive-chain key and independently derives its p2wpkh address', () => {
