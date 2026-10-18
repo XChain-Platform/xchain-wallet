@@ -179,6 +179,14 @@ wait (`waitForTokenBalance`, `waitForValidAction`, `waitForActivationHeight`,
 (`test/unit/e2e/testnet-harness.test.js`) proves the whole healthy path with a
 venue whose forbidden members throw.
 
+Stake-unstake waits for its residual stake row through `waitForResidualStake`
+in `test/e2e/fixtures/testnet_stakes.js`. It polls the explorer's stakes source
+route for the address every 30 seconds within the indexed wait budget, treats a
+non-OK answer or a rejected request as a miss and keeps polling, and at the
+deadline names the action index and, when the last poll failed, that failure as
+the HTTP status or an error code. A refused or misrouted stakes request
+therefore reads differently from a residual that is not yet indexed.
+
 Before the venue check and before stdin is read, `global-setup.testnet.js`
 runs `assertOriginsAllowed` from `test/e2e/fixtures/testnet_origin.js`. It sends
 one `OPTIONS` request carrying the suite origin to each encoder, explorer and
@@ -189,10 +197,12 @@ Otherwise setup stops the run with one error starting `Origin preflight refused`
 that names every refused role, the suite origin and the header seen, or the
 fetch rejection code. A public service that permits only the production wallet
 origin therefore fails the run in seconds instead of stalling it hours in. The
-suite origin is `http://localhost:` plus `XC_PREVIEW_PORT`, or `4193` when that
-variable is unset, matching the port `playwright.testnet.config.js` uses for the
-preview. This preflight does not relax browser origin rules or decide which
-origins a service allows.
+`suitePort` helper in `test/e2e/fixtures/testnet_origin.js` takes
+`XC_PREVIEW_PORT` only when it is an integer from 1 to 65535 and uses `4193`
+otherwise. `playwright.testnet.config.js` serves the preview on `suitePort()`
+and sets `baseURL` to `suiteOrigin()`, so the origin preflight probes the same
+origin the browser is served from. This preflight does not relax browser origin
+rules or decide which origins a service allows.
 
 Three things differ from regtest on purpose:
 
