@@ -17,8 +17,14 @@ const SERVICES = Object.freeze([
 ]);
 
 export function suiteOrigin(env = process.env) {
+    return `http://localhost:${suitePort(env)}`;
+}
+
+export function suitePort(env = process.env) {
     const port = Number(env.XC_PREVIEW_PORT);
-    return `http://localhost:${Number.isInteger(port) && port > 0 ? port : DEFAULT_PREVIEW_PORT}`;
+    return Number.isInteger(port) && port >= 1 && port <= 65535
+        ? port
+        : DEFAULT_PREVIEW_PORT;
 }
 
 function rejectionCode(error) {
