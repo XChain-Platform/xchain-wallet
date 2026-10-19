@@ -14,7 +14,7 @@
         "tools/release/sign.sh": "36e35ecc6471f1165d83a171e49e4f8692646baf209e11668417820d896e6f3c",
         "tools/release/verify.sh": "2b8a69f21df3ef050f3a965204123ec9e790de6755ff7327d7d316b264770c2e",
         "tools/release/lib.sh": "cc8e8d24a10783636c09989c2c5de4f7e0bd1e5f6a9c4ff79421cf8d62e680d3",
-        "tools/release/expected-artifacts.txt": "389ee77303d0355368e0f1c9c8b44ad3caa5f72428a75ddc074ff6f2862dd0d9",
+        "tools/release/expected-artifacts.txt": "a4dc896b3ada2ba303ddff3b66cd54f664004cf619b0ccde90c33a9dddc537c3",
         "tools/build-reproduce/check-no-dev-mock.sh": "89b44c98c77a6c2307e8dc390fe461bbf7b93c7200b66788c9190ff80366db5e",
         "tools/release/update-info.mjs": "3e8c08ad2fe7dbc4f12a94ce68a682bc2094200040e2e75fdea61bcb0513c73f",
         "tools/release/store-profile-status.txt": "e9c6db30b1090c71ed52755651f1ff3efd3ef1b11f893a8d10d44de69eede5dd"
