@@ -32,7 +32,7 @@
 //   4. Imperative API (`load` / `save` / `clear` / `hasDraft`) rather
 //      than auto-syncing state: each form already owns its state
 //      and decides when to write / restore. The hook just centralises
-//      the storage shape so future-Claude can reason about what's in
+//      the storage shape so a reader can see what's in
 //      localStorage at a glance.
 //
 // Caller responsibilities:

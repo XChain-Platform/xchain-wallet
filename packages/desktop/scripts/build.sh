@@ -199,7 +199,7 @@ cd "/workspace/packages/desktop/${DIST_DIR}"
 # above disagree, this is what says WHICH file inside the bundle moved,
 # and without it a mismatch is a 130MB binary diff.
 #
-# IT COVERS node_modules PATHS, AND THAT IS THE POINT (build-spec
+# IT COVERS node_modules PATHS, AND THAT IS THE POINT (decided
 # 2026-08-02). This find used to carry `-not -path '*/node_modules/*'`,
 # borrowed from the recipes that hash a SOURCE tree, where skipping
 # node_modules is obviously right. Here it runs inside `dist/`, which holds

@@ -32,10 +32,10 @@
 //
 // VENUE
 //
-// Run it on the regtest host, where the encoder/miner ports are local and ~/Sites is
-// the same NFS path as the Mac:
+// Run it on the regtest host, where the encoder/miner ports are local and the repo is
+// checked out at the same path as on the Mac:
 //
-//   ssh localhost 'cd ~/Sites/XChain-Platform/xchain-wallet && \
+//   ssh localhost 'cd /path/to/xchain-wallet && \
 //     node tools/regtest/deployNativeFee.mjs litecoin-regtest'
 //
 // From the Mac it needs tunnels for the chain's encoder + miner ports.

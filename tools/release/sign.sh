@@ -299,7 +299,7 @@ fi
 # --- Pristine-clone gate (§6) ------------------------------------
 #
 # The tag must exist, HEAD must be sitting on it, and the worktree must
-# be clean. This is not defensive programming: `~/Sites` is shared with a
+# be clean. This is not defensive programming: the dev checkout is shared with a
 # second coder over NFS and a neighbour's uncommitted edits have compiled
 # into a wallet build there before. A release signed out of that tree
 # carries their work-in-progress under the maintainer's signature, and
