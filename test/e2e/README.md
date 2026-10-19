@@ -293,8 +293,8 @@ the shortfall, but never a key or an address.
 
 After that run-input preflight and before any spec runs,
 `global-setup.testnet.js` runs `preflightClaimantReward` from
-`test/e2e/fixtures/testnet_rewards.js`. It reads the claimant's accrued rewards
-and valid collects from the testnet explorer. When the claimant has no
+`test/e2e/fixtures/testnet_rewards.js`. It reads the claimant's claimable total
+from the testnet explorer's `api/staking` summary. When the claimant has no
 unclaimed partial validator reward, or a set `claimant.amount` is not a valid
 partial of that reward, setup stops the run with one error starting
 `Claimant reward preflight refused`. The error names the reward seen but never
