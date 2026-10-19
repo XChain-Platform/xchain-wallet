@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-import { expect } from './wallet.js';
+import { expect, openPaletteCommand } from './wallet.js';
 
 export const WALLET_UNLOCK = 'testnetpassword123';
 
@@ -22,11 +22,7 @@ export async function approve(page, password = WALLET_UNLOCK) {
 }
 
 export async function gotoPalette(page, title) {
-    await page.keyboard.press('ControlOrMeta+k');
-    const dialog = page.getByRole('dialog', { name: 'Command palette' });
-    await expect(dialog).toBeVisible({ timeout: 30_000 });
-    await dialog.getByRole('combobox').fill(title);
-    await dialog.getByRole('option', { name: new RegExp(`^${title}\\b`) }).first().click();
+    await openPaletteCommand(page, title);
 }
 
 export async function readDoneTxid(page) {
