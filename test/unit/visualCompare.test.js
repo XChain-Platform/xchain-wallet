@@ -19,8 +19,8 @@ import {
     SCREENS,
     screenSelected,
     SIZES,
-} from '../../scripts/visual-compare.mjs';
-import { VISUAL_REPORT_GENERATOR } from '../../scripts/visual-report-files.mjs';
+} from '../../tools/visual-compare.mjs';
+import { VISUAL_REPORT_GENERATOR } from '../../tools/visual-report-files.mjs';
 
 const { PNG } = pngjs;
 

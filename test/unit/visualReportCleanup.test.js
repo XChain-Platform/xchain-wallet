@@ -18,9 +18,9 @@ import pngjs from 'pngjs';
 import { afterEach, describe, expect, it } from 'vitest';
 import {
     pruneReportRows, VISUAL_REPORT_GENERATOR,
-} from '../../scripts/visual-report-files.mjs';
+} from '../../tools/visual-report-files.mjs';
 
-const SCRIPT = join(process.cwd(), 'scripts', 'visual-clean.mjs');
+const SCRIPT = join(process.cwd(), 'tools', 'visual-clean.mjs');
 const fixtures = [];
 const { PNG } = pngjs;
 

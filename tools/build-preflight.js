@@ -176,7 +176,7 @@ export function runBuildPreflight({ root = SCRIPT_ROOT, write = console.log } = 
 function parseRoot(args) {
     if (args.length === 0) return SCRIPT_ROOT;
     if (args.length === 2 && args[0] === '--root') return resolve(args[1]);
-    throw new Error('usage: node scripts/build-preflight.js [--root PATH]');
+    throw new Error('usage: node tools/build-preflight.js [--root PATH]');
 }
 
 if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
