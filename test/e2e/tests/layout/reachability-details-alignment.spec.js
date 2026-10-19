@@ -44,9 +44,11 @@ test('the Details link starts where the message text starts on a phone', async (
     await createWallet(page);
     await goOffline(page);
     // Contacts is local data, so the shell notice is the page's only message.
+    // It holds no balances, so the notice says information in general, not
+    // balances, may be out of date.
     await gotoSection(page, 'Contacts');
 
-    const message = page.getByRole('status').filter({ hasText: 'Some balances may be out of date' });
+    const message = page.getByRole('status').filter({ hasText: /Some (balances|information) may be out of date/ });
     await expect(message).toBeVisible();
     const details = page.getByRole('button', { name: 'Details', exact: true });
     await expect(details).toBeVisible();
