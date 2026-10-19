@@ -167,11 +167,9 @@ export class PriceAlertWatcher {
                 this._fired.delete(id);
                 this._firedDirty = true;
             }
-            // A delivered alert whose stored status has left 'armed' no longer
-            // needs the in-memory guard. Dropping it here, and only once the
-            // store says so, lets a re-armed alert with the same id fire again
-            // before the app restarts while a store that has not caught up cannot
-            // deliver it twice.
+            // Drop the in-memory fired guard once the store no longer lists the
+            // alert as armed, so a re-armed alert with the same id can fire again.
+            // Waiting for the store avoids a double delivery while it lags.
             for (const id of this._fired) {
                 if (!armedIds.has(id) && !this._pendingTriggered.has(id)) this._fired.delete(id);
             }
