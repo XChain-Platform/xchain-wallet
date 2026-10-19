@@ -386,7 +386,7 @@ jobs:
             -L 3123:localhost:3123 -L 3125:localhost:3125 "$XC_REGTEST_SSH_HOST"
       - name: Run regtest suite shard ${{ steps.shard.outputs.value }}
         if: steps.venue.outputs.configured == 'true'
-        run: pnpm test:e2e:regtest -- --shard=${{ steps.shard.outputs.value }}
+        run: pnpm test:e2e:regtest --shard=${{ steps.shard.outputs.value }}
         env:
           NODE_OPTIONS: --max-old-space-size=6144
       - name: Upload Playwright report
