@@ -32,7 +32,9 @@ export async function readTestnetGasHeadroom({
             { signal: AbortSignal.timeout(30_000) },
         );
     } catch (error) {
-        const code = error?.code || error?.cause?.code || error?.name || 'UNKNOWN';
+        const code = [error?.cause?.code, error?.code, error?.name]
+            .find((value) => typeof value === 'string' && /^[A-Za-z_]{2,40}$/.test(value))
+            || 'unknown';
         throw new Error(`Gas headroom read failed: ${code}`);
     }
 
