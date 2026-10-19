@@ -71,6 +71,64 @@ describe('testnet XCHAIN mint headroom', () => {
             .rejects.not.toThrow('secret-bearing transport detail');
     });
 
+    it('reports an AbortSignal timeout rejection by its DOMException name', async () => {
+        const rejection = new DOMException('The operation timed out', 'TimeoutError');
+        const fetch = vi.fn(async () => { throw rejection; });
+
+        await expect(readTestnetGasHeadroom({ explorerUrl, coin, fetch }))
+            .rejects.toThrow('Gas headroom read failed: TimeoutError');
+    });
+
+    it('reports a cause code when the rejection has no own code', async () => {
+        const rejection = new Error('transport failed', {
+            cause: { code: 'CAUSE_ONLY' },
+        });
+        const fetch = vi.fn(async () => { throw rejection; });
+
+        await expect(readTestnetGasHeadroom({ explorerUrl, coin, fetch }))
+            .rejects.toThrow('Gas headroom read failed: CAUSE_ONLY');
+    });
+
+    it('prefers a cause code over a different own code', async () => {
+        const rejection = Object.assign(new Error('transport failed', {
+            cause: { code: 'CAUSE_CODE' },
+        }), { code: 'OWN_CODE' });
+        const fetch = vi.fn(async () => { throw rejection; });
+
+        await expect(readTestnetGasHeadroom({ explorerUrl, coin, fetch }))
+            .rejects.toThrow('Gas headroom read failed: CAUSE_CODE');
+    });
+
+    it.each(['BAD.CODE', 'CODE1'])('reports an invalid rejection code %s as unknown', async (code) => {
+        const rejection = Object.assign(Object.create(null), { code });
+        const fetch = vi.fn(async () => { throw rejection; });
+
+        await expect(readTestnetGasHeadroom({ explorerUrl, coin, fetch }))
+            .rejects.toThrow('Gas headroom read failed: unknown');
+    });
+
+    it.each([
+        'request to https://wallet-secrets.example failed',
+        'lookup internal-service failed',
+        'address tb1qsecretaddress leaked',
+        'key xprv9s21ZrQH143K leaked',
+    ])('does not expose rejection message detail: %s', async (message) => {
+        const rejection = new Error(message, { cause: new Error(`cause: ${message}`) });
+        const fetch = vi.fn(async () => { throw rejection; });
+
+        let thrown;
+        try {
+            await readTestnetGasHeadroom({ explorerUrl, coin, fetch });
+        } catch (error) {
+            thrown = error;
+        }
+
+        expect(thrown).toBeInstanceOf(Error);
+        expect(thrown.message).toBe('Gas headroom read failed: Error');
+        expect(thrown.message).not.toContain(message);
+        expect(thrown.message).not.toContain(`cause: ${message}`);
+    });
+
     it('reports a non-404 HTTP failure by status', async () => {
         const fetch = vi.fn(async () => reply(500));
         await expect(readTestnetGasHeadroom({ explorerUrl, coin, fetch }))
