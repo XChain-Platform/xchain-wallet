@@ -32,13 +32,13 @@ import {
     waitForValidAction,
 } from '../../fixtures/testnet.js';
 import { fundTestnetAddress } from '../../fixtures/testnet_funding.js';
+import { MINT_AMOUNT } from '../../fixtures/testnet_gas_preflight.js';
 import { mintTestnetXchain } from '../../fixtures/testnet_mint.js';
 import { leftoverNotice, writeRecoveryRecord } from '../../fixtures/testnet_recover.js';
 import { waitForResidualStake } from '../../fixtures/testnet_stakes.js';
 
 const STAKE_AMOUNT = '100';
 const UNSTAKE_AMOUNT = '30';
-const MINT_AMOUNT = 200;
 const INCLUSION_TIMEOUT = INDEXED_WAIT_MS;
 // Activation is several blocks past the stake, each of which can carry the same future wait.
 const ACTIVATION_TIMEOUT = INDEXED_WAIT_MS + 60 * 60_000;
