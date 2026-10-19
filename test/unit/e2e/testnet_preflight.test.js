@@ -199,14 +199,24 @@ describe('testnet global setup', () => {
             liveVenue: vi.fn(() => ({})),
             readRunInput: vi.fn(() => INPUT),
             stageRunInput: vi.fn(async () => ({ cleanup, file: 'staged-input' })),
-            testnetEndpoints: vi.fn(() => ({})),
+            testnetEndpoints: vi.fn(() => ({ explorerUrl: 'explorer' })),
         }));
-        vi.doMock('../../e2e/fixtures/testnet_preflight.js', () => ({
-            preflightRunInput: vi.fn(async () => { throw refusal; }),
+        // The origin, gas and reward preflights each fetch the explorer; this
+        // case is about cleanup after the run-input preflight refuses, so the
+        // earlier and later guards are stubbed out and never touch the network.
+        vi.doMock('../../e2e/fixtures/testnet_origin.js', () => ({
+            assertOriginsAllowed: vi.fn(async () => {}),
+            suiteOrigin: vi.fn(() => 'http://localhost:4193'),
         }));
         vi.doMock('../../e2e/fixtures/testnet_gas_preflight.js', () => ({
             MINT_AMOUNT: 200,
-            preflightGasHeadroom: vi.fn(async () => null),
+            preflightGasHeadroom: vi.fn(async () => {}),
+        }));
+        vi.doMock('../../e2e/fixtures/testnet_rewards.js', () => ({
+            preflightClaimantReward: vi.fn(async () => {}),
+        }));
+        vi.doMock('../../e2e/fixtures/testnet_preflight.js', () => ({
+            preflightRunInput: vi.fn(async () => { throw refusal; }),
         }));
 
         try {
@@ -216,7 +226,9 @@ describe('testnet global setup', () => {
         } finally {
             vi.doUnmock('../../e2e/fixtures/testnet.js');
             vi.doUnmock('../../e2e/fixtures/testnet_preflight.js');
+            vi.doUnmock('../../e2e/fixtures/testnet_origin.js');
             vi.doUnmock('../../e2e/fixtures/testnet_gas_preflight.js');
+            vi.doUnmock('../../e2e/fixtures/testnet_rewards.js');
             vi.resetModules();
             log.mockRestore();
         }
