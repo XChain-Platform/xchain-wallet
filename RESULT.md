@@ -4,7 +4,8 @@
 None. No surface file was changed. This commit adds RESULT.md only.
 
 ## Verify
-- `node tools/release/phase4-rehearsal.mjs check`: FAIL (exit 1), unchanged from the base commit.
+- `node tools/release/phase4-rehearsal.mjs check`: FAIL (exit 1) on the fresh base commit, with only the base's objects.
+  After I fetched tags (to build the v0.341.4 worktree) the same command exits 0 and prints `BEHIND: this checkout does not contain 8def6d18 ... Differing: tools/release/sign.sh`. The verdict depends on whether that commit object is in the local clone, not on any change of mine. Treat the exit 0 as environment-dependent, not as a fix.
   - Failing line at 3700ec4f: `STALE: the signing path has moved since the rehearsal pinned at 8def6d18: tools/release/sign.sh`.
   - Tests: 0 passed, 1 failed (the single check above). No other test was run.
 
