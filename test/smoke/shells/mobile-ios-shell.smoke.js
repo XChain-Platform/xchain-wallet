@@ -1134,8 +1134,12 @@ if (composeIsRemote) {
         'step 4 of the scripted demo is gone from the review notes, so this guard cannot check the ordering'
         + ' of the airplane-mode step - re-derive it against whatever replaced it rather than deleting this',
     );
-    const composeAt = step4[1].search(/confirmation screen/i);
-    const cutoffAt = step4[1].search(/Airplane Mode/i);
+    // A leading bold label ("**Route A: compose first, then Airplane Mode.**")
+    // names the route rather than instructing a step, so the ordering is read
+    // from the instructions that follow it.
+    const step4Body = step4[1].replace(/^\*\*[^*]+\*\*\s*/, '');
+    const composeAt = step4Body.search(/confirmation screen/i);
+    const cutoffAt = step4Body.search(/Airplane Mode/i);
     assert.ok(
         composeAt !== -1 && cutoffAt !== -1 && composeAt < cutoffAt,
         'step 4 must reach the confirmation screen BEFORE it turns on Airplane Mode. Composing a transaction'
