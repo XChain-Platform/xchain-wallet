@@ -61,13 +61,8 @@ import {
 const PASSWORD = 'regtestpassword123';
 const FUNDING_BTC = 1;
 const MINT_XCHAIN = 500;
-/**
- * The whole minted balance. The Send form's local balance check refuses only
- * amounts ABOVE the balance, so this reaches the confirm page, where the
- * venue's dry-run is the one expected to reject it. `warmSend` asserts that
- * premise at the venue before the walk relies on it.
- */
-const DRYRUN_REJECTED = String(MINT_XCHAIN);
+/** Comfortably beyond the minted balance, so the dry-run must reject it. */
+const UNAFFORDABLE = '999999';
 /** Well inside it, so the same walk can then succeed unchanged. */
 const AFFORDABLE = '25';
 
@@ -120,6 +115,23 @@ async function composeTokenSend(page, amount) {
     await expectConfirmModal(page, 'this action', 30_000);
 }
 
+/**
+ * Turns the wallet's "balances hidden" privacy toggle on.
+ *
+ * The Send form refuses an amount above the balance it has read, locally and
+ * before anything composes, so an UNAFFORDABLE token send never reaches the
+ * confirm page and the pre-flight gate goes unexercised. That check stands
+ * down while balances are hidden (`amountBalanceError` in Send.jsx), which is
+ * the product's own switch and needs no change to the wallet. The toggle's
+ * storage key and change event are the ones `useBalancesHidden` owns.
+ */
+async function hideBalances(page) {
+    await page.evaluate(() => {
+        localStorage.setItem('xc:balancesHidden', '1');
+        window.dispatchEvent(new CustomEvent('xc:balances-hidden-change', { detail: true }));
+    });
+}
+
 /** Creates the funded token wallet used by one pre-flight scenario. */
 async function openFundedTokenWallet(page) {
     await createWallet(page, { password: PASSWORD });
@@ -137,14 +149,15 @@ async function openFundedTokenWallet(page) {
     // The mint leaves the shell on its terminal screen, so remount Home.
     await page.reload();
     await unlockAfterReload(page, PASSWORD);
+    await hideBalances(page);
     return own;
 }
 
 test.describe('pre-flight gate on regtest', () => {
     test('an unaffordable token send fails pre-flight, blocks Approve, and can be overridden', async ({ page }) => {
         const own = await openFundedTokenWallet(page);
-        await warmSend(own, DRYRUN_REJECTED, false);
-        await composeTokenSend(page, DRYRUN_REJECTED);
+        await warmSend(own, UNAFFORDABLE, false);
+        await composeTokenSend(page, UNAFFORDABLE);
 
         // §5.2.4: the verdict chip, from a REAL dry-run. Tier 1 was
         // unreachable on every venue until, so this had never once
@@ -159,22 +172,34 @@ test.describe('pre-flight gate on regtest', () => {
         // reason after "because" is the indexer's text verbatim; a wallet that
         // reworded it would be hiding which party said what.
         const panel = page.getByTestId('preflight-panel');
-        await expect(panel).toContainText(/would be refused because/i);
+        await expect(panel).toContainText(/would be refused because insufficient funds/i);
 
-        // The amount is within the balance the form read, so Tier 2's balance
-        // check stays quiet and the dry-run is the only error to acknowledge.
+        // Both tiers speak, independently, and BOTH are network-sourced: Tier 1
+        // relays the handler's verdict, and Tier 2's balance check is only as
+        // trustworthy as the explorer balance it read. `constants.js` registers
+        // BALANCE_INSUFFICIENT as `network` for exactly that reason, so it too
+        // is overridable. Tier-1 precedence downgrades a contradicting Tier-2
+        // error only when the dry-run says VALID; here they agree.
         const dryRunAck = page.getByTestId('ack-DRYRUN_INVALID');
+        const balanceAck = page.getByTestId('ack-BALANCE_INSUFFICIENT');
+        await expect(panel).toContainText(/Balance of XCHAIN .* does not cover/i);
         await expect(dryRunAck).toBeVisible();
-        await expect(page.getByTestId('ack-BALANCE_INSUFFICIENT')).toHaveCount(0);
+        await expect(balanceAck).toBeVisible();
 
         // Blocking BY DEFAULT.
         const approve = page.getByTestId('confirm-approve');
         await expect(approve).toBeDisabled();
 
-        // With the error acknowledged, signing is permitted. This is the
+        // Acknowledging ONE error is not enough. The override is per finding,
+        // not a single "I accept whatever is wrong" switch - a user who has
+        // read one warning has not thereby consented to the others.
+        await dryRunAck.check();
+        await expect(approve).toBeDisabled();
+
+        // With every error acknowledged, signing is permitted. This is the
         // anti-censorship half of §4.2: a gate the explorer could hold shut
         // would let a hostile or broken one stop the user signing at all.
-        await dryRunAck.check();
+        await balanceAck.check();
         await expect(approve).toBeEnabled();
 
         // The acknowledgment is a live gate, not a one-way latch: withdrawing
@@ -196,8 +221,8 @@ test.describe('pre-flight gate on regtest', () => {
         // point is that a rejected pre-flight is not a dead end and leaves
         // nothing behind - the second compose has to produce a clean report,
         // not a stale one.
-        await warmSend(own, DRYRUN_REJECTED, false);
-        await composeTokenSend(page, DRYRUN_REJECTED);
+        await warmSend(own, UNAFFORDABLE, false);
+        await composeTokenSend(page, UNAFFORDABLE);
         await expect(page.getByTestId('preflight-chip')).toHaveText('Will likely fail');
         await page.getByTestId('confirm-reject').click();
         await expect(page.getByTestId('confirm-modal')).toHaveCount(0);
