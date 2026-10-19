@@ -319,11 +319,11 @@ jobs:
   # is not on GitHub's network. Without both, the job says in its summary that
   # the venue suite did NOT run, so a skipped gate is never read as a pass.
   e2e-regtest:
+    name: e2e-regtest (rolling shard)
     runs-on: ubuntu-24.04
-    # One run at a time on the shared regtest venue: concurrent runs starve each other past the
-    # 6 h job limit. A lone run of the 160-test suite measures about 70 s a test (139 min for
-    # the first 120 on 2026-10-17), so the cap leaves room for the whole suite plus waits.
-    timeout-minutes: 240
+    # One run at a time on the shared regtest venue. Each run covers one rolling
+    # quarter of the suite, keeping the venue out of the main CI critical path.
+    timeout-minutes: 120
     concurrency:
       group: wallet-regtest-venue
       cancel-in-progress: false
@@ -351,6 +351,13 @@ jobs:
         run: |
           pnpm exec playwright test --config test/e2e/playwright.regtest.config.js --list | tee regtest-list.txt
           grep -q 'regtest.spec' regtest-list.txt
+      - name: Select rolling shard
+        id: shard
+        run: |
+          currentMinutes=$(($(date -u +%s) / 60))
+          shardNumber=$((currentMinutes % 4 + 1))
+          echo "value=${shardNumber}/4" >> "$GITHUB_OUTPUT"
+          echo "Running regtest shard ${shardNumber}/4"
       - name: Check regtest venue access
         id: venue
         run: |
@@ -377,9 +384,9 @@ jobs:
             -L 3023:localhost:3023 -L 3025:localhost:3025 \
             -L 3223:localhost:3223 -L 3225:localhost:3225 \
             -L 3123:localhost:3123 -L 3125:localhost:3125 "$XC_REGTEST_SSH_HOST"
-      - name: Run regtest suite
+      - name: Run regtest suite shard ${{ steps.shard.outputs.value }}
         if: steps.venue.outputs.configured == 'true'
-        run: pnpm test:e2e:regtest
+        run: pnpm test:e2e:regtest -- --shard=${{ steps.shard.outputs.value }}
         env:
           NODE_OPTIONS: --max-old-space-size=6144
       - name: Upload Playwright report
