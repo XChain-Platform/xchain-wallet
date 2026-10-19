@@ -58,6 +58,8 @@ import {
     ENCODER_URL,
     EXPLORER_URL,
     REGTEST_COIN,
+    approveConfirm as approveConfirmBounded,
+    expectConfirmModal,
     failBroadcast,
     fundAddress,
     healVenueClock,
@@ -221,7 +223,14 @@ test.describe('STAKE -> UNSTAKE lifecycle on regtest (partial unstake, re-driven
             await switchToRegtest(page, PASSWORD);
 
             staker = await readReceiveAddress(page);
-            await fundAddress(staker, FUNDING_BTC);
+            // One retry: the utxo-tracker view can lag the mined block on the
+            // shared venue, and funding is setup, not the claim under test.
+            try {
+                await fundAddress(staker, FUNDING_BTC);
+            } catch {
+                await nudgeChain();
+                await fundAddress(staker, FUNDING_BTC);
+            }
 
             // Balances are fetched per chain on mount, so a reload is the cheapest
             // way to make the freshly-confirmed UTXO visible to the forms.
@@ -325,12 +334,10 @@ test.describe('STAKE -> UNSTAKE lifecycle on regtest (partial unstake, re-driven
             await amountField(main).fill(UNSTAKE_PARTIAL);
             await main.getByRole('button', { name: 'Unstake', exact: true }).click();
 
-            const confirm = page.getByTestId('confirm-modal');
-            await expect(confirm).toBeVisible({ timeout: 60_000 });
+            const confirm = await expectConfirmModal(page, 'the (faked-failure) partial UNSTAKE');
             const password = page.getByLabel('Password', { exact: true });
             if (await password.count() > 0 && await password.isVisible()) await password.fill(PASSWORD);
-            await expect(page.getByTestId('confirm-approve')).toBeEnabled({ timeout: 60_000 });
-            await page.getByTestId('confirm-approve').click();
+            await approveConfirmBounded(page, 'the (faked-failure) partial UNSTAKE');
 
             // RED, on purpose: the happy-path assertions two steps below
             // (success text, `waitForValidAction`) would fail exactly like this
@@ -371,7 +378,10 @@ test.describe('STAKE -> UNSTAKE lifecycle on regtest (partial unstake, re-driven
             // wrong amount.
             await expect(amountField(main)).toHaveValue(UNSTAKE_PARTIAL);
             await main.getByRole('button', { name: 'Unstake', exact: true }).click();
-            await approveConfirm(page);
+            await expectConfirmModal(page, 'the real partial UNSTAKE');
+            const realPassword = page.getByLabel('Password', { exact: true });
+            if (await realPassword.count() > 0 && await realPassword.isVisible()) await realPassword.fill(PASSWORD);
+            await approveConfirmBounded(page, 'the real partial UNSTAKE');
 
             await expect(main.getByText(/Unstake broadcast\./)).toBeVisible({ timeout: 120_000 });
             const txid = await readDoneTxid(page);
