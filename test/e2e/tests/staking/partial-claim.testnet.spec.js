@@ -61,7 +61,7 @@ async function importClaimant(page, claimant) {
     await page.getByLabel('Label (optional)').fill('Testnet validator claimant');
     const password = page.getByLabel('Wallet password', { exact: true });
     if (await password.count()) await password.fill(WALLET_UNLOCK);
-    await page.getByRole('checkbox', { name: /not backed up by my recovery phrase/i }).check();
+    await page.getByRole('checkbox', { name: /backed up by my recovery phrase/i }).check();
     await page.getByRole('button', { name: 'Import', exact: true }).click();
 
     const notice = page.getByText(/^Imported /);

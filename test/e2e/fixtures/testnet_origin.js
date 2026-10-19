@@ -8,6 +8,9 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+
 const DEFAULT_PREVIEW_PORT = 4193;
 const ERROR_CODE_RE = /^[A-Za-z_]{2,40}$/;
 const SERVICES = Object.freeze([
@@ -64,4 +67,31 @@ export async function assertOriginsAllowed(
     if (refused.length > 0) {
         throw new Error(`Origin preflight refused: ${refused.join('; ')}`);
     }
+}
+
+export async function runOriginPreflight({
+    env = process.env,
+    endpoints,
+    fetch = globalThis.fetch,
+    log = console.error,
+} = {}) {
+    try {
+        let resolvedEndpoints = endpoints;
+        if (resolvedEndpoints === undefined) {
+            const { testnetEndpoints } = await import('./testnet.js');
+            resolvedEndpoints = testnetEndpoints();
+        }
+        await assertOriginsAllowed(resolvedEndpoints, { origin: suiteOrigin(env), fetch });
+        return 0;
+    } catch (error) {
+        log(error instanceof Error ? error.message : String(error));
+        return 1;
+    }
+}
+
+const invokedDirectly = process.argv[1]
+    && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url);
+
+if (invokedDirectly) {
+    process.exitCode = await runOriginPreflight();
 }

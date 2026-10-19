@@ -10,18 +10,38 @@
 
 const MINIMUM_PARTIAL_REWARD = 0.00000001;
 
-async function explorerRows(path, { explorerUrl, coin, fetch }) {
-    const response = await fetch(`${explorerUrl}/${coin}/api/${path}`, {
+async function explorerClaimable(address, { explorerUrl, coin, fetch }) {
+    const response = await fetch(`${explorerUrl}/${coin}/api/staking/${address}`, {
         signal: AbortSignal.timeout(30_000),
     });
     if (!response.ok) {
         throw new Error(`explorer reward request returned HTTP ${response.status}`);
     }
-    const body = await response.json();
-    if (Array.isArray(body)) return body;
-    if (Array.isArray(body?.data)) return body.data;
-    if (Array.isArray(body?.rows)) return body.rows;
-    return [];
+    let body;
+    try {
+        body = await response.json();
+    } catch {
+        throw new Error('Claimant reward read failed: no claimable total');
+    }
+    if (!body || typeof body !== 'object' || Array.isArray(body)) {
+        throw new Error('Claimant reward read failed: no claimable total');
+    }
+    let summary = body;
+    if (Object.hasOwn(body, 'total') && Object.hasOwn(body, 'data')) {
+        summary = Array.isArray(body.data)
+            ? (body.data.length === 1 ? body.data[0] : undefined)
+            : body.data;
+    }
+    if (
+        !summary
+        || typeof summary !== 'object'
+        || Array.isArray(summary)
+        || typeof summary.claimable !== 'string'
+        || !/^-?\d+\.\d{8}$/.test(summary.claimable)
+    ) {
+        throw new Error('Claimant reward read failed: no claimable total');
+    }
+    return Number(summary.claimable);
 }
 
 export function rewardTotal(rewards, claims) {
@@ -54,12 +74,7 @@ export async function unclaimedReward(address, {
     coin,
     fetch = globalThis.fetch,
 }) {
-    const request = { explorerUrl, coin, fetch };
-    const [rewards, claims] = await Promise.all([
-        explorerRows(`rewards/${address}/address`, request),
-        explorerRows(`collects/${address}/address`, request),
-    ]);
-    return rewardTotal(rewards, claims);
+    return explorerClaimable(address, { explorerUrl, coin, fetch });
 }
 
 export async function preflightClaimantReward(input, options) {

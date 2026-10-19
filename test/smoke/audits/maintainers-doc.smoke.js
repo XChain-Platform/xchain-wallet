@@ -28,6 +28,7 @@ const docPath = 'MAINTAINERS.md';
 assert.ok(existsSync(join(root, docPath)), `${docPath} exists at repo root`);
 
 const docSrc = read(docPath);
+const codeOfConductUrl = 'https://github.com/XChain-Platform/.github/blob/master/CODE_OF_CONDUCT.md';
 
 // Required structural headings.
 const requiredHeadings = [
@@ -93,8 +94,12 @@ assert.ok(/single primary maintainer/i.test(docSrc) || /pre-launch/i.test(docSrc
 for (const companion of ['CODE_OF_CONDUCT.md', 'SECURITY.md', 'CONTRIBUTING.md']) {
     assert.ok(docSrc.includes(companion),
         `MAINTAINERS.md cites ${companion}`);
+}
+for (const companion of ['SECURITY.md', 'CONTRIBUTING.md']) {
     assert.ok(existsSync(join(root, companion)),
         `cited companion exists: ${companion}`);
 }
+assert.ok(docSrc.includes(codeOfConductUrl),
+    'MAINTAINERS.md links to the organization code of conduct');
 
 console.log('OK: MAINTAINERS.md doc smoke');

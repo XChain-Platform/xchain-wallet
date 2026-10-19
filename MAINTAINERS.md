@@ -6,7 +6,7 @@ to be scrapable: keep the headings and the areas table stable so downstream
 packagers and the OWNERS-file ecosystem can read it.
 
 Companion documents: [`CONTRIBUTING.md`](./CONTRIBUTING.md) (how to contribute),
-[`CODE_OF_CONDUCT.md`](./CODE_OF_CONDUCT.md) (community standards), and
+[`CODE_OF_CONDUCT.md`](https://github.com/XChain-Platform/.github/blob/master/CODE_OF_CONDUCT.md) (community standards), and
 [`SECURITY.md`](./SECURITY.md) (how to report a vulnerability).
 
 ## Primary maintainer
@@ -51,7 +51,7 @@ to expect review from as the team grows.
 ## Removing a maintainer
 
 A maintainer is removed when they step down, become unreachable for an extended
-period, or act in serious violation of the [`CODE_OF_CONDUCT.md`](./CODE_OF_CONDUCT.md).
+period, or act in serious violation of the [`CODE_OF_CONDUCT.md`](https://github.com/XChain-Platform/.github/blob/master/CODE_OF_CONDUCT.md).
 Removal is recorded the same way it is granted: a PR that edits this file. While
 there is a single primary maintainer, removal is not applicable to that role
 without a successor first being added.
@@ -65,7 +65,7 @@ the team growing.
 | Topic | Channel |
 | --- | --- |
 | Security vulnerability | **security@dankest.llc** (see [`SECURITY.md`](./SECURITY.md); do not open a public issue) |
-| Code of conduct | **conduct@dankest.llc** (see [`CODE_OF_CONDUCT.md`](./CODE_OF_CONDUCT.md)) |
+| Code of conduct | **conduct@dankest.llc** (see [`CODE_OF_CONDUCT.md`](https://github.com/XChain-Platform/.github/blob/master/CODE_OF_CONDUCT.md)) |
 | Dependency / supply-chain concern | **security@dankest.llc** |
 | Release / build integrity | open an issue tagged `release`, or **security@dankest.llc** if sensitive |
 

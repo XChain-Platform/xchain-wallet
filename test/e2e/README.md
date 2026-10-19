@@ -182,10 +182,14 @@ venue whose forbidden members throw.
 Stake-unstake waits for its residual stake row through `waitForResidualStake`
 in `test/e2e/fixtures/testnet_stakes.js`. It polls the explorer's stakes source
 route for the address every 30 seconds within the indexed wait budget, treats a
-non-OK answer or a rejected request as a miss and keeps polling, and at the
-deadline names the action index and, when the last poll failed, that failure as
-the HTTP status or an error code. A refused or misrouted stakes request
-therefore reads differently from a residual that is not yet indexed.
+non-OK answer, a rejected request, or a 2xx answer with no stake list as a miss
+and keeps polling, and at the deadline names the action index and, when the last
+poll failed, that failure as the HTTP status or an error code. A 2xx answer with
+no stake list reports `NO_STAKE_LIST`, so a refused or misrouted stakes request
+reads differently from a residual that is not yet indexed.
+Stake-unstake reads its activation target through `activationTarget`, which
+refuses an unreadable or non-future activation block at once instead of after
+the activation wait.
 
 Both testnet staking specs drive the wallet through
 `test/e2e/fixtures/testnet_walk.js`. It exports `WALLET_UNLOCK`, the unlock
@@ -208,11 +212,31 @@ its txid. It reads nothing from stdin, so a new testnet spec funds a wallet by
 passing it the treasury from the staged run input instead of composing those
 steps itself.
 
-Before the venue check and before stdin is read, `global-setup.testnet.js`
-runs `assertOriginsAllowed` from `test/e2e/fixtures/testnet_origin.js`. It sends
-one `OPTIONS` request carrying the suite origin to each encoder, explorer and
-hub URL named by the testnet descriptor, skipping an empty hub URL. A service
-is allowed only when it answers with a 2xx status and an
+Stake-unstake mints its XCHAIN gas through `mintTestnetXchain(page, amount,
+options)` in `test/e2e/fixtures/testnet_mint.js`. The helper reads the remaining
+XCHAIN supply capacity from the testnet explorer's token route through
+`readTestnetGasHeadroom` and refuses before any page step when that headroom is
+below the requested amount. It then signs one MINT through the Advanced action
+on the Bitcoin testnet chain from a testnet From address, and never reads the
+regtest explorer.
+
+Two unit guards, `test/unit/e2e/testnet_ui_text.test.js` and
+`test/unit/e2e/testnet_ui_names.test.js`, read every testnet spec and testnet
+fixture. They fail with the file, line and text of any plain `getByText`
+literal, `getByRole` name, `getByLabel` or `getByTestId` literal that no file
+under `packages/core/src` holds any more. A name the wallet composes at render
+time is checked by its fragments through the `COMPOSED` map, so a renamed label
+fails the unit suite instead of a live testnet pass 120 s in after coins are
+spent.
+
+The Playwright webServer command runs `runOriginPreflight` from
+`test/e2e/fixtures/testnet_origin.js` before the production build. A refused
+origin therefore stops the run before `vite build` starts. Global setup keeps
+the same check before the venue check and before stdin is read by calling
+`assertOriginsAllowed`. The check sends one `OPTIONS` request carrying the
+suite origin to each encoder, explorer and hub URL named by the testnet
+descriptor, skipping an empty hub URL. A service is allowed only when it
+answers with a 2xx status and an
 `access-control-allow-origin` header that is `*` or exactly the suite origin.
 Otherwise setup stops the run with one error starting `Origin preflight refused`
 that names every refused role, the suite origin and the header seen, or the
@@ -225,6 +249,19 @@ and sets `baseURL` to `suiteOrigin()`, so the origin preflight probes the same
 origin the browser is served from. This preflight does not relax browser origin
 rules or decide which origins a service allows.
 
+After the venue check writes its two log lines and before stdin is read,
+`global-setup.testnet.js` runs `preflightGasHeadroom(MINT_AMOUNT, options)` from
+`test/e2e/fixtures/testnet_gas_preflight.js`. It reads the remaining XCHAIN
+supply capacity through `readTestnetGasHeadroom` in `testnet_mint.js` and passes
+when the gas token has no capped record or when its headroom covers
+`MINT_AMOUNT`. That is the gas amount stake-unstake mints, imported from the
+same gas preflight fixture. Otherwise setup stops the run with one error
+starting `Gas headroom preflight refused` that names the headroom and the
+amount. A failed token read instead stops it with an error starting
+`Gas headroom read failed:` followed by the HTTP status or an error code, never
+the rejection's message. A capped XCHAIN supply therefore fails the run in
+seconds, before the run input is staged and before any treasury is sent.
+
 Three things differ from regtest on purpose:
 
 - **No browser relaxation.** The public explorer sends CORS headers, so the
@@ -232,7 +269,8 @@ Three things differ from regtest on purpose:
   `--disable-web-security` would be reporting on a browser nobody ships.
 - **Global setup only reads.** Its origin check and venue probes prove the
   services accept the suite origin, the venue is reachable, not stale, halted
-  or lagging, and that it prices a MINT of XCHAIN. It seeds nothing.
+  or lagging, that it prices a MINT of XCHAIN, and that the XCHAIN supply
+  covers the gas mint. It seeds nothing.
 - **Funding and recovery input arrive over stdin.** After the venue check
   passes, `global-setup.testnet.js` reads stdin once and stages it in a
   mode-0600 file inside a mode-0700 directory. Only that file's path, never a
@@ -262,8 +300,8 @@ the shortfall, but never a key or an address.
 
 After that run-input preflight and before any spec runs,
 `global-setup.testnet.js` runs `preflightClaimantReward` from
-`test/e2e/fixtures/testnet_rewards.js`. It reads the claimant's accrued rewards
-and valid collects from the testnet explorer. When the claimant has no
+`test/e2e/fixtures/testnet_rewards.js`. It reads the claimant's claimable total
+from the testnet explorer's `api/staking` summary. When the claimant has no
 unclaimed partial validator reward, or a set `claimant.amount` is not a valid
 partial of that reward, setup stops the run with one error starting
 `Claimant reward preflight refused`. The error names the reward seen but never

@@ -12,7 +12,7 @@ import xchainSdk from 'xchain-sdk';
 import { derive, hdKeyFromSeed } from '../../../packages/core/src/crypto/hd.js';
 import { bip39MnemonicToSeedSync } from '../../../packages/core/src/crypto/mnemonic.js';
 import { defaultRegistry } from '../../../packages/core/src/registry/index.js';
-import { TESTNET_NETWORK, liveVenue } from './testnet.js';
+import { TESTNET_COIN, TESTNET_NETWORK, liveVenue } from './testnet.js';
 import { buildTopUp } from './testnet_topup.js';
 
 const { WalletUtils } = xchainSdk;
@@ -31,6 +31,25 @@ export function writeRecoveryRecord(address, phrase, { dir = RECOVERY_DIR } = {}
     fs.writeFileSync(file, JSON.stringify({ address, phrase: phraseText }), { mode: 0o600 });
     fs.chmodSync(file, 0o600);
     return file;
+}
+
+export async function leftoverNotice(venue, address, { file, destination } = {}) {
+    const target = destination ?? '<destination>';
+    const recovery = `recovery file: ${file}; dry run: `
+        + `node test/e2e/fixtures/testnet_recover.js ${file} ${target}; `
+        + 'add --broadcast to send it';
+    let view;
+    try {
+        view = await venue.utxos(address);
+    } catch {
+        return `[testnet ${TESTNET_COIN}] leftover balance could not be read for ${address}; ${recovery}`;
+    }
+    if (!Array.isArray(view?.utxos)) {
+        return `[testnet ${TESTNET_COIN}] leftover balance could not be read for ${address}; ${recovery}`;
+    }
+    const left = view.utxos.reduce((sum, utxo) => sum + Number(utxo.value), 0);
+    if (left === 0) return null;
+    return `[testnet ${TESTNET_COIN}] ${left} sats remain on ${address}; ${recovery}`;
 }
 
 export function recoverKey({ address, phrase } = {}) {

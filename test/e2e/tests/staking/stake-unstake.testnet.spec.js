@@ -22,7 +22,6 @@ import {
     TESTNET_COIN,
     checkTestnetVenue,
     liveVenue,
-    mintXchain,
     readRunInput,
     readTestnetReceiveAddress,
     switchToTestnet,
@@ -33,12 +32,13 @@ import {
     waitForValidAction,
 } from '../../fixtures/testnet.js';
 import { fundTestnetAddress } from '../../fixtures/testnet_funding.js';
-import { writeRecoveryRecord } from '../../fixtures/testnet_recover.js';
-import { waitForResidualStake } from '../../fixtures/testnet_stakes.js';
+import { MINT_AMOUNT } from '../../fixtures/testnet_gas_preflight.js';
+import { mintTestnetXchain } from '../../fixtures/testnet_mint.js';
+import { leftoverNotice, writeRecoveryRecord } from '../../fixtures/testnet_recover.js';
+import { activationTarget, waitForResidualStake } from '../../fixtures/testnet_stakes.js';
 
 const STAKE_AMOUNT = '100';
 const UNSTAKE_AMOUNT = '30';
-const MINT_AMOUNT = 200;
 const INCLUSION_TIMEOUT = INDEXED_WAIT_MS;
 // Activation is several blocks past the stake, each of which can carry the same future wait.
 const ACTIVATION_TIMEOUT = INDEXED_WAIT_MS + 60 * 60_000;
@@ -46,8 +46,6 @@ const ACTIVATION_TIMEOUT = INDEXED_WAIT_MS + 60 * 60_000;
 const venue = liveVenue();
 const { explorerUrl } = testnetEndpoints();
 
-// The funded wallet has a random seed, so its phrase is the only way back to the
-// sats sent to it. It is written here, owner-only, before any funding is sent.
 function signingPubkey() {
     return randomBytes(32).toString('hex');
 }
@@ -69,19 +67,16 @@ test.describe('STAKE and partial UNSTAKE on Bitcoin testnet', () => {
 
     test.afterAll(async () => {
         if (!fundedAddress) return;
-        const view = await venue.utxos(fundedAddress).catch(() => null);
-        const left = (view?.utxos || []).reduce((sum, u) => sum + Number(u.value), 0);
-        if (left > 0) {
-            const destination = treasury?.address || '<destination>';
-            console.warn(`[testnet ${TESTNET_COIN}] ${left} sats remain on ${fundedAddress}; `
-                + `recovery file: ${recoveryFile}; dry run: `
-                + `node test/e2e/fixtures/testnet_recover.js ${recoveryFile} ${destination}; `
-                + 'add --broadcast to send it');
-        }
+        const notice = await leftoverNotice(venue, fundedAddress, {
+            file: recoveryFile,
+            destination: treasury?.address,
+        });
+        if (notice) console.warn(notice);
     });
 
     test('mints, stakes, waits for activation, and partially unstakes', async ({ page }) => {
         let address;
+        let activationHeight;
         let pubkey;
         let stake;
 
@@ -90,13 +85,15 @@ test.describe('STAKE and partial UNSTAKE on Bitcoin testnet', () => {
             await switchToTestnet(page, WALLET_UNLOCK);
             address = await readTestnetReceiveAddress(page);
             fundedAddress = address;
+            // The funded wallet has a random seed, so its phrase is the only way back to the
+            // sats sent to it. It is written here, owner-only, before any funding is sent.
             recoveryFile = writeRecoveryRecord(address, phrase);
             await fundTestnetAddress(venue, treasury, address, {
                 timeoutMs: INCLUSION_TIMEOUT,
             });
             await page.reload();
             await unlockAfterReload(page, WALLET_UNLOCK);
-            await mintXchain(page, MINT_AMOUNT);
+            await mintTestnetXchain(page, MINT_AMOUNT, { explorerUrl, coin: TESTNET_COIN });
             await waitForTokenBalance(venue, address, GAS_TICK, MINT_AMOUNT, {
                 timeoutMs: INCLUSION_TIMEOUT,
             });
@@ -112,7 +109,7 @@ test.describe('STAKE and partial UNSTAKE on Bitcoin testnet', () => {
             const main = page.getByRole('main');
             await expect(main.getByLabel('From', { exact: true })).toHaveValue(address);
             await main.getByLabel('Signing public key', { exact: true }).fill(pubkey);
-            await expect(main.getByText('✓ No existing stake for this pubkey; defaulting to New stake.'))
+            await expect(main.getByText('✓ No existing stake for this public key. New stake is selected.'))
                 .toBeVisible({ timeout: 120_000 });
             await main.getByRole('textbox', { name: /^Amount/ }).fill(STAKE_AMOUNT);
             await main.getByRole('button', { name: 'Stake', exact: true }).click();
@@ -126,10 +123,11 @@ test.describe('STAKE and partial UNSTAKE on Bitcoin testnet', () => {
             expect(stake.source).toBe(address);
             expect(String(stake.signing_pubkey).toLowerCase()).toBe(pubkey);
             expect(Number(stake.amount)).toBeCloseTo(Number(STAKE_AMOUNT), 8);
+            activationHeight = activationTarget(stake);
         });
 
         await test.step('wait for the indexed activation height', async () => {
-            await waitForActivationHeight(venue, Number(stake.activation_block) + 1, {
+            await waitForActivationHeight(venue, activationHeight, {
                 timeoutMs: ACTIVATION_TIMEOUT,
             });
         });

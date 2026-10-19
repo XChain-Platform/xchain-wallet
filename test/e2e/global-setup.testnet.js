@@ -37,6 +37,7 @@ import {
     testnetEndpoints,
 } from './fixtures/testnet.js';
 import { assertOriginsAllowed, suiteOrigin } from './fixtures/testnet_origin.js';
+import { MINT_AMOUNT, preflightGasHeadroom } from './fixtures/testnet_gas_preflight.js';
 import { preflightRunInput } from './fixtures/testnet_preflight.js';
 import { preflightClaimantReward } from './fixtures/testnet_rewards.js';
 
@@ -52,6 +53,10 @@ export default async function globalSetup() {
     console.log(`[testnet ${TESTNET_COIN}] priced: XCHAIN/USD ${report.price.xchainUsdPrice}, `
         + `coin/USD ${report.price.coinUsdPrice} (round ${report.price.oracleRound})`);
 
+    await preflightGasHeadroom(MINT_AMOUNT, {
+        explorerUrl: endpoints.explorerUrl,
+        coin: TESTNET_COIN,
+    });
     const staged = await stageRunInput(process.stdin);
     try {
         const input = readRunInput(staged.file);
