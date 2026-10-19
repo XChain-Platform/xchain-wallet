@@ -35,7 +35,7 @@ import { fundTestnetAddress } from '../../fixtures/testnet_funding.js';
 import { MINT_AMOUNT } from '../../fixtures/testnet_gas_preflight.js';
 import { mintTestnetXchain } from '../../fixtures/testnet_mint.js';
 import { leftoverNotice, writeRecoveryRecord } from '../../fixtures/testnet_recover.js';
-import { waitForResidualStake } from '../../fixtures/testnet_stakes.js';
+import { activationTarget, waitForResidualStake } from '../../fixtures/testnet_stakes.js';
 
 const STAKE_AMOUNT = '100';
 const UNSTAKE_AMOUNT = '30';
@@ -76,6 +76,7 @@ test.describe('STAKE and partial UNSTAKE on Bitcoin testnet', () => {
 
     test('mints, stakes, waits for activation, and partially unstakes', async ({ page }) => {
         let address;
+        let activationHeight;
         let pubkey;
         let stake;
 
@@ -122,10 +123,11 @@ test.describe('STAKE and partial UNSTAKE on Bitcoin testnet', () => {
             expect(stake.source).toBe(address);
             expect(String(stake.signing_pubkey).toLowerCase()).toBe(pubkey);
             expect(Number(stake.amount)).toBeCloseTo(Number(STAKE_AMOUNT), 8);
+            activationHeight = activationTarget(stake);
         });
 
         await test.step('wait for the indexed activation height', async () => {
-            await waitForActivationHeight(venue, Number(stake.activation_block) + 1, {
+            await waitForActivationHeight(venue, activationHeight, {
                 timeoutMs: ACTIVATION_TIMEOUT,
             });
         });
