@@ -75,6 +75,7 @@ import {
 
 const chainRegistry = registryLib.defaultRegistry();
 const POLL_INTERVAL_MS = 10_000;
+const OWNED_LIST_REVALIDATE_MS = 16_000;
 
 const PROTOCOL_COIN_TICKER = {
     bitcoin: 'BTC',
@@ -2150,6 +2151,7 @@ function extractListRows(resp) {
 function ExistingListPickerScreen({ variant, messaging, chainId, addresses, onSelect, onBack }) {
     const [rows, setRows] = useState(/** @type {any[] | null} */ (null));
     const [loadError, setLoadError] = useState(/** @type {string | null} */ (null));
+    const [loadAttempt, setLoadAttempt] = useState(0);
 
     useEffect(() => {
         let cancelled = false;
@@ -2160,12 +2162,13 @@ function ExistingListPickerScreen({ variant, messaging, chainId, addresses, onSe
             setRows([]);
             return undefined;
         }
-        Promise.all(addrList.map((addr) => messaging.getListsForSource({ chainId, address: addr })
-            .then((resp) => extractListRows(resp))
-            .catch((err) => { throw err; })))
+        Promise.all(addrList.map((addr) => Promise.resolve()
+            .then(() => messaging.getListsForSource({ chainId, address: addr }))
+            .then((resp) => ({ rows: extractListRows(resp), error: null }))
+            .catch((error) => ({ rows: [], error }))))
             .then((results) => {
                 if (cancelled) return;
-                const merged = results.flat();
+                const merged = results.flatMap((result) => result.rows);
                 const seen = new Set();
                 const uniq = merged.filter((row) => {
                     const key = String(row.action_index ?? row.tx_hash ?? JSON.stringify(row));
@@ -2175,12 +2178,19 @@ function ExistingListPickerScreen({ variant, messaging, chainId, addresses, onSe
                 });
                 uniq.sort((a, b) => Number(b.block_index || 0) - Number(a.block_index || 0));
                 setRows(uniq);
-            })
-            .catch((err) => {
-                if (!cancelled) setLoadError(readFailureMessage(err, 'load your lists'));
+                const failed = results.find((result) => result.error);
+                if (failed && uniq.length === 0) {
+                    setLoadError(readFailureMessage(failed.error, 'load your lists'));
+                }
             });
         return () => { cancelled = true; };
-    }, [chainId, addresses, messaging]);
+    }, [chainId, addresses, messaging, loadAttempt]);
+
+    useEffect(() => {
+        if (!rows || loadAttempt > 0) return undefined;
+        const timer = setTimeout(() => setLoadAttempt(1), OWNED_LIST_REVALIDATE_MS);
+        return () => clearTimeout(timer);
+    }, [rows, loadAttempt]);
 
     const header = <PageHeader onBack={onBack} title="Choose a list" />;
     const wrap = (children) => (
@@ -2189,7 +2199,16 @@ function ExistingListPickerScreen({ variant, messaging, chainId, addresses, onSe
         </Screen>
     );
 
-    if (loadError) return wrap(<StatusMessage variant="error">{loadError}</StatusMessage>);
+    if (loadError) {
+        return wrap(
+            <StatusMessage
+                variant="error"
+                recovery={{ label: 'Try again', onAction: () => setLoadAttempt((value) => value + 1) }}
+            >
+                {loadError}
+            </StatusMessage>,
+        );
+    }
     if (!rows) return wrap(<p className={styles.hint}>Loading lists…</p>);
     if (rows.length === 0) {
         return wrap(
