@@ -182,7 +182,7 @@ export const EXIT = { LIVE: 0, FAILURE: 1, CONFIG: 2, INCONCLUSIVE: 3, CONTACT_G
 // handed to this script), so it writes nothing. A pin that could be advanced
 // by supplying your own bytes would certify exactly the thing it exists to
 // catch.
-export const DEFAULT_PIN_PATH = join(here, '..', '..', 'docs', 'privacy-deploy-pin.json');
+export const DEFAULT_PIN_PATH = join(here, 'pins', 'privacy-deploy-pin.json');
 
 /**
  * The fingerprint the pin stores, over normalized policy text rather than
@@ -664,7 +664,7 @@ Exit codes: 0 live, 1 not live / not current / redirects, 2 config error,
 current but a contact address is JavaScript-gated at the edge (submittable;
 fix the edge setting).
 
-THE DEPLOY PIN. On exit 0 or 4 this writes docs/privacy-deploy-pin.json,
+THE DEPLOY PIN. On exit 0 or 4 this writes tools/release/pins/privacy-deploy-pin.json,
 recording that this normalized policy text was observed live at this URL.
 It is the only thing in this repo that knows what is actually published, so
 the smoke suite reads that note instead of fetching. The pin is rewritten

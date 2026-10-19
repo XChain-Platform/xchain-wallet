@@ -1118,7 +1118,7 @@ const pointerNote = existsSync(specPath)
 // precisely the state where the gap is real and unattended: written, pushed,
 // not deployed. Git can only ever see what would be published.
 //
-// So the subject is the DEPLOY, and the anchor is docs/privacy-deploy-pin.json.
+// So the subject is the DEPLOY, and the anchor is tools/release/pins/privacy-deploy-pin.json.
 // verify-privacy-url.mjs is the one thing in this repo that fetches, and on a
 // confirmed live observation it writes down the fingerprint of the policy text
 // it actually saw being served. This section compares the canonical policy
@@ -1158,7 +1158,7 @@ try {
         + 'so whether this run read what CI reads is unknown';
 }
 
-const pinPath = join(walletRoot, 'docs', 'privacy-deploy-pin.json');
+const pinPath = join(walletRoot, 'tools', 'release', 'pins', 'privacy-deploy-pin.json');
 assert.ok(existsSync(pinPath),
     `FAIL: ${pinPath} is missing, so nothing records that the published privacy policy was ever `
     + 'observed live. The Chrome Web Store form validates that URL. Run '
