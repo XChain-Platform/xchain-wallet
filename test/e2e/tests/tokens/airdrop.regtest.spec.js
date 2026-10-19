@@ -1089,6 +1089,11 @@ test.describe(`airdrop on ${REGTEST_CHAIN_LABEL}`, () => {
             const others = (await readChainAddresses(page, issuer)).filter((a) => a !== issuer);
             expect(others.length).toBe(2);
             [member, heldOut] = others;
+
+            await main.getByLabel('Airdrop to').selectOption('existing');
+            await main.getByRole('button', { name: 'Choose list' }).click();
+            await expect(page.getByText('No published lists yet', { exact: true }))
+                .toBeVisible({ timeout: 30_000 });
         });
 
         await test.step('publish the list somewhere else entirely', async () => {
