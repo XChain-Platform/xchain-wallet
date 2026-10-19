@@ -182,10 +182,11 @@ venue whose forbidden members throw.
 Stake-unstake waits for its residual stake row through `waitForResidualStake`
 in `test/e2e/fixtures/testnet_stakes.js`. It polls the explorer's stakes source
 route for the address every 30 seconds within the indexed wait budget, treats a
-non-OK answer or a rejected request as a miss and keeps polling, and at the
-deadline names the action index and, when the last poll failed, that failure as
-the HTTP status or an error code. A refused or misrouted stakes request
-therefore reads differently from a residual that is not yet indexed.
+non-OK answer, a rejected request, or a 2xx answer with no stake list as a miss
+and keeps polling, and at the deadline names the action index and, when the last
+poll failed, that failure as the HTTP status or an error code. A 2xx answer with
+no stake list reports `NO_STAKE_LIST`, so a refused or misrouted stakes request
+reads differently from a residual that is not yet indexed.
 
 Both testnet staking specs drive the wallet through
 `test/e2e/fixtures/testnet_walk.js`. It exports `WALLET_UNLOCK`, the unlock

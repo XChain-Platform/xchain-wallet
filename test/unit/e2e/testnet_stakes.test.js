@@ -107,6 +107,36 @@ describe('testnet residual stake polling', () => {
     });
 
     it.each([
+        ['an object without a stake list', { total: 0 }],
+        ['a null body', null],
+    ])('names NO_STAKE_LIST when the last poll returns %s', async (_label, body) => {
+        const fetch = vi.fn(async () => response(body));
+
+        await expect(waitForResidualStake(ADDRESS, ACTION_INDEX, {
+            ...OPTIONS,
+            ...clock(),
+            fetch,
+        })).rejects.toThrow(
+            `action ${ACTION_INDEX} was not indexed; last explorer failure: NO_STAKE_LIST`,
+        );
+        expect(fetch).toHaveBeenCalledTimes(10);
+    });
+
+    it('recovers when a no-list answer is followed by a matching row', async () => {
+        const row = { action_index: ACTION_INDEX };
+        const fetch = vi.fn()
+            .mockResolvedValueOnce(response({ total: 0 }))
+            .mockResolvedValueOnce(response([row]));
+
+        await expect(waitForResidualStake(ADDRESS, ACTION_INDEX, {
+            ...OPTIONS,
+            ...clock(),
+            fetch,
+        })).resolves.toBe(row);
+        expect(fetch).toHaveBeenCalledTimes(2);
+    });
+
+    it.each([
         ['https://explorer.private.example/stakes', 'explorer.private.example'],
         ['request to internal-service failed', 'internal-service'],
         ['address tb1qsecretwalletaddress was rejected', 'tb1qsecretwalletaddress'],
