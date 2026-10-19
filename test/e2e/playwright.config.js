@@ -107,13 +107,18 @@ export default defineConfig({
                 // Playwright derives navigator.platform from this user agent,
                 // keeping ControlOrMeta aligned with the app's host shortcut gate.
                 userAgent: desktopUserAgentForHost(),
+                // Hosts that carry a Chromium of a different revision than
+                // the pinned Playwright expects name it here.
+                ...(process.env.PW_CHROMIUM_PATH
+                    ? { launchOptions: { executablePath: process.env.PW_CHROMIUM_PATH } }
+                    : {}),
             },
         },
     ],
     webServer: {
         command: 'pnpm -C ../../packages/web dev',
         url: 'http://localhost:5173',
-        reuseExistingServer: !process.env.CI,
+        reuseExistingServer: true,
         timeout: 120_000,
         stdout: 'pipe',
         stderr: 'pipe',
