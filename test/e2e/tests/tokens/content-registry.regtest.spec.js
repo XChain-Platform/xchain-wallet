@@ -61,9 +61,17 @@ const STAMP = Date.now().toString().slice(-6);
 async function approveAndGetTxid(page) {
     await page.getByTestId('confirm-approve').click();
     const main = page.getByRole('main');
-    await expect(main, 'no transaction id ever appeared after Approve')
-        .toContainText(/[0-9a-f]{64}/, { timeout: 180_000 });
-    const txid = (await main.innerText()).match(/[0-9a-f]{64}/)?.[0];
+    // AddressText shows `first6…last6` and keeps the full id only in the
+    // element's title and aria-label, so the visible text never holds 64 hex.
+    const readAll = () => main.evaluate((el) => [
+        el.innerText,
+        ...[...el.querySelectorAll('[title],[aria-label]')]
+            .flatMap((n) => [n.getAttribute('title'), n.getAttribute('aria-label')]),
+    ].filter(Boolean).join('\n')).catch(() => '');
+    await expect.poll(async () => /[0-9a-f]{64}/.test(await readAll()),
+        { message: 'no transaction id ever appeared after Approve', timeout: 180_000 })
+        .toBe(true);
+    const txid = (await readAll()).match(/[0-9a-f]{64}/)?.[0];
     expect(txid, 'success screen showed no transaction id').toBeTruthy();
     return txid;
 }
@@ -376,8 +384,11 @@ test.describe(`content and registry flows on ${REGTEST_CHAIN_LABEL}`, () => {
             if (await renamePassword.count() > 0 && await renamePassword.isVisible()) await renamePassword.fill(PASSWORD);
             await expectConfirmModal(page, 'this action', 60_000);
             await expect(page.getByTestId('confirm-approve')).toBeEnabled({ timeout: 120_000 });
-            const renameTxid = await approveAndGetTxid(page);
-            await waitForValidAction(renameTxid);
+            // The rename done screen ("List rename submitted.") prints no
+            // transaction id, so the proof is the explorer showing the new name.
+            await page.getByTestId('confirm-approve').click();
+            await expect(page.getByRole('main').getByText('List rename submitted.'))
+                .toBeVisible({ timeout: 180_000 });
 
             await expect.poll(async () => {
                 const detail = await explorerJson(`action/${managedListIndex}`);

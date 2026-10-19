@@ -343,7 +343,14 @@ async function approveAndGetTxid(page, not = null) {
     // IDae0d…Done"), so a \b-anchored pattern does not match (§3.5, Session 30).
     const deadline = Date.now() + 180_000;
     while (Date.now() < deadline) {
-        const found = ((await main.innerText().catch(() => '')).match(/[0-9a-f]{64}/g) || [])
+        // The done screens draw an id through AddressText, which shows
+        // `first6…last6` and keeps the full value only in the element's
+        // title and aria-label, so the visible text alone never holds 64 hex.
+        const found = ((await main.evaluate((el) => [
+            el.innerText,
+            ...[...el.querySelectorAll('[title],[aria-label]')]
+                .flatMap((n) => [n.getAttribute('title'), n.getAttribute('aria-label')]),
+        ].filter(Boolean).join('\n')).catch(() => '')).match(/[0-9a-f]{64}/g) || [])
             .filter((id) => id !== not);
         if (found.length > 0) return found[0];
         await new Promise((r) => setTimeout(r, 1_000));
