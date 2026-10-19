@@ -187,6 +187,9 @@ and keeps polling, and at the deadline names the action index and, when the last
 poll failed, that failure as the HTTP status or an error code. A 2xx answer with
 no stake list reports `NO_STAKE_LIST`, so a refused or misrouted stakes request
 reads differently from a residual that is not yet indexed.
+Stake-unstake reads its activation target through `activationTarget`, which
+refuses an unreadable or non-future activation block at once instead of after
+the activation wait.
 
 Both testnet staking specs drive the wallet through
 `test/e2e/fixtures/testnet_walk.js`. It exports `WALLET_UNLOCK`, the unlock
