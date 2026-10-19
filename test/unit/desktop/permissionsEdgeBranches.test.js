@@ -271,3 +271,33 @@ describe('HID chooser default, as the module describes it', () => {
         expect(prose).toMatch(/left un-prevented, which Electron answers by cancelling/);
     });
 });
+
+describe('bridge session permission logging', () => {
+    function wire(env) {
+        const session = fakeSession();
+        const log = vi.fn();
+        attachHidDenial(session, { env, log });
+        return { session, log };
+    }
+
+    it('logs nothing by default', () => {
+        const { session, log } = wire({});
+        expect(session.handlers.check(null, 'hid', 'file://')).toBe(false);
+        expect(log).not.toHaveBeenCalled();
+    });
+
+    it('logs each checked permission and verdict when the flag is 1', () => {
+        const { session, log } = wire({ XCHAIN_LOG_BRIDGE_PERMISSIONS: '1' });
+        expect(session.handlers.check(null, 'usb', 'https://connect.trezor.io')).toBe(false);
+        expect(session.handlers.check(null, 'notifications', 'https://connect.trezor.io')).toBe(true);
+        expect(log).toHaveBeenCalledTimes(2);
+        expect(log.mock.calls[0][1]).toEqual({ permission: 'usb', requestingOrigin: 'https://connect.trezor.io', allowed: false });
+        expect(log.mock.calls[1][1].allowed).toBe(true);
+    });
+
+    it('ignores other flag values', () => {
+        const { session, log } = wire({ XCHAIN_LOG_BRIDGE_PERMISSIONS: 'true' });
+        session.handlers.check(null, 'hid', 'file://');
+        expect(log).not.toHaveBeenCalled();
+    });
+});
