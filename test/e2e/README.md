@@ -242,6 +242,19 @@ and sets `baseURL` to `suiteOrigin()`, so the origin preflight probes the same
 origin the browser is served from. This preflight does not relax browser origin
 rules or decide which origins a service allows.
 
+After the venue check writes its two log lines and before stdin is read,
+`global-setup.testnet.js` runs `preflightGasHeadroom(MINT_AMOUNT, options)` from
+`test/e2e/fixtures/testnet_gas_preflight.js`. It reads the remaining XCHAIN
+supply capacity through `readTestnetGasHeadroom` in `testnet_mint.js` and passes
+when the gas token has no capped record or when its headroom covers
+`MINT_AMOUNT`. That is the gas amount stake-unstake mints, imported from the
+same gas preflight fixture. Otherwise setup stops the run with one error
+starting `Gas headroom preflight refused` that names the headroom and the
+amount. A failed token read instead stops it with an error starting
+`Gas headroom read failed:` followed by the HTTP status or an error code, never
+the rejection's message. A capped XCHAIN supply therefore fails the run in
+seconds, before the run input is staged and before any treasury is sent.
+
 Three things differ from regtest on purpose:
 
 - **No browser relaxation.** The public explorer sends CORS headers, so the
@@ -249,7 +262,8 @@ Three things differ from regtest on purpose:
   `--disable-web-security` would be reporting on a browser nobody ships.
 - **Global setup only reads.** Its origin check and venue probes prove the
   services accept the suite origin, the venue is reachable, not stale, halted
-  or lagging, and that it prices a MINT of XCHAIN. It seeds nothing.
+  or lagging, that it prices a MINT of XCHAIN, and that the XCHAIN supply
+  covers the gas mint. It seeds nothing.
 - **Funding and recovery input arrive over stdin.** After the venue check
   passes, `global-setup.testnet.js` reads stdin once and stages it in a
   mode-0600 file inside a mode-0700 directory. Only that file's path, never a
