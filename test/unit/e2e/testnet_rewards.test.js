@@ -29,8 +29,8 @@ function response(body, { ok = true, status = 200 } = {}) {
     return { ok, status, json: vi.fn(async () => body) };
 }
 
-function fetchRows(rewards, claims) {
-    return vi.fn(async (url) => response(url.includes('/rewards/') ? rewards : claims));
+function fetchClaimable(claimable) {
+    return vi.fn(async () => response({ claimable }));
 }
 
 function input(amount) {
@@ -58,20 +58,18 @@ describe('testnet claimant rewards', () => {
     });
 
     it.each([
-        ['bare arrays', (rows) => rows],
-        ['data arrays', (rows) => ({ data: rows })],
-        ['rows arrays', (rows) => ({ rows })],
-    ])('reads rewards and claims from %s', async (_label, wrap) => {
-        const fetch = fetchRows(
-            wrap([{ amount: '1.5' }]),
-            wrap([{ amount: '0.25', status: 'valid' }]),
-        );
+        ['a bare object', { claimable: '1.25000000' }],
+        ['an envelope with array data', { total: 1, data: [{ claimable: '1.25000000' }] }],
+        ['an envelope with object data', { total: 1, data: { claimable: '1.25000000' } }],
+    ])('reads claimable from %s', async (_label, body) => {
+        const fetch = vi.fn(async () => response(body));
 
         await expect(unclaimedReward(ADDRESS, { ...OPTIONS, fetch })).resolves.toBe(1.25);
-        expect(fetch.mock.calls.map(([url]) => url)).toEqual([
-            `${OPTIONS.explorerUrl}/${OPTIONS.coin}/api/rewards/${ADDRESS}/address`,
-            `${OPTIONS.explorerUrl}/${OPTIONS.coin}/api/collects/${ADDRESS}/address`,
-        ]);
+        expect(fetch).toHaveBeenCalledOnce();
+        expect(fetch).toHaveBeenCalledWith(
+            `${OPTIONS.explorerUrl}/${OPTIONS.coin}/api/staking/${ADDRESS}`,
+            { signal: expect.any(AbortSignal) },
+        );
     });
 
     it('throws when an explorer answer is not successful', async () => {
@@ -81,25 +79,66 @@ describe('testnet claimant rewards', () => {
             .rejects.toThrow('explorer reward request returned HTTP 503');
     });
 
-    it('refuses a claimant with no partial reward available', async () => {
-        const fetch = fetchRows([], []);
+    it('uses a non-sensitive error when the explorer answer does not parse', async () => {
+        const parseMessage = 'body contained private diagnostics';
+        const fetch = vi.fn(async () => ({
+            ok: true,
+            status: 200,
+            json: vi.fn(async () => { throw new Error(parseMessage); }),
+        }));
+
+        let refusal;
+        try {
+            await unclaimedReward(ADDRESS, { ...OPTIONS, fetch });
+        } catch (error) {
+            refusal = error;
+        }
+
+        expect(refusal).toBeInstanceOf(Error);
+        expect(refusal.message).toBe('Claimant reward read failed: no claimable total');
+        expect(refusal.message).not.toContain(parseMessage);
+        expect(refusal.message).not.toContain(ADDRESS);
+    });
+
+    it('uses a non-sensitive error when the explorer answer has no claimable total', async () => {
+        const bodyMessage = 'private explorer response';
+        const fetch = vi.fn(async () => response({ message: bodyMessage }));
+
+        let refusal;
+        try {
+            await unclaimedReward(ADDRESS, { ...OPTIONS, fetch });
+        } catch (error) {
+            refusal = error;
+        }
+
+        expect(refusal).toBeInstanceOf(Error);
+        expect(refusal.message).toBe('Claimant reward read failed: no claimable total');
+        expect(refusal.message).not.toContain(bodyMessage);
+        expect(refusal.message).not.toContain(ADDRESS);
+    });
+
+    it.each([
+        ['zero', '0.00000000'],
+        ['negative', '-0.25000000'],
+    ])('refuses a claimant with a %s claimable total', async (_label, claimable) => {
+        const fetch = fetchClaimable(claimable);
 
         await expect(preflightClaimantReward(input(), { ...OPTIONS, fetch }))
-            .rejects.toThrow(/^Claimant reward preflight refused: reward seen 0 /);
+            .rejects.toThrow(/^Claimant reward preflight refused: reward seen /);
     });
 
     it.each([
         ['at', '1.5'],
         ['above', '1.50000001'],
     ])('refuses a requested amount %s the reward', async (_label, amount) => {
-        const fetch = fetchRows([{ amount: '1.5' }], []);
+        const fetch = fetchClaimable('1.50000000');
 
         await expect(preflightClaimantReward(input(amount), { ...OPTIONS, fetch }))
             .rejects.toThrow(/^Claimant reward preflight refused: reward seen 1.5;/);
     });
 
     it('passes a valid requested amount below the reward', async () => {
-        const fetch = fetchRows([{ amount: '1.5' }], []);
+        const fetch = fetchClaimable('1.50000000');
 
         await expect(preflightClaimantReward(input('0.75'), { ...OPTIONS, fetch }))
             .resolves.toBe(1.5);
@@ -113,7 +152,7 @@ describe('testnet claimant rewards', () => {
 
     it('does not expose the claimant address in refusal messages', async () => {
         const address = 'private-claimant-address';
-        const fetch = fetchRows([{ amount: '0.00000001' }], []);
+        const fetch = fetchClaimable('0.00000001');
         let refusal;
 
         try {
