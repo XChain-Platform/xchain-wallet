@@ -19,12 +19,18 @@
 // against mounted components until now, which is assertion against the same
 // model that produced the behaviour.
 //
-// WHY A STUBBED VERDICT. The Send form refuses an amount above the balance it
-// knows, so an unaffordable send never reaches the confirm page, and the
-// venue accepts every affordable send. The fail legs therefore compose an
-// AFFORDABLE amount and answer the `/api/preflight` request in the page with
-// the venue's own reply for that amount, flipped to `valid:false`. The gate,
-// its chip, its acknowledgement and its override all run for real on top.
+// WHY A TOKEN SEND. The scenario was originally scripted as an excess-amount
+// NATIVE send, and driving it found that it never reaches the confirm page
+// at all: the form catches it first ("You don't have enough funds"), which
+// is better UX and leaves the gate unexercised. A TOKEN send is the case the
+// wallet CANNOT pre-empt - the token ledger lives in the indexer, the
+// transaction itself only moves dust plus a miner fee, so an unaffordable
+// token send composes perfectly well and only the dry-run knows better.
+// That is precisely the situation pre-flight exists for.
+//
+// Verified against the venue before this was written: an over-balance SEND
+// returns `valid:false, status:"invalid: insufficient funds"` from
+// /RBTC/api/preflight, and an affordable one returns `valid:true`.
 //
 // WHAT IT COSTS TO GET THAT VERDICT, and why every walk below warms it
 // first: a COLD dry-run on this shared venue was measured between 1.2s and
@@ -55,9 +61,14 @@ import {
 const PASSWORD = 'regtestpassword123';
 const FUNDING_BTC = 1;
 const MINT_XCHAIN = 500;
-/** Inside the minted balance, with its dry-run answer stubbed to fail. */
-const STUBBED_FAIL = '26';
-/** Inside it too, left to the venue, so the same walk can then succeed unchanged. */
+/**
+ * The whole minted balance. The Send form's local balance check refuses only
+ * amounts ABOVE the balance, so this reaches the confirm page, where the
+ * venue's dry-run is the one expected to reject it. `warmSend` asserts that
+ * premise at the venue before the walk relies on it.
+ */
+const DRYRUN_REJECTED = String(MINT_XCHAIN);
+/** Well inside it, so the same walk can then succeed unchanged. */
 const AFFORDABLE = '25';
 
 function toField(page) {
@@ -95,19 +106,6 @@ async function warmSend(source, amount, expected) {
     return quote;
 }
 
-/**
- * Answers the page's `/api/preflight` request with `quote` (the venue's own
- * reply for the composed amount) flipped to an insufficient-funds rejection.
- */
-async function stubDryRunInvalid(page, quote) {
-    await page.route('**/api/preflight*', (route) => route.fulfill({
-        status: 200,
-        contentType: 'application/json',
-        headers: { 'access-control-allow-origin': '*' },
-        body: JSON.stringify({ ...quote, valid: false, status: 'invalid: insufficient funds' }),
-    }));
-}
-
 /** Picks XCHAIN in the Send asset picker, fills the form, opens the modal. */
 async function composeTokenSend(page, amount) {
     await gotoSection(page, 'Send');
@@ -143,11 +141,10 @@ async function openFundedTokenWallet(page) {
 }
 
 test.describe('pre-flight gate on regtest', () => {
-    test('a rejected token send fails pre-flight, blocks Approve, and can be overridden', async ({ page }) => {
+    test('an unaffordable token send fails pre-flight, blocks Approve, and can be overridden', async ({ page }) => {
         const own = await openFundedTokenWallet(page);
-        const quote = await warmSend(own, STUBBED_FAIL, true);
-        await stubDryRunInvalid(page, quote);
-        await composeTokenSend(page, STUBBED_FAIL);
+        await warmSend(own, DRYRUN_REJECTED, false);
+        await composeTokenSend(page, DRYRUN_REJECTED);
 
         // §5.2.4: the verdict chip, from a REAL dry-run. Tier 1 was
         // unreachable on every venue until, so this had never once
@@ -162,10 +159,10 @@ test.describe('pre-flight gate on regtest', () => {
         // reason after "because" is the indexer's text verbatim; a wallet that
         // reworded it would be hiding which party said what.
         const panel = page.getByTestId('preflight-panel');
-        await expect(panel).toContainText(/would be refused because insufficient funds/i);
+        await expect(panel).toContainText(/would be refused because/i);
 
-        // The balance check has nothing to report for an affordable amount, so
-        // the dry-run rejection is the one finding to acknowledge.
+        // The amount is within the balance the form read, so Tier 2's balance
+        // check stays quiet and the dry-run is the only error to acknowledge.
         const dryRunAck = page.getByTestId('ack-DRYRUN_INVALID');
         await expect(dryRunAck).toBeVisible();
         await expect(page.getByTestId('ack-BALANCE_INSUFFICIENT')).toHaveCount(0);
@@ -174,7 +171,7 @@ test.describe('pre-flight gate on regtest', () => {
         const approve = page.getByTestId('confirm-approve');
         await expect(approve).toBeDisabled();
 
-        // With every error acknowledged, signing is permitted. This is the
+        // With the error acknowledged, signing is permitted. This is the
         // anti-censorship half of §4.2: a gate the explorer could hold shut
         // would let a hostile or broken one stop the user signing at all.
         await dryRunAck.check();
@@ -199,13 +196,11 @@ test.describe('pre-flight gate on regtest', () => {
         // point is that a rejected pre-flight is not a dead end and leaves
         // nothing behind - the second compose has to produce a clean report,
         // not a stale one.
-        const quote = await warmSend(own, STUBBED_FAIL, true);
-        await stubDryRunInvalid(page, quote);
-        await composeTokenSend(page, STUBBED_FAIL);
+        await warmSend(own, DRYRUN_REJECTED, false);
+        await composeTokenSend(page, DRYRUN_REJECTED);
         await expect(page.getByTestId('preflight-chip')).toHaveText('Will likely fail');
         await page.getByTestId('confirm-reject').click();
         await expect(page.getByTestId('confirm-modal')).toHaveCount(0);
-        await page.unroute('**/api/preflight*');
 
         // The second dry-run is a DIFFERENT action string, so it is cold
         // again. Warming it is also the only thing that makes "Looks good"
@@ -215,7 +210,7 @@ test.describe('pre-flight gate on regtest', () => {
         await warmSend(own, AFFORDABLE, true);
 
         // Fix in place: the form kept its values (§5.1), so only the amount
-        // changes and the venue answers again.
+        // changes.
         await amountField(page).fill(AFFORDABLE);
         await mainButton(page, 'Send').click();
         await expectConfirmModal(page, 'this action', 30_000);

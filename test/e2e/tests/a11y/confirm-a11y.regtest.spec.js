@@ -49,8 +49,12 @@ import {
 const PASSWORD = 'a11yconfirmpassword';
 const FUNDING_BTC = 1;
 const MINT_XCHAIN = 500;
-/** Inside the minted balance, with its dry-run answer stubbed to fail (see preflight-gate). */
-const STUBBED_FAIL = '26';
+/**
+ * The whole minted balance: the local balance check allows it (it refuses only
+ * amounts ABOVE the balance), and the venue's dry-run is the one that rejects
+ * it. See preflight-gate.
+ */
+const DRYRUN_REJECTED = String(MINT_XCHAIN);
 const AFFORDABLE = '25';
 /** The MV3 popup band; the config's desktop default is the "full" arm. */
 const POPUP = { width: 360, height: 600 };
@@ -101,21 +105,6 @@ async function warmSend(source, amount, expected) {
     });
     expect(quote.valid, `the venue's own dry-run for a ${amount} XCHAIN send disagrees `
         + `with this spec's premise: ${JSON.stringify(quote)}`).toBe(expected);
-    return quote;
-}
-
-/**
- * Answers the page's `/api/preflight` request with `quote` (the venue's own
- * reply for the composed amount) flipped to an insufficient-funds rejection,
- * because the Send form keeps an unaffordable amount from reaching the modal.
- */
-async function stubDryRunInvalid(page, quote) {
-    await page.route('**/api/preflight*', (route) => route.fulfill({
-        status: 200,
-        contentType: 'application/json',
-        headers: { 'access-control-allow-origin': '*' },
-        body: JSON.stringify({ ...quote, valid: false, status: 'invalid: insufficient funds' }),
-    }));
 }
 
 /**
@@ -132,19 +121,17 @@ async function scanBothVerdicts(page, own, width) {
     await scan(page, `Confirm surface (ready, ${width})`);
     await page.getByTestId('confirm-reject').click();
 
-    const failQuote = await warmSend(own, STUBBED_FAIL, true);
-    await stubDryRunInvalid(page, failQuote);
+    await warmSend(own, DRYRUN_REJECTED, false);
 
     // The fail state is its own scan target, not a variation: it is the only
     // one that renders the error list, the per-finding "Sign anyway"
     // checkboxes and `aria-live="assertive"`, and it is the state a user is
     // most likely to be reading carefully. An unlabelled override control
     // here is a consent problem, not a lint finding.
-    await composeTokenSend(page, STUBBED_FAIL);
+    await composeTokenSend(page, DRYRUN_REJECTED);
     await expect(page.getByTestId('preflight-chip')).toHaveText('Will likely fail');
     await expect(page.getByTestId('ack-DRYRUN_INVALID')).toBeVisible();
     await scan(page, `Confirm surface (pre-flight fail, ${width})`);
-    await page.unroute('**/api/preflight*');
 }
 
 test.describe('a11y: confirm surface, full width (§5.2)', () => {
