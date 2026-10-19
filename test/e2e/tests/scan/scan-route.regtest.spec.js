@@ -288,6 +288,13 @@ test.describe('scan and classify (§24.3)', () => {
             await openScan(page);
             expect(await classifyPaste(page, `xchain:BTC/send?to=${PAY_TO}&amount=${PAY_AMOUNT}`),
                 'an xchain: send intent was not routed').toBe('routed');
+            // Send is a lazy chunk that loads the wallet's addresses before it
+            // renders the form, so the To field is not there the instant the
+            // scan route unmounts. Wait for it as the receive step waits for its
+            // screen, then read the filled values.
+            await expect(page.getByLabel('To', { exact: true }),
+                'the send intent did not open the Send screen')
+                .toBeVisible({ timeout: 30_000 });
             expect(await page.getByLabel('To', { exact: true }).inputValue(),
                 'the send intent opened Send with a different destination than the URI named')
                 .toBe(PAY_TO);

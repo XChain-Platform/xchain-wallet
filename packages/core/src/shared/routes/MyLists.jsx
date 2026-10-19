@@ -23,6 +23,7 @@ import styles from './ActionsMenu.module.css';
 import local from './MyLists.module.css';
 
 const chainRegistry = registryLib.defaultRegistry();
+const OWNED_LIST_REVALIDATE_MS = 16_000;
 
 /**
  * PC-10 "My Lists": owner-facing list view over every LIST action this
@@ -70,6 +71,7 @@ function MyListsScreen({ walletId, activeAccountId, onOpenList, onCreateList, on
     );
     const [addressesReload, setAddressesReload] = useState(0);
     const [listsReload, setListsReload] = useState(0);
+    const [listsRevalidated, setListsRevalidated] = useState(false);
     const [query, setQuery] = useState('');
     const [network, setNetwork] = useState('all');
 
@@ -159,6 +161,15 @@ function MyListsScreen({ walletId, activeAccountId, onOpenList, onCreateList, on
         if (states.length === 0) return true;
         return states.some((s) => s.loading);
     }, [listsByChain]);
+
+    useEffect(() => {
+        if (!addressesByChain || offline || anyLoading || listsRevalidated) return undefined;
+        const timer = setTimeout(() => {
+            setListsRevalidated(true);
+            setListsReload((value) => value + 1);
+        }, OWNED_LIST_REVALIDATE_MS);
+        return () => clearTimeout(timer);
+    }, [addressesByChain, offline, anyLoading, listsRevalidated]);
 
     const loadErrors = useMemo(() => (
         Object.entries(listsByChain)
