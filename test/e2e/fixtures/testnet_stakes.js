@@ -36,7 +36,7 @@ async function explorerRows(address, { explorerUrl, coin, fetch }) {
     if (Array.isArray(body)) return body;
     if (Array.isArray(body?.data)) return body.data;
     if (Array.isArray(body?.rows)) return body.rows;
-    return [];
+    throw Object.assign(new Error(), { code: 'NO_STAKE_LIST' });
 }
 
 export async function waitForResidualStake(address, actionIndex, {
