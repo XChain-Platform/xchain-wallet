@@ -19,6 +19,7 @@ const mocks = vi.hoisted(() => ({
     input: { address: 'treasury-address', claimant: { address: 'claimant-address' } },
     liveVenue: vi.fn(),
     preflightClaimantReward: vi.fn(),
+    preflightGasHeadroom: vi.fn(),
     preflightRunInput: vi.fn(),
     readRunInput: vi.fn(),
     stageRunInput: vi.fn(),
@@ -40,6 +41,11 @@ vi.mock('../../e2e/fixtures/testnet.js', () => ({
 vi.mock('../../e2e/fixtures/testnet_origin.js', () => ({
     assertOriginsAllowed: mocks.assertOriginsAllowed,
     suiteOrigin: mocks.suiteOrigin,
+}));
+
+vi.mock('../../e2e/fixtures/testnet_gas_preflight.js', () => ({
+    MINT_AMOUNT: 200,
+    preflightGasHeadroom: mocks.preflightGasHeadroom,
 }));
 
 vi.mock('../../e2e/fixtures/testnet_preflight.js', () => ({
@@ -80,6 +86,7 @@ beforeEach(() => {
     mocks.checkTestnetVenue.mockResolvedValue(REPORT);
     mocks.liveVenue.mockReturnValue(mocks.venue);
     mocks.preflightClaimantReward.mockResolvedValue(undefined);
+    mocks.preflightGasHeadroom.mockResolvedValue(undefined);
     mocks.preflightRunInput.mockResolvedValue(undefined);
     mocks.readRunInput.mockReturnValue(mocks.input);
     mocks.stageRunInput.mockResolvedValue({ cleanup: mocks.cleanup, file: STAGED_FILE });
@@ -123,6 +130,18 @@ describe('testnet global setup ordering', () => {
         expect(mocks.stageRunInput).not.toHaveBeenCalled();
     });
 
+    it('refuses insufficient gas headroom after checking the venue and before staging input', async () => {
+        const refusal = new Error('Gas headroom preflight refused');
+        mocks.preflightGasHeadroom.mockRejectedValueOnce(refusal);
+
+        await expect(globalSetup()).rejects.toBe(refusal);
+
+        expect(mocks.checkTestnetVenue).toHaveBeenCalledWith(mocks.venue);
+        expect(mocks.checkTestnetVenue.mock.invocationCallOrder[0])
+            .toBeLessThan(mocks.preflightGasHeadroom.mock.invocationCallOrder[0]);
+        expect(mocks.stageRunInput).not.toHaveBeenCalled();
+    });
+
     it('cleans staged input when run-input preflight refuses', async () => {
         const refusal = new Error('run input refused');
         mocks.preflightRunInput.mockRejectedValueOnce(refusal);
@@ -153,6 +172,11 @@ describe('testnet global setup ordering', () => {
     it('passes staged input through both preflights and returns a cleanup teardown', async () => {
         const teardown = await globalSetup();
 
+        expect(mocks.preflightGasHeadroom).toHaveBeenCalledTimes(1);
+        expect(mocks.preflightGasHeadroom).toHaveBeenCalledWith(200, {
+            explorerUrl: ENDPOINTS.explorerUrl,
+            coin: 'TBTC',
+        });
         expect(mocks.stageRunInput).toHaveBeenCalledWith(process.stdin);
         expect(mocks.readRunInput).toHaveBeenCalledWith(STAGED_FILE);
         expect(mocks.preflightRunInput).toHaveBeenCalledWith(mocks.venue, mocks.input);
