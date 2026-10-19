@@ -339,12 +339,19 @@ async function approveAndGetTxid(page, not = null) {
     await expect(approve).toBeEnabled({ timeout: 120_000 });
     await approve.click();
     const main = page.getByRole('main');
-    // The success screens render the id with no separators ("Transaction
-    // IDae0d…Done"), so a \b-anchored pattern does not match (§3.5, Session 30).
+    // Success screens draw the id truncated, so the full 64 characters are
+    // only in the element's accessible name; the visible text is the fallback
+    // for screens that print it whole. Neither carries separators ("Transaction
+    // IDae0d...Done"), so the text read is bounded by hex characters rather
+    // than by \b (§3.5, Session 30).
     const deadline = Date.now() + 180_000;
     while (Date.now() < deadline) {
-        const found = ((await main.innerText().catch(() => '')).match(/[0-9a-f]{64}/g) || [])
-            .filter((id) => id !== not);
+        const labelled = await main.locator('[aria-label]').evaluateAll((nodes) => nodes
+            .map((n) => n.getAttribute('aria-label') || '')
+            .filter((label) => /^[0-9a-f]{64}$/.test(label))).catch(() => []);
+        const printed = ((await main.innerText().catch(() => ''))
+            .match(/(?<![0-9a-f])[0-9a-f]{64}(?![0-9a-f])/g) || []);
+        const found = [...labelled, ...printed].filter((id) => id !== not);
         if (found.length > 0) return found[0];
         await new Promise((r) => setTimeout(r, 1_000));
     }

@@ -46,6 +46,7 @@ import {
     waitForTokenBalance,
     waitForValidAction,
 } from '../../fixtures/regtest.js';
+import { waitForShownTxid } from '../../fixtures/pendingHistory.js';
 
 const PASSWORD = 'regtestpassword123';
 // Off Bitcoin the protocol fee is paid in the native coin: about 20 DOGE per
@@ -60,11 +61,12 @@ const STAMP = Date.now().toString().slice(-6);
 /** Approves the open confirm screen and returns the broadcast txid. */
 async function approveAndGetTxid(page) {
     await page.getByTestId('confirm-approve').click();
-    const main = page.getByRole('main');
-    await expect(main, 'no transaction id ever appeared after Approve')
-        .toContainText(/[0-9a-f]{64}/, { timeout: 180_000 });
-    const txid = (await main.innerText()).match(/[0-9a-f]{64}/)?.[0];
-    expect(txid, 'success screen showed no transaction id').toBeTruthy();
+    // The success screen draws the id truncated; the full 64 characters are in
+    // its accessible name, which readShownTxid reads.
+    const txid = await waitForShownTxid(page.getByRole('main'), {
+        timeout: 180_000,
+        message: 'no transaction id ever appeared after Approve',
+    });
     return txid;
 }
 
