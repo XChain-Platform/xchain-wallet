@@ -11,7 +11,7 @@ const CONSENSUS = [
     'src/consensus/',
     'src/coins/',
     'src/protocol/',
-    'bin/pins/'
+    'tools/pins/'
 ];
 
 const GROUPS = [
@@ -149,7 +149,7 @@ function listTests() {
 
 function findRequirers(needle) {
     try {
-        const output = runGit(['grep', '-l', '-F', '--', needle, '--', 'src', 'packages', 'test', 'bin']);
+        const output = runGit(['grep', '-l', '-F', '--', needle, '--', 'src', 'packages', 'test', 'tools']);
         return output ? output.split('\n') : [];
     } catch (error) {
         if (error.status === 1) return [];
@@ -202,7 +202,7 @@ function runPlan(plan) {
 
 function main() {
     if (!['--plan', '--run'].includes(process.argv[2])) {
-        console.error('usage: node bin/ci_fast_select.js --plan|--run');
+        console.error('usage: node tools/ci_fast_select.js --plan|--run');
         return 2;
     }
     let plan;
