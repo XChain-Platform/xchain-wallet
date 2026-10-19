@@ -49,8 +49,12 @@ import {
 const PASSWORD = 'a11yconfirmpassword';
 const FUNDING_BTC = 1;
 const MINT_XCHAIN = 500;
-/** Beyond the minted balance, so the dry-run rejects it (see preflight-gate). */
-const UNAFFORDABLE = '999999';
+/**
+ * The whole minted balance: the local balance check allows it (it refuses only
+ * amounts ABOVE the balance), and the venue's dry-run is the one that rejects
+ * it. See preflight-gate.
+ */
+const DRYRUN_REJECTED = String(MINT_XCHAIN);
 const AFFORDABLE = '25';
 /** The MV3 popup band; the config's desktop default is the "full" arm. */
 const POPUP = { width: 360, height: 600 };
@@ -117,14 +121,14 @@ async function scanBothVerdicts(page, own, width) {
     await scan(page, `Confirm surface (ready, ${width})`);
     await page.getByTestId('confirm-reject').click();
 
-    await warmSend(own, UNAFFORDABLE, false);
+    await warmSend(own, DRYRUN_REJECTED, false);
 
     // The fail state is its own scan target, not a variation: it is the only
     // one that renders the error list, the per-finding "Sign anyway"
     // checkboxes and `aria-live="assertive"`, and it is the state a user is
     // most likely to be reading carefully. An unlabelled override control
     // here is a consent problem, not a lint finding.
-    await composeTokenSend(page, UNAFFORDABLE);
+    await composeTokenSend(page, DRYRUN_REJECTED);
     await expect(page.getByTestId('preflight-chip')).toHaveText('Will likely fail');
     await expect(page.getByTestId('ack-DRYRUN_INVALID')).toBeVisible();
     await scan(page, `Confirm surface (pre-flight fail, ${width})`);
