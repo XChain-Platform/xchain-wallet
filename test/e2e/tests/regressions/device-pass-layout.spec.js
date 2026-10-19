@@ -158,12 +158,17 @@ test.describe('real wallet', () => {
         // aside there (one message per state), so it is not a route the
         // notice shows on.
         await gotoSection(page, 'Settings');
-        await expect(toggle).toHaveAttribute('aria-expanded', 'false');
+        // Settings holds no balance, so the same notice drops the word
+        // balances.
+        const settingsMessage = page.getByRole('status').filter({ hasText: 'Some information may be out of date' });
+        await expect(settingsMessage).toBeVisible();
+        await expect(settingsMessage.locator('xpath=..').getByRole('button', { name: 'Details' }))
+            .toHaveAttribute('aria-expanded', 'false');
         // On a route with a page header the notice opens the scrolling
         // content below that header, never between the two toolbars.
         // Settings loads lazily; until its Screen mounts, the notice waits in
         // the route area's fallback slot, so poll for the settled placement.
-        const placement = () => message.evaluate((node) => {
+        const placement = () => settingsMessage.evaluate((node) => {
             const main = node.closest('main');
             const pageHeader = main?.previousElementSibling;
             return {
