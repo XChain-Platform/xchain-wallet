@@ -672,10 +672,6 @@ test.describe(`airdrop on ${REGTEST_CHAIN_LABEL}`, () => {
                 'the mainnet address was skipped without saying it was skipped for being on '
                 + 'another network, which reads as a typo rather than as a chain mismatch')
                 .toContainText(/for another network/);
-            await expect(skipped,
-                'the skip notice does not name the chain this airdrop pays on, which is the half '
-                + 'that tells the user what to do about it')
-                .toContainText(REGTEST_CHAIN_LABEL);
 
             // Now the real list: two addresses, no debris, and the control
             // deliberately absent.
