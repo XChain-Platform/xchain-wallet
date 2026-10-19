@@ -3,8 +3,8 @@
 //
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-// At 360px every Manage token panel tab fits the strip, so none sits cut
-// off past the edge of a phone screen.
+// Checks that every Manage token panel tab fits the strip at 360px, so none
+// is clipped past the edge of a phone screen.
 
 import { createWallet, expect, test } from '../../fixtures/wallet.js';
 

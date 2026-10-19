@@ -163,9 +163,9 @@ test.describe('responsive: one interface at every width', () => {
             });
         }
 
-        // The link hides itself with the hidden attribute while its panel is
-        // open, which works only while no author display rule outranks the
-        // attribute. jsdom applies no stylesheet, so only a browser shows it.
+        // The hidden attribute must hide the link while its panel is open; an
+        // author display rule would override it. Checked in a browser because
+        // jsdom applies no stylesheet.
         await test.step('Forgot password leaves the screen while its panel is open', async () => {
             const forgot = page.getByRole('button', { name: 'Forgot password?' });
             await forgot.click();
