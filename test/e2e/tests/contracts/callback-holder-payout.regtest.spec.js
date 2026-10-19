@@ -162,6 +162,41 @@ async function mineToHeight(target, timeoutMs = 300_000) {
     throw new Error(`the indexer never reached block ${target} (chain tip ${tip}, indexed ${indexed})`);
 }
 
+/**
+ * Opens Execute callback and waits until the WALLET's own block height has
+ * reached `callbackBlock`.
+ *
+ * The explorer's indexer height (`mineToHeight`) is not what the form gates
+ * on: the form reads the wallet's own watermark once when it mounts, and that
+ * can still be a couple of blocks behind the indexer, so Execute is refused
+ * ("Callback is not allowed until block N. The network is at M."). The form
+ * prints "Allowed from block N (reached)" once its own height has caught up;
+ * until then, keep mining and reopen the form so it re-reads the height.
+ */
+async function openExecuteCallbackAtWalletHeight(page, callbackBlock, timeoutMs = 300_000) {
+    const deadline = Date.now() + timeoutMs;
+    let seen = 'no block line shown';
+    while (Date.now() < deadline) {
+        const main = await openExecuteCallbackWhenConfigured(page);
+        const allowed = main.getByText('Allowed from block', { exact: true })
+            .locator('xpath=following-sibling::dd[1]');
+        await expect(allowed, 'Execute callback did not show the allowed-from block')
+            .toBeVisible({ timeout: 30_000 });
+        await expect.poll(async () => (await allowed.innerText()).includes('(reached)'), {
+            timeout: 15_000,
+        }).toBe(true).then(() => { seen = 'reached'; }, async () => {
+            seen = (await allowed.innerText().catch(() => seen)).replace(/\s+/g, ' ');
+        });
+        if (seen === 'reached') return main;
+        await mineToHeight(callbackBlock);
+        await nudgeChain();
+        await new Promise((resolve) => setTimeout(resolve, 3_000));
+        await page.reload();
+        await unlockAfterReload(page, UNLOCK_VALUE);
+    }
+    throw new Error(`the wallet's own height never reached callback block ${callbackBlock} (${seen})`);
+}
+
 async function waitForExactBalance(address, tick, expected, timeoutMs = 300_000) {
     const deadline = Date.now() + timeoutMs;
     let actual = null;
@@ -296,7 +331,7 @@ test.describe(`holder-payout callback on ${REGTEST_CHAIN_LABEL}`, () => {
             await mineToHeight(callbackBlock);
             await ownerPage.reload();
             await unlockAfterReload(ownerPage, UNLOCK_VALUE);
-            const main = await openExecuteCallbackWhenConfigured(ownerPage);
+            const main = await openExecuteCallbackAtWalletHeight(ownerPage, callbackBlock);
 
             const holdersToPay = main.getByText('Holders to pay', { exact: true })
                 .locator('xpath=following-sibling::dd[1]');

@@ -44,9 +44,9 @@
 // VENUE
 //
 // Run it on the regtest host, where the encoder / miner / explorer ports are local and
-// ~/Sites is the same NFS path as the Mac:
+// the repo checkout is the same NFS path as the Mac:
 //
-//   ssh localhost 'cd ~/Sites/XChain-Platform/xchain-wallet && \
+//   ssh localhost 'cd path/to/xchain-wallet && \
 //     node tools/regtest/xc1178SmtMemoRepoison.mjs litecoin-regtest'
 //
 // RECOVERY. A pre-fix run leaves the indexer wedged on the block it refused.

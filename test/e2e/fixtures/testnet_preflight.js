@@ -39,6 +39,16 @@ function refusal(subject, held, needed) {
     );
 }
 
+export async function preflightClaimantUtxo(venue, address) {
+    const view = await venue.utxos(address);
+    const held = confirmedValues(view)[0] ?? 0;
+    const needed = MIN_CLAIM_UTXO_SATS;
+    if (held < needed) {
+        throw refusal('Claimant preflight refused', held, needed);
+    }
+    return { held, needed };
+}
+
 export async function preflightRunInput(venue, input) {
     const treasuryView = await venue.utxos(input?.address);
     const treasury = fundingCapacity(confirmedValues(treasuryView));
@@ -56,14 +66,10 @@ export async function preflightRunInput(venue, input) {
         );
     }
 
-    const claimantView = await venue.utxos(claimant.address);
-    const claimantHeld = confirmedValues(claimantView)[0] ?? 0;
-    if (claimantHeld < MIN_CLAIM_UTXO_SATS) {
-        throw refusal('Claimant preflight refused', claimantHeld, MIN_CLAIM_UTXO_SATS);
-    }
+    const claimantUtxo = await preflightClaimantUtxo(venue, claimant.address);
 
     return {
         treasury: { held: treasury.held, needed: treasury.needed },
-        claimant: { held: claimantHeld, needed: MIN_CLAIM_UTXO_SATS },
+        claimant: claimantUtxo,
     };
 }
