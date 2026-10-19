@@ -208,6 +208,23 @@ its txid. It reads nothing from stdin, so a new testnet spec funds a wallet by
 passing it the treasury from the staged run input instead of composing those
 steps itself.
 
+Stake-unstake mints its XCHAIN gas through `mintTestnetXchain(page, amount,
+options)` in `test/e2e/fixtures/testnet_mint.js`. The helper reads the remaining
+XCHAIN supply capacity from the testnet explorer's token route through
+`readTestnetGasHeadroom` and refuses before any page step when that headroom is
+below the requested amount. It then signs one MINT through the Advanced action
+on the Bitcoin testnet chain from a testnet From address, and never reads the
+regtest explorer.
+
+Two unit guards, `test/unit/e2e/testnet_ui_text.test.js` and
+`test/unit/e2e/testnet_ui_names.test.js`, read every testnet spec and testnet
+fixture. They fail with the file, line and text of any plain `getByText`
+literal, `getByRole` name, `getByLabel` or `getByTestId` literal that no file
+under `packages/core/src` holds any more. A name the wallet composes at render
+time is checked by its fragments through the `COMPOSED` map, so a renamed label
+fails the unit suite instead of a live testnet pass 120 s in after coins are
+spent.
+
 Before the venue check and before stdin is read, `global-setup.testnet.js`
 runs `assertOriginsAllowed` from `test/e2e/fixtures/testnet_origin.js`. It sends
 one `OPTIONS` request carrying the suite origin to each encoder, explorer and
