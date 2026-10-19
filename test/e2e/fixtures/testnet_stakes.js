@@ -25,6 +25,29 @@ function failureDetail(error) {
     return typeof code === 'string' && /^[A-Za-z_]{2,40}$/.test(code) ? code : 'unknown';
 }
 
+function nonNegativeSafeInteger(value) {
+    if (typeof value === 'number') {
+        return Number.isSafeInteger(value) && value >= 0 ? value : null;
+    }
+    if (typeof value !== 'string' || !/^\d+$/.test(value)) return null;
+    const number = Number(value);
+    return Number.isSafeInteger(number) ? number : null;
+}
+
+export function activationTarget(stake) {
+    const activationBlock = nonNegativeSafeInteger(stake?.activation_block);
+    const blockIndex = nonNegativeSafeInteger(stake?.block_index);
+    if (activationBlock !== null && blockIndex !== null && activationBlock > blockIndex) {
+        return activationBlock + 1;
+    }
+
+    throw new Error(
+        `Stake activation unreadable for action ${String(stake?.action_index)}: `
+        + `activation_block=${String(stake?.activation_block)}, `
+        + `block_index=${String(stake?.block_index)}`,
+    );
+}
+
 async function explorerRows(address, { explorerUrl, coin, fetch }) {
     const response = await fetch(`${explorerUrl}/${coin}/api/stakes/${address}/source`, {
         signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
@@ -36,7 +59,7 @@ async function explorerRows(address, { explorerUrl, coin, fetch }) {
     if (Array.isArray(body)) return body;
     if (Array.isArray(body?.data)) return body.data;
     if (Array.isArray(body?.rows)) return body.rows;
-    return [];
+    throw Object.assign(new Error(), { code: 'NO_STAKE_LIST' });
 }
 
 export async function waitForResidualStake(address, actionIndex, {

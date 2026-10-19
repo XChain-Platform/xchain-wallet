@@ -59,7 +59,7 @@ export default defineConfig({
         },
     ],
     webServer: {
-        command: `pnpm -C ../../packages/web build && pnpm -C ../../packages/web preview --port ${PREVIEW_PORT} --strictPort`,
+        command: `node fixtures/testnet_origin.js && pnpm -C ../../packages/web build && pnpm -C ../../packages/web preview --port ${PREVIEW_PORT} --strictPort`,
         url: `http://localhost:${PREVIEW_PORT}`,
         // Never reuse: a preview already running serves whatever build it
         // started with, which is the stale-dist trap the build step closes.

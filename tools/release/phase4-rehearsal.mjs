@@ -51,7 +51,7 @@
 // meaning something different each time. Both refs are recorded.
 //
 // THE PIN IS AN OBSERVATION, NEVER AN ASSERTION - the convention
-// docs/release-key-pin.json and docs/privacy-deploy-pin.json already set here.
+// docs/release-key-pin.json and tools/release/pins/privacy-deploy-pin.json already set here.
 // `pin` refuses to write anything it did not just watch happen, and it records
 // the deepest step REACHED rather than a pass, because a Phase 4 rehearsal
 // that stops short is the normal case: the signature itself needs K1's
@@ -65,7 +65,7 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const WALLET_ROOT = resolve(HERE, '..', '..');
-export const PIN_PATH = join(WALLET_ROOT, 'docs', 'phase4-rehearsal-pin.json');
+export const PIN_PATH = join(WALLET_ROOT, 'tools', 'release', 'pins', 'phase4-rehearsal-pin.json');
 
 // The files a Phase 4 run's behaviour actually depends on, split by which tree
 // supplies them. Anything left out is drift nobody will see. The script side
@@ -417,7 +417,7 @@ function usage() {
 
   pin --repo <dir> --tag <vX.Y.Z> --input <dir> [--lane <name> | --staging]
       Run probe, then record what it observed in
-      docs/phase4-rehearsal-pin.json. Refuses to write a pin for a run
+      tools/release/pins/phase4-rehearsal-pin.json. Refuses to write a pin for a run
       it did not just watch.
 
   check [--against <ref>] [--pin <file>]

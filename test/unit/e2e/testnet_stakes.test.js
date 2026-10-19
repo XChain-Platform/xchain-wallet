@@ -11,7 +11,7 @@
 // @vitest-environment node
 
 import { describe, expect, it, vi } from 'vitest';
-import { waitForResidualStake } from '../../e2e/fixtures/testnet_stakes.js';
+import { activationTarget, waitForResidualStake } from '../../e2e/fixtures/testnet_stakes.js';
 
 const ADDRESS = 'stake-source-address';
 const ACTION_INDEX = 17;
@@ -33,6 +33,40 @@ function clock() {
     });
     return { now: () => time, sleep };
 }
+
+describe('testnet stake activation target', () => {
+    it.each([
+        ['numbers', { action_index: 5, activation_block: 11, block_index: 10 }, 12],
+        ['digit strings', { action_index: 5, activation_block: '11', block_index: '10' }, 12],
+    ])('reads a future activation target from %s', (_label, stake, target) => {
+        expect(activationTarget(stake)).toBe(target);
+    });
+
+    it.each([
+        ['a missing activation block', { action_index: 5, block_index: 10 }],
+        ['a null activation block', { action_index: 5, activation_block: null, block_index: 10 }],
+        ['a non-numeric activation block', { action_index: 5, activation_block: 'x', block_index: 10 }],
+        ['a fractional activation block', { action_index: 5, activation_block: 10.5, block_index: 10 }],
+        ['an activation block equal to the block index', { action_index: 5, activation_block: 10, block_index: 10 }],
+        ['a missing block index', { action_index: 5, activation_block: 11 }],
+    ])('refuses %s without exposing an address', (_label, stake) => {
+        const source = 'tb1qnotshown';
+        let error;
+
+        try {
+            activationTarget({ ...stake, source });
+        } catch (caught) {
+            error = caught;
+        }
+
+        expect(error).toBeInstanceOf(Error);
+        expect(error.message).toMatch(/^Stake activation unreadable/);
+        expect(error.message).toContain(`action ${stake.action_index}`);
+        expect(error.message).toContain(`activation_block=${String(stake.activation_block)}`);
+        expect(error.message).toContain(`block_index=${String(stake.block_index)}`);
+        expect(error.message).not.toContain(source);
+    });
+});
 
 describe('testnet residual stake polling', () => {
     it('returns a matching row from the third poll after two empty answers', async () => {
@@ -104,6 +138,36 @@ describe('testnet residual stake polling', () => {
             `action ${ACTION_INDEX} was not indexed; last explorer failure: ECONNREFUSED`,
         );
         expect(fetch).toHaveBeenCalledTimes(10);
+    });
+
+    it.each([
+        ['an object without a stake list', { total: 0 }],
+        ['a null body', null],
+    ])('names NO_STAKE_LIST when the last poll returns %s', async (_label, body) => {
+        const fetch = vi.fn(async () => response(body));
+
+        await expect(waitForResidualStake(ADDRESS, ACTION_INDEX, {
+            ...OPTIONS,
+            ...clock(),
+            fetch,
+        })).rejects.toThrow(
+            `action ${ACTION_INDEX} was not indexed; last explorer failure: NO_STAKE_LIST`,
+        );
+        expect(fetch).toHaveBeenCalledTimes(10);
+    });
+
+    it('recovers when a no-list answer is followed by a matching row', async () => {
+        const row = { action_index: ACTION_INDEX };
+        const fetch = vi.fn()
+            .mockResolvedValueOnce(response({ total: 0 }))
+            .mockResolvedValueOnce(response([row]));
+
+        await expect(waitForResidualStake(ADDRESS, ACTION_INDEX, {
+            ...OPTIONS,
+            ...clock(),
+            fetch,
+        })).resolves.toBe(row);
+        expect(fetch).toHaveBeenCalledTimes(2);
     });
 
     it.each([
