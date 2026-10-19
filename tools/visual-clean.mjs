@@ -11,7 +11,7 @@
 
 // Removes marked visual comparison reports from temporary storage.
 //
-//     node scripts/visual-clean.mjs [--root <tmp-dir>] [--max-age-hours 24] [--all]
+//     node tools/visual-clean.mjs [--root <tmp-dir>] [--max-age-hours 24] [--all]
 
 import {
     existsSync, lstatSync, readFileSync, readdirSync, realpathSync, rmSync, statSync,

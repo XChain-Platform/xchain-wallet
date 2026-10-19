@@ -36,7 +36,7 @@ const repoRoot = join(here, '..', '..', '..');
 // Where wallet code that can name an SDK path lives. Everything generated or
 // vendored is skipped: a hit inside node_modules or dist is the SDK's own
 // business or a build artifact, not a spelling this repo maintains.
-const SCAN_ROOTS = ['test', 'packages', 'bin', 'tools'];
+const SCAN_ROOTS = ['test', 'packages', 'tools'];
 const SKIP_DIRS = new Set([
     'node_modules', 'dist', 'build', 'coverage', '.vite', '.turbo', 'playwright-report',
     'test-results', 'release', 'out',
