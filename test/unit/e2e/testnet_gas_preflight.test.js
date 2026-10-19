@@ -57,4 +57,15 @@ describe('testnet gas headroom preflight', () => {
         await expect(preflightGasHeadroom(200, { explorerUrl, coin, fetch }))
             .rejects.toThrow('Gas headroom read failed: HTTP 500');
     });
+
+    it('propagates an unparsable token body failure', async () => {
+        const fetch = vi.fn(async () => ({
+            ok: true,
+            status: 200,
+            json: vi.fn(async () => { throw new SyntaxError('not JSON'); }),
+        }));
+
+        await expect(preflightGasHeadroom(200, { explorerUrl, coin, fetch }))
+            .rejects.toThrow('Gas headroom read failed: not JSON');
+    });
 });

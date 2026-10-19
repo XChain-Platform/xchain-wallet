@@ -45,18 +45,28 @@ describe('testnet XCHAIN mint headroom', () => {
         await expect(readTestnetGasHeadroom({ explorerUrl, coin, fetch })).resolves.toBeNull();
     });
 
-    it('returns null for non-JSON and incomplete token records', async () => {
-        const nonJson = vi.fn(async () => ({
-            ok: true,
-            status: 200,
-            json: vi.fn(async () => { throw new SyntaxError('not JSON'); }),
-        }));
+    it('returns null for an incomplete token record', async () => {
         const missingSupply = vi.fn(async () => reply(200, { supply: { max: '1000' } }));
 
-        await expect(readTestnetGasHeadroom({ explorerUrl, coin, fetch: nonJson }))
-            .resolves.toBeNull();
         await expect(readTestnetGasHeadroom({ explorerUrl, coin, fetch: missingSupply }))
             .resolves.toBeNull();
+    });
+
+    it.each([
+        ['an unparsable body', async () => { throw new SyntaxError('secret parse detail'); }],
+        ['a null body', async () => null],
+        ['an array body', async () => []],
+    ])('reports %s as not JSON without exposing parse detail', async (_label, json) => {
+        const fetch = vi.fn(async () => ({
+            ok: true,
+            status: 200,
+            json: vi.fn(json),
+        }));
+
+        await expect(readTestnetGasHeadroom({ explorerUrl, coin, fetch }))
+            .rejects.toThrow('Gas headroom read failed: not JSON');
+        await expect(readTestnetGasHeadroom({ explorerUrl, coin, fetch }))
+            .rejects.not.toThrow('secret parse detail');
     });
 
     it('reports a fetch rejection by code without echoing its message', async () => {

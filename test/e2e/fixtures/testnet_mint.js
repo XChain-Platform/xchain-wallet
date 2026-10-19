@@ -43,7 +43,15 @@ export async function readTestnetGasHeadroom({
         throw new Error(`Gas headroom read failed: HTTP ${response.status}`);
     }
 
-    const row = await response.json().catch(() => null);
+    let row;
+    try {
+        row = await response.json();
+    } catch {
+        throw new Error('Gas headroom read failed: not JSON');
+    }
+    if (row === null || typeof row !== 'object' || Array.isArray(row)) {
+        throw new Error('Gas headroom read failed: not JSON');
+    }
     const max = row?.supply?.max;
     const current = row?.supply?.current;
     if (max == null || current == null) return null;
