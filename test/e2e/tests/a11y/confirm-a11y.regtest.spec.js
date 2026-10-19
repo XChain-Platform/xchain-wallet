@@ -69,6 +69,23 @@ async function composeTokenSend(page, amount) {
     await expectConfirmModal(page, 'this action', 30_000);
 }
 
+/**
+ * Turns the wallet's "balances hidden" privacy toggle on.
+ *
+ * The Send form refuses an amount above the balance it has read, locally and
+ * before anything composes, so an UNAFFORDABLE token send never reaches the
+ * confirm page and the pre-flight gate goes unexercised. That check stands
+ * down while balances are hidden (`amountBalanceError` in Send.jsx), which is
+ * the product's own switch and needs no change to the wallet. The toggle's
+ * storage key and change event are the ones `useBalancesHidden` owns.
+ */
+async function hideBalances(page) {
+    await page.evaluate(() => {
+        localStorage.setItem('xc:balancesHidden', '1');
+        window.dispatchEvent(new CustomEvent('xc:balances-hidden-change', { detail: true }));
+    });
+}
+
 async function fundedWallet(page) {
     await createWallet(page, { password: PASSWORD });
     await switchToRegtest(page, PASSWORD);
@@ -80,6 +97,7 @@ async function fundedWallet(page) {
     await waitForTokenBalance(own, 'XCHAIN', MINT_XCHAIN);
     await page.reload();
     await unlockAfterReload(page, PASSWORD);
+    await hideBalances(page);
     return own;
 }
 
