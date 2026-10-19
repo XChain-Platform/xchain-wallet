@@ -225,11 +225,14 @@ time is checked by its fragments through the `COMPOSED` map, so a renamed label
 fails the unit suite instead of a live testnet pass 120 s in after coins are
 spent.
 
-Before the venue check and before stdin is read, `global-setup.testnet.js`
-runs `assertOriginsAllowed` from `test/e2e/fixtures/testnet_origin.js`. It sends
-one `OPTIONS` request carrying the suite origin to each encoder, explorer and
-hub URL named by the testnet descriptor, skipping an empty hub URL. A service
-is allowed only when it answers with a 2xx status and an
+The Playwright webServer command runs `runOriginPreflight` from
+`test/e2e/fixtures/testnet_origin.js` before the production build. A refused
+origin therefore stops the run before `vite build` starts. Global setup keeps
+the same check before the venue check and before stdin is read by calling
+`assertOriginsAllowed`. The check sends one `OPTIONS` request carrying the
+suite origin to each encoder, explorer and hub URL named by the testnet
+descriptor, skipping an empty hub URL. A service is allowed only when it
+answers with a 2xx status and an
 `access-control-allow-origin` header that is `*` or exactly the suite origin.
 Otherwise setup stops the run with one error starting `Origin preflight refused`
 that names every refused role, the suite origin and the header seen, or the

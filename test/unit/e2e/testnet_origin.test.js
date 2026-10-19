@@ -10,9 +10,11 @@
 
 // @vitest-environment node
 
+import fs from 'node:fs';
 import { describe, expect, it, vi } from 'vitest';
 import {
     assertOriginsAllowed,
+    runOriginPreflight,
     suiteOrigin,
     suitePort,
 } from '../../e2e/fixtures/testnet_origin.js';
@@ -34,6 +36,51 @@ function response(status, allowedOrigin) {
         },
     };
 }
+
+describe('testnet origin preflight runner', () => {
+    it('returns zero without logging when the injected endpoints allow the origin', async () => {
+        const fetch = vi.fn(async () => response(204, ORIGIN));
+        const log = vi.fn();
+
+        await expect(runOriginPreflight({
+            env: { XC_PREVIEW_PORT: '4193' },
+            endpoints: { encoderUrl: 'encoder-service', explorerUrl: '', hubUrl: '' },
+            fetch,
+            log,
+        })).resolves.toBe(0);
+
+        expect(fetch).toHaveBeenCalledOnce();
+        expect(log).not.toHaveBeenCalled();
+    });
+
+    it.each([
+        ['a refused header', async () => response(200, 'https://wallet.example')],
+        ['a rejected fetch', async () => { throw new Error('private transport detail'); }],
+    ])('returns one and logs one refusal for %s', async (_label, fetchImpl) => {
+        const log = vi.fn();
+
+        await expect(runOriginPreflight({
+            env: { XC_PREVIEW_PORT: '4193' },
+            endpoints: { encoderUrl: 'encoder-service', explorerUrl: '', hubUrl: '' },
+            fetch: vi.fn(fetchImpl),
+            log,
+        })).resolves.toBe(1);
+
+        expect(log).toHaveBeenCalledOnce();
+        expect(log.mock.calls[0][0]).toMatch(/^Origin preflight refused/);
+    });
+
+    it('has no static import of the testnet fixture', () => {
+        const source = fs.readFileSync(
+            new URL('../../e2e/fixtures/testnet_origin.js', import.meta.url),
+            'utf8',
+        );
+
+        expect(source).not.toMatch(
+            /\b(?:import|export)\s+(?:[^'"]*\s+from\s+)?['"]\.\/testnet\.js['"]/,
+        );
+    });
+});
 
 describe('testnet origin preflight', () => {
     it('accepts wildcard and exact-origin headers and skips an empty hub URL', async () => {
