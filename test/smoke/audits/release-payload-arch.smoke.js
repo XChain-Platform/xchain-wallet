@@ -286,6 +286,29 @@ try {
                 readFileSync(join(newDir, 'RELEASE_HASHES.txt'))));
     }
 
+    // --- 4e. The capture in sign.sh survives an empty result under set -u ---
+    //
+    // sign.sh runs under `set -euo pipefail`, and bash 3.2 (macOS) aborts on
+    // expanding an empty array there. A fully checked run leaves it empty.
+    {
+        const sign = readFileSync(join(repo, 'tools', 'release', 'sign.sh'), 'utf8');
+        const start = sign.indexOf('PAYLOAD_UNCHECKED=""');
+        const end = sign.indexOf('\nfi\n', start);
+        const snippet = start > -1 && end > start ? sign.slice(start, end + 4) : 'false';
+        const script = `set -euo pipefail; XR_PAYLOAD_UNCHECKED=(); ${snippet}\n`
+            + 'printf "[%s]" "$PAYLOAD_UNCHECKED"; '
+            + 'XR_PAYLOAD_UNCHECKED=("architecture: ./a.snap" "native: ./a.snap"); '
+            + `${snippet}\nprintf "[%s]" "$PAYLOAD_UNCHECKED"`;
+        let out = '';
+        try {
+            out = execFileSync('bash', ['-c', script], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] });
+        } catch (err) {
+            out = `exit ${err.status}: ${err.stderr ?? ''}`;
+        }
+        check('sign.sh captures an empty and a populated unchecked list under set -u',
+            out === '[][architecture: ./a.snap\nnative: ./a.snap]', out);
+    }
+
     // --- 5. The whole-directory gate fails the release, with a real exit
     {
         const dir = mkdtempSync(join(work, 'dir-'));

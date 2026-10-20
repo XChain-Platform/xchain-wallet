@@ -758,7 +758,11 @@ xr_check_expected "$INPUT_DIR" "$GATE_EXPECTED" "$RELEASE_SET" "$STAGING_OS"
 # signature says they do: an artifact signed under the wrong arch installs,
 # verifies against this manifest, and cannot start.
 xr_check_payload_arches "$INPUT_DIR"
-PAYLOAD_UNCHECKED="$(printf '%s\n' "${XR_PAYLOAD_UNCHECKED[@]}")"
+# Guarded expansion: an empty array under set -u aborts on bash 3.2.
+PAYLOAD_UNCHECKED=""
+if [[ ${#XR_PAYLOAD_UNCHECKED[@]} -gt 0 ]]; then
+    PAYLOAD_UNCHECKED="$(printf '%s\n' "${XR_PAYLOAD_UNCHECKED[@]}")"
+fi
 
 # A lane that already has users must not vanish from a release. The gate
 # above cannot ask this: every store lane is `optional` there until it has
