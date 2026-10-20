@@ -101,6 +101,7 @@ export {
     BATCH_FORBIDDEN_ACTIONS,
     BATCH_SINGLETON_ACTIONS,
     BATCH_WEIGHT_BUDGET,
+    BATCH_MAX_COMMANDS,
 } from './batchCommand.js';
 export { oraclePriceAction } from './oraclePriceAction.js';
 export {

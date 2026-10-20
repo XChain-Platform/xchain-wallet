@@ -11,14 +11,14 @@
 // The wallet-side gate on the hub's chain-registry snapshot.
 //
 // The bundled chain descriptors are copied into xchain-hub/src/chain-registry.json
-// by bin/sync-chain-registry.mjs. Until now the ONLY thing comparing the two was
+// by tools/sync-chain-registry.mjs. Until now the ONLY thing comparing the two was
 // xchain-hub/test/unit/chainRegistry.test.js, which skips when the wallet sibling
 // is absent, so a hub-only run skipped the guard and a wallet-only run never
 // looked at the hub at all. Wallet b3fd8dd5 corrected the bitcoin-regtest encoder
 // port (3023 -> 3003), the snapshot kept 3023 on origin for both repos, and
 // nothing anywhere went red.
 //
-// The first case below is the gate: bin/chain-registry.sync.json is written by
+// The first case below is the gate: tools/chain-registry.sync.json is written by
 // the sync script and committed with the descriptor edit, so a descriptor change
 // that was never mirrored fails HERE, in the wallet's own unit suite, with no
 // hub checkout present anywhere.
@@ -41,8 +41,8 @@ import { BUNDLED_DESCRIPTORS } from '../../packages/core/src/registry/descriptor
 // vitest anchors its root to the wallet repo (test/vitest/unit.config.js), so
 // cwd is the repo root. import.meta.url is not a file: URL under the transform.
 const WS_ROOT = process.cwd();
-const SCRIPT = join(WS_ROOT, 'bin', 'sync-chain-registry.mjs');
-const FINGERPRINT = join(WS_ROOT, 'bin', 'chain-registry.sync.json');
+const SCRIPT = join(WS_ROOT, 'tools', 'sync-chain-registry.mjs');
+const FINGERPRINT = join(WS_ROOT, 'tools', 'chain-registry.sync.json');
 const DESCRIPTORS_REL = join('packages', 'core', 'src', 'registry', 'descriptors');
 const GIT_FIXTURE_TIMEOUT = 60_000;
 
@@ -77,11 +77,11 @@ function descriptorsSource(port) {
 function makeVenue({ port = 3003, withHub = true } = {}) {
     const venue = mkdtempSync(join(tmpdir(), 'chain-registry-sync-'));
     const wallet = join(venue, 'xchain-wallet');
-    mkdirSync(join(wallet, 'bin', 'lib'), { recursive: true });
+    mkdirSync(join(wallet, 'tools', 'lib'), { recursive: true });
     mkdirSync(join(wallet, DESCRIPTORS_REL), { recursive: true });
-    cpSync(SCRIPT, join(wallet, 'bin', 'sync-chain-registry.mjs'));
-    cpSync(join(WS_ROOT, 'bin', 'lib', 'checkout-freshness.mjs'),
-        join(wallet, 'bin', 'lib', 'checkout-freshness.mjs'));
+    cpSync(SCRIPT, join(wallet, 'tools', 'sync-chain-registry.mjs'));
+    cpSync(join(WS_ROOT, 'tools', 'lib', 'checkout-freshness.mjs'),
+        join(wallet, 'tools', 'lib', 'checkout-freshness.mjs'));
     writeFileSync(join(wallet, DESCRIPTORS_REL, 'index.js'), descriptorsSource(port));
     if (withHub) mkdirSync(join(venue, 'xchain-hub', 'src'), { recursive: true });
     return { venue, wallet, hubSnapshot: join(venue, 'xchain-hub', 'src', 'chain-registry.json') };
@@ -94,7 +94,7 @@ function editDescriptors(wallet, port) {
 
 /** Run the fixture's copy of the sync script. */
 function sync(wallet, args = []) {
-    const r = spawnSync(process.execPath, [join(wallet, 'bin', 'sync-chain-registry.mjs'), ...args], {
+    const r = spawnSync(process.execPath, [join(wallet, 'tools', 'sync-chain-registry.mjs'), ...args], {
         encoding: 'utf8',
         cwd: wallet,
         env: { ...process.env },
@@ -151,7 +151,7 @@ const scrub = (...dirs) => dirs.forEach((d) => rmSync(d, { recursive: true, forc
 describe('chain-registry sync gate @regression', { timeout: GIT_FIXTURE_TIMEOUT }, () => {
     it('the committed fingerprint matches the bundled descriptors', () => {
         // THE gate. Red means a descriptor changed and the hub snapshot was
-        // never resynced: run xchain-wallet/bin/sync-chain-registry.mjs and
+        // never resynced: run xchain-wallet/tools/sync-chain-registry.mjs and
         // commit both files. It reads nothing outside this repo, which is the
         // entire point - the hub-side guard skips when this repo is absent.
         const recorded = JSON.parse(readFileSync(FINGERPRINT, 'utf8'));
@@ -198,7 +198,7 @@ describe('chain-registry sync gate @regression', { timeout: GIT_FIXTURE_TIMEOUT 
             const r = sync(wallet, ['--allow-stale']);
             expect(r.status).toBe(1);
             expect(r.stderr).toMatch(/no xchain-hub checkout/);
-            expect(existsSync(join(wallet, 'bin', 'chain-registry.sync.json'))).toBe(false);
+            expect(existsSync(join(wallet, 'tools', 'chain-registry.sync.json'))).toBe(false);
         } finally { scrub(venue); }
     });
 
@@ -208,7 +208,7 @@ describe('chain-registry sync gate @regression', { timeout: GIT_FIXTURE_TIMEOUT 
             expect(sync(wallet, ['--allow-stale']).status).toBe(0);
             const snapshot = JSON.parse(readFileSync(hubSnapshot, 'utf8'));
             expect(snapshot.descriptors[0].encoder.defaultPort).toBe(3003);
-            const recorded = JSON.parse(readFileSync(join(wallet, 'bin', 'chain-registry.sync.json'), 'utf8'));
+            const recorded = JSON.parse(readFileSync(join(wallet, 'tools', 'chain-registry.sync.json'), 'utf8'));
             expect(recorded.descriptors_sha256).toBe(digestOf(snapshot.descriptors));
             expect(sync(wallet, ['--check']).status).toBe(0);
         } finally { scrub(venue); }
@@ -237,12 +237,12 @@ describe('chain-registry sync gate @regression', { timeout: GIT_FIXTURE_TIMEOUT 
         try {
             sync(wallet, ['--allow-stale']);
             const before = [readFileSync(hubSnapshot, 'utf8'),
-                readFileSync(join(wallet, 'bin', 'chain-registry.sync.json'), 'utf8')];
+                readFileSync(join(wallet, 'tools', 'chain-registry.sync.json'), 'utf8')];
             const again = sync(wallet, ['--allow-stale']);
             expect(again.status).toBe(0);
             expect(again.stdout).toMatch(/nothing rewritten/);
             expect(readFileSync(hubSnapshot, 'utf8')).toBe(before[0]);
-            expect(readFileSync(join(wallet, 'bin', 'chain-registry.sync.json'), 'utf8')).toBe(before[1]);
+            expect(readFileSync(join(wallet, 'tools', 'chain-registry.sync.json'), 'utf8')).toBe(before[1]);
         } finally { scrub(venue); }
     });
 

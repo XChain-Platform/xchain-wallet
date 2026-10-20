@@ -12,7 +12,7 @@ import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 
-const source = readFileSync(join(process.cwd(), 'scripts', 'visual-compare.mjs'), 'utf8');
+const source = readFileSync(join(process.cwd(), 'tools', 'visual-compare.mjs'), 'utf8');
 
 describe('visual compare navigation', () => {
     it('uses the Settings drilldown command for Keyboard and selects a file for Import', () => {

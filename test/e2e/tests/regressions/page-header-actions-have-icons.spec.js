@@ -30,7 +30,8 @@ const CONTENT_ACTION_ROUTES = [
     // An empty list offers Create from its empty state and a list with rows offers New from the actions row.
     { paletteName: 'My orders', heading: 'My orders', actionName: /^(Create an order|New order)$/ },
     { paletteName: 'My swaps', heading: 'My swaps', actionName: /^(Create a swap|New swap)$/ },
-    { paletteName: 'My tokens', heading: 'My tokens', actionName: 'Issue new token' },
+    // The demo wallet owns no tokens, so the empty state offers Issue token; a list with rows offers Issue new token.
+    { paletteName: 'My tokens', heading: 'My tokens', actionName: /^Issue (new )?token$/ },
     { paletteName: 'Payments due', heading: 'Payments due', actionName: 'Refresh payments' },
     { open: 'wallet-rename', heading: 'Rename wallet', actionName: 'Save' },
     { open: 'account-rename', heading: 'Rename account', actionName: 'Save' },

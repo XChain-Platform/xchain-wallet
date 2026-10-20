@@ -305,8 +305,10 @@ optional  xchain-wallet-v*[0-9].apk         store    -         deferred-android
 # given a meaning.
 #
 # `deferred-android` like its twin: apksigner's lane, declared not checked.
-# Optional, and its lane is NOT-SHIPPED in shipped-lanes.txt, so nothing
-# demands it until the first ceremony actually produces one.
+# Optional here like its twin: its lane is SHIPPED in shipped-lanes.txt, and
+# the parity gate there is what demands it of a release in that lane's scope,
+# while the ceremony leg that builds it stays opt-in behind
+# XCHAIN_BUILD_ANDROID_FULL=1.
 optional  xchain-wallet-v*-full.apk         default  -         deferred-android
 optional  xchain-wallet-ios-v*.ipa          store    -         store
 optional  *-mas.pkg                         store    universal store
