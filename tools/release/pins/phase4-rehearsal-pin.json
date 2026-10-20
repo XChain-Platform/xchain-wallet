@@ -8,13 +8,13 @@
     "reached": "manifest-written",
     "reachedSignature": false,
     "blocker": "gpg: signing failed: No secret key",
-    "scriptRef": "8def6d18f78f6fda19534267eeffc377906f09de",
+    "scriptRef": "f7c830b7a9609d52a7fdb70f692b150abda2a38e",
     "repoRef": "46a7ad3dc49129558e99a0e0562b145fd8584d39",
     "scriptPath": {
-        "tools/release/sign.sh": "36e35ecc6471f1165d83a171e49e4f8692646baf209e11668417820d896e6f3c",
+        "tools/release/sign.sh": "bdb1c47a76355e618ec1096677514a0549567504ee59a4f0f4231caf86e40200",
         "tools/release/verify.sh": "2b8a69f21df3ef050f3a965204123ec9e790de6755ff7327d7d316b264770c2e",
         "tools/release/lib.sh": "cc8e8d24a10783636c09989c2c5de4f7e0bd1e5f6a9c4ff79421cf8d62e680d3",
-        "tools/release/expected-artifacts.txt": "389ee77303d0355368e0f1c9c8b44ad3caa5f72428a75ddc074ff6f2862dd0d9",
+        "tools/release/expected-artifacts.txt": "25e6cf7eb5edafc6987618224e3ab6aa81c761067dc7809be35e5345ff9d149f",
         "tools/build-reproduce/check-no-dev-mock.sh": "89b44c98c77a6c2307e8dc390fe461bbf7b93c7200b66788c9190ff80366db5e",
         "tools/release/update-info.mjs": "3e8c08ad2fe7dbc4f12a94ce68a682bc2094200040e2e75fdea61bcb0513c73f",
         "tools/release/store-profile-status.txt": "e9c6db30b1090c71ed52755651f1ff3efd3ef1b11f893a8d10d44de69eede5dd"
@@ -24,5 +24,5 @@
         "tools/release/verify-signatures.mjs": "5aa1c30f370723c02b3b58787587a41447ad80f794ed1216db19d54d2864bcfc",
         "tools/release/launch-probe.mjs": "7b2b0e6d840e608449c86666121962e1db9025d99ca4591cc950b2ec5b22c555"
     },
-    "observedAt": "2026-10-14T00:48:15.095Z"
+    "observedAt": "2026-10-19T23:52:51.513Z"
 }

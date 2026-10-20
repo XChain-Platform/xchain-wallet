@@ -322,6 +322,12 @@ function ListRenameFormScreen({ walletId, listRef, onBack, onDone = onBack }) {
                     {result.psbtHex && !result.txid ? 'Unsigned list rename created.' : 'List rename submitted.'}
                 </StatusMessage>
                 <p className={styles.hint}>The new list details appear when this transaction confirms.</p>
+                {result.txid ? (
+                    <dl className={styles.detailsList}>
+                        <dt className={styles.detailsLabel}>Transaction ID</dt>
+                        <dd className={styles.detailsValue}><code className={styles.txid}>{String(result.txid)}</code></dd>
+                    </dl>
+                ) : null}
                 <div className={styles.actions}>
                     <Button type="button" variant="primary" onClick={onDone}>Done</Button>
                 </div>

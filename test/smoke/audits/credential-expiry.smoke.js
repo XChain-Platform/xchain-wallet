@@ -35,7 +35,7 @@
 import { strict as assert } from 'node:assert';
 import { spawnSync } from 'node:child_process';
 import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
-import { homedir, tmpdir } from 'node:os';
+import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -370,7 +370,16 @@ if (spawnSync('gpg', ['--version'], { encoding: 'utf8' }).status === 0) {
 // The deliberate exception to "no verdict depends on the machine": where the
 // credential store exists, the declared dates are checked against the artifacts
 // themselves, which is the half the weekly hosted-runner job relies on.
-if (existsSync(join(homedir(), '.xchain-release'))) {
+//
+// The release machine is the one holding the release credentials, not any
+// machine with a ~/.xchain-release directory: a CI host keeps its own unrelated
+// secrets there. So the block runs wherever ANY home-store artifact the
+// declaration names is present, and then demands every row be measured, so a
+// release machine missing one certificate still fails here.
+const homeStoreRows = declared.credentials.filter((c) => !c.verifyFrom.startsWith('./'));
+assert.ok(homeStoreRows.length > 0, 'the declaration names no home-store artifact, so this block could never run');
+const holdsReleaseCredentials = homeStoreRows.some((c) => existsSync(resolveVerifyFrom(c.verifyFrom)));
+if (holdsReleaseCredentials) {
     const run = spawnSync(process.execPath, [TOOL, '--json', '--require-measured'], { encoding: 'utf8' });
     assert.ok([0, 1].includes(run.status), `tool exited ${run.status}: ${run.stderr}`);
     for (const f of JSON.parse(run.stdout).findings) {
@@ -380,8 +389,8 @@ if (existsSync(join(homedir(), '.xchain-release'))) {
             `credential ${f.id} is ${f.state} on the release machine: ${f.detail || f.reason || ''}`);
     }
 } else {
-    console.log('credential-expiry smoke: no ~/.xchain-release here, so the measured-on-the-release-machine '
-        + 'block did not run (declared dates only).');
+    console.log('credential-expiry smoke: none of the declared release credentials is on this machine, so the '
+        + 'measured-on-the-release-machine block did not run (declared dates only).');
 }
 
 console.log('credential-expiry smoke: ok');

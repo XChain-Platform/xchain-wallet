@@ -260,6 +260,12 @@ function ListTransferFormScreen({ walletId, listRef, onBack, onDone = onBack }) 
                     {result.psbtHex && !result.txid ? 'Unsigned list transfer created.' : 'List transfer submitted.'}
                 </StatusMessage>
                 <p className={styles.hint}>The new owner takes control when the transfer confirms.</p>
+                {result.txid ? (
+                    <dl className={styles.detailsList}>
+                        <dt className={styles.detailsLabel}>Transaction ID</dt>
+                        <dd className={styles.detailsValue}><code className={styles.txid}>{String(result.txid)}</code></dd>
+                    </dl>
+                ) : null}
                 <div className={styles.actions}>
                     <Button type="button" variant="primary" onClick={onDone}>Done</Button>
                 </div>

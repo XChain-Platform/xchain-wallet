@@ -377,13 +377,34 @@ export function probe({ repo, tag, input, lane, staging = false, env = {}, timeo
         env: probeEnv(process.env, env),
     });
     const output = `${r.stdout || ''}${r.stderr || ''}`;
+    // A run the timeout killed stopped mid-step, so its last line is progress rather than a refusal
+    // and its depth is not an observation; report the kill and claim no step.
+    const timedOut = r.error?.code === 'ETIMEDOUT';
+    if (timedOut || r.signal) {
+        return {
+            reached: null,
+            exitCode: r.status,
+            killed: timedOut ? `timed out after ${timeoutMs / 1000}s` : `killed by ${r.signal}`,
+            blocker: null,
+            output,
+        };
+    }
     const reached = r.status === 0 ? 'signature' : classify(output);
     return {
         reached,
         exitCode: r.status,
+        killed: null,
         blocker: r.status === 0 ? null : firstRefusal(output),
         output,
     };
+}
+
+/** The probe timeout in milliseconds from `--timeout <seconds>`, 120 s when absent, or null when malformed. */
+export function timeoutFromArgs(argv) {
+    const i = argv.indexOf('--timeout');
+    if (i === -1) return 120000;
+    const seconds = Number(argv[i + 1]);
+    return Number.isFinite(seconds) && seconds > 0 ? seconds * 1000 : null;
 }
 
 // The refusal line itself, so the pin carries the tooling's own words rather
@@ -410,15 +431,16 @@ export function firstRefusal(output) {
 function usage() {
     console.log(`usage: phase4-rehearsal.mjs <command> [args]
 
-  probe --repo <dir> --tag <vX.Y.Z> --input <dir> [--lane <name> | --staging]
+  probe --repo <dir> --tag <vX.Y.Z> --input <dir> [--lane <name> | --staging] [--timeout <seconds>]
       Drive ceremony Phase 4's signing preconditions and report the
       deepest step reached. Writes nothing. --lane and --staging are
-      mutually exclusive, as sign.sh makes them.
+      mutually exclusive, as sign.sh makes them. --timeout bounds the
+      sign.sh run (default 120); a run it kills reached no step.
 
-  pin --repo <dir> --tag <vX.Y.Z> --input <dir> [--lane <name> | --staging]
+  pin --repo <dir> --tag <vX.Y.Z> --input <dir> [--lane <name> | --staging] [--timeout <seconds>]
       Run probe, then record what it observed in
       tools/release/pins/phase4-rehearsal-pin.json. Refuses to write a pin for a run
-      it did not just watch.
+      it did not just watch, or for one the timeout killed.
 
   check [--against <ref>] [--pin <file>]
       Has the script side of the signing path moved since the pinned
@@ -440,7 +462,8 @@ function cmdPin(argv) {
     const input = arg(argv, '--input');
     const lane = arg(argv, '--lane');
     const staging = argv.includes('--staging');
-    if (!repo || !tag || !input) { usage(); process.exit(2); }
+    const timeoutMs = timeoutFromArgs(argv);
+    if (!repo || !tag || !input || timeoutMs === null) { usage(); process.exit(2); }
     if (refuseConflicts({ lane, staging })) return 2;
     // Decide before the dirty check, so a fallback gate with uncommitted edits blocks the pin.
     const gateFallback = gateFallbackFor(repo);
@@ -456,7 +479,12 @@ function cmdPin(argv) {
         return 1;
     }
 
-    const result = probe({ repo, tag, input, lane, staging });
+    const result = probe({ repo, tag, input, lane, staging, timeoutMs });
+    if (result.killed) {
+        console.error(`[phase4-rehearsal] refusing to pin: the sign.sh run ${result.killed}, so it stopped `
+            + 'mid-step and observed no depth. Re-drive with a longer --timeout <seconds>.');
+        return 1;
+    }
     // Refuse when sign.sh announces a control tree this mapping does not expect, so a pin never hashes the wrong copy.
     const announced = /signing controls come from the (tag|tool) tree/.exec(result.output)?.[1];
     const expectedTree = staging ? 'tool' : 'tag';
@@ -675,8 +703,14 @@ function main() {
         if (!repo || !tag || !input) { usage(); return 2; }
         const lane = arg(argv, '--lane');
         const staging = argv.includes('--staging');
+        const timeoutMs = timeoutFromArgs(argv);
+        if (timeoutMs === null) { usage(); return 2; }
         if (refuseConflicts({ lane, staging })) return 2;
-        const r = probe({ repo, tag, input, lane, staging });
+        const r = probe({ repo, tag, input, lane, staging, timeoutMs });
+        if (r.killed) {
+            console.log(`[phase4-rehearsal] reached no step: the sign.sh run ${r.killed}`);
+            return 1;
+        }
         console.log(`[phase4-rehearsal] reached: ${r.reached} (exit ${r.exitCode})`);
         if (r.blocker) console.log(`[phase4-rehearsal] blocker: ${r.blocker}`);
         return r.reached === 'signature' ? 0 : 1;

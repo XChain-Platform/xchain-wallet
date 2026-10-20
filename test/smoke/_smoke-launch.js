@@ -9,7 +9,7 @@
 // contact legal@dankest.llc.
 
 // How one smoke process starts, shared by the full runner (_run-smokes.js) and
-// the push gate's changed-test tier (bin/ci_fast_select.js), so a smoke reads
+// the push gate's changed-test tier (tools/ci_fast_select.js), so a smoke reads
 // source the same way under both. Every smoke but the raw-source ones reads
 // wallet source with plain t('key') calls swapped for their English text
 // (_english-source.mjs); the raw-source ones audit the t() calls themselves.

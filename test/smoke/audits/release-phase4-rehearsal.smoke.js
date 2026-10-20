@@ -42,8 +42,8 @@ import { fileURLToPath } from 'node:url';
 
 import {
     announcedGateFallback, argConflicts, classify, drift, EXECUTABLE_GATES, firstRefusal, gateFallbackFor,
-    gateFallbackMismatch, LIB_SH_DEPENDENCIES, PIN_FORMAT, PIN_PATH, pinPathFiles, probeEnv, scopeMismatch,
-    signingPathFiles, STEPS, uncoveredByPin,
+    gateFallbackMismatch, LIB_SH_DEPENDENCIES, PIN_FORMAT, PIN_PATH, pinPathFiles, probe, probeEnv, scopeMismatch,
+    signingPathFiles, STEPS, timeoutFromArgs, uncoveredByPin,
 } from '../../../tools/release/phase4-rehearsal.mjs';
 
 assert.ok(existsSync(PIN_PATH),
@@ -429,6 +429,25 @@ assert.ok(REPO_PATH_FILES.every((p) => typeof pin.repoPath?.[p] === 'string'),
         assert.equal(r.status, 2, `probe with --lane and --staging must exit 2 before sign.sh runs; got ${r.status}`);
         assert.match(r.stderr, /refusing: --staging cannot be combined with --lane/);
         assert.doesNotMatch(`${r.stdout}${r.stderr}`, /reached:|sign\.sh:/, 'probe ran sign.sh despite the conflict');
+    } finally {
+        rmSync(work, { recursive: true, force: true });
+    }
+}
+
+// A sign.sh run the timeout kills stopped mid-step, so probe must report the kill and claim no depth,
+// which is what keeps pin from recording a progress line as the blocker of a run nobody saw finish.
+{
+    assert.equal(timeoutFromArgs([]), 120000, 'the probe timeout defaults to 120 s');
+    assert.equal(timeoutFromArgs(['--timeout', '600']), 600000, '--timeout takes seconds');
+    for (const bad of [['--timeout'], ['--timeout', '0'], ['--timeout', 'soon']]) {
+        assert.equal(timeoutFromArgs(bad), null, `a malformed --timeout must be refused: ${bad.join(' ')}`);
+    }
+    const work = mkdtempSync(join(tmpdir(), 'phase4-timeout-'));
+    try {
+        const r = probe({ repo: work, tag: 'v0.0.0', input: work, staging: true, timeoutMs: 1 });
+        assert.ok(r.killed, 'a probe the timeout killed must say so');
+        assert.equal(r.reached, null, 'a probe the timeout killed must claim no step');
+        assert.equal(r.blocker, null, 'a probe the timeout killed has no refusal to record');
     } finally {
         rmSync(work, { recursive: true, force: true });
     }
