@@ -220,14 +220,25 @@ below the requested amount. It then signs one MINT through the Advanced action
 on the Bitcoin testnet chain from a testnet From address, and never reads the
 regtest explorer.
 
-Two unit guards, `test/unit/e2e/testnet_ui_text.test.js` and
-`test/unit/e2e/testnet_ui_names.test.js`, read every testnet spec and testnet
-fixture. They fail with the file, line and text of any plain `getByText`
+Three unit guards, `test/unit/e2e/testnet_ui_text.test.js`,
+`test/unit/e2e/testnet_ui_names.test.js` and
+`test/unit/e2e/testnet_ui_regex.test.js`, read every testnet spec and testnet
+fixture. The first two fail with the file, line and text of any plain `getByText`
 literal, `getByRole` name, `getByLabel` or `getByTestId` literal that no file
 under `packages/core/src` holds any more. A name the wallet composes at render
 time is checked by its fragments through the `COMPOSED` map, so a renamed label
 fails the unit suite instead of a live testnet pass 120 s in after coins are
-spent.
+spent. The third checks each regex first argument of `getByText` and `getByLabel`
+and each regex `name` option of `getByRole` by its longest literal fragment,
+case-insensitively when the pattern carries the `i` flag, against
+`packages/core/src`.
+
+`test/unit/e2e/testnet_config.test.js` imports `playwright.testnet.config.js`
+under a non-CI and a CI load and fails when its one worker, zero retries, serial
+run, testnet spec glob, global setup, `suiteOrigin` base URL, `suitePort`
+preview, fresh strict-port preview server, real browser origin rules or the json
+report path that `testnet_evidence.js` reads by default drift, so a config
+change fails the unit suite instead of hours into a live testnet pass.
 
 The Playwright webServer command runs `runOriginPreflight` from
 `test/e2e/fixtures/testnet_origin.js` before the production build. A refused
