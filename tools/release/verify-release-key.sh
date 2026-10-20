@@ -75,10 +75,10 @@ Options:
   --key <fpr>         signing key fingerprint            (required)
   --gnupghome <dir>   GNUPGHOME holding it   (default: ~/.xchain-release)
   --keep              leave the scratch dirs behind for inspection
-  --no-pin            do not record docs/release-key-pin.json
+  --no-pin            do not record tools/release/pins/release-key-pin.json
   -h, --help          print this and exit 0
 
-On success this writes docs/release-key-pin.json, the note saying a key was
+On success this writes tools/release/pins/release-key-pin.json, the note saying a key was
 observed SIGNING rather than merely existing. The extension ceremony's
 Phase 4 reads it, because the key lives outside the repo and a document
 that hardcodes whether it exists goes stale the day the ceremony runs. Use
@@ -268,7 +268,7 @@ GNUPGHOME="$GNUPGHOME_DIR" \
 # compares a published trust root against a signature has to know which is
 # which.
 if [ "$WRITE_PIN" -eq 1 ]; then
-    PIN_PATH="$REPO_ROOT/docs/release-key-pin.json"
+    PIN_PATH="$REPO_ROOT/tools/release/pins/release-key-pin.json"
     SIGNING_SUBKEY="$(printf '%s\n' "$VERIFY_OUT" \
         | sed -n 's/.*using [A-Za-z0-9]* key \([0-9A-Fa-f]\{16,\}\).*/\1/p' | head -1)"
     [ -n "$SIGNING_SUBKEY" ] || SIGNING_SUBKEY="(not parsed)"

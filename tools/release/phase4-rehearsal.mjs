@@ -51,7 +51,7 @@
 // meaning something different each time. Both refs are recorded.
 //
 // THE PIN IS AN OBSERVATION, NEVER AN ASSERTION - the convention
-// docs/release-key-pin.json and tools/release/pins/privacy-deploy-pin.json already set here.
+// tools/release/pins/release-key-pin.json and tools/release/pins/privacy-deploy-pin.json already set here.
 // `pin` refuses to write anything it did not just watch happen, and it records
 // the deepest step REACHED rather than a pass, because a Phase 4 rehearsal
 // that stops short is the normal case: the signature itself needs K1's

@@ -71,7 +71,7 @@ import { releaseTagOf } from './feed-sweep.mjs';
 // https://xchain.io/security are the two channels - it is the in-repo copy
 // verify.sh already reads, so both readers of a manifest signature bind to
 // the same key.
-const PIN_FILE = fileURLToPath(new URL('../../docs/release-key-pin.json', import.meta.url));
+const PIN_FILE = fileURLToPath(new URL('./pins/release-key-pin.json', import.meta.url));
 
 const OAUTH_TOKEN_URL = 'https://oauth2.googleapis.com/token';
 const UPLOAD_URL = (id) => `https://www.googleapis.com/upload/chromewebstore/v1.1/items/${id}`;
@@ -101,7 +101,7 @@ Options:
   -h, --help            print this and exit 0
 
 The manifest's detached signature is verified with gpg and bound to the
-release key's fingerprint (XCHAIN_VERIFY_KEY, else docs/release-key-pin.json).
+release key's fingerprint (XCHAIN_VERIFY_KEY, else tools/release/pins/release-key-pin.json).
 A good signature from any OTHER key is refused: this project has three GPG
 keys in its orbit and they are not interchangeable.
 
@@ -320,10 +320,10 @@ export async function expectedSigner(readFileImpl = readFile, env = process.env)
         const parsed = JSON.parse(await readFileImpl(PIN_FILE, 'utf8'));
         return {
             fingerprint: String(parsed.fingerprint || '').replace(/\s+/g, '').toUpperCase(),
-            source: 'docs/release-key-pin.json',
+            source: 'tools/release/pins/release-key-pin.json',
         };
     } catch {
-        return { fingerprint: '', source: 'docs/release-key-pin.json' };
+        return { fingerprint: '', source: 'tools/release/pins/release-key-pin.json' };
     }
 }
 
@@ -385,7 +385,7 @@ export async function checkProvenance({
                 + '  A good signature from an unknown key is not a verification; this project has three\n'
                 + '  GPG keys in its orbit and they are not interchangeable. Set XCHAIN_VERIFY_KEY to the\n'
                 + '  fingerprint published at https://xchain.io/security, or run from a checkout carrying\n'
-                + '  docs/release-key-pin.json.';
+                + '  tools/release/pins/release-key-pin.json.';
         } else {
             // manifestText, not `manifest`: the signature has to cover the
             // bytes the tag anchor and the hash table are read out of, or
