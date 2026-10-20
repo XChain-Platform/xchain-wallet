@@ -240,6 +240,18 @@ preview, fresh strict-port preview server, real browser origin rules or the json
 report path that `testnet_evidence.js` reads by default drift, so a config
 change fails the unit suite instead of hours into a live testnet pass.
 
+`test/unit/e2e/testnet_imports.test.js` parses every testnet spec, every testnet
+fixture, `global-setup.testnet.js` and `playwright.testnet.config.js`. It fails
+with the file, source and name of each relative import whose target is missing
+or no longer exports the imported name, following export-star re-exports, so a
+renamed or dropped fixture export fails the unit suite instead of a live
+testnet pass when it loads the spec. `test/unit/e2e/testnet_cli_entry.test.js`
+runs `testnet_evidence.js` and `testnet_run_input.js` through a symlinked
+fixtures directory, expects their refusal exits, and fails when a testnet CLI
+fixture compares an unresolved entry path instead of resolving it with
+`realpathSync`, so a CLI reached through a symlinked checkout or temp directory
+runs instead of exiting 0 having done nothing.
+
 The Playwright webServer command runs `runOriginPreflight` from
 `test/e2e/fixtures/testnet_origin.js` before the production build. A refused
 origin therefore stops the run before `vite build` starts. Global setup keeps
