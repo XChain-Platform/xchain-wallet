@@ -324,6 +324,10 @@ jobs:
     # One run at a time on the shared regtest venue. Each run covers one rolling
     # quarter of the suite, keeping the venue out of the main CI critical path.
     timeout-minutes: 120
+    # Shared across refs on purpose: there is one regtest venue, so runs must
+    # serialize. GitHub keeps one pending run per group, so a newer run can evict
+    # a queued master or develop run; an eviction is recovered by re-running.
+    # The ci-master-verdict smoke allows exactly this job and group name.
     concurrency:
       group: wallet-regtest-venue
       cancel-in-progress: false
