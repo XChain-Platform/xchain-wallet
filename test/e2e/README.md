@@ -345,10 +345,11 @@ record, `test/e2e/test-results-testnet/results.json` when no path is given. It
 prints one line per test giving its status, spec file and title, with one
 indented label and txid line under it for each txid the test recorded. It then
 ends on `testnet run passed` and exits 0 when the run has no errors, at least
-one test, every test expected and at least one txid, and ends on
-`testnet run failed` and exits 1 otherwise. It exits 2 with one stderr line
-naming the path when the file is missing or is not JSON. The ledger closure
-cites the printed txids instead of reading the JSON tree by hand.
+one test, every test expected and a funding, stake, unstake and collect txid.
+Any absent label is named on a `missing txid` line before the reader ends on
+`testnet run failed` and exits 1. It exits 2 with one stderr line naming the
+path when the file is missing or is not JSON. The ledger closure cites the
+printed txids instead of reading the JSON tree by hand.
 
 One worker, no retries: the specs share one treasury and one chain, and a
 retry on a public chain spends it twice. Bitcoin only, since staking is

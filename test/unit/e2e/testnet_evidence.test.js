@@ -17,6 +17,7 @@ import { summarizeRun, main } from '../../e2e/fixtures/testnet_evidence.js';
 const A = 'a'.repeat(64);
 const B = 'b'.repeat(64);
 const C = 'c'.repeat(64);
+const D = 'd'.repeat(64);
 
 const tx = (description) => ({ type: 'txid', description });
 const mk = (title, status, annotations = [], results = []) => ({
@@ -75,12 +76,34 @@ describe('summarizeRun', () => {
 
 describe('main', () => {
     it('passes a clean run', async () => {
-        const { code, out } = await run(report([mk('ok', 'expected', [tx(`funding ${A}`)])]));
+        const { code, out } = await run(report([
+            mk('stake', 'expected', [
+                tx(`funding ${A}`),
+                tx(`stake ${B}`),
+                tx(`unstake ${C}`),
+            ]),
+            mk('claim', 'expected', [tx(`collect ${D}`)]),
+        ]));
         expect(code).toBe(0);
         expect(out).toEqual([
-            'expected staking/x.testnet.spec.js ok\n',
+            'expected staking/x.testnet.spec.js stake\n',
             `  funding ${A}\n`,
+            `  stake ${B}\n`,
+            `  unstake ${C}\n`,
+            'expected staking/x.testnet.spec.js claim\n',
+            `  collect ${D}\n`,
             'testnet run passed\n',
+        ]);
+    });
+
+    it('fails an expected claim-only run and names the missing txids', async () => {
+        const { code, out } = await run(report([mk('claim', 'expected', [tx(`collect ${D}`)])]));
+        expect(code).toBe(1);
+        expect(out).toEqual([
+            'expected staking/x.testnet.spec.js claim\n',
+            `  collect ${D}\n`,
+            'missing txid: funding, stake, unstake\n',
+            'testnet run failed\n',
         ]);
     });
 
