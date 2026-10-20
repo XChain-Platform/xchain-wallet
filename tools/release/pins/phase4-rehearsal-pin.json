@@ -5,11 +5,11 @@
     "lane": null,
     "releaseSet": "staging",
     "gateFallback": [],
-    "reached": "gpg-key-named",
+    "reached": "manifest-written",
     "reachedSignature": false,
-    "blocker": "sign.sh: tag 'v0.341.2' does not exist in .",
-    "scriptRef": "eba74e09a6f021d5048abbdace18c9cafe50ffb6",
-    "repoRef": "a889933115175714b7b8c551fa2232fe6495dc1e",
+    "blocker": "gpg: signing failed: No secret key",
+    "scriptRef": "f7c830b7a9609d52a7fdb70f692b150abda2a38e",
+    "repoRef": "46a7ad3dc49129558e99a0e0562b145fd8584d39",
     "scriptPath": {
         "tools/release/sign.sh": "bdb1c47a76355e618ec1096677514a0549567504ee59a4f0f4231caf86e40200",
         "tools/release/verify.sh": "2b8a69f21df3ef050f3a965204123ec9e790de6755ff7327d7d316b264770c2e",
@@ -20,9 +20,9 @@
         "tools/release/store-profile-status.txt": "93b13279e4c068394889b9fbe1862d4491dd91d17fbe9d840dbe0598f18f8c59"
     },
     "repoPath": {
-        "tools/release/shipped-lanes.txt": "6583af8c60603177db27ea5d3276df2d16a31c6509c57c15dc491bee596939dd",
+        "tools/release/shipped-lanes.txt": "b6d5396ff65bdf822743cbada3ad94f468eb26462ff85b0fc9782226f5df5fa8",
         "tools/release/verify-signatures.mjs": "5aa1c30f370723c02b3b58787587a41447ad80f794ed1216db19d54d2864bcfc",
         "tools/release/launch-probe.mjs": "7b2b0e6d840e608449c86666121962e1db9025d99ca4591cc950b2ec5b22c555"
     },
-    "observedAt": "2026-10-20T04:09:01.903Z"
+    "observedAt": "2026-10-19T23:52:51.513Z"
 }
