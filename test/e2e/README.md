@@ -228,9 +228,8 @@ literal, `getByRole` name, `getByLabel` or `getByTestId` literal that no file
 under `packages/core/src` holds any more. A name the wallet composes at render
 time is checked by its fragments through the `COMPOSED` map, so a renamed label
 fails the unit suite instead of a live testnet pass 120 s in after coins are
-spent.
-The third checks each regex first argument of `getByText` and `getByLabel` and
-each regex `name` option of `getByRole` by its longest literal fragment,
+spent. The third checks each regex first argument of `getByText` and `getByLabel`
+and each regex `name` option of `getByRole` by its longest literal fragment,
 case-insensitively when the pattern carries the `i` flag, against
 `packages/core/src`.
 
