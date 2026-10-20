@@ -17,7 +17,7 @@
         "tools/release/expected-artifacts.txt": "25e6cf7eb5edafc6987618224e3ab6aa81c761067dc7809be35e5345ff9d149f",
         "tools/build-reproduce/check-no-dev-mock.sh": "89b44c98c77a6c2307e8dc390fe461bbf7b93c7200b66788c9190ff80366db5e",
         "tools/release/update-info.mjs": "3e8c08ad2fe7dbc4f12a94ce68a682bc2094200040e2e75fdea61bcb0513c73f",
-        "tools/release/store-profile-status.txt": "e9c6db30b1090c71ed52755651f1ff3efd3ef1b11f893a8d10d44de69eede5dd"
+        "tools/release/store-profile-status.txt": "93b13279e4c068394889b9fbe1862d4491dd91d17fbe9d840dbe0598f18f8c59"
     },
     "repoPath": {
         "tools/release/shipped-lanes.txt": "b6d5396ff65bdf822743cbada3ad94f468eb26462ff85b0fc9782226f5df5fa8",

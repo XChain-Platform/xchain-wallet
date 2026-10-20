@@ -2,50 +2,41 @@ IMPLEMENTED store-profile-build-lane
 
 # Whether the `store` build profile EXISTS as a build mechanism.
 #
-# It does, as of 2026-08-01, so a `store` artifact may now be signed.
+# It does, so a `store` artifact may be signed.
 #
-# What earns the label, in the order it was built:
+# What the label means today: the profile exists and is verifiable, and the
+# `HIDDEN_SURFACES` registry in `packages/web/src/surfaces/registry.js` is
+# EMPTY for both profiles. The 2026-10-09 review decision ships every product
+# surface in every profile, so a `store` bundle carries the same product as a
+# `default` one. It differs in CSP, sourcemaps, packaging and its signed
+# profile stamp, and it is no longer a reduced product.
 #
-#   First, the profile itself: `XCHAIN_BUILD_PROFILE` resolution (a
-#   typo throws rather than quietly building `default`), a profile-aware and
-#   strictly SUBTRACTIVE CSP, a `build-profile.txt` stamp plus a meta tag
-#   emitted into the dist, and a mobile staging step that refuses anything but
-#   a `store` bundle. That made the two profiles differ - by a CSP origin.
+# What the profile mechanism provides:
 #
-#   Then the substantive half this line was waiting for: the
-#   review-hidden surfaces of §2.3, the DEX lane first, are compiled
-#   OUT of a store build. `packages/web/src/surfaces/registry.js` holds the
-#   surface list as data; vite swaps `surfaces/dex.jsx` for a twin that imports
-#   nothing, so the DEX route modules listed in `SURFACE_MODULES.dex` there
-#   (the authoritative list, nine modules including CrossChainOrderForm at the
-#   time of writing; not copied here, so it cannot drift) are not in the
-#   bundle at all, and every entry point that pointed at them (both navs, the
-#   menu, the actions catalogue, the command palette, Home, TokenDetail) is
-#   unwired with them. The build FAILS SHUT if any of those modules is imported
-#   from anywhere else, which is the one way an alias swap quietly stops
-#   working.
+#   `XCHAIN_BUILD_PROFILE` resolution (a typo throws rather than quietly
+#   building `default`), a profile-aware and strictly SUBTRACTIVE CSP, a
+#   `build-profile.txt` stamp plus a meta tag emitted into the dist, a mobile
+#   staging step that refuses anything but a `store` bundle, and
+#   `sourcemap: BUILD_PROFILE !== 'store'` in `packages/web/vite.config.js`.
 #
-# Measured 2026-08-01, both directions, on one tree: the store bundle's
-# sourcemaps carry none of those eight modules and the default bundle's carry
-# all eight; shared modules (ReceivePicker, ManageToken) are in both, which is
-# the control; the store index.html has no connect.trezor.io and the default
-# one does; main chunk 3,585 kB store vs 3,716 kB default.
+# What stays available but is currently unused: the compile-out mechanism. If
+# a surface is ever listed in `HIDDEN_SURFACES`, vite swaps
+# `surfaces/<name>.jsx` for a twin that imports nothing, and the
+# `xchain-hidden-surface-guard` plugin (enforce 'pre') fails the build if a
+# `SURFACE_MODULES` entry is imported from anywhere else. With the registry
+# empty no swap happens and the guard has nothing to protect.
 #
-# Noted 2026-09-29: that measurement covered the eight modules the registry
-# held on that date (CrossChainOrderForm was added later), and it read store
-# sourcemaps, which a store build no longer emits (`packages/web/vite.config.js`,
-# `sourcemap: BUILD_PROFILE !== 'store'`). It cannot be repeated as written.
-#
-# Current evidence, all of it rerunnable: the `xchain-hidden-surface-guard`
-# plugin in `packages/web/vite.config.js` (enforce 'pre') fails a store build
-# if any `SURFACE_MODULES` entry is imported from outside `surfaces/dex.jsx`;
-# `test/smoke/audits/release-build-profiles.smoke.js` pins that plugin and the
-# store build's sourcemap setting; `test/unit/mobile/storeSurfaces.test.js`
-# checks no other web-shell file imports a listed module and ties the list to
-# what `surfaces/dex.jsx` imports and routes.
+# Evidence, all of it rerunnable: `test/smoke/audits/release-build-profiles.smoke.js`
+# pins that the store profile hides no product surface and pins the store
+# build's sourcemap setting; `test/unit/mobile/storeSurfaces.test.js` and
+# `test/unit/mobile/storeProfileBuild.test.js` tie the registry to the surface
+# modules and routes.
 #
 # The gate above stays live and still fails shut on anything but a line
-# beginning IMPLEMENTED. It now means something narrower but just as real: if
-# the surface mechanism is ever removed or bypassed, put this line back to
-# UNIMPLEMENTED in the same commit, because a verifier reading `store` in a
-# signed, append-only manifest concludes those surfaces are absent.
+# beginning IMPLEMENTED. Read it as: the profile mechanism is in place. It does
+# NOT say any surface is absent from a store build. A verifier reading `store`
+# in a signed, append-only manifest must consult `HIDDEN_SURFACES` at the
+# signed commit for that. If the profile mechanism is ever removed or
+# bypassed, put this line back to UNIMPLEMENTED in the same commit. If a
+# surface is later added to `HIDDEN_SURFACES.store`, update this prose in that
+# same commit.
