@@ -11,13 +11,6 @@ function refuse(role) {
 
 export function preflightRunInputKeys(input, { wallet } = {}) {
     try {
-        void assertTreasuryKey;
-        void addressTypeOf;
-    } catch {
-        return;
-    }
-
-    try {
         assertTreasuryKey(input, wallet);
     } catch {
         refuse('treasury');
