@@ -15,8 +15,8 @@
 // nothing is spent. The teardown setup returns is called at once, so the staged
 // run input is removed and the environment variable unset before exit.
 
-import path from 'node:path';
-import { fileURLToPath } from 'node:url';
+import fs from 'node:fs';
+import { pathToFileURL } from 'node:url';
 
 const USAGE = 'usage: node test/e2e/fixtures/testnet_run_input.js <treasury.json> <claimant.json> '
     + '| node test/e2e/fixtures/testnet_ready.js';
@@ -51,9 +51,15 @@ export async function main({
     return 0;
 }
 
-const invokedDirectly = process.argv[1]
-    && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url);
+function invokedDirectly() {
+    if (!process.argv[1]) return false;
+    try {
+        return import.meta.url === pathToFileURL(fs.realpathSync(process.argv[1])).href;
+    } catch {
+        return false;
+    }
+}
 
-if (invokedDirectly) {
+if (invokedDirectly()) {
     process.exitCode = await main();
 }
