@@ -758,6 +758,7 @@ xr_check_expected "$INPUT_DIR" "$GATE_EXPECTED" "$RELEASE_SET" "$STAGING_OS"
 # signature says they do: an artifact signed under the wrong arch installs,
 # verifies against this manifest, and cannot start.
 xr_check_payload_arches "$INPUT_DIR"
+PAYLOAD_UNCHECKED="$(printf '%s\n' "${XR_PAYLOAD_UNCHECKED[@]}")"
 
 # A lane that already has users must not vanish from a release. The gate
 # above cannot ask this: every store lane is `optional` there until it has
@@ -889,7 +890,8 @@ if [[ "$UNATTENDED" -eq 1 && "$RELEASE_SET" != "staging" ]]; then
     SIGNING_PROVENANCE="unattended"
 fi
 xr_write_manifest "$INPUT_DIR" "$TAG" "$TAG_COMMIT" "$BUILT_AT" "$DEV_MOCK_STATE" \
-    "$GATE_EXPECTED" "$COVERAGE_LANES" "$STAGING_OS" "$SIGNING_PROVENANCE"
+    "$GATE_EXPECTED" "$COVERAGE_LANES" "$STAGING_OS" "$SIGNING_PROVENANCE" \
+    "$PAYLOAD_UNCHECKED"
 
 echo "sign.sh: signing manifest with key $XCHAIN_RELEASE_GPG_KEY ..." >&2
 # Loopback pinentry ONLY when a passphrase file was supplied. The array
