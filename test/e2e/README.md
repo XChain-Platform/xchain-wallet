@@ -340,6 +340,16 @@ phrase or an address. Git ignores the file and the next run replaces it, so a
 pass or a failure leaves its on-chain record in that file instead of a scrolled
 terminal.
 
+`node test/e2e/fixtures/testnet_evidence.js [results.json]` reads that run
+record, `test/e2e/test-results-testnet/results.json` when no path is given. It
+prints one line per test giving its status, spec file and title, with one
+indented label and txid line under it for each txid the test recorded. It then
+ends on `testnet run passed` and exits 0 when the run has no errors, at least
+one test, every test expected and at least one txid, and ends on
+`testnet run failed` and exits 1 otherwise. It exits 2 with one stderr line
+naming the path when the file is missing or is not JSON. The XC-3445 ledger
+closure cites the printed txids instead of reading the JSON tree by hand.
+
 One worker, no retries: the specs share one treasury and one chain, and a
 retry on a public chain spends it twice. Bitcoin only, since staking is
 BTC-only at launch and the treasury holds tBTC; leave `XC_REGTEST_COIN` unset.
