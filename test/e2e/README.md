@@ -308,6 +308,13 @@ partial of that reward, setup stops the run with one error starting
 a key or an address, so a claimant with nothing to claim fails in seconds
 instead of after stake-unstake has spent treasury and hours of block time.
 
+`node test/e2e/fixtures/testnet_run_input.js <treasury.json> <claimant.json> | node test/e2e/fixtures/testnet_ready.js`
+runs every global setup check with no build, no preview server and no browser,
+spends nothing and removes the staged input before it exits. It prints
+`testnet run ready` and exits 0 when the venue, the treasury and the claimant
+pass, prints `testnet run not ready: <message>` on stderr and exits 1 when a
+check refuses, and exits 2 without running a check when stdin is a terminal.
+
 When the treasury is short,
 `node test/e2e/fixtures/testnet_topup.js <source-wallet.json> <destination> [--broadcast]`
 refills it by sweeping every confirmed UTXO of a stored testnet key into one
