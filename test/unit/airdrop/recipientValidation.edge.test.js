@@ -3,6 +3,7 @@
 
 import { describe, expect, it } from 'vitest';
 import {
+    classifyRecipients,
     isPlausibleAddress,
     isRecipientForChain,
 } from '../../../packages/core/src/airdrop/parseRecipients.js';
@@ -52,5 +53,21 @@ describe('isRecipientForChain descriptor handling', () => {
         expect(isRecipientForChain(null, { coin: 'bitcoin', network: 'mainnet' })).toBe(false);
         expect(isRecipientForChain(BTC_MAINNET, { coin: 'unknown', network: 'mainnet' }))
             .toBe(false);
+    });
+});
+
+// Entries the indexer files as `invalid: ADDRESS (format)` must never reach the published list.
+describe('classifyRecipients segwit witness rules', () => {
+    it('drops BIP173/BIP350 invalid vectors as invalid, not as another network', () => {
+        const chain = { coin: 'bitcoin', network: 'mainnet' };
+        const bad = [
+            'bc1p0xlxvlhemja6c4dqv22uapctqupfhlxm9h8z3k2e72q4k9hcz7vqh2y7hd',
+            'BC1QR508D6QEJXTDG4Y5R3ZARVARYV98GJ9P',
+        ];
+        const good = 'bc1qw508d6qejxtdg4y5r3zarvary0c5xw7kv8f3t4';
+        const result = classifyRecipients([good, ...bad], chain);
+        expect(result.valid).toEqual([good]);
+        expect(result.invalid).toEqual(bad);
+        expect(result.wrongNetwork).toEqual([]);
     });
 });

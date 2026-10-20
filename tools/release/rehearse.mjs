@@ -1066,9 +1066,17 @@ export function coverageDemand({ lanesText, releaseArtifacts }) {
  * tag with `previousPublishedTag`, so an unpublished tag reaches this only
  * when an operator names it with --previous-tag.
  *
+ * A PUBLICATION IS NOT NECESSARILY A DESKTOP PUBLICATION. An Android-only
+ * partial publishes a manifest with no desktop artifact, and desktop users
+ * still update from the desktop release before it. So, given `repo`, each OS
+ * is resolved to the newest published manifest at or before `previousTag`
+ * that carries it, and an OS is waived only when no such manifest exists.
+ * Every refusal along that walk (tag listing, non-404 status, network) fails
+ * shut exactly like the single read above.
+ *
  * @returns {Promise<{oses: string[], reason: string}>}
  */
-export async function bootstrapOsesAt({ previousTag, prodFeedBase, fetchImpl = fetch }) {
+export async function bootstrapOsesAt({ previousTag, prodFeedBase, fetchImpl = fetch, repo = null, run = gitRun }) {
     const desktopOses = [...new Set(Object.values(LANE_NAME_TO_OS))];
     if (!previousTag) {
         return { oses: desktopOses, reason: 'no previous release: no lane has a published predecessor' };
@@ -1080,23 +1088,47 @@ export async function bootstrapOsesAt({ previousTag, prodFeedBase, fetchImpl = f
                 + `${previousTag} published is unknown; no lane is treated as bootstrap`,
         };
     }
-    let published;
-    try {
-        published = await publishedOsesAt({ previousTag, prodFeedBase, fetchImpl });
-    } catch (err) {
-        return {
-            oses: [],
-            reason: `could not read the published manifest for ${previousTag} `
-                + `(${String(err?.message || err)}); no lane is treated as bootstrap`,
-        };
+    // Without a repo there is no history to walk, so only `previousTag` is read.
+    let walk = [previousTag];
+    if (repo) {
+        try {
+            walk = [previousTag, ...earlierTagsOf(repo, previousTag, run)];
+        } catch (err) {
+            return {
+                oses: [],
+                reason: `could not list the tags before ${previousTag} `
+                    + `(${String(err?.message || err)}); no lane is treated as bootstrap`,
+            };
+        }
     }
-    const oses = desktopOses.filter((os) => !published.oses.has(os));
+    // Newest-first, so the first manifest carrying an OS is that OS's predecessor.
+    const predecessor = new Map();
+    for (const candidate of walk) {
+        let published;
+        try {
+            published = await publishedOsesAt({ previousTag: candidate, prodFeedBase, fetchImpl });
+        } catch (err) {
+            return {
+                oses: [],
+                reason: `could not read the published manifest for ${candidate} `
+                    + `(${String(err?.message || err)}); no lane is treated as bootstrap`,
+            };
+        }
+        for (const os of published.oses) {
+            if (!predecessor.has(os)) predecessor.set(os, candidate);
+        }
+        if (desktopOses.every((os) => predecessor.has(os))) break;
+    }
+    const oses = desktopOses.filter((os) => !predecessor.has(os));
+    const from = [...predecessor].map(([os, t]) => `${os} from ${t}`).join(', ');
+    const where = `${String(prodFeedBase).replace(/\/+$/, '')}/RELEASE_HASHES/`;
     return {
         oses,
         reason: oses.length
-            ? `${previousTag} published no ${oses.join(', ')} artifact (read from `
-              + `${published.source}), so those lanes have nothing to update FROM`
-            : `${previousTag} published every desktop lane (read from ${published.source})`,
+            ? `no manifest published at or before ${previousTag} carries a ${oses.join(', ')} `
+              + `artifact (read from ${where}${from ? `; ${from}` : ''}), so those lanes have `
+              + 'nothing to update FROM'
+            : `every desktop lane has a published predecessor (${from}, read from ${where})`,
     };
 }
 
@@ -1670,7 +1702,7 @@ async function main(argv) {
         const prodFeedBase = flag(argv, '--prod-feed') || resolveProdFeed(repo);
         const previousTag = flag(argv, '--previous-tag') ?? await resolvePrevious(repo, tag, prodFeedBase);
         const requirement = swapRequirement({ repo, tag, previousTag });
-        const bootstrap = await bootstrapOsesAt({ previousTag, prodFeedBase });
+        const bootstrap = await bootstrapOsesAt({ previousTag, prodFeedBase, repo });
 
         const lanes = [];
         for (const lane of LANES) {

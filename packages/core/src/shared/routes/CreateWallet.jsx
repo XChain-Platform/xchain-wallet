@@ -591,7 +591,7 @@ export function CreateWallet({ onBack, onCreated: handleCreated, mode = 'fresh' 
             />
             <RadioGroup
                 className={styles.wordCountRow}
-                legend="Recovery phrase length"
+                legend={t('createWallet.recoveryPhraseLength')}
                 name="word-count"
                 value={String(wordCount)}
                 onChange={(nextWordCount) => setWordCount(Number(nextWordCount))}

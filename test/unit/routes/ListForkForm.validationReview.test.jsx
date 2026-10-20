@@ -99,6 +99,19 @@ describe('ListForkForm addition validation', () => {
         expect(await screen.findByText('Remove 1 invalid address before reviewing.')).toBeTruthy();
         expect(screen.queryByRole('button', { name: 'Publish add' })).toBeNull();
     });
+
+    // A ^<index> reference is still kept out, but the note says it is a reference, not a typo.
+    it('keeps an address reference out of review and says what it is', async () => {
+        mountFork({ type: '2', items: [ADDRESS.address] });
+        fireEvent.change(await screen.findByLabelText(/Add addresses/), {
+            target: { value: '^123' },
+        });
+
+        expect(await screen.findByText(/One entry is an address reference/)).toBeTruthy();
+        fireEvent.click(screen.getByRole('button', { name: 'Review' }));
+        expect(await screen.findByText('Remove 1 invalid address before reviewing.')).toBeTruthy();
+        expect(screen.queryByRole('button', { name: 'Publish add' })).toBeNull();
+    });
 });
 
 describe('ListForkForm review', () => {

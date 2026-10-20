@@ -86,7 +86,7 @@ export function WalletModeSection() {
         <>
             <div className={cardStyles.card}>
             <RadioGroup
-                legend="Choose how this wallet handles transactions; watcher and signer are paired modes for air-gapped signing."
+                legend={t('settings.walletMode.chooseHowThisWalletHandles')}
                 name="walletMode"
                 value={selected}
                 onChange={onChange}

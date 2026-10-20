@@ -54,7 +54,7 @@ assert.ok(!isTrivialString('Sign in to continue'), 'sentence is non-trivial');
 assert.ok(isTrivialString('Hello', ['Hello']), 'allow-listed sentence is trivial');
 
 // USER_FACING_ATTRS set covers the documented attribute list.
-// The last thirty-two are component props: copy shipped through them
+// The last thirty-five are component props: copy shipped through them
 // escaped the translator index while the set held DOM attribute names
 // only.
 // Every documented name is listed here, and the size assertion below
@@ -71,6 +71,7 @@ const DOCUMENTED_USER_FACING_ATTRS = [
     'copyLabel', 'balanceText', 'submitLabel',
     'what', 'prefix', 'noun', 'summary', 'error', 'recovery',
     'feeText', 'emptyActionLabel', 'warningNoun', 'message', 'description',
+    'lead', 'legend', 'closeLabel',
 ];
 for (const attr of DOCUMENTED_USER_FACING_ATTRS) {
     assert.ok(USER_FACING_ATTRS.has(attr), `${attr} is in USER_FACING_ATTRS`);
@@ -457,6 +458,23 @@ v = findViolations(jsxAttr('description', jsxExpr(template('Write it on paper or
 assert.strictEqual(v.length, 1, 'flags a description template with static copy');
 v = findViolations(jsxAttr('description', jsxExpr(identifier('hint'))));
 assert.strictEqual(v.length, 0, 'a runtime description value stays silent');
+
+// 19g. FormNotice's bold `lead`, RadioGroup's `legend` and OverlaySurface's
+// `closeLabel` all reach the user verbatim; runtime values stay silent.
+v = findViolations(jsxAttr('lead', literal('Destroy is irreversible.')));
+assert.strictEqual(v.length, 1, 'flags a lead literal');
+assert.match(v[0].message, /lead/);
+v = findViolations(jsxAttr('lead', jsxExpr(identifier('shownLead'))));
+assert.strictEqual(v.length, 0, 'a runtime lead value stays silent');
+v = findViolations(jsxAttr('legend', literal('Expiration')));
+assert.strictEqual(v.length, 1, 'flags a legend literal');
+assert.match(v[0].message, /legend/);
+v = findViolations(jsxAttr('legend', jsxExpr(conditional(literal('Pause setting'), literal('Lock duration')))));
+assert.strictEqual(v.length, 1, 'flags copy in a legend ternary, once');
+assert.match(v[0].message, /Pause setting/);
+v = findViolations(jsxAttr('closeLabel', literal('Close more navigation')));
+assert.strictEqual(v.length, 1, 'flags a closeLabel literal');
+assert.match(v[0].message, /closeLabel/);
 
 // 19e. The style guide's note and kicker stay out of the set only while no
 // shipped file passes them as an attribute; this walk keeps that true.

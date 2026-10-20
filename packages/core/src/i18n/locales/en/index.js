@@ -1660,6 +1660,8 @@ export const en = {
     'settings.appearance.reducedMotion': 'Reduced motion',
     'settings.walletMode.switchToMode': 'Switch to {label} mode?',
     'settings.walletMode.confirmModeChange': 'Confirm mode change',
+    'settings.walletMode.chooseHowThisWalletHandles':
+        'Choose how this wallet handles transactions; watcher and signer are paired modes for air-gapped signing.',
     'settings.page.searchSettings': 'Search settings…',
     'settings.page.searchSettings2': 'Search settings',
     'settings.page.noMatchingSettings': 'No matching settings',
@@ -2220,6 +2222,7 @@ export const en = {
     'components.watcherResultPanel.copyHex': 'Copy hex',
     'components.watcherResultPanel.copyUnsignedTransactionHex': 'Copy unsigned transaction hex',
     'components.watcherResultPanel.animatedQrFormat': 'Animated QR format',
+    'components.watcherResultPanel.qrFormat': 'QR format',
     'components.watcherResultPanel.animatedQr': 'Animated QR (',
     'components.watcherResultPanel.unsignedTransactionAnimatedQr': 'Unsigned transaction animated QR',
     'components.watcherResultPanel.plainTextChunks': 'Plain-text chunks',
@@ -2398,6 +2401,7 @@ export const en = {
     'ui.animatedQrFrames.nextFrame': 'Next frame',
     'components.bottomTabBar.bottomNavigation': 'Bottom navigation',
     'components.bottomTabBar.switchWallet': 'Switch wallet',
+    'components.bottomTabBar.closeMoreNavigation': 'Close more navigation',
     'keyboard.shortcutHelp.keyboardShortcuts': 'Keyboard shortcuts',
     'keyboard.shortcutHelp.shortcutList': 'Shortcut list',
     'keyboard.shortcutHelp.browserExtension': 'Browser extension',
@@ -2671,6 +2675,7 @@ export const en = {
     'components.stalenessLabel.offline': 'Offline, showing saved data',
     'settings.connectedSites.allowedSites': 'Allowed sites',
     'createWallet.requiredWhenEnabled': 'Required when enabled.',
+    'createWallet.recoveryPhraseLength': 'Recovery phrase length',
     'settings.thisWallet.deletesTheWalletAndAll':
         'Deletes the wallet and all linked records (accounts, addresses, signers, pending txs). The encrypted seed is destroyed; back up first if you need recovery.',
     'settings.display.collapseBalancesBelowTheSelected': 'Pinned and escrowed balances stay visible.',

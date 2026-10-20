@@ -47,9 +47,19 @@ import { ARGON2ID_TEST_TIMEOUT_MS } from '../../helpers/argon2idTimeout.js';
 
 // Every case here pays a real Argon2id derivation at the production floor.
 vi.setConfig({ testTimeout: ARGON2ID_TEST_TIMEOUT_MS });
+
+// Put the re-seal floor between the fixture's two costs, so case 1 sees one
+// raised to it and one kept, without paying 64 MiB per restore. The real floor
+// values are pinned in test/unit/flows/walletBackup.edge.test.js.
+vi.mock('../../../packages/core/src/crypto/kdf.js', async (importActual) => ({
+    ...(await importActual()),
+    KDF_MIN_ITERATIONS: 3,
+    KDF_MIN_MEMORY_KIB: 4096,
+}));
 import {
     exportBackupFile,
     importBackupFile,
+    BackupSealDamagedError,
     BackupSeedPasswordError,
 } from '../../../packages/core/src/flows/backupFile.js';
 import {
@@ -71,7 +81,8 @@ import {
 // Argon2id at real cost would make this test slow for no extra truth: what is
 // under test is WHICH key opens the blob, not how expensive the KDF is. The
 // derive path enforces maxima only, so a below-floor cost is accepted here, and
-// the re-key inherits that cost with a fresh salt - which case 1 also checks.
+// the re-key inherits that cost, raised to the floor, with a fresh salt - which
+// case 1 also checks.
 const KDF_PARAMS = {
     algorithm: 'argon2id',
     salt: 'AAAAAAAAAAAAAAAAAAAAAA==',
@@ -214,8 +225,10 @@ describe('integration/flows/backup restore: which password opens the seed', () =
             'the re-key reused the source salt. Under the same password that derives the same '
             + 'master key for two wallets, which is a weakening, not a re-key')
             .toBe(false);
-        // Cost is inherited so a device that calibrated upward keeps it.
-        expect(restored.kdfParams.iterations).toBe(KDF_PARAMS.iterations);
+        // A cost below the floor is raised to it, because the re-seal guards THIS
+        // device's password; a higher one is inherited so a calibrated device keeps it.
+        expect(restored.kdfParams.iterations,
+            'the re-seal kept a below-floor iteration count from the backup').toBe(3);
         expect(restored.kdfParams.memory).toBe(KDF_PARAMS.memory);
         expect(restored.kdfParams.parallelism).toBe(KDF_PARAMS.parallelism);
     });
@@ -296,6 +309,36 @@ describe('integration/flows/backup restore: which password opens the seed', () =
         expect(await target.addresses.list(),
             'a refused restore still wrote addresses into the vault')
             .toHaveLength(0);
+    });
+
+    // A damaged seal is reported as damage even under the RIGHT wallet password.
+    it.each([
+        ['truncated below IV and tag', (seal) => seal.slice(0, 16)],
+        ['not base64 at all', () => '%%not-base64%%'],
+    ])('a seed seal %s fails as damaged, never as a wrong password, and writes nothing', async (_label, damage) => {
+        const [record] = await sourceVault.wallets.list();
+        const damagedVault = makeVault({
+            wallets: [{ ...record, encryptedSeed: damage(record.encryptedSeed) }],
+            accounts: await sourceVault.accounts.list(),
+            addresses: await sourceVault.addresses.list(),
+        });
+        const r = await exportBackupFile({
+            vault: damagedVault, walletId: 'src', password: BACKUP_PASSWORD, kdfParams: KDF_PARAMS,
+        });
+        const target = makeVault();
+        const caught = await importBackupFile({
+            vault: target,
+            fileContent: r.fileContent,
+            password: BACKUP_PASSWORD,
+            walletPassword: ORIGINAL_PASSWORD,
+            devicePassword: DEVICE_PASSWORD,
+            mode: 'add',
+        }).catch((err) => err);
+
+        expect(caught).toBeInstanceOf(BackupSealDamagedError);
+        expect(caught.what).toBe('seed');
+        expect(restoreFailureMessage(caught)).not.toContain(RESTORE_PASSWORD_LABELS.wallet);
+        expect(await target.wallets.list()).toHaveLength(0);
     });
 
     it('refuses to restore key material with no device password to re-seal under', async () => {

@@ -28,8 +28,10 @@
 
 import { gcm } from '@noble/ciphers/aes';
 
-const IV_LENGTH = 12;        // GCM standard nonce length
-const TAG_LENGTH_BYTES = 16; // GCM auth tag (128 bits)
+// Exported so the backup envelope (backup.js) splits the packed blob on this
+// layout rather than on its own copy of the numbers.
+export const IV_LENGTH = 12;        // GCM standard nonce length
+export const TAG_LENGTH_BYTES = 16; // GCM auth tag (128 bits)
 
 /**
  * Encrypt `plaintext` with a 256-bit key. Optional `aad` is authenticated

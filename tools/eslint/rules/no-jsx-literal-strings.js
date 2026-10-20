@@ -36,10 +36,11 @@
 //     menuHeader, emptyTitle, emptyBody, confirmLabel, cancelLabel,
 //     copyLabel, balanceText, submitLabel, what, prefix, noun, summary,
 //     error, recovery, feeText, emptyActionLabel, warningNoun, message,
-//     description (the USER_FACING_ATTRS set below is the authority; keep
-//     this list in step with it). The last thirty-two are component props
-//     rather than DOM attributes: shipping components render copy through them,
-//     so a DOM-only set left that copy out of the translator index.
+//     description, lead, legend, closeLabel (the USER_FACING_ATTRS set below
+//     is the authority; keep this list in step with it). The last thirty-five
+//     are component props rather than DOM attributes: shipping components
+//     render copy through them, so a DOM-only set left that copy out of the
+//     translator index.
 //   - Destructured prop defaults  function C({ label = 'Copy' })  → flagged
 //     when the property KEY is one of those same names and the default
 //     is a non-trivial string or template. Copy shipped as a default
@@ -285,6 +286,15 @@ const USER_FACING_ATTRS = new Set([
     // no ObjectPattern gives it a string default, and the same-named
     // identifiers are locals, state or `styles.description`, which no gate reaches.
     'description',
+    // FormNotice forwards `lead` to StatusMessage and NoticeLines, which render it
+    // verbatim as the bold opening sentence. No JSX `lead=` in packages/*/src is technical.
+    'lead',
+    // RadioGroup renders `legend` verbatim as the fieldset's <legend>, its visible
+    // caption and accessible name. No JSX `legend=` in packages/*/src is technical.
+    'legend',
+    // OverlaySurface forwards `closeLabel` straight into its close button's DOM
+    // aria-label, the same one-hop shape as `ariaLabel`, `iconLabel` and `aria`.
+    'closeLabel',
 ]);
 
 // There is deliberately no technical-attribute deny-list here. Both

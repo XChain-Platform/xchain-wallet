@@ -1037,6 +1037,50 @@ const check = (over) => assertRecord({
     });
     assert.match(oneOs(published).problems.join(' '), /no observed swap on any OS/,
         'with the published predecessor the release still owes an observed swap');
+
+    // A publication is not necessarily a DESKTOP publication. An Android-only
+    // partial is a published predecessor whose manifest carries no desktop
+    // artifact, while desktop users still update from the release before it.
+    const androidOnly = manifest(['xchain-wallet-v0.3.0.apk', 'xchain-wallet-v0.3.0-full.apk']);
+    const walkTags = tagsRun(['v0.4.0', 'v0.3.0', 'v0.2.0']);
+    const afterAndroid = { previousTag: 'v0.3.0', prodFeedBase: base, repo: '.', run: walkTags };
+
+    // Control: read as a single tag, the Android-only manifest waives every desktop OS.
+    const singleTag = await bootstrapOsesAt({
+        ...afterAndroid, repo: null, fetchImpl: byTag({ 'v0.3.0': [200, androidOnly] }),
+    });
+    assert.deepEqual(singleTag.oses, desktop, 'control: one Android-only manifest reads as no desktop predecessor');
+    assert.ok(oneOs(singleTag).ok, 'control: and that waiver passes a one-os record with no swap at all');
+
+    const perOs = await bootstrapOsesAt({
+        ...afterAndroid, fetchImpl: byTag({ 'v0.3.0': [200, androidOnly], 'v0.2.0': [200, macLinux] }),
+    });
+    assert.deepEqual(perOs.oses, ['win32'],
+        'darwin and linux resolve to the mac+Linux release behind the Android-only one and stay DEMANDED');
+    assert.match(perOs.reason, /darwin from v0\.2\.0/, 'the reason names the per-OS predecessor');
+    assert.match(oneOs(perOs).problems.join(' '), /no observed swap on any OS/,
+        'a desktop release after an Android-only partial still owes an observed swap');
+
+    // Every earlier manifest is Android-only: the real first-desktop-release case, still waived.
+    const neverDesktop = await bootstrapOsesAt({
+        ...afterAndroid, fetchImpl: byTag({ 'v0.3.0': [200, androidOnly], 'v0.2.0': [200, androidOnly] }),
+    });
+    assert.deepEqual(neverDesktop.oses, desktop, 'no desktop manifest anywhere behind it waives every desktop OS');
+
+    // FAIL SHUT along the walk: any refusal behind the Android-only tag waives NOTHING.
+    for (const [label, args] of [
+        ['a 500 on a walked tag', { fetchImpl: byTag({ 'v0.3.0': [200, androidOnly], 'v0.2.0': [500, 'upstream'] }) }],
+        ['a network failure on a walked tag', {
+            fetchImpl: byTag({ 'v0.3.0': [200, androidOnly], 'v0.2.0': new Error('fetch failed') }),
+        }],
+        ['a tag listing that fails', {
+            fetchImpl: byTag({ 'v0.3.0': [200, androidOnly] }),
+            run: () => { throw new Error('git exploded'); },
+        }],
+    ]) {
+        const shut = await bootstrapOsesAt({ ...afterAndroid, ...args });
+        assert.deepEqual(shut.oses, [], `${label} must waive no OS`);
+    }
 }
 
 server.close();

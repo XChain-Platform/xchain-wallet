@@ -49,6 +49,10 @@ const BASE58_ALPHABET = /^[1-9A-HJ-NP-Za-km-z]+$/;
 // Bech32 shape per BIP173: a human-readable part, the last `1` as separator, then at
 // least six data characters from the Bech32 charset. Tested against the lowercased value.
 const BECH32_SHAPE = /^[0-9a-z]+1[qpzry9x8gf2tvdw0s3jn54khce6mua7l]{6,}$/;
+// An address reference: a caret, then an index with no leading zero, the same
+// canonical form the indexer accepts for a LIST address item. The wallet never
+// publishes one; it only names it so the form can say why it was skipped.
+const ADDRESS_REF = /^\^[1-9][0-9]*$/;
 
 /**
  * Split a paste-box string into raw candidate strings. Handles line-
@@ -187,9 +191,14 @@ export function isRecipientForChain(addr, chain) {
  * They stay inside `invalid` as well so every existing count ("N invalid
  * skipped") keeps totalling the entries that were actually dropped.
  *
+ * `addressRefs` is the subset of `invalid` written as an address reference
+ * (`^<index>`). The wallet does not resolve references, so they are still
+ * dropped, but they are not typos either and the form says so.
+ *
  * @param {string[]} candidates
  * @param {{ coin?: string, network?: string, networkKind?: string } | null} [chain]
- * @returns {{ valid: string[], invalid: string[], duplicates: number, wrongNetwork: string[] }}
+ * @returns {{ valid: string[], invalid: string[], duplicates: number, wrongNetwork: string[],
+ *   addressRefs: string[] }}
  */
 export function classifyRecipients(candidates, chain) {
     const classifier = createRecipientClassifier(chain, false);
@@ -204,6 +213,8 @@ function createRecipientClassifier(chain, includeLines) {
     const invalid = [];
     /** @type {string[]} */
     const wrongNetwork = [];
+    /** @type {string[]} */
+    const addressRefs = [];
     const params = chainParams(chain);
     const seen = new Set();
     const invalidLines = [];
@@ -234,10 +245,12 @@ function createRecipientClassifier(chain, includeLines) {
             wrongNetwork.push(candidate);
             if (includeLines) wrongNetworkLines.push({ address: candidate, line });
         }
+        // Name an address reference, which is a real chain form and not a typo.
+        if (ADDRESS_REF.test(candidate)) addressRefs.push(candidate);
     };
     const result = () => includeLines
-        ? { valid, invalid, duplicates, wrongNetwork, invalidLines, wrongNetworkLines }
-        : { valid, invalid, duplicates, wrongNetwork };
+        ? { valid, invalid, duplicates, wrongNetwork, addressRefs, invalidLines, wrongNetworkLines }
+        : { valid, invalid, duplicates, wrongNetwork, addressRefs };
     return { add, result };
 }
 
@@ -249,7 +262,7 @@ function createRecipientClassifier(chain, includeLines) {
  * @param {Array<{ value: string, line: number }>} entries
  * @param {{ coin?: string, network?: string, networkKind?: string } | null} [chain]
  * @returns {{ valid: string[], invalid: string[], duplicates: number, wrongNetwork: string[],
- *   invalidLines: Array<{ address: string, line: number }>,
+ *   addressRefs: string[], invalidLines: Array<{ address: string, line: number }>,
  *   wrongNetworkLines: Array<{ address: string, line: number }> }}
  */
 export function classifyRecipientEntries(entries, chain) {

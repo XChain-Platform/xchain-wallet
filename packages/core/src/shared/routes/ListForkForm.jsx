@@ -35,6 +35,7 @@ import { QueuedResultPanel } from '../components/QueuedResultPanel.jsx';
 import { currentListItems, findListOwner } from '../../flows/listMembership.js';
 import { listLabel } from '../utils/listLabel.js';
 import { classifyTickItems } from '../utils/listTickItems.js';
+import { addressReferenceNote } from '../utils/addressReferenceCopy.js';
 import { listTickCoinSupport } from '../../flows/listTickCoinSupport.js';
 import { listActionSize, listActionSizeError } from '../utils/listActionSize.js';
 import { explorerReadFailure } from '../../sdk/explorerErrors.js';
@@ -1128,6 +1129,10 @@ function ListForkFormScreen({ walletId, listRef, onBack, onDone, repointHandlers
             {additions.invalid.length > 0 ? (
                 <FieldNote variant="warning" role="alert">
                     Invalid {isTick ? 'token names' : 'addresses'}: {additions.invalid.join(', ')}
+                    {/* Say why a ^<index> address reference is in that list: it is not a typo. */}
+                    {!isTick && additions.addressRefs?.length > 0
+                        ? ` ${addressReferenceNote(additions.addressRefs.length)}`
+                        : null}
                 </FieldNote>
             ) : null}
             {!isTick ? (

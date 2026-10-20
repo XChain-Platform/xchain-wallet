@@ -24,6 +24,7 @@ import {
     stringifyBackupEnvelope,
     parseBackupEnvelope,
 } from '../../../packages/core/src/crypto/backup.js';
+import { IV_LENGTH, TAG_LENGTH_BYTES } from '../../../packages/core/src/crypto/aead.js';
 
 // Every round-trip here pays a real Argon2id derivation at the production floor.
 vi.setConfig({ testTimeout: ARGON2ID_TEST_TIMEOUT_MS });
@@ -85,6 +86,21 @@ describe('crypto/backup', () => {
             const json = stringifyBackupEnvelope(env);
             const parsed = parseBackupEnvelope(json);
             expect(parsed.magic).toBe(BACKUP_MAGIC);
+        });
+
+        // These lengths ARE format version 1. If the AEAD layout ever changes, bump
+        // BACKUP_FORMAT_VERSION and keep a v1 decode path; never edit the literals here.
+        it('pins format version 1 to a 12-byte iv and a 16-byte tag', async () => {
+            expect({ formatVersion: BACKUP_FORMAT_VERSION, iv: IV_LENGTH, tag: TAG_LENGTH_BYTES })
+                .toEqual({ formatVersion: 1, iv: 12, tag: 16 });
+            const env = await encodeBackupEnvelope({
+                password: 'p',
+                payload: { x: 1 },
+                walletName: 'A',
+                kdfParams: KDF_PARAMS,
+            });
+            expect(Buffer.from(env.encryption.iv, 'base64')).toHaveLength(12);
+            expect(Buffer.from(env.encryption.tag, 'base64')).toHaveLength(16);
         });
     });
 

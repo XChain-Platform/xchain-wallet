@@ -21,7 +21,8 @@
 // The stored payload is SELF-CONTAINED (`{ request, composed, report }` with
 // the composed PSBT hex, not a reference) so a killed-and-restarted SW can
 // rehydrate the modal to its last state WITHOUT re-composing - re-composing
-// would break the byte-identity guarantee (a new UTXO selection).
+// would break the byte-identity guarantee (a new UTXO selection). It also
+// carries `dispatch` and `createdAt`, which resume needs to sign and to expire.
 //
 // Falls back to null when chrome.storage.session is unreachable (Node tests,
 // non-extension shells), so the host uses in-memory only.
@@ -30,7 +31,18 @@ const REQUEST_KEY = 'xchain.confirmAction';
 const RESERVATION_KEY = 'xchain.reservationLedger';
 
 /**
- * @typedef {{ id: string, request: object, composed: object, report: object|null }} ConfirmSession
+ * One stored confirm, exactly as the `action.confirmSession.put` route in
+ * createBackgroundHost.js writes it. Nothing typechecks these packages, so a
+ * test reads these @property names back and compares them to the stored keys.
+ *
+ * @typedef {Object} ConfirmSession
+ * @property {string} id
+ * @property {object|null} request
+ * @property {object|null} composed
+ * @property {object|null} report
+ * @property {{ software: string, hardware?: string, base: object, after?: object, returnTo?: object, label?: string }|null} dispatch
+ *   allow-listed messaging method names plus the request body resume signs with
+ * @property {number|null} createdAt  epoch ms the confirm was stored, checked against the resume TTL
  */
 
 /**

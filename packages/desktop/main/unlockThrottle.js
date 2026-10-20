@@ -14,8 +14,9 @@
 // attacker can't reset the lockout by relaunching), and is read BEFORE
 // the Argon2id KDF runs so a locked-out attempt costs no CPU.
 //
-// The pure policy (FREE_ATTEMPTS, exponential backoff, checkUnlockAllowed,
-// recordFailure) lives in the shared extension module; this file only
+// The pure policy (FREE_ATTEMPTS, then the fixed G066 delay ladder capped at
+// 15 min, checkUnlockAllowed, recordFailure) lives in the shared extension
+// module, which mirrors core/src/flows/lockoutTracking.js; this file only
 // supplies the { load, save, clear } persistence contract handleWalletUnlock
 // consumes. Without a store passed in, desktop wallet.unlock ran with NO
 // brute-force gate at all (the extension shipped one; desktop dropped it).

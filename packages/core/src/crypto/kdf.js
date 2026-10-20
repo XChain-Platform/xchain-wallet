@@ -44,7 +44,7 @@ export const KDF_KEY_LENGTH = 32;  // 256-bit master key
 /**
  * @typedef {Object} KdfParams
  * @property {'argon2id'} algorithm
- * @property {string} salt               base64-encoded salt (min 16 bytes)
+ * @property {string} salt               base64-encoded salt; KDF_MIN_SALT_BYTES (8) accepted on load, fresh params use 16
  * @property {number} iterations         Argon2 "t" cost
  * @property {number} memory             Argon2 "m" cost in KiB
  * @property {number} parallelism        Argon2 "p" cost
@@ -74,7 +74,8 @@ const isPositiveSafeInt = (v) =>
  * throwaway demo wallet uses iterations=1 / memory=8 MiB for speed), so a
  * too-LOW param must still load. A weakened cost only ever weakens the
  * attacker's own copy of a stolen blob, so it is not a defence boundary;
- * the too-HIGH direction is.
+ * the too-HIGH direction is. The salt floor (`KDF_MIN_SALT_BYTES`) is the
+ * exception: `checkedSalt` enforces it on load, as the native KDFs do.
  *
  * @param {KdfParams} params
  * @throws {KdfParamError}

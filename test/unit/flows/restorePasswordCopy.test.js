@@ -28,7 +28,7 @@ import {
     restorePasswordRequiredMessage,
 } from '../../../packages/core/src/flows/restorePasswordCopy.js';
 import { BackupPasswordError } from '../../../packages/core/src/crypto/backup.js';
-import { BackupSeedPasswordError } from '../../../packages/core/src/flows/backupFile.js';
+import { BackupSealDamagedError, BackupSeedPasswordError } from '../../../packages/core/src/flows/backupFile.js';
 
 /** Every string this lane can put on screen clears the same bar. */
 function expectUserFacing(message) {
@@ -116,6 +116,20 @@ describe('restoreFailureMessage names the password it is talking about', () => {
         // password that was correct.
         expect(m).not.toContain(`The "${RESTORE_PASSWORD_LABELS.file}" field wants`);
         expectNamesAField(m);
+    });
+
+    // A damaged seal is not a password problem, so no field may be blamed for it.
+    it('a damaged wallet inside the backup, never a password', () => {
+        for (const reason of [
+            new BackupSealDamagedError('seed'),
+            { name: 'BackupSealDamagedError', message: new BackupSealDamagedError('passphrase').message },
+            new BackupSealDamagedError('imported key').message,
+        ]) {
+            const m = restoreFailureMessage(reason);
+            expect(m).toMatch(/damaged, so no password can open it/);
+            expect(m).not.toContain(`The "${RESTORE_PASSWORD_LABELS.wallet}" field wants`);
+            expect(m).not.toContain(`The "${RESTORE_PASSWORD_LABELS.file}" field wants`);
+        }
     });
 
     it('an empty field is named by its label, per mode', () => {

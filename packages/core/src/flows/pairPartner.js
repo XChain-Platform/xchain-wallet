@@ -206,13 +206,13 @@ export function keySetIdOf(keys) {
 /**
  * Read this wallet's account-level public material for a set of chains.
  *
- * Works against any Signer: `getPublicKey` is on the base interface, and
- * `getAccountXpub` is feature-detected (software signers have it;
- * hardware signers surface their xpub through their own transport, so
- * their entries carry a null xpub and pair on publicKey + chainCode).
+ * Calls `getPublicKey({ chainId, path })` per the base Signer contract; a signer
+ * without `getAccountXpub` yields a null xpub and pairs on publicKey + chainCode.
+ * Pairing routes supply only software signers; Ledger accepts only BIP44/49/84
+ * paths, so a counterwallet-legacy (`m/0'`) wallet cannot pair through one.
  *
  * @param {object} opts
- * @param {{ getPublicKey: (p: { path: string }) => Promise<{ publicKey: string, chainCode: string }>, getAccountXpub?: (p: { path: string }) => Promise<string> }} opts.signer
+ * @param {{ getPublicKey: (p: import('../signers/Signer.js').GetPublicKeyParams) => Promise<{ publicKey: string, chainCode: string }>, getAccountXpub?: (p: { path: string }) => Promise<string> }} opts.signer
  * @param {import('../registry/index.js').ChainRegistry} opts.chainRegistry
  * @param {string[]} opts.chainIds
  * @param {number} [opts.accountIndex]
@@ -257,7 +257,7 @@ export async function collectPairingKeys({
         if (seenPaths.has(path)) continue;
         seenPaths.add(path);
 
-        const pub = await signer.getPublicKey({ path });
+        const pub = await signer.getPublicKey({ chainId, path });
         const publicKey = normalizeHex(pub?.publicKey, 33, 'publicKey');
         const chainCode = normalizeHex(pub?.chainCode, 32, 'chainCode');
         let xpub = null;

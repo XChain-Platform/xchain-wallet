@@ -116,7 +116,7 @@ export function WatcherResultPanel({
                 </div>
                 <div className={styles.successTxidBlock}>
                     <RadioGroup
-                        legend="QR format"
+                        legend={t('components.watcherResultPanel.qrFormat')}
                         name="watcher-qr-format"
                         value={qrFormat}
                         onChange={setQrFormat}

@@ -50,7 +50,7 @@ const ADDRESS_CELL_STYLE = { overflowWrap: 'anywhere' };
  *     behind More. Tabs: Rewards / Delegation / Details.
  *   - 'contract': tokens `address` staked into contract
  *     `contractActionIndex`. Add stake / Unstake / Delegate key, with
- *     View contract behind More. Tabs: Positions / Slashes / Details.
+ *     View contract behind More. Tabs: Positions / Penalties / Details.
  *
  * Every quick action renders disabled when its handler prop is absent
  * (house pattern: shells thread handlers as the flows exist).
@@ -288,7 +288,7 @@ export function StakeDetail({
         ]
         : [
             { id: 'positions', label: 'Positions' },
-            { id: 'slashes', label: 'Slashes' },
+            { id: 'slashes', label: 'Penalties' },
             { id: 'details', label: 'Details' },
         ];
 
@@ -345,7 +345,7 @@ export function StakeDetail({
                         ) : null}
                         {contract?.slash_destination ? (
                             <>
-                                <dt className={styles.detailsLabel}>Slash destination</dt>
+                                <dt className={styles.detailsLabel}>Penalty destination</dt>
                                 <dd className={styles.detailsValue} style={ADDRESS_CELL_STYLE}>
                                     <AddressText address={String(contract.slash_destination)} truncate={false} />
                                 </dd>
@@ -589,7 +589,7 @@ export function StakeDetail({
                                     <ListRow
                                         title={<span className={local.eventAmount}>{fmt(u.amount)} {detailText(u.tick)}</span>}
                                         subtitle={<span className={local.eventMeta}>
-                                            releasing, slashable until block {fmt(u.cooldown_end_block)}
+                                            releasing, can still be penalized until block {fmt(u.cooldown_end_block)}
                                         </span>}
                                         trailing={<span className={local.eventWhen}>cooldown</span>}
                                     />
@@ -601,9 +601,9 @@ export function StakeDetail({
 
             {activeTab === 'slashes' ? (
                 slashEvents.length === 0 ? (
-                    <EmptyState title="No slash events" body="Slash events against this position appear here." />
+                    <EmptyState title="No penalties" body="Any penalty taken from this position appears here." />
                 ) : (
-                    <ul className={local.eventList} aria-label="Slash events">
+                    <ul className={local.eventList} aria-label="Penalties">
                         {slashEvents.slice(0, 25).map((ev, i) => (
                         <li key={`sl:${i}`}>
                             <ListRow
