@@ -444,6 +444,7 @@ xr_assert_store_profile_buildable() {
 
 # Write "$dir/RELEASE_HASHES.txt" with the signed header + sorted hashes.
 # Args: dir tag tag_commit built_utc dev_mock_gate_state [expected_file] [lanes]
+#       [staging_os] [signing] [payload_unchecked]
 #
 # `lanes` is set only for a PARTIAL release (sign.sh --lane) and
 # writes two header fields, `coverage: partial` and `lanes: <names>`. A
@@ -452,6 +453,9 @@ xr_assert_store_profile_buildable() {
 # stripping the fields to pass a partial manifest off as complete breaks
 # the signature rather than the claim.
 #
+# payload_unchecked contains one `<gate>: ./<name>` row per permitted skip.
+# It is omitted on a fully checked run so existing manifest bytes do not move.
+#
 # expected_file is optional ONLY for verify.sh --recompute, which writes a
 # manifest already stamped "(none)" for tag and commit and announces
 # itself as not a release. A real release always passes it: without it
@@ -459,19 +463,16 @@ xr_assert_store_profile_buildable() {
 # that omits the one thing v2 exists for.
 xr_write_manifest() {
     local dir="$1" tag="$2" commit="$3" built="$4" gate="$5" expected="${6:-}"
-    local lanes="${7:-}" staging_os="${8:-}" signing="${9:-}"
+    local lanes="${7:-}" staging_os="${8:-}" signing="${9:-}" payload_unchecked="${10:-}"
     local sha
     sha="$(xr_sha256_cmd)" || return 2
-
     local files count
     files="$(xr_list_artifacts "$dir")" || return 2
     count="$(printf '%s\n' "$files" | grep -c . || true)"
-
     if [[ "$count" -eq 0 ]]; then
         echo "release/lib.sh: no artifacts found in $dir - nothing to hash." >&2
         return 1
     fi
-
     # Resolved BEFORE the manifest is opened for writing: an undeclared or
     # ambiguous profile must leave no half-written manifest behind.
     #
@@ -505,6 +506,12 @@ xr_write_manifest() {
         echo "# built: $built"
         echo "# dev-mock-gate: $gate"
         echo "# artifacts: $count"
+        if [[ -n "$payload_unchecked" ]]; then
+            echo "# payload-check: partial"
+            while IFS= read -r line; do
+                [[ -n "$line" ]] && echo "# payload-unchecked $line"
+            done <<< "$payload_unchecked"
+        fi
         if [[ -n "$lanes" ]]; then
             echo "# coverage: partial"
             echo "# lanes: $lanes"
@@ -535,11 +542,8 @@ xr_write_manifest() {
         # cannot be undone, but it CAN be made visible, and a reader deciding
         # how much a signature is worth is exactly who needs to know.
         #
-        # So the manifest declares its own provenance. Emitted ONLY on the
-        # unattended path, so every attended manifest stays byte-identical to
-        # the ones already published and no verifier sees a new field where
-        # nothing changed. A `#` line is ignored by `sha256sum -c` like every
-        # other header here.
+        # Emitted ONLY on the unattended path, so every attended manifest
+        # stays byte-identical. A `#` line is ignored by `sha256sum -c`.
         if [[ -n "$signing" ]]; then
             echo "# signing: $signing"
         fi
@@ -932,16 +936,13 @@ xr_arch_triplet() {
 # arm64-labelled artifact full of x86-64 code installs, passes every hash
 # and signature check we have, and cannot start.
 #
-# A MISSING EXTRACTOR IS A PROBLEM, NOT A SKIP. This gate decides whether a
-# release ships; a check that quietly becomes a no-op on the one host where
-# it was needed is the "mechanism nothing ran" family this lane keeps
-# rediscovering. It names the tool and the artifact rather than shrugging.
+# A MISSING EXTRACTOR MAKES THE VERDICT PARTIAL. The release host deliberately
+# permits that skip, so the summary and signed manifest have to preserve it.
 #
 # Args: dir name declared-arch. Prints problems on stderr, count on stdout.
 xr_check_payload_arch() {
-    local dir="$1" name="$2" arch="$3"
+    local dir="$1" name="$2" arch="$3" unchecked_report="${4:-${XR_PAYLOAD_UNCHECKED_REPORT:-}}"
     local f="$dir/${name#./}" problems=0 triplet machine listing="" n
-
     triplet="$(xr_arch_triplet "$arch")"
     [[ -n "$triplet" ]] || { echo 0; return 0; }
 
@@ -978,6 +979,7 @@ xr_check_payload_arch() {
                 echo "              evidence of its contents. Install it" >&2
                 echo "              (brew install squashfs / apt install squashfs-tools) to" >&2
                 echo "              have this artifact checked." >&2
+                xr_note_payload_unchecked "$unchecked_report" architecture "$name"
             elif ! listing="$(unsquashfs -l "$f" 2>/dev/null)"; then
                 echo "PAYLOAD-ARCH  '${name#./}' could not be read as a squashfs image by" >&2
                 echo "              unsquashfs. An artifact whose contents cannot be read is" >&2
@@ -993,6 +995,7 @@ xr_check_payload_arch() {
                 echo "              this host, so nothing has confirmed its contents match the" >&2
                 echo "              architecture its name claims. Install it (brew install" >&2
                 echo "              dpkg / apt install dpkg) to have this artifact checked." >&2
+                xr_note_payload_unchecked "$unchecked_report" architecture "$name"
             elif ! listing="$(dpkg-deb -c "$f" 2>/dev/null)"; then
                 echo "PAYLOAD-ARCH  '${name#./}' could not be read as a Debian package by" >&2
                 echo "              dpkg-deb. An artifact whose contents cannot be read is" >&2
@@ -1022,7 +1025,6 @@ xr_check_payload_arch() {
         n="$(xr_check_foreign_triplets "$listing" "$arch" "${name#./}")"
         problems=$((problems + n))
     fi
-
     echo "$problems"
 }
 
@@ -1061,6 +1063,11 @@ xr_check_foreign_triplets() {
     echo "$problems"
 }
 
+xr_note_payload_unchecked() {
+    local report="${1:-}" gate="$2" name="${3#./}"
+    [[ -z "$report" ]] || printf '%s: ./%s\n' "$gate" "$name" >> "$report"
+}
+
 # Does a Linux artifact's payload carry the compiled native addon that a
 # Linux install of this app produces?
 #
@@ -1080,9 +1087,8 @@ xr_check_foreign_triplets() {
 #
 # Args: dir name. Prints problems on stderr, count on stdout.
 xr_check_payload_native() {
-    local dir="$1" name="$2"
+    local dir="$1" name="$2" unchecked_report="${3:-${XR_PAYLOAD_UNCHECKED_REPORT:-}}"
     local f="$dir/${name#./}" problems=0 listing="" tmp="" data="" cand offset found
-
     case "${name#./}" in
         *.snap)
             # A snap is a BARE squashfs image: no ELF runtime in front of it,
@@ -1090,7 +1096,6 @@ xr_check_payload_native() {
             # extractor reads the file as given. It carries the same
             # `resources/app.asar.unpacked/` tree the `.deb` does, which is
             # what lets the shared tail below ask both the same question.
-            #
             # It is in scope because the snap is built where the divergence
             # this gate exists to catch actually happens: snapcraft cannot run
             # in the pinned container, so the snap lane builds on the runner
@@ -1108,6 +1113,7 @@ xr_check_payload_native() {
                 echo "              image nothing else here can read. Install it" >&2
                 echo "              (brew install squashfs / apt install squashfs-tools) to" >&2
                 echo "              have this artifact checked." >&2
+                xr_note_payload_unchecked "$unchecked_report" native "$name"
                 echo 0
                 return 0
             fi
@@ -1167,6 +1173,7 @@ xr_check_payload_native() {
                     echo "PAYLOAD-NATIVE-UNCHECKED  '${name#./}' was NOT checked: no reader on" >&2
                     echo "              this host can open an ar container (GNU tar cannot, and" >&2
                     echo "              dpkg-deb is absent). Install dpkg to have it checked." >&2
+                    xr_note_payload_unchecked "$unchecked_report" native "$name"
                 fi
             fi
             rm -rf "$tmp"
@@ -1183,13 +1190,13 @@ xr_check_payload_native() {
                 echo "              image nothing else here can read. Install it" >&2
                 echo "              (brew install squashfs / apt install squashfs-tools) to" >&2
                 echo "              have this artifact checked." >&2
+                xr_note_payload_unchecked "$unchecked_report" native "$name"
                 echo 0
                 return 0
             fi
             # An AppImage is an ELF runtime with the squashfs appended, so the
             # extractor needs the offset that image starts at, and 'hsqs' is
             # the image's own magic.
-            #
             # THE MAGIC OCCURS MORE THAN ONCE AND THE FIRST ONE IS NOT THE
             # IMAGE. This took the first textual match, and the first real
             # AppImage ever put through it proved that wrong: on the v0.336.0
@@ -1199,7 +1206,6 @@ xr_check_payload_native() {
             # returned 0 - meaning this gate has never once read an AppImage,
             # and it failed in the one way nothing notices, by declining to
             # judge rather than by judging wrong (frontier row 132).
-            #
             # Try the candidates in order and keep the first that actually
             # lists. The extractor reading the image is the only honest test of
             # where the image is; a magic string is a guess at it. Bounded at
@@ -1219,6 +1225,7 @@ xr_check_payload_native() {
                 echo "              same set carries the same payload and IS checked, so" >&2
                 echo "              refusing would fail a release over this check's own" >&2
                 echo "              limitation rather than over the artifact." >&2
+                xr_note_payload_unchecked "$unchecked_report" native "$name"
                 echo 0
                 return 0
             fi
@@ -1257,8 +1264,42 @@ xr_check_payload_native() {
 # files; this one has to open the bytes, so it is a different question asked
 # of a different thing, and keeping them apart is what lets each be driven
 # honestly. sign.sh calls both, in that order, before it signs anything.
+xr_report_payload_failures() {
+    local problems="$1" native="$2"
+    if [[ "$problems" -gt 0 ]]; then
+        echo >&2
+        echo "release/lib.sh: payload-architecture gate FAILED ($problems problem(s))." >&2
+        echo "  An artifact's name, its metadata and its contents all have to" >&2
+        echo "  agree. Publishing one that does not gives a user a download that" >&2
+        echo "  installs, verifies against the signed manifest, and cannot run." >&2
+    fi
+    if [[ "$native" -gt 0 ]]; then
+        echo >&2
+        echo "release/lib.sh: payload-native gate FAILED ($native problem(s))." >&2
+        echo "  A Linux payload with no compiled addon was built where that" >&2
+        echo "  addon never compiled, and tiny-secp256k1 falls back to JS with" >&2
+        echo "  nothing said. Build the set the release lane builds" >&2
+        echo "  it in, rather than publishing a rehearsal of a different bundle." >&2
+    fi
+}
+
+xr_report_payload_completion() {
+    local gate="$1" unchecked="$2"
+    if [[ "$unchecked" -gt 0 ]]; then
+        echo "release/lib.sh: payload-$gate gate PARTIAL ($unchecked unchecked)." >&2
+    else
+        echo "release/lib.sh: payload-$gate gate ok." >&2
+    fi
+}
+
+XR_PAYLOAD_UNCHECKED=()
+XR_PAYLOAD_UNCHECKED_REPORT=""
+
 xr_check_payload_arches() {
-    local dir="$1" name arch problems=0 native=0 n
+    local dir="$1" name arch problems=0 native=0 n report
+    local arch_unchecked native_unchecked line
+    report="$(mktemp "${TMPDIR:-/tmp}/xr-payload-unchecked.XXXXXX")"
+    XR_PAYLOAD_UNCHECKED_REPORT="$report"
 
     while IFS= read -r name; do
         [[ -z "$name" ]] && continue
@@ -1287,29 +1328,22 @@ xr_check_payload_arches() {
         problems=$((problems + n))
     done < <(xr_list_artifacts "$dir")
 
-    if [[ "$problems" -gt 0 ]]; then
-        echo >&2
-        echo "release/lib.sh: payload-architecture gate FAILED ($problems problem(s))." >&2
-        echo "  An artifact's name, its metadata and its contents all have to" >&2
-        echo "  agree. Publishing one that does not gives a user a download that" >&2
-        echo "  installs, verifies against the signed manifest, and cannot run." >&2
-    fi
-
-    if [[ "$native" -gt 0 ]]; then
-        echo >&2
-        echo "release/lib.sh: payload-native gate FAILED ($native problem(s))." >&2
-        echo "  A Linux payload with no compiled addon was built where that" >&2
-        echo "  addon never compiled, and tiny-secp256k1 falls back to JS with" >&2
-        echo "  nothing said. Build the set the release lane builds" >&2
-        echo "  it in, rather than publishing a rehearsal of a different bundle." >&2
-    fi
-
+    xr_report_payload_failures "$problems" "$native"
     if [[ "$problems" -gt 0 || "$native" -gt 0 ]]; then
+        rm -f "$report"
+        XR_PAYLOAD_UNCHECKED_REPORT=""
         return 1
     fi
-
-    echo "release/lib.sh: payload-architecture gate ok." >&2
-    echo "release/lib.sh: payload-native gate ok." >&2
+    arch_unchecked="$(grep -c '^architecture:' "$report" || true)"
+    native_unchecked="$(grep -c '^native:' "$report" || true)"
+    XR_PAYLOAD_UNCHECKED=()
+    while IFS= read -r line; do
+        [[ -n "$line" ]] && XR_PAYLOAD_UNCHECKED+=("$line")
+    done < "$report"
+    rm -f "$report"
+    XR_PAYLOAD_UNCHECKED_REPORT=""
+    xr_report_payload_completion architecture "$arch_unchecked"
+    xr_report_payload_completion native "$native_unchecked"
 }
 
 # Check one declared row's per-architecture coverage.
