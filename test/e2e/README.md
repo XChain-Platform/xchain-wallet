@@ -308,6 +308,13 @@ partial of that reward, setup stops the run with one error starting
 a key or an address, so a claimant with nothing to claim fails in seconds
 instead of after stake-unstake has spent treasury and hours of block time.
 
+`node test/e2e/fixtures/testnet_run_input.js <treasury.json> <claimant.json> | node test/e2e/fixtures/testnet_ready.js`
+runs every global setup check with no build, no preview server and no browser,
+spends nothing and removes the staged input before it exits. It prints
+`testnet run ready` and exits 0 when the venue, the treasury and the claimant
+pass, prints `testnet run not ready: <message>` on stderr and exits 1 when a
+check refuses, and exits 2 without running a check when stdin is a terminal.
+
 When the treasury is short,
 `node test/e2e/fixtures/testnet_topup.js <source-wallet.json> <destination> [--broadcast]`
 refills it by sweeping every confirmed UTXO of a stored testnet key into one
@@ -323,6 +330,25 @@ to the destination. It prints one JSON line carrying `txid`, `txHex`, `fee`,
 `swept` and `inputs`, and broadcasts only when `--broadcast` is present. This is
 how sats left on a funded wallet go back to the treasury without a by-hand
 wallet restore.
+
+Every testnet run writes `test/e2e/test-results-testnet/results.json` through
+Playwright's json reporter beside the list reporter (github and html under CI).
+stake-unstake records its funding, stake and unstake txids, and partial-claim
+its collect txid, as test annotations of type `txid` whose description is the
+label, a space and the txid. Those annotations carry only txids, never a key, a
+phrase or an address. Git ignores the file and the next run replaces it, so a
+pass or a failure leaves its on-chain record in that file instead of a scrolled
+terminal.
+
+`node test/e2e/fixtures/testnet_evidence.js [results.json]` reads that run
+record, `test/e2e/test-results-testnet/results.json` when no path is given. It
+prints one line per test giving its status, spec file and title, with one
+indented label and txid line under it for each txid the test recorded. It then
+ends on `testnet run passed` and exits 0 when the run has no errors, at least
+one test, every test expected and at least one txid, and ends on
+`testnet run failed` and exits 1 otherwise. It exits 2 with one stderr line
+naming the path when the file is missing or is not JSON. The ledger closure
+cites the printed txids instead of reading the JSON tree by hand.
 
 One worker, no retries: the specs share one treasury and one chain, and a
 retry on a public chain spends it twice. Bitcoin only, since staking is

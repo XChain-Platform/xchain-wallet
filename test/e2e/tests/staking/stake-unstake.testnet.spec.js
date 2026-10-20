@@ -88,9 +88,10 @@ test.describe('STAKE and partial UNSTAKE on Bitcoin testnet', () => {
             // The funded wallet has a random seed, so its phrase is the only way back to the
             // sats sent to it. It is written here, owner-only, before any funding is sent.
             recoveryFile = writeRecoveryRecord(address, phrase);
-            await fundTestnetAddress(venue, treasury, address, {
+            const fundingTxid = await fundTestnetAddress(venue, treasury, address, {
                 timeoutMs: INCLUSION_TIMEOUT,
             });
+            test.info().annotations.push({ type: 'txid', description: `funding ${fundingTxid}` });
             await page.reload();
             await unlockAfterReload(page, WALLET_UNLOCK);
             await mintTestnetXchain(page, MINT_AMOUNT, { explorerUrl, coin: TESTNET_COIN });
@@ -115,7 +116,9 @@ test.describe('STAKE and partial UNSTAKE on Bitcoin testnet', () => {
             await main.getByRole('button', { name: 'Stake', exact: true }).click();
             await approve(page);
             await expect(main.getByText(/Stake broadcast\./)).toBeVisible({ timeout: 120_000 });
-            stake = await waitForValidAction(venue, await readDoneTxid(page), {
+            const stakeTxid = await readDoneTxid(page);
+            test.info().annotations.push({ type: 'txid', description: `stake ${stakeTxid}` });
+            stake = await waitForValidAction(venue, stakeTxid, {
                 timeoutMs: INCLUSION_TIMEOUT,
             });
             expect(stake.action).toBe('STAKE');
@@ -145,7 +148,9 @@ test.describe('STAKE and partial UNSTAKE on Bitcoin testnet', () => {
             await main.getByRole('button', { name: 'Unstake', exact: true }).click();
             await approve(page);
             await expect(main.getByText(/Unstake broadcast\./)).toBeVisible({ timeout: 120_000 });
-            const unstake = await waitForValidAction(venue, await readDoneTxid(page), {
+            const unstakeTxid = await readDoneTxid(page);
+            test.info().annotations.push({ type: 'txid', description: `unstake ${unstakeTxid}` });
+            const unstake = await waitForValidAction(venue, unstakeTxid, {
                 timeoutMs: INCLUSION_TIMEOUT,
             });
             expect(unstake.action).toBe('UNSTAKE');
