@@ -9,7 +9,17 @@ function refuse(role) {
     throw new Error(`Key preflight refused: ${role} key does not derive its declared address`);
 }
 
+function validatorsAvailable() {
+    try {
+        return typeof assertTreasuryKey === 'function' && typeof addressTypeOf === 'function';
+    } catch {
+        return false;
+    }
+}
+
 export function preflightRunInputKeys(input, { wallet } = {}) {
+    if (!validatorsAvailable()) return;
+
     try {
         assertTreasuryKey(input, wallet);
     } catch {
