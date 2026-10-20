@@ -8,8 +8,8 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-import path from 'node:path';
-import { fileURLToPath } from 'node:url';
+import fs from 'node:fs';
+import { pathToFileURL } from 'node:url';
 
 const DEFAULT_PREVIEW_PORT = 4193;
 const ERROR_CODE_RE = /^[A-Za-z_]{2,40}$/;
@@ -89,9 +89,15 @@ export async function runOriginPreflight({
     }
 }
 
-const invokedDirectly = process.argv[1]
-    && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url);
+function invokedDirectly() {
+    if (!process.argv[1]) return false;
+    try {
+        return import.meta.url === pathToFileURL(fs.realpathSync(process.argv[1])).href;
+    } catch {
+        return false;
+    }
+}
 
-if (invokedDirectly) {
+if (invokedDirectly()) {
     process.exitCode = await runOriginPreflight();
 }

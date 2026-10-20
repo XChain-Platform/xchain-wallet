@@ -19,8 +19,9 @@
 // holds at least one id. Nothing here prints a key, a phrase or an address.
 
 import fs from 'node:fs/promises';
+import { realpathSync } from 'node:fs';
 import path from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const DEFAULT_REPORT = path.resolve(HERE, '..', 'test-results-testnet', 'results.json');
@@ -97,8 +98,14 @@ export async function main({
     return passed ? 0 : 1;
 }
 
-const invokedDirectly = process.argv[1]
-    && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url);
-if (invokedDirectly) {
+function invokedDirectly() {
+    if (!process.argv[1]) return false;
+    try {
+        return import.meta.url === pathToFileURL(realpathSync(process.argv[1])).href;
+    } catch {
+        return false;
+    }
+}
+if (invokedDirectly()) {
     process.exitCode = await main();
 }

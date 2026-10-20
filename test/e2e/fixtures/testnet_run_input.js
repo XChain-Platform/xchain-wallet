@@ -9,8 +9,7 @@
 // contact legal@dankest.llc.
 
 import fs from 'node:fs';
-import path from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { pathToFileURL } from 'node:url';
 import { parseRunInput, TESTNET_ADDRESS_RE } from './testnet.js';
 
 const USAGE = 'usage: node test/e2e/fixtures/testnet_run_input.js <treasury.json> <claimant.json>';
@@ -73,10 +72,16 @@ export function main(argv = process.argv.slice(2), {
     return 0;
 }
 
-const invokedDirectly = process.argv[1]
-    && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url);
+function invokedDirectly() {
+    if (!process.argv[1]) return false;
+    try {
+        return import.meta.url === pathToFileURL(fs.realpathSync(process.argv[1])).href;
+    } catch {
+        return false;
+    }
+}
 
-if (invokedDirectly) {
+if (invokedDirectly()) {
     try {
         process.exitCode = main();
     } catch (error) {
