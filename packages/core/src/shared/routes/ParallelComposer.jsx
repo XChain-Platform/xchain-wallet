@@ -651,7 +651,7 @@ function RowEditor({ index, row, chainIds, addressesByChain, activeByChain, acti
 
             <div className={parallelStyles.rowStatus}>
                 <span>Row state</span>
-                <StatusPill status={row.status} labelPrefix={`Row ${index + 1} status`} />
+                <StatusPill status={row.status} labelPrefix={t('parallelComposer.rowStatusPrefix', { row: index + 1 })} />
             </div>
 
             <Select
@@ -788,7 +788,7 @@ function statusLabel(status) {
     }[status] || status;
 }
 
-function StatusPill({ status, labelPrefix = 'Status' }) {
+function StatusPill({ status, labelPrefix = t('parallelComposer.statusPrefix') }) {
     const label = statusLabel(status);
     return (
         <span

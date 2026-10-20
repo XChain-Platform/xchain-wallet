@@ -283,14 +283,14 @@ describe('filtered list empty states', () => {
             getDispensersForSource: vi.fn().mockResolvedValue({ data: [row] }),
         };
         mount(DispensersList, messaging, { onOpenDispenser: () => {} });
-        await screen.findByText('open');
+        await screen.findByText('Open');
 
         fireEvent.change(screen.getByLabelText('Search dispensers'), { target: { value: 'missing' } });
         expect(await screen.findByText('No results for these filters')).toBeInTheDocument();
 
         fireEvent.click(screen.getByRole('button', { name: 'Reset filters' }));
         expect(screen.getByLabelText('Search dispensers')).toHaveValue('');
-        expect(await screen.findByText('open')).toBeInTheDocument();
+        expect(await screen.findByText('Open')).toBeInTheDocument();
         expect(screen.queryByText('No dispensers yet')).toBeNull();
     });
 

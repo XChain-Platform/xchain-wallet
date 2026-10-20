@@ -211,7 +211,7 @@ export function FeesSection() {
 
                         <ToggleRow
                             label={t('settings.fees.allowFeeBumpReplaceBy')}
-                            accessibleLabel={`${displayName} allow fee bump (Replace-by-Fee)`}
+                            accessibleLabel={t('settings.fees.allowFeeBumpReplaceBy2', { displayName })}
                             hint={descriptor?.feeStrategy?.rbfSupported
                                 ? t('settings.fees.keepThisOnSoYou')
                                 : t('settings.fees.feeBumpingIsNotSupported', { displayName })}

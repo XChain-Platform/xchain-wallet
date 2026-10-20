@@ -72,3 +72,27 @@ describe('MyLists row names', () => {
         expect(screen.getByRole('button', { name: 'Open Safe␦name (List #12)' })).toBeTruthy();
     }, 20_000);
 });
+
+describe('MyLists row status badge', () => {
+    it('says a refused list was rejected in plain words, never the indexer code', async () => {
+        renderLists([row({ status: 'invalid: LIST_ACTION_INDEX (not owner)' })]);
+
+        const badge = await screen.findByText('Rejected');
+        expect(badge.getAttribute('title')).toBe('Rejected: sent by an address that does not own the list');
+        const rowText = screen.getByRole('button', { name: 'Open token list #12' }).textContent;
+        expect(rowText).not.toMatch(/invalid:|LIST_ACTION_INDEX/);
+    }, 20_000);
+
+    it('reads valid, pending and missing statuses without calling them rejected', async () => {
+        renderLists([
+            row({ action_index: 12 }),
+            row({ action_index: 13, status: 'pending' }),
+            row({ action_index: 14, status: undefined }),
+        ]);
+
+        expect(await screen.findByText('Valid')).toBeTruthy();
+        expect(screen.getByText('Pending').getAttribute('title')).toBeNull();
+        expect(screen.getByText('Unavailable').getAttribute('title')).toBeNull();
+        expect(screen.queryByText('Rejected')).toBeNull();
+    }, 20_000);
+});

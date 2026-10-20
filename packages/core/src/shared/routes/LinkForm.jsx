@@ -646,7 +646,7 @@ export function LinkForm({ walletId, onBack }) {
                     <dd className={styles.detailsValue}>
                         Action #{actionIndex1} {'↔'} action #{actionIndex2}
                     </dd>
-                    <dt className={styles.detailsLabel}>Side A decoded</dt>
+                    <dt className={styles.detailsLabel}>First action</dt>
                     <dd className={styles.detailsValue} style={{ fontSize: 'var(--xc-text-xs)', color: 'var(--xc-text-muted)' }}>
                         {preview1?.loading
                             ? 'Loading…'
@@ -656,7 +656,7 @@ export function LinkForm({ walletId, onBack }) {
                                     ? decodePreview(preview1.action)
                                     : '(preview not loaded)'}
                     </dd>
-                    <dt className={styles.detailsLabel}>Side B decoded</dt>
+                    <dt className={styles.detailsLabel}>Second action</dt>
                     <dd className={styles.detailsValue} style={{ fontSize: 'var(--xc-text-xs)', color: 'var(--xc-text-muted)' }}>
                         {preview2?.loading
                             ? 'Loading…'
@@ -889,7 +889,8 @@ function SidePanel({ title, chainIds, chainId, onChainChange, actionIndex, onAct
 function decodePreview(action) {
     if (!action) return '(empty)';
     const a = action.action || action.ACTION;
-    if (!a) return JSON.stringify(action).slice(0, 80);
+    // Never show raw row JSON to a person; a row with no action name says so plainly.
+    if (!a) return 'Action details unavailable';
     // Show the humanized action label, never the raw all-caps opcode.
     const label = actionDisplayLabel(a);
     if (a === 'ISSUE') {

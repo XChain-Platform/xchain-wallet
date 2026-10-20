@@ -21,6 +21,7 @@ import {
     isOpenDispenserSelling,
 } from '../utils/dispenserPricing.js';
 import { actionRowIdentity, explorerPage, uniqueRows } from '../utils/pagedRows.js';
+import { dispenserStatusLabel } from '../utils/dispenserReopen.js';
 import { userFacingMessage } from '../utils/userFacingMessage.js';
 import { t } from '../../i18n/index.js';
 import styles from './ActionsMenu.module.css';
@@ -500,7 +501,7 @@ function ResultsPane({ rowsByChain, searching, onOpenDispenser, oracleFeedsFor, 
 function ResultRow({ row, oracleFeeds, onSelect }) {
     const give = `${formatDecimal(row.give_amount)} ${row.give_tick || '?'}`;
     const price = dispenserFillPriceLabel(row, oracleFeeds);
-    const status = String(flowsLib.dispenserLiveState(row).status || '-');
+    const status = dispenserStatusLabel(flowsLib.dispenserLiveState(row).status) || '-';
     return (
         <Button
             type="button"

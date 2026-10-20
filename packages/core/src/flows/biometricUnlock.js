@@ -304,10 +304,18 @@ async function webauthnRegister({ password, accountName = 'XChain Wallet' }) {
         throw new BiometricPrfUnavailableError();
     }
 
+    // Zero the wrap key, its PRF source and the password bytes even when the
+    // seal throws (prfOutput views the authenticator's buffer, so that is wiped too).
     const key = prfOutput.slice(0, 32);
     const passwordBytes = new TextEncoder().encode(password);
-    const ciphertext = await aeadEncrypt(key, passwordBytes);
-    key.fill(0);
+    let ciphertext;
+    try {
+        ciphertext = await aeadEncrypt(key, passwordBytes);
+    } finally {
+        key.fill(0);
+        prfOutput.fill(0);
+        passwordBytes.fill(0);
+    }
 
     persistRecord({
         credentialId: bytesToBase64(credentialId),
@@ -340,10 +348,18 @@ async function webauthnUnlock() {
         throw new BiometricPrfUnavailableError();
     }
 
+    // Zero the wrap key, its PRF source and the password bytes on every exit,
+    // a failed GCM tag check included.
     const key = prfOutput.slice(0, 32);
-    const plaintext = await aeadDecrypt(key, ciphertext);
-    key.fill(0);
-    return new TextDecoder().decode(plaintext);
+    let plaintext = null;
+    try {
+        plaintext = await aeadDecrypt(key, ciphertext);
+        return new TextDecoder().decode(plaintext);
+    } finally {
+        key.fill(0);
+        prfOutput.fill(0);
+        if (plaintext) plaintext.fill(0);
+    }
 }
 
 /** @type {BiometricProvider} */

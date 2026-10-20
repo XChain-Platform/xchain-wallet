@@ -451,8 +451,12 @@ export function PublishFileForm({ walletId, onBack }) {
     async function handleSubmit(event) {
         event.preventDefault();
         if (!fileMeta || !fromAddress || stage === 'submitting') return;
-        if (!isWatcherMode && !hw && (!signerReady && password.length === 0)) return;
-        if (!isWatcherMode && hw && hwStatus !== 'available') return;
+        // Sign only from the confirm screen, which signs the reviewed PSBT (a
+        // review stage left open across a switch out of watcher mode lands here).
+        if (!isWatcherMode) {
+            setSubmitError('Publishing is signed on the confirm screen. Go back and select Publish file again.');
+            return;
+        }
         setStage('submitting');
         setSubmitError(null);
         try {
@@ -487,22 +491,6 @@ export function PublishFileForm({ walletId, onBack }) {
                         ...(feePerKb != null ? { feePerKb } : {}),
                     },
                 });
-            } else {
-                const base = {
-                    walletId,
-                    chainId,
-                    from,
-                    name: fileMeta.name,
-                    type: fileMeta.type,
-                    title: title.trim() || undefined,
-                    memo: memo.trim() || undefined,
-                    rawData,
-                    payFeeInNativeCoin: nativeFee.flag,
-                    ...(feePerKb != null ? { feePerKb } : {}),
-                };
-                r = hw
-                    ? await messaging.fileActionHw({ ...base, signerId: fromAddress.signerId })
-                    : await messaging.fileAction({ ...base, password });
             }
             setResult(r);
             setPassword('');

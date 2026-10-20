@@ -69,9 +69,10 @@ describe('DispensersList lifecycle badges', () => {
         mount();
         const openRow = await screen.findByRole('button', { name: 'Open JAVIERTEST dispenser #40' });
         const cancelledRow = screen.getByRole('button', { name: 'Open JAVIERTEST dispenser #31' });
-        expect(within(openRow).getByText('open')).toBeInTheDocument();
-        expect(within(cancelledRow).getByText('cancelled')).toBeInTheDocument();
+        expect(within(openRow).getByText('Open')).toBeInTheDocument();
+        expect(within(cancelledRow).getByText('Closed')).toBeInTheDocument();
         expect(screen.queryByText('valid')).not.toBeInTheDocument();
+        expect(screen.queryByText('cancelled')).not.toBeInTheDocument();
     });
 
     it('states escrow on the open row only; a cancelled row holds nothing', async () => {
@@ -88,14 +89,14 @@ describe('DispensersList lifecycle badges', () => {
             .mockResolvedValue({ data: [closing] });
         mount({ getDispensersForSource });
         await act(async () => { await Promise.resolve(); await Promise.resolve(); });
-        expect(screen.getByText('open')).toBeInTheDocument();
+        expect(screen.getByText('Open')).toBeInTheDocument();
 
         await act(async () => {
             await vi.advanceTimersByTimeAsync(20000);
         });
         expect(getDispensersForSource).toHaveBeenCalledTimes(2);
         expect(screen.getByText('Closing')).toBeInTheDocument();
-        expect(screen.queryByText('open')).not.toBeInTheDocument();
+        expect(screen.queryByText('Open')).not.toBeInTheDocument();
         vi.useRealTimers();
     });
 });
@@ -160,7 +161,7 @@ describe('DispensersList closing badge', () => {
     it('makes no cancels read when no row is closing', async () => {
         const lifecycle = vi.fn().mockResolvedValue({ data: [] });
         mount({ lifecycle });
-        expect(await screen.findByText('open')).toBeInTheDocument();
+        expect(await screen.findByText('Open')).toBeInTheDocument();
         expect(lifecycle).not.toHaveBeenCalled();
     });
 });

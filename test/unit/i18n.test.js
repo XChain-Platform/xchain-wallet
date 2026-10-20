@@ -477,6 +477,8 @@ describe('translations', () => {
         expect(duplicateKeyGroups).toEqual([
             // Retrying a desktop update download and retrying a balance load.
             ['desktopUpdate.retry', 'home.retryBalances'],
+            // The History status filter header and the parallel composer's status-pill label prefix.
+            ['history.filters.statusHeader', 'parallelComposer.statusPrefix'],
             ['home.receive', 'uri.intent.receive'],
             // The Send form's network field and the Settings network row.
             ['send.fields.chain', 'settings.network.label'],

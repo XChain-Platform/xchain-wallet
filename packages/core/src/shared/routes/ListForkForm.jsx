@@ -355,9 +355,8 @@ function ListForkFormScreen({ walletId, listRef, onBack, onDone, repointHandlers
     const itemIdentity = useCallback((item) => {
         const value = String(item);
         if (isTick) return value.toLowerCase();
-        const bech32 = /^(?:bc1|tb1|bcrt1|ltc1|tltc1)/i.test(value)
-            && (value === value.toLowerCase() || value === value.toUpperCase());
-        return bech32 ? value.toLowerCase() : value;
+        // Match address case variants with the same rule the recipient parser uses.
+        return airdropLib.bech32IdentityKey(value);
     }, [isTick]);
 
     const currentItemKeys = useMemo(

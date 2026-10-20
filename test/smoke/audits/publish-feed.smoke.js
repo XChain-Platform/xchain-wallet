@@ -944,6 +944,39 @@ function serveTls(dir) {
     assert.match(b.stdout, /^ok {3}rehearsal v0\.333\.1: 0 lane\(s\) probed \+ 1 direct/);
 }
 
+{
+    // The documented `--lane android-direct` still rehearses the full APK a two-APK partial carries.
+    const both = join(work, 'release-partial-both');
+    const keyFile = join(work, 'smoke-key-both.asc');
+    writeFileSync(keyFile, execFileSync('gpg', ['--armor', '--export', SMOKE_FPR],
+        { env: { ...process.env, GNUPGHOME: gnupg } }));
+    const out = join(work, 'REHEARSAL-staged-both.json');
+    const rehearse = join(root, 'tools', 'release', 'rehearse.mjs');
+    const tls = await serveTls(join(work, 'feed-partial-both-staging'));
+    assert.ok(tls, 'openssl is required to stand up the https staging feed this case reads');
+    const r = await runNode(rehearse, ['run', '--feed', `${tls.base}/`, '--tag', TAG,
+        '--channel', 'staging', '--prod-input', both, '--lane', 'android-direct',
+        '--previous-tag', 'v0.333.0', '--prod-feed', tls.base, '--repo', root,
+        '--pinned-key', keyFile, '--pinned-fingerprint', SMOKE_FPR, '--out', out],
+    { NODE_EXTRA_CA_CERTS: tls.cert });
+    tls.server.close();
+
+    const record = JSON.parse(readFileSync(out, 'utf8'));
+    assert.deepEqual(record.lanes, [], '--lane android-direct still probes no desktop lane');
+    assert.deepEqual(record['direct-lanes'].map((l) => l.id), ['android-direct', 'android-full'],
+        `every direct lane the release carries is probed, named or not:\n${r.out}`);
+    for (const direct of record['direct-lanes']) {
+        assert.ok(direct.ok, `${direct.id} passes: ${direct.failed} ${direct.reason}`);
+    }
+    assert.equal(r.status, 0, `the two-APK partial rehearses:\n${r.out}`);
+
+    const k1Shaped = join(work, 'REHEARSAL-staged-both-k1-shaped.json');
+    writeFileSync(k1Shaped, JSON.stringify({ ...record, 'pinned-key-override': null }));
+    const a = spawnSync(process.execPath, [rehearse, 'assert', '--record', k1Shaped,
+        '--tag', TAG, '--prod-input', both], { encoding: 'utf8' });
+    assert.equal(a.status, 0, `one documented command yields a record assert accepts:\n${a.stderr}`);
+}
+
 // ------------- one tag, two staged sets: desktop and APK keep their manifests
 //
 // A release that carries an APK stages TWO separately signed sets for one tag

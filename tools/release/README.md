@@ -553,6 +553,11 @@ The authoritative checklist is §6 of
      --lane android-direct
    ```
 
+   `--lane android-direct` only keeps the desktop lanes out of an APK-only
+   partial. Every direct lane whose APK is in the release directory
+   (`android-direct`, `android-full`) is rehearsed whatever `--lane` names,
+   so the one command covers a release that carries both APKs.
+
    Step 5 then refuses that release without the record, because its lane
    ships the APK: the §7.5 waiver covers only lanes with no electron-updater
    feed AND no artifact a direct lane distributes. Run it without

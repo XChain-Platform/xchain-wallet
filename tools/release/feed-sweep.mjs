@@ -164,8 +164,12 @@ export function parseJsonPointerVersion(text) {
     return typeof parsed.version === 'string' ? parsed.version.trim() : '';
 }
 
-/** The client's cap on the whole feed body (directUpdateCheck.js MAX_FEED_BYTES). */
-const DIRECT_FEED_MAX_CHARS = 4096;
+/**
+ * The client's cap on the whole feed body, in UTF-8 bytes: the Android bridge
+ * (XChainVaultPlugin.java UPDATE_FEED_MAX_BYTES) drops a longer body before
+ * directUpdateCheck.js applies its own MAX_FEED_BYTES to the decoded text.
+ */
+const DIRECT_FEED_MAX_BYTES = 4096;
 
 /** The client's version rule (directUpdateCheck.js SEMVER_RE), verbatim. */
 const DIRECT_SEMVER_RE = /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$/;
@@ -183,18 +187,19 @@ const DIRECT_SEMVER_RE = /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$/;
  * `test/smoke/audits/feed-sweep.smoke.js`, which drives BOTH functions
  * over one set of bodies wherever both files exist.
  *
- * The size is measured the client's way - `text.length` on the decoded
- * body, not a stat of the file - because that is the comparison
- * `checkForDirectUpdate` actually makes before it parses anything.
+ * The size is measured in UTF-8 bytes of the body, because the only lane
+ * that self-updates is Android, whose native bridge caps the bytes it reads
+ * before `checkForDirectUpdate` runs; for any string that count is at least
+ * the `text.length` the JS check compares, so the byte rule covers both.
  *
  * @param {string} text
  * @returns {string} the reason, or '' when the client accepts it
  */
 export function directFeedRejection(text) {
     if (typeof text !== 'string') return 'not text';
-    if (text.length > DIRECT_FEED_MAX_CHARS) {
-        return `${text.length} characters, over the client's `
-            + `${DIRECT_FEED_MAX_CHARS}-character cap`;
+    const bytes = Buffer.byteLength(text, 'utf8');
+    if (bytes > DIRECT_FEED_MAX_BYTES) {
+        return `${bytes} bytes, over the client's ${DIRECT_FEED_MAX_BYTES}-byte cap`;
     }
     let parsed;
     try { parsed = JSON.parse(text); } catch { return 'not parseable as JSON'; }

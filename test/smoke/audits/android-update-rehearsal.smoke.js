@@ -259,6 +259,18 @@ const probe = (feedDir, over = {}) => {
 }
 
 {
+    // Over the cap in UTF-8 bytes while under it in characters: the Android
+    // bridge drops it by bytes, so the rehearsal must count bytes too.
+    const body = `${JSON.stringify({ version: VERSION, note: 'é'.repeat(2100) })}\n`;
+    assert.ok(body.length <= 4096 && Buffer.byteLength(body, 'utf8') > 4096,
+        'the fixture sits between the character and the byte reading of the cap');
+    const feed = makeFeed('feed-oversized-multibyte', { tamper: (s) => { s.feed = body; } });
+    const r = await probe(feed.dir);
+    assert.equal(r.failed, 'feed');
+    assert.match(r.reason, /reads at most/);
+}
+
+{
     // The notice points at a download that is not there. The feed is
     // perfect and the lane is still broken, which is why the destination is
     // part of the rehearsal rather than assumed from the feed passing.
@@ -441,6 +453,17 @@ const check = (over, releaseArtifacts) => assertRecord({
     const fullOk = { id: 'android-full', ok: true, checks: {} };
     const onlyStore = check({ lanes: [], swaps: [] }, twoApks);
     assert.match(onlyStore.problems.join(' '), /no result for lane android-full/);
+    // The remedy is one command naming every missing lane, since `run` rewrites the whole record.
+    const neither = check({ lanes: [], swaps: [], 'direct-lanes': [] }, twoApks);
+    for (const id of ['android-direct', 'android-full']) {
+        assert.match(neither.problems.join(' '), new RegExp(`no result for lane ${id}`));
+    }
+    assert.match(neither.problems.join(' '), /run rehearse\.mjs run --lane android-direct --lane android-full\./);
+    assert.ok(!neither.problems.join(' ').includes('run rehearse.mjs run --lane android-full.'),
+        'no per-lane remedy that would rewrite the record without the other lane');
+    // A release that also ships desktop artifacts is re-run with no --lane, or the desktop lanes drop out.
+    const mixed = check({ 'direct-lanes': [] }, [...twoApks, `xchain-wallet-setup-${VERSION}-x64.exe`]);
+    assert.match(mixed.problems.join(' '), /run rehearse\.mjs run with no --lane/);
     assert.ok(check({ lanes: [], swaps: [], 'direct-lanes': [...okDirect, fullOk] }, twoApks).ok);
     const strayFail = check({ lanes: [], swaps: [], 'direct-lanes': [...okDirect, { ...fullOk, ok: false }] },
         [APK, AAB]);

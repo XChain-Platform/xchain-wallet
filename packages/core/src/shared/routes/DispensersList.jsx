@@ -24,6 +24,7 @@ import { dispenserRateLabel } from '../utils/dispenserPricing.js';
 import {
     CHAIN_TIME_REFRESH_MS, chainClockFromTipRead, dispenserCancelTimestamp, dispenserCloseEta,
 } from '../utils/dispenserCloseWindow.js';
+import { dispenserStatusLabel } from '../utils/dispenserReopen.js';
 import { startVisibleInterval } from '../utils/visibleInterval.js';
 import styles from './ActionsMenu.module.css';
 import local from './DispensersList.module.css';
@@ -496,7 +497,7 @@ function DispenserRow({ row, label, oracleFeeds, cancelTimestamp, nowMs, chainCl
         : null;
     const badge = status === 'cancelling'
         ? (closeEta ? `Closing · ${closeEta.shortCountdown}` : 'Closing')
-        : status;
+        : dispenserStatusLabel(status);
     return (
         <ListRow
             type="button"

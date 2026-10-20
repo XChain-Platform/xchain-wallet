@@ -205,6 +205,17 @@ describe('PC-38 deployChunkedRun', () => {
         }
     });
 
+    it('asks for the built-transaction check on every carrier and the assembler', async () => {
+        okSubmit();
+        const { opts } = baseOpts();
+        await deployChunkedRun(opts);
+        expect(submitAction.mock.calls).toHaveLength(4);
+        for (const call of submitAction.mock.calls) {
+            expect(call[0].verifyBuiltTx).toBe(true);
+            expect(call[0].prebuiltPsbt).toBeUndefined();
+        }
+    });
+
     it('persists each confirmed chunk BEFORE the next leg, so a crash loses nothing', async () => {
         const vault = fakeVault();
         const putsAtSubmit = [];
@@ -331,6 +342,8 @@ describe('PC-38 deployChunkedRun', () => {
         expect(sent).toHaveLength(2);
         expect([sent[0].VERSION, sent[0].CHUNK_INDEX]).toEqual(['4', '1']);
         expect(sent[1].VERSION).toBe('2');
+        // A resumed run's re-sent legs are checked like a fresh run's.
+        expect(submitAction.mock.calls.map((c) => c[0].verifyBuiltTx)).toEqual([true, true]);
     });
 });
 

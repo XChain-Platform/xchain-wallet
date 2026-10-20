@@ -20,22 +20,23 @@ const ADDRESS = {
     signerId: 'signer-1',
 };
 const LITECOIN_ADDRESS = 'ltc1qw508d6qejxtdg4y5r3zarvary0c5xw7kgmn4n9';
+const LITECOIN_REGTEST_ADDRESS = 'rltc1qmr46t4ca5wh35k6mczdzrkepqw2d8ne92hnush';
 
-function mountFork({ type = '1', items = ['KEEP', 'REMOVE'] } = {}) {
+function mountFork({ type = '1', items = ['KEEP', 'REMOVE'], chainId = CHAIN, owner = ADDRESS } = {}) {
     const row = {
         action_index: 2700,
         type,
-        source: ADDRESS.address,
+        source: owner.address,
         list: items,
         state: {
             edit_resolution_active: true,
             current_list: items,
-            owner: ADDRESS.address,
+            owner: owner.address,
         },
     };
     const target = {
-        getAddressesByChain: vi.fn().mockResolvedValue({ [CHAIN]: [ADDRESS] }),
-        getActiveAddresses: vi.fn().mockResolvedValue({ [CHAIN]: { id: ADDRESS.id } }),
+        getAddressesByChain: vi.fn().mockResolvedValue({ [chainId]: [owner] }),
+        getActiveAddresses: vi.fn().mockResolvedValue({ [chainId]: { id: owner.id } }),
         getSettings: vi.fn().mockResolvedValue({ walletMode: 'full', activeNetwork: 'mainnet' }),
         signerReady: vi.fn().mockResolvedValue({ ready: true }),
         getSignerStatus: vi.fn().mockResolvedValue({ status: 'unlocked' }),
@@ -53,12 +54,12 @@ function mountFork({ type = '1', items = ['KEEP', 'REMOVE'] } = {}) {
             <ListForkForm
                 walletId="wallet-1"
                 listRef={{
-                    chainId: CHAIN,
+                    chainId,
                     actionIndex: '2700',
                     type,
                     items,
                     editResolutionActive: true,
-                    source: ADDRESS.address,
+                    source: owner.address,
                     parentIndex: null,
                 }}
                 onBack={() => {}}
@@ -111,6 +112,18 @@ describe('ListForkForm addition validation', () => {
         fireEvent.click(screen.getByRole('button', { name: 'Review' }));
         expect(await screen.findByText('Remove 1 invalid address before reviewing.')).toBeTruthy();
         expect(screen.queryByRole('button', { name: 'Publish add' })).toBeNull();
+    });
+
+    it('counts a Litecoin regtest member stored in uppercase as already on the list', async () => {
+        const owner = { ...ADDRESS, id: 'litecoin-0', address: LITECOIN_REGTEST_ADDRESS };
+        const stored = LITECOIN_REGTEST_ADDRESS.toUpperCase();
+        mountFork({ type: '2', items: [stored], chainId: 'litecoin-regtest', owner });
+        fireEvent.change(await screen.findByLabelText(/Add addresses/), {
+            target: { value: LITECOIN_REGTEST_ADDRESS },
+        });
+
+        expect(await screen.findByText(/0 to add · 0 to remove/)).toBeTruthy();
+        expect(document.body.textContent).toMatch(/1 already on the list/);
     });
 });
 

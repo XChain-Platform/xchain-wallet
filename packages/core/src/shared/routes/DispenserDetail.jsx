@@ -47,7 +47,13 @@ import styles from './IssueTokenForm.module.css';
 import local from './DispenserDetail.module.css';
 import { externalIndexOf, preferredSourceId } from '../addressSelection.js';
 import { refillsUsed, refillCeilingMessage } from '../utils/dispenserRefills.js';
-import { isTerminalDispenserStatus, reopenTermsFrom, terminalDispenserNotice } from '../utils/dispenserReopen.js';
+import {
+    dispenserStatusLabel,
+    isTerminalDispenserStatus,
+    ownerActionRefusal,
+    reopenTermsFrom,
+    terminalDispenserNotice,
+} from '../utils/dispenserReopen.js';
 import {
     CHAIN_TIME_REFRESH_MS, chainClockFromTipRead, dispenserCancelTimestamp, dispenserCloseEta, shortAddress,
 } from '../utils/dispenserCloseWindow.js';
@@ -1302,7 +1308,7 @@ export function DispenserDetail({ walletId, chainId, actionIndex, onBack, onCanc
 
     async function verifyOwnerActionOpen(setError, action) {
         if (!isOpen) {
-            setError(`This dispenser is ${liveStatus || 'not open'} and cannot accept another ${action}.`);
+            setError(ownerActionRefusal(liveStatus, action));
             return false;
         }
         if (isDemoWallet) return true;
@@ -1311,9 +1317,9 @@ export function DispenserDetail({ walletId, chainId, actionIndex, onBack, onCanc
             const freshStatus = flowsLib.dispenserLiveState(fresh).status;
             if (freshStatus === 'open') return true;
             if (fresh) setDispenser(fresh);
-            setError(`This dispenser is ${freshStatus || 'not open'} and cannot accept another ${action}.`);
+            setError(ownerActionRefusal(freshStatus, action));
         } catch {
-            setError(`Could not verify that this dispenser is still open. Try the ${action} again.`);
+            setError(`Could not verify that this dispenser is still open. Try ${action === 'close' ? 'closing' : 'refilling'} it again.`);
         }
         return false;
     }
@@ -2062,7 +2068,7 @@ export function DispenserDetail({ walletId, chainId, actionIndex, onBack, onCanc
                 ) : null}
                 <dt className={styles.detailsLabel}>Status</dt>
                 <dd className={styles.detailsValue}>
-                    {isClosing ? 'closing (1-hour window)' : detailText(liveStatus)}
+                    {isClosing ? 'Closing (1-hour window)' : detailText(dispenserStatusLabel(liveStatus))}
                 </dd>
                 {currentExpiration ? (
                     <>

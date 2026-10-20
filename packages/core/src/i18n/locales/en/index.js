@@ -93,6 +93,8 @@ export const en = {
         '{actions, plural, one {# action} other {# actions}} across {networks, plural, one {# network} other {# networks}}',
     'parallelComposer.noRollback':
         "Actions on different networks aren't settled as one unit; only an individual swap completes together.",
+    'parallelComposer.statusPrefix': 'Status',
+    'parallelComposer.rowStatusPrefix': 'Row {row} status',
     'dispenserExplorer.searchHint.token': 'Ticker name, such as MYTOKEN, or a token reference from the explorer.',
     'dispenserExplorer.searchHint.address': 'Dispenser address or source address.',
     // AmountField appends the unit in brackets, so these labels carry none.
@@ -1625,6 +1627,7 @@ export const en = {
     'settings.fees.enterTheRateIn': 'Enter the rate in {unit}.',
     'settings.fees.customFeeRate2': '{displayName} custom fee rate',
     'settings.fees.allowFeeBumpReplaceBy': 'Allow fee bump (Replace-by-Fee)',
+    'settings.fees.allowFeeBumpReplaceBy2': '{displayName} allow fee bump (Replace-by-Fee)',
     'settings.fees.keepThisOnSoYou':
         'Keep this on so you can raise the fee later to speed up a stuck send on this network.',
     'settings.fees.feeBumpingIsNotSupported': "Fee bumping isn't supported on {displayName}.",

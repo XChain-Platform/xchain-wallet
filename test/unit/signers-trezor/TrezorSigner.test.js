@@ -168,6 +168,26 @@ describe('TrezorSigner.getStatus', () => {
         });
         expect(await s.getStatus()).toBe('disconnected');
     });
+
+    it.each(['bitcoin-testnet', 'bitcoin-regtest', 'litecoin-testnet', 'dogecoin-testnet'])(
+        'returns "unsupported-network" for %s, a chain the Trezor path cannot sign on',
+        async (chainId) => {
+            expect(await makeSigner().getStatus({ chainId })).toBe('unsupported-network');
+        },
+    );
+
+    it('returns "available" for every supported chain and when no chainId is given', async () => {
+        const s = makeSigner();
+        for (const chainId of ['bitcoin-mainnet', 'litecoin-mainnet', 'dogecoin-mainnet']) {
+            expect(await s.getStatus({ chainId })).toBe('available');
+        }
+        expect(await s.getStatus({})).toBe('available');
+    });
+
+    it('reports the device state before the network gate', async () => {
+        const s = makeSigner({ getFeatures: vi.fn().mockRejectedValue(new Error('disconnected')) });
+        expect(await s.getStatus({ chainId: 'bitcoin-testnet' })).toBe('disconnected');
+    });
 });
 
 describe('TrezorSigner hardware failures', () => {

@@ -65,6 +65,7 @@ import { classifyTickItems } from '../utils/listTickItems.js';
 import { currentListItems } from '../../flows/listMembership.js';
 import { MEMO_HINT } from '../utils/memoLimit.js';
 import { listLabel } from '../utils/listLabel.js';
+import { listStatusText } from '../utils/listItemStatusText.js';
 import { readFailureMessage } from '../utils/readFailureMessage.js';
 import { ADDRESS_REFERENCE_ITEM_MESSAGE, addressReferenceNote } from '../utils/addressReferenceCopy.js';
 import {
@@ -241,7 +242,7 @@ export function AirdropForm({ walletId, resumeId = null, onBack, initialChainId,
     // user was shown is wrong. `null` means "not read yet / read failed",
     // which leaves the pre-existing behaviour untouched.
     const [listReconcile, setListReconcile] = useState(
-        /** @type {{ storedCount: number, expectedCount: number, missing: string[] } | null} */
+        /** @type {{ storedCount: number, expectedCount: number, missing: string[], stored: unknown[] } | null} */
         (null),
     );
     const [airdropTxid, setAirdropTxid] = useState(/** @type {string | null} */ (null));
@@ -569,7 +570,8 @@ export function AirdropForm({ walletId, resumeId = null, onBack, initialChainId,
                 if (cancelled) return;
                 // Reconcile against what the airdrop will resolve the list to
                 const stored = currentListItems(row) || [];
-                setListReconcile(airdropLib.reconcileStoredList(submitted, stored));
+                // Keep the stored members too: the token's access lists are matched against them.
+                setListReconcile({ ...airdropLib.reconcileStoredList(submitted, stored), stored });
             })
             .catch(() => {
                 // Non-fatal: a failed read must not block a paid-for airdrop.
@@ -644,6 +646,51 @@ export function AirdropForm({ walletId, resumeId = null, onBack, initialChainId,
         tick: token.trim().toUpperCase(),
         skip: !token.trim(),
     });
+
+    // The network pays only the addresses the dropped token's own allow and
+    // block lists admit, so read their members for the review count. A failed
+    // read keeps the unfiltered count and says the payout may be smaller.
+    const accessAllow = dropInfo?.allowList ?? null;
+    const accessBlock = dropInfo?.blockList ?? null;
+    const [accessLists, setAccessLists] = useState(
+        /** @type {{ loading: boolean, allow: unknown[] | null, block: unknown[] | null, error: string | null } | null} */
+        (null),
+    );
+    useEffect(() => {
+        if (!chainId || (!accessAllow && !accessBlock)) {
+            setAccessLists(null);
+            return undefined;
+        }
+        let cancelled = false;
+        const readMembers = (actionIndex) => {
+            if (!actionIndex) return Promise.resolve(null);
+            if (typeof messaging.getListByActionIndex !== 'function') {
+                return Promise.reject(new Error('list reads are not available'));
+            }
+            return messaging.getListByActionIndex({ chainId, actionIndex }).then((row) => {
+                // Count only a valid plain address list (a union row carries no members of its own).
+                if (Number(row?.type) === 3) throw new Error('It combines other lists, which this wallet cannot count.');
+                if (Number(row?.type) !== 2) throw new Error('It is not an address list.');
+                if (row.status != null && row.status !== 'valid') throw new Error('The list it names is not valid.');
+                const members = currentListItems(row);
+                if (!Array.isArray(members)) throw new Error('the list has no member data');
+                return members;
+            });
+        };
+        setAccessLists({ loading: true, allow: null, block: null, error: null });
+        Promise.all([readMembers(accessAllow), readMembers(accessBlock)])
+            .then(([allow, block]) => {
+                if (!cancelled) setAccessLists({ loading: false, allow, block, error: null });
+            })
+            .catch((err) => {
+                if (cancelled) return;
+                setAccessLists({
+                    loading: false, allow: null, block: null,
+                    error: readFailureMessage(err, 'read this token\'s allow or block list'),
+                });
+            });
+        return () => { cancelled = true; };
+    }, [chainId, accessAllow, accessBlock, messaging]);
 
     const chainsWithAddresses = addressesByChain ? Object.keys(addressesByChain) : [];
     const coinTicker = descriptor ? PROTOCOL_COIN_TICKER[descriptor.coin] : '';
@@ -742,13 +789,24 @@ export function AirdropForm({ walletId, resumeId = null, onBack, initialChainId,
     // means the count is a preview, never a promise (see the file-level
     // doc comment for the full honesty rationale).
     const recipientPreview = useMemo(() => {
+        // Count only the listed addresses the token's access lists admit, once both are read.
+        const addressPreview = (listed, unfilteredCount) => {
+            const ready = accessLists && !accessLists.loading && !accessLists.error;
+            const { approved, excluded } = ready
+                ? airdropLib.applyTokenAccessLists(listed, accessLists)
+                : { approved: null, excluded: [] };
+            const count = approved ? approved.length : unfilteredCount;
+            return {
+                kind: 'address', count, listedCount: unfilteredCount, loading: false, error: null, volatile: false, excluded,
+            };
+        };
         if (sourceMode === 'paste') {
             // Once the published list has been read back, the chain's
             // count is the truth - it is what the AIRDROP will actually pay
             // and be charged for. Before that (and if the read failed) fall
             // back to what was submitted.
             const count = listReconcile ? listReconcile.storedCount : recipients.valid.length;
-            return { kind: 'address', count, loading: false, error: null, volatile: false };
+            return addressPreview(listReconcile ? listReconcile.stored : recipients.valid, count);
         }
         if (sourceMode === 'holders') {
             return { kind: 'tick', count: holderPreview.total, loading: holderPreview.loading, error: holderPreview.error, volatile: true };
@@ -761,20 +819,49 @@ export function AirdropForm({ walletId, resumeId = null, onBack, initialChainId,
             return { kind: null, count: null, loading: false, error: existingListDetail.error, volatile: false };
         }
         if (existingListDetail.kind === 'address') {
-            return { kind: 'address', count: existingListDetail.items.length, loading: false, error: null, volatile: false };
+            return addressPreview(existingListDetail.items, existingListDetail.items.length);
         }
         return { kind: 'tick', count: holderPreview.total, loading: holderPreview.loading, error: holderPreview.error, volatile: true };
-    }, [sourceMode, recipients.valid.length, holderPreview, existingListDetail, listReconcile]);
+    }, [sourceMode, recipients.valid, holderPreview, existingListDetail, listReconcile, accessLists]);
 
-    // Exact decimal math, not a float product. This number both
-    // prices the preview and gates submit, so an ulp of drift is the
-    // difference between a payable drop and one the chain rejects.
+    // Say who the token's access lists keep out of this airdrop, or that they could not be read.
+    const excludedRecipients = recipientPreview.excluded || [];
+    const accessListNotice = !accessLists || accessLists.loading
+        ? null
+        : accessLists.error
+            ? `${accessLists.error} This token has an allow or block list, so the network may pay `
+                + 'fewer addresses than shown here.'
+            : recipientPreview.kind === 'tick'
+                ? 'This token has an allow or block list, and the network pays no holder it excludes, '
+                    + 'so fewer addresses may be paid than counted here.'
+                : excludedRecipients.length > 0
+                    ? `This token's allow or block list excludes ${excludedRecipients.length} of these `
+                        + 'addresses, and the network pays '
+                        + `${excludedRecipients.length === 1 ? 'it' : 'them'} nothing. As the lists stand now, this airdrop pays `
+                        + `${recipientPreview.count}. The lists can change before the airdrop confirms, so Max and the `
+                        + `balance check still cover all ${recipientPreview.listedCount} listed addresses. The excluded `
+                        + `${excludedRecipients.length === 1 ? 'address' : 'addresses'}: ${excludedRecipients.join(', ')}.`
+                    : null;
+
+    // Exact decimal math, not a float product. This number prices the
+    // preview and its funded twin below gates submit, so an ulp of drift is
+    // the difference between a payable drop and one the chain rejects.
     const totalDistribution = useMemo(() => {
         const amt = String(amountPer).trim();
         if (!(Number(amt) > 0)) return null;
         if (recipientPreview.count === null || recipientPreview.count === undefined) return null;
         return multiplyDecimal(amt, String(recipientPreview.count));
     }, [amountPer, recipientPreview.count]);
+
+    // Size Max and the balance check on every listed address, not only the ones the
+    // token's access lists admit now (those lists can widen before the airdrop confirms).
+    const fundedCount = recipientPreview.listedCount ?? recipientPreview.count;
+    const fundedDistribution = useMemo(() => {
+        const amt = String(amountPer).trim();
+        if (!(Number(amt) > 0)) return null;
+        if (fundedCount === null || fundedCount === undefined) return null;
+        return multiplyDecimal(amt, String(fundedCount));
+    }, [amountPer, fundedCount]);
 
     // (E2E D-86, second form): the amount field is PER RECIPIENT,
     // so filling the whole balance into it proposes a payout of balance x
@@ -790,18 +877,18 @@ export function AirdropForm({ walletId, resumeId = null, onBack, initialChainId,
     const maxPerRecipient = useMemo(
         () => perUnitMax({
             balance: tickAmtBalance,
-            eligibleUnits: recipientPreview.count != null ? String(recipientPreview.count) : null,
+            eligibleUnits: fundedCount != null ? String(fundedCount) : null,
             divisibility: dropInfo?.divisibility ?? null,
         }),
-        [tickAmtBalance, recipientPreview.count, dropInfo],
+        [tickAmtBalance, fundedCount, dropInfo],
     );
     const maxPayable = maxPerRecipient !== null && Number(maxPerRecipient) > 0;
     const roundingRemainder = useMemo(() => {
         if (!maxPayable || compareDecimal(amountPer, maxPerRecipient) !== 0) return null;
-        if (totalDistribution === null || tickAmtBalance === null) return null;
-        const remainder = subtractDecimalStrings(tickAmtBalance, totalDistribution);
+        if (fundedDistribution === null || tickAmtBalance === null) return null;
+        const remainder = subtractDecimalStrings(tickAmtBalance, fundedDistribution);
         return compareDecimal(remainder, '0') === 1 ? remainder : null;
-    }, [amountPer, maxPayable, maxPerRecipient, tickAmtBalance, totalDistribution]);
+    }, [amountPer, maxPayable, maxPerRecipient, tickAmtBalance, fundedDistribution]);
 
     const flowNetworkFee = useMemo(() => {
         if (!feeEstimate?.coinAmount) return null;
@@ -883,10 +970,11 @@ export function AirdropForm({ walletId, resumeId = null, onBack, initialChainId,
         // screens and one broadcast LIST later. Only fires when both the
         // projected total and the balance are known, so an explorer
         // hiccup leaves the form ungated.
-        if (totalDistribution && exceedsBalance(totalDistribution, tickAmtBalance)) {
+        if (fundedDistribution && exceedsBalance(fundedDistribution, tickAmtBalance)) {
             const TICK = token.trim().toUpperCase();
+            const lead = fundedCount === recipientPreview.count ? 'This pays' : 'Paying every listed address takes';
             setFormError(
-                `This pays ~${formatWithThousands(totalDistribution)} ${TICK} in total, more than the `
+                `${lead} ~${formatWithThousands(fundedDistribution)} ${TICK} in total, more than the `
                 + `${formatWithThousands(tickAmtBalance)} ${TICK} this address holds.`
                 + (maxPayable ? ` Up to ${formatWithThousands(maxPerRecipient)} each is payable.` : ''),
             );
@@ -1498,6 +1586,9 @@ export function AirdropForm({ walletId, resumeId = null, onBack, initialChainId,
                         distribution and protocol fee remain estimates.
                     </p>
                 ) : null}
+                {accessListNotice ? (
+                    <FormNotice variant="warning" role="alert">{accessListNotice}</FormNotice>
+                ) : null}
                 {holderPreview.failures.length > 0 ? (
                     <Button
                         type="button"
@@ -1643,9 +1734,12 @@ export function AirdropForm({ walletId, resumeId = null, onBack, initialChainId,
                         {`The published list holds ${listReconcile.storedCount} of the ${listReconcile.expectedCount} addresses you submitted: `
                             + `${listReconcile.missing.length} ${listReconcile.missing.length === 1 ? 'was' : 'were'} rejected by the network, most often because `
                             + `${listReconcile.missing.length === 1 ? 'it does' : 'they do'} not belong to the active network. This airdrop pays `
-                            + `${listReconcile.storedCount}. The rejected ${listReconcile.missing.length === 1 ? 'address' : 'addresses'}: `
+                            + `${recipientPreview.count ?? listReconcile.storedCount}. The rejected ${listReconcile.missing.length === 1 ? 'address' : 'addresses'}: `
                             + `${listReconcile.missing.join(', ')}.`}
                     </FormNotice>
+                ) : null}
+                {accessListNotice ? (
+                    <FormNotice variant="warning" role="alert">{accessListNotice}</FormNotice>
                 ) : null}
                 {/* PC-11 holder-snapshot honesty: a TICK list's holder set
                     binds at AIRDROP execution (when it confirms on-chain),
@@ -2241,7 +2335,7 @@ function ExistingListPickerScreen({ variant, messaging, chainId, addresses, onSe
         <ul style={{ listStyle: 'none', padding: 0, margin: 0 }}>
             {rows.map((row) => {
                 const isTick = String(row.type) === '1';
-                const status = String(row.status || '?');
+                const statusWhy = row.status ? listStatusText(row.status) : 'status unknown';
                 return (
                     <li
                         key={String(row.action_index)}
@@ -2254,7 +2348,7 @@ function ExistingListPickerScreen({ variant, messaging, chainId, addresses, onSe
                             onClick={() => onSelect(row)}
                         >
                             {isTick ? 'Token' : 'Address'} list #{row.action_index ?? '?'}
-                            {status !== 'valid' ? ` (${status})` : ''}
+                            {statusWhy ? ` (${statusWhy})` : ''}
                         </Button>
                     </li>
                 );

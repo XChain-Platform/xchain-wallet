@@ -11,6 +11,7 @@ import { describe, expect, it, vi } from 'vitest';
 import Module, { createRequire } from 'node:module';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { isValidSignerBridgeMessage } from '../../../packages/desktop/main/security.js';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const preloadPath = resolve(here, '../../../packages/desktop/preload.cjs');
@@ -175,5 +176,32 @@ describe('desktop preload API', () => {
 
         expect(ipcRenderer.on).toHaveBeenCalledTimes(4);
         expect(ipcRenderer.removeListener).toHaveBeenCalledTimes(4);
+    });
+
+    it('accepts exactly the signer frames main accepts, so no frame is dropped silently', () => {
+        const postMessage = loadPreload().worlds.get('xchainWalletSignerBridge').postMessage;
+        const err = { name: 'Error', message: 'no' };
+        const frames = [
+            { kind: 'register', signerIds: ['signer-1'] },
+            { kind: 'unregister', signerIds: [] },
+            { kind: 'register', signerIds: ['x'.repeat(256)] },
+            { kind: 'register', signerIds: ['x'.repeat(257)] },
+            { kind: 'register', signerIds: [''] },
+            { kind: 'response', reqId: 1, ok: true, result: 'available' },
+            { kind: 'response', reqId: 1, ok: true, result: null },
+            { kind: 'response', reqId: 1, ok: true },
+            { kind: 'response', reqId: 1, ok: true, result: 1, error: err },
+            { kind: 'response', reqId: 1, ok: false, error: err },
+            { kind: 'response', reqId: 1, ok: false, error: err, result: 1 },
+            { kind: 'response', reqId: 1, ok: false, error: { name: '', message: 'no' } },
+            { kind: 'response', reqId: 1, ok: false, error: { name: 'Error', message: '' } },
+            { kind: 'response', reqId: 0, ok: true, result: 1 },
+            { kind: 'unknown' },
+        ];
+        for (const frame of frames) {
+            let preloadAccepts = true;
+            try { postMessage(frame); } catch { preloadAccepts = false; }
+            expect(preloadAccepts, JSON.stringify(frame).slice(0, 80)).toBe(isValidSignerBridgeMessage(frame));
+        }
     });
 });

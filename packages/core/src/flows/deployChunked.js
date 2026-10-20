@@ -727,6 +727,9 @@ export async function deployChunkedRun(opts) {
             }
         },
         onBroadcastFailure: opts.onBroadcastFailure,
+        // Check each leg's PSBT against this action before signing: the user
+        // approved a summary of the run before any leg's bytes existed.
+        verifyBuiltTx: true,
     });
 
     // Phase 1: carriers, in order, each indexed before the next.

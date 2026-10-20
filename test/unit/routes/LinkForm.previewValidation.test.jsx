@@ -110,4 +110,35 @@ describe('LinkForm action preview validation', () => {
         expect(restored[1]).toHaveValue('20');
         expect(screen.queryByRole('button', { name: 'Back' })).toBeNull();
     });
+
+    it('labels the review previews in plain words and never shows raw action JSON', async () => {
+        const btc = address('btc-1', BTC);
+        const ltc = address('ltc-1', LTC);
+        const client = {
+            getAddressesByChain: vi.fn().mockResolvedValue({ [BTC]: [btc], [LTC]: [ltc] }),
+            getActiveAddresses: vi.fn().mockResolvedValue({ [BTC]: btc, [LTC]: ltc }),
+            getSettings: vi.fn().mockResolvedValue({ walletMode: 'watcher' }),
+            signerReady: vi.fn().mockResolvedValue({ ready: false }),
+            getActionByIndex: vi.fn(({ chainId }) => Promise.resolve(chainId === BTC
+                ? { action: 'SEND', tick: 'TOKEN', amount: '1' }
+                : { tx_hash: 'abc123', block_index: 9 })),
+        };
+
+        render(
+            <MessagingProvider shell="web" messaging={client}>
+                <LinkForm walletId="w" onBack={() => {}} />
+            </MessagingProvider>,
+        );
+
+        const inputs = await screen.findAllByLabelText('Action to reference');
+        fireEvent.change(inputs[0], { target: { value: '10' } });
+        fireEvent.change(inputs[1], { target: { value: '20' } });
+        await waitFor(() => expect(screen.getByRole('button', { name: 'Review' })).toBeEnabled());
+        fireEvent.click(screen.getByRole('button', { name: 'Review' }));
+
+        expect(await screen.findByText('First action')).toBeInTheDocument();
+        expect(screen.getByText('Second action')).toBeInTheDocument();
+        expect(screen.getByText('Action details unavailable')).toBeInTheDocument();
+        expect(document.body.textContent).not.toMatch(/Side [AB] decoded|tx_hash/);
+    });
 });

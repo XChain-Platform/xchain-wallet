@@ -83,6 +83,52 @@ export function terminalDispenserNotice(status, { canReopen }) {
         : `${notice.what} ${notice.rule}.`;
 }
 
+// The word a badge or status row shows for each lifecycle status. `valid` is what an
+// explorer without the lifecycle column reports, which says nothing about being open.
+const STATUS_LABELS = {
+    open: 'Open',
+    cancelling: 'Closing',
+    empty: 'Sold out',
+    complete: 'Sold out',
+    max_dispenses_reached: 'Limit reached',
+    cancelled: 'Closed',
+    closed: 'Closed',
+    expired: 'Expired',
+    valid: 'Unknown',
+};
+
+/**
+ * The plain word for a dispenser's lifecycle status, never the indexer's raw token.
+ *
+ * @param {string} status  dispenserLiveState(...).status
+ * @returns {string}  empty when there is no status at all
+ */
+export function dispenserStatusLabel(status) {
+    const key = String(status || '');
+    if (!key) return '';
+    return Object.prototype.hasOwnProperty.call(STATUS_LABELS, key) ? STATUS_LABELS[key] : 'Unknown';
+}
+
+/**
+ * Why an owner's refill or close was refused because the dispenser is not open.
+ *
+ * @param {string} status  the status that refused it
+ * @param {'refill' | 'close'} action
+ * @returns {string}
+ */
+export function ownerActionRefusal(status, action) {
+    const key = String(status || '');
+    const verb = action === 'close' ? 'closed' : 'refilled';
+    if (key === 'cancelling') {
+        return action === 'close'
+            ? 'This dispenser is already closing.'
+            : "This dispenser is closing, so it can't be refilled.";
+    }
+    const notice = Object.prototype.hasOwnProperty.call(NOTICES, key) ? NOTICES[key] : null;
+    if (notice) return `${notice.what} It can't be ${verb}.`;
+    return `This dispenser isn't open, so it can't be ${verb}.`;
+}
+
 // Explorer amounts arrive as fixed-scale decimals ("25.00000000"). The form
 // validates fiat amounts to two places, so the padding would be refused there.
 function plainDecimal(v) {

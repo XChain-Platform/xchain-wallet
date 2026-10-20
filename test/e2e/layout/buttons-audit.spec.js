@@ -10,7 +10,7 @@
 
 import { resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { test } from '../fixtures/wallet.js';
+import { expect, test } from '../fixtures/wallet.js';
 import { createSweep } from './sweep.js';
 
 const OUT_ROOT = resolve(
@@ -62,11 +62,13 @@ export function readFocused() {
 
 test('buttons and controls audit', async ({ page }, testInfo) => {
     test.setTimeout(45 * 60 * 1000);
+    const audited = [];
     const sweep = createSweep(page, {
         venue: testInfo.project.name,
         outDir: resolve(OUT_ROOT, testInfo.project.name),
-        onScreen: async (currentPage) => {
+        onScreen: async (currentPage, label) => {
             const controls = await currentPage.evaluate(auditControls);
+            audited.push({ label, controls: controls.length });
             await currentPage.evaluate(() => document.activeElement?.blur?.());
             const focus = [];
             for (let i = 0; i < 25; i += 1) {
@@ -80,4 +82,7 @@ test('buttons and controls audit', async ({ page }, testInfo) => {
     });
     await sweep.onboarding({ demo: true });
     await sweep.unlocked();
+    // Check harness coverage, not findings: the audit must have read a screen that shows controls.
+    expect(audited.length, 'harness coverage: the audit read no screen').toBeGreaterThan(0);
+    expect(audited.some((s) => s.controls > 0), 'harness coverage: the audit found no visible control').toBe(true);
 });

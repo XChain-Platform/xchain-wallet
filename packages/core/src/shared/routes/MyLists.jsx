@@ -19,6 +19,7 @@ import { OfflineEmptyState } from '../components/OfflineEmptyState.jsx';
 import { useNetworkOffline } from '../hooks/useNetworkOffline.js';
 import { coinFromChainId } from '../components/BalanceList.jsx';
 import { listLabel } from '../utils/listLabel.js';
+import { listStatusText } from '../utils/listItemStatusText.js';
 import styles from './ActionsMenu.module.css';
 import local from './MyLists.module.css';
 
@@ -341,8 +342,18 @@ function MyListRow({ row, onSelect }) {
     const chainIconUrl = branding.chainIconSmallUrl(row.chainId);
     const isTick = String(row.type) === '1';
     const isFork = row.list_action_index != null && row.list_action_index !== '';
-    const status = String(row.status || '?');
-    const valid = status === 'valid';
+    // Show one word in the badge (a short uppercase pill) and put the plain
+    // reason for a refused list in its tooltip; never the indexer's code.
+    const statusWhy = listStatusText(row.status);
+    const valid = String(row.status ?? '').trim().toLowerCase() === 'valid';
+    let statusLabel = 'Unavailable';
+    let statusTitle;
+    if (valid) statusLabel = 'Valid';
+    else if (statusWhy === 'pending') statusLabel = 'Pending';
+    else if (statusWhy) {
+        statusLabel = 'Rejected';
+        statusTitle = `Rejected: ${statusWhy}`;
+    }
     const index = row.action_index ?? '?';
     const kind = isTick ? 'Token list' : 'Address list';
     const label = listLabel(index, row.name, kind);
@@ -375,8 +386,11 @@ function MyListRow({ row, onSelect }) {
                 : 'Created list'}
             trailingClassName={local.statusSlot}
             trailing={(
-                <span className={`${local.status} ${valid ? local.status_valid : local.status_invalid}`}>
-                    {valid ? 'Valid' : status}
+                <span
+                    className={`${local.status} ${valid ? local.status_valid : local.status_invalid}`}
+                    title={statusTitle}
+                >
+                    {statusLabel}
                 </span>
             )}
         />

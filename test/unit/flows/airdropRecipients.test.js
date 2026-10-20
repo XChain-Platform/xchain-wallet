@@ -26,6 +26,9 @@
 
 import { describe, it, expect } from 'vitest';
 import {
+    applyTokenAccessLists,
+    bech32IdentityKey,
+    classifyRecipientEntries,
     classifyRecipients,
     isRecipientForChain,
     isPlausibleAddress,
@@ -152,6 +155,71 @@ describe('classifyRecipients - network-aware validation', () => {
 
         expect(out.valid).toEqual([LITECOIN_REGTEST_BECH32]);
         expect(out.duplicates).toBe(1);
+    });
+
+    it('publishes an uppercase bech32 paste in lowercase', () => {
+        expect(classifyRecipients([MAINNET_BECH32.toUpperCase()], BTC_MAINNET).valid)
+            .toEqual([MAINNET_BECH32]);
+        expect(classifyRecipients(
+            [LITECOIN_REGTEST_BECH32.toUpperCase()],
+            { coin: 'litecoin', network: 'regtest' },
+        ).valid).toEqual([LITECOIN_REGTEST_BECH32]);
+        expect(classifyRecipientEntries(
+            [{ value: MAINNET_BECH32.toUpperCase(), line: 1 }],
+            BTC_MAINNET,
+        ).valid).toEqual([MAINNET_BECH32]);
+    });
+
+    it('keeps a rejected uppercase entry as pasted', () => {
+        const upper = MAINNET_BECH32.toUpperCase();
+        const out = classifyRecipients([upper], BTC_REGTEST);
+        expect(out.valid).toEqual([]);
+        expect(out.invalid).toEqual([upper]);
+    });
+});
+
+describe('bech32IdentityKey - one case-folding rule', () => {
+    it('folds a single-case bech32 address of every family', () => {
+        for (const address of [MAINNET_BECH32, REGTEST_BECH32, LITECOIN_BECH32, LITECOIN_REGTEST_BECH32]) {
+            expect(bech32IdentityKey(address.toUpperCase())).toBe(address);
+            expect(bech32IdentityKey(address)).toBe(address);
+        }
+    });
+
+    it('leaves mixed-case bech32 and base58 unchanged', () => {
+        const mixed = `${MAINNET_BECH32.slice(0, 10).toUpperCase()}${MAINNET_BECH32.slice(10)}`;
+        expect(bech32IdentityKey(mixed)).toBe(mixed);
+        expect(bech32IdentityKey(MAINNET_LEGACY)).toBe(MAINNET_LEGACY);
+        expect(bech32IdentityKey(REGTEST_LEGACY)).toBe(REGTEST_LEGACY);
+    });
+});
+
+describe('applyTokenAccessLists - who the network pays', () => {
+    const LISTED = [MAINNET_BECH32, MAINNET_LEGACY];
+
+    it('pays everyone when the token has no access lists', () => {
+        expect(applyTokenAccessLists(LISTED, { allow: null, block: null }))
+            .toEqual({ approved: LISTED, excluded: [] });
+    });
+
+    it('pays only allow-list members, and nobody for an empty allow list', () => {
+        expect(applyTokenAccessLists(LISTED, { allow: [MAINNET_LEGACY] }))
+            .toEqual({ approved: [MAINNET_LEGACY], excluded: [MAINNET_BECH32] });
+        expect(applyTokenAccessLists(LISTED, { allow: [] }))
+            .toEqual({ approved: [], excluded: LISTED });
+    });
+
+    it('never pays a block-list member, even one on the allow list', () => {
+        expect(applyTokenAccessLists(LISTED, { allow: LISTED, block: [{ address: MAINNET_BECH32 }] }))
+            .toEqual({ approved: [MAINNET_LEGACY], excluded: [MAINNET_BECH32] });
+    });
+
+    it('matches bech32 case variants but keeps base58 case-sensitive', () => {
+        expect(applyTokenAccessLists([{ item: MAINNET_BECH32.toUpperCase() }, MAINNET_BECH32], {
+            allow: [MAINNET_BECH32],
+        })).toEqual({ approved: [MAINNET_BECH32.toUpperCase()], excluded: [] });
+        expect(applyTokenAccessLists([MAINNET_LEGACY], { allow: [MAINNET_LEGACY.toLowerCase()] }))
+            .toEqual({ approved: [], excluded: [MAINNET_LEGACY] });
     });
 });
 

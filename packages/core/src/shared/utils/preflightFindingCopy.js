@@ -21,9 +21,9 @@
 // actions, so those lines stay action-neutral, and rules that bind only past a
 // network upgrade say "may", never "will".
 
-// The demotion the SDK stamps when the network accepted the action but a
-// local balance projection over the sender's other unconfirmed actions still
-// flags it. Copy keyed on the code alone would contradict the acceptance.
+// The demotion the SDK stamps when the network accepted the action but a local
+// projection over the sender's other unconfirmed actions still flags the balance
+// (code-keyed copy would contradict it); PreflightPanel.findingCopy.test.jsx pins it.
 const LOCAL_DELTA_DOWNGRADE = 'dryrun-valid-local-delta';
 
 const LOCAL_DELTA_HEADLINE = 'The network accepted this action on its own, but counting your other unconfirmed'

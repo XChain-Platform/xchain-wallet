@@ -3388,6 +3388,13 @@ export function createBackgroundHost(deps) {
             feeIncrease: coinAmount(plan.feeIncreaseSats),
         };
         if (req?.preview === true) return feeQuote;
+        // Refuse to sign a second replacement while one waits in the queue: re-signing beside a queued signed copy is forbidden.
+        // The refusal is a plain sentence because the History card shows it as written.
+        await ensureQueueLoaded();
+        if (getQueue(walletId).some((e) => e?.rbfReplacesPendingTxId === conflictRecord.id)) {
+            throw new Error('A replacement for this transaction is already waiting in the queued-transactions banner. '
+                + 'Send it or remove it there before you speed up or cancel again.');
+        }
 
         let actionString = null;
         if (strategy !== 'cancel') {
@@ -3478,11 +3485,37 @@ export function createBackgroundHost(deps) {
             // An already-on-network answer means these exact bytes reached a node, so the
             // replacement is live and the original evicted: settle it as delivered, as every broadcast lane does.
             if (!flows.isAlreadyOnNetworkRejection(err)) {
-                await vault.pendingTxs.put({
-                    ...pending,
-                    status: 'failed',
-                    error: err?.message ? String(err.message) : String(err),
+                const failure = err?.message ? String(err.message) : String(err);
+                // Retire only bytes that can never confirm; the same split broadcast.signedTx applies.
+                if (flows.classifyBroadcastFailure(err) === 'permanent') {
+                    const failedPatch = { status: 'failed', error: failure };
+                    if (await settleQueuedPendingTx(vault, { pendingTxId: pending.id }, failedPatch) === 'unreachable') {
+                        recordOwedSettlement(walletId, pending.id, 'patch', failedPatch);
+                    }
+                    if (err && typeof err === 'object') {
+                        try { err.name = flows.BROADCAST_FAILED_PERMANENT_NAME; } catch { /* keep immutable error */ }
+                    }
+                    throw err;
+                }
+                // A transient failure may still have reached a node, so keep the record live and queue
+                // the same signed bytes for a re-send; the entry names the original so a later
+                // delivery retires it. The original stays 'broadcast' until then.
+                const queuedPatch = { status: 'queued', error: failure };
+                if (await settleQueuedPendingTx(vault, { pendingTxId: pending.id }, queuedPatch) === 'unreachable') {
+                    recordOwedSettlement(walletId, pending.id, 'patch', queuedPatch);
+                }
+                await enqueueSignedBroadcast(walletId, {
+                    chainId,
+                    signedTxHex: signed.txHex,
+                    summary: pending.actionSummary,
+                    txid: signed.txid,
+                    pendingTxId: pending.id,
+                    rbfReplacesPendingTxId: conflictRecord.id,
                 });
+                await flushOwedSettlements(vault);
+                if (err && typeof err === 'object') {
+                    try { err.name = flows.BROADCAST_FAILED_TRANSIENT_NAME; } catch { /* keep immutable error */ }
+                }
                 throw err;
             }
             broadcast = signed.txid;
@@ -3533,6 +3566,19 @@ export function createBackgroundHost(deps) {
     // nested causes included, because that is all the encoder hands back.
     function saysAlreadyOnNetwork(err) {
         return flows.isAlreadyOnNetworkRejection(err);
+    }
+    // Retire the original a queued fee-bump replacement evicted, the write tx.replace makes when its own send lands.
+    // Best effort: a refused write leaves the original live, which nets its spend but never re-sends it.
+    async function settleReplacedOriginal(vault, entry, replacementTxHash) {
+        const originalId = entry?.rbfReplacesPendingTxId;
+        if (typeof originalId !== 'string' || !originalId) return;
+        if (typeof replacementTxHash !== 'string' || !replacementTxHash) return;
+        try {
+            const original = await vault?.pendingTxs?.get(originalId);
+            if (!original || original.chainConfirmed === true) return;
+            if (original.status !== 'broadcast' && original.status !== 'broadcasting') return;
+            await vault.pendingTxs.put({ ...original, status: 'rbf-replaced', rbfReplacement: replacementTxHash });
+        } catch (_e) { /* the original stays live */ }
     }
     // In-flight claims for broadcast.queue.broadcast, keyed walletId:id.
     // `broadcastTx` is an irreversible effector, so a second call for the same
@@ -3647,6 +3693,7 @@ export function createBackgroundHost(deps) {
                     if (await settleQueuedPendingTx(vault, entry, deliveredPatch) === 'unreachable') {
                         recordOwedSettlement(walletId, entry.pendingTxId, 'patch', deliveredPatch);
                     }
+                    await settleReplacedOriginal(vault, entry, entry.txid);
                     const landed = q.findIndex((e) => e.id === id);
                     if (landed >= 0) q.splice(landed, 1);
                     await persistQueue();
@@ -3737,6 +3784,7 @@ export function createBackgroundHost(deps) {
             if (await settleQueuedPendingTx(vault, entry, landedPatch) === 'unreachable') {
                 recordOwedSettlement(walletId, entry.pendingTxId, 'patch', landedPatch);
             }
+            await settleReplacedOriginal(vault, entry, landedPatch.txid);
             const cur = q.findIndex((e) => e.id === id);
             if (cur >= 0) q.splice(cur, 1);
             await persistQueue();

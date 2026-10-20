@@ -182,8 +182,10 @@ export async function decodeBackupEnvelope({ password, envelope }) {
     try {
         try {
             plaintext = await aeadDecrypt(masterKey, blob);
-        } catch {
-            throw new BackupPasswordError();
+        } catch (err) {
+            // Only a tag mismatch means a wrong password; a key or format fault surfaces as itself.
+            if (/** @type {any} */ (err)?.name === 'AeadAuthError') throw new BackupPasswordError();
+            throw err;
         }
     } finally {
         masterKey.fill(0);

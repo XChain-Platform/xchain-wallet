@@ -166,8 +166,11 @@ export async function importWif({
         let seedBytes;
         try {
             seedBytes = await decrypt(masterKey, base64ToBytes(walletRecord.encryptedSeed));
-        } catch {
-            throw new WrongPasswordError();
+        } catch (err) {
+            // Only a GCM tag mismatch is a wrong password (crypto/aead.js); a
+            // damaged seal or a malformed session key propagates as itself.
+            if (/** @type {any} */ (err)?.name === 'AeadAuthError') throw new WrongPasswordError();
+            throw err;
         } finally {
             if (seedBytes) seedBytes.fill(0);
         }

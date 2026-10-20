@@ -152,6 +152,36 @@ describe('ListDetail membership under list-edit resolution', () => {
         mountDetail({ ...LIST_2700, state: ACTIVE_STATE });
         expect(await screen.findByText('Left out by the network (1)')).toBeTruthy();
         expect(screen.getByText('NOSUCHTICKQA')).toBeTruthy();
+        const row = screen.getByText('NOSUCHTICKQA').closest('li');
+        expect(row.textContent).toBe('NOSUCHTICKQA (token not found)');
+        expect(row.getAttribute('title')).toBe('invalid: TICK (unknown)');
+    });
+
+    it('says why a fork edit item was left out in plain words', async () => {
+        mountDetail({
+            ...LIST_2700,
+            action_index: 2703,
+            list_action_index: 2700,
+            edit: 1,
+            edits: [{ tick: 'FORKADDED', status: 'valid' }, { address: 'notanaddress', status: 'invalid: ADDRESS (format)' }],
+        });
+        const row = (await screen.findByText('notanaddress')).closest('li');
+        expect(row.textContent).toBe('notanaddress (not a valid address for this network)');
+        expect(screen.getByText('FORKADDED').closest('li').textContent).toBe('FORKADDED');
+    });
+
+    it('says why the network refused a list in its status row', async () => {
+        mountDetail({ ...LIST_2700, status: 'invalid: LIST_ACTION_INDEX (not owner)' });
+        const value = (await screen.findByText('Status')).nextElementSibling;
+        expect(value.textContent).toBe('Rejected: sent by an address that does not own the list');
+        expect(value.getAttribute('title')).toBe('invalid: LIST_ACTION_INDEX (not owner)');
+    });
+
+    it('reads a valid list status as Valid with no tooltip', async () => {
+        mountDetail({ ...LIST_2700 });
+        const value = (await screen.findByText('Status')).nextElementSibling;
+        expect(value.textContent).toBe('Valid');
+        expect(value.getAttribute('title')).toBeNull();
     });
 
     it('labels a numeric remove edit as removed items', async () => {

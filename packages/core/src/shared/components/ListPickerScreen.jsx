@@ -28,6 +28,7 @@ import { Button, EmptyState, ListPage, ListRow, PageHeader, Screen, StatusMessag
 import { contactsPickerStyles as styles } from './ContactsPickerScreen.jsx';
 import { currentListItems, currentListMemberCount } from '../../flows/listMembership.js';
 import { listLabel } from '../utils/listLabel.js';
+import { listStatusText } from '../utils/listItemStatusText.js';
 import { neutralizeControlText } from '../utils/textHardening.js';
 import { formatDecimalAmount } from '../utils/amountFormat.js';
 import { t } from '../../i18n/index.js';
@@ -234,7 +235,7 @@ export function ListPickerScreen({
                             const idx = String(row.action_index ?? '?');
                             const isTick = String(row.type) === '1';
                             const isUnion = String(row.type) === '3';
-                            const status = String(row.status || '');
+                            const statusWhy = listStatusText(row.status);
                             const count = counts[idx];
                             const kind = isUnion ? 'Union' : isTick ? 'Token' : 'Address';
                             const titleLabel = typeof row.name === 'string' && row.name.length > 0
@@ -264,7 +265,7 @@ export function ListPickerScreen({
                                         title={(
                                             <span className={styles.abName}>
                                                 {titleLabel}
-                                                {status && status !== 'valid' ? ` (${status})` : ''}
+                                                {statusWhy ? ` (${statusWhy})` : ''}
                                             </span>
                                         )}
                                         subtitle={(

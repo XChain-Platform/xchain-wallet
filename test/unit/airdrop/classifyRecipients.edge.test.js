@@ -26,11 +26,11 @@ describe('classifyRecipients edge cases', () => {
         });
     });
 
-    it('deduplicates valid bech32 addresses without changing the retained spelling', () => {
+    it('deduplicates bech32 case variants and returns the lowercase form', () => {
         const upper = BTC_MAINNET.toUpperCase();
         const out = classifyRecipients([upper, BTC_MAINNET, upper], CHAIN);
 
-        expect(out.valid).toEqual([upper]);
+        expect(out.valid).toEqual([BTC_MAINNET]);
         expect(out.duplicates).toBe(2);
     });
 
