@@ -297,6 +297,9 @@ when confirmed treasury value cannot cover `FUNDING_SATS` plus the fee for two
 outputs, when the `claimant` is absent, or when the claimant's largest confirmed
 UTXO is below `MIN_CLAIM_UTXO_SATS`. A refusal names sats held, sats needed and
 the shortfall, but never a key or an address.
+Setup first proves through `test/e2e/fixtures/testnet_keys.js` that both keys
+derive their declared addresses and stops with `Key preflight refused` when
+either proof fails.
 
 After that run-input preflight and before any spec runs,
 `global-setup.testnet.js` runs `preflightClaimantReward` from

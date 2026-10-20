@@ -20,6 +20,7 @@ const mocks = vi.hoisted(() => ({
     liveVenue: vi.fn(),
     preflightClaimantReward: vi.fn(),
     preflightGasHeadroom: vi.fn(),
+    preflightRunInputKeys: vi.fn(),
     preflightRunInput: vi.fn(),
     readRunInput: vi.fn(),
     stageRunInput: vi.fn(),
@@ -46,6 +47,10 @@ vi.mock('../../e2e/fixtures/testnet_origin.js', () => ({
 vi.mock('../../e2e/fixtures/testnet_gas_preflight.js', () => ({
     MINT_AMOUNT: 200,
     preflightGasHeadroom: mocks.preflightGasHeadroom,
+}));
+
+vi.mock('../../e2e/fixtures/testnet_keys.js', () => ({
+    preflightRunInputKeys: mocks.preflightRunInputKeys,
 }));
 
 vi.mock('../../e2e/fixtures/testnet_preflight.js', () => ({
@@ -87,6 +92,7 @@ beforeEach(() => {
     mocks.liveVenue.mockReturnValue(mocks.venue);
     mocks.preflightClaimantReward.mockResolvedValue(undefined);
     mocks.preflightGasHeadroom.mockResolvedValue(undefined);
+    mocks.preflightRunInputKeys.mockReturnValue(undefined);
     mocks.preflightRunInput.mockResolvedValue(undefined);
     mocks.readRunInput.mockReturnValue(mocks.input);
     mocks.stageRunInput.mockResolvedValue({ cleanup: mocks.cleanup, file: STAGED_FILE });
@@ -155,6 +161,20 @@ describe('testnet global setup ordering', () => {
         expect(process.env[RUN_INPUT_ENV]).toBeUndefined();
     });
 
+    it('cleans staged input when key preflight refuses before any UTXO read', async () => {
+        const refusal = new Error('Key preflight refused: claimant');
+        mocks.preflightRunInputKeys.mockImplementationOnce(() => { throw refusal; });
+
+        await expect(globalSetup()).rejects.toBe(refusal);
+
+        expect(mocks.preflightRunInputKeys).toHaveBeenCalledOnce();
+        expect(mocks.preflightRunInputKeys).toHaveBeenCalledWith(mocks.input);
+        expect(mocks.cleanup).toHaveBeenCalledTimes(1);
+        expect(mocks.preflightRunInput).not.toHaveBeenCalled();
+        expect(mocks.preflightClaimantReward).not.toHaveBeenCalled();
+        expect(process.env[RUN_INPUT_ENV]).toBeUndefined();
+    });
+
     it('cleans staged input when claimant-reward preflight refuses', async () => {
         const refusal = new Error('claimant reward refused');
         mocks.preflightClaimantReward.mockRejectedValueOnce(refusal);
@@ -179,11 +199,15 @@ describe('testnet global setup ordering', () => {
         });
         expect(mocks.stageRunInput).toHaveBeenCalledWith(process.stdin);
         expect(mocks.readRunInput).toHaveBeenCalledWith(STAGED_FILE);
+        expect(mocks.preflightRunInputKeys).toHaveBeenCalledOnce();
+        expect(mocks.preflightRunInputKeys).toHaveBeenCalledWith(mocks.input);
         expect(mocks.preflightRunInput).toHaveBeenCalledWith(mocks.venue, mocks.input);
         expect(mocks.preflightClaimantReward).toHaveBeenCalledWith(mocks.input, {
             explorerUrl: ENDPOINTS.explorerUrl,
             coin: 'TBTC',
         });
+        expect(mocks.preflightRunInputKeys.mock.invocationCallOrder[0])
+            .toBeLessThan(mocks.preflightRunInput.mock.invocationCallOrder[0]);
         expect(mocks.preflightRunInput.mock.invocationCallOrder[0])
             .toBeLessThan(mocks.preflightClaimantReward.mock.invocationCallOrder[0]);
         expect(process.env[RUN_INPUT_ENV]).toBe(STAGED_FILE);
