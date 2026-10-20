@@ -70,6 +70,19 @@ describe('BatchComposerForm rows', () => {
         expect(screen.getByRole('button', { name: 'Remove' })).toBeDisabled();
     });
 
+    it('stops offering Add action once the batch holds the maximum number of actions', async () => {
+        const { flows } = await import('../../../packages/core/src/index.js');
+        expect(typeof flows.BATCH_MAX_COMMANDS).toBe('number');
+
+        mount();
+        const add = await screen.findByRole('button', { name: /Add action/ });
+        for (let i = 1; i < flows.BATCH_MAX_COMMANDS; i += 1) fireEvent.click(add);
+
+        expect(screen.getAllByRole('region', { name: /Step \d/ })).toHaveLength(flows.BATCH_MAX_COMMANDS);
+        expect(add).toBeDisabled();
+        expect(screen.getByText(new RegExp(`${flows.BATCH_MAX_COMMANDS} actions is the most one batch carries`))).toBeTruthy();
+    }, 60000);
+
     it('waits to ask for an action until the user touches the row or presses Review', async () => {
         mount();
         const review = await screen.findByRole('button', { name: 'Review' });
