@@ -483,9 +483,10 @@ fi
 # Everything above builds ONCE and derives the APK from the AAB, because the
 # store lane's two artifacts must be the same bytes (§6 step 2). This leg is
 # the deliberate exception, and it is a second build by necessity rather
-# than by sloppiness: the `default` profile compiles DIFFERENT CODE in (the
-# DEX lane's eight modules, the Trezor connect CSP origin), so there is no
-# bundle to derive it from. Operator answer, 2026-08-07: build
+# than by sloppiness: the `default` profile differs from `store` in the
+# Trezor connect CSP origin, and `HIDDEN_SURFACES` is currently empty for
+# both profiles so no product surface differs, but the CSP and packaging
+# differences mean there is still no single bundle to derive it from. Operator answer, 2026-08-07: build
 # it, rather than document the coupling and leave the self-custody audience
 # with Play's restrictions they went out of their way to avoid.
 #
