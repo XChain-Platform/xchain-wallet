@@ -331,6 +331,15 @@ to the destination. It prints one JSON line carrying `txid`, `txHex`, `fee`,
 how sats left on a funded wallet go back to the treasury without a by-hand
 wallet restore.
 
+Every testnet run writes `test/e2e/test-results-testnet/results.json` through
+Playwright's json reporter beside the list reporter (github and html under CI).
+stake-unstake records its funding, stake and unstake txids, and partial-claim
+its collect txid, as test annotations of type `txid` whose description is the
+label, a space and the txid. Those annotations carry only txids, never a key, a
+phrase or an address. Git ignores the file and the next run replaces it, so a
+pass or a failure leaves its on-chain record in that file instead of a scrolled
+terminal.
+
 One worker, no retries: the specs share one treasury and one chain, and a
 retry on a public chain spends it twice. Bitcoin only, since staking is
 BTC-only at launch and the treasury holds tBTC; leave `XC_REGTEST_COIN` unset.
