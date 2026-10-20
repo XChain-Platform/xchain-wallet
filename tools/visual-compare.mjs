@@ -19,7 +19,7 @@
 // sorted by how much each screen changed, so a person sees every visual change
 // a batch makes before it lands.
 //
-//     node scripts/visual-compare.mjs --baseline <tree> --candidate <tree> --out <dir>
+//     node tools/visual-compare.mjs --baseline <tree> --candidate <tree> --out <dir>
 //         [--port-base 5391]    baseline dev server port; the candidate uses port + 1 (alias --port)
 //         [--sizes k51,phone412] only these sizes (names below)
 //         [--screens home,settings] only these screens (keys below)

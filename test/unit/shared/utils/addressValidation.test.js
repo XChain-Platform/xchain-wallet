@@ -184,6 +184,42 @@ describe('address formats', () => {
     });
 });
 
+// The indexer's bech32Decode drops a LIST item that breaks a witness rule into
+// list_items_invalid, so every case here must be rejected by the wallet too.
+describe('segwit witness rules (same as the indexer bech32Decode)', () => {
+    const bytes = (n) => new Uint8Array(n).fill(7);
+    const withPadding = (codec, version, program) => {
+        const words = [version, ...codec.toWords(program)];
+        words[words.length - 1] |= 1;
+        return codec.encode('bc', words);
+    };
+
+    it('accepts v0 20/32-byte bech32 and v1 32-byte bech32m, in either single case', () => {
+        for (const address of [segwit('bc'), taproot('bc'),
+            bech32.encode('bc', [0, ...bech32.toWords(bytes(32))])]) {
+            expect(isValidAddressForChain(address, 'bitcoin', 'mainnet'), address).toBe(true);
+            expect(isValidAddressForChain(address.toUpperCase(), 'bitcoin', 'mainnet'), address).toBe(true);
+        }
+    });
+
+    it.each([
+        ['v1 with a bech32 checksum (pre-BIP350 Taproot)', bech32.encode('bc', [1, ...bech32.toWords(bytes(32))])],
+        ['BIP350 invalid vector, v1 with a bech32 checksum', 'bc1p0xlxvlhemja6c4dqv22uapctqupfhlxm9h8z3k2e72q4k9hcz7vqh2y7hd'],
+        ['v0 with a bech32m checksum', bech32m.encode('bc', [0, ...bech32m.toWords(bytes(20))])],
+        ['v0 with a 16-byte program (BIP173 vector)', 'BC1QR508D6QEJXTDG4Y5R3ZARVARYV98GJ9P'],
+        ['v0 with a 21-byte program', bech32.encode('bc', [0, ...bech32.toWords(bytes(21))])],
+        ['v1 with a 1-byte program', bech32m.encode('bc', [1, ...bech32m.toWords(bytes(1))])],
+        ['v1 with a 41-byte program', bech32m.encode('bc', [1, ...bech32m.toWords(bytes(41))])],
+        ['witness version 17', bech32m.encode('bc', [17, ...bech32m.toWords(bytes(20))])],
+        ['non-zero padding bits', withPadding(bech32m, 1, bytes(32))],
+        ['an extra padding word', bech32.encode('bc', [0, ...bech32.toWords(bytes(20)), 0])],
+        ['a string over 90 characters', bech32m.encode('bc', [1, ...bech32m.toWords(bytes(60))], false)],
+    ])('rejects %s', (_label, address) => {
+        expect(isValidAddressForChain(address, 'bitcoin', 'mainnet')).toBe(false);
+        expect(isValidAddressAnyNetwork(address)).toBe(false);
+    });
+});
+
 describe('addressValidationError', () => {
     const descriptor = (coin, networkKind) => ({ coin, networkKind });
 

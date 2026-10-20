@@ -105,6 +105,44 @@ describe('changeWalletPassword', () => {
         expect(keys.every((k) => k.every((b) => b === 0))).toBe(true);
     });
 
+    // Another wallet the old password cannot open, or whose seal is damaged, keeps its old seal.
+    it.each(['BackupSeedPasswordError', 'BackupSealDamagedError'])(
+        'skips another wallet whose re-seal fails with %s and still changes the target',
+        async (errorName) => {
+            const { deps, rekeyVault, wallet, deriveMasterKey } = setup();
+            const other = { ...wallet, id: 'wallet-2', importedKeys: [] };
+            deps.vault.wallets.list = vi.fn(async () => [wallet, other]);
+            const rekeyWalletRecord = vi.fn(async (candidate) => {
+                if (candidate.id === 'wallet-2') throw Object.assign(new Error('sealed'), { name: errorName });
+                return true;
+            });
+
+            await expect(changeWalletPassword({
+                walletId: 'wallet-1', currentPassword: 'old-password', newPassword: 'new-password',
+            }, deps, { unlockWallet: async () => ({ lock() {} }), rekeyWalletRecord, deriveMasterKey }))
+                .resolves.toMatchObject({ changed: true, walletIds: ['wallet-1'] });
+
+            expect(rekeyWalletRecord).toHaveBeenCalledTimes(2);
+            expect(rekeyVault.mock.calls[0][0].wallets.map((w) => w.id)).toEqual(['wallet-1']);
+        },
+    );
+
+    it('refuses, writing nothing, when another wallet fails its re-seal for any other reason', async () => {
+        const { deps, rekeyVault, wallet, deriveMasterKey } = setup();
+        const other = { ...wallet, id: 'wallet-2', importedKeys: [] };
+        deps.vault.wallets.list = vi.fn(async () => [wallet, other]);
+        const rekeyWalletRecord = vi.fn(async (candidate) => {
+            if (candidate.id === 'wallet-2') throw new Error('storage fault');
+            return true;
+        });
+
+        await expect(changeWalletPassword({
+            walletId: 'wallet-1', currentPassword: 'old-password', newPassword: 'new-password',
+        }, deps, { unlockWallet: async () => ({ lock() {} }), rekeyWalletRecord, deriveMasterKey }))
+            .rejects.toThrow('storage fault');
+        expect(rekeyVault).not.toHaveBeenCalled();
+    });
+
     it('leaves the vault key and the session caches alone when the vault is not under the old password', async () => {
         const { deps, rekeyVault, commit, deriveMasterKey } = setup({ vaultUnderOld: false });
         const rekeyWalletRecord = vi.fn(async () => true);

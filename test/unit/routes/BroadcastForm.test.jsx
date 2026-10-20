@@ -31,6 +31,10 @@ import { render, screen, fireEvent, waitFor, cleanup, act } from '@testing-libra
 import React from 'react';
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
 import { BroadcastForm } from '../../../packages/core/src/shared/routes/BroadcastForm.jsx';
+import {
+    clearQueuedResultHandoff,
+    setQueuedResultHandoff,
+} from '../../../packages/core/src/shared/utils/submitFailureMessage.js';
 
 // The protocol's BROADCAST format table, copied from xchain-sdk/src/formats.js
 // (and identical to the indexer's own copy in
@@ -371,6 +375,30 @@ describe('BroadcastForm broadcasts a pasted signed transaction safely', () => {
         expect(await screen.findByText(
             'The node rejected this transaction because an input is missing or already spent.',
         )).toBeTruthy();
+    });
+
+    // The host reports a refused queue save as `persisted: false` and never sets
+    // `unsaved`, so the screen must map it. Each case seeds the OPPOSITE stale
+    // handoff, proving the warning follows this route's reply and not a leftover.
+    it.each([
+        ['warns when the queue save was refused', false, true],
+        ['stays quiet when the queue save landed', true, false],
+    ])('%s', async (_case, persisted, warns) => {
+        setQueuedResultHandoff({ queued: true, unsaved: !warns });
+        try {
+            mountForm();
+            broadcastSignedTxRequest.mockResolvedValueOnce({
+                queued: true, broadcast: 'queued', queueId: 'q1', pendingTxId: 'p1', persisted,
+            });
+            await openRawTransaction(LEGACY_TX);
+            await screen.findByText(/spends 1 input/);
+            fireEvent.click(screen.getByRole('button', { name: 'Broadcast transaction' }));
+
+            expect(await screen.findByRole('heading', { name: 'Signed. Not broadcast yet.' })).toBeTruthy();
+            expect(Boolean(screen.queryByText(/could not be saved to the queue/))).toBe(warns);
+        } finally {
+            clearQueuedResultHandoff();
+        }
     });
 
     it('locks unsafe navigation and gives a next step when the relay does not answer', async () => {

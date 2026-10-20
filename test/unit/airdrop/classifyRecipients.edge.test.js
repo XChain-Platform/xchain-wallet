@@ -22,6 +22,7 @@ describe('classifyRecipients edge cases', () => {
             invalid: [],
             duplicates: 0,
             wrongNetwork: [],
+            addressRefs: [],
         });
     });
 
@@ -49,6 +50,31 @@ describe('classifyRecipients edge cases', () => {
         expect(out.valid).toEqual([BTC_LEGACY]);
         expect(out.invalid).toEqual([changedCase]);
         expect(out.duplicates).toBe(0);
+    });
+
+    // Mirrors the indexer's canonical caret id: a caret, then digits with no leading zero.
+    it('names a canonical ^<index> address reference but still skips it', () => {
+        const out = classifyRecipients([BTC_MAINNET, '^123', '^7'], CHAIN);
+
+        expect(out.valid).toEqual([BTC_MAINNET]);
+        expect(out.invalid).toEqual(['^123', '^7']);
+        expect(out.addressRefs).toEqual(['^123', '^7']);
+        expect(out.wrongNetwork).toEqual([]);
+    });
+
+    it('leaves non-canonical caret entries as plain invalid input', () => {
+        const odd = ['^007', '^0', '^', '^12a', '^-1', '123', '^^5'];
+        const out = classifyRecipients(odd, CHAIN);
+
+        expect(out.invalid).toEqual(odd);
+        expect(out.addressRefs).toEqual([]);
+    });
+
+    it('names a reference without a chain too, since it is never a plausible address', () => {
+        const out = classifyRecipients(['^42'], null);
+
+        expect(out.valid).toEqual([]);
+        expect(out.addressRefs).toEqual(['^42']);
     });
 
     it('reports valid addresses for another network separately from malformed input', () => {

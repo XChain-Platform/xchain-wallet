@@ -684,9 +684,12 @@ export function ContractStakeForm({
                             valueClassName={styles.detailsValue}
                         />
                     ) : null}
-                    <dt className={styles.detailsLabel} style={{ color: 'var(--xc-danger-text)' }}>Slash risk</dt>
+                    {/* A contract slash can take a staker's whole balance, cooldown
+                        included, so the warning says so in plain words. */}
+                    <dt className={styles.detailsLabel} style={{ color: 'var(--xc-danger-text)' }}>Penalty risk</dt>
                     <dd className={styles.detailsValue} style={{ color: 'var(--xc-danger-text)' }}>
-                        Funds slashed by this contract are sent to{' '}
+                        This contract can take some or all of your staked tokens as a penalty.
+                        {' '}Penalties are sent to{' '}
                         {contractMeta.slashDestination
                             ? <AddressText address={contractMeta.slashDestination} />
                             : 'the contract-configured destination'}.
@@ -803,7 +806,7 @@ export function ContractStakeForm({
                 <dd className={styles.detailsValue}>Contract #{contractActionIndex}</dd>
                 <dt className={styles.detailsLabel}>Cooldown</dt>
                 <dd className={styles.detailsValue}>{contractMeta.cooldown} blocks</dd>
-                <dt className={styles.detailsLabel}>Slashed funds</dt>
+                <dt className={styles.detailsLabel}>Penalty destination</dt>
                 <dd className={styles.detailsValue}>
                     {contractMeta.slashDestination
                         ? <AddressText address={contractMeta.slashDestination} truncate={false} />

@@ -324,3 +324,66 @@ describe('DeployContractForm validation diagnostics', () => {
     });
 
 });
+
+describe('DeployContractForm suggested gas label', () => {
+    // The label must follow the gas value that is submitted: the trimmed
+    // field, or the suggestion when the field is empty.
+    async function renderWithSuggestion() {
+        let utils;
+        await domAct(async () => {
+            utils = render(
+                <MessagingProvider
+                    shell="web"
+                    messaging={messagingWithValidation({ valid: true }, {
+                        suggestContractGasLimit: () => Promise.resolve({ suggested: 21000, rationale: null }),
+                    })}
+                >
+                    <DeployContractForm walletId="w" onBack={() => {}} />
+                </MessagingProvider>,
+            );
+            await drain();
+        });
+        await domAct(async () => {
+            fireEvent.change(utils.getByLabelText('Code source'), { target: { value: SOURCE } });
+            await drain();
+        });
+        return utils;
+    }
+
+    async function suggest(utils) {
+        await domAct(async () => {
+            fireEvent.click(utils.getByRole('button', { name: 'Suggest gas' }));
+            await drain();
+        });
+        return utils.getByText(/Suggested gas limit:/);
+    }
+
+    it('says applied when the suggestion fills an empty gas field', async () => {
+        const utils = await renderWithSuggestion();
+        const label = await suggest(utils);
+        expect(utils.getByLabelText('Gas limit')).toHaveValue('21000');
+        expect(label).toHaveTextContent('Suggested gas limit: 21000 (applied)');
+    });
+
+    it('says not applied when the user already set a different gas limit', async () => {
+        const utils = await renderWithSuggestion();
+        await domAct(async () => {
+            fireEvent.change(utils.getByLabelText('Gas limit'), { target: { value: '50000' } });
+            await drain();
+        });
+        const label = await suggest(utils);
+        expect(utils.getByLabelText('Gas limit')).toHaveValue('50000');
+        expect(label).toHaveTextContent('Suggested gas limit: 21000 (not applied: your gas limit is used)');
+        expect(label).not.toHaveTextContent('21000 (applied)');
+    });
+
+    it('still says applied after the gas field is cleared, since submit falls back to the suggestion', async () => {
+        const utils = await renderWithSuggestion();
+        const label = await suggest(utils);
+        await domAct(async () => {
+            fireEvent.change(utils.getByLabelText('Gas limit'), { target: { value: '' } });
+            await drain();
+        });
+        expect(label).toHaveTextContent('Suggested gas limit: 21000 (applied)');
+    });
+});

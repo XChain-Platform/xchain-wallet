@@ -37,6 +37,7 @@ import { preferredSourceId } from '../addressSelection.js';
 import { pickDefaultChainId } from '../chainSelection.js';
 import { classifyTickItems } from '../utils/listTickItems.js';
 import { qualifyTickItem } from '../utils/listTickCoin.js';
+import { ADDRESS_REFERENCE_ITEM_MESSAGE, addressReferenceNote } from '../utils/addressReferenceCopy.js';
 import { listTickCoinSupport } from '../../flows/listTickCoinSupport.js';
 import { listMetaSupported } from '../../flows/listFormatSupport.js';
 import {
@@ -115,8 +116,8 @@ export function ListCreateForm({ walletId, chainId: initialChainId, initialType,
     // detection, drag-and-drop) matches exactly.
     const [pasteText, setPasteText] = useState('');
     const [recipients, setRecipients] = useState(
-        /** @type {{ valid: string[], invalid: string[], duplicates: number, wrongNetwork: string[] }} */
-        ({ valid: [], invalid: [], duplicates: 0, wrongNetwork: [] }),
+        /** @type {{ valid: string[], invalid: string[], duplicates: number, wrongNetwork: string[], addressRefs: string[] }} */
+        ({ valid: [], invalid: [], duplicates: 0, wrongNetwork: [], addressRefs: [] }),
     );
     const [showInvalid, setShowInvalid] = useState(false);
     // TYPE=1 (token list) member entry: same free-text tick parsing as
@@ -839,6 +840,21 @@ export function ListCreateForm({ walletId, chainId: initialChainId, initialType,
                                 items={recipients.wrongNetwork.map((address) => ({
                                     subject: address,
                                     message: 'Does not belong to the selected network.',
+                                }))}
+                            />
+                        </FieldNote>
+                    ) : null}
+                    {/* A ^<index> entry is an address reference, not a typo; this
+                        form needs the address itself, so say that instead. */}
+                    {recipients.addressRefs.length > 0 ? (
+                        <FieldNote variant="warning" role="alert">
+                            <p>{addressReferenceNote(recipients.addressRefs.length)}</p>
+                            <DiagnosticDetails
+                                summary={`Address references (${recipients.addressRefs.length})`}
+                                keepAddresses
+                                items={recipients.addressRefs.map((ref) => ({
+                                    subject: ref,
+                                    message: ADDRESS_REFERENCE_ITEM_MESSAGE,
                                 }))}
                             />
                         </FieldNote>

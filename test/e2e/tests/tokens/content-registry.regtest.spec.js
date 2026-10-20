@@ -30,6 +30,7 @@
 // only the form's own success copy.
 
 import { createWallet, expect, openPaletteCommand, test } from '../../fixtures/wallet.js';
+import { waitForShownTxid } from '../../fixtures/pendingHistory.js';
 import {
     explorerJson,
     expectConfirmModal,
@@ -60,12 +61,7 @@ const STAMP = Date.now().toString().slice(-6);
 /** Approves the open confirm screen and returns the broadcast txid. */
 async function approveAndGetTxid(page) {
     await page.getByTestId('confirm-approve').click();
-    const main = page.getByRole('main');
-    await expect(main, 'no transaction id ever appeared after Approve')
-        .toContainText(/[0-9a-f]{64}/, { timeout: 180_000 });
-    const txid = (await main.innerText()).match(/[0-9a-f]{64}/)?.[0];
-    expect(txid, 'success screen showed no transaction id').toBeTruthy();
-    return txid;
+    return waitForShownTxid(page.getByRole('main'), { message: 'no transaction id ever appeared after Approve' });
 }
 
 /**

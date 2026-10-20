@@ -54,6 +54,8 @@ import {
     stringifyBackupEnvelope,
     deriveMasterKeyAsync,
     makeFreshKdfParams,
+    KDF_MIN_ITERATIONS,
+    KDF_MIN_MEMORY_KIB,
     encrypt,
     decrypt,
     bytesToBase64,
@@ -114,6 +116,43 @@ export class BackupSeedPasswordError extends Error {
         this.name = 'BackupSeedPasswordError';
         this.what = what;
     }
+}
+
+/**
+ * The backed-up wallet's own seal is damaged: not valid base64, or too short to
+ * hold a ciphertext. No password opens it, so this must never read as the
+ * wrong-password error above; only a GCM tag mismatch (`AeadAuthError`) means
+ * the password is wrong. Matched by `name` because errors cross the shell
+ * messaging boundary as plain objects.
+ */
+export class BackupSealDamagedError extends Error {
+    /**
+     * @param {string} what   'seed' | 'imported key' | 'passphrase'
+     * @param {unknown} [cause]
+     */
+    constructor(what, cause) {
+        super(
+            `The wallet inside this backup file is damaged (its ${what} cannot be read), so no `
+            + 'password can open it. Restore from a different backup file.',
+        );
+        this.name = 'BackupSealDamagedError';
+        this.what = what;
+        this.cause = cause;
+    }
+}
+
+/**
+ * Map a failure to open one of the backed-up wallet's seals to the error the
+ * restore screen can act on. A tag mismatch is the wrong password; a decode or
+ * length fault is a damaged record.
+ *
+ * @param {unknown} err
+ * @param {string} what   'seed' | 'imported key' | 'passphrase'
+ * @returns {Error}
+ */
+function sealOpenError(err, what) {
+    if (/** @type {any} */ (err)?.name === 'AeadAuthError') return new BackupSeedPasswordError(what);
+    return new BackupSealDamagedError(what, err);
 }
 
 /**
@@ -628,7 +667,8 @@ export function remintIdentifiers(decoded) {
  * `SignerPool.populate` skips it silently. `importedKeys` re-key with the seed
  * because `importWif` seals them under the SAME master key (importWif.js), and
  * so does the §15.6 `encryptedPassphrase`, which is the third leg below.
- * New params copy the source's argon2 COST but ALWAYS take a fresh salt: one
+ * New params copy the source's argon2 COST (raised to the KDF_MIN_* floor when
+ * lower) but ALWAYS take a fresh salt: one
  * salt reused under one password derives the same master key for two wallets.
  * That fresh salt is also why the passphrase cannot simply ride through
  * verbatim: nothing about the new seal matches the old one, so an untouched
@@ -691,15 +731,15 @@ export async function rekeyWalletRecord(wallet, { walletPassword, devicePassword
         if (hasSeed) {
             try {
                 seed = await decrypt(oldKey, base64ToBytes(wallet.encryptedSeed));
-            } catch {
-                throw new BackupSeedPasswordError('seed');
+            } catch (err) {
+                throw sealOpenError(err, 'seed');
             }
         }
         for (const k of sealedKeys) {
             try {
                 wifs.push(await decrypt(oldKey, base64ToBytes(k.encryptedWif)));
-            } catch {
-                throw new BackupSeedPasswordError('imported key');
+            } catch (err) {
+                throw sealOpenError(err, 'imported key');
             }
         }
         if (hasPassphrase) {
@@ -712,15 +752,17 @@ export async function rekeyWalletRecord(wallet, { walletPassword, devicePassword
                 passphrase = await decrypt(
                     oldKey, base64ToBytes(wallet.encryptedPassphrase), PASSPHRASE_AAD,
                 );
-            } catch {
-                throw new BackupSeedPasswordError('passphrase');
+            } catch (err) {
+                throw sealOpenError(err, 'passphrase');
             }
         }
 
-        // Fresh salt, inherited cost. `makeFreshKdfParams` supplies the salt.
+        // Fresh salt, inherited cost, never below the floor. `makeFreshKdfParams` supplies the salt.
+        // A sub-floor cost may still OPEN (validateKdfParams), but THIS device's password is a new
+        // secret, and sealing it at a backup's weak cost would make it cheap to guess.
         const nextParams = kdfParams ?? makeFreshKdfParams({
-            iterations: wallet.kdfParams.iterations,
-            memory: wallet.kdfParams.memory,
+            iterations: Math.max(wallet.kdfParams.iterations, KDF_MIN_ITERATIONS),
+            memory: Math.max(wallet.kdfParams.memory, KDF_MIN_MEMORY_KIB),
             parallelism: wallet.kdfParams.parallelism,
         });
         newKey = await deriveMasterKeyAsync(devicePassword, nextParams);

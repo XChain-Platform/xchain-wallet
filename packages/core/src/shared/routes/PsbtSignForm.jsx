@@ -100,6 +100,7 @@ import {
 import { pickDefaultChainId } from '../chainSelection.js';
 import { psbtActionSummary } from '../utils/actionDisplayLabel.js';
 import { readFailureMessage } from '../utils/readFailureMessage.js';
+import { SIGNED_NOT_BROADCAST_UNSAVED_WARNING } from '../utils/submitFailureMessage.js';
 
 // Show fixed copy for every parse failure: the parse handler throws only
 // precondition text and decoder exceptions, never wording written for a user.
@@ -462,6 +463,9 @@ export function PsbtSignForm({ walletId, onBack, initialPsbt }) {
     );
     const [broadcastTxid, setBroadcastTxid] = useState(/** @type {string} */ (''));
     const [broadcastError, setBroadcastError] = useState(/** @type {string | null} */ (null));
+    // True when the host queued the signed bytes but storage refused the save
+    // (`persisted: false`), so the queue copy will not survive a restart.
+    const [broadcastUnsaved, setBroadcastUnsaved] = useState(false);
 
     const psbtHex = useMemo(() => normalizePsbtInput(pasted), [pasted]);
 
@@ -1073,6 +1077,10 @@ export function PsbtSignForm({ walletId, onBack, initialPsbt }) {
                         }}>{broadcastTxid}</code>
                         <CopyButton value={broadcastTxid} label="Copy txid" />
                     </div>
+                ) : broadcastState === 'queued' && broadcastUnsaved ? (
+                    // Never promise the banner holds bytes the queue failed to save;
+                    // the signed hex above stays on screen to copy.
+                    <StatusMessage variant="error">{SIGNED_NOT_BROADCAST_UNSAVED_WARNING}</StatusMessage>
                 ) : broadcastState === 'queued' ? (
                     <StatusMessage variant="warning">
                         The network could not take the transaction yet. Its signed bytes are saved in the
@@ -1112,6 +1120,7 @@ export function PsbtSignForm({ walletId, onBack, initialPsbt }) {
                                 }
                                 setBroadcastState('broadcasting');
                                 setBroadcastError(null);
+                                setBroadcastUnsaved(false);
                                 try {
                                     const res = await messaging.broadcastSignedTxRequest({
                                         walletId,
@@ -1121,6 +1130,7 @@ export function PsbtSignForm({ walletId, onBack, initialPsbt }) {
                                         fromAddress: selectedAddress?.address || undefined,
                                     });
                                     if (res?.queued === true) {
+                                        setBroadcastUnsaved(res?.persisted === false);
                                         setBroadcastState('queued');
                                     } else {
                                         setBroadcastTxid(res?.txid || signedTxid);

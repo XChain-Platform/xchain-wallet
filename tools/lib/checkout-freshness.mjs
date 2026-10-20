@@ -5,7 +5,7 @@
 // the paths I am about to READ AS CANONICAL, that this checkout does not have?
 //
 // Generators that copy one repo's source into another repo's vendored artifact
-// (xchain-wallet/bin/sync-chain-registry.mjs) read the LOCAL tree. Run from a
+// (xchain-wallet/tools/sync-chain-registry.mjs) read the LOCAL tree. Run from a
 // stale clone, such a generator faithfully rewrites a superseded value into the
 // consumer and the result looks exactly like a legitimate resync. That
 // is how the hub's chain-registry snapshot kept a bitcoin-regtest encoder port

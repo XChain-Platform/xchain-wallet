@@ -69,6 +69,10 @@
 
 .body {
     composes: scrollArea;
+    /* Contains absolutely positioned descendants (visually hidden text,
+       hit areas) so the scroller clips them; otherwise the route container
+       counts them as overflow below the viewport. */
+    position: relative;
     flex: 1 1 auto;
     min-height: 0;
     padding: var(--xc-page-top) var(--xc-page-gutter);

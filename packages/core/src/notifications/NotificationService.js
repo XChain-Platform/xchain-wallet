@@ -489,8 +489,12 @@ export class NotificationService {
             }
             case 'ORDER_MATCH':
             case 'SWAP_MATCH':
+                // Swaps and orders live on separate screens (My swaps, My
+                // orders), so name the one that matched; both share one toggle.
                 if (flags.orderFills) {
-                    plan = { kind: 'order-fill', title: 'Order matched', body: `Your order on ${addr.label} was matched.` };
+                    plan = msg.type === 'SWAP_MATCH'
+                        ? { kind: 'order-fill', title: 'Swap matched', body: `Your swap on ${addr.label} was matched.` }
+                        : { kind: 'order-fill', title: 'Order matched', body: `Your order on ${addr.label} was matched.` };
                 }
                 break;
             case 'DISPENSE':
@@ -501,8 +505,18 @@ export class NotificationService {
             case 'COINPAY_REQUIRED':
                 // BTCPAY-style obligation. No dedicated v1 toggle; gate under
                 // incomingReceipts (it's an inbound-settlement prompt).
+                //
+                // Only a matched ORDER on a coin pair owes a coin payment. The
+                // event reaches both the payer and the payee address, so each
+                // side is told its own part; an event naming neither stays neutral.
                 if (flags.incomingReceipts) {
-                    plan = { kind: 'coinpay-required', title: 'CoinPay payment required', body: `Complete the payment for your swap on ${addr.label}.` };
+                    if (data.payer_address === addr.address) {
+                        plan = { kind: 'coinpay-required', title: 'Payment due for a matched order', body: `One of your orders on ${addr.label} was matched. Send the coin payment before the payment window closes, or the match expires.` };
+                    } else if (data.payee_address === addr.address) {
+                        plan = { kind: 'coinpay-required', title: 'Order matched, awaiting payment', body: `One of your orders on ${addr.label} was matched. The buyer has until the payment window closes to send the coin payment.` };
+                    } else {
+                        plan = { kind: 'coinpay-required', title: 'Coin payment due', body: `An order on ${addr.label} was matched and needs a coin payment before the payment window closes.` };
+                    }
                 }
                 break;
             // priceAlerts has no client event source in v1 (no alert-threshold

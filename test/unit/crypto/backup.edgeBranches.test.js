@@ -5,7 +5,10 @@
 
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-vi.mock('../../../packages/core/src/crypto/aead.js', () => ({
+// Only the cipher calls are mocked; the real layout lengths stay, because
+// backup.js splits and checks the envelope on them.
+vi.mock('../../../packages/core/src/crypto/aead.js', async (importOriginal) => ({
+    ...(await importOriginal()),
     encrypt: vi.fn(),
     decrypt: vi.fn(),
 }));

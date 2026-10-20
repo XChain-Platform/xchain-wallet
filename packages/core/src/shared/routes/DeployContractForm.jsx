@@ -1475,7 +1475,11 @@ export function DeployContractForm({ walletId, onBack }) {
             {suggestedGas !== null ? (
                 <p className={styles.summary}>
                     Suggested gas limit: {suggestedGas}
-                    {gasLimit !== String(suggestedGas) ? ' (applied)' : ''}
+                    {/* Compare what submit will send (trimmed field, else the
+                        suggestion), the same fallback handleReview uses. */}
+                    {(String(gasLimit).trim() || String(suggestedGas)) === String(suggestedGas)
+                        ? ' (applied)'
+                        : ' (not applied: your gas limit is used)'}
                     {/* The SDK's rationale is a raw count dump ("… 1 indexed
                         for, charged 2x/iteration …"); restate it in plain
                         counts, keeping the raw string when the shape moves

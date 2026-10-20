@@ -12,7 +12,7 @@ import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..', '..');
-const SCRIPT = join(ROOT, 'scripts', 'build-preflight.js');
+const SCRIPT = join(ROOT, 'tools', 'build-preflight.js');
 const VERSION = '1.2.3';
 
 function write(root, path, contents) {

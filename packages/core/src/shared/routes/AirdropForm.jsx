@@ -66,6 +66,7 @@ import { currentListItems } from '../../flows/listMembership.js';
 import { MEMO_HINT } from '../utils/memoLimit.js';
 import { listLabel } from '../utils/listLabel.js';
 import { readFailureMessage } from '../utils/readFailureMessage.js';
+import { ADDRESS_REFERENCE_ITEM_MESSAGE, addressReferenceNote } from '../utils/addressReferenceCopy.js';
 import {
     classifyRecipientEntries,
     classifyRecipientEntriesAsync,
@@ -185,8 +186,8 @@ export function AirdropForm({ walletId, resumeId = null, onBack, initialChainId,
     // 'paste' mode: paste/upload addresses -> new ADDRESS list (TYPE=2).
     const [pasteText, setPasteText] = useState('');
     const [committedRecipients, setCommittedRecipients] = useState(
-        /** @type {{ valid: string[], invalid: string[], duplicates: number, wrongNetwork: string[], invalidLines?: Array<{ address: string, line: number }> }} */
-        ({ valid: [], invalid: [], duplicates: 0, wrongNetwork: [], invalidLines: [] }),
+        /** @type {{ valid: string[], invalid: string[], duplicates: number, wrongNetwork: string[], addressRefs?: string[], invalidLines?: Array<{ address: string, line: number }> }} */
+        ({ valid: [], invalid: [], duplicates: 0, wrongNetwork: [], addressRefs: [], invalidLines: [] }),
     );
     const [importedRecipientEntries, setImportedRecipientEntries] = useState(
         /** @type {{ text: string, entries: Array<{ value: string, line: number }> } | null} */ (null),
@@ -425,6 +426,8 @@ export function AirdropForm({ walletId, resumeId = null, onBack, initialChainId,
     const recipientClassificationPending = !immediateRecipients && !largeRecipientsReady;
     const recipientsPending = deferredRecipientsPending || recipientClassificationPending;
     const recipients = stage === 'compose' ? parsedRecipients : committedRecipients;
+    // A resumed record carries no classification, so it has no reference list.
+    const addressRefs = recipients.addressRefs || [];
 
     // Parse holder tickers with the same chain grammar as every token-list form.
     const tickItems = useMemo(() => classifyTickItems(ticksText), [ticksText]);
@@ -1980,6 +1983,22 @@ export function AirdropForm({ walletId, resumeId = null, onBack, initialChainId,
                                 items={recipients.wrongNetwork.map((address) => ({
                                     subject: address,
                                     message: 'Does not belong to the active network.',
+                                }))}
+                            />
+                        </FieldNote>
+                    ) : null}
+
+                    {/* A ^<index> entry is an address reference, not a typo. This
+                        form needs the address itself, so say that instead of "invalid". */}
+                    {addressRefs.length > 0 ? (
+                        <FieldNote variant="warning" role="alert">
+                            <p>{addressReferenceNote(addressRefs.length)}</p>
+                            <DiagnosticDetails
+                                summary={`Address references (${addressRefs.length})`}
+                                keepAddresses
+                                items={addressRefs.map((ref) => ({
+                                    subject: ref,
+                                    message: ADDRESS_REFERENCE_ITEM_MESSAGE,
                                 }))}
                             />
                         </FieldNote>

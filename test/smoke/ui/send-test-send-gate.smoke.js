@@ -115,8 +115,8 @@ assert.match(
 );
 assert.match(
     formRender,
-    /type="submit"[\s\S]{0,200}disabled=\{(?:isDemo \|\| )?networkOffline \|\| !!testSendGate \|\| maxUnavailable\}/,
-    'compose-form Send button disabled while offline, gated, or Max is unavailable',
+    /type="submit"[\s\S]{0,200}disabled=\{(?:isDemo \|\| )?networkOffline \|\| !!testSendGate \|\| maxUnavailable \|\| !!amountBalanceError\}/,
+    'compose-form Send button disabled while offline, gated, Max is unavailable, or the amount exceeds the known balance',
 );
 assert.match(
     sendSrc,

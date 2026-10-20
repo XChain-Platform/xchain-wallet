@@ -144,6 +144,13 @@ export function restoreFailureMessage(reason, { mode = 'fresh' } = {}) {
         return 'The wallet inside this backup file is missing the details needed to unlock it, so '
             + 'no password can open it. Restore from a different backup file.';
     }
+    // A damaged seal on the wallet inside the backup. Also not about a
+    // password: retyping one cannot help, so it must win before the
+    // wrong-password matchers below.
+    if (/backupsealdamagederror|wallet inside this backup file is damaged/.test(hay)) {
+        return 'The wallet inside this backup file is damaged, so no password can open it. '
+            + 'Restore from a different backup file.';
+    }
     // The contents are not a backup envelope at all (pasted text, another
     // app's file, a truncated copy). Core's wording ("unexpected magic
     // \"undefined\"") names its own field names, and no password is at fault.

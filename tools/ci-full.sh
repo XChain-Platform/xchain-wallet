@@ -14,7 +14,7 @@
 #*********************************************************************
 
 #
-# bin/ci-full.sh: run EVERY tier this repo's GitHub CI runs, in one process.
+# tools/ci-full.sh: run EVERY tier this repo's GitHub CI runs, in one process.
 #
 # .github/workflows/ci.yml fans this repo out as eight parallel jobs (test,
 # drift-guards, build, coverage, e2e, e2e-regtest, audit, verdict). The
@@ -151,7 +151,7 @@ need_sib xchain-documentation
 # the pre-push hook used to run on its own.
 FAST_CI_PLAN=""
 if [ "${CI_TIER:-full}" = "fast" ]; then
-  if FAST_CI_PLAN="$(node bin/ci_fast_select.js --plan 2>&1)"; then
+  if FAST_CI_PLAN="$(node tools/ci_fast_select.js --plan 2>&1)"; then
     echo "$FAST_CI_PLAN"
   else
     echo "ci:full: fast selector unavailable ($FAST_CI_PLAN); running the full test tier"
@@ -161,11 +161,11 @@ fi
 if [ "${CI_TIER:-full}" != "fast" ] || printf '%s\n' "$FAST_CI_PLAN" | grep -qx 'consensus 1'; then
   run_tier "test (pnpm run ci)" pnpm run ci
 else
-  run_tier "test (changed tests)" node bin/ci_fast_select.js --run
+  run_tier "test (changed tests)" node tools/ci_fast_select.js --run
   fast_defer "test (pnpm run ci)"
 fi
 if [ "${CI_TIER:-full}" = "fast" ]; then
-  run_tier "fast-tier selector self-test" node --test bin/ci_fast_select.test.js
+  run_tier "fast-tier selector self-test" node --test tools/ci_fast_select.test.js
 fi
 
 # --- regression suite --------------------------------------------------
@@ -194,7 +194,7 @@ run_tier "drift: wallet<->SDK preflight schema/code parity" \
   pnpm exec vitest run --config test/vitest/unit.config.js \
     test/unit/components/PreflightPanel.tier1Notice.test.jsx
 run_tier "drift: wallet<->hub chain-registry snapshot" \
-  node bin/sync-chain-registry.mjs --check
+  node tools/sync-chain-registry.mjs --check
 run_tier "drift: installed SDK matches lockfile pin" \
   pnpm run sdk:check
 

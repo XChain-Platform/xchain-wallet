@@ -101,8 +101,8 @@ for (const tag of tags) {
     assert.ok(integrity, `built asset ${url} carries no integrity attribute`);
     assert.match(tag, /\scrossorigin/, `built asset ${url} carries integrity but no crossorigin`);
 
-    // Resolved exactly as the plugin's lookup resolves it, so a tag that gains a
-    // query string ("?v=2") is still verified rather than quietly missing.
+    // Resolved as the plugin's lookup resolves it at Vite's default base '/', so a tag
+    // that gains a query string ("?v=2") is still verified rather than quietly missing.
     const file = join(webDir, 'dist', url.replace(/^\/+/, '').split(/[?#]/)[0]);
     assert.ok(existsSync(file), `integrity points at a missing file: ${url}`);
     const want = `sha384-${createHash('sha384').update(readFileSync(file)).digest('base64')}`;

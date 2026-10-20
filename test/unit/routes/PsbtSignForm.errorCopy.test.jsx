@@ -236,6 +236,28 @@ describe('PSBT sign screen: a broadcast that fails', () => {
     });
 });
 
+// The host reports whether the queue save landed as `persisted`; the banner
+// promise is only true when it did.
+describe('PSBT sign screen: a broadcast the host queued', () => {
+    const queuedWith = (persisted) => broadcastWith(() => Promise.resolve({
+        queued: true, broadcast: 'queued', queueId: 'q1', pendingTxId: 'p1', persisted,
+    }));
+
+    it('warns instead of promising the banner when the queue save was refused', async () => {
+        const utils = await queuedWith(false);
+        expect(alertsText(utils)).toMatch(/could not be saved to the queue/);
+        expect(utils.container.textContent).not.toMatch(/saved in the\s+queued-transactions banner/);
+        // The warning tells the user to copy the bytes, so the copy control must still be there.
+        expect(utils.container.querySelector('[data-testid="signed-tx-hex"]')).toBeTruthy();
+    });
+
+    it('keeps the banner copy when the queue save landed', async () => {
+        const utils = await queuedWith(true);
+        expect(alertsText(utils)).not.toMatch(/could not be saved to the queue/);
+        expect(utils.container.textContent).toMatch(/saved in the\s+queued-transactions banner/);
+    });
+});
+
 describe('PSBT sign screen: a signing attempt that fails', () => {
     async function signWith(signPsbtUserInitiatedHw) {
         const utils = await mountAndPaste({ signPsbtUserInitiatedHw });

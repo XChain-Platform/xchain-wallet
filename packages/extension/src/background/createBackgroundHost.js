@@ -5763,7 +5763,10 @@ export async function changeWalletPassword(req, deps, operations = {}) {
             try {
                 if (await rekey(candidate, sealOpts(candidate))) candidates.push(candidate);
             } catch (err) {
-                if (/** @type {any} */ (err)?.name !== 'BackupSeedPasswordError') throw err;
+                // Skip another wallet this password cannot open, or whose seal is
+                // damaged: it keeps its old seal and the change goes ahead.
+                const name = /** @type {any} */ (err)?.name;
+                if (name !== 'BackupSeedPasswordError' && name !== 'BackupSealDamagedError') throw err;
             }
         }
 

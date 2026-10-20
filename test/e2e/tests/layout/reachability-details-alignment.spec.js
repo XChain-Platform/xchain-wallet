@@ -43,10 +43,11 @@ test('the Details link starts where the message text starts on a phone', async (
     await page.setViewportSize({ width: 360, height: 800 });
     await createWallet(page);
     await goOffline(page);
-    // Contacts is local data, so the shell notice is the page's only message.
+    // Contacts is local data, so the shell notice is the page's only message
+    // and, with no balance on screen, says its information may be out of date.
     await gotoSection(page, 'Contacts');
 
-    const message = page.getByRole('status').filter({ hasText: 'Some balances may be out of date' });
+    const message = page.getByRole('status').filter({ hasText: 'Some information may be out of date' });
     await expect(message).toBeVisible();
     const details = page.getByRole('button', { name: 'Details', exact: true });
     await expect(details).toBeVisible();

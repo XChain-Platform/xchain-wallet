@@ -255,7 +255,7 @@ export function BottomTabBar({
                     title={<h2 className={styles.sheetTitle}>{t('history.detail.more')}</h2>}
                     titleId="xc-bottom-sheet-dialog-title"
                     aria-labelledby="xc-bottom-sheet-dialog-title"
-                    closeLabel="Close more navigation"
+                    closeLabel={t('components.bottomTabBar.closeMoreNavigation')}
                     onClose={() => setSheetOpen(false)}
                     onBackdrop={() => setSheetOpen(false)}
                     onKeyDown={onSheetKeyDown}

@@ -204,7 +204,16 @@ function RawTransactionBroadcast({
         // A relay that queued the transaction instead of broadcasting it is
         // not a broadcast; say so before any success copy can render.
         if (result?.queued) {
-            return <QueuedResultPanel onDone={() => setState('form')} what="broadcast" unsaved={result?.unsaved} />;
+            // Map the host's `persisted` reply to a definite boolean: this lane
+            // never goes through useConfirmAction, so the panel's handoff fallback
+            // would show another action's leftover warning, or none at all.
+            return (
+                <QueuedResultPanel
+                    onDone={() => setState('form')}
+                    what="broadcast"
+                    unsaved={result?.persisted === false}
+                />
+            );
         }
         const explorerBase = descriptor?.explorer?.defaultUrl;
         const explorerUrl = txid && explorerBase ? explorerPageUrl({

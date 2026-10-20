@@ -14,7 +14,7 @@
 // service has refused, from its own failure or from a direct connection check.
 // A slow service, an HTTP error answer, or a single failing service keeps the wait.
 
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import { checkReachability } from '../../../packages/core/src/flows/reachability.js';
 
 const NETWORK_ERROR = () => new Error('Encoder request failed: Network Error');
@@ -105,12 +105,19 @@ describe('checkReachability fast-fail verdict', () => {
     it('asks nothing directly when the services answer promptly', async () => {
         const calls = [];
         const ok = async () => true;
-        const res = await run(
-            sdkWith({ encoder: ok, hub: ok, explorer: ok }),
-            { wireDelayMs: 200, wireCheck: async (...args) => { calls.push(args); return 'refused'; } },
-        );
-        expect(res.overall).toBe('normal');
-        await new Promise((resolve) => setTimeout(resolve, 250));
-        expect(calls).toHaveLength(0);
+        const wireDelayMs = 200;
+        vi.useFakeTimers();
+        try {
+            const res = await run(
+                sdkWith({ encoder: ok, hub: ok, explorer: ok }),
+                { wireDelayMs, wireCheck: async (...args) => { calls.push(args); return 'refused'; } },
+            );
+            expect(res.overall).toBe('normal');
+            // Run the clock well past the wire delay, so a direct check left armed would fire here.
+            await vi.advanceTimersByTimeAsync(wireDelayMs * 2);
+            expect(calls).toHaveLength(0);
+        } finally {
+            vi.useRealTimers();
+        }
     });
 });

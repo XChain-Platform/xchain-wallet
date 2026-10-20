@@ -315,3 +315,36 @@ describe('ContractStakeForm exact partial unstake', () => {
             .toBe('90071992.54740901');
     });
 });
+
+describe('ContractStakeForm penalty warning', () => {
+    it('tells the staker in plain words that the contract can take their staked tokens', async () => {
+        mountForm({
+            initialMode: 'stake',
+            initialSigningPubkey: 'a'.repeat(64),
+        }, {
+            getSettings: vi.fn().mockResolvedValue({ walletMode: 'watcher' }),
+            getWalletBalances: vi.fn().mockResolvedValue({
+                [CHAIN]: [{
+                    address: ACTIVE_ADDRESS,
+                    balances: {
+                        native: { tick: 'BTC', quantity: '1', divisibility: 8 },
+                        tokens: [{ tick: 'XCHAIN', quantity: '5', divisibility: 8 }],
+                    },
+                }],
+            }),
+        });
+        expect(await screen.findByText('Penalty destination')).toBeInTheDocument();
+        expect(screen.queryByText('Slashed funds')).not.toBeInTheDocument();
+
+        fireEvent.change(await screen.findByLabelText('Amount (XCHAIN)'), {
+            target: { value: '1' },
+        });
+        fireEvent.click(screen.getByRole('button', { name: 'Preview' }));
+
+        const review = await screen.findByRole('form', { name: 'Stake review' });
+        expect(review).toHaveTextContent('Penalty risk');
+        expect(review).toHaveTextContent('This contract can take some or all of your staked tokens as a penalty.');
+        expect(review).toHaveTextContent('Penalties are sent to');
+        expect(review).not.toHaveTextContent(/slash/i);
+    });
+});

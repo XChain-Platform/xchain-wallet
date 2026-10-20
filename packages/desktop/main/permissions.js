@@ -370,8 +370,9 @@ export function attachHidPermissions(session, opts) {
  * at their pickers.
  *
  * @param {import('electron').Session} session
+ * @param {{ env?: Record<string, string | undefined>, log?: (...args: unknown[]) => void }} [opts]
  */
-export function attachHidDenial(session) {
+export function attachHidDenial(session, opts = {}) {
     if (!session) throw new Error('attachHidDenial: session is required');
     if (typeof session.setPermissionRequestHandler !== 'function') {
         throw new Error('attachHidDenial: session.setPermissionRequestHandler is missing');
@@ -399,7 +400,13 @@ export function attachHidDenial(session) {
     // Braces: the handler Electron 43 actually consults for `hid`. Refuse
     // every device class (WebHID, WebUSB, Web Serial); other permissions stay
     // granted here, as narrowing them needs a live Trezor pairing to measure.
-    session.setPermissionCheckHandler((_webContents, permission) => !BRIDGE_DENIED_DEVICE_CLASSES.has(permission));
+    const logChecks = (opts?.env ?? process.env).XCHAIN_LOG_BRIDGE_PERMISSIONS === '1';
+    const log = opts?.log ?? console.log;
+    session.setPermissionCheckHandler((_webContents, permission, requestingOrigin) => {
+        const allowed = !BRIDGE_DENIED_DEVICE_CLASSES.has(permission);
+        if (logChecks) log('[bridge-session] permission check', { permission, requestingOrigin, allowed });
+        return allowed;
+    });
 
     // Refuses every device outright, regardless of vendor, origin or
     // frame - the handler `setDevicePermissionHandler` consults once a
