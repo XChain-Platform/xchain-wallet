@@ -126,7 +126,9 @@ test.describe('partial validator reward claim on Bitcoin testnet', () => {
             await main.getByRole('button', { name: 'Claim rewards', exact: true }).click();
             await approve(page);
             await expect(main.getByText(/Claim broadcast\./)).toBeVisible({ timeout: 120_000 });
-            const action = await waitForValidAction(venue, await readDoneTxid(page), {
+            const claimTxid = await readDoneTxid(page);
+            test.info().annotations.push({ type: 'txid', description: `collect ${claimTxid}` });
+            const action = await waitForValidAction(venue, claimTxid, {
                 timeoutMs: INCLUSION_TIMEOUT,
             });
             expect(action.action).toBe('COLLECT');

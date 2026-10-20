@@ -45,7 +45,9 @@ export default defineConfig({
     timeout: 8 * 60 * 60_000,
     expect: { timeout: 120_000 },
     globalSetup: './global-setup.testnet.js',
-    reporter: process.env.CI ? [['github'], ['html', { open: 'never' }]] : 'list',
+    reporter: process.env.CI
+        ? [['github'], ['html', { open: 'never' }], ['json', { outputFile: './test-results-testnet/results.json' }]]
+        : [['list'], ['json', { outputFile: './test-results-testnet/results.json' }]],
     use: {
         baseURL: suiteOrigin(),
         trace: 'retain-on-failure',
