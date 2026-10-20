@@ -22,6 +22,7 @@ const CORE_SRC = path.join(ROOT, 'packages/core/src');
 
 export const COMPOSED = {
     'Open Validator stake': ['Open ', 'Validator stake'],
+    'Switch to Testnet?': ['Switch to {network}?', 'Testnet'],
 };
 
 const walk = (dir) => fs.readdirSync(dir, { withFileTypes: true }).flatMap((entry) => {
@@ -122,6 +123,14 @@ describe('testnet e2e UI name literals', () => {
             'sample.js:2 "planted unknown name"',
             'COMPOSED "composed name" missing fragment "missing fragment"',
         ]);
+    });
+
+    it('accepts the testnet switch dialog and the switch network button', () => {
+        const sample = [
+            "page.getByRole('dialog', { name: 'Switch to Testnet?' });",
+            "page.getByRole('button', { name: 'Switch network' });",
+        ].join('\n');
+        expect(invalidUiNames([['sample.js', sample]], coreSources())).toEqual([]);
     });
 
     it('finds every locator kind and every literal in packages/core/src', () => {
