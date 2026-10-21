@@ -356,19 +356,19 @@ wallet restore.
 
 Every testnet run writes `test/e2e/test-results-testnet/results.json` through
 Playwright's json reporter beside the list reporter (github and html under CI).
-stake-unstake records its funding, stake and unstake txids, and partial-claim
-its collect txid, as test annotations of type `txid` whose description is the
-label, a space and the txid. Those annotations carry only txids, never a key, a
-phrase or an address. Git ignores the file and the next run replaces it, so a
-pass or a failure leaves its on-chain record in that file instead of a scrolled
-terminal.
+stake-unstake records its funding, mint, stake and unstake txids, and
+partial-claim its collect txid, as test annotations of type `txid` whose
+description is the label, a space and the txid. Those annotations carry only
+txids, never a key, a phrase or an address. Git ignores the file and the next
+run replaces it, so a pass or a failure leaves its on-chain record in that file
+instead of a scrolled terminal.
 
 `node test/e2e/fixtures/testnet_evidence.js [results.json]` reads that run
 record, `test/e2e/test-results-testnet/results.json` when no path is given. It
 prints one line per test giving its status, spec file and title, with one
 indented label and txid line under it for each txid the test recorded. It then
 ends on `testnet run passed` and exits 0 when the run has no errors, at least
-one test, every test expected and a funding, stake, unstake and collect txid.
+one test, every test expected and a funding, mint, stake, unstake and collect txid.
 Any absent label is named on a `missing txid` line before the reader ends on
 `testnet run failed` and exits 1. It exits 2 with one stderr line naming the
 path when the file is missing or is not JSON. The ledger closure cites the

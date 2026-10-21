@@ -13,7 +13,8 @@
 //
 // The report nests suites inside suites, and the on-chain transaction ids are
 // carried as annotations of type txid, each described as a label (funding,
-// stake, unstake or collect), one space and the 64 hex characters of the id.
+// mint, stake, unstake or collect), one space and the 64 hex characters of
+// the id.
 // summarizeRun flattens that tree in report order; main prints one line per
 // test with its ids indented below it and exits 0 only for a clean run that
 // holds every required id label. Nothing here prints a key, a phrase or an
@@ -26,9 +27,15 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const DEFAULT_REPORT = path.resolve(HERE, '..', 'test-results-testnet', 'results.json');
-const TXID_PATTERN = /^(funding|stake|unstake|collect) ([0-9a-f]{64})$/;
+const TXID_PATTERN = /^(funding|mint|stake|unstake|collect) ([0-9a-f]{64})$/;
 
-export const REQUIRED_TXID_LABELS = Object.freeze(['funding', 'stake', 'unstake', 'collect']);
+export const REQUIRED_TXID_LABELS = Object.freeze([
+    'funding',
+    'mint',
+    'stake',
+    'unstake',
+    'collect',
+]);
 
 function collectTxids(annotations, file, title, seen, out) {
     for (const annotation of annotations || []) {

@@ -18,6 +18,7 @@ const A = 'a'.repeat(64);
 const B = 'b'.repeat(64);
 const C = 'c'.repeat(64);
 const D = 'd'.repeat(64);
+const E = 'e'.repeat(64);
 
 const tx = (description) => ({ type: 'txid', description });
 const mk = (title, status, annotations = [], results = []) => ({
@@ -79,20 +80,38 @@ describe('main', () => {
         const { code, out } = await run(report([
             mk('stake', 'expected', [
                 tx(`funding ${A}`),
-                tx(`stake ${B}`),
-                tx(`unstake ${C}`),
+                tx(`mint ${B}`),
+                tx(`stake ${C}`),
+                tx(`unstake ${D}`),
             ]),
-            mk('claim', 'expected', [tx(`collect ${D}`)]),
+            mk('claim', 'expected', [tx(`collect ${E}`)]),
         ]));
         expect(code).toBe(0);
         expect(out).toEqual([
             'expected staking/x.testnet.spec.js stake\n',
             `  funding ${A}\n`,
-            `  stake ${B}\n`,
-            `  unstake ${C}\n`,
+            `  mint ${B}\n`,
+            `  stake ${C}\n`,
+            `  unstake ${D}\n`,
             'expected staking/x.testnet.spec.js claim\n',
-            `  collect ${D}\n`,
+            `  collect ${E}\n`,
             'testnet run passed\n',
+        ]);
+    });
+
+    it('fails when a clean run has no mint txid', async () => {
+        const { code, out } = await run(report([
+            mk('stake', 'expected', [
+                tx(`funding ${A}`),
+                tx(`stake ${B}`),
+                tx(`unstake ${C}`),
+            ]),
+            mk('claim', 'expected', [tx(`collect ${D}`)]),
+        ]));
+        expect(code).toBe(1);
+        expect(out.slice(-2)).toEqual([
+            'missing txid: mint\n',
+            'testnet run failed\n',
         ]);
     });
 
@@ -102,7 +121,7 @@ describe('main', () => {
         expect(out).toEqual([
             'expected staking/x.testnet.spec.js claim\n',
             `  collect ${D}\n`,
-            'missing txid: funding, stake, unstake\n',
+            'missing txid: funding, mint, stake, unstake\n',
             'testnet run failed\n',
         ]);
     });
