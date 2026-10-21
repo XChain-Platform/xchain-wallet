@@ -15,25 +15,25 @@
 // human-readable) and derive a monotonic integer tuple for `version`
 // (what Chrome actually uses for upgrade ordering).
 //
-// Rule (chosen to keep `version` monotonic across the RC → GA cut):
+// Rule (chosen to keep `version` monotonic across each release cut):
 //
-//     wallet M.m.p           →  M.m.p           (stable, 3 segments)
-//     wallet M.m.p-rc.N      →  0.M.m.N         (prerelease, 4 segments)
+//     wallet M.m.p             →  M.m.p       (stable, 3 segments)
+//     wallet M.m.p-{rc,beta}.N →  0.M.m.N     (prerelease, 4 segments)
+//     wallet M.m.p-respin.N    →  M.m.p.N     (respin, 4 segments)
 //
 // Properties:
-//  - For any `M.m.p-rc.N` with M ≥ 1, `0.M.m.N` < `M.m.p`: Chrome
-//    compares segment-by-segment, and the leading `0` pins prerelease
-//    tuples strictly below every stable tuple with M ≥ 1.
-//  - Successive RCs increase (0.1.0.1 < 0.1.0.2 < … < 0.1.0.N).
-//  - N fits in one segment up to 65535 RC candidates (plenty).
+//  - Prereleases sort below their stable release for the wallet's supported
+//    release trains, including the current 0.MINOR.PATCH train.
+//  - A respin adds a positive fourth segment, so it sorts above stable.
+//  - Successive candidates and respins increase with N.
 //
 // Usage:
 //   import { deriveExtensionVersion } from './derive-extension-version.js';
-//   deriveExtensionVersion('1.0.0-rc.1');  // → '0.1.0.1'
-//   deriveExtensionVersion('1.0.0');        // → '1.0.0'
+//   deriveExtensionVersion('0.342.0-beta.1');   // → '0.0.342.1'
+//   deriveExtensionVersion('0.341.4');          // → '0.341.4'
+//   deriveExtensionVersion('0.341.4-respin.1'); // → '0.341.4.1'
 
-const STABLE_RE = /^(\d+)\.(\d+)\.(\d+)$/;
-const RC_RE = /^(\d+)\.(\d+)\.(\d+)-rc\.(\d+)$/;
+const RELEASE_RE = /^(\d+)\.(\d+)\.(\d+)(?:-(rc|beta|respin)\.(\d+))?$/;
 
 const MAX_SEGMENT = 65535;
 
@@ -48,9 +48,9 @@ function assertSegment(n, label) {
 /**
  * Derive the Chrome-manifest `version` string from a wallet semver.
  *
- * @param {string} walletVersion  e.g. '1.0.0-rc.1' or '1.0.0'
- * @returns {string}              e.g. '0.1.0.1'  or '1.0.0'
- * @throws if the input doesn't match either supported shape.
+ * @param {string} walletVersion  e.g. '0.342.0-beta.1' or '0.341.4-respin.1'
+ * @returns {string}              e.g. '0.0.342.1' or '0.341.4.1'
+ * @throws if the input doesn't match a supported release shape.
  */
 export function deriveExtensionVersion(walletVersion) {
     if (typeof walletVersion !== 'string' || walletVersion.length === 0) {
@@ -58,23 +58,25 @@ export function deriveExtensionVersion(walletVersion) {
             `deriveExtensionVersion: expected non-empty string, got ${JSON.stringify(walletVersion)}`,
         );
     }
-    const stable = STABLE_RE.exec(walletVersion);
-    if (stable) {
-        const [, M, m, p] = stable;
-        const parts = [Number(M), Number(m), Number(p)];
-        parts.forEach((n, i) => assertSegment(n, ['major', 'minor', 'patch'][i]));
-        return parts.join('.');
+    const release = RELEASE_RE.exec(walletVersion);
+    if (!release) {
+        throw new Error(
+            `deriveExtensionVersion: unrecognized wallet version ${JSON.stringify(walletVersion)}; `
+            + "expected 'M.m.p', 'M.m.p-rc.N', 'M.m.p-beta.N' or 'M.m.p-respin.N'",
+        );
     }
-    const rc = RC_RE.exec(walletVersion);
-    if (rc) {
-        const [, M, m, , N] = rc;
-        const parts = [0, Number(M), Number(m), Number(N)];
-        assertSegment(parts[1], 'major');
-        assertSegment(parts[2], 'minor');
-        assertSegment(parts[3], 'rc-number');
-        return parts.join('.');
+
+    const [, M, m, p, lane, N] = release;
+    const base = [Number(M), Number(m), Number(p)];
+    base.forEach((n, i) => assertSegment(n, ['major', 'minor', 'patch'][i]));
+    if (!lane) return base.join('.');
+
+    const laneNumber = Number(N);
+    assertSegment(laneNumber, `${lane}-number`);
+    if (laneNumber === 0) {
+        throw new Error(`deriveExtensionVersion: ${lane}-number must be at least 1`);
     }
-    throw new Error(
-        `deriveExtensionVersion: unrecognized wallet version ${JSON.stringify(walletVersion)}; expected 'M.m.p' or 'M.m.p-rc.N'`,
-    );
+    if (lane === 'respin') return [...base, laneNumber].join('.');
+
+    return [0, base[0], base[1], laneNumber].join('.');
 }

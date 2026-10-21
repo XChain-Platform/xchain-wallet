@@ -379,18 +379,12 @@ release - claim the release in the ledger before touching anything):
      packages/extension/manifest.json is in the list and is the only one
      of them the Chrome Web Store ever reads - leave it behind and step 6
      uploads a zip re-declaring a version the store has already served,
-     which it refuses. Note that manifest.json's version is DERIVED from
-     the wallet version rather than copied
-     (packages/core/scripts/derive-extension-version.js: a stable M.m.p
-     maps to itself, but a prerelease M.m.p-rc.N maps to 0.M.m.N, because
-     Chrome forbids prerelease suffixes). Cut a rollback re-release as a
-     STABLE version and the two are the same string. If you ever need an
-     RC here, stop: measured 2026-08-02, the manifest audit's
-     version-matches-wallet rule and version-lockstep.smoke.js demand
-     DIFFERENT values for a prerelease root and both run in
-     pnpm test:smoke, so the suite cannot pass until that is resolved
-     (that contract's ground, not this script's). Add a CHANGELOG.md entry that
-     says plainly this is a rollback re-release of $GOOD_TAG, not new work.
+     which it refuses. Use tools/release/bump-version.mjs so manifest.json's
+     Chrome-only integer tuple and its user-visible version_name are derived
+     together. Stable M.m.p maps to M.m.p, beta and RC tags map below stable,
+     and respin tags map above it. The manifest audit, lockstep smoke and
+     sign.sh all enforce that derivation. Add a CHANGELOG.md entry that says
+     plainly this is a rollback re-release of $GOOD_TAG, not new work.
   4. Run the manual QA checklist in full against the bumped build
      (https://docs.xchain.io/components/wallet/release/qa-checklist), including
      the "Chrome Web Store release provenance" section.
