@@ -290,9 +290,11 @@ describe('PC-38 deployChunkedRun', () => {
         const { opts } = baseOpts();
         await deployChunkedRun(opts);
         expect(submitAction.mock.calls).toHaveLength(4);
-        for (const call of submitAction.mock.calls) {
+        // Each leg signs the PSBT composeActionForConfirm already tamper-checked;
+        // verifyBuiltTx stays set so a leg built without one is still checked.
+        for (const [i, call] of submitAction.mock.calls.entries()) {
             expect(call[0].verifyBuiltTx).toBe(true);
-            expect(call[0].prebuiltPsbt).toBeUndefined();
+            expect(call[0].prebuiltPsbt).toMatchObject({ psbtHex: `checked-psbt-${i + 1}` });
         }
     });
 
