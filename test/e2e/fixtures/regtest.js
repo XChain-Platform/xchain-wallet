@@ -1945,6 +1945,26 @@ export function activeNetworkControl(page) {
 }
 
 /**
+ * Turns Developer Mode on from the Settings index and returns to it. Without
+ * it the Active network select offers only Mainnet. Idempotent: a wallet that
+ * already has it on is left alone.
+ */
+export async function enableDeveloperMode(page) {
+    await page.getByRole('button', { name: /^Developer mode/ }).click();
+    const devToggle = page.getByRole('switch', { name: 'Turn on developer mode', exact: true });
+    await expect(devToggle).toBeVisible();
+    if (!(await devToggle.isChecked())) {
+        // `.check()` fails here: the input is fully controlled by PERSISTED
+        // settings, so its `checked` does not flip until the vault write
+        // resolves, and check()'s post-click assertion is synchronous.
+        // Click, then wait for the state the write produces.
+        await devToggle.click();
+        await expect(devToggle).toBeChecked();
+    }
+    await page.getByRole('button', { name: 'Back to settings' }).click();
+}
+
+/**
  * Flips the wallet onto the regtest network and waits for it to come
  * back up.
  *
@@ -1967,18 +1987,7 @@ export async function switchToRegtest(page, password) {
     // because it has no nav surface.
     await openSettings(page);
 
-    await page.getByRole('button', { name: /^Developer mode/ }).click();
-    const devToggle = page.getByRole('switch', { name: 'Turn on developer mode', exact: true });
-    await expect(devToggle).toBeVisible();
-    if (!(await devToggle.isChecked())) {
-        // `.check()` fails here: the input is fully controlled by PERSISTED
-        // settings, so its `checked` does not flip until the vault write
-        // resolves, and check()'s post-click assertion is synchronous.
-        // Click, then wait for the state the write produces.
-        await devToggle.click();
-        await expect(devToggle).toBeChecked();
-    }
-    await page.getByRole('button', { name: 'Back to settings' }).click();
+    await enableDeveloperMode(page);
 
     // This select now derives an address on each chain of the
     // network it switches to. Before that fix it only moved a filter,
