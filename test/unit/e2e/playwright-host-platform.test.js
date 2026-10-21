@@ -8,6 +8,7 @@
 import { describe, expect, it } from 'vitest';
 
 import config, { desktopUserAgentForHost } from '../../e2e/playwright.config.js';
+import regtestConfig from '../../e2e/playwright.regtest.config.js';
 
 const DESKTOP_CHROME_UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) '
     + 'AppleWebKit/537.36 (KHTML, like Gecko) Chrome/147.0.0.0 Safari/537.36';
@@ -26,5 +27,9 @@ describe('Playwright desktop host platform', () => {
 
     it('configures the desktop project for the current host', () => {
         expect(config.projects[0].use.userAgent).toBe(desktopUserAgentForHost());
+    });
+
+    it('configures the regtest desktop project for the current host', () => {
+        expect(regtestConfig.projects[0].use.userAgent).toBe(desktopUserAgentForHost());
     });
 });

@@ -29,6 +29,7 @@
 // browser origin rules.
 
 import { defineConfig, devices } from '@playwright/test';
+import { desktopUserAgentForHost } from './host-user-agent.js';
 
 // Deliberately NOT vite preview's default 4173: a hand-run preview (this
 // venue is also driven manually while debugging, and a second coder shares
@@ -102,6 +103,9 @@ export default defineConfig({
             name: 'chromium',
             use: {
                 ...devices['Desktop Chrome'],
+                // Same host-matched user agent as playwright.config.js, so
+                // ControlOrMeta and the wallet's shortcut gate agree on a Mac host.
+                userAgent: desktopUserAgentForHost(),
                 launchOptions: {
                     args: [
                         '--disable-web-security',
