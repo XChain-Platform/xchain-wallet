@@ -23,12 +23,15 @@ import { useEffect, useRef } from 'react';
 
 /** @type {object[]} */
 const activeTraps = [];
+// Dialog portals lock their own document, including preview frames, without
+// freezing the page that embeds them.
 // Keyed by document: a modal rendered into an iframe (the style guide's width
 // frames) locks that frame's body, never the page around it.
 const bodyScrollLocks = new WeakMap();
 const inertLocks = new WeakMap();
 const FOCUS_VISIBLE_FALLBACK_CLASS = 'xc-focus-visible-fallback';
 const MODAL_SELECTOR = '[role="dialog"][aria-modal="true"], [role="alertdialog"][aria-modal="true"]';
+const SUPPRESS_INITIAL_FOCUS_ATTR = 'data-xc-suppress-initial-focus';
 
 function installFocusVisibleFallback() {
     if (typeof document === 'undefined') return;
@@ -252,9 +255,11 @@ export function useFocusTrap(containerRef, {
         const initial = requestedInitial === container
             ? (firstFocusable || container)
             : (requestedInitial || firstFocusable);
-        if (container.contains(document.activeElement)) {
+        const suppressInitialFocus = ownerDoc.documentElement
+            ?.hasAttribute(SUPPRESS_INITIAL_FOCUS_ATTR);
+        if (container.contains(ownerDoc.activeElement)) {
             // Already focused inside (an autoFocus control): leave it.
-        } else if (initial && typeof initial.focus === 'function') {
+        } else if (!suppressInitialFocus && initial && typeof initial.focus === 'function') {
             // Defer to after paint so the element is actually focusable.
             requestAnimationFrame(() => { try { initial.focus(); } catch { /* noop */ } });
         }
