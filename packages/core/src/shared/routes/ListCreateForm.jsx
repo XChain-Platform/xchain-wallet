@@ -128,6 +128,7 @@ export function ListCreateForm({ walletId, chainId: initialChainId, initialType,
         /** @type {Record<string, 'found' | 'missing' | null>} */ ({}),
     );
     const [tickCoinSupported, setTickCoinSupported] = useState(false);
+    const [anyCoins, setAnyCoins] = useState(/** @type {string[]} */ ([]));
     const [memo, setMemo] = useState('');
     const [metaSupported, setMetaSupported] = useState(false);
     const [listName, setListName] = useState('');
@@ -200,6 +201,22 @@ export function ListCreateForm({ walletId, chainId: initialChainId, initialType,
         return () => { cancelled = true; };
     }, [chainId, messaging]);
 
+    // Once token-policy inheritance is active the indexer takes an address item
+    // for any configured coin on this network; the explorer's flag says when, so
+    // the form never offers an item the chain would drop into list_items_invalid.
+    useEffect(() => {
+        let cancelled = false;
+        setAnyCoins([]);
+        if (!chainId || !recipientCoin || !recipientNetwork) return () => { cancelled = true; };
+        Promise.resolve()
+            .then(() => (typeof messaging.listAnyCoinItems === 'function'
+                ? messaging.listAnyCoinItems({ chainId, coin: recipientCoin, networkKind: recipientNetwork })
+                : []))
+            .then((coins) => { if (!cancelled) setAnyCoins(Array.isArray(coins) ? coins : []); })
+            .catch(() => { if (!cancelled) setAnyCoins([]); });
+        return () => { cancelled = true; };
+    }, [chainId, recipientCoin, recipientNetwork, messaging]);
+
     useEffect(() => {
         let cancelled = false;
         setMetaSupported(false);
@@ -221,8 +238,9 @@ export function ListCreateForm({ walletId, chainId: initialChainId, initialType,
         setRecipients(airdropLib.classifyRecipients(
             parts,
             { coin: recipientCoin, network: recipientNetwork },
+            { anyCoins },
         ));
-    }, [pasteText, listType, recipientCoin, recipientNetwork]);
+    }, [pasteText, listType, recipientCoin, recipientNetwork, anyCoins]);
 
     const fromAddress = useMemo(() => {
         if (!fromAddressId || !addressesByChain || !chainId) return null;

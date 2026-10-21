@@ -166,6 +166,7 @@ function ListForkFormScreen({ walletId, listRef, onBack, onDone, repointHandlers
     const [owner, setOwner] = useState(/** @type {string | null | undefined} */ (undefined));
     const [listName, setListName] = useState(/** @type {string | null} */ (null));
     const [tickCoinSupported, setTickCoinSupported] = useState(false);
+    const [anyCoins, setAnyCoins] = useState(/** @type {string[]} */ ([]));
 
     // Prefer the explorer's current owner, then walk to the root create for
     // older explorers that do not report one.
@@ -274,6 +275,24 @@ function ListForkFormScreen({ walletId, listRef, onBack, onDone, repointHandlers
         return () => { cancelled = true; };
     }, [chainId, isTick, messaging]);
 
+    // Once token-policy inheritance is active the indexer takes an address item
+    // for any configured coin on this network; the explorer's flag says when, so
+    // the form never offers an item the chain would drop into list_items_invalid.
+    useEffect(() => {
+        let cancelled = false;
+        setAnyCoins([]);
+        if (isTick || !chainId || !descriptor?.coin || !descriptor?.networkKind) return () => { cancelled = true; };
+        Promise.resolve()
+            .then(() => (typeof messaging.listAnyCoinItems === 'function'
+                ? messaging.listAnyCoinItems({
+                    chainId, coin: descriptor?.coin, networkKind: descriptor?.networkKind,
+                })
+                : []))
+            .then((coins) => { if (!cancelled) setAnyCoins(Array.isArray(coins) ? coins : []); })
+            .catch(() => { if (!cancelled) setAnyCoins([]); });
+        return () => { cancelled = true; };
+    }, [chainId, isTick, descriptor?.coin, descriptor?.networkKind, messaging]);
+
     const fromAddress = useMemo(() => {
         if (!fromAddressId || !addressesByChain) return null;
         return (addressesByChain[chainId] || []).find((a) => a.id === fromAddressId) || null;
@@ -349,8 +368,8 @@ function ListForkFormScreen({ walletId, listRef, onBack, onDone, repointHandlers
         return airdropLib.classifyRecipients(parts, {
             coin: descriptor?.coin || null,
             network: descriptor?.networkKind || null,
-        });
-    }, [addText, isTick, tickCoinSupported, descriptor?.coin, descriptor?.networkKind]);
+        }, { anyCoins });
+    }, [addText, isTick, tickCoinSupported, descriptor?.coin, descriptor?.networkKind, anyCoins]);
 
     const itemIdentity = useCallback((item) => {
         const value = String(item);

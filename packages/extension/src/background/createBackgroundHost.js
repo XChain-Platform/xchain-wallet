@@ -26,6 +26,7 @@ import { crypto as coreCrypto, decoder, flows, registry, schemas } from '@xchain
 import { WALLET_VERSION } from '@xchain-wallet/core/buildInfo.js';
 import { sharedListDirectory } from '@xchain-wallet/core/flows/sharedLists.js';
 import { listTickCoinSupport } from '@xchain-wallet/core/flows/listTickCoinSupport.js';
+import { listAnyCoinItemsSupport } from '@xchain-wallet/core/flows/listAnyCoinItemsSupport.js';
 import { supplyHistoryFor } from '@xchain-wallet/core/flows/supplyHistory.js';
 import { capRbfToDescriptor } from '@xchain-wallet/core/flows/rbfCap.js';
 import {
@@ -5431,6 +5432,15 @@ export function createBackgroundHost(deps) {
     // answers false for a missing SDK method, a throw or an unknown chain.
     host.register('sdk.isListTickCoinActive', async (req, { sdkRegistry }) => {
         return listTickCoinSupport({ sdkRegistry, chainId: req?.chainId });
+    });
+
+    // The address-list item gate the list create and fork forms read: the coins
+    // whose addresses a LIST on this chain accepts, its own included. The flow
+    // answers [] for a missing explorer, a throw or a flag that is not true.
+    host.register('sdk.listAnyCoinItems', async (req, { sdkRegistry }) => {
+        return listAnyCoinItemsSupport({
+            sdkRegistry, chainId: req?.chainId, coin: req?.coin, networkKind: req?.networkKind,
+        });
     });
 
     host.register('sdk.getActionFields', async (req, { sdkRegistry }) => {

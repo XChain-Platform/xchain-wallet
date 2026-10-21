@@ -1897,6 +1897,17 @@ export function getActionFormats(req) {
 }
 
 /**
+ * The coins whose addresses an address LIST on the chain accepts once
+ * token-policy inheritance is active, read from the explorer's gate flag.
+ * Answers [] when the gate is off or on any failure.
+ *
+ * @param {{ chainId: string, coin: string, networkKind: string }} req
+ */
+export function listAnyCoinItems(req) {
+    return /** @type {any} */ (sendMessage('sdk.listAnyCoinItems', req));
+}
+
+/**
  * Whether the chain has reached the list tick-coin activation, so the create
  * form may offer coin-qualified ticker items. Answers false on any failure.
  *

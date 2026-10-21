@@ -199,18 +199,36 @@ export function isRecipientForChain(addr, chain) {
  * (`^<index>`). The wallet does not resolve references, so they are still
  * dropped, but they are not typos either and the form says so.
  *
+ * `options.anyCoins` is the opt-in for address LISTs once token-policy
+ * inheritance is active: an address for any of those coins on the chain's own
+ * network counts as valid, the rule the indexer applies to LIST TYPE=2 items.
+ * Only the list create and fork forms pass it; AIRDROP and list transfers stay
+ * strict, because they pay or move on the list's own coin.
+ *
  * @param {string[]} candidates
  * @param {{ coin?: string, network?: string, networkKind?: string } | null} [chain]
+ * @param {{ anyCoins?: string[] }} [options]
  * @returns {{ valid: string[], invalid: string[], duplicates: number, wrongNetwork: string[],
  *   addressRefs: string[] }}
  */
-export function classifyRecipients(candidates, chain) {
-    const classifier = createRecipientClassifier(chain, false);
+export function classifyRecipients(candidates, chain, options = {}) {
+    const classifier = createRecipientClassifier(chain, false, options.anyCoins);
     for (const raw of candidates) classifier.add(raw);
     return classifier.result();
 }
 
-function createRecipientClassifier(chain, includeLines) {
+/**
+ * True when `candidate` is an address for one of `anyCoins` on the chain's
+ * own network. Never widens across networks, and without a known chain it
+ * never widens at all.
+ */
+function isOtherCoinItem(candidate, params, anyCoins) {
+    if (!params || !Array.isArray(anyCoins) || anyCoins.length === 0) return false;
+    return anyCoins.some((coin) => coin !== params.coin
+        && isValidAddressForChain(candidate, coin, params.network));
+}
+
+function createRecipientClassifier(chain, includeLines, anyCoins) {
     /** @type {string[]} */
     const valid = [];
     /** @type {string[]} */
@@ -233,7 +251,7 @@ function createRecipientClassifier(chain, includeLines) {
             return;
         }
         seen.add(duplicateKey);
-        if (isRecipientForChain(candidate, chain)) {
+        if (isRecipientForChain(candidate, chain) || isOtherCoinItem(candidate, params, anyCoins)) {
             // Publish the lowercase bech32 form, which every wallet emits (BIP173).
             valid.push(duplicateKey);
             return;
@@ -263,12 +281,13 @@ function createRecipientClassifier(chain, includeLines) {
  *
  * @param {Array<{ value: string, line: number }>} entries
  * @param {{ coin?: string, network?: string, networkKind?: string } | null} [chain]
+ * @param {{ anyCoins?: string[] }} [options]  see classifyRecipients
  * @returns {{ valid: string[], invalid: string[], duplicates: number, wrongNetwork: string[],
  *   addressRefs: string[], invalidLines: Array<{ address: string, line: number }>,
  *   wrongNetworkLines: Array<{ address: string, line: number }> }}
  */
-export function classifyRecipientEntries(entries, chain) {
-    const classifier = createRecipientClassifier(chain, true);
+export function classifyRecipientEntries(entries, chain, options = {}) {
+    const classifier = createRecipientClassifier(chain, true, options.anyCoins);
     for (const entry of entries) classifier.add(entry?.value, entry?.line);
     return classifier.result();
 }
@@ -279,7 +298,8 @@ export function classifyRecipientEntries(entries, chain) {
  *
  * @param {Array<{ value: string, line: number }>} entries
  * @param {{ coin?: string, network?: string, networkKind?: string } | null} [chain]
- * @param {{ chunkSize?: number, yieldTask?: () => Promise<void>, shouldCancel?: () => boolean }} [options]
+ * @param {{ chunkSize?: number, yieldTask?: () => Promise<void>, shouldCancel?: () => boolean,
+ *   anyCoins?: string[] }} [options]
  * @returns {Promise<ReturnType<typeof classifyRecipientEntries> | null>}
  */
 export async function classifyRecipientEntriesAsync(entries, chain, options = {}) {
@@ -287,7 +307,7 @@ export async function classifyRecipientEntriesAsync(entries, chain, options = {}
     const chunkSize = Number.isInteger(rawChunkSize) && rawChunkSize > 0 ? rawChunkSize : 250;
     const yieldTask = options.yieldTask || (() => new Promise((resolve) => setTimeout(resolve, 0)));
     const shouldCancel = options.shouldCancel || (() => false);
-    const classifier = createRecipientClassifier(chain, true);
+    const classifier = createRecipientClassifier(chain, true, options.anyCoins);
 
     for (let index = 0; index < entries.length; index += 1) {
         if (index > 0 && index % chunkSize === 0) {

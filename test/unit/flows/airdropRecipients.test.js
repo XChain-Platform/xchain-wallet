@@ -62,6 +62,41 @@ describe('parseCsv recipient imports', () => {
 
 });
 
+describe('classifyRecipients - other-coin list items (anyCoins opt-in)', () => {
+    const ANY = { anyCoins: ['bitcoin', 'litecoin', 'dogecoin'] };
+
+    it('puts another coin\'s address on the same network in valid when opted in', () => {
+        const out = classifyRecipients([MAINNET_LEGACY, LITECOIN_BECH32], BTC_MAINNET, ANY);
+        expect(out.valid).toEqual([MAINNET_LEGACY, LITECOIN_BECH32]);
+        expect(out.wrongNetwork).toEqual([]);
+        expect(out.invalid).toEqual([]);
+    });
+
+    it('keeps it in wrongNetwork without the opt-in, or when that coin is not in the set', () => {
+        expect(classifyRecipients([LITECOIN_BECH32], BTC_MAINNET).wrongNetwork).toEqual([LITECOIN_BECH32]);
+        expect(classifyRecipients([LITECOIN_BECH32], BTC_MAINNET, { anyCoins: ['bitcoin'] }).wrongNetwork)
+            .toEqual([LITECOIN_BECH32]);
+        expect(classifyRecipients([LITECOIN_BECH32], BTC_MAINNET, { anyCoins: [] }).wrongNetwork)
+            .toEqual([LITECOIN_BECH32]);
+    });
+
+    it('never widens across networks', () => {
+        const out = classifyRecipients([LITECOIN_REGTEST_BECH32, MAINNET_BECH32], BTC_MAINNET, ANY);
+        expect(out.valid).toEqual([MAINNET_BECH32]);
+        expect(out.wrongNetwork).toEqual([LITECOIN_REGTEST_BECH32]);
+
+        const regtest = classifyRecipients([LITECOIN_REGTEST_BECH32, LITECOIN_BECH32], BTC_REGTEST, ANY);
+        expect(regtest.valid).toEqual([LITECOIN_REGTEST_BECH32]);
+        expect(regtest.wrongNetwork).toEqual([LITECOIN_BECH32]);
+    });
+
+    it('carries the opt-in through the line-tracking classifier', () => {
+        const out = classifyRecipientEntries([{ value: LITECOIN_BECH32, line: 1 }], BTC_MAINNET, ANY);
+        expect(out.valid).toEqual([LITECOIN_BECH32]);
+        expect(out.wrongNetworkLines).toEqual([]);
+    });
+});
+
 describe('classifyRecipients - network-aware validation', () => {
     it('does not count a mainnet address as valid on a regtest wallet', () => {
         const out = classifyRecipients([
