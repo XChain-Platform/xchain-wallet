@@ -20,6 +20,9 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 vi.mock('../../../packages/core/src/flows/submitAction.js', () => ({
     submitAction: vi.fn(),
 }));
+vi.mock('../../../packages/core/src/flows/composeActionForConfirm.js', () => ({
+    composeActionForConfirm: vi.fn(),
+}));
 vi.mock('../../../packages/core/src/flows/sendToken.js', () => ({
     normalizeSource: vi.fn((from) => ({
         address: from.address, publicKey: from.publicKey,
@@ -29,6 +32,8 @@ vi.mock('../../../packages/core/src/flows/sendToken.js', () => ({
 }));
 
 import { submitAction } from '../../../packages/core/src/flows/submitAction.js';
+import { composeActionForConfirm } from '../../../packages/core/src/flows/composeActionForConfirm.js';
+import { TamperDetectedError } from '../../../packages/core/src/flows/confirmChecks.js';
 import {
     planChunkedDeploy,
     chunkCarrierParams,
@@ -39,6 +44,32 @@ import {
 
 const FROM = { address: 'addr-1', publicKey: '02ab', derivationPath: "m/84'/1'/0'/0/0", addressId: 'a1' };
 const HASH = 'a'.repeat(64);
+
+function checkedCompose(actionData, sequence) {
+    return {
+        psbt: `checked-psbt-${sequence}`,
+        encoding: 'OP_RETURN',
+        actionString: `DEPLOY|${actionData.params.VERSION}|${actionData.params.CHUNK_INDEX ?? 'assemble'}`,
+        version: actionData.params.VERSION,
+        deferredFeeOutput: null,
+        deferredOutputs: [],
+        revealOpts: null,
+        revealPsbt: null,
+        envelope: null,
+        adsPlan: { canSubmit: false },
+        compression: null,
+        tamperVerified: true,
+    };
+}
+
+beforeEach(() => {
+    let sequence = 0;
+    composeActionForConfirm.mockReset();
+    composeActionForConfirm.mockImplementation(async ({ actionData }) => {
+        sequence += 1;
+        return checkedCompose(actionData, sequence);
+    });
+});
 
 // A stand-in for the SDK's planner; the real consensus math is pinned in the
 // SDK's own chunkHelper suite, so here we only need a deterministic shape.
@@ -184,6 +215,55 @@ describe('PC-38 deployChunkedRun', () => {
             .toEqual([['4', '0', 'p0'], ['4', '1', 'p1'], ['4', '2', 'p2']]);
         expect(sent[3].VERSION).toBe('2');
         expect(sent[3].CODE_HASH).toBe(HASH);
+    });
+
+    it('tamper-checks and fee-checks every leg, then signs those exact composed bytes', async () => {
+        okSubmit();
+        const { opts } = baseOpts({ opts: { feePerKb: 4321, payFeeInNativeCoin: true } });
+        await deployChunkedRun(opts);
+
+        expect(composeActionForConfirm).toHaveBeenCalledTimes(4);
+        expect(submitAction).toHaveBeenCalledTimes(4);
+        for (let i = 0; i < 4; i++) {
+            const composed = composeActionForConfirm.mock.calls[i][0];
+            const submitted = submitAction.mock.calls[i][0];
+            expect(composed.actionData).toEqual(submitted.actionData);
+            expect(composed.encoderOpts).toEqual(submitted.encoderOpts);
+            expect(composed.encoderOpts).toMatchObject({
+                sourceAddress: FROM.address,
+                change: FROM.address,
+                feePerKb: 4321,
+                payFeeInNativeCoin: true,
+            });
+            expect(composed).toMatchObject({
+                source: FROM.address,
+                ownAddresses: [FROM.address],
+                signer: FROM,
+            });
+            expect(submitted.prebuiltPsbt).toMatchObject({
+                psbtHex: `checked-psbt-${i + 1}`,
+                actionString: `DEPLOY|${submitted.actionData.params.VERSION}`
+                    + `|${submitted.actionData.params.CHUNK_INDEX ?? 'assemble'}`,
+            });
+        }
+    });
+
+    it('stops before signing a leg when its host-side tamper check fails', async () => {
+        let sequence = 0;
+        composeActionForConfirm.mockImplementation(async ({ actionData }) => {
+            sequence += 1;
+            if (sequence === 2) {
+                throw new TamperDetectedError('The action encoded in the transaction does not match what you approved.');
+            }
+            return checkedCompose(actionData, sequence);
+        });
+        submitAction.mockResolvedValue({ txid: 'tx1', indexed: { action_index: 1001 } });
+        const { opts } = baseOpts();
+
+        await expect(deployChunkedRun(opts)).rejects.toThrow(TamperDetectedError);
+        expect(composeActionForConfirm).toHaveBeenCalledTimes(2);
+        expect(submitAction).toHaveBeenCalledTimes(1);
+        expect(submitAction.mock.calls[0][0].actionData.params.CHUNK_INDEX).toBe('0');
     });
 
     it('pins every leg to the SAME source address (chunks are gathered per-deployer)', async () => {
