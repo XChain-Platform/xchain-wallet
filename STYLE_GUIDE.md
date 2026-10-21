@@ -2,7 +2,7 @@
 
 Living doc. The rule it exists to enforce: **if you find yourself copying CSS or JSX between two routes, lift it.** When in doubt, prefer one of the shared primitives below over re-rolling from scratch.
 
-The live catalog is the style guide page, served by the web dev server at `/style-guide/`. Its bar switches ordinary examples between Mobile (360px), Extension popup (400px) and Desktop (1024px) frames, and `?view=mobile|extension|desktop` in the URL opens a given view. Page-template examples instead show compact (360px), rail (768px), and full (1024px) widths together so the page gutter is visible at every layout tier.
+The live catalog is the style guide page, published at https://wallet.xchain.io/style-guide/ with every web deploy and served by the web dev server at `/style-guide/`. Its bar switches ordinary examples between Mobile (360px), Extension popup (400px) and Desktop (1024px) frames, and `?view=mobile|extension|desktop` in the URL opens a given view. Page-template examples instead show compact (360px), rail (768px), and full (1024px) widths together so the page gutter is visible at every layout tier.
 
 ## Page templates
 

@@ -25,6 +25,8 @@ import { useEffect, useRef } from 'react';
 const activeTraps = [];
 // Dialog portals lock their own document, including preview frames, without
 // freezing the page that embeds them.
+// Keyed by document: a modal rendered into an iframe (the style guide's width
+// frames) locks that frame's body, never the page around it.
 const bodyScrollLocks = new WeakMap();
 const inertLocks = new WeakMap();
 const FOCUS_VISIBLE_FALLBACK_CLASS = 'xc-focus-visible-fallback';
