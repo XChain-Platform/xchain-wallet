@@ -23,11 +23,13 @@ import { useEffect, useRef } from 'react';
 
 /** @type {object[]} */
 const activeTraps = [];
-let bodyScrollLocks = 0;
-let priorBodyOverflow = '';
+// Dialog portals lock their own document, including preview frames, without
+// freezing the page that embeds them.
+const bodyScrollLocks = new WeakMap();
 const inertLocks = new WeakMap();
 const FOCUS_VISIBLE_FALLBACK_CLASS = 'xc-focus-visible-fallback';
 const MODAL_SELECTOR = '[role="dialog"][aria-modal="true"], [role="alertdialog"][aria-modal="true"]';
+const SUPPRESS_INITIAL_FOCUS_ATTR = 'data-xc-suppress-initial-focus';
 
 function installFocusVisibleFallback() {
     if (typeof document === 'undefined') return;
@@ -51,19 +53,24 @@ function installFocusVisibleFallback() {
 
 installFocusVisibleFallback();
 
-function lockBodyScroll() {
-    if (typeof document === 'undefined' || !document.body) return;
-    if (bodyScrollLocks === 0) {
-        priorBodyOverflow = document.body.style.overflow;
-        document.body.style.overflow = 'hidden';
+function lockBodyScroll(doc) {
+    if (!doc?.body) return;
+    const lock = bodyScrollLocks.get(doc);
+    if (lock) {
+        lock.count += 1;
+        return;
     }
-    bodyScrollLocks += 1;
+    bodyScrollLocks.set(doc, { count: 1, priorOverflow: doc.body.style.overflow });
+    doc.body.style.overflow = 'hidden';
 }
 
-function unlockBodyScroll() {
-    if (typeof document === 'undefined' || !document.body || bodyScrollLocks === 0) return;
-    bodyScrollLocks -= 1;
-    if (bodyScrollLocks === 0) document.body.style.overflow = priorBodyOverflow;
+function unlockBodyScroll(doc) {
+    const lock = doc && bodyScrollLocks.get(doc);
+    if (!lock) return;
+    lock.count -= 1;
+    if (lock.count > 0) return;
+    if (doc.body) doc.body.style.overflow = lock.priorOverflow;
+    bodyScrollLocks.delete(doc);
 }
 
 function lockInert(element) {
@@ -229,7 +236,8 @@ export function useFocusTrap(containerRef, {
 
         const layer = {};
         activeTraps.push(layer);
-        lockBodyScroll();
+        const ownerDoc = container.ownerDocument;
+        lockBodyScroll(ownerDoc);
         const modalRoot = modalRootFor(container);
         const backgroundTargets = modalRoot ? inertTargetsOutside(modalRoot) : [];
         backgroundTargets.forEach(lockInert);
@@ -245,9 +253,11 @@ export function useFocusTrap(containerRef, {
         const initial = requestedInitial === container
             ? (firstFocusable || container)
             : (requestedInitial || firstFocusable);
-        if (container.contains(document.activeElement)) {
+        const suppressInitialFocus = ownerDoc.documentElement
+            ?.hasAttribute(SUPPRESS_INITIAL_FOCUS_ATTR);
+        if (container.contains(ownerDoc.activeElement)) {
             // Already focused inside (an autoFocus control): leave it.
-        } else if (initial && typeof initial.focus === 'function') {
+        } else if (!suppressInitialFocus && initial && typeof initial.focus === 'function') {
             // Defer to after paint so the element is actually focusable.
             requestAnimationFrame(() => { try { initial.focus(); } catch { /* noop */ } });
         }
@@ -277,7 +287,7 @@ export function useFocusTrap(containerRef, {
             const layerIndex = activeTraps.indexOf(layer);
             if (layerIndex !== -1) activeTraps.splice(layerIndex, 1);
             backgroundTargets.forEach(unlockInert);
-            unlockBodyScroll();
+            unlockBodyScroll(ownerDoc);
             const prev = previouslyFocused.current;
             // A caller often disables its opener while the dialog is pending
             // (a Delete button marked busy until the confirm settles), and the
