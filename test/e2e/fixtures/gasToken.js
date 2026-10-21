@@ -33,7 +33,7 @@ import { chromium, devices, expect } from '@playwright/test';
 import {
     EXPLORER_URL, REGTEST_COIN, REGTEST_DESTINATION,
     switchToRegtest, unlockAfterReload, readReceiveAddress,
-    expectConfirmModal, approveConfirm,
+    expectConfirmModal, approveConfirm, mintXchain,
 } from './regtest.js';
 import { selectNamedChain } from './crossChain.js';
 import {
@@ -56,7 +56,6 @@ export const GAS_ISSUE = Object.freeze({
 const BOOTSTRAP_PASSWORD = 'GasBootstrap!2026';
 const BTC_COIN = 'RBTC';
 const BRIDGE_AMOUNT = 5000;
-const BRIDGE_MINT_AMOUNT = BRIDGE_AMOUNT + 1;
 const RAILS = Object.freeze({
     RBTC: { coin: 'BTC', label: 'Bitcoin', encoderPort: 3023, minerPort: 3025 },
     RLTC: { coin: 'LTC', label: 'Litecoin', encoderPort: 3223, minerPort: 3225 },
@@ -93,9 +92,11 @@ async function railRpc(port, method, params = {}) {
         // An off-BTC run reaches the Bitcoin rail too, so its encoder and miner
         // ports must be tunneled beside the venue's own; say which ones.
         const btc = rail(BTC_COIN);
+        const ports = `-L ${btc.encoderPort}:localhost:${btc.encoderPort} -L ${btc.minerPort}:localhost:${btc.minerPort}`;
         throw new Error(`${method} on localhost:${port} did not answer (${err?.message || err}); `
-            + 'the gas bootstrap needs the Bitcoin regtest rail as well as the venue chain, so tunnel '
-            + `-L ${btc.encoderPort}:localhost:${btc.encoderPort} -L ${btc.minerPort}:localhost:${btc.minerPort} too`);
+            + (REGTEST_COIN === BTC_COIN
+                ? `tunnel the Bitcoin regtest rail: ${ports}`
+                : `XCHAIN reaches ${REGTEST_COIN} only over the bridge from Bitcoin regtest, so tunnel ${ports} beside the venue's own ports`));
     }
     const body = await res.json();
     if (body.error || body.result?.error) {
@@ -225,6 +226,84 @@ async function submitAdvancedAction(page, what) {
 }
 
 /**
+ * MINT on Bitcoin from `source` (one of the page wallet's own Bitcoin
+ * addresses, already funded) and lock `amount` across to `destination` on the
+ * venue chain with an XBRIDGE v0. One unit more than the lock is minted, the
+ * margin the bootstrap has always carried, so the lock never meets a balance
+ * short by its own fee. Returns once the lock is signed; the credit lands on
+ * the venue only after the hub's relay margin, see waitForBridgedXchain.
+ */
+async function mintAndLockOnBitcoin(page, source, destination, amount) {
+    const minted = amount + 1;
+    const held = await railTokenBalance(BTC_COIN, source);
+    await openBitcoinAdvancedAction(page, 'MINT');
+    await page.getByRole('textbox', { name: 'TICK', exact: true }).fill(GAS_TICK);
+    await page.getByRole('textbox', { name: 'AMOUNT', exact: true }).fill(String(minted));
+    await submitAdvancedAction(page, `the MINT of ${minted} ${GAS_TICK} on Bitcoin`);
+    await waitFor(
+        () => railTokenBalance(BTC_COIN, source).then((balance) => balance >= held + minted),
+        { coins: [BTC_COIN], timeoutMs: 180_000, description: `the ${GAS_TICK} MINT on Bitcoin` },
+    );
+
+    const bridge = gasBridgeParams(REGTEST_COIN, destination, amount);
+    await openBitcoinAdvancedAction(page, 'XBRIDGE');
+    await page.getByLabel('Format version', { exact: true }).selectOption(bridge.VERSION);
+    for (const field of ['DEST_COIN', 'DEST_ADDRESS', 'AMOUNT']) {
+        await page.getByRole('textbox', { name: field, exact: true }).fill(bridge[field]);
+    }
+    await submitAdvancedAction(page, `the XBRIDGE lock of ${amount} ${GAS_TICK} to ${REGTEST_COIN}`);
+}
+
+/**
+ * The hub stamps a bridged credit a full relay margin ahead (LTC 600 s, DOGE
+ * 240 s) and only settles it once Bitcoin buries the lock, so the wait mines
+ * both rails and is sized past the margin.
+ */
+function bridgeWaitMs() {
+    return REGTEST_COIN === 'RLTC' ? 780_000 : 420_000;
+}
+
+async function waitForBridgedXchain(destination, atLeast) {
+    await waitFor(
+        () => railTokenBalance(REGTEST_COIN, destination).then((balance) => balance >= atLeast),
+        {
+            coins: [BTC_COIN, REGTEST_COIN],
+            timeoutMs: bridgeWaitMs(),
+            description: `the bridged ${GAS_TICK} credit of ${atLeast} to ${destination} on ${REGTEST_COIN}`,
+        },
+    );
+}
+
+/**
+ * Give `address`, the page wallet's own venue-chain address, `amount` XCHAIN.
+ *
+ * On Bitcoin this is the open faucet MINT. Off Bitcoin the bridged token is
+ * mint-locked (MINT_START_BLOCK never arrives), so a MINT there can only be
+ * refused; the spec's tokens come the way every venue's supply does instead:
+ * minted on Bitcoin regtest and locked across with an XBRIDGE v0. That needs
+ * the Bitcoin rail tunnelled beside the venue's own (encoder 3023, miner 3025).
+ * The wallet must already be unlocked on regtest; this reloads it once, to see
+ * the Bitcoin funding.
+ *
+ * @param {import('@playwright/test').Page} page
+ * @param {{ address: string, amount: number, password: string }} opts
+ */
+export async function fundXchain(page, { address, amount, password }) {
+    if (REGTEST_COIN === BTC_COIN) {
+        await mintXchain(page, amount);
+        return;
+    }
+    const held = await railTokenBalance(REGTEST_COIN, address);
+    const main = await openBitcoinAdvancedAction(page, 'MINT');
+    const source = await main.getByLabel('From', { exact: true }).inputValue();
+    await fundRailAddress(BTC_COIN, source, 1);
+    await page.reload();
+    await unlockAfterReload(page, password);
+    await mintAndLockOnBitcoin(page, source, address, amount);
+    await waitForBridgedXchain(address, held + amount);
+}
+
+/**
  * Seed the gas token through the wallet itself. Bitcoin uses ISSUE directly.
  * Other chains use the platform supply path: ISSUE and MINT on Bitcoin, then an
  * XBRIDGE v0 lock to the throwaway wallet's destination-chain address.
@@ -291,24 +370,7 @@ export async function ensureGasToken({ baseURL, log = console.log }) {
             );
         }
 
-        if (bridged) {
-            await openBitcoinAdvancedAction(page, 'MINT');
-            await page.getByRole('textbox', { name: 'TICK', exact: true }).fill(GAS_TICK);
-            await page.getByRole('textbox', { name: 'AMOUNT', exact: true }).fill(String(BRIDGE_MINT_AMOUNT));
-            await submitAdvancedAction(page, `the MINT of ${BRIDGE_MINT_AMOUNT} ${GAS_TICK} on Bitcoin`);
-            await waitFor(
-                () => railTokenBalance(BTC_COIN, source).then((amount) => amount >= BRIDGE_MINT_AMOUNT),
-                { coins: [BTC_COIN], timeoutMs: 180_000, description: `the ${GAS_TICK} MINT on Bitcoin` },
-            );
-
-            const bridge = gasBridgeParams(REGTEST_COIN, destination);
-            await openBitcoinAdvancedAction(page, 'XBRIDGE');
-            await page.getByLabel('Format version', { exact: true }).selectOption(bridge.VERSION);
-            for (const field of ['DEST_COIN', 'DEST_ADDRESS', 'AMOUNT']) {
-                await page.getByRole('textbox', { name: field, exact: true }).fill(bridge[field]);
-            }
-            await submitAdvancedAction(page, `the XBRIDGE lock of ${BRIDGE_AMOUNT} ${GAS_TICK} to ${REGTEST_COIN}`);
-        }
+        if (bridged) await mintAndLockOnBitcoin(page, source, destination, BRIDGE_AMOUNT);
     } catch (err) {
         // Global setup has no test artifacts, so a locator timeout here would
         // otherwise be a stack trace and nothing else. Name the screen instead.
@@ -327,12 +389,11 @@ export async function ensureGasToken({ baseURL, log = console.log }) {
         await browser.close();
     }
 
-    const bridgeWaitMs = REGTEST_COIN === 'RLTC' ? 780_000 : bridged ? 420_000 : 180_000;
     await waitFor(
         () => probeGasToken().then((verdict) => verdict === 'present'),
         {
             coins: bridged ? [BTC_COIN, REGTEST_COIN] : [BTC_COIN],
-            timeoutMs: bridgeWaitMs,
+            timeoutMs: bridged ? bridgeWaitMs() : 180_000,
             description: bridged
                 ? `the bridged ${GAS_TICK} credit on ${REGTEST_COIN}`
                 : `the ${GAS_TICK} ISSUE on ${REGTEST_COIN}`,

@@ -63,7 +63,8 @@
 // the last thing standing between a user and handing an address's entire
 // contents to a stranger. It is asserted on the way past.
 //
-// RUN IT ON BITCOIN OR DOGECOIN:
+// RUN IT ON BITCOIN OR DOGECOIN (a Dogecoin run also tunnels the Bitcoin rail's
+// encoder 3023 and miner 3025, since its XCHAIN arrives over the bridge):
 //   cd test/e2e && XC_REGTEST_COIN=RBTC npx playwright test \
 //       --config=playwright.regtest.config.js tests/sweep/force-close-and-broadcast.regtest.spec.js
 
@@ -72,7 +73,6 @@ import {
     expectConfirmModal as sharedConfirmModal,
     EXPLORER_URL,
     fundAddress,
-    mintXchain,
     nudgeChain,
     REGTEST_ADDRESS_RE,
     REGTEST_CHAIN_LABEL,
@@ -88,9 +88,13 @@ import {
     selectDispenserOnSource,
     selectPickerAsset,
 } from '../../fixtures/regtest.js';
+import { fundXchain } from '../../fixtures/gasToken.js';
 
 const PASSWORD = 'regtestpassword123';
-/** Three fee-bearing broadcasts ride on this address: mint, dispenser, sweep. */
+/**
+ * Fee-bearing broadcasts ride on this address: the mint (on Bitcoin only, since
+ * off Bitcoin the tokens arrive over the bridge), the dispenser and the sweep.
+ */
 const FUNDING = 2;
 const TICK = 'XCHAIN';
 const MINT = 1000;
@@ -289,7 +293,9 @@ test.describe(`sweep force-close and broadcast on ${REGTEST_CHAIN_LABEL}`, () =>
             await fundAddress(source, FUNDING);
             await page.reload();
             await unlockAfterReload(page, PASSWORD);
-            await mintXchain(page, MINT);
+            // Off Bitcoin the bridged XCHAIN is mint-locked, so the balance is
+            // minted on Bitcoin regtest and locked across to this source.
+            await fundXchain(page, { address: source, amount: MINT, password: PASSWORD });
             await waitForTokenBalance(source, TICK, MINT, 1_200_000);
             await seedPrices();
 

@@ -257,10 +257,16 @@ export async function assertVenueReachable() {
     // Names the ports THIS run needs, not Bitcoin's: a Litecoin run whose
     // encoder tunnel is missing would otherwise be told to open Bitcoin's and
     // find that it already is.
+    // Off Bitcoin the gas token arrives over the bridge from Bitcoin regtest,
+    // so those runs need the Bitcoin encoder and miner tunnelled too.
+    const bitcoinPorts = REGTEST_COIN === 'RBTC' ? ''
+        : `-L ${VENUES.RBTC.encoderPort}:localhost:${VENUES.RBTC.encoderPort} `
+        + `-L ${VENUES.RBTC.minerPort}:localhost:${VENUES.RBTC.minerPort} `;
     const hint =
         `Regtest venue (${REGTEST_COIN}) unreachable. Open the tunnels:\n`
         + `  ssh -N -L 18080:localhost:18080 -L ${VENUE.encoderPort}:localhost:${VENUE.encoderPort} `
         + `-L 10000:localhost:10000 -L ${VENUE.minerPort}:localhost:${VENUE.minerPort} `
+        + bitcoinPorts
         + '"$XC_REGTEST_SSH_HOST"';
 
     let status;
