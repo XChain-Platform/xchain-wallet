@@ -9,36 +9,33 @@
 // contact legal@dankest.llc.
 
 // gasToken: make sure the venue chain carries the XCHAIN gas token before any
-// spec asks to MINT it.
+// spec asks to use it.
 //
 // WHY THIS EXISTS, measured 2026-09-01. The regtest stack was re-genesised
 // (every chain restarted from height 0) and the first spec to run afterwards
 // died in its setup with the wallet's own sentence on screen: "The network
-// would refuse this action as it stands: TICK (unknown)". Every spec in this
-// suite funds itself through `mintXchain`, and XCHAIN is not a protocol
-// constant on LTC/DOGE regtest: it is an ordinary open-mint ISSUE that the
-// xchain-e2e-test suite plants in its own `gas-token-check` phase
-// (test/initialCheck.test.js), through a DB-backed helper this harness cannot
-// reach. Until that suite happened to run, this one could not fund a single
-// address, and the failure blamed a MINT rather than a missing issuance.
+// would refuse this action as it stands: TICK (unknown)". XCHAIN is not a
+// protocol constant in a fresh database. Bitcoin creates its open-mint ISSUE;
+// Litecoin and Dogecoin receive their token row only when an XBRIDGE v0 lock
+// from Bitcoin is settled there. This is the same supply path used by the
+// xchain-e2e-test `gas-token-check` phase.
 //
 // The parameters below are that phase's, byte for byte, so the two suites
 // agree about what XCHAIN is on a fresh chain: no pre-minted supply, minting
 // left unlocked and open from genesis, a per-transaction cap high enough that
 // `mintXchain(page, 5000)` is never throttled.
 //
-// The probe is the venue's own fee quote for a MINT of the tick, which is the
-// read the wallet makes before it signs: a present tick quotes `valid`, an
-// absent one answers `invalid: TICK (unknown)`. Holder counts cannot stand in
-// for it, because a faucet with `MINT_SUPPLY 0` has no holders until someone
-// mints.
+// Bitcoin is probed with the venue's own MINT fee quote. Off Bitcoin, the
+// bridged row is mint-locked by design, so a valid MINT quote cannot be the
+// existence test; those chains use the token-detail endpoint instead.
 
 import { chromium, devices, expect } from '@playwright/test';
 import {
     EXPLORER_URL, REGTEST_COIN, REGTEST_DESTINATION,
-    fundAddress, switchToRegtest, unlockAfterReload, readReceiveAddress,
-    selectVenueChain, expectConfirmModal, approveConfirm, nudgeChain,
+    switchToRegtest, unlockAfterReload, readReceiveAddress,
+    expectConfirmModal, approveConfirm,
 } from './regtest.js';
+import { selectNamedChain } from './crossChain.js';
 import {
     createWallet, openPaletteCommand, LICENSE_ACCEPTED_AT_KEY, LICENSE_ACCEPTED_VERSION_KEY,
 } from './wallet.js';
@@ -56,6 +53,74 @@ export const GAS_ISSUE = Object.freeze({
 });
 
 const BOOTSTRAP_PASSWORD = 'GasBootstrap!2026';
+const BTC_COIN = 'RBTC';
+const BRIDGE_AMOUNT = 5000;
+const BRIDGE_MINT_AMOUNT = BRIDGE_AMOUNT + 1;
+const RAILS = Object.freeze({
+    RBTC: { coin: 'BTC', label: 'Bitcoin', encoderPort: 3023, minerPort: 3025 },
+    RLTC: { coin: 'LTC', label: 'Litecoin', encoderPort: 3223, minerPort: 3225 },
+    RDOGE: { coin: 'DOGE', label: 'Dogecoin', encoderPort: 3123, minerPort: 3125 },
+});
+
+function rail(coin) {
+    const found = RAILS[coin];
+    if (!found) throw new Error(`no gas-token bootstrap rail is configured for ${coin}`);
+    return found;
+}
+
+export function gasBridgeParams(coin, destination, amount = BRIDGE_AMOUNT) {
+    if (coin === BTC_COIN) throw new Error('XCHAIN is issued directly on Bitcoin and is not bridged to it');
+    if (!destination) throw new Error(`the ${coin} gas bridge needs a destination address`);
+    return {
+        VERSION: '0',
+        DEST_COIN: rail(coin).coin,
+        DEST_ADDRESS: destination,
+        AMOUNT: String(amount),
+    };
+}
+
+async function railRpc(port, method, params = {}) {
+    const res = await fetch(`http://localhost:${port}`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ jsonrpc: '2.0', id: 1, method, params }),
+        signal: AbortSignal.timeout(30_000),
+    });
+    const body = await res.json();
+    if (body.error || body.result?.error) {
+        throw new Error(`${method} failed: ${JSON.stringify(body.error || body.result.error)}`);
+    }
+    return body.result;
+}
+
+async function countRailUtxos(coin, address) {
+    const result = await railRpc(rail(coin).encoderPort, 'get_utxos', { address });
+    return Array.isArray(result?.utxos) ? result.utxos.length : 0;
+}
+
+async function fundRailAddress(coin, address, amount = 1) {
+    const venue = rail(coin);
+    const before = await countRailUtxos(coin, address);
+    await railRpc(venue.minerPort, 'send_funds', { address, amount });
+    await railRpc(venue.minerPort, 'generate_blocks', { count: 1 });
+
+    const deadline = Date.now() + 60_000;
+    while (Date.now() < deadline) {
+        if (await countRailUtxos(coin, address) > before) return;
+        await new Promise((resolve) => setTimeout(resolve, 1_000));
+    }
+    throw new Error(`funding ${address} on ${coin} never appeared in the encoder`);
+}
+
+async function nudgeRail(coin) {
+    try {
+        const status = await fetch(`${EXPLORER_URL}/${coin}/api/status`, {
+            signal: AbortSignal.timeout(10_000),
+        }).then((res) => res.json());
+        if (Number(status?.decoder_lag_blocks?.[coin] ?? 0) > 3) return;
+        await railRpc(rail(coin).minerPort, 'generate_blocks', { count: 1 });
+    } catch { /* global setup's venue check reports persistent rail failures */ }
+}
 
 /**
  * Classify a `/feequote` body for a MINT of the gas tick.
@@ -70,44 +135,99 @@ const BOOTSTRAP_PASSWORD = 'GasBootstrap!2026';
  * @param {any} body
  * @returns {'present'|'absent'}
  */
-export function gasTokenVerdict(body) {
+export function gasTokenVerdict(body, coin = REGTEST_COIN) {
     const status = typeof body?.status === 'string' ? body.status : null;
     if (status === 'valid') return 'present';
     if (status && /TICK \(unknown\)/.test(status)) return 'absent';
     throw new Error(
-        `cannot tell whether ${GAS_TICK} exists on ${REGTEST_COIN}: the MINT quote answered `
+        `cannot tell whether ${GAS_TICK} exists on ${coin}: the MINT quote answered `
         + `${JSON.stringify(body).slice(0, 300)} - neither a valid quote nor a TICK (unknown) refusal`,
     );
 }
 
-/** Ask the venue whether it would price a MINT of the gas tick right now. */
-export async function probeGasToken() {
+/** Check for the native Bitcoin faucet or the bridged off-BTC token row. */
+export async function probeGasToken(coin = REGTEST_COIN, source = REGTEST_DESTINATION) {
+    if (coin !== BTC_COIN) {
+        const res = await fetch(`${EXPLORER_URL}/${coin}/api/token/${GAS_TICK}`, {
+            signal: AbortSignal.timeout(30_000),
+        });
+        const body = await res.json().catch(() => null);
+        if (res.ok && body?.info?.tick === GAS_TICK) return 'present';
+        if (res.ok && body === null) return 'absent';
+        if (res.status === 404) return 'absent';
+        throw new Error(
+            `cannot tell whether ${GAS_TICK} exists on ${coin}: token lookup answered `
+            + `${res.status} ${JSON.stringify(body).slice(0, 300)}`,
+        );
+    }
     const q = new URLSearchParams({
         action: 'MINT',
         params: `0|${GAS_TICK}|1`,
-        source: REGTEST_DESTINATION,
+        source,
     });
-    const res = await fetch(`${EXPLORER_URL}/${REGTEST_COIN}/api/feequote?${q.toString()}`, {
+    const res = await fetch(`${EXPLORER_URL}/${coin}/api/feequote?${q.toString()}`, {
         signal: AbortSignal.timeout(30_000),
     });
-    return gasTokenVerdict(await res.json());
+    return gasTokenVerdict(await res.json(), coin);
+}
+
+async function waitFor(predicate, { coins, timeoutMs, description }) {
+    const deadline = Date.now() + timeoutMs;
+    let lastError = null;
+    while (Date.now() < deadline) {
+        try {
+            if (await predicate()) return;
+            lastError = null;
+        } catch (err) {
+            lastError = err;
+        }
+        for (const coin of coins) await nudgeRail(coin);
+        await new Promise((resolve) => setTimeout(resolve, 3_000));
+    }
+    throw new Error(`${description} did not land within ${Math.round(timeoutMs / 1000)}s`
+        + (lastError ? `; last probe: ${lastError?.message || lastError}` : ''));
+}
+
+async function railTokenBalance(coin, address) {
+    const res = await fetch(`${EXPLORER_URL}/${coin}/api/balances/${address}`, {
+        signal: AbortSignal.timeout(30_000),
+    });
+    if (!res.ok) throw new Error(`balance lookup on ${coin} answered ${res.status}`);
+    const body = await res.json();
+    const row = (body?.data || []).find((entry) => entry.tick === GAS_TICK);
+    return Number(row?.amount || 0);
+}
+
+async function openBitcoinAdvancedAction(page, action) {
+    await openPaletteCommand(page, 'Advanced action');
+    const main = page.getByRole('main');
+    await selectNamedChain(main, 'Network', rail(BTC_COIN).label);
+    await page.getByLabel('Action', { exact: true }).selectOption(action);
+    return main;
+}
+
+async function submitAdvancedAction(page, what) {
+    await page.getByRole('button', { name: 'Sign action' }).click();
+    await expectConfirmModal(page, what);
+    await approveConfirm(page, what);
+    await page.waitForTimeout(4_000);
 }
 
 /**
- * ISSUE the gas token through the wallet itself, from a throwaway wallet whose
- * first venue-chain address is funded by the miner. The whole path is the one
- * every spec already trusts (`createWallet` -> `switchToRegtest` -> the
- * Advanced-action form -> the confirm modal), so a bootstrap failure reads the
- * same way a spec failure does and names the screen's own sentence.
+ * Seed the gas token through the wallet itself. Bitcoin uses ISSUE directly.
+ * Other chains use the platform supply path: ISSUE and MINT on Bitcoin, then an
+ * XBRIDGE v0 lock to the throwaway wallet's destination-chain address.
  *
  * @param {{ baseURL: string, log?: (line: string) => void }} opts
  */
 export async function ensureGasToken({ baseURL, log = console.log }) {
     if (await probeGasToken() === 'present') {
-        log(`[regtest ${REGTEST_COIN}] gas token ${GAS_TICK} already issued on the venue`);
+        log(`[regtest ${REGTEST_COIN}] gas token ${GAS_TICK} already present on the venue`);
         return { issued: false };
     }
-    log(`[regtest ${REGTEST_COIN}] gas token ${GAS_TICK} is NOT issued on this venue (fresh genesis?); issuing it through the wallet`);
+    const bridged = REGTEST_COIN !== BTC_COIN;
+    log(`[regtest ${REGTEST_COIN}] gas token ${GAS_TICK} is NOT present on this venue (fresh genesis?); `
+        + (bridged ? 'issuing it on Bitcoin and bridging it through the wallet' : 'issuing it through the wallet'));
 
     // The same browser the specs get: the project's launch args let the wallet
     // read the explorer cross-origin, and the spec fixture's license bypass is
@@ -134,32 +254,55 @@ export async function ensureGasToken({ baseURL, log = console.log }) {
         page = await context.newPage();
         await createWallet(page, { password: BOOTSTRAP_PASSWORD, name: 'Gas bootstrap' });
         await switchToRegtest(page, BOOTSTRAP_PASSWORD);
-        source = await readReceiveAddress(page);
-        await fundAddress(source, 1);
+        const destination = bridged ? await readReceiveAddress(page) : null;
+
+        const main = await openBitcoinAdvancedAction(page, 'ISSUE');
+        source = await main.getByLabel('From', { exact: true }).inputValue();
+        await fundRailAddress(BTC_COIN, source, 1);
         await page.reload();
         await unlockAfterReload(page, BOOTSTRAP_PASSWORD);
 
-        await openPaletteCommand(page, 'Advanced action');
-        await selectVenueChain(page);
-        await page.getByLabel('Action', { exact: true }).selectOption('ISSUE');
-        await page.getByRole('textbox', { name: 'TICK', exact: true }).fill(GAS_TICK);
-        for (const [field, value] of Object.entries(GAS_ISSUE)) {
-            const box = page.getByRole('textbox', { name: field, exact: true });
-            await expect(box, `the ISSUE form renders no "${field}" field, so the gas token cannot be issued with the e2e-test suite's parameters`)
-                .toBeVisible({ timeout: 15_000 });
-            await box.fill(value);
+        if (await probeGasToken(BTC_COIN, source) === 'absent') {
+            await openBitcoinAdvancedAction(page, 'ISSUE');
+            await page.getByRole('textbox', { name: 'TICK', exact: true }).fill(GAS_TICK);
+            for (const [field, value] of Object.entries(GAS_ISSUE)) {
+                const box = page.getByRole('textbox', { name: field, exact: true });
+                await expect(box, `the ISSUE form renders no "${field}" field, so the gas token cannot be issued with the e2e-test suite's parameters`)
+                    .toBeVisible({ timeout: 15_000 });
+                await box.fill(value);
+            }
+            await submitAdvancedAction(page, `the ISSUE of ${GAS_TICK} on Bitcoin`);
+            await waitFor(
+                () => probeGasToken(BTC_COIN, source).then((verdict) => verdict === 'present'),
+                { coins: [BTC_COIN], timeoutMs: 180_000, description: `the ${GAS_TICK} ISSUE on Bitcoin` },
+            );
         }
-        await page.getByRole('button', { name: 'Sign action' }).click();
-        await expectConfirmModal(page, `the ISSUE of ${GAS_TICK}`);
-        await approveConfirm(page, `the ISSUE of ${GAS_TICK}`);
-        await page.waitForTimeout(4_000);
+
+        if (bridged) {
+            await openBitcoinAdvancedAction(page, 'MINT');
+            await page.getByRole('textbox', { name: 'TICK', exact: true }).fill(GAS_TICK);
+            await page.getByRole('textbox', { name: 'AMOUNT', exact: true }).fill(String(BRIDGE_MINT_AMOUNT));
+            await submitAdvancedAction(page, `the MINT of ${BRIDGE_MINT_AMOUNT} ${GAS_TICK} on Bitcoin`);
+            await waitFor(
+                () => railTokenBalance(BTC_COIN, source).then((amount) => amount >= BRIDGE_MINT_AMOUNT),
+                { coins: [BTC_COIN], timeoutMs: 180_000, description: `the ${GAS_TICK} MINT on Bitcoin` },
+            );
+
+            const bridge = gasBridgeParams(REGTEST_COIN, destination);
+            await openBitcoinAdvancedAction(page, 'XBRIDGE');
+            await page.getByLabel('Format version', { exact: true }).selectOption(bridge.VERSION);
+            for (const field of ['DEST_COIN', 'DEST_ADDRESS', 'AMOUNT']) {
+                await page.getByRole('textbox', { name: field, exact: true }).fill(bridge[field]);
+            }
+            await submitAdvancedAction(page, `the XBRIDGE lock of ${BRIDGE_AMOUNT} ${GAS_TICK} to ${REGTEST_COIN}`);
+        }
     } catch (err) {
         // Global setup has no test artifacts, so a locator timeout here would
         // otherwise be a stack trace and nothing else. Name the screen instead.
         let screen = '';
         let shot = '';
         try {
-            shot = `test-results-regtest/gas-token-bootstrap-${REGTEST_COIN}.png`;
+            shot = `tmp/gas-token-bootstrap-${REGTEST_COIN}.png`;
             await page?.screenshot({ path: shot, fullPage: true });
             screen = (await page?.locator('body').innerText())?.replace(/\s+/g, ' ').slice(0, 800) || '';
         } catch { /* the page itself may be gone; the original error still names the step */ }
@@ -171,20 +314,17 @@ export async function ensureGasToken({ baseURL, log = console.log }) {
         await browser.close();
     }
 
-    // The issuance is real only once the venue prices a MINT of it, which is
-    // the read the specs will make; mine towards that rather than waiting on
-    // the form's own terminal screen.
-    const deadline = Date.now() + 180_000;
-    while (Date.now() < deadline) {
-        await nudgeChain();
-        await new Promise((r) => setTimeout(r, 3_000));
-        if (await probeGasToken() === 'present') {
-            log(`[regtest ${REGTEST_COIN}] gas token ${GAS_TICK} issued: the venue now prices a MINT of it`);
-            return { issued: true, source };
-        }
-    }
-    throw new Error(
-        `[regtest ${REGTEST_COIN}] the ${GAS_TICK} ISSUE was approved in the wallet but the venue still `
-        + 'does not price a MINT of it after 180s; check the action on the explorer before re-running',
+    const bridgeWaitMs = REGTEST_COIN === 'RLTC' ? 780_000 : bridged ? 420_000 : 180_000;
+    await waitFor(
+        () => probeGasToken().then((verdict) => verdict === 'present'),
+        {
+            coins: bridged ? [BTC_COIN, REGTEST_COIN] : [BTC_COIN],
+            timeoutMs: bridgeWaitMs,
+            description: bridged
+                ? `the bridged ${GAS_TICK} credit on ${REGTEST_COIN}`
+                : `the ${GAS_TICK} ISSUE on ${REGTEST_COIN}`,
+        },
     );
+    log(`[regtest ${REGTEST_COIN}] gas token ${GAS_TICK} ${bridged ? 'bridged from Bitcoin' : 'issued'} and visible on the venue`);
+    return { issued: true, source, bridged };
 }
