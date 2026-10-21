@@ -101,16 +101,16 @@ assert.notEqual(value, 'true',
     + 'the exact configuration that made 30 of 40 master runs cancel and left with no'
     + 'releasable commit: the release gate requires a COMPLETED, SUCCESSFUL ci.yml run on the tag '
     + 'commit, and a cancelled run can never become one. Gate the flag on the ref instead:\n'
-    + "  cancel-in-progress: ${{ github.ref != 'refs/heads/master' }}");
+    + "  cancel-in-progress: ${{ github.ref != 'refs/heads/master' && github.ref != 'refs/heads/develop' }}");
 
 // The flag must be conditional on the ref, and the condition must actually
-// exempt master. Checking the shape rather than one exact string, so an
-// equivalent spelling (a different default branch name, an `inputs`-driven
-// expression) is free to differ without failing on correct writing.
+// exempt both protected branches. Checking the shape rather than one exact
+// string, so an equivalent spelling (a different default branch name, an
+// `inputs`-driven expression) is free to differ without failing on correct writing.
 assert.match(value, /\$\{\{.*github\.ref.*\}\}/,
     `ci.yml sets \`cancel-in-progress: ${value}\`, which is neither \`true\` nor an expression on `
-    + '`github.ref`. This flag has to distinguish master (never cancel, so every commit reaches a '
-    + 'verdict the release gate can read) from everything else (cancel freely). A constant cannot.');
+    + '`github.ref`. This flag has to distinguish protected branches (never cancel, so every commit '
+    + 'reaches a verdict) from supersedable refs (cancel freely). A constant cannot.');
 
 assert.match(value, /refs\/heads\/master/,
     `ci.yml's \`cancel-in-progress\` expression (${value}) does not mention refs/heads/master, so `
@@ -148,9 +148,9 @@ assert.equal(evaluate('refs/heads/develop'), false,
 
 assert.equal(evaluate('refs/pull/42/merge'), true,
     'the `cancel-in-progress` expression evaluates FALSE for pull requests, so superseded PR runs '
-    + 'would pile up. Master is the exemption; everything else should still cancel.');
+    + 'would pile up. Protected branches are the exemption; supersedable refs should still cancel.');
 
-// The group must be per-COMMIT on master, not merely per-ref.
+// The group must be per-COMMIT on protected branches, not merely per-ref.
 //
 // This assertion exists because the first version of this gate passed on a
 // configuration that was measured failing hours later. `cancel-in-progress:
@@ -160,8 +160,8 @@ assert.equal(evaluate('refs/pull/42/merge'), true,
 // started, by a later push that already carried the flag fix.
 //
 // Grouping per commit removes the contention instead of arbitrating it. There
-// is then no such thing as two master runs in one group, so nothing can evict
-// anything and every commit reaches a verdict.
+// is then no such thing as two protected-branch runs in one group, so nothing
+// can evict anything and every commit reaches a verdict.
 const group = body.match(/group:\s*(.+)/);
 
 assert.ok(group,
@@ -170,24 +170,29 @@ assert.ok(group,
 const groupValue = group[1].trim();
 
 assert.match(groupValue, /github\.sha/,
-    `ci.yml's concurrency group (${groupValue}) does not vary by github.sha, so every master commit `
-    + 'shares one group and a newer push evicts whichever run is still QUEUED. `cancel-in-progress: '
-    + 'false` does not prevent that: it only protects a run that has already started. A commit whose '
-    + 'run was evicted while queued can never satisfy the release gate. Group per commit on master:\n'
-    + "  group: ci-${{ github.ref }}-${{ github.ref == 'refs/heads/master' && github.sha || 'ref' }}");
+    `ci.yml's concurrency group (${groupValue}) does not vary by github.sha, so every `
+    + 'protected-branch commit shares one group and a newer push evicts whichever run is still QUEUED. '
+    + '`cancel-in-progress: false` does not prevent that: it only protects a run that has already started. '
+    + 'A commit whose run was evicted while queued can never satisfy the release gate. Group per commit '
+    + 'on protected branches.');
 
 assert.match(groupValue, /refs\/heads\/master/,
     `ci.yml's concurrency group (${groupValue}) uses github.sha unconditionally, which would give `
     + 'every pull-request push its own group too and defeat superseding entirely. The sha must be '
-    + 'conditional on master.');
+    + 'conditional on protected branches.');
 
-// A push to master must still be a trigger, or the gate above guards nothing.
-// The branch list may carry develop beside master (the develop/master model
-// runs the gate on both) and comment lines above it; what this asserts is that
-// master itself is in the push trigger.
+assert.match(groupValue, /refs\/heads\/develop/,
+    `ci.yml's concurrency group (${groupValue}) does not protect refs/heads/develop per commit, so `
+    + 'a second develop push can evict the queued run for the first before it reaches a verdict.');
+
+// Pushes to both protected branches must remain triggers, or the gate above
+// guards nothing for the missing branch.
 assert.match(ci, /on:\n(?:.*\n)*?\s*push:\n(?:\s*#.*\n)*\s*branches:\s*\[[^\]]*\bmaster\b[^\]]*\]/,
     'ci.yml no longer runs on pushes to master. The release gate reads a ci.yml run on the tag '
     + 'commit, and tags are cut from master, so without this trigger no commit is ever releasable.');
+
+assert.match(ci, /on:\n(?:.*\n)*?\s*push:\n(?:\s*#.*\n)*\s*branches:\s*\[[^\]]*\bdevelop\b[^\]]*\]/,
+    'ci.yml no longer runs on pushes to develop, so concurrent develop commits cannot reach verdicts.');
 
 // ---------------------------------------------------------------------------
 // Part 2a: ci.yml declares a `verdict` job, and nothing can escape it.
@@ -217,9 +222,8 @@ const verdict = jobs.get('verdict');
 // Job-level `concurrency:` blocks are a second eviction path: GitHub keeps one
 // PENDING run per group, so a group shared across refs lets a newer push evict a
 // queued master or develop run whatever the top-level block says. Every job is a
-// job the verdict needs, so each job-level group must be per-commit on master,
-// except the one named exception below, which must also say why in ci.yml.
-const SHARED_GROUP_EXCEPTIONS = new Map([['e2e-regtest', 'wallet-regtest-venue']]);
+// job the verdict needs, so each job-level group must be per-commit on both
+// protected branches.
 
 for (const [jobName, jobSource] of jobs) {
     const jobConc = jobSource.match(/^ {4}concurrency:[ \t]*\n((?: {5,}.*\n|[ \t]*\n)*)/m);
@@ -228,23 +232,24 @@ for (const [jobName, jobSource] of jobs) {
     const jobGroup = lines.join('\n').match(/group:\s*(.+)/);
     assert.ok(jobGroup, `job \`${jobName}\` in ci.yml has a \`concurrency:\` block with no \`group\`.`);
     const jobGroupValue = jobGroup[1].trim();
-    if (SHARED_GROUP_EXCEPTIONS.get(jobName) === jobGroupValue) {
-        const lead = jobSource.split('\n').slice(0, jobSource.split('\n').findIndex((l) => /^ {4}concurrency:/.test(l)));
-        const note = lead.filter((l) => /^\s*#/.test(l)).slice(-6).join(' ');
-        assert.match(note, /one regtest venue/i,
-            `job \`${jobName}\` shares group \`${jobGroupValue}\` but the comment beside it does not say why `
-            + '(one regtest venue, so runs must serialize).');
-        assert.match(note, /re-?run/i,
-            `job \`${jobName}\` shares group \`${jobGroupValue}\` but the comment beside it does not say an `
-            + 'eviction is recovered by re-running.');
-        continue;
-    }
-    assert.ok(/github\.sha/.test(jobGroupValue) && /refs\/heads\/master/.test(jobGroupValue),
+    assert.ok(/github\.sha/.test(jobGroupValue)
+        && /refs\/heads\/master/.test(jobGroupValue)
+        && /refs\/heads\/develop/.test(jobGroupValue),
         `job \`${jobName}\` in ci.yml sets concurrency group \`${jobGroupValue}\`, which is shared across refs. `
         + 'GitHub keeps one pending run per group, so a newer push evicts a queued master or develop run '
-        + 'and that commit never reaches a verdict. Make the group per-commit on master, or add a named, '
-        + 'explained exception in SHARED_GROUP_EXCEPTIONS (job and group name) with a comment in ci.yml.');
+        + 'and that commit never reaches a verdict. Make the group per-commit on both protected branches.');
 }
+
+const regtest = jobs.get('e2e-regtest');
+assert.ok(regtest, 'ci.yml has no `e2e-regtest` job.');
+assert.doesNotMatch(regtest, /^ {4}concurrency:/m,
+    'the `e2e-regtest` job must not use GitHub concurrency to serialize the shared venue: GitHub keeps '
+    + 'only one pending job in a group, so a second develop push can evict the first before it reaches a verdict.');
+assert.match(regtest, /flock\s+--exclusive\s+[^\n]*xchain-wallet-regtest\.lock/,
+    'the `e2e-regtest` job does not acquire the shared venue lock inside the running job. Without that lock, '
+    + 'concurrent runs can mutate the same regtest chain at the same time.');
+assert.match(regtest, /until grep -qx venue-lock-acquired[^]*pnpm test:e2e:regtest/,
+    'the `e2e-regtest` job does not wait for the in-job venue lock before starting the regtest suite.');
 
 assert.ok(verdict,
     'ci.yml has no `verdict` job. Without it a red run says only "failure", which is the same word '
@@ -541,7 +546,7 @@ assert.deepEqual(twinJobs, [...jobs.keys()],
     + 'it lacks gates green locally and red on GitHub. Add a `# --- job: <name>` section that '
     + 'runs the job\'s steps, or prints SKIPPED-BY-DESIGN for each step that cannot run locally.');
 
-console.log('OK: ci master-verdict smoke (concurrency exempts refs/heads/master from '
-    + 'cancel-in-progress, evaluated both ways; push-to-master trigger intact; `verdict` job waits '
+console.log('OK: ci master-verdict smoke (concurrency exempts master and develop from '
+    + 'cancel-in-progress, evaluated both ways; protected-branch push triggers intact; `verdict` job waits '
     + `on all ${others.length} jobs and classifies from steps; cancelled/not-started jobs report as `
     + 'themselves on runs 31122248576 and 31267045090, a real step failure still reports RED)');
