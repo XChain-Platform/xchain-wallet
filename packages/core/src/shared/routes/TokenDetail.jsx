@@ -74,9 +74,7 @@ function callAsync(callback) {
  * Cluster I FOLLOWUP 3 + Cluster C FOLLOWUP 3 ship the richer metadata
  * via `messaging.getTokenInfo`: description / creator / supply / lock
  * status / market price / extracted image URL all surface inline below
- * the existing fixed metadata block. Phase-3 features (Sell on DEX,
- * Market view, supply chart over time) and reputation remain tracked
- * in FOLLOWUPS.md under §27.
+ * the existing fixed metadata block.
  *
  * @param {object} props
  * @param {string} props.walletId
@@ -93,6 +91,7 @@ function callAsync(callback) {
  * @param {() => void} props.onBack
  * @param {() => void} [props.onSend]                navigate to Send route
  * @param {() => void} [props.onReceive]             navigate to Receive route
+ * @param {() => void} [props.onBuy]                 navigate to the selected asset's market view
  * @param {() => void} [props.onViewActivity]        navigate to History pre-filtered to this tick
  * @param {() => void} [props.onManageToken]         navigate to the issuer's Manage Token view for this tick; only offered when the wallet holds the issuing address (see useIsTokenIssuer.js)
  */
@@ -713,7 +712,7 @@ function TokenDetailContent({
                             aria-label="Trade"
                             aria-busy="false"
                             leading={<span className={styles.quickActionIcon} aria-hidden="true"><Icon.MarketIcon /></span>}
-                            title="Trade"
+                            title={<span>Market view</span>}
                             subtitle={tradeDisabledReason}
                         />
                     ) : null}
