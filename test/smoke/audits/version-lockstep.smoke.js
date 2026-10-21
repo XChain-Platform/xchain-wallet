@@ -33,6 +33,7 @@ import { strict as assert } from 'node:assert';
 import { existsSync, readFileSync, readdirSync, statSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { deriveExtensionVersion } from '../../../packages/core/scripts/derive-extension-version.js';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const root = join(here, '..', '..', '..');
@@ -75,18 +76,20 @@ assert.deepEqual(drifted, [],
 // think it shipped, which is also the number the publish log and the
 // rogue-publish monitor are keyed on.
 
-const manifestVersion = readJson('packages/extension/manifest.json').version;
-assert.equal(manifestVersion, rootVersion,
-    `packages/extension/manifest.json is at ${manifestVersion} but the root is at ${rootVersion}. The store `
+const manifest = readJson('packages/extension/manifest.json');
+const manifestVersion = manifest.version;
+const expectedManifestVersion = deriveExtensionVersion(rootVersion);
+assert.equal(manifestVersion, expectedManifestVersion,
+    `packages/extension/manifest.json is at ${manifestVersion} but ${rootVersion} derives to `
+    + `${expectedManifestVersion}. The store `
     + 'reads the manifest, so this is the version that would go live, be written into publish-log.md, and be '
     + 'compared by the store-version monitor.');
 
 // version_name is optional in MV3; when present it is user-visible and must
 // not contradict the version it sits beside.
-const manifest = readJson('packages/extension/manifest.json');
 if (manifest.version_name) {
-    assert.ok(manifest.version_name.startsWith(rootVersion),
-        `manifest.json version_name "${manifest.version_name}" does not start with the shipped version `
+    assert.equal(manifest.version_name, rootVersion,
+        `manifest.json version_name "${manifest.version_name}" is not the shipped version `
         + `"${rootVersion}". version_name is what Chrome shows the user on the extensions page.`);
 }
 
@@ -219,6 +222,6 @@ if (!isPrerelease) {
 }
 
 console.log(`OK: version-lockstep smoke (${members.length} packages + the store-facing`
-    + `manifest.json + the user-facing buildInfo.js + README's badge and Status line all at ${rootVersion}`
+    + ` manifest.json at ${manifestVersion} (derived from ${rootVersion}) + the user-facing buildInfo.js + README's badge and Status line all at ${rootVersion}`
     + `${isPrerelease ? '; prerelease, so no CHANGELOG section is required' : `, with a CHANGELOG section carrying ${entryCount} entries`}`
     + '; test/e2e exempt and documented)');

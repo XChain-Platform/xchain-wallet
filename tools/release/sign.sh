@@ -479,6 +479,50 @@ if [[ -z "$TAG_VERSION" ]]; then
     echo "sign.sh: --tag '$TAG' carries no X.Y.Z version to check the artifacts against." >&2
     exit 2
 fi
+
+derive_extension_version() {
+    local release="$1" major minor patch lane_number value segment
+    if [[ "$release" =~ ^([0-9]+)\.([0-9]+)\.([0-9]+)$ ]]; then
+        major="${BASH_REMATCH[1]}" minor="${BASH_REMATCH[2]}" patch="${BASH_REMATCH[3]}"
+        lane_number=""
+    elif [[ "$release" =~ ^([0-9]+)\.([0-9]+)\.([0-9]+)-(rc|beta)\.([0-9]+)$ ]]; then
+        major="${BASH_REMATCH[1]}" minor="${BASH_REMATCH[2]}" patch="${BASH_REMATCH[3]}"
+        lane_number="${BASH_REMATCH[5]}"
+        for segment in "$major" "$minor" "$patch" "$lane_number"; do
+            [[ "$segment" =~ ^[0-9]{1,5}$ ]] || return 1
+            value=$((10#$segment))
+            (( value <= 65535 )) || return 1
+        done
+        (( 10#$lane_number > 0 )) || return 1
+        printf '0.%d.%d.%d' "$((10#$major))" "$((10#$minor))" "$((10#$lane_number))"
+        return 0
+    elif [[ "$release" =~ ^([0-9]+)\.([0-9]+)\.([0-9]+)-respin\.([0-9]+)$ ]]; then
+        major="${BASH_REMATCH[1]}" minor="${BASH_REMATCH[2]}" patch="${BASH_REMATCH[3]}"
+        lane_number="${BASH_REMATCH[4]}"
+    else
+        return 1
+    fi
+
+    for segment in "$major" "$minor" "$patch" ${lane_number:+"$lane_number"}; do
+        [[ "$segment" =~ ^[0-9]{1,5}$ ]] || return 1
+        value=$((10#$segment))
+        (( value <= 65535 )) || return 1
+    done
+    if [[ -n "$lane_number" ]]; then
+        (( 10#$lane_number > 0 )) || return 1
+        printf '%d.%d.%d.%d' "$((10#$major))" "$((10#$minor))" "$((10#$patch))" "$((10#$lane_number))"
+    else
+        printf '%d.%d.%d' "$((10#$major))" "$((10#$minor))" "$((10#$patch))"
+    fi
+}
+
+TAG_RELEASE_VERSION="${TAG#v}"
+if ! EXPECTED_EXTENSION_VERSION="$(derive_extension_version "$TAG_RELEASE_VERSION")"; then
+    echo "sign.sh: --tag '$TAG' cannot be represented as a Chrome extension version." >&2
+    echo "  Expected M.m.p, M.m.p-rc.N, M.m.p-beta.N or M.m.p-respin.N" >&2
+    echo "  with components from 0 through 65535 and a positive lane number." >&2
+    exit 2
+fi
 VERSION_MISMATCH=""
 while IFS= read -r artifact; do
     name="$(basename "$artifact")"
@@ -528,12 +572,16 @@ while IFS= read -r artifact; do
     # No node_modules in a pristine clone (row 50), so this stays dependency
     # free: unzip to stdout, and a regex over the one field.
     inner="$(unzip -p "$artifact" manifest.json 2>/dev/null \
-        | grep -oE '"version"[[:space:]]*:[[:space:]]*"[0-9]+\.[0-9]+\.[0-9]+"' \
-        | head -1 | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' || true)"
+        | grep -oE '"version"[[:space:]]*:[[:space:]]*"[0-9]+(\.[0-9]+){0,3}"' \
+        | head -1 | grep -oE '[0-9]+(\.[0-9]+){0,3}' || true)"
     if [[ -z "$inner" ]]; then
         INTERNAL_MISMATCH+="    $name: no readable manifest.json version inside the zip"$'\n'
-    elif [[ "$inner" != "$TAG_VERSION" ]]; then
-        INTERNAL_MISMATCH+="    $name: manifest.json says $inner, the tag says $TAG_VERSION"$'\n'
+    elif [[ "$inner" != "$EXPECTED_EXTENSION_VERSION" ]]; then
+        if [[ "$EXPECTED_EXTENSION_VERSION" == "$TAG_RELEASE_VERSION" ]]; then
+            INTERNAL_MISMATCH+="    $name: manifest.json says $inner, the tag says $TAG_RELEASE_VERSION"$'\n'
+        else
+            INTERNAL_MISMATCH+="    $name: manifest.json says $inner, tag $TAG_RELEASE_VERSION derives to $EXPECTED_EXTENSION_VERSION"$'\n'
+        fi
     fi
 done < <(find "$INPUT_DIR" -maxdepth 1 -type f | sort)
 

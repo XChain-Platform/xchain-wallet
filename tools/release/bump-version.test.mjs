@@ -121,13 +121,18 @@ test('a beta bump writes every version but leaves the changelog byte-identical',
     t.after(() => rmSync(root, { recursive: true, force: true }));
     const before = readFileSync(path.join(root, 'CHANGELOG.md'), 'utf8');
 
-    const result = run(tool, ['1.3.0-beta.1', '--date', '2026-10-13']);
+    const result = run(tool, ['0.342.0-beta.1', '--date', '2026-10-13']);
 
     assert.equal(result.status, 0, result.stderr);
-    assert.equal(JSON.parse(readFileSync(path.join(root, 'package.json'), 'utf8')).version, '1.3.0-beta.1');
+    assert.equal(JSON.parse(readFileSync(path.join(root, 'package.json'), 'utf8')).version, '0.342.0-beta.1');
+    const manifest = JSON.parse(readFileSync(
+        path.join(root, 'packages', 'extension', 'manifest.json'), 'utf8',
+    ));
+    assert.equal(manifest.version, '0.0.342.1');
+    assert.equal(manifest.version_name, '0.342.0-beta.1');
     assert.match(readFileSync(path.join(root, 'packages', 'core', 'src', 'buildInfo.js'), 'utf8'),
-        /WALLET_VERSION = '1\.3\.0-beta\.1'/);
-    assert.match(readFileSync(path.join(root, 'README.md'), 'utf8'), /badge\/version-1\.3\.0--beta\.1-blue/);
+        /WALLET_VERSION = '0\.342\.0-beta\.1'/);
+    assert.match(readFileSync(path.join(root, 'README.md'), 'utf8'), /badge\/version-0\.342\.0--beta\.1-blue/);
     assert.equal(readFileSync(path.join(root, 'CHANGELOG.md'), 'utf8'), before);
     assert.match(result.stdout, /CHANGELOG\.md left unchanged/);
 });
@@ -152,13 +157,18 @@ test('a respin bumps with an empty Unreleased section and writes no changelog se
     emptyUnreleased(root);
     const before = readFileSync(path.join(root, 'CHANGELOG.md'), 'utf8');
 
-    const result = run(tool, ['1.2.3-respin.1', '--dry-run']);
+    const result = run(tool, ['0.341.4-respin.1', '--dry-run']);
     assert.equal(result.status, 0, result.stderr);
     assert.match(result.stdout, /CHANGELOG\.md left unchanged/);
 
-    const written = run(tool, ['1.2.3-respin.1']);
+    const written = run(tool, ['0.341.4-respin.1']);
     assert.equal(written.status, 0, written.stderr);
-    assert.equal(JSON.parse(readFileSync(path.join(root, 'package.json'), 'utf8')).version, '1.2.3-respin.1');
+    assert.equal(JSON.parse(readFileSync(path.join(root, 'package.json'), 'utf8')).version, '0.341.4-respin.1');
+    const manifest = JSON.parse(readFileSync(
+        path.join(root, 'packages', 'extension', 'manifest.json'), 'utf8',
+    ));
+    assert.equal(manifest.version, '0.341.4.1');
+    assert.equal(manifest.version_name, '0.341.4-respin.1');
     assert.equal(readFileSync(path.join(root, 'CHANGELOG.md'), 'utf8'), before);
 });
 
