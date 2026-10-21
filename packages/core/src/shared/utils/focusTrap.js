@@ -23,8 +23,9 @@ import { useEffect, useRef } from 'react';
 
 /** @type {object[]} */
 const activeTraps = [];
-let bodyScrollLocks = 0;
-let priorBodyOverflow = '';
+// Keyed by document: a modal rendered into an iframe (the style guide's width
+// frames) locks that frame's body, never the page around it.
+const bodyScrollLocks = new WeakMap();
 const inertLocks = new WeakMap();
 const FOCUS_VISIBLE_FALLBACK_CLASS = 'xc-focus-visible-fallback';
 const MODAL_SELECTOR = '[role="dialog"][aria-modal="true"], [role="alertdialog"][aria-modal="true"]';
@@ -51,19 +52,24 @@ function installFocusVisibleFallback() {
 
 installFocusVisibleFallback();
 
-function lockBodyScroll() {
-    if (typeof document === 'undefined' || !document.body) return;
-    if (bodyScrollLocks === 0) {
-        priorBodyOverflow = document.body.style.overflow;
-        document.body.style.overflow = 'hidden';
+function lockBodyScroll(doc) {
+    if (!doc?.body) return;
+    const lock = bodyScrollLocks.get(doc);
+    if (lock) {
+        lock.count += 1;
+        return;
     }
-    bodyScrollLocks += 1;
+    bodyScrollLocks.set(doc, { count: 1, priorOverflow: doc.body.style.overflow });
+    doc.body.style.overflow = 'hidden';
 }
 
-function unlockBodyScroll() {
-    if (typeof document === 'undefined' || !document.body || bodyScrollLocks === 0) return;
-    bodyScrollLocks -= 1;
-    if (bodyScrollLocks === 0) document.body.style.overflow = priorBodyOverflow;
+function unlockBodyScroll(doc) {
+    const lock = doc && bodyScrollLocks.get(doc);
+    if (!lock) return;
+    lock.count -= 1;
+    if (lock.count > 0) return;
+    if (doc.body) doc.body.style.overflow = lock.priorOverflow;
+    bodyScrollLocks.delete(doc);
 }
 
 function lockInert(element) {
@@ -229,7 +235,8 @@ export function useFocusTrap(containerRef, {
 
         const layer = {};
         activeTraps.push(layer);
-        lockBodyScroll();
+        const ownerDoc = container.ownerDocument;
+        lockBodyScroll(ownerDoc);
         const modalRoot = modalRootFor(container);
         const backgroundTargets = modalRoot ? inertTargetsOutside(modalRoot) : [];
         backgroundTargets.forEach(lockInert);
@@ -277,7 +284,7 @@ export function useFocusTrap(containerRef, {
             const layerIndex = activeTraps.indexOf(layer);
             if (layerIndex !== -1) activeTraps.splice(layerIndex, 1);
             backgroundTargets.forEach(unlockInert);
-            unlockBodyScroll();
+            unlockBodyScroll(ownerDoc);
             const prev = previouslyFocused.current;
             // A caller often disables its opener while the dialog is pending
             // (a Delete button marked busy until the confirm settles), and the
