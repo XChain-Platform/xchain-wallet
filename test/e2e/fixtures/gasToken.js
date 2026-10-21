@@ -40,6 +40,7 @@ import {
     createWallet, openPaletteCommand, LICENSE_ACCEPTED_AT_KEY, LICENSE_ACCEPTED_VERSION_KEY,
 } from './wallet.js';
 import { LICENSE_VERSION } from '../../../packages/core/src/buildInfo.js';
+import { desktopUserAgentForHost } from '../host-user-agent.js';
 
 export const GAS_TICK = 'XCHAIN';
 
@@ -238,7 +239,9 @@ export async function ensureGasToken({ baseURL, log = console.log }) {
     let page = null;
     let source = null;
     try {
-        const context = await browser.newContext({ ...devices['Desktop Chrome'], baseURL });
+        const context = await browser.newContext({
+            ...devices['Desktop Chrome'], userAgent: desktopUserAgentForHost(), baseURL,
+        });
         await context.addInitScript(
             ([atKey, versionKey, version]) => {
                 try {

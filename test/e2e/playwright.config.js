@@ -34,20 +34,9 @@
 import { defineConfig, devices } from '@playwright/test';
 
 import { describeBudget, timeoutBudget } from './timeout-budget.js';
+import { desktopUserAgentForHost } from './host-user-agent.js';
 
-export function desktopUserAgentForHost(
-    platform = process.platform,
-    desktopUserAgent = devices['Desktop Chrome'].userAgent,
-) {
-    const platformToken = {
-        darwin: 'Macintosh; Intel Mac OS X 10_15_7',
-        linux: 'X11; Linux x86_64',
-        win32: 'Windows NT 10.0; Win64; x64',
-    }[platform];
-    return platformToken
-        ? desktopUserAgent.replace(/\([^)]*\)/, `(${platformToken})`)
-        : desktopUserAgent;
-}
+export { desktopUserAgentForHost };
 
 const budget = timeoutBudget();
 // Named in the run's own output, so a red run is self-describing: the
