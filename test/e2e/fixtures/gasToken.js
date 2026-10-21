@@ -81,12 +81,22 @@ export function gasBridgeParams(coin, destination, amount = BRIDGE_AMOUNT) {
 }
 
 async function railRpc(port, method, params = {}) {
-    const res = await fetch(`http://localhost:${port}`, {
-        method: 'POST',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ jsonrpc: '2.0', id: 1, method, params }),
-        signal: AbortSignal.timeout(30_000),
-    });
+    let res;
+    try {
+        res = await fetch(`http://localhost:${port}`, {
+            method: 'POST',
+            headers: { 'content-type': 'application/json' },
+            body: JSON.stringify({ jsonrpc: '2.0', id: 1, method, params }),
+            signal: AbortSignal.timeout(30_000),
+        });
+    } catch (err) {
+        // An off-BTC run reaches the Bitcoin rail too, so its encoder and miner
+        // ports must be tunneled beside the venue's own; say which ones.
+        const btc = rail(BTC_COIN);
+        throw new Error(`${method} on localhost:${port} did not answer (${err?.message || err}); `
+            + 'the gas bootstrap needs the Bitcoin regtest rail as well as the venue chain, so tunnel '
+            + `-L ${btc.encoderPort}:localhost:${btc.encoderPort} -L ${btc.minerPort}:localhost:${btc.minerPort} too`);
+    }
     const body = await res.json();
     if (body.error || body.result?.error) {
         throw new Error(`${method} failed: ${JSON.stringify(body.error || body.result.error)}`);
