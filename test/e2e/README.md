@@ -179,6 +179,11 @@ wait (`waitForTokenBalance`, `waitForValidAction`, `waitForActivationHeight`,
 (`test/unit/e2e/testnet-harness.test.js`) proves the whole healthy path with a
 venue whose forbidden members throw.
 
+The run-input network checks live in `testnet_preflight.js`, but after staging
+and parsing the input, global setup first runs `testnet_keys.js` and its
+synchronous `preflightRunInputKeys` gate. A mismatch stops the suite with
+`Key preflight refused` before any live write can use either supplied key.
+
 Stake-unstake waits for its residual stake row through `waitForResidualStake`
 in `test/e2e/fixtures/testnet_stakes.js`. It polls the explorer's stakes source
 route for the address every 30 seconds within the indexed wait budget, treats a
