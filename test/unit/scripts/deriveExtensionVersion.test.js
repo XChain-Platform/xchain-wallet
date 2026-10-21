@@ -29,10 +29,10 @@ describe('deriveExtensionVersion', () => {
     });
 
     it('maps a respin above its stable release', () => {
-        const stable = deriveExtensionVersion('0.341.4');
-        const respin = deriveExtensionVersion('0.341.4-respin.1');
+        const stable = deriveExtensionVersion('0.299.4');
+        const respin = deriveExtensionVersion('0.299.4-respin.1');
 
-        expect(respin).toBe('0.341.4.1');
+        expect(respin).toBe('0.299.4.1');
         expect(compareChromeVersions(respin, stable)).toBeGreaterThan(0);
     });
 
