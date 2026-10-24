@@ -76,7 +76,7 @@ const setGate = (page, symbol, afterReserve = false) => page.evaluate(
     [symbol, afterReserve],
 );
 
-async function expectBoundary(page) {
+async function expectBoundary(page, { home = true } = {}) {
     const alert = page.getByRole('alert').filter({ hasText: "This screen couldn't be shown" });
     await expect(alert).toBeVisible();
     // The boundary's own text. The shell header outside it names the wallet by design.
@@ -85,7 +85,8 @@ async function expectBoundary(page) {
     expect(text).not.toContain(WALLET_NAME);
     expect(text).not.toContain(VALID_BTC);
     expect(text).not.toMatch(/\bat\s+\S+\s+\(|\.jsx?:\d+|Error:/);
-    await expect(alert.getByRole('button', { name: 'Go to Home' })).toBeVisible();
+    if (home) await expect(alert.getByRole('button', { name: 'Go to Home' })).toBeVisible();
+    else await expect(alert.getByRole('button', { name: 'Go to Home' })).toHaveCount(0);
     await expect(alert.getByRole('button', { name: 'Try again' })).toBeVisible();
     return alert;
 }
@@ -107,7 +108,7 @@ test.describe('route error boundary in a real browser', () => {
             if (target.name === 'Home') await gotoSection(page, 'Home');
             else if (target.name === 'Settings') await page.getByRole('button', { name: /settings/i }).first().click();
             else await gotoSection(page, target.name);
-            const alert = await expectBoundary(page);
+            const alert = await expectBoundary(page, { home: target.name !== 'Home' });
 
             // The shell around it stays usable: the navigation is still there.
             await expect(nav(page)).toBeVisible();
@@ -118,6 +119,15 @@ test.describe('route error boundary in a real browser', () => {
             await expect(page.getByRole('alert').filter({ hasText: "This screen couldn't be shown" })).toHaveCount(0);
         });
     }
+
+    test('Go to Home carries a house icon, not the external-link icon', async ({ page }) => {
+        await setGate(page, 'History');
+        await gotoSection(page, 'History');
+        const alert = await expectBoundary(page);
+        const svg = alert.getByRole('button', { name: 'Go to Home' }).locator('svg');
+        await expect(svg).toHaveCount(1);
+        expect(await svg.innerHTML()).not.toContain('m20 4-9 9');
+    });
 
     test('Go to Home leaves a failing screen for Home', async ({ page }) => {
         await setGate(page, 'History');
