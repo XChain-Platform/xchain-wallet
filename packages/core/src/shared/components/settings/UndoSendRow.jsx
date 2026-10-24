@@ -75,6 +75,9 @@ export function UndoSendRow() {
                         const n = /^\d+$/.test(raw)
                             ? Math.min(Number(raw), UNDO_SEND_SECONDS_MAX)
                             : UNDO_SEND_SECONDS_DEFAULT;
+                        // The stored value can already equal n (99 clamps to a stored 30),
+                        // which leaves the field's key unchanged, so show n here.
+                        e.target.value = String(n);
                         update({ grace: { undoSendSeconds: n } }).catch((err) => {
                             // eslint-disable-next-line no-console
                             console.error('grace.undoSendSeconds update failed:', err);

@@ -154,7 +154,7 @@ function PermissionRow({ permission, setPermission }) {
             );
         }
     } else if (permission === 'denied') {
-        hint = 'Notifications are blocked. Open your browser or system settings, find XChain Wallet, and allow notifications.';
+        hint = t('settings.notifications.blockedHint');
     } else if (permission !== 'checking') {
         action = (
             <Button type="button" size="sm" icon={null} onClick={request} disabled={requesting} aria-busy={requesting}>

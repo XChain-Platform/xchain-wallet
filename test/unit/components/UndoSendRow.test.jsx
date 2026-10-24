@@ -96,6 +96,13 @@ describe('UndoSendRow', () => {
         expect(update).toHaveBeenCalledWith({ grace: { undoSendSeconds: 30 } });
     });
 
+    it('typing 600 over a stored 30 shows 30, not the typed 600', () => {
+        withGrace({ undoSendEnabled: true, undoSendSeconds: 30 });
+        render(<UndoSendRow />);
+        typeAndBlur('600');
+        expect(screen.getByLabelText(INPUT_LABEL).value).toBe('30');
+    });
+
     it('typing 12 writes 12', () => {
         withGrace({ undoSendEnabled: true });
         render(<UndoSendRow />);

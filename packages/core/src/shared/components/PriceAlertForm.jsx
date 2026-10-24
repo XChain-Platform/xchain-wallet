@@ -84,7 +84,7 @@ export function PriceAlertForm({
     const disabledReason = !chainId
         ? 'Choose a coin to continue.'
         : targetStr === ''
-            ? 'Enter a target price to continue.'
+            ? t('settings.notifications.enterTargetPrice')
             : null;
 
     const alreadyMet = useMemo(() => {
