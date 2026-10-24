@@ -3,7 +3,63 @@
 //
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
+import { neutralizeControlText } from '../utils/textHardening.js';
+
 const MAX_WEIGHT_SCALE = 18;
+const MAX_QUESTION_DISPLAY_LENGTH = 1_024;
+const MAX_OPTION_DISPLAY_LENGTH = 256;
+const MAX_SHORT_FIELD_DISPLAY_LENGTH = 128;
+const MAX_ACTION_INDEX = 0xffffffffffffffffn;
+
+function primitiveDisplayText(value, maxLength, fallback = '') {
+    const type = typeof value;
+    if (value === null || value === undefined
+        || !['string', 'number', 'bigint', 'boolean'].includes(type)
+        || (type === 'number' && !Number.isFinite(value))) return fallback;
+    return neutralizeControlText(value, { maxLength }) || fallback;
+}
+
+function positiveIndexText(value) {
+    if (typeof value === 'number') {
+        return Number.isSafeInteger(value) && value > 0 ? String(value) : null;
+    }
+    const raw = String(value ?? '').trim();
+    if (!/^[1-9]\d{0,19}$/.test(raw)) return null;
+    return BigInt(raw) <= MAX_ACTION_INDEX ? raw : null;
+}
+
+/** Normalize untrusted explorer poll fields before a route renders them. */
+export function pollRowForDisplay(row) {
+    if (!row || typeof row !== 'object' || Array.isArray(row)) return null;
+    const actionIndex = positiveIndexText(row.action_index);
+    const pollIndex = positiveIndexText(row.poll_index);
+    if (actionIndex && pollIndex && BigInt(actionIndex) !== BigInt(pollIndex)) return null;
+    const indexText = actionIndex || pollIndex;
+    const indexValue = actionIndex ? row.action_index : row.poll_index;
+    if (!indexText) return null;
+    const options = Array.isArray(row.options)
+        ? row.options.map((option) => (
+            primitiveDisplayText(option, MAX_OPTION_DISPLAY_LENGTH, 'Unavailable option')
+        ))
+        : [];
+    return {
+        ...row,
+        action_index: typeof indexValue === 'number' ? indexValue : indexText,
+        tick: primitiveDisplayText(row.tick, MAX_SHORT_FIELD_DISPLAY_LENGTH),
+        question: primitiveDisplayText(row.question, MAX_QUESTION_DISPLAY_LENGTH),
+        options,
+        poll_status: primitiveDisplayText(row.poll_status, MAX_SHORT_FIELD_DISPLAY_LENGTH),
+        tally_mode: primitiveDisplayText(row.tally_mode, MAX_SHORT_FIELD_DISPLAY_LENGTH, 'unavailable'),
+        weight_mode: primitiveDisplayText(row.weight_mode, MAX_SHORT_FIELD_DISPLAY_LENGTH, 'unavailable'),
+    };
+}
+
+/** Compare poll ids as exact integers without passing them through Number. */
+export function samePollIndex(left, right) {
+    const a = positiveIndexText(left);
+    const b = positiveIndexText(right);
+    return a !== null && b !== null && BigInt(a) === BigInt(b);
+}
 
 function parseWeight(value) {
     if (typeof value === 'number' && (

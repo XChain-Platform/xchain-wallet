@@ -143,7 +143,7 @@ export function unclaimedRewards({ rewards, claims } = {}) {
     let accrued = 0n;
     for (const r of Array.isArray(rewards) ? rewards : []) {
         const p = parseAmount(r?.amount, SCALE);
-        if (p === null) continue;
+        if (p === null || p.units < 0n) continue;
         if (!p.exact) hasUnrepresentableAmount = true;
         accrued += floorUnits(p);
     }
@@ -153,7 +153,7 @@ export function unclaimedRewards({ rewards, claims } = {}) {
         const valid = String(c?.status ?? '') === 'valid';
         if (!valid) { hasRejectedClaim = true; continue; }
         const p = parseAmount(c?.amount, SCALE);
-        if (p === null) continue;
+        if (p === null || p.units < 0n) continue;
         if (!p.exact) hasUnrepresentableAmount = true;
         claimed += ceilUnits(p);
     }

@@ -17,6 +17,7 @@ import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { useGovernanceChainIds } from '../hooks/useGovernanceAddressesPresent.js';
 import { t } from '../../i18n/index.js';
 import { userFacingMessage } from '../utils/userFacingMessage.js';
+import { pollRowForDisplay } from './pollDisplay.js';
 import styles from './IssueTokenForm.module.css';
 import local from './GovernancePolls.module.css';
 
@@ -115,7 +116,10 @@ export function GovernancePolls({ walletId, onOpenPoll, onCreate, onDelegate, on
         setPollState({ walletId, chainId, rows: null, error: null });
         messaging.governancePolls({ chainId, opts: { limit: 50 } })
             .then((resp) => {
-                if (!cancelled) setPollState({ walletId, chainId, rows: extractRows(resp), error: null });
+                if (!cancelled) {
+                    const rows = extractRows(resp).map(pollRowForDisplay).filter(Boolean);
+                    setPollState({ walletId, chainId, rows, error: null });
+                }
             })
             .catch((err) => {
                 if (!cancelled) {

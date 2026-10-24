@@ -39,6 +39,8 @@ const LONG_NAME = `Protocol${'Name'.repeat(14)}`;
 const LONG_TICK = `GIVE${'X'.repeat(48)}`;
 const LONG_GET_TICK = `GET${'Y'.repeat(48)}`;
 const LARGE_AMOUNT = '1234567890123456789012345678901234567890';
+// Poll indexes are uint64; LONG_INDEX is wider and is refused by design.
+const POLL_INDEX = '18446744073709551615';
 
 function pending() {
     return new Promise(() => {});
@@ -422,7 +424,7 @@ describe('412px protocol detail layouts', () => {
         const option = `Option${'Choice'.repeat(16)}`;
         const messaging = messagingWith({
             governancePoll: vi.fn().mockResolvedValue({
-                action_index: LONG_INDEX,
+                action_index: POLL_INDEX,
                 tick: LONG_TICK,
                 question: LONG_NAME.repeat(2),
                 options: [option, 'Other'],
@@ -436,7 +438,7 @@ describe('412px protocol detail layouts', () => {
             governanceVotes: vi.fn().mockResolvedValue({ data: [] }),
         });
         const view = mountCompact(
-            <PollDetail walletId="wallet" chainId={CHAIN} pollIndex={LONG_INDEX} onBack={() => {}} />,
+            <PollDetail walletId="wallet" chainId={CHAIN} pollIndex={POLL_INDEX} onBack={() => {}} />,
             messaging,
         );
 
@@ -452,7 +454,7 @@ describe('412px protocol detail layouts', () => {
         const option = `Final${'Outcome'.repeat(16)}`;
         const messaging = messagingWith({
             governancePoll: vi.fn().mockResolvedValue({
-                action_index: LONG_INDEX,
+                action_index: POLL_INDEX,
                 tick: LONG_TICK,
                 options: [option],
                 poll_status: 'finalized',
@@ -463,7 +465,7 @@ describe('412px protocol detail layouts', () => {
             }),
         });
         const view = mountCompact(
-            <PollDetail walletId="wallet" chainId={CHAIN} pollIndex={LONG_INDEX} onBack={() => {}} />,
+            <PollDetail walletId="wallet" chainId={CHAIN} pollIndex={POLL_INDEX} onBack={() => {}} />,
             messaging,
         );
 

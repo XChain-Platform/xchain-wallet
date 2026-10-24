@@ -25,6 +25,7 @@ import { userFacingMessage } from '../utils/userFacingMessage.js';
 import dashStyles from './ActionsMenu.module.css';
 import styles from './OperatorDashboard.module.css';
 import { OperatorPublisherMode } from '../components/OperatorPublisherMode.jsx';
+import { neutralizeControlText } from '../utils/textHardening.js';
 
 const chainRegistry = registryLib.defaultRegistry();
 
@@ -215,7 +216,7 @@ function OperatorDashboardView({ walletId, chainId, address, onBack }) {
                         <ul className={styles.metricList}>
                             <li>Total amount staked: {totalStake ?? formatAmount(primaryStake)} XCP</li>
                             {primaryStake.activation_block || primaryStake.ACTIVATION_BLOCK ? (
-                                <li>Activation block: {primaryStake.activation_block || primaryStake.ACTIVATION_BLOCK}</li>
+                                <li>Activation block: {metricText(primaryStake.activation_block || primaryStake.ACTIVATION_BLOCK)}</li>
                             ) : null}
                         </ul>
                     ) : (
@@ -235,7 +236,7 @@ function OperatorDashboardView({ walletId, chainId, address, onBack }) {
                             {delegations.rows.slice(0, 10).map((d, i) => (
                                 <li key={i}>
                                     Signing key: {shortPubkey(d.signing_pubkey || d.SIGNING_PUBKEY)};
-                                    {' '}recorded at block {d.block_index || 'unknown'};
+                                    {' '}recorded at block {metricText(d.block_index)};
                                     {' '}status: {plainWords(stakingRowState(d, height))}
                                 </li>
                             ))}
@@ -246,11 +247,11 @@ function OperatorDashboardView({ walletId, chainId, address, onBack }) {
                 <Section title="Validator performance" loading={validators.loading} error={validators.error} showContentOnError={!!ownValidator}>
                     {ownValidator ? (
                         <ul className={styles.metricList}>
-                            {ownValidator.uptime !== undefined ? <li>Uptime: {String(ownValidator.uptime)}</li> : null}
-                            {ownValidator.score !== undefined ? <li>Validator score: {String(ownValidator.score)}</li> : null}
-                            {ownValidator.votes !== undefined ? <li>Votes recorded: {String(ownValidator.votes)}</li> : null}
-                            {ownValidator.missed !== undefined ? <li>Missed validations: {String(ownValidator.missed)}</li> : null}
-                            {ownValidator.last_seen_block ? <li>Last seen at block: {ownValidator.last_seen_block}</li> : null}
+                            {ownValidator.uptime !== undefined ? <li>Uptime: {metricText(ownValidator.uptime, 'unavailable')}</li> : null}
+                            {ownValidator.score !== undefined ? <li>Validator score: {metricText(ownValidator.score, 'unavailable')}</li> : null}
+                            {ownValidator.votes !== undefined ? <li>Votes recorded: {metricText(ownValidator.votes, 'unavailable')}</li> : null}
+                            {ownValidator.missed !== undefined ? <li>Missed validations: {metricText(ownValidator.missed, 'unavailable')}</li> : null}
+                            {ownValidator.last_seen_block ? <li>Last seen at block: {metricText(ownValidator.last_seen_block, 'unavailable')}</li> : null}
                         </ul>
                     ) : activePubkey ? (
                         <EmptyState
@@ -280,7 +281,7 @@ function OperatorDashboardView({ walletId, chainId, address, onBack }) {
                         <ul className={styles.metricList}>
                             {recentRewards.map((r, i) => (
                                 <li key={i} className={dashStyles.entryDescription}>
-                                    Reward amount: {formatRewardAmount(r)} XCP; earned at block {r.block_index || 'unknown'}
+                                    Reward amount: {formatRewardAmount(r)} XCP; earned at block {metricText(r.block_index)}
                                     {r.status ? `; status: ${plainWords(r.status)}` : ''}
                                 </li>
                             ))}
@@ -304,10 +305,10 @@ function OperatorDashboardView({ walletId, chainId, address, onBack }) {
                                     {b.message || b.MESSAGE
                                         ? <span title={String(b.message || b.MESSAGE)}>Message: "{truncate(b.message || b.MESSAGE, 32)}"</span>
                                         : (b.broadcast_action_index || b.BROADCAST_ACTION_INDEX
-                                            ? <>Feed reference number: {b.broadcast_action_index || b.BROADCAST_ACTION_INDEX}</>
+                                            ? <>Feed reference number: {metricText(b.broadcast_action_index || b.BROADCAST_ACTION_INDEX)}</>
                                             : 'Message or feed reference: none')}
-                                    {(b.value !== undefined && b.value !== null) ? <>; published value: {String(b.value)}</> : null}
-                                    {'; published at block: '}{b.block_index || 'unknown'}
+                                    {(b.value !== undefined && b.value !== null) ? <>; published value: {metricText(b.value, 'unavailable')}</> : null}
+                                    {'; published at block: '}{metricText(b.block_index)}
                                 </li>
                             ))}
                         </ul>
@@ -362,7 +363,7 @@ function extractRows(resp) {
 }
 
 function formatAmount(stake) {
-    return String(stake?.amount ?? stake?.AMOUNT ?? stake?.quantity ?? 'N/A');
+    return metricText(stake?.amount ?? stake?.AMOUNT ?? stake?.quantity, 'N/A');
 }
 
 export function splitRewards(rows, claims) {
@@ -371,7 +372,15 @@ export function splitRewards(rows, claims) {
 }
 
 function formatRewardAmount(row) {
-    return row?.amount ?? row?.AMOUNT ?? row?.reward ?? 'N/A';
+    return metricText(row?.amount ?? row?.AMOUNT ?? row?.reward, 'N/A');
+}
+
+function metricText(value, fallback = 'unknown') {
+    const type = typeof value;
+    if (value === null || value === undefined
+        || !['string', 'number', 'bigint', 'boolean'].includes(type)
+        || (type === 'number' && !Number.isFinite(value))) return fallback;
+    return neutralizeControlText(value, { maxLength: 128 }) || fallback;
 }
 
 function shortPubkey(pk) {

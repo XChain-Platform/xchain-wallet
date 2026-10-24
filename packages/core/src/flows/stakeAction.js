@@ -62,10 +62,15 @@ export async function stakeAction(opts) {
     if (!opts.params.AMOUNT) {
         throw new Error('stakeAction: params.AMOUNT is required');
     }
+    if (typeof opts.params.AMOUNT === 'number'
+        && Number.isInteger(opts.params.AMOUNT)
+        && !Number.isSafeInteger(opts.params.AMOUNT)) {
+        throw new Error('stakeAction: AMOUNT must be an exact decimal string');
+    }
     if (!/^[0-9]+(\.[0-9]{1,8})?$/.test(String(opts.params.AMOUNT))) {
         throw new Error('stakeAction: AMOUNT must be a positive decimal with at most 8 fractional digits');
     }
-    if (Number(opts.params.AMOUNT) <= 0) {
+    if (!/[1-9]/.test(String(opts.params.AMOUNT))) {
         throw new Error('stakeAction: AMOUNT must be greater than 0');
     }
     if (!opts.params.SIGNING_PUBKEY) {

@@ -49,4 +49,15 @@ describe.each(COMPOSERS)('%s amount intent', (name, compose, extra) => {
                 .rejects.toThrow(`${name}: AMOUNT must be a positive decimal`);
         }
     });
+
+    it('rejects a rounded unsafe number but accepts the same exact decimal string', async () => {
+        await expect(compose({
+            ...base,
+            params: { VERSION: '0', ...extra, AMOUNT: Number.MAX_SAFE_INTEGER + 2 },
+        })).rejects.toThrow(`${name}: AMOUNT must be an exact decimal string`);
+        await expect(compose({
+            ...base,
+            params: { VERSION: '0', ...extra, AMOUNT: '9007199254740993' },
+        })).rejects.toThrow(PAST_AMOUNT_GUARD);
+    });
 });
