@@ -98,6 +98,102 @@ afterEach(() => {
 });
 
 describe('MessagingInbox audit states', () => {
+    it('ignores malformed message rows without hiding valid conversations', async () => {
+        mount(messagingFor({ messages: [
+            incoming({
+                from: { attacker: true },
+                txid: 'malformed-sender',
+                text: 'invalid row',
+                timestamp: 3,
+            }),
+            incoming({
+                from: 'peer-valid',
+                txid: 'valid-row',
+                text: 'valid message remains visible',
+                timestamp: 2,
+            }),
+        ] }));
+
+        expect(await screen.findByText('valid message remains visible')).toBeTruthy();
+        expect(screen.queryByText('invalid row')).toBeNull();
+    });
+
+    it('neutralizes invisible direction controls while keeping message markup inert', async () => {
+        const from = 'bc1qpeer\u202Etxt\u200Btail';
+        const text = '<script>globalThis.messageExecuted = true</script> pay\u202Etxt\u200Bnow';
+        mount(messagingFor({ messages: [incoming({
+            from,
+            txid: 'hostile-display',
+            text,
+            timestamp: 2,
+        })] }));
+
+        const preview = await screen.findByText(/globalThis\.messageExecuted/);
+        expect(preview.textContent).not.toContain('\u202E');
+        expect(preview.textContent).not.toContain('\u200B');
+        expect(document.body.textContent).not.toContain('\u202E');
+        expect(document.body.textContent).not.toContain('\u200B');
+        expect(document.body.textContent).toContain('\u2426');
+        expect(document.querySelector('script')).toBeNull();
+
+        fireEvent.click(preview);
+        expect(await screen.findByText(/pay\u2426txtnow/)).toBeTruthy();
+    });
+
+    it('does not mislabel an unreadable ECIES envelope as a missing shared key', async () => {
+        mount(messagingFor({ messages: [{
+            format: 2,
+            method: 1,
+            chainId: CHAIN,
+            from: REQUEST.from,
+            to: OWNER.address,
+            txid: 'bad-ecies',
+            timestamp: 2,
+            text: null,
+            encrypted: true,
+        }] }));
+
+        fireEvent.click(await screen.findByText('🔒 Encrypted message'));
+        expect(await screen.findByText(/could not be decrypted/i)).toBeTruthy();
+        expect(screen.queryByText(/shared key this wallet does not have/i)).toBeNull();
+    });
+
+    it('does not label a look-alike sender or a wallet claim as outgoing', async () => {
+        const lookAlike = OWNER.address.replace('e', '\u0435');
+        mount(messagingFor({ messages: [incoming({
+            from: lookAlike,
+            txid: 'look-alike-sender',
+            text: 'Official wallet message',
+            timestamp: 2,
+        })] }));
+
+        const preview = await screen.findByText('Official wallet message');
+        expect(screen.getByLabelText(lookAlike)).toBeTruthy();
+        expect(screen.queryByText(/^You/)).toBeNull();
+
+        fireEvent.click(preview);
+        const body = await screen.findByText('Official wallet message');
+        expect(body.closest('li').style.alignItems).toBe('flex-start');
+    });
+
+    it('renders a one-megabyte body inside the wrapping message bubble', async () => {
+        const text = 'A'.repeat(1_048_576);
+        const utils = mount(messagingFor({ messages: [incoming({
+            from: REQUEST.from,
+            txid: 'one-megabyte-message',
+            text,
+            timestamp: 2,
+        })] }));
+
+        const conversations = await screen.findByRole('list', { name: 'Conversations' });
+        fireEvent.click(conversations.querySelector('button'));
+        const copy = await screen.findByRole('button', { name: 'Copy message' });
+        const bubble = copy.closest('div').previousElementSibling;
+        expect(bubble.textContent).toHaveLength(1_048_576);
+        expect(bubble.style.overflowWrap).toBe('anywhere');
+        expect(utils.container.scrollWidth).toBeLessThanOrEqual(utils.container.clientWidth);
+    });
+
     it('uses the same shared size class for the search and network controls', async () => {
         mount(messagingFor());
 

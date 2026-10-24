@@ -37,6 +37,7 @@
 import { submitAction } from './submitAction.js';
 import { normalizeSource } from './sendToken.js';
 import { exportPrivateKey } from './exportPrivateKey.js';
+import { hasUnsafeMessageCharacters } from '../shared/utils/messageTextSafety.js';
 
 const PROTOCOL_COIN_TICKER = {
     bitcoin: 'BTC',
@@ -64,6 +65,12 @@ export function messageWireByteLength(message, method) {
     if (method === null || plaintextBytes === 0) return plaintextBytes;
     const envelopeBytes = method === 2 ? ECDH_ENVELOPE_BYTES : ECIES_ENVELOPE_BYTES;
     return (plaintextBytes + envelopeBytes) * 2;
+}
+
+function assertMessageTextSafe(message) {
+    if (hasUnsafeMessageCharacters(message)) {
+        throw new TypeError('messageAction: Message contains unsupported control or invisible characters.');
+    }
 }
 
 function assertMessageFieldFits(value, label) {
@@ -191,6 +198,7 @@ export async function buildMessageParams(opts) {
     if (typeof opts.message !== 'string' || opts.message.trim().length === 0) {
         throw new Error('buildMessageParams: message is required');
     }
+    assertMessageTextSafe(opts.message);
 
     // method: null = plaintext (v3), 1 = ECIES (v2), 2 = ECDH session (v2).
     const method = opts.method === null ? null : (opts.method === 2 ? 2 : 1);
@@ -328,6 +336,7 @@ export async function messageAction(opts) {
         if (typeof field !== 'string' || field.trim().length === 0) {
             throw new Error('messageAction: message is required');
         }
+        if (method === null) assertMessageTextSafe(field);
         assertMessageFieldFits(field, method === null ? 'Message' : 'Encrypted message');
     } else {
         ({ params, method, broadcastChainId, source } = await buildMessageParams(opts));

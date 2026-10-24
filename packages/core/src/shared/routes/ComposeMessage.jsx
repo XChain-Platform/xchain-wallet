@@ -40,6 +40,7 @@ import {
     MESSAGE_ATTACHMENT_TYPES,
     serializeMessageContent,
 } from '../utils/messageContent.js';
+import { hasUnsafeMessageCharacters } from '../utils/messageTextSafety.js';
 import { MAX_MESSAGE_BYTES, messageWireByteLength } from '../../flows/messageAction.js';
 import styles from './IssueTokenForm.module.css';
 
@@ -471,6 +472,10 @@ function ComposeMessageForm({
     const messageLengthError = wireMessageBytes > MAX_MESSAGE_BYTES
         ? `${messageLengthSubject} ${wireMessageBytes.toLocaleString()} bytes; the network accepts at most ${MAX_MESSAGE_BYTES.toLocaleString()} bytes.`
         : undefined;
+    const messageCharacterError = hasUnsafeMessageCharacters(message)
+        ? 'Message contains unsupported control or invisible characters.'
+        : undefined;
+    const messageError = messageCharacterError || messageLengthError;
 
     function handleAttachmentPick(event) {
         const file = event.target?.files?.[0];
@@ -648,7 +653,7 @@ function ComposeMessageForm({
             setSubmitError('Write a message to send, or attach a file.');
             return;
         }
-        if (messageLengthError) return;
+        if (messageError) return;
         if (addressInvalid) return;
         if (feeValidationError) {
             setSubmitError(feeValidationError);
@@ -671,7 +676,7 @@ function ComposeMessageForm({
         event.preventDefault();
         if (stage === 'submitting') return;
         if (!fromAddress || !chainId || !toAddress.trim() || (!message.trim() && !attachment)) return;
-        if (messageLengthError) return;
+        if (messageError) return;
         if (addressInvalid) return;
         if (feeValidationError) return;
         if (!sendUnencrypted && pubkeyState !== 'found') return;
@@ -1039,7 +1044,7 @@ function ComposeMessageForm({
                     variant="primary"
                     icon={<Icon.SendIcon />}
                     loading={actionConfirm.composing}
-                    disabled={actionConfirm.composing || Boolean(messageLengthError)}
+                    disabled={actionConfirm.composing || Boolean(messageError)}
                 >
                     {actionConfirm.composing ? 'Preparing review…' : 'Send message'}
                 </Button>
@@ -1073,10 +1078,10 @@ function ComposeMessageForm({
                 }}
                 rows={4}
                 placeholder="Write your message…"
-                hint={messageLengthError
+                hint={messageError
                     ? undefined
                     : `${wireMessageBytes.toLocaleString()} / ${MAX_MESSAGE_BYTES.toLocaleString()}${sendUnencrypted ? ' bytes.' : ' encrypted bytes.'}`}
-                error={messageLengthError}
+                error={messageError}
                 style={{ minHeight: '4rem' }}
             />
 

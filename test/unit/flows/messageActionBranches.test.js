@@ -79,6 +79,17 @@ describe('message parameter branches', () => {
             .rejects.toThrow('message is required');
     });
 
+    it.each([
+        ['NUL', 'pay\u0000recipient'],
+        ['bidi override', 'pay\u202Erecipient'],
+        ['zero-width joiner', 'pay\u200Drecipient'],
+    ])('rejects a message containing an unsafe %s character', async (_label, message) => {
+        const { opts, sdk } = setup({ opts: { message } });
+
+        await expect(buildMessageParams(opts)).rejects.toThrow(/unsupported control or invisible characters/i);
+        expect(sdk.messaging.eciesEncrypt).not.toHaveBeenCalled();
+    });
+
     it('rejects unknown destination, coin, and broadcast chains', async () => {
         const missing = setup({ opts: { chainId: 'missing' } });
         await expect(buildMessageParams(missing.opts)).rejects.toThrow('unknown chain');
