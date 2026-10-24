@@ -212,6 +212,14 @@ describe('ToastHost', () => {
         }
     });
 
+    it('clamps a runaway message so the card and its dismiss button stay on screen', () => {
+        const css = readFileSync('packages/core/src/shared/components/ToastHost.module.css', 'utf8');
+        const block = css.match(/\.message\s*\{([^}]*)\}/);
+        expect(block).not.toBeNull();
+        expect(block[1]).toMatch(/-webkit-line-clamp:\s*6;/);
+        expect(block[1]).toMatch(/overflow:\s*hidden;/);
+    });
+
     it('renders broadcast notifications containing markup as text', () => {
         const message = '<script>globalThis.notificationExecuted = true</script>';
         setup();

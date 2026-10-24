@@ -66,6 +66,7 @@ import {
     cancelSendAssetSwitch,
 } from '@xchain-wallet/core/shared/utils/sendAssetSwitch.js';
 import { NOTIFICATION_EVENT } from './notifications/webNotifyAdapter.js';
+import { createNotificationToastGate } from './notifications/notificationToastGate.js';
 import { ReachabilityBanner } from '@xchain-wallet/core/shared/components/ReachabilityBanner.jsx';
 // §6 / D4. Renders nothing unless a shell installed a direct-update
 // provider, which only a sideloaded Android APK does; see flows/directUpdate.js.
@@ -301,7 +302,7 @@ function AppInner() {
     // by <FullLayoutWithNav> from its measured container width; the variant
     // only decides the dev-preview frame and the messaging shell, both of
     // which are resolved in <App> above.
-    const { showToast } = useToast();
+    const { showToast, dismissToast } = useToast();
     // §34.1: settings carry the keyboard-shortcut overrides threaded into
     // the palette hook, the dispatcher, and the help modal below.
     const { settings } = useSettings();
@@ -901,17 +902,28 @@ function AppInner() {
     // adapter shows an OS notification instead, so we skip the toast then.
     useEffect(() => {
         if (status.state !== 'unlocked') return undefined;
+        const gate = createNotificationToastGate();
+        // Ids this effect put on screen: a lock must take them off again, since
+        // a notification toast names an amount and the lock screen shows none.
+        const shownIds = new Set();
+        let sequence = 0;
         const onNotify = (event) => {
             if (typeof document !== 'undefined' && document.visibilityState === 'hidden') return;
             const detail = (event && event.detail) || {};
             const message = detail.title && detail.body
                 ? `${detail.title}: ${detail.body}`
                 : (detail.title || detail.body || 'Notification');
-            showToast({ message, variant: 'default' });
+            const toast = gate(message);
+            const id = toast.id || `notification-${sequence += 1}`;
+            shownIds.add(id);
+            showToast({ id, message: toast.message, variant: 'default' });
         };
         window.addEventListener(NOTIFICATION_EVENT, onNotify);
-        return () => window.removeEventListener(NOTIFICATION_EVENT, onNotify);
-    }, [status.state, showToast]);
+        return () => {
+            window.removeEventListener(NOTIFICATION_EVENT, onNotify);
+            for (const id of shownIds) dismissToast(id);
+        };
+    }, [status.state, showToast, dismissToast]);
 
     // Mirror of popup App: load accounts for the active wallet and
     // auto-select the first (lowest-index) one. Reset on wallet switch.
