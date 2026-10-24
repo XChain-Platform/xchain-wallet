@@ -11,13 +11,17 @@
 import React from 'react';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeAll, describe, expect, it } from 'vitest';
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { MessagingProvider } from '../../packages/core/src/shared/MessagingProvider.jsx';
 import { BottomTabBar } from '../../packages/core/src/shared/components/BottomTabBar.jsx';
 import overlayStyles from '../../packages/core/src/shared/components/OverlaySurface.module.css';
 import { WalletPicker } from '../../packages/core/src/shared/routes/WalletPicker.jsx';
 import walletPickerStyles from '../../packages/core/src/shared/routes/WalletPicker.module.css';
+import { preloadOnDemandOverlays } from '../../packages/core/src/shared/components/onDemandOverlays.js';
+
+// The app loads these on idle after first paint; load them up front here.
+beforeAll(() => preloadOnDemandOverlays());
 
 const read = (relativePath) => readFileSync(join(process.cwd(), relativePath), 'utf8');
 const overlayCss = read('packages/core/src/shared/components/OverlaySurface.module.css');

@@ -11,8 +11,12 @@
 import { Suspense, lazy, useCallback, useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { Button, Icon, Spinner } from '@xchain-wallet/core/ui';
-import { ConfirmModal } from './ConfirmModal.jsx';
-import { OverlaySurface } from './OverlaySurface.jsx';
+// The popover and its confirm open only after a click, so they load on demand.
+import {
+    ConfirmModalOnDemand as ConfirmModal,
+    OverlaySurfaceOnDemand as OverlaySurface,
+} from './onDemandOverlays.js';
+import { openWhenLoaded, useIdlePreload } from '../utils/onDemandComponent.js';
 import { useAnchoredPopover } from '../hooks/useViewportClamp.js';
 import { useConfirmModal } from '../hooks/useConfirmModal.js';
 import {
@@ -98,6 +102,12 @@ export function HeaderSettingsButton({
     const confirmDialog = useConfirmModal();
     const wrapRef = useRef(null);
     const triggerRef = useRef(null);
+    useIdlePreload(OverlaySurface, ConfirmModal);
+    // Open once the surface is loaded, so placement and focus see the popover.
+    const togglePopover = () => {
+        if (open) setOpen(false);
+        else openWhenLoaded(OverlaySurface, () => setOpen(true));
+    };
     // The system Back gesture and Escape close this before it leaves the
     // screen; the shared stack consumes Escape, so focus goes back here.
     const closePopover = useCallback(() => {
@@ -220,7 +230,7 @@ export function HeaderSettingsButton({
                             type="button"
                             role="menuitem"
                             className={menuStyles.actionRow}
-                            onClick={() => setOpen((v) => !v)}
+                            onClick={togglePopover}
                             aria-haspopup="dialog"
                             aria-expanded={open ? 'true' : 'false'}
                             data-active={anyNonDefault ? 'true' : undefined}
@@ -241,7 +251,7 @@ export function HeaderSettingsButton({
                                     {anyNonDefault ? <span className={styles.dot} /> : null}
                                 </>
                             )}
-                            onClick={() => setOpen((v) => !v)}
+                            onClick={togglePopover}
                             aria-haspopup="dialog"
                             aria-expanded={open ? 'true' : 'false'}
                             aria-label={t('home.settings')}

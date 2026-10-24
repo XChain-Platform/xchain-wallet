@@ -47,7 +47,9 @@ import {
     subscribeActiveWallet,
     writeActiveWallet,
 } from '../utils/activeWalletMemory.js';
-import { DemoExitConfirm } from '../components/DemoExitConfirm.jsx';
+// The demo-exit confirm opens only on a tap, so it and its styles load on demand.
+import { DemoExitConfirmOnDemand as DemoExitConfirm } from '../components/onDemandOverlays.js';
+import { useIdlePreload } from '../utils/onDemandComponent.js';
 import { useFocusTrap } from '../utils/focusTrap.js';
 import { useBackHandler } from '../../ui/backStack.js';
 import { useNativeExitRoot } from '../hooks/useNativeExitRoot.js';
@@ -201,6 +203,7 @@ export function Locked({ onUnlocked }) {
     // The unlock screen is the bottom of the app, so Android Back leaves it
     // the way Home does.
     useNativeExitRoot(true, true);
+    useIdlePreload(DemoExitConfirm);
 
     useEffect(() => {
         inputRef.current?.focus();

@@ -36,7 +36,7 @@
 // The positive cases matter as much as the negative ones: a gate that
 // removed Send from every wallet would also make this file green.
 
-import { describe, it, expect, vi, afterEach } from 'vitest';
+import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 import { render, screen, fireEvent, waitFor, cleanup } from '@testing-library/react';
 import React from 'react';
 
@@ -46,6 +46,10 @@ import { buildCommands } from '../../../packages/core/src/shared/commandPalette/
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
 import { Send } from '../../../packages/core/src/shared/routes/Send.jsx';
 import { Receive } from '../../../packages/core/src/shared/routes/Receive.jsx';
+import { preloadOnDemandOverlays } from '../../../packages/core/src/shared/components/onDemandOverlays.js';
+
+// The app loads these on idle after first paint; load them up front here.
+beforeAll(() => preloadOnDemandOverlays());
 
 afterEach(() => { cleanup(); vi.clearAllMocks(); });
 

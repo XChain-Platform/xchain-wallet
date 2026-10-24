@@ -1,7 +1,7 @@
 // Copyright © 2025-2026 Dankest, LLC
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 
 vi.mock('../../../packages/core/src/shared/hooks/useReachability.js', () => ({
@@ -10,6 +10,10 @@ vi.mock('../../../packages/core/src/shared/hooks/useReachability.js', () => ({
 
 import { HeaderSettingsButton } from '../../../packages/core/src/shared/components/HeaderSettingsButton.jsx';
 import { NetworkStatusIndicator } from '../../../packages/core/src/shared/components/NetworkStatusIndicator.jsx';
+import { preloadOnDemandOverlays } from '../../../packages/core/src/shared/components/onDemandOverlays.js';
+
+// The app loads these on idle after first paint; load them up front here.
+beforeAll(() => preloadOnDemandOverlays());
 
 afterEach(() => {
     cleanup();

@@ -16,43 +16,6 @@
     min-height: var(--xc-control-h-sm);
 }
 
-.back {
-    --xc-icon-size: var(--xc-icon-md);
-    justify-self: start;
-    width: var(--xc-page-header-side);
-    height: var(--xc-page-header-side);
-    min-width: var(--xc-page-header-side);
-    /* The header side token resolves to this global size; naming it here
-       keeps the stated tap floor readable outside the header scope. */
-    min-height: var(--xc-control-h-md);
-    background: transparent;
-    border: none;
-    color: var(--xc-accent-text);
-    font-size: var(--xc-text-sm);
-    cursor: pointer;
-    padding: 0;
-    border-radius: var(--xc-control-radius);
-    transition: color 0.12s ease;
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-}
-
-.back:hover {
-    background: transparent;
-    color: color-mix(in srgb, var(--xc-accent-primary) 70%, white 30%);
-}
-
-.back:focus-visible {
-    outline: 2px solid var(--xc-focus-ring);
-    outline-offset: 2px;
-}
-
-.back:disabled {
-    opacity: 0.5;
-    cursor: not-allowed;
-}
-
 .titleGroup {
     display: flex;
     align-items: center;

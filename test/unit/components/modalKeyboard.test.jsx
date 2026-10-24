@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 import { useState } from 'react';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 import {
     act,
     cleanup,
@@ -17,6 +17,10 @@ import { DemoExitConfirm } from '../../../packages/core/src/shared/components/De
 import { GatedFileViewer } from '../../../packages/core/src/shared/components/GatedFileViewer.jsx';
 import { NoticeModal } from '../../../packages/core/src/shared/components/NoticeModal.jsx';
 import { resetBackStackForTests } from '../../../packages/core/src/ui/backStack.js';
+import { preloadOnDemandOverlays } from '../../../packages/core/src/shared/components/onDemandOverlays.js';
+
+// The app loads these on idle after first paint; load them up front here.
+beforeAll(() => preloadOnDemandOverlays());
 
 const TEXT_FILE = Buffer.from('hello').toString('base64');
 

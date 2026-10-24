@@ -28,12 +28,6 @@
     margin-bottom: var(--xc-space-3);
 }
 
-.walletName {
-    font-size: var(--xc-text-lg);
-    font-weight: 600;
-    color: var(--xc-text);
-}
-
 @media (min-width: 600px) {
     .hero {
         margin-bottom: var(--xc-space-5);

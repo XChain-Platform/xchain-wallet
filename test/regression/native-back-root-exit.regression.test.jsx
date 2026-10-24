@@ -16,13 +16,16 @@
 
 import React from 'react';
 import { act, cleanup, render, screen } from '@testing-library/react';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { MessagingProvider } from '../../packages/core/src/shared/MessagingProvider.jsx';
-import { ToastHost } from '../../packages/core/src/shared/components/ToastHost.jsx';
+import { ToastHost, preloadToastStack } from '../../packages/core/src/shared/components/ToastHost.jsx';
 import { Locked } from '../../packages/core/src/shared/routes/Locked.jsx';
 import { Onboarding } from '../../packages/core/src/shared/routes/Onboarding.jsx';
 import { LICENSE_VERSION } from '../../packages/core/src/buildInfo.js';
 import { resetBackStackForTests, useNativeBackRoot } from '../../packages/core/src/ui/backStack.js';
+
+// The app loads these on idle after first paint; load them up front here.
+beforeAll(() => preloadToastStack());
 
 const EXIT_HINT = 'Press Back again to exit.';
 let nativeBack;

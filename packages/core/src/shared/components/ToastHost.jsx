@@ -9,11 +9,18 @@
 // contact legal@dankest.llc.
 
 import { createContext, useCallback, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
-import { Button } from '../../ui/Button.jsx';
 import styles from './ToastHost.module.css';
+import { onDemandComponent, useIdlePreload } from '../utils/onDemandComponent.js';
 import { HapticProvider, useHaptic } from '../hooks/useHaptic.js';
 import { clearToastRoom, placeToastStack } from './toastPlacement.js';
 import { t } from '../../i18n/index.js';
+
+// The cards and their styles load after first paint (or with the first toast);
+// the viewport and its live region render from the first frame.
+const ToastStack = onDemandComponent(() => import('./ToastStack.jsx'), 'ToastStack');
+
+/** Loads the toast cards now instead of on idle, for a caller that needs them at once. */
+export const preloadToastStack = () => ToastStack.preload().then(() => {});
 
 const VISIBLE_LIMIT = 3;
 // One duration policy for every toast, set here rather than per call: 8 s for
@@ -78,6 +85,7 @@ export function ToastHost({ children }) {
     const timersRef = useRef(/** @type {Map<string, ReturnType<typeof setTimeout>>} */ (new Map()));
     const viewportRef = useRef(/** @type {HTMLDivElement | null} */ (null));
     const haptic = useHaptic();
+    useIdlePreload(ToastStack);
 
     const announce = useCallback((message) => {
         if (typeof message !== 'string' || message.length === 0) return;
@@ -225,81 +233,30 @@ export function ToastHost({ children }) {
                     <span className={styles.liveAnnouncement} key={announcement.id}>
                         {announcement.message}
                     </span>
-                    {hiddenCount > 0 ? (
-                        <div className={styles.overflowBadge} aria-hidden="true">
-                            {t('components.toastHost.more', { hiddenCount })}
-                        </div>
-                    ) : null}
-                    {visibleToasts.map((t) => (
-                        <ToastItem
-                            key={t.id}
-                            toast={t}
-                            onAction={() => {
-                                if (typeof t.onAction === 'function') {
+                    {visibleToasts.length > 0 || hiddenCount > 0 ? (
+                        <ToastStack
+                            toasts={visibleToasts}
+                            hiddenCount={hiddenCount}
+                            onAction={(toast) => {
+                                if (typeof toast.onAction === 'function') {
                                     try {
-                                        Promise.resolve(t.onAction()).catch(() => {
+                                        Promise.resolve(toast.onAction()).catch(() => {
                                             /* The caller surfaces action failures through its own UI. */
                                         });
                                     } catch {
                                         /* The caller surfaces action failures through its own UI. */
                                     }
                                 }
-                                dismissToast(t.id);
+                                dismissToast(toast.id);
                             }}
-                            onDismiss={() => dismissToast(t.id)}
+                            onDismiss={dismissToast}
                         />
-                    ))}
+                    ) : null}
                 </div>
             </ToastContext.Provider>
         </HapticProvider>
     );
 }
-
-function ToastItem({ toast, onAction, onDismiss }) {
-    const presentation = TOAST_PRESENTATION[toast.variant || 'default'] || TOAST_PRESENTATION.default;
-    return (
-        <div
-            className={`${styles.toast} ${styles[`variant_${presentation.tone}`]}`}
-            data-variant={presentation.tone}
-            onKeyDown={(event) => {
-                if (event.key !== 'Escape') return;
-                event.preventDefault();
-                event.stopPropagation();
-                onDismiss();
-            }}
-        >
-            <span className={styles.icon} aria-hidden="true">{presentation.icon}</span>
-            <span className={styles.message}>{toast.message}</span>
-            <div className={styles.controls}>
-                {toast.actionLabel && toast.onAction ? (
-                    <button
-                        type="button"
-                        className={styles.actionBtn}
-                        onClick={onAction}
-                    >
-                        {toast.actionLabel}
-                    </button>
-                ) : null}
-                <Button
-                    size="sm"
-                    variant="secondary"
-                    className={styles.dismissBtn}
-                    icon={<span aria-hidden="true">×</span>}
-                    onClick={onDismiss}
-                    aria-label={t('components.toastHost.dismissNotification')}
-                />
-            </div>
-        </div>
-    );
-}
-
-const TOAST_PRESENTATION = {
-    default: { tone: 'info', icon: 'ℹ' },
-    info: { tone: 'info', icon: 'ℹ' },
-    warning: { tone: 'warning', icon: '⚠' },
-    success: { tone: 'success', icon: '✓' },
-    error: { tone: 'error', icon: '✕' },
-};
 
 /**
  * Hook for routes / components that want to surface a toast. Falls back

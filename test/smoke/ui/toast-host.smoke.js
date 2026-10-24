@@ -65,8 +65,12 @@ assert.ok(/role="status"[\s\S]*aria-live="polite"/.test(th),
 // --- 2. CSS includes the reduced-motion guard + viewport positioning -----
 
 const thCssSrc = readFileSync(thCss, 'utf8');
+// The card rules load with the cards after first paint (ToastStack.jsx).
+const stackCss = join(components, 'ToastStack.module.css');
+assert.ok(existsSync(stackCss), 'ToastStack.module.css exists');
+const stackCssSrc = readFileSync(stackCss, 'utf8');
 assert.ok(
-    /@media \(prefers-reduced-motion: reduce\)/.test(thCssSrc),
+    /@media \(prefers-reduced-motion: reduce\)/.test(stackCssSrc),
     'ToastHost CSS guards animation under prefers-reduced-motion',
 );
 assert.ok(/position:\s*fixed/.test(thCssSrc),
@@ -75,15 +79,15 @@ assert.ok(/pointer-events:\s*none/.test(thCssSrc),
     'ToastHost viewport sets pointer-events: none so it never traps clicks');
 // The card itself passes taps through as well (a toast floats over a phone
 // screen's bottom controls); only its buttons take them.
-assert.ok(/\.toast\s*\{[^}]*pointer-events:\s*none/.test(thCssSrc),
+assert.ok(/\.toast\s*\{[^}]*pointer-events:\s*none/.test(stackCssSrc),
     'a toast card passes taps through to the control beneath it');
-assert.ok(/\.controls\s*\{[^}]*pointer-events:\s*none/.test(thCssSrc),
+assert.ok(/\.controls\s*\{[^}]*pointer-events:\s*none/.test(stackCssSrc),
     'the toast controls box passes taps through, so it never becomes a tap-catching strip');
 for (const button of ['actionBtn', 'dismissBtn']) {
-    assert.ok(new RegExp(`\\.${button}\\s*\\{[^}]*pointer-events:\\s*auto`).test(thCssSrc),
+    assert.ok(new RegExp(`\\.${button}\\s*\\{[^}]*pointer-events:\\s*auto`).test(stackCssSrc),
         `the toast ${button} still takes taps`);
 }
-assert.ok(!/@media[^{]*max-width[^{]*\{\s*\.toast\s*\{[^}]*flex-wrap:\s*wrap/.test(thCssSrc),
+assert.ok(!/@media[^{]*max-width[^{]*\{\s*\.toast\s*\{[^}]*flex-wrap:\s*wrap/.test(stackCssSrc),
     'the toast stays one row on narrow phones instead of wrapping its controls onto a strip of their own');
 
 // --- 3. ContactsList delete shows an Undo toast --------------------------

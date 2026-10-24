@@ -1,10 +1,10 @@
 // Copyright © 2025-2026 Dankest, LLC
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { act, cleanup, fireEvent, render, screen } from '@testing-library/react';
-import toastStyles from '../../../../packages/core/src/shared/components/ToastHost.module.css';
+import toastStyles from '../../../../packages/core/src/shared/components/ToastStack.module.css';
 
 const mocks = vi.hoisted(() => ({
     haptic: {
@@ -19,7 +19,9 @@ vi.mock('../../../../packages/core/src/shared/hooks/useHaptic.js', () => ({
     HapticProvider: ({ children }) => children,
 }));
 
-import { ToastHost, useClearToastsOnLock, useToast } from '../../../../packages/core/src/shared/components/ToastHost.jsx';
+import {
+    ToastHost, preloadToastStack, useClearToastsOnLock, useToast,
+} from '../../../../packages/core/src/shared/components/ToastHost.jsx';
 
 let toastApi;
 
@@ -43,6 +45,9 @@ function show(input) {
     });
     return id;
 }
+
+// The app loads the toast cards on idle after first paint; load them up front here.
+beforeAll(() => preloadToastStack());
 
 beforeEach(() => {
     vi.useFakeTimers();
@@ -193,7 +198,7 @@ describe('ToastHost', () => {
             .toHaveClass(toastStyles.dismissBtn);
 
         const css = readFileSync(
-            'packages/core/src/shared/components/ToastHost.module.css',
+            'packages/core/src/shared/components/ToastStack.module.css',
             'utf8',
         );
         expect(css).toMatch(/\.toast\s*\{[^}]*padding:\s*var\(--xc-card-pad\)/s);
@@ -204,7 +209,7 @@ describe('ToastHost', () => {
     it('lays every tone tint over the opaque raised surface', () => {
         // The tone tints are 10 to 14 percent alpha; on their own they let the
         // page text show through a floating toast (Receive at 360 wide).
-        const css = readFileSync('packages/core/src/shared/components/ToastHost.module.css', 'utf8');
+        const css = readFileSync('packages/core/src/shared/components/ToastStack.module.css', 'utf8');
         for (const tone of ['info', 'warning', 'success', 'error']) {
             const block = css.match(new RegExp(`\\.variant_${tone}\\s*\\{([^}]*)\\}`));
             expect(block, tone).not.toBeNull();
@@ -213,7 +218,7 @@ describe('ToastHost', () => {
     });
 
     it('clamps a runaway message so the card and its dismiss button stay on screen', () => {
-        const css = readFileSync('packages/core/src/shared/components/ToastHost.module.css', 'utf8');
+        const css = readFileSync('packages/core/src/shared/components/ToastStack.module.css', 'utf8');
         const block = css.match(/\.message\s*\{([^}]*)\}/);
         expect(block).not.toBeNull();
         expect(block[1]).toMatch(/-webkit-line-clamp:\s*6;/);

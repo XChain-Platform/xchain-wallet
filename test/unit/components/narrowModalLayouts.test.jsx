@@ -14,6 +14,10 @@ import { GatedFileViewer } from '../../../packages/core/src/shared/components/Ga
 import { NoticeModal } from '../../../packages/core/src/shared/components/NoticeModal.jsx';
 import buttonStyles from '../../../packages/core/src/ui/Button.module.css';
 import overlayStyles from '../../../packages/core/src/shared/components/OverlaySurface.module.css';
+import { preloadOnDemandOverlays } from '../../../packages/core/src/shared/components/onDemandOverlays.js';
+
+// The app loads these on idle after first paint; load them up front here.
+beforeAll(() => preloadOnDemandOverlays());
 
 const COMPONENT_DIR = join(process.cwd(), 'packages/core/src/shared/components');
 const ROUTE_DIR = join(process.cwd(), 'packages/core/src/shared/routes');

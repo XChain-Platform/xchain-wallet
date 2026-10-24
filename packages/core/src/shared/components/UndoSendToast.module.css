@@ -2,28 +2,29 @@
  * (so the dialog's focus trap still reaches Cancel), but it is the same toast
  * as every other one: the host stack's resting corner, safe-area insets,
  * keyboard offset and motion rules, and the host card, message and action
- * styles, all composed from ToastHost.module.css.
+ * styles, composed from ToastHost.module.css (the stack) and
+ * ToastStack.module.css (the card).
  */
 .stack {
     composes: viewport from './ToastHost.module.css';
 }
 
 .toast {
-    composes: toast variant_info from './ToastHost.module.css';
+    composes: toast variant_info from './ToastStack.module.css';
 }
 
 .icon {
-    composes: icon from './ToastHost.module.css';
+    composes: icon from './ToastStack.module.css';
 }
 
 .message {
-    composes: message from './ToastHost.module.css';
+    composes: message from './ToastStack.module.css';
 }
 
 .controls {
-    composes: controls from './ToastHost.module.css';
+    composes: controls from './ToastStack.module.css';
 }
 
 .cancelBtn {
-    composes: actionBtn from './ToastHost.module.css';
+    composes: actionBtn from './ToastStack.module.css';
 }

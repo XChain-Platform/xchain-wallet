@@ -1,0 +1,183 @@
+/* §37.2 toast cards. ToastStack.jsx loads on demand (after first paint, or
+ * with the first toast), so these rules stay out of the startup CSS; the
+ * viewport and its live region stay in ToastHost.module.css because they
+ * render from the first frame. */
+
+/* The visual overflow count stays out of the accessibility tree because
+   queued toasts announce themselves when they receive a visible slot. */
+.overflowBadge {
+    pointer-events: none;
+    align-self: center;
+    /* Preserve the untokenized 2px optical inset around the compact badge. */
+    padding: 2px var(--xc-space-2);
+    border-radius: var(--xc-radius-pill);
+    background: var(--xc-surface-raised);
+    color: var(--xc-text-muted);
+    font-size: var(--xc-text-xs);
+    border: 1px solid var(--xc-border);
+}
+
+.toast {
+    pointer-events: none;
+    box-sizing: border-box;
+    display: flex;
+    min-width: 0;
+    max-width: 100%;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--xc-space-2);
+    padding: var(--xc-card-pad);
+    border: 1px solid var(--xc-border);
+    border-radius: var(--xc-card-radius);
+    background: var(--xc-surface-raised);
+    color: var(--xc-text);
+    font-size: var(--xc-text-sm);
+    line-height: 1.4;
+    box-shadow: var(--xc-shadow-toast);
+    animation: toast-in var(--xc-motion-duration-standard) var(--xc-motion-ease-enter);
+}
+
+@media (prefers-reduced-motion: reduce) {
+    :global(:root:not([data-xc-reduced-motion='no-preference'])) .toast { animation: none; }
+}
+
+:global(:root[data-xc-reduced-motion='reduce']) .toast { animation: none; }
+
+@keyframes toast-in {
+    from { opacity: 0; transform: translateY(var(--xc-space-2)); }
+    to   { opacity: 1; transform: translateY(0); }
+}
+
+/* The tone tints are translucent, so each one is laid over the opaque raised
+   surface: the toast keeps the inline message colours without letting the
+   page show through it. */
+.variant_info {
+    border-color: var(--xc-info);
+    background: linear-gradient(var(--xc-info-bg), var(--xc-info-bg)), var(--xc-surface-raised);
+    color: var(--xc-info-text);
+}
+
+.variant_warning {
+    border-color: var(--xc-warning);
+    background: linear-gradient(var(--xc-warning-bg), var(--xc-warning-bg)), var(--xc-surface-raised);
+    color: var(--xc-warning-text);
+}
+
+.variant_success {
+    border-color: var(--xc-success);
+    background: linear-gradient(var(--xc-success-bg), var(--xc-success-bg)), var(--xc-surface-raised);
+    color: var(--xc-success);
+}
+
+.variant_error {
+    border-color: var(--xc-danger);
+    background: linear-gradient(var(--xc-danger-bg), var(--xc-danger-bg)), var(--xc-surface-raised);
+    color: var(--xc-danger-text);
+}
+
+/* Forced colours drop the tint layer; pin the system pair so the card keeps
+   its outline and readable text. */
+@media (forced-colors: active) {
+    .variant_info,
+    .variant_warning,
+    .variant_success,
+    .variant_error {
+        background: Canvas;
+        color: CanvasText;
+        border: 1px solid CanvasText;
+    }
+}
+
+.icon {
+    flex: 0 0 auto;
+    align-self: flex-start;
+    font-size: var(--xc-icon-sm);
+    font-weight: 700;
+    line-height: 1.4;
+}
+
+.message {
+    flex: 1 1 auto;
+    min-width: 0;
+    word-break: break-word;
+    /* A toast is a glance, not a document: a hostile or runaway message stops at
+       six lines so the card stays on screen and its dismiss button stays
+       reachable. */
+    display: -webkit-box;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 6;
+    line-clamp: 6;
+    overflow: hidden;
+}
+
+/* The controls box passes taps through too; only the buttons inside it take
+   them. At 360 wide the box once wrapped onto a full-width row of its own, and
+   that strip swallowed taps on whatever sat under it (Receive's "Switch input
+   to USD"). The toast now stays one row at every width. */
+.controls {
+    pointer-events: none;
+    display: inline-flex;
+    align-items: center;
+    gap: var(--xc-space-1);
+    flex: 0 0 auto;
+}
+
+.actionBtn {
+    pointer-events: auto;
+    background: transparent;
+    border: none;
+    color: inherit;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    font-size: var(--xc-text-xs);
+    cursor: pointer;
+    padding: var(--xc-space-1) var(--xc-space-2);
+    border-radius: var(--xc-radius-sm);
+    font-family: inherit;
+    min-width: 0;
+    max-width: 100%;
+    overflow-wrap: anywhere;
+    /* State the WCAG 2.2 AA 2.5.8 pointer-target floor instead of
+       inheriting it from whichever line box the platform font produces. */
+    min-height: var(--xc-tap-min);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+}
+.actionBtn:hover {
+    background: var(--xc-bg-muted);
+}
+.actionBtn:focus-visible {
+    outline: 2px solid var(--xc-focus-ring);
+    outline-offset: 2px;
+}
+
+.dismissBtn {
+    pointer-events: auto;
+    background: transparent;
+    border: none;
+    color: inherit;
+    cursor: pointer;
+    font-size: var(--xc-text-lg);
+    line-height: 1;
+    padding: 0 var(--xc-space-1);
+    border-radius: var(--xc-radius-sm);
+    font-family: inherit;
+    /* State the WCAG 2.2 AA 2.5.8 pointer-target floor instead of
+       inheriting it from whichever line box the platform font produces. */
+    min-width: var(--xc-control-h-sm);
+    min-height: var(--xc-control-h-sm);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+}
+.dismissBtn:hover {
+    color: var(--xc-text);
+    background: var(--xc-bg-muted);
+}
+.dismissBtn:focus-visible {
+    outline: 2px solid var(--xc-focus-ring);
+    outline-offset: 2px;
+}
+

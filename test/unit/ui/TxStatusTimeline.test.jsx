@@ -169,7 +169,7 @@ describe('<TxStatusTimeline>', () => {
 
     it('uses shared tokens for the cleaned component geometry', () => {
         const routeErrorCss = componentCss('RouteErrorBoundary');
-        const toastCss = componentCss('ToastHost');
+        const toastCss = componentCss('ToastStack');
         const tokenFieldCss = componentCss('TokenField');
         const heroCss = componentCss('TotalBalanceHero');
         const undoToastCss = componentCss('UndoSendToast');
@@ -190,7 +190,7 @@ describe('<TxStatusTimeline>', () => {
         expect(timelineCss).toContain('font-size: var(--xc-text-lg);');
         expect(timelineCss).not.toMatch(/(?:width|height):\s*18px/);
         // The undo countdown composes the host toast, so it carries no motion of its own.
-        expect(undoToastCss).toMatch(/composes:\s*toast variant_info from '\.\/ToastHost\.module\.css'/);
+        expect(undoToastCss).toMatch(/composes:\s*toast variant_info from '\.\/ToastStack\.module\.css'/);
         expect(undoToastCss).not.toContain('translateY(8px)');
     });
 });

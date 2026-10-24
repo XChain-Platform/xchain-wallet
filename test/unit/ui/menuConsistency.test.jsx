@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 import { readFileSync } from 'node:fs';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import React from 'react';
 
@@ -10,6 +10,10 @@ import { MessagingProvider } from '../../../packages/core/src/shared/MessagingPr
 import { BottomTabBar } from '../../../packages/core/src/shared/components/BottomTabBar.jsx';
 import { ActionsMenu } from '../../../packages/core/src/shared/routes/ActionsMenu.jsx';
 import { MenuRoute } from '../../../packages/core/src/shared/routes/MenuRoute.jsx';
+import { preloadOnDemandOverlays } from '../../../packages/core/src/shared/components/onDemandOverlays.js';
+
+// The app loads these on idle after first paint; load them up front here.
+beforeAll(() => preloadOnDemandOverlays());
 
 const tokenCss = readFileSync('packages/core/src/ui/tokens.css', 'utf8');
 

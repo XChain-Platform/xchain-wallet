@@ -68,12 +68,6 @@ describe('shared UI RTL styles', () => {
 
         expect(unexpected).toEqual([]);
         expect(allowed.sort()).toEqual([...ALLOWED_PHYSICAL_DECLARATIONS].sort());
-
-        // The back control is a square icon button on the control scale, so a
-        // zero padding with a centered glyph is direction-neutral.
-        const pageHeader = source('PageHeader.module.css');
-        expect(pageHeader).toMatch(/\.back\s*\{[^}]*padding:\s*0;/s);
-        expect(pageHeader).toMatch(/\.back\s*\{[^}]*justify-content:\s*center/s);
     });
 
     it('mirrors every marked horizontal icon from one shared RTL rule', () => {

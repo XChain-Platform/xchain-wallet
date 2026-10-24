@@ -119,7 +119,6 @@ describe('PageHeader', () => {
 
     it('wraps a long title to two lines between mirrored fixed actions at every width', () => {
         const header = rule(pageHeaderCss, '.header');
-        const back = rule(pageHeaderCss, '.back');
         const title = rule(pageHeaderCss, '.title');
         const trailingButton = rule(pageHeaderCss, '.trailing button:not([role="menuitem"])');
 
@@ -127,10 +126,6 @@ describe('PageHeader', () => {
         expect(header).toMatch(
             /grid-template-columns:\s*var\(--xc-page-header-side\)\s+minmax\(0,\s*1fr\)\s+var\(--xc-page-header-side\)/,
         );
-        expect(back).toMatch(/width:\s*var\(--xc-page-header-side\)/);
-        expect(back).toMatch(/height:\s*var\(--xc-page-header-side\)/);
-        expect(back).toMatch(/padding:\s*0/);
-        expect(back).toMatch(/border-radius:\s*var\(--xc-control-radius\)/);
         expect(title).toMatch(/overflow-wrap:\s*anywhere/);
         expect(title).toMatch(/white-space:\s*normal/);
         expect(title).toMatch(/-webkit-line-clamp:\s*2/);
