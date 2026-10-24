@@ -41,8 +41,8 @@ const { ReachabilityBanner } = await import('../../../packages/core/src/shared/c
 const CHAIN_ID = 'bitcoin-mainnet';
 const FROM = 'bc1qsendersendersendersendersendersendersa';
 
-function makeMessaging(quantity) {
-    const balances = { native: { tick: 'BTC', quantity, divisibility: 8 }, tokens: [] };
+function makeMessaging(quantity, { balances: balancesOverride } = {}) {
+    const balances = balancesOverride || { native: { tick: 'BTC', quantity, divisibility: 8 }, tokens: [] };
     const base = {
         getAddressesByChain: vi.fn().mockResolvedValue({
             [CHAIN_ID]: [{ id: 'addr-1', address: FROM, publicKey: '02ab', derivationPath: "m/84'/0'/0'/0/0", source: 'hd' }],
@@ -66,8 +66,8 @@ function makeMessaging(quantity) {
     });
 }
 
-function mount(quantity, { inShell = false } = {}) {
-    const messaging = makeMessaging(quantity);
+function mount(quantity, { inShell = false, balances } = {}) {
+    const messaging = makeMessaging(quantity, { balances });
     const onReceive = vi.fn();
     const send = React.createElement(Send, { walletId: 'w', onBack() {}, onReceive });
     const tree = inShell
@@ -94,6 +94,12 @@ describe('Send empty state and the balance check', () => {
         mount('0');
         expect(await screen.findByRole('heading', { name: 'Nothing to send yet' })).toBeInTheDocument();
         expect(screen.queryByRole('heading', { name: "Balances couldn't be checked" })).toBeNull();
+    });
+
+    it('keeps the form instead of claiming there is nothing to send when the coin balance was unreadable', async () => {
+        mount('0', { balances: { native: null, tokens: [], unavailable: ['native'], unavailableReason: 'balance service unavailable' } });
+        expect(await screen.findByRole('form', { name: 'Send' }, { timeout: 10_000 })).toBeInTheDocument();
+        expect(screen.queryByRole('heading', { name: 'Nothing to send yet' })).toBeNull();
     });
 
     it('shows one unchecked-balances state when balances could not be checked', async () => {

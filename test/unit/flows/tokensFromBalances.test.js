@@ -33,6 +33,15 @@ describe('tokensFromBalances (D-14 decimals mapping)', () => {
         ]);
     });
 
+    it('skips rows that are not objects and keeps the readable ones', () => {
+        const out = tokensFromBalances({
+            data: [{ tick: 'XCHAIN', quantity: '7', divisibility: 0 }, null, 5, 'x', {}, { tick: null, quantity: '1' }],
+        });
+        expect(out).toEqual([
+            { tick: 'XCHAIN', quantity: '7', divisibility: 0, displayName: 'XCHAIN', imageUrl: null },
+        ]);
+    });
+
     it('reads amount into quantity when quantity is absent', () => {
         const [row] = tokensFromBalances({ data: [{ tick: 'T', amount: '42', decimals: 0 }] });
         expect(row.quantity).toBe('42');

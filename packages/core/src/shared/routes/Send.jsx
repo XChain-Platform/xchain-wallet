@@ -1742,9 +1742,11 @@ export function Send({ walletId, accountId, onBack, prefill = null, onDone, onCh
                 if (cancelled) return;
                 const entries = byChain?.[chainId];
                 const addressCount = (addressesByChain[chainId] || []).length;
-                // An incomplete or failed aggregate cannot prove the chain is empty.
+                // An incomplete or failed aggregate, or one whose coin balance could not be
+                // read, cannot prove the chain is empty.
                 if (!Array.isArray(entries) || entries.length < addressCount
-                    || entries.some((entry) => entry?.error || !entry?.balances)) {
+                    || entries.some((entry) => entry?.error || !entry?.balances
+                        || (Array.isArray(entry.balances.unavailable) && entry.balances.unavailable.includes('native')))) {
                     setChainBalanceState({ chainId, status: 'unknown' });
                     return;
                 }

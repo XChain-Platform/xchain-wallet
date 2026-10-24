@@ -176,7 +176,11 @@ function nativeFromAddress(addrResp, nativeTicker) {
 // XCHAIN shown as 0.00003000). Rows that already carry `quantity` (demo
 // fixtures, dev mocks) are atomic already and pass through untouched.
 export function tokensFromBalances(balResp) {
-    const rows = balResp && Array.isArray(balResp.data) ? balResp.data : [];
+    // A row that is not an object (null, a number) carries no tick; skipping it
+    // keeps the rest of the ledger readable instead of failing the whole read.
+    const rows = balResp && Array.isArray(balResp.data)
+        ? balResp.data.filter((r) => r !== null && typeof r === 'object')
+        : [];
     return rows
         .map((r) => {
             const divisibility = Number(r.divisibility ?? r.decimals ?? 0);
@@ -317,7 +321,9 @@ function shapeFromReads({ balResp, addrResp, nativeTicker }) {
     // null amounts when its UTXO tracker is not answering, and that body is
     // "could not read", not "holds nothing". It is marked the same way a
     // thrown read is, so Home says Unavailable and the Confirm preview stops
-    // projecting the coin from zero.
+    // projecting the coin from zero. A confirmed amount that is not a
+    // non-negative decimal (text, a negative, an object) is the same
+    // "could not read": the number is unknown, not zero.
     const addrUnreadable = addrOk && nativeAnswerUnreadable(addrResp);
     const unavailable = [
         ...(balOk ? [] : ['tokens']),
@@ -345,7 +351,9 @@ export const NATIVE_BALANCE_UNREADABLE_REASON = 'balance service unavailable';
 function nativeAnswerUnreadable(addrResp) {
     if (!addrResp || typeof addrResp !== 'object') return true;
     if (addrResp.tracker_available === false) return true;
-    return addrResp.balances?.confirmed == null;
+    const confirmed = addrResp.balances?.confirmed;
+    if (confirmed == null) return true;
+    return atomicFromHumanAmount(confirmed, 8) === null;
 }
 
 // Demo wallets (issue #82). A demo wallet lands on mainnet, so every balance
