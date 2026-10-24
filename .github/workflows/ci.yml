@@ -323,14 +323,7 @@ jobs:
     runs-on: ubuntu-24.04
     # One run at a time on the shared regtest venue. Each run covers one rolling
     # quarter of the suite, keeping the venue out of the main CI critical path.
-    timeout-minutes: 120
-    # Shared across refs on purpose: there is one regtest venue, so runs must
-    # serialize. GitHub keeps one pending run per group, so a newer run can evict
-    # a queued master or develop run; an eviction is recovered by re-running.
-    # The ci-master-verdict smoke allows exactly this job and group name.
-    concurrency:
-      group: wallet-regtest-venue
-      cancel-in-progress: false
+    timeout-minutes: 240
     env:
       XC_REGTEST_SSH_HOST: ${{ vars.XC_REGTEST_SSH_HOST }}
       # Which regtest chain the suite drives (RBTC, RLTC or RDOGE). Bitcoin is the
@@ -373,7 +366,7 @@ jobs:
             echo "### regtest e2e venue run NOT RUN" >> "$GITHUB_STEP_SUMMARY"
             echo "The regtest venue is not configured for this repository, so the production-build regtest suite did not execute." >> "$GITHUB_STEP_SUMMARY"
           fi
-      - name: Open the regtest tunnel
+      - name: Wait for and open the regtest tunnel
         if: steps.venue.outputs.configured == 'true'
         run: |
           install -m 700 -d ~/.ssh
@@ -383,11 +376,21 @@ jobs:
           # so name the key in the ssh config for every host this job reaches.
           printf 'Host *\n  IdentityFile ~/.ssh/regtest_key\n  IdentitiesOnly yes\n' >> ~/.ssh/config
           chmod 600 ~/.ssh/config
-          ssh -N -f -o StrictHostKeyChecking=accept-new -o ExitOnForwardFailure=yes -i ~/.ssh/regtest_key \
+          attempt=1
+          while ! ssh -N -f -o ConnectTimeout=15 -o StrictHostKeyChecking=accept-new \
+            -o ExitOnForwardFailure=yes -i ~/.ssh/regtest_key \
             -L 18080:localhost:18080 -L 10000:localhost:10000 \
             -L 3023:localhost:3023 -L 3025:localhost:3025 \
             -L 3223:localhost:3223 -L 3225:localhost:3225 \
-            -L 3123:localhost:3123 -L 3125:localhost:3125 "$XC_REGTEST_SSH_HOST"
+            -L 3123:localhost:3123 -L 3125:localhost:3125 "$XC_REGTEST_SSH_HOST"; do
+            if [ "$attempt" -ge 240 ]; then
+              echo "::error::The regtest venue remained busy for two hours"
+              exit 1
+            fi
+            echo "The regtest venue is busy; retrying in 30 seconds (attempt $attempt/240)"
+            attempt=$((attempt + 1))
+            sleep 30
+          done
       - name: Run regtest suite shard ${{ steps.shard.outputs.value }}
         if: steps.venue.outputs.configured == 'true'
         run: pnpm test:e2e:regtest --shard=${{ steps.shard.outputs.value }}
