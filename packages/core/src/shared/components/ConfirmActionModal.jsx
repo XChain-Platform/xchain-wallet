@@ -462,6 +462,26 @@ export function ConfirmActionModal({
                 data-testid="confirm-modal"
                 aria-label={t('components.confirmActionModal.confirm', { value: headlineText || 'action' })}
             >
+                {/* §5.3.4: a credential failure returns the page to `ready`
+                    with this error set, so the user retypes and re-approves
+                    the SAME PSBT. It is the first item of page content,
+                    ahead of the header row. */}
+                {error?.presentation === 'status' ? (
+                    <div className={styles.hwNote} role="status" data-testid="confirm-notice">
+                        {userFacingMessage(
+                            error,
+                            'The request stopped because the wallet service returned no explanation.',
+                        )}
+                    </div>
+                ) : error ? (
+                    <StatusMessage variant="error" role="alert" testId="confirm-error">
+                        {userFacingMessage(
+                            error,
+                            'The request stopped because the wallet service returned no explanation.',
+                        )}
+                    </StatusMessage>
+                ) : null}
+
                 <div className={styles.header}>
                     <span className={styles.actionLabel}>{actionHeaderLabel}</span>
                     <span className={styles.chainBadge} data-testid="confirm-chain-badge">{chainLabel}</span>
@@ -591,26 +611,6 @@ export function ConfirmActionModal({
                     {refusal ? (
                         <StatusMessage variant="error" role="alert" testId="confirm-refusal">
                             {refusal}
-                        </StatusMessage>
-                    ) : null}
-
-                    {/* §5.3.4: a credential failure returns the page to `ready`
-                        with this error set, so the user retypes and re-approves
-                        the SAME PSBT. Sits directly above the credentials block
-                        so the message is adjacent to the field it refers to. */}
-                    {error?.presentation === 'status' ? (
-                        <div className={styles.hwNote} role="status" data-testid="confirm-notice">
-                            {userFacingMessage(
-                                error,
-                                'The request stopped because the wallet service returned no explanation.',
-                            )}
-                        </div>
-                    ) : error ? (
-                        <StatusMessage variant="error" role="alert" testId="confirm-error">
-                            {userFacingMessage(
-                                error,
-                                'The request stopped because the wallet service returned no explanation.',
-                            )}
                         </StatusMessage>
                     ) : null}
 

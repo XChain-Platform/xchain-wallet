@@ -464,6 +464,8 @@ describe('ConfirmActionModal', () => {
         expect(modalCss).toMatch(/\.footer > button > span:last-child\s*\{[^}]*text-overflow:\s*clip/s);
         expect(modalCss).toMatch(/@media \(max-width: 480px\)[\s\S]*\.credentials dl\s*\{[^}]*grid-template-columns:\s*minmax\(0, 1fr\)/s);
         expect(modalCss).toMatch(/@media \(max-width: 480px\)[\s\S]*\.footer\s*\{[^}]*flex-direction:\s*column/s);
+        // A stacked footer sizes each button by its content, so a wrapped label never spills over its neighbour.
+        expect(modalCss).toMatch(/@media \(max-width: 480px\)[\s\S]*\.footer > \*\s*\{[^}]*flex:\s*0 0 auto/s);
     });
 
     it('uses a plain headline when an action has no decoded summary', () => {

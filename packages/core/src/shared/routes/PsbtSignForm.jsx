@@ -919,6 +919,10 @@ export function PsbtSignForm({ walletId, onBack, initialPsbt }) {
                 ...(parsedAction?.actionString
                     ? { preflight: (o) => messaging.preflight({ chainId, ...o }) }
                     : {}),
+                // A pasted PSBT has no known age, so Approve always probes its
+                // inputs; spent ones stop the sign with the shared notice.
+                checkInputs: (hex) => messaging.checkInputLiveness({ chainId, psbtHex: hex }),
+                alwaysCheckInputs: true,
                 onApprove: () => messaging.signPsbtUserInitiated({
                     walletId,
                     addressId,
