@@ -26,22 +26,42 @@ import {
     result,
 } from '../schemas/validate.js';
 
-// §5.5 + §36.3: donation addresses are TBD per chain at launch. Any
-// descriptor with this literal string in `adsDonationAddress` is
-// treated as "not configured": the ADS resolver refuses to submit a
-// donation output for that chain, and the submitAction integration
-// advances the accumulator as if ADS were disabled. A grep-replace
-// before mainnet release physically can't be missed because the
-// sentinel is an obvious non-address string.
+export const ADS_DONATION_ADDRESS_ROLES = /** @type {const} */ ([
+    'DONATE1',
+    'DONATE2',
+    'EXPLORER',
+]);
+
+export const ADS_DEFAULT_DONATION_ADDRESS_ROLE = 'DONATE1';
+
 export const ADS_DONATION_ADDRESS_PLACEHOLDER = 'PLACEHOLDER_REPLACE_BEFORE_MAINNET';
 
 /**
- * @param {Pick<ChainDescriptor, 'adsDonationAddress'>} descriptor
+ * @param {Pick<ChainDescriptor, 'adsDonationAddress'|'adsDonationAddresses'> | null | undefined} descriptor
+ * @param {typeof ADS_DONATION_ADDRESS_ROLES[number]} [role]
+ * @returns {string | null}
+ */
+export function donationAddressForDescriptor(
+    descriptor,
+    role = ADS_DEFAULT_DONATION_ADDRESS_ROLE,
+) {
+    if (!descriptor) return null;
+    const selected = descriptor.adsDonationAddresses
+        ? descriptor.adsDonationAddresses[role]
+        : role === ADS_DEFAULT_DONATION_ADDRESS_ROLE
+            ? descriptor.adsDonationAddress
+            : null;
+    return typeof selected === 'string' ? selected : null;
+}
+
+/**
+ * @param {Pick<ChainDescriptor, 'adsDonationAddress'|'adsDonationAddresses'> | null | undefined} descriptor
+ * @param {typeof ADS_DONATION_ADDRESS_ROLES[number]} [role]
  * @returns {boolean}
  */
-export function isDonationAddressConfigured(descriptor) {
-    if (!descriptor || typeof descriptor.adsDonationAddress !== 'string') return false;
-    return descriptor.adsDonationAddress !== ADS_DONATION_ADDRESS_PLACEHOLDER;
+export function isDonationAddressConfigured(descriptor, role) {
+    const address = donationAddressForDescriptor(descriptor, role);
+    return address !== null && address !== ADS_DONATION_ADDRESS_PLACEHOLDER;
 }
 
 export const FEE_UNITS = /** @type {const} */ ([
@@ -92,7 +112,8 @@ export const FEE_STRATEGY_NAMES = /** @type {const} */ ([
  * @property {EndpointConfig} explorer
  * @property {EndpointConfig} encoder
  * @property {EndpointConfig} [hub]
- * @property {string} adsDonationAddress          §36.3 destination for Automatic Donation System output; `ADS_DONATION_ADDRESS_PLACEHOLDER` disables submission
+ * @property {string} adsDonationAddress          §36.3 default destination for Automatic Donation System output; legacy custom descriptors may use only this field
+ * @property {{ DONATE1: string, DONATE2: string, EXPLORER: string }} [adsDonationAddresses] network-specific Automatic Donation System destinations
  * @property {{ perTxAmountSats: number, triggerAmountSats: number }} [adsDefaults]  §36.1 per-coin ADS seed values in the chain's base unit; absent = generic ADS_DEFAULT_* fallback
  * @property {string[]} [platformListOwners]      display-only platform list-owner addresses; never consensus
  * @property {boolean} [isUserAdded]              set by registry for Developer Mode entries
@@ -344,6 +365,29 @@ export function validateChainDescriptor(record) {
         isNonEmptyString(r.adsDonationAddress),
         `must be a non-empty string (use ADS_DONATION_ADDRESS_PLACEHOLDER "${ADS_DONATION_ADDRESS_PLACEHOLDER}" when unset)`,
     );
+    if (r.adsDonationAddresses !== undefined) {
+        const addresses = r.adsDonationAddresses;
+        check(
+            errors,
+            'adsDonationAddresses',
+            isPlainObject(addresses) &&
+                Object.keys(addresses).length === ADS_DONATION_ADDRESS_ROLES.length &&
+                ADS_DONATION_ADDRESS_ROLES.every((role) =>
+                    isNonEmptyString(addresses[role]) &&
+                    addresses[role] !== ADS_DONATION_ADDRESS_PLACEHOLDER) &&
+                new Set(ADS_DONATION_ADDRESS_ROLES.map((role) => addresses[role])).size ===
+                    ADS_DONATION_ADDRESS_ROLES.length,
+            `must contain exactly ${ADS_DONATION_ADDRESS_ROLES.join(', ')} as distinct configured strings`,
+        );
+        if (isPlainObject(addresses) && isNonEmptyString(addresses.DONATE1)) {
+            check(
+                errors,
+                'adsDonationAddress',
+                r.adsDonationAddress === addresses.DONATE1,
+                'must match adsDonationAddresses.DONATE1',
+            );
+        }
+    }
     if (r.isUserAdded !== undefined) {
         check(errors, 'isUserAdded', isBoolean(r.isUserAdded), 'must be a boolean');
     }
