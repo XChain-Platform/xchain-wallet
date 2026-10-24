@@ -99,25 +99,44 @@ export async function betsForQuery({ sdkRegistry, chainId, query, type, opts }) 
  */
 export function betPoolAmounts(pools, outcomeCount) {
     const rows = Array.isArray(pools) ? pools : [];
-    const amount = (v) => (v === null || v === undefined || v === '' ? '0' : String(v));
+    // Explorer aggregates are DECIMAL(65,18): at most 47 whole digits and 18
+    // fractional digits. Anything outside that shape is not a pool amount and
+    // must not reach SDK arithmetic as attacker-controlled numeric input.
+    const amount = (v) => {
+        const value = v === null || v === undefined ? '' : String(v).trim();
+        return /^\d{1,47}(\.\d{1,18})?$/.test(value) ? value : null;
+    };
+    const declared = Number(outcomeCount);
+    // BET consensus allows at most 16 outcomes. Treat a valid declared count as
+    // authoritative: explorer pool rows are untrusted reads, and an index past
+    // the market definition must not enlarge the SDK input or contribute to a
+    // projected payout.
+    const MAX_OUTCOMES = 16;
+    const declaredSize = Number.isInteger(declared) && declared > 0 && declared <= MAX_OUTCOMES
+        ? declared
+        : null;
 
     // A dense list is passed through: the SDK's own callers already hand it one,
     // and re-keying it by a non-existent `outcome` field would zero it out.
     const isRows = rows.some((p) => p !== null && typeof p === 'object');
     const dense = [];
     if (!isRows) {
-        for (let i = 0; i < rows.length; i += 1) dense[i] = amount(rows[i]);
+        for (let i = 0; i < rows.length; i += 1) dense[i] = amount(rows[i]) ?? '0';
     } else {
+        const seen = new Set();
         for (const row of rows) {
             if (!row || typeof row !== 'object') continue;
             const i = Number(row.outcome);
-            if (!Number.isInteger(i) || i < 0) continue;
-            dense[i] = amount(row.pool ?? row.amount);
+            if (!Number.isInteger(i) || i < 0 || i >= MAX_OUTCOMES) continue;
+            if (declaredSize !== null && i >= declaredSize) continue;
+            const value = amount(row.pool ?? row.amount);
+            if (value === null || seen.has(i)) continue;
+            seen.add(i);
+            dense[i] = value;
         }
     }
 
-    const declared = Number(outcomeCount);
-    const size = Math.max(dense.length, Number.isInteger(declared) && declared > 0 ? declared : 0);
+    const size = declaredSize === null ? dense.length : declaredSize;
     const out = new Array(size);
     for (let i = 0; i < size; i += 1) out[i] = dense[i] === undefined ? '0' : dense[i];
     return out;
@@ -153,9 +172,10 @@ export async function projectBetPayout({
     // being backed: an unbacked outcome is a normal thing to project on, and the
     // caller has not given us anything to range-check it against.
     const index = Number(outcome);
-    const floor = Number.isInteger(Number(outcomeCount)) && Number(outcomeCount) > 0
-        ? Number(outcomeCount)
-        : (Number.isInteger(index) && index >= 0 ? index + 1 : 0);
+    const declared = Number(outcomeCount);
+    const floor = Number.isInteger(declared) && declared > 0 && declared <= 16
+        ? declared
+        : (Number.isInteger(index) && index >= 0 ? Math.min(index + 1, 16) : 0);
     return sdk.betting.projectPayout({
         pools: betPoolAmounts(pools, floor),
         outcome,

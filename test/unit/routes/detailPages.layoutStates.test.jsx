@@ -478,7 +478,8 @@ describe('412px protocol detail layouts', () => {
     });
 
     it('keeps a long bet feed name, split values, and review action visible', async () => {
-        const outcome = `Outcome${'Result'.repeat(16)}`;
+        // Outcome labels display at most 40 characters.
+        const outcome = `Outcome${'Result'.repeat(5)}`;
         const messaging = messagingWith({
             betFeed: vi.fn().mockResolvedValue({
                 action_index: LONG_INDEX,

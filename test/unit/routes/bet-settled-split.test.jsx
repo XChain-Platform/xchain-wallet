@@ -15,7 +15,12 @@ import { describe, it, expect, vi } from 'vitest';
 import { render, act as domAct, fireEvent } from '@testing-library/react';
 import React from 'react';
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
-import { BetFeedDetail, splitFromBets, isLiveFeedStatus } from '../../../packages/core/src/shared/routes/BetFeedDetail.jsx';
+import {
+    BetFeedDetail,
+    splitFromBets,
+    isLiveFeedStatus,
+    poolRowsForOutcomes,
+} from '../../../packages/core/src/shared/routes/BetFeedDetail.jsx';
 import { OracleConsole } from '../../../packages/core/src/shared/routes/OracleConsole.jsx';
 
 const CHAIN = 'bitcoin-mainnet';
@@ -121,6 +126,17 @@ describe('splitFromBets', () => {
         expect(splitFromBets(null)).toEqual([]);
     });
 
+    it('ignores malformed outcome indexes and stakes from the explorer', () => {
+        expect(splitFromBets([
+            { outcome: -1, amount: '50' },
+            { outcome: 0.5, amount: '50' },
+            { outcome: 2, amount: '50' },
+            { outcome: 0, amount: '-5' },
+            { outcome: 0, amount: 'not-an-amount' },
+            { outcome: 1, amount: '7' },
+        ], 2)).toEqual([{ outcome: 1, pool: '7', bet_count: 1 }]);
+    });
+
     // Session 25,. Market #1198 was resolved `resolved_void` because it
     // held no accepted bets at all, and its page still read "0: Yes 100
     // (100.0%, 1 bet)" - the rejected bet from the deadline race, counted as a
@@ -144,6 +160,21 @@ describe('splitFromBets', () => {
         expect(splitFromBets([{ outcome: 1, amount: '7' }])).toEqual([
             { outcome: 1, pool: '7', bet_count: 1 },
         ]);
+    });
+});
+
+describe('poolRowsForOutcomes', () => {
+    it('drops out-of-range, duplicate and malformed explorer aggregates', () => {
+        expect(poolRowsForOutcomes([
+            { outcome: 0, pool: '5', bet_count: 1 },
+            { outcome: 0, pool: '999', bet_count: 99 },
+            { outcome: 1, pool: '-7', bet_count: 1 },
+            { outcome: 99, pool: '500', bet_count: 1 },
+        ], 2)).toEqual([{ outcome: 0, pool: '5', bet_count: 1 }]);
+
+        expect(poolRowsForOutcomes([
+            { outcome: 1, pool: '7', bet_count: 'not-a-count' },
+        ], 2)).toEqual([{ outcome: 1, pool: '7', bet_count: 0 }]);
     });
 });
 

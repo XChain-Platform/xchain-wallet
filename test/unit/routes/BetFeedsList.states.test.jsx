@@ -76,4 +76,23 @@ describe('BetFeedsList states', () => {
         fireEvent.click(label.closest('button'));
         expect(onOpenMarket).toHaveBeenCalledWith(CHAIN, 7);
     });
+
+    it('neutralizes direction controls in explorer market text', async () => {
+        mount({
+            getAddressesByChain: vi.fn().mockResolvedValue({ [CHAIN]: [ADDRESS] }),
+            betFeeds: vi.fn().mockResolvedValue({
+                data: [{
+                    action_index: 8,
+                    tick: 'XCHAIN',
+                    label: 'Question\u202Eevil',
+                    outcomes: 'Yes\u202Eevil,No',
+                    feed_status: 'open',
+                }],
+            }),
+        });
+
+        await screen.findByText(/Question/);
+        expect(document.body.textContent).not.toContain('\u202E');
+        expect(document.body.textContent).toContain('\u2426');
+    });
 });

@@ -407,8 +407,12 @@ export function CreateBetFeedForm({
             if (!/^\d+(\.\d{1,2})?$/.test(feePct.trim())) return 'Your fee must be a number with at most two decimal places, as a percent of the pot.';
             if (Number(feePct.trim()) > MAX_FEE_PCT) return `Your fee cannot exceed ${MAX_FEE_PCT}% of the pot.`;
         }
-        if (minAmount.trim() && !(/^\d+(\.\d+)?$/.test(minAmount.trim()) && Number(minAmount.trim()) > 0)) {
-            return 'The minimum bet must be a positive amount.';
+        if (minAmount.trim()) {
+            const min = /^(\d+)(?:\.(\d+))?$/.exec(minAmount.trim());
+            if (!min) return 'The minimum bet must be a positive amount.';
+            if ((min[2] || '').length > 18) return 'The minimum bet can have at most 18 decimal places.';
+            if ((min[1].replace(/^0+/, '').length || 1) > 47) return 'The minimum bet is too large.';
+            if (!/[1-9]/.test(`${min[1]}${min[2] || ''}`)) return 'The minimum bet must be a positive amount.';
         }
         if (allowList.trim() && !/^\d+$/.test(allowList.trim())) return 'The allowed-addresses list must be a list number.';
         if (blockList.trim() && !/^\d+$/.test(blockList.trim())) return 'The blocked-addresses list must be a list number.';

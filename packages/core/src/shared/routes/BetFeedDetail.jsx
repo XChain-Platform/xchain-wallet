@@ -32,7 +32,8 @@ import {
     trimAmountTail,
     sumDecimalStrings,
 } from '../utils/amountFormat.js';
-import { outcomeLabelsOf, outcomePhrase } from '../utils/betOutcomeLabels.js';
+import { outcomeLabelsOf, outcomePhrase, safeOutcomeLabel } from '../utils/betOutcomeLabels.js';
+import { neutralizeControlText } from '../utils/textHardening.js';
 import { formatLocalDateTime } from '../utils/dateTime.js';
 import styles from './IssueTokenForm.module.css';
 
@@ -71,23 +72,50 @@ function isAcceptedBet(b) {
 
 // Rebuild the per-outcome split from the bets themselves, in the shape the
 // explorer's `pools` rows use, so the renderer needs no second code path.
-export function splitFromBets(rows) {
+export function splitFromBets(rows, outcomeCount) {
     const byOutcome = new Map();
+    const declared = Number(outcomeCount);
+    const limit = Number.isInteger(declared) && declared > 0 && declared <= 16 ? declared : 16;
     for (const b of (Array.isArray(rows) ? rows : []).filter(isAcceptedBet)) {
         // `Number(null)` is 0, so a row with no outcome would otherwise be
         // silently counted as a bet on outcome 0 - a wrong pool, not a
         // missing one.
         if (b?.outcome === null || b?.outcome === undefined || b?.outcome === '') continue;
         const outcome = Number(b.outcome);
-        if (!Number.isFinite(outcome)) continue;
+        if (!Number.isInteger(outcome) || outcome < 0 || outcome >= limit) continue;
+        const amount = String(b?.amount ?? '').trim();
+        if (!/^\d{1,47}(\.\d{1,18})?$/.test(amount) || compareDecimalStrings(amount, '0') !== 1) continue;
         const cur = byOutcome.get(outcome) || { outcome, amounts: [], bet_count: 0 };
-        cur.amounts.push(b?.amount);
+        cur.amounts.push(amount);
         cur.bet_count += 1;
         byOutcome.set(outcome, cur);
     }
     return [...byOutcome.values()].map(({ outcome, amounts, bet_count }) => ({
         outcome, bet_count, pool: sumDecimalStrings(amounts),
     }));
+}
+
+/** Keep only pool aggregates that can belong to the displayed market. */
+export function poolRowsForOutcomes(rows, outcomeCount) {
+    const count = Number(outcomeCount);
+    if (!Number.isInteger(count) || count < 1 || count > 16) return [];
+    const seen = new Set();
+    const valid = [];
+    for (const row of Array.isArray(rows) ? rows : []) {
+        const outcome = Number(row?.outcome);
+        const pool = String(row?.pool ?? '').trim();
+        if (!Number.isInteger(outcome) || outcome < 0 || outcome >= count || seen.has(outcome)) continue;
+        if (!/^\d{1,47}(\.\d{1,18})?$/.test(pool)) continue;
+        const betCount = Number(row?.bet_count);
+        seen.add(outcome);
+        valid.push({
+            ...row,
+            outcome,
+            pool,
+            bet_count: Number.isInteger(betCount) && betCount >= 0 ? betCount : 0,
+        });
+    }
+    return valid;
 }
 
 // The compatibility reconstruction is bounded, and the screen says so out
@@ -114,10 +142,27 @@ function trimZeros(v) {
 
 function betAmountError(value, minimum) {
     const stake = String(value ?? '').trim();
-    if (!/^\d+(\.\d+)?$/.test(stake) || compareDecimalStrings(stake, '0') !== 1) {
+    const match = /^(\d+)(?:\.(\d+))?$/.exec(stake);
+    if (!match) {
+        return 'Enter a positive bet amount using digits and an optional decimal point.';
+    }
+    if ((match[2] || '').length > 18) return 'A bet amount can have at most 18 decimal places.';
+    const wholeDigits = match[1].replace(/^0+/, '').length || 1;
+    if (wholeDigits > 47) return 'This bet amount is too large.';
+    if (!/[1-9]/.test(`${match[1]}${match[2] || ''}`)) {
         return 'Enter a positive bet amount using digits and an optional decimal point.';
     }
     const min = String(minimum ?? '').trim();
+    if (min) {
+        const minimumMatch = /^(\d+)(?:\.(\d+))?$/.exec(min);
+        const minimumWholeDigits = minimumMatch
+            ? (minimumMatch[1].replace(/^0+/, '').length || 1)
+            : 0;
+        if (!minimumMatch || (minimumMatch[2] || '').length > 18 || minimumWholeDigits > 47
+            || !/[1-9]/.test(`${minimumMatch[1]}${minimumMatch[2] || ''}`)) {
+            return 'This market reports an invalid minimum bet amount.';
+        }
+    }
     if (min && compareDecimalStrings(stake, min) === -1) {
         return `This market requires a minimum bet of ${min}.`;
     }
@@ -217,7 +262,7 @@ export function BetFeedDetail({ walletId, chainId, feedIndex, onOpenOracle, onSe
                 // silently omits bets is worse than one that admits its bound:
                 // this screen is where someone checks what a market did.
                 setSettledPartial(rows.length >= SETTLED_BET_LIMIT);
-                setSettledSplit(splitFromBets(rows));
+                setSettledSplit(splitFromBets(rows, outcomeLabelsOf(feed).length));
             })
             // Falling back to the explorer rows keeps the screen readable; an
             // empty aggregate shows zeros rather than a guessed total.
@@ -306,7 +351,15 @@ export function BetFeedDetail({ walletId, chainId, feedIndex, onOpenOracle, onSe
     // byte-for-byte the object handed to submit. Two derivations could diverge and
     // the divergence would be signed rather than caught.
     function betParams() {
-        return { feedActionIndex: feedIndex, outcome, amount: String(amount).trim() };
+        return {
+            feedActionIndex: feedIndex,
+            outcome,
+            amount: String(amount).trim(),
+            // The SDK uses the market definition to range-check the selected
+            // index before compose. Without it, a malformed explorer response
+            // can turn an out-of-range choice into a signed, fee-burning bet.
+            outcomes: outcomeLabels,
+        };
     }
 
     function sourceDescriptor() {
@@ -447,10 +500,10 @@ export function BetFeedDetail({ walletId, chainId, feedIndex, onOpenOracle, onSe
 
     const outcomes = outcomeLabels;
     const live = isLiveFeedStatus(feed.feed_status);
-    const livePools = Array.isArray(feed.pools) ? feed.pools : [];
+    const livePools = poolRowsForOutcomes(feed.pools, outcomes.length);
     // A terminal market uses the explorer aggregate when present, or the
     // compatibility reconstruction when the aggregate is empty.
-    const pools = live ? livePools : (settledSplit || livePools);
+    const pools = live ? livePools : poolRowsForOutcomes(settledSplit || livePools, outcomes.length);
     const byOutcome = {};
     for (const p of pools) byOutcome[Number(p.outcome)] = p;
     const total = sumDecimalStrings(pools.map((pool) => pool.pool || '0'));
@@ -470,7 +523,7 @@ export function BetFeedDetail({ walletId, chainId, feedIndex, onOpenOracle, onSe
     return wrap(
         <>
             <SectionHeader
-                title={feed.label || '(untitled market)'}
+                title={neutralizeControlText(feed.label, { maxLength: 250 }) || '(untitled market)'}
                 description={`#${String(feed.action_index)} · ${feed.tick || 'n/a'} · ${statusLabel(feed.feed_status)}`}
             />
 
@@ -576,7 +629,7 @@ export function BetFeedDetail({ walletId, chainId, feedIndex, onOpenOracle, onSe
                                 className={`${styles.listCard} ${styles.betOddsRow}`}
                                 style={{ display: 'flex', justifyContent: 'space-between', gap: '0.5rem', flexWrap: 'wrap' }}
                             >
-                                <span className={styles.splitValue}>{i}: {label}</span>
+                                <span className={styles.splitValue}>{i}: {safeOutcomeLabel(label) || `Outcome ${i}`}</span>
                                 <span className={styles.splitValue}>{pool} ({share}, {bets} bet{bets === 1 ? '' : 's'})</span>
                             </div>
                         );
@@ -655,7 +708,7 @@ export function BetFeedDetail({ walletId, chainId, feedIndex, onOpenOracle, onSe
                                         aria-pressed={outcome === i}
                                         onClick={() => setOutcome(i)}
                                     >
-                                        {label}
+                                        {safeOutcomeLabel(label) || `Outcome ${i}`}
                                     </Button>
                                 ))}
                             </div>
@@ -677,7 +730,7 @@ export function BetFeedDetail({ walletId, chainId, feedIndex, onOpenOracle, onSe
                                 <div className={styles.hint} data-testid="bet-projection">
                                     {compareDecimalStrings(projected.payout, '0') === 1 ? (
                                         <p>
-                                            If <strong>{outcomes[outcome] ?? `outcome ${outcome}`}</strong> wins, this
+                                            If <strong>{safeOutcomeLabel(outcomes[outcome]) || `outcome ${outcome}`}</strong> wins, this
                                             stake pays about{' '}
                                             <strong>{trimAmountTail(projected.payout)}{feed.tick ? ` ${feed.tick}` : ''}</strong>
                                             {projected.profit !== undefined ? (

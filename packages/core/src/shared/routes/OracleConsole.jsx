@@ -18,7 +18,8 @@ import { ActionConfirmScreen } from '../components/ActionConfirmScreen.jsx';
 import { useSignerReady } from '../hooks/useSignerReady.js';
 import { useWalletMode } from '../hooks/useWalletMode.js';
 import { WatcherResultPanel } from '../components/WatcherResultPanel.jsx';
-import { outcomeLabelsOf } from '../utils/betOutcomeLabels.js';
+import { outcomeLabelsOf, safeOutcomeLabel } from '../utils/betOutcomeLabels.js';
+import { neutralizeControlText } from '../utils/textHardening.js';
 import { submitFailureMessage } from '../utils/submitFailureMessage.js';
 import styles from './IssueTokenForm.module.css';
 import consoleStyles from './OracleConsole.module.css';
@@ -378,7 +379,10 @@ export function OracleConsole({ walletId, accountId, onOpenMarket, onDuplicate, 
                     return (
                         <div key={key} className={`${styles.listCard} ${consoleStyles.card}`}>
                             <div className={consoleStyles.marketHeader}>
-                                <strong className={consoleStyles.marketTitle}>Market number: #{String(f.action_index)}; {f.label || 'Untitled market'}</strong>
+                                <strong className={consoleStyles.marketTitle}>
+                                    Market number: #{String(f.action_index)};{' '}
+                                    {neutralizeControlText(f.label, { maxLength: 250 }) || 'Untitled market'}
+                                </strong>
                                 <span className={styles.hint}>Market status: {marketStatusLabel(f.feed_status)}</span>
                             </div>
                             {/* Only while those two clocks still mean something. A
@@ -472,7 +476,15 @@ export function OracleConsole({ walletId, accountId, onOpenMarket, onDuplicate, 
                                         cannot be undone. The selected outcome has to be announced. */}
                                     <div role="group" aria-label="Winning outcome" className={consoleStyles.outcomeRow}>
                                         {labels.map((l, i) => (
-                                            <Button key={i} variant={outcome === i ? 'primary' : 'ghost'} size="md" aria-pressed={outcome === i} onClick={() => setOutcome(i)}>{l}</Button>
+                                            <Button
+                                                key={i}
+                                                variant={outcome === i ? 'primary' : 'ghost'}
+                                                size="md"
+                                                aria-pressed={outcome === i}
+                                                onClick={() => setOutcome(i)}
+                                            >
+                                                {safeOutcomeLabel(l) || `Outcome ${i}`}
+                                            </Button>
                                         ))}
                                     </div>
                                     {!isWatcherMode && !isHw && !signerReady ? (
@@ -487,7 +499,7 @@ export function OracleConsole({ walletId, accountId, onOpenMarket, onDuplicate, 
                                         loading={actionConfirm.composing}
                                         disabled={demoGuard.blocked || outcome === null}
                                         onClick={() => runOracleAction(f, 'resolveMarketParams', submitResolve, {
-                                            feedActionIndex: f.action_index, outcome,
+                                            feedActionIndex: f.action_index, outcome, outcomes: labels,
                                         })}
                                     >
                                         {isWatcherMode ? 'Create unsigned transaction' : 'Review resolve'}
