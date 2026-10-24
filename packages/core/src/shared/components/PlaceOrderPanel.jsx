@@ -215,9 +215,12 @@ export function PlaceOrderPanel({ walletId, chainId, tick1, tick2, prefillPrice,
         );
         const tickUpper = String(tick || '').toUpperCase();
         const hit = rows.find((r) => r.chainId === chainId && r.tick.toUpperCase() === tickUpper);
-        if (!hit) return { balance: '0', divisibility: null };
+        if (!hit) return { balance: '0', available: '0', divisibility: null };
         return {
             balance: formatQuantity(hit.quantity, hit.divisibility),
+            // The display balance carries thousands separators, which no exact
+            // comparison can parse; the guard compares against this plain form.
+            available: plainQuantity(hit.quantity, hit.divisibility),
             divisibility: Number.isInteger(Number(hit.divisibility)) ? Number(hit.divisibility) : null,
         };
     }, [balances, chainId, addressesByChain, fromAddressId]);
@@ -275,10 +278,17 @@ export function PlaceOrderPanel({ walletId, chainId, tick1, tick2, prefillPrice,
     // positive plain-decimal number.
     const total = useMemo(() => multiplyAmounts(price, size), [price, size]);
 
+    // The size as the wire spells it. The indexer refuses an amount with an
+    // empty half (".5", "5."), which the entry filter allows; multiplying by
+    // one gives the same plain form the total already uses.
+    const sizeText = useMemo(() => multiplyAmounts(size, '1') ?? String(size).trim(), [size]);
+
     // The chosen expiration as a Unix timestamp (seconds). `null` = the
     // default window (omit EXPIRATION); `undefined` = an invalid custom
     // entry (blocked in the guard); a number is emitted verbatim.
-    const expirationUnix = useMemo(() => {
+    // A preset is a duration from the moment of submit, so it resolves on every
+    // call: a panel left open for hours still places a full-length order.
+    const resolveExpirationUnix = () => {
         if (expirationId === 'custom') {
             const ms = Date.parse(customExpiration);
             if (!Number.isFinite(ms)) return undefined;
@@ -288,18 +298,19 @@ export function PlaceOrderPanel({ walletId, chainId, tick1, tick2, prefillPrice,
         if (!preset) return undefined;
         if (preset.days == null) return null;
         return Math.floor(Date.now() / 1000) + preset.days * 86400;
-    }, [expirationId, customExpiration]);
+    };
+    const expirationUnix = resolveExpirationUnix();
 
     const summary = useMemo(() => {
         if (!total) return null;
         if (side === 'buy') {
-            return `Give ${total} ${tick2}, get ${size} ${tick1}`;
+            return `Give ${total} ${tick2}, get ${sizeText} ${tick1}`;
         }
-        return `Give ${size} ${tick1}, get ${total} ${tick2}`;
-    }, [side, total, size, tick1, tick2]);
+        return `Give ${sizeText} ${tick1}, get ${total} ${tick2}`;
+    }, [side, total, sizeText, tick1, tick2]);
 
     function buildParams() {
-        const sizeStr = String(size).trim();
+        const sizeStr = sizeText;
         const totalStr = total == null ? '' : String(total);
         /** @type {Record<string, string>} */
         // GIVE_COIN / GET_COIN are required by the indexer (order.js
@@ -326,7 +337,8 @@ export function PlaceOrderPanel({ walletId, chainId, tick1, tick2, prefillPrice,
         // the chain's own coin composes with that side blanked.
         if (coinTicker && p.GIVE_TICK.toUpperCase() === coinTicker) p.GIVE_TICK = '';
         if (coinTicker && p.GET_TICK.toUpperCase() === coinTicker) p.GET_TICK = '';
-        if (typeof expirationUnix === 'number') p.EXPIRATION = String(expirationUnix);
+        const submitExpiration = resolveExpirationUnix();
+        if (typeof submitExpiration === 'number') p.EXPIRATION = String(submitExpiration);
         return p;
     }
 
@@ -452,18 +464,19 @@ export function PlaceOrderPanel({ walletId, chainId, tick1, tick2, prefillPrice,
         const giveTick = side === 'buy' ? tick2 : tick1;
         const giveAmount = side === 'buy' ? total : size.trim();
         const giveAsset = side === 'buy' ? totalAsset : sizeAsset;
-        if (giveAsset && compareAmounts(giveAmount, giveAsset.balance) === 1) {
+        if (giveAsset && compareAmounts(giveAmount, giveAsset.available) === 1) {
             setFormError(`Give amount exceeds your available ${giveTick} balance of ${giveAsset.balance}.`);
             return;
         }
         // undefined means the custom date box holds something unparseable;
         // null is the legitimate "never expires" preset and passes.
-        if (expirationUnix === undefined) {
+        const reviewExpiration = resolveExpirationUnix();
+        if (reviewExpiration === undefined) {
             setFormError('Pick a valid expiration date and time.');
             return;
         }
         // An expiration already in the past is dead on arrival at the indexer.
-        if (typeof expirationUnix === 'number' && expirationUnix <= Math.floor(Date.now() / 1000)) {
+        if (typeof reviewExpiration === 'number' && reviewExpiration <= Math.floor(Date.now() / 1000)) {
             setFormError('Expiration must be in the future.');
             return;
         }
@@ -621,9 +634,9 @@ export function PlaceOrderPanel({ walletId, chainId, tick1, tick2, prefillPrice,
                 : (EXPIRATION_PRESETS.find((e) => e.id === expirationId)?.label ?? expirationId));
 
         const giveTick = side === 'buy' ? tick2 : tick1;
-        const giveAmt = side === 'buy' ? (total != null ? String(total) : '') : size;
+        const giveAmt = side === 'buy' ? (total != null ? String(total) : '') : sizeText;
         const getTick = side === 'buy' ? tick1 : tick2;
-        const getAmt = side === 'buy' ? size : (total != null ? String(total) : '');
+        const getAmt = side === 'buy' ? sizeText : (total != null ? String(total) : '');
 
         let feeDisplay = 'Estimate unavailable';
         if (feeEstimate) {
@@ -917,7 +930,7 @@ export function PlaceOrderPanel({ walletId, chainId, tick1, tick2, prefillPrice,
                                 // buying (giving tick2), size when selling tick1.
                                 const thisOrderGive = side === 'buy'
                                     ? (total != null ? String(total) : '')
-                                    : String(size).trim();
+                                    : sizeText;
                                 if (autopayArm && exposure && exposure[chainId]) {
                                     return (
                                         <p style={{ margin: 'var(--xc-space-2) 0 0', color: 'var(--xc-text-muted)' }}>
@@ -983,4 +996,15 @@ function formatQuantity(quantity, divisibility) {
         str = str.replace(/0+$/, '').replace(/\.$/, '');
     }
     return str;
+}
+
+// The exact balance as a plain decimal string, for comparisons.
+function plainQuantity(quantity, divisibility) {
+    const raw = String(quantity ?? '').trim();
+    if (!/^\d+$/.test(raw)) return null;
+    const div = Number.isFinite(divisibility) && divisibility >= 0
+        ? Math.min(20, Math.floor(divisibility))
+        : 8;
+    const str = formatAmount(raw, div, 'plain');
+    return str.includes('.') ? str.replace(/0+$/, '').replace(/\.$/, '') : str;
 }

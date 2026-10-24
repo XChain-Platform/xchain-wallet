@@ -75,6 +75,11 @@ function localInputToUnix(localStr) {
     return Math.floor(ms / 1000);
 }
 
+// The indexer reads a coin-named ticker as an unknown token and marks the order
+// invalid, so the native coin is chosen with the Native option, not typed.
+const isNativeCoinName = (tick, coinTicker) => Boolean(coinTicker) && String(tick).trim().toUpperCase() === coinTicker;
+const nativeCoinTickMessage = (coinTicker) => `${coinTicker} is the network coin. Choose Native ${coinTicker} for that side instead of typing it as a token.`;
+
 const isPlainPositive = (v) => /^\d+(\.\d+)?$/.test(String(v).trim()) && Number(String(v).trim()) > 0;
 const isCanonicalActionIndex = (value, { allowZero = false } = {}) => (
     allowZero ? /^(?:0|[1-9]\d*)$/ : /^[1-9]\d*$/
@@ -295,6 +300,7 @@ export function CreateOrderForm({ walletId, onBack, initialChainId, initialFromA
             if (!giveTick.trim()) { setFormError('Enter the ticker to give.'); return false; }
             const tickError = tickerReferenceError(giveTick, { noun: 'Give ticker', allowRef: true });
             if (tickError) { setFormError(tickError); return false; }
+            if (isNativeCoinName(giveTick, coinTicker)) { setFormError(nativeCoinTickMessage(coinTicker)); return false; }
             if (!giveOwnership && !isPlainPositive(giveAmount)) { setFormError('Enter a positive amount to give.'); return false; }
         } else if (!isPlainPositive(giveAmount)) {
             setFormError(`Enter a positive amount of ${coinTicker} to give.`); return false;
@@ -316,6 +322,7 @@ export function CreateOrderForm({ walletId, onBack, initialChainId, initialFromA
             if (!getTick.trim()) { setFormError('Enter the ticker to get.'); return false; }
             const tickError = tickerReferenceError(getTick, { noun: 'Get ticker', allowRef: true });
             if (tickError) { setFormError(tickError); return false; }
+            if (isNativeCoinName(getTick, coinTicker)) { setFormError(nativeCoinTickMessage(coinTicker)); return false; }
             if (!getOwnership && !isPlainPositive(getAmount)) { setFormError('Enter a positive amount to get.'); return false; }
         } else if (!isPlainPositive(getAmount)) {
             setFormError(`Enter a positive amount of ${coinTicker} to get.`); return false;
