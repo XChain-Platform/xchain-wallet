@@ -81,7 +81,7 @@ import {
 } from './protocol.js';
 import { attachSignerBridgeListener } from './signerBridgeListener.js';
 import { attachUpdater } from './updater.js';
-import { applyTorRouting } from './torRouting.js';
+import { applyTorRouting, applyProxyToSession } from './torRouting.js';
 import {
     installProcessErrorHandlers,
     reportMainFailure,
@@ -250,6 +250,9 @@ function getTrezorConnectSession() {
     if (!trezorConnectSession) {
         trezorConnectSession = session.fromPartition('trezor-connect-isolated');
         attachHidDenial(trezorConnectSession);
+        // The hosted script fetches from the internet, so it follows the Tor
+        // routing in force instead of connecting directly.
+        void applyProxyToSession(trezorConnectSession).catch((err) => reportMainFailure('trezor session proxy', err));
     }
     return trezorConnectSession;
 }
@@ -545,6 +548,7 @@ function buildRuntime() {
                 settings,
                 sdkRegistry,
                 session: session.defaultSession,
+                extraSessions: () => (trezorConnectSession ? [trezorConnectSession] : []),
                 log: (m) => console.info(m),
             });
             // Routing is now in force, so the first hub request may leave.

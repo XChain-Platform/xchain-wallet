@@ -43,6 +43,7 @@ import {
 } from '../../../packages/desktop/main/socksAgent.js';
 import {
     applyTorRouting,
+    applyProxyToSession,
     readTorSettings,
     resetTorRoutingState,
 } from '../../../packages/desktop/main/torRouting.js';
@@ -305,5 +306,48 @@ describe('applyTorRouting', () => {
         expect(result.reason).toMatch(/cannot reach the SOCKS proxy/);
         expect(registry.pools).toEqual(['SOCKS']);
         await applyTorRouting({ settings: {}, sdkRegistry: registry });
+    });
+
+    it('ends off when the toggle is switched off while the proxy probe is still running', async () => {
+        const stalled = net.createServer(() => {});
+        await new Promise((r) => stalled.listen(0, '127.0.0.1', r));
+        const address = `127.0.0.1:${stalled.address().port}`;
+        const registry = { pools: [], setPool(p) { this.pools.push(p ? 'SOCKS' : 'CLEARED'); } };
+        const proxyCalls = [];
+        const session = { setProxy: async (cfg) => { proxyCalls.push(cfg); } };
+        try {
+            const on = applyTorRouting({
+                settings: { privacy: { torRouting: true, socksProxyAddress: address } },
+                sdkRegistry: registry,
+                session,
+            });
+            await new Promise((r) => setTimeout(r, 50));
+            const off = applyTorRouting({ settings: { privacy: { torRouting: false } }, sdkRegistry: registry, session });
+            await Promise.all([on, off]);
+            expect(registry.pools.at(-1)).toBe('CLEARED');
+            expect(proxyCalls.at(-1).mode).toBe('direct');
+        } finally {
+            stalled.close();
+        }
+    }, 20_000);
+
+    it('puts a later session on the routing in force and leaves it direct when off', async () => {
+        const later = [];
+        const laterSession = { setProxy: async (cfg) => { later.push(cfg); } };
+        await applyProxyToSession(laterSession);
+        expect(later.at(-1)).toEqual({ mode: 'direct' });
+
+        const registry = { setPool() {} };
+        await applyTorRouting({
+            settings: { privacy: { torRouting: true, socksProxyAddress: `127.0.0.1:${proxyPort}` } },
+            sdkRegistry: registry,
+            extraSessions: () => [laterSession],
+        });
+        expect(later.at(-1).proxyRules).toBe(`socks5://127.0.0.1:${proxyPort}`);
+        await applyProxyToSession(laterSession);
+        expect(later.at(-1).proxyBypassRules).toBe('<-loopback>');
+
+        await applyTorRouting({ settings: {}, sdkRegistry: registry, extraSessions: () => [laterSession] });
+        expect(later.at(-1)).toEqual({ mode: 'direct' });
     });
 });

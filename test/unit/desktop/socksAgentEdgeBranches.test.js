@@ -102,3 +102,61 @@ describe('SOCKS handshake error branches', () => {
         expect(result.error.message).toBe('SOCKS proxy closed during handshake');
     });
 });
+
+describe('SOCKS reply framing', () => {
+    function twoStepServer(writeReply) {
+        return listen((socket) => {
+            socket.once('data', () => {
+                socket.write(Buffer.from([0x05, 0x00]));
+                socket.once('data', () => writeReply(socket));
+            });
+        });
+    }
+
+    it('fails a version-only reply instead of throwing from the socket handler', async () => {
+        const proxyPort = await twoStepServer((socket) => socket.write(Buffer.from([0x05])));
+        const uncaught = [];
+        const onUncaught = (err) => uncaught.push(err);
+        process.on('uncaughtException', onUncaught);
+        try {
+            await expect(socksConnect({
+                proxyHost: '127.0.0.1', proxyPort, host: 'example.com', port: 443, timeoutMs: 100,
+            })).rejects.toThrow(/did not answer/);
+            expect(uncaught).toEqual([]);
+        } finally {
+            process.off('uncaughtException', onUncaught);
+        }
+    });
+
+    it('waits for the rest of a success reply split across segments', async () => {
+        const proxyPort = await twoStepServer((socket) => {
+            socket.write(Buffer.from([0x05, 0x00, 0x00, 0x01]));
+            setTimeout(() => socket.write(Buffer.from([0, 0, 0, 0, 0, 0])), 40);
+        });
+        const started = Date.now();
+        const tunnel = await socksConnect({
+            proxyHost: '127.0.0.1', proxyPort, host: 'example.com', port: 443,
+        });
+        expect(Date.now() - started).toBeGreaterThanOrEqual(30);
+        tunnel.destroy();
+    });
+
+    it('does not treat a two-byte success header as a connected tunnel', async () => {
+        const proxyPort = await twoStepServer((socket) => socket.write(Buffer.from([0x05, 0x00])));
+        await expect(socksConnect({
+            proxyHost: '127.0.0.1', proxyPort, host: 'example.com', port: 443, timeoutMs: 100,
+        })).rejects.toThrow(/did not answer/);
+    });
+
+    it('hands bytes that follow the reply to the tunnel reader', async () => {
+        const proxyPort = await twoStepServer((socket) => {
+            socket.write(Buffer.concat([Buffer.from([0x05, 0x00, 0x00, 0x01, 0, 0, 0, 0, 0, 0]), Buffer.from('hello')]));
+        });
+        const tunnel = await socksConnect({
+            proxyHost: '127.0.0.1', proxyPort, host: 'example.com', port: 443,
+        });
+        const got = await new Promise((resolve) => tunnel.once('data', resolve));
+        expect(got.toString()).toBe('hello');
+        tunnel.destroy();
+    });
+});
