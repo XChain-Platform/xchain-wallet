@@ -46,7 +46,7 @@ import styles from './EmptyState.module.css';
  * @param {() => void} [props.onSecondaryAction]
  * @param {import('react').ReactNode | null} [props.secondaryActionIcon]
  * @param {boolean} [props.plain]                        accepted for older callers; every empty state is now unboxed
- * @param {'h2' | 'h3' | 'p'} [props.titleAs]             default h2; h3 under a SectionHeader
+ * @param {'h1' | 'h2' | 'h3' | 'p'} [props.titleAs]       default h2; h3 under a SectionHeader; h1 when the empty state is the whole page
  * @param {string} [props.role]                           default 'status'
  * @param {boolean} [props.showWhileUnavailable]         stays while the shell's reachability notice is up
  * @param {string} [props.className]

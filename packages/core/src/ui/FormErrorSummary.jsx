@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-import { useEffect, useMemo, useRef } from 'react';
+import { useEffect, useId, useMemo, useRef } from 'react';
 import styles from './FormErrorSummary.module.css';
 import statusStyles from './StatusMessage.module.css';
 import { t } from '../i18n/index.js';
@@ -57,6 +57,7 @@ function showsLabel(error) {
  */
 export function FormErrorSummary({ errors, focusKey, recovery }) {
     const summaryRef = useRef(/** @type {HTMLDivElement | null} */ (null));
+    const summaryId = useId();
     const signature = useMemo(
         () => errors.map((error) => `${error.id || ''}:${error.message}`).join('|'),
         [errors],
@@ -65,6 +66,45 @@ export function FormErrorSummary({ errors, focusKey, recovery }) {
     useEffect(() => {
         if (errors.length > 0) summaryRef.current?.focus();
     }, [signature, focusKey, errors.length]);
+
+    // The summary names the failing fields, so each of them says so too: a
+    // screen reader on the field hears that it is invalid and reads the
+    // summary as its description. An attribute the field already carries is
+    // left alone; only what is added here is removed again.
+    const fieldIds = useMemo(
+        () => (focusKey ? [...new Set(errors.map((error) => error.id).filter(Boolean))] : []),
+        // eslint-disable-next-line react-hooks/exhaustive-deps -- `signature` stands for the error list's content
+        [signature, focusKey],
+    );
+    useEffect(() => {
+        const touched = [];
+        for (const id of fieldIds) {
+            const field = document.getElementById(id);
+            if (!field) continue;
+            const entry = { field, invalid: false, describedBy: false };
+            if (field.getAttribute('aria-invalid') !== 'true') {
+                field.setAttribute('aria-invalid', 'true');
+                entry.invalid = true;
+            }
+            const tokens = (field.getAttribute('aria-describedby') || '').split(/\s+/).filter(Boolean);
+            if (!tokens.includes(summaryId)) {
+                field.setAttribute('aria-describedby', [...tokens, summaryId].join(' '));
+                entry.describedBy = true;
+            }
+            touched.push(entry);
+        }
+        return () => {
+            for (const entry of touched) {
+                if (entry.invalid) entry.field.removeAttribute('aria-invalid');
+                if (entry.describedBy) {
+                    const rest = (entry.field.getAttribute('aria-describedby') || '')
+                        .split(/\s+/).filter((token) => token && token !== summaryId);
+                    if (rest.length > 0) entry.field.setAttribute('aria-describedby', rest.join(' '));
+                    else entry.field.removeAttribute('aria-describedby');
+                }
+            }
+        };
+    }, [fieldIds, summaryId]);
 
     if (!focusKey || errors.length === 0) return null;
 
@@ -80,6 +120,7 @@ export function FormErrorSummary({ errors, focusKey, recovery }) {
     return (
         <div
             ref={summaryRef}
+            id={summaryId}
             role="alert"
             tabIndex={-1}
             aria-label={t('ui.formErrorSummary.formErrors')}

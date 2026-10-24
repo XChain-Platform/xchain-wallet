@@ -44,7 +44,9 @@
 
 .etaNormal {
     background: color-mix(in srgb, var(--xc-warning) 14%, transparent);
-    color: var(--xc-warning);
+    /* The warning text token, not the warning accent: the accent is 4.49:1 on
+       its own tint in the light theme, just under the 4.5:1 floor. */
+    color: var(--xc-warning-text);
 }
 
 .etaFast {
