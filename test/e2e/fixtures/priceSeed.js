@@ -341,6 +341,13 @@ export const SYNTHETIC_ROUNDS = Object.freeze([
 
 const SYNTHETIC = new Set(SYNTHETIC_ROUNDS);
 
+/**
+ * Lowest synthetic round any XChain fixture writes. A finalized row below it came
+ * from a real oracle, not from this seed or a sibling seed (the DOGE setups write
+ * 990001-990012 on the same venues), so the live-oracle check keys on it.
+ */
+export const PRICE_SEED_MARKER_FLOOR = Math.min(...SYNTHETIC_ROUNDS);
+
 /** The indexer's `ORACLE_MAX_PRICE_AGE_SECONDS`. See the anchor rule above. */
 export const ORACLE_MAX_PRICE_AGE_SECONDS = 1800;
 
@@ -737,22 +744,47 @@ export function readStateScript(coinPairs) {
  * coin_pair) key, which is what lets this move an existing sentinel forward
  * rather than stacking a new round beside it.
  */
+export async function writePriceSeedRows(query, rows, markerFloor = PRICE_SEED_MARKER_FLOOR) {
+    const liveRows = await query(
+        `SELECT 1 AS live_oracle FROM price_snapshots
+         WHERE status = 'finalized' AND round_number < ?
+           AND created_at >= DATE_SUB(NOW(), INTERVAL 5 MINUTE)
+         LIMIT 1`,
+        [markerFloor],
+    );
+    if (liveRows.length) {
+        throw new Error(
+            'REFUSING: the wallet e2e price fixture found a recently finalized price_snapshots '
+            + 'row below its marker range. This hub database has an active oracle, so writing '
+            + 'synthetic finalized rows would corrupt its consensus clamp reference.',
+        );
+    }
+
+    for (const row of rows) {
+        await query(
+            'INSERT INTO price_snapshots'
+            + ' (round_number, coin_pair, price, reference_block, reference_chain,'
+            + '  block_timestamp, validator_count, consensus_round, consensus_proof, status)'
+            + " VALUES (?, ?, ?, 0, 'BTC', ?, 1, 1, '[]', 'finalized')"
+            + ' ON DUPLICATE KEY UPDATE price = VALUES(price),'
+            + ' reference_block = VALUES(reference_block),'
+            + ' block_timestamp = VALUES(block_timestamp),'
+            + " status = 'finalized'",
+            [row.roundNumber, row.coinPair, row.price, row.blockTimestamp],
+        );
+    }
+    return rows.length;
+}
+
 export function writeRowsScript(rows) {
     return containerScript(`
-        for (const row of ROWS){
-            await priceConn.query(
-                'INSERT INTO price_snapshots'
-                + ' (round_number, coin_pair, price, reference_block, reference_chain,'
-                + '  block_timestamp, validator_count, consensus_round, consensus_proof, status)'
-                + " VALUES (?, ?, ?, 0, 'BTC', ?, 1, 1, '[]', 'finalized')"
-                + ' ON DUPLICATE KEY UPDATE price = VALUES(price),'
-                + ' reference_block = VALUES(reference_block),'
-                + ' block_timestamp = VALUES(block_timestamp),'
-                + " status = 'finalized'",
-                [row.roundNumber, row.coinPair, row.price, row.blockTimestamp]);
-        }
-        out = { written: ROWS.length, network: process.env.INDEXER_NETWORK };
-    `, { ROWS: rows });
+        const written = await writePriceSeedRows(
+            (sql, params) => priceConn.query(sql, params), ROWS, PRICE_SEED_MARKER_FLOOR);
+        out = { written, network: process.env.INDEXER_NETWORK };
+    `, {
+        ROWS: rows,
+        PRICE_SEED_MARKER_FLOOR,
+    }, [writePriceSeedRows]);
 }
 
 /**
@@ -769,13 +801,15 @@ export function writeRowsScript(rows) {
  * only ever exists in the indexer's own database, so the tip is read there
  * regardless.
  */
-function containerScript(body, constants = {}) {
+function containerScript(body, constants = {}, helpers = []) {
     const decls = Object.entries(constants)
         .map(([name, value]) => `const ${name} = ${JSON.stringify(value)};`)
         .join('\n');
+    const helperDecls = helpers.map((helper) => helper.toString()).join('\n');
     return `'use strict';
 const mariadb = require('mariadb');
 ${decls}
+${helperDecls}
 const env = process.env;
 if (env.INDEXER_NETWORK !== 'regtest'){
     console.error('REFUSING: INDEXER_NETWORK is ' + JSON.stringify(env.INDEXER_NETWORK)
