@@ -20,6 +20,8 @@ import { ConfirmModal } from '../ConfirmModal.jsx';
 import { useBackHandler } from '../../../ui/backStack.js';
 import cardStyles from '../../../ui/Card.module.css';
 import { t } from '../../../i18n/index.js';
+import '../../../i18n/locales/en/settings.js';
+import '../../../i18n/locales/en/ui.js';
 
 // Built per call so a locale switch applies.
 const modeOptions = () => /** @type {const} */ ([

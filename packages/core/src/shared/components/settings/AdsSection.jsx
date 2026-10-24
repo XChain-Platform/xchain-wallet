@@ -34,6 +34,7 @@ import {
 } from '../../../registry/validate.js';
 import { resolveAdsChainConfig } from '../../../schemas/settings.js';
 import { t } from '../../../i18n/index.js';
+import '../../../i18n/locales/en/settings.js';
 import { STACK, SettingsLoadError, Status, ToggleRow } from './_settingsPrimitives.jsx';
 import styles from './AdsSection.module.css';
 

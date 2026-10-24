@@ -30,6 +30,7 @@ import {
     SELECT, STACK, SettingsFieldRow, SettingsLoadError, Status,
 } from './_settingsPrimitives.jsx';
 import { t } from '../../../i18n/index.js';
+import '../../../i18n/locales/en/settings.js';
 
 const THEME_OPTIONS = /** @type {const} */ ([
     { value: 'system', label: 'System default' },

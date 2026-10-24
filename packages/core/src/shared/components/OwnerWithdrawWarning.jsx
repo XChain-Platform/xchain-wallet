@@ -11,6 +11,7 @@
 import { FormNotice } from '@xchain-wallet/core/ui';
 import { OWNER_WITHDRAW_WARNING } from '../routes/contractResponseShape.js';
 import { t } from '../../i18n/index.js';
+import '../../i18n/locales/en/components.js';
 
 /**
  * The owner-withdraw warning (OWNER_WITHDRAW_OPT_IN): shown on a contract's

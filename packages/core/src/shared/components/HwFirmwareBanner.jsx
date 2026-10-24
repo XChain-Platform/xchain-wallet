@@ -34,6 +34,7 @@ import { StatusMessage } from '@xchain-wallet/core/ui';
 import { safeHttpUrl } from '../utils/externalUrl.js';
 import styles from './HwFirmwareBanner.module.css';
 import { t } from '../../i18n/index.js';
+import '../../i18n/locales/en/components.js';
 
 const { checkFirmware } = signersLib;
 

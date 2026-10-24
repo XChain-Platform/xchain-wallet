@@ -14,6 +14,7 @@
 // t() as a key, sees only this one.
 
 import { i18n } from '@xchain-wallet/core';
+import '@xchain-wallet/core/i18n/locales/en/extension.js';
 
 const { t } = i18n;
 

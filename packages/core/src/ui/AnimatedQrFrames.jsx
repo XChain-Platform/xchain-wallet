@@ -13,6 +13,7 @@ import QRCode from 'qrcode';
 import { useReducedMotion } from './reducedMotion.js';
 import qrStyles from './QrDisplay.module.css';
 import { t } from '../i18n/index.js';
+import '../i18n/locales/en/ui.js';
 
 /**
  * Render a sequence of strings as animated QR codes; frames advance

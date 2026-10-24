@@ -12,6 +12,7 @@ import { useEffect, useId, useMemo, useState } from 'react';
 import { Button, EmptyState, Icon, ListPage, PageHeader, Screen, Skeleton, StatusMessage } from '@xchain-wallet/core/ui';
 import { flows as flowsLib } from '@xchain-wallet/core';
 import { t } from '../../i18n/index.js';
+import '../../i18n/locales/en/market.js';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { MarketChart } from '../components/MarketChart.jsx';
 import { OrderbookPanel } from '../components/OrderbookPanel.jsx';

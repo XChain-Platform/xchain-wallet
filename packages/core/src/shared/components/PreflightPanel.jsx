@@ -32,6 +32,8 @@ import {
 import { unverifiedText, warningText } from '../utils/preflightFindingCopy.js';
 import { formatDecimalAmount } from '../utils/amountFormat.js';
 import { t } from '../../i18n/index.js';
+import '../../i18n/locales/en/components.js';
+import '../../i18n/locales/en/settings.js';
 
 // Tier-1 headline codes (xchain-sdk preflight constants.js). Duplicated as
 // literals rather than imported: this component is rendered by the extension

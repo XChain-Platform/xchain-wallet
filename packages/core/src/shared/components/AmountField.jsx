@@ -26,6 +26,8 @@ import { coinToFiatExact } from '../../flows/priceLookup.js';
 import { formatFiat } from './BalanceList.jsx';
 import styles from './AmountField.module.css';
 import { t } from '../../i18n/index.js';
+import '../../i18n/locales/en/components.js';
+import '../../i18n/locales/en/send.js';
 
 // The space kept between typed digits and the first action: the same 4px
 // (--xc-space-1) the actions keep from the field border.

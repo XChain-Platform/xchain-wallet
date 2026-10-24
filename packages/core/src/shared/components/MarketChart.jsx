@@ -38,6 +38,7 @@ import { useReportLoadFailure } from './pageLoadFailures.jsx';
 import { describeChartSeries } from './Sparkline.jsx';
 import { withRequestTimeout } from '../utils/requestTimeout.js';
 import { t } from '../../i18n/index.js';
+import '../../i18n/locales/en/components.js';
 
 /**
  * @param {object} props

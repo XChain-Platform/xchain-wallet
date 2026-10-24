@@ -26,6 +26,7 @@
 import { sha256 } from '@noble/hashes/sha2';
 import { bytesToHex } from '@noble/hashes/utils';
 import { t } from '../../i18n/index.js';
+import '../../i18n/locales/en/flows.js';
 
 // The integrity check handles transaction payloads, but refuses enough text to
 // turn hashing an explicit paste into a main-thread memory or CPU spike.

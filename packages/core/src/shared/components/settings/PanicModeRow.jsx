@@ -35,6 +35,7 @@ import {
 } from '../../../flows/panicMode.js';
 import { ROW, ROW_HINT } from './_settingsPrimitives.jsx';
 import { t } from '../../../i18n/index.js';
+import '../../../i18n/locales/en/settings.js';
 
 export function PanicModeRow() {
     const [state, setState] = useState(getPanicModeState);

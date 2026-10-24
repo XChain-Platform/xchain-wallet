@@ -12,6 +12,8 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { Screen, ListPage, Button, ChainBadge, ChoiceControl } from '@xchain-wallet/core/ui';
 import { useBackHandler } from '@xchain-wallet/core/ui/backStack.js';
 import { i18n, registry as registryLib } from '@xchain-wallet/core';
+import '@xchain-wallet/core/i18n/locales/en/accountPicker.js';
+import '@xchain-wallet/core/i18n/locales/en/extension.js';
 import { useSupportedChains } from '@xchain-wallet/core/shared/hooks/useSupportedChains.js';
 import { neutralizeControlText } from '@xchain-wallet/core/shared/utils/textHardening.js';
 import { OriginIdentity } from '@xchain-wallet/core/shared/components/OriginIdentity.jsx';

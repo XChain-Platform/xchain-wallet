@@ -38,6 +38,7 @@ import tableStyles from './DataTable.module.css';
 import { startVisibleInterval } from '../utils/visibleInterval.js';
 import styles from './MarketTrading.module.css';
 import { t } from '../../i18n/index.js';
+import '../../i18n/locales/en/components.js';
 
 const POLL_INTERVAL_MS = 5000;
 

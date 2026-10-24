@@ -12,6 +12,7 @@ import { t } from '../../i18n/index.js';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { AddressField, AddressText, Button, ChainBadge, ChainPicker, FeeSelector, FieldNote, FormNotice, FormPage, Icon, Input, ListPage, PageHeader, Screen, StatusMessage, Textarea } from '@xchain-wallet/core/ui';
 import { registry as registryLib } from '@xchain-wallet/core';
+import '../../i18n/locales/en/send.js';
 import { normalizeConstructorParams } from '../../flows/deployChunked.js';
 import { DEPLOY_ARGUMENT_WORDS, deployActionFit, variadicSizeMessage } from '../../flows/variadicActionSize.js';
 import { indexerWaitMessage } from '../../flows/deployLegWait.js';

@@ -12,6 +12,8 @@ import { t } from '../../i18n/index.js';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { AddressField, AddressText, Button, ChainBadge, ChainPicker, Checkbox, CopyButton, FeeSelector, FormNotice, FormPage, FormSection, Input, ListPage, PageHeader, RadioGroup, Screen, SectionHeader, StatusMessage } from '@xchain-wallet/core/ui';
 import { registry as registryLib } from '@xchain-wallet/core';
+import '../../i18n/locales/en/crossChainOrder.js';
+import '../../i18n/locales/en/crossChainSwap.js';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { useDemoGuard } from '../hooks/useDemoGuard.jsx';
 import { useSettings } from '../hooks/useSettings.js';

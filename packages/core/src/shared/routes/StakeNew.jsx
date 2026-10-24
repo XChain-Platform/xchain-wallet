@@ -20,6 +20,7 @@ import { registry as registryLib } from '@xchain-wallet/core';
 import * as branding from '../../branding/branding.js';
 import { t } from '../../i18n/index.js';
 import { readFailureMessage } from '../utils/readFailureMessage.js';
+import '../../i18n/locales/en/stakeNew.js';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import styles from './ActionsMenu.module.css';
 import local from './StakeNew.module.css';

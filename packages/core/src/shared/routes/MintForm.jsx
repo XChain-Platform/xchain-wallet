@@ -15,6 +15,7 @@ import {
     registry as registryLib,
     decoder as decoderLib,
 } from '@xchain-wallet/core';
+import '../../i18n/locales/en/send.js';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { useDemoGuard } from '../hooks/useDemoGuard.jsx';
 import { useSettings } from '../hooks/useSettings.js';

@@ -24,6 +24,16 @@
 // surfacing dead entries.
 
 import { t } from '../../i18n/index.js';
+import '../../i18n/locales/en/components.js';
+import '../../i18n/locales/en/governance.js';
+import '../../i18n/locales/en/issue.js';
+import '../../i18n/locales/en/keyboard.js';
+import '../../i18n/locales/en/palette.js';
+import '../../i18n/locales/en/routes.js';
+import '../../i18n/locales/en/scan.js';
+import '../../i18n/locales/en/send.js';
+import '../../i18n/locales/en/settings.js';
+import '../../i18n/locales/en/ui.js';
 import { Icon } from '../../ui/index.js';
 
 // Categories double as the Tab-cycle groups in the palette (§33.4). Order

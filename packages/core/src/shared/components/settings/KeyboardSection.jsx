@@ -36,6 +36,7 @@ import {
 } from '../../keyboard/shortcuts.js';
 import { ROW, ROW_LABEL, STACK, SettingsLoadError, Status } from './_settingsPrimitives.jsx';
 import { t } from '../../../i18n/index.js';
+import '../../../i18n/locales/en/settings.js';
 
 const GROUP_HEADER = {
     fontSize: 'var(--xc-type-section-title-size)',

@@ -12,6 +12,7 @@ import { useEffect, useId, useMemo, useRef } from 'react';
 import styles from './FormErrorSummary.module.css';
 import statusStyles from './StatusMessage.module.css';
 import { t } from '../i18n/index.js';
+import '../i18n/locales/en/ui.js';
 
 const LABEL_FILLER = new Set(['a', 'an', 'the', 'to', 'of', 'for', 'in', 'on', 'at', 'optional']);
 

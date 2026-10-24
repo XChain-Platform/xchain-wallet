@@ -15,6 +15,9 @@ import { useNativeFiatRates, useTokenFiatRates } from '../hooks/useFiatRate.js';
 import { subtractDecimalStrings } from '../utils/amountFormat.js';
 import { formatFiatAmount } from '../utils/fiatAmountFormat.js';
 import { t } from '../../i18n/index.js';
+import '../../i18n/locales/en/components.js';
+import '../../i18n/locales/en/receive.js';
+import '../../i18n/locales/en/send.js';
 
 /**
  * Renders a §21.2 simulation result (balance deltas, side-effects, and

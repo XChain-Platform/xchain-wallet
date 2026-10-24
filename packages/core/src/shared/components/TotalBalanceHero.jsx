@@ -26,6 +26,8 @@ import {
 import { percentChangeDisplay } from '../utils/percentFormat.js';
 import { isMainnetChainId } from '../utils/mainnetChain.js';
 import { t } from '../../i18n/index.js';
+import '../../i18n/locales/en/balances.js';
+import '../../i18n/locales/en/components.js';
 
 const COMPACT_ACTIONS_QUERY = '(max-width: 479px)';
 

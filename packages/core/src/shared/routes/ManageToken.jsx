@@ -42,6 +42,12 @@ import { formatTokenQuantity, formatWithThousands } from '../utils/amountFormat.
 import { formatRelativeDateTime } from '../utils/dateTimeFormat.js';
 import { t } from '../../i18n/index.js';
 import { UNKNOWN_TOKEN_ISSUER_MESSAGE } from '../utils/tokenIssuerEligibility.js';
+import '../../i18n/locales/en/history.js';
+import '../../i18n/locales/en/issue.js';
+import '../../i18n/locales/en/manageToken.js';
+import '../../i18n/locales/en/routes.js';
+import '../../i18n/locales/en/settings.js';
+import '../../i18n/locales/en/verifySignature.js';
 
 const chainRegistry = registryLib.defaultRegistry();
 

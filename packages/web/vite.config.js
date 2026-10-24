@@ -40,6 +40,8 @@ import { SURFACE_MODULES, hiddenSurfacesFor } from './src/surfaces/registry.js';
 // `fullnode.regtest.json` literal beside it) out of a `store` bundle. Inert in
 // every other profile; fails the build shut if a marker survives.
 import { regtestSidecarPlugin } from './regtestSidecar.js';
+// Lets an unused module drop its English namespace import; see i18nNamespaces.js.
+import { i18nNamespacePlugin } from './i18nNamespaces.js';
 import {
     WEB_INITIAL_CSS_SIZE_LIMIT,
     WEB_INITIAL_JS_SIZE_LIMIT,
@@ -491,6 +493,7 @@ export default defineConfig({
     },
     plugins: [
         polyfillShimResolver,
+        i18nNamespacePlugin,
         initialBundleSizePlugin,
         react(),
         ...(httpsEnabled ? [basicSsl()] : []),

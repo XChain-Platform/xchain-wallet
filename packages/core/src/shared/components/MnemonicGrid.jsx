@@ -12,6 +12,9 @@ import { useId, useMemo, useState } from 'react';
 import { Button } from '../../ui/Button.jsx';
 import styles from './MnemonicGrid.module.css';
 import { t } from '../../i18n/index.js';
+import '../../i18n/locales/en/components.js';
+import '../../i18n/locales/en/importWallet.js';
+import '../../i18n/locales/en/settings.js';
 
 /**
  * Read-only mnemonic display per §19.2. Keeps the phrase concealed until the

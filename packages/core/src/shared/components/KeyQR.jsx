@@ -27,6 +27,7 @@ import { useEffect, useState } from 'react';
 import QRCode from 'qrcode';
 import qrStyles from '../../ui/QrDisplay.module.css';
 import { t } from '../../i18n/index.js';
+import '../../i18n/locales/en/components.js';
 
 /**
  * @param {object} props

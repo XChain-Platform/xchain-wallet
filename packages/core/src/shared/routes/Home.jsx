@@ -59,6 +59,8 @@ import {
     NO_CHAINS_TITLE,
 } from '../utils/chainAvailability.js';
 import { t } from '../../i18n/index.js';
+import '../../i18n/locales/en/actionsMenu.js';
+import '../../i18n/locales/en/alerts.js';
 
 const chainRegistry = registryLib.defaultRegistry();
 

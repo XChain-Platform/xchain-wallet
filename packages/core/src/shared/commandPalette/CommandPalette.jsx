@@ -31,6 +31,7 @@ import styles from './CommandPalette.module.css';
 import { useBackHandler } from '../../ui/backStack.js';
 import { useFocusTrap } from '../utils/focusTrap.js';
 import { t } from '../../i18n/index.js';
+import '../../i18n/locales/en/commandPalette.js';
 
 /**
  * @param {object} props

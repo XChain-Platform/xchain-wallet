@@ -39,6 +39,7 @@ import { parseXchainUri, hardenUriIntentText, safeChainIdParam } from '../../uri
 import { neutralizeControlText } from '../utils/textHardening.js';
 import { isValidAddressAnyNetwork, isValidAddressForChain } from '../utils/addressValidation.js';
 import { t } from '../../i18n/index.js';
+import '../../i18n/locales/en/scan.js';
 import { defaultRegistry } from '../../registry/index.js';
 
 const DEFAULT_CHAIN_REGISTRY = defaultRegistry();

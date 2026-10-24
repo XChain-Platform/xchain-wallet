@@ -39,6 +39,7 @@ import { PanicModeRow } from './PanicModeRow.jsx';
 import { UndoSendRow } from './UndoSendRow.jsx';
 import { DuressPassphraseRow } from './DuressPassphraseRow.jsx';
 import { t } from '../../../i18n/index.js';
+import '../../../i18n/locales/en/settings.js';
 
 const AUTOLOCK_OPTIONS = /** @type {const} */ ([
     { value: 1, label: '1 minute' },

@@ -26,6 +26,8 @@ import { Input } from '@xchain-wallet/core/ui';
 import { ConfirmActionModal } from './ConfirmActionModal.jsx';
 import { SigningReadyNote } from '../safety/PanicFreezeNotice.jsx';
 import { t } from '../../i18n/index.js';
+import '../../i18n/locales/en/components.js';
+import '../../i18n/locales/en/send.js';
 
 /**
  * @param {object} props

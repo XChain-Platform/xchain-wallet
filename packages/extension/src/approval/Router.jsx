@@ -10,6 +10,7 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import { i18n } from '@xchain-wallet/core';
+import '@xchain-wallet/core/i18n/locales/en/extension.js';
 import { ListPage, Screen } from '@xchain-wallet/core/ui';
 import { RouteErrorBoundary } from '@xchain-wallet/core/shared/components/RouteErrorBoundary.jsx';
 import { fetchApproval, resolveApproval } from './messaging.js';

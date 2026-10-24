@@ -32,6 +32,13 @@ import { WantReachabilityNotice } from '../components/hideReachabilityNotice.js'
 import { NetworkEndpointsSection } from '../components/settings/NetworkEndpointsSection.jsx';
 import { NetworkSection } from '../components/settings/NetworkSection.jsx';
 import { normalizeActiveNetwork } from '../utils/activeNetworkSwitch.js';
+import '../../i18n/locales/en/accountPicker.js';
+import '../../i18n/locales/en/desktopUpdate.js';
+import '../../i18n/locales/en/importWallet.js';
+import '../../i18n/locales/en/routes.js';
+import '../../i18n/locales/en/send.js';
+import '../../i18n/locales/en/settings.js';
+import '../../i18n/locales/en/ui.js';
 
 // Names the network the wallet is actually on, so the Network row never claims
 // Mainnet while a test network is active.

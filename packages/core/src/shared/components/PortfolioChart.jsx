@@ -24,6 +24,8 @@ import { readFailureMessage } from '../utils/readFailureMessage.js';
 import { percentChangeDisplay } from '../utils/percentFormat.js';
 import styles from './PortfolioChart.module.css';
 import { t } from '../../i18n/index.js';
+import '../../i18n/locales/en/components.js';
+import '../../i18n/locales/en/routes.js';
 
 // Range definitions. CoinGecko's sparkline is 168 hourly points (7d),
 // so 24h slices the tail of that real series and 7d uses it as-is.

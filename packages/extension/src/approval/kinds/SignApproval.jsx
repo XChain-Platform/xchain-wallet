@@ -26,6 +26,11 @@ import {
     registry as registryLib,
     decoder as decoderLib,
 } from '@xchain-wallet/core';
+import '@xchain-wallet/core/i18n/locales/en/actionDetail.js';
+import '@xchain-wallet/core/i18n/locales/en/extension.js';
+import '@xchain-wallet/core/i18n/locales/en/send.js';
+import '@xchain-wallet/core/i18n/locales/en/signerSelect.js';
+import '@xchain-wallet/core/i18n/locales/en/verifySignature.js';
 import { BalanceChanges } from '@xchain-wallet/core/shared/components/BalanceChanges.jsx';
 import { RawPsbtViewer } from '@xchain-wallet/core/shared/components/RawPsbtViewer.jsx';
 // §5.6 slice 4: the confirm surface's building blocks, reused here.

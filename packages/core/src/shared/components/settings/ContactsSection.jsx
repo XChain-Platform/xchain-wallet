@@ -36,6 +36,8 @@ import {
     Status,
 } from './_settingsPrimitives.jsx';
 import { t } from '../../../i18n/index.js';
+import '../../../i18n/locales/en/history.js';
+import '../../../i18n/locales/en/settings.js';
 
 const CONTACT_ACTIONS = {
     display: 'flex',

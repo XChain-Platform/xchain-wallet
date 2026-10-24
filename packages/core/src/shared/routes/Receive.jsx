@@ -51,6 +51,9 @@ import {
 import styles from './Receive.module.css';
 import qrStyles from '../../ui/QrDisplay.module.css';
 import { t } from '../../i18n/index.js';
+import '../../i18n/locales/en/history.js';
+import '../../i18n/locales/en/receive.js';
+import '../../i18n/locales/en/verifySignature.js';
 
 const chainRegistry = registryLib.defaultRegistry();
 const NATIVE_COIN_DECIMALS = 8;

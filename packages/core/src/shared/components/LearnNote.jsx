@@ -17,6 +17,7 @@ import { Button } from '@xchain-wallet/core/ui';
 import { useLearnMode } from '../hooks/useLearnMode.js';
 import styles from './LearnNote.module.css';
 import { t } from '../../i18n/index.js';
+import '../../i18n/locales/en/components.js';
 
 const DOCS_URL = 'https://docs.xchain.io/components/wallet/security#sign-screen-safety-rails';
 const DISMISSED_KEY_PREFIX = 'xc:learn-note:dismissed:';

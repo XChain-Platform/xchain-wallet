@@ -12,6 +12,7 @@ import { useEffect, useId, useState } from 'react';
 import { Icon } from '@xchain-wallet/core/ui';
 import styles from './LayoutModeToggle.module.css';
 import { t } from '../../i18n/index.js';
+import '../../i18n/locales/en/components.js';
 import { LAYOUT_MODE_STORAGE_KEY } from '../utils/layoutModeStorageKey.js';
 
 /**

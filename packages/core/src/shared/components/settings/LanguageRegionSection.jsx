@@ -38,6 +38,7 @@ import {
 } from './_settingsPrimitives.jsx';
 import { availableLocales, setLocale as setI18nLocale } from '../../../i18n/index.js';
 import { t } from '../../../i18n/index.js';
+import '../../../i18n/locales/en/settings.js';
 
 // Friendly display names for known locales; we extend this map as
 // translations land. Unknown registered locales fall back to their

@@ -47,6 +47,7 @@ import {
     ToggleRow,
 } from './_settingsPrimitives.jsx';
 import { t } from '../../../i18n/index.js';
+import '../../../i18n/locales/en/settings.js';
 
 const chainRegistry = registryLib.defaultRegistry();
 

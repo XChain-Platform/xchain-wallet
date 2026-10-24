@@ -30,6 +30,7 @@ import { useSettings } from '../../hooks/useSettings.js';
 import { useMessaging } from '../../useMessaging.js';
 import { INPUT, INPUT_DISABLED, ROW, ROW_TITLE, ToggleRow } from './_settingsPrimitives.jsx';
 import { t } from '../../../i18n/index.js';
+import '../../../i18n/locales/en/settings.js';
 import { blurNumberInputOnWheel } from '../../utils/formInput.js';
 
 export function UndoSendRow() {

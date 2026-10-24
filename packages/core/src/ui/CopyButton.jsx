@@ -18,6 +18,7 @@ import { useHapticFeedback } from '../shared/hooks/useHaptic.js';
 // sync and given a real expiry on the shells that have those mechanisms.
 import { copyText, CopyFailure } from '../shared/clipboard.js';
 import { t } from '../i18n/index.js';
+import '../i18n/locales/en/ui.js';
 
 /**
  * Copies `value` to the system clipboard and briefly shows a confirmation

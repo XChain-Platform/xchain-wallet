@@ -9,6 +9,7 @@
 // contact legal@dankest.llc.
 
 import { registry as registryLib } from '@xchain-wallet/core';
+import '../../i18n/locales/en/pending.js';
 import { tickerForDescriptor } from '../../registry/coinTicker.js';
 import { pendingDisplayState } from '../utils/pendingHistory.js';
 import { formatLocalDateTime } from '../utils/dateTime.js';

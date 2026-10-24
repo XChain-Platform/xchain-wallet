@@ -19,6 +19,8 @@
 
 import { flows as flowsLib } from '@xchain-wallet/core';
 import { t } from '../../i18n/index.js';
+import '../../i18n/locales/en/components.js';
+import '../../i18n/locales/en/send.js';
 import { Button } from '../../ui/Button.jsx';
 import styles from './ResumeConfirmCard.module.css';
 

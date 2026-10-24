@@ -696,7 +696,7 @@ export function findViolations(node, options = {}) {
             if (!isTrivialString(n.value, allow, minLength)) {
                 out.push({
                     node: n,
-                    message: `Inline JSX text "${truncate(n.value)}" should be moved to i18n/locales/<lang>/index.js and accessed via t('key').`,
+                    message: `Inline JSX text "${truncate(n.value)}" should be moved to the i18n/locales/<lang>/ dictionary and accessed via t('key').`,
                 });
             }
         } else if (n.type === 'JSXAttribute') {

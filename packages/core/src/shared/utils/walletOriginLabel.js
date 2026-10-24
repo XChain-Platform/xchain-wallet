@@ -9,6 +9,7 @@
 // contact legal@dankest.llc.
 
 import { t } from '../../i18n/index.js';
+import '../../i18n/locales/en/walletDetails.js';
 
 // One dictionary key per stored wallet origin (schemas/wallet.js
 // WALLET_ORIGINS), so no origin ever shows as its raw stored value.

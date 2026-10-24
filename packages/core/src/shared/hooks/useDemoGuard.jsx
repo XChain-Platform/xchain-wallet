@@ -21,6 +21,8 @@
 import { useCallback, useMemo, useState } from 'react';
 import { StatusMessage } from '../../ui/StatusMessage.jsx';
 import { t } from '../../i18n/index.js';
+import '../../i18n/locales/en/demo.js';
+import '../../i18n/locales/en/send.js';
 import { isDemoWallet } from '../../flows/demoMode.js';
 import { exitDemoWallet } from '../utils/demoGraduation.js';
 import { DemoExitConfirm } from '../components/DemoExitConfirm.jsx';
