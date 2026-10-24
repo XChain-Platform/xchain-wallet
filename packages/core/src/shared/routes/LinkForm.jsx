@@ -28,6 +28,7 @@ import {
 } from '../../flows/feeEstimate.js';
 import { actionDisplayLabel } from '../utils/actionDisplayLabel.js';
 import { humanizeError } from '../utils/humanizeError.js';
+import { explorerErrorCode } from '../../sdk/explorerErrors.js';
 import styles from './IssueTokenForm.module.css';
 import { preferredSourceId } from '../addressSelection.js';
 import { pickDefaultChainId } from '../chainSelection.js';
@@ -213,7 +214,10 @@ export function LinkForm({ walletId, onBack }) {
                 })
                 .catch((err) => {
                     if (!mountedRef.current) return;
-                    setPreviewCache((p) => ({ ...p, [key]: { loading: false, action: null, error: err?.message || String(err) } }));
+                    // The explorer answers 404 for a number no action holds: that is a
+                    // missing action, not a failed lookup.
+                    const missing = explorerErrorCode(err) === 'EXPLORER_HTTP_404';
+                    setPreviewCache((p) => ({ ...p, [key]: { loading: false, action: null, error: missing ? null : (err?.message || String(err)) } }));
                 });
         }, 350);
         return () => clearTimeout(t);
@@ -232,7 +236,10 @@ export function LinkForm({ walletId, onBack }) {
                 })
                 .catch((err) => {
                     if (!mountedRef.current) return;
-                    setPreviewCache((p) => ({ ...p, [key]: { loading: false, action: null, error: err?.message || String(err) } }));
+                    // The explorer answers 404 for a number no action holds: that is a
+                    // missing action, not a failed lookup.
+                    const missing = explorerErrorCode(err) === 'EXPLORER_HTTP_404';
+                    setPreviewCache((p) => ({ ...p, [key]: { loading: false, action: null, error: missing ? null : (err?.message || String(err)) } }));
                 });
         }, 350);
         return () => clearTimeout(t);
@@ -401,10 +408,9 @@ export function LinkForm({ walletId, onBack }) {
             setFormError('Pick a source address first.');
             return;
         }
-        if (validationError) {
-            setFormError(validationError);
-            return;
-        }
+        // The live banner above the form already states this problem; copying it
+        // into formError printed the same sentence twice.
+        if (validationError) return;
         if (previewPending) {
             setFormError('Wait for both action previews to finish loading.');
             return;
@@ -873,9 +879,11 @@ function SidePanel({ title, chainIds, chainId, onChainChange, actionIndex, onAct
                             ? humanizeError(preview.error, 'load that action').message
                             : preview?.action
                                 ? `Preview: ${decodePreview(preview.action)}`
-                                : descriptor && actionIndex
-                                    ? 'Enter the action number from the explorer to see a preview…'
-                                    : ''}
+                                : preview
+                                    ? 'No action was found at that number.'
+                                    : descriptor && actionIndex
+                                        ? 'Enter the action number from the explorer to see a preview…'
+                                        : ''}
             </div>
         </fieldset>
     );

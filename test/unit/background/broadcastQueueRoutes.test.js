@@ -875,12 +875,11 @@ describe('submitAction never retires a transaction the network already holds as 
     it.each([
         ['spendP2sh rejects', { spendP2sh: vi.fn(async () => { throw new Error('encoder down'); }) }],
         ['the phase-2 signature is refused', { phase2Sign: async () => { throw new Error('user rejected on device'); } }],
-    ])('keeps a P2SH phase 1 that went out live when %s', async (_label, opts) => {
+    ])('broadcasts no P2SH phase 1 and marks the send failed when %s', async (_label, opts) => {
         const h = landedSubmit({ encoding: 'P2SH', answers: ['ok'], ...opts });
         await expect(h.run()).rejects.toThrow();
-        expect(h.sdk.encoder.broadcastTx).toHaveBeenCalledTimes(1);
-        expect(h.puts.some((p) => p.status === 'failed')).toBe(false);
-        expect(h.last()).toMatchObject({ status: 'broadcast', txid: 'txid-PHASE1' });
+        expect(h.sdk.encoder.broadcastTx).not.toHaveBeenCalled();
+        expect(h.last().status).toBe('failed');
     });
 
     it('still marks a send failed when the phase-1 signature is refused', async () => {

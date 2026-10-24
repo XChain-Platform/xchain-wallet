@@ -34,6 +34,23 @@ function commitLandedFields(source) {
 }
 
 /**
+ * Carry the signed reveal of a two-phase action onto a queue entry whose bytes are
+ * its commit, so every send of the entry sends the commit and then the reveal.
+ * An entry whose commit already landed carries the reveal as its own bytes instead.
+ *
+ * @param {{ revealTxHex?: unknown, revealTxid?: unknown, commitLanded?: unknown } | null | undefined} source
+ * @returns {{ revealTxHex?: string, revealTxid?: string }}
+ */
+function queuedRevealFields(source) {
+    if (source?.commitLanded === true) return {};
+    if (typeof source?.revealTxHex !== 'string' || !source.revealTxHex) return {};
+    return {
+        revealTxHex: source.revealTxHex,
+        ...(typeof source.revealTxid === 'string' && source.revealTxid ? { revealTxid: source.revealTxid } : {}),
+    };
+}
+
+/**
  * @param {{
  *   store: import('./broadcastQueueStore.js').BroadcastQueueStore,
  *   importedAddressIdsFor: (vault: any, walletId: string) => Promise<Set<string>>,
@@ -525,9 +542,9 @@ export function createBroadcastQueueEngine({ store: queueStore, importedAddressI
      *   - no owed settlement names it. A journaled write belongs to an entry
      *     whose broadcast or discard already happened.
      *   - a 'broadcasting' record was created before this store was built.
-     *     submitAction holds its record at 'broadcasting' across the phase-1
-     *     broadcast, the reveal and the whole P2SH phase 2 (a hardware
-     *     signature included), and tx.replace and broadcast.signedTx hold theirs
+     *     submitAction holds its record at 'broadcasting' across the commit
+     *     broadcast and the broadcast of its already-signed reveal or P2SH
+     *     phase 2, and tx.replace and broadcast.signedTx hold theirs
      *     across the network call, with no queue entry naming any of them. A
      *     record this process created is therefore a live call's, or one the
      *     map or journal already holds; one a dead process left behind predates
@@ -598,6 +615,9 @@ export function createBroadcastQueueEngine({ store: queueStore, importedAddressI
                 pendingTxId: record.id,
                 ...(resumedClaim ? { resumedClaim: true } : {}),
                 ...commitLandedFields(record),
+                // A two-phase record checkpointed before its commit went out
+                // comes back with its reveal, so the resume sends both.
+                ...queuedRevealFields(record),
                 // No ADS verdict: it rode the entry, never the record, so the
                 // donation this transaction may carry is not re-derivable here.
                 // Booking nothing under-counts the accumulator; booking a guess
@@ -770,7 +790,10 @@ export function createBroadcastQueueEngine({ store: queueStore, importedAddressI
      * `rbfReplacesPendingTxId` names the original a queued fee-bump replacement
      * evicts, so the broadcast route retires it once the replacement lands.
      *
-     * @param {{ chainId: string, signedTxHex: string, summary?: string, signedAt?: number, txid?: string, pendingTxId?: string | null, resumedClaim?: boolean, rbfReplacesPendingTxId?: string, commitLanded?: true, commitTxid?: string | null, adsCommit?: { chainId: string, donationIncluded: boolean } | null }} entry
+     * `revealTxHex` is the signed reveal of a two-phase action whose commit is
+     * `signedTxHex`: the broadcast route sends the commit and then the reveal.
+     *
+     * @param {{ chainId: string, signedTxHex: string, summary?: string, signedAt?: number, txid?: string, pendingTxId?: string | null, resumedClaim?: boolean, rbfReplacesPendingTxId?: string, commitLanded?: true, commitTxid?: string | null, revealTxHex?: string, revealTxid?: string, adsCommit?: { chainId: string, donationIncluded: boolean } | null }} entry
      * @returns {import('./broadcastQueueStorage.js').QueueEntry}
      */
     function pushQueueEntry(walletId, entry) {
@@ -793,6 +816,7 @@ export function createBroadcastQueueEngine({ store: queueStore, importedAddressI
                 ? { rbfReplacesPendingTxId: entry.rbfReplacesPendingTxId }
                 : {}),
             ...commitLandedFields(entry),
+            ...queuedRevealFields(entry),
             ...(adsCommit
                 && typeof adsCommit === 'object'
                 && typeof adsCommit.chainId === 'string'

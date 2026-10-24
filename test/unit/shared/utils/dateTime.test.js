@@ -8,6 +8,7 @@ import {
     formatElapsedTime,
     formatLocalDateTime,
     formatRelativeTime,
+    formatUnixSecondsLocal,
 } from '../../../../packages/core/src/shared/utils/dateTime.js';
 
 afterEach(() => vi.restoreAllMocks());
@@ -50,5 +51,17 @@ describe('shared date and time formatting', () => {
 
         expect(text).toMatch(/GMT$/);
         expect(text).not.toMatch(/^\d{4}-\d{2}-\d{2}T/);
+    });
+
+    it('reads an EXPIRATION field as seconds even when the date lies past year 5138', () => {
+        const locale = vi.spyOn(Date.prototype, 'toLocaleString').mockImplementation(function () { return this.toISOString(); });
+
+        expect(formatUnixSecondsLocal('4102444800')).toBe('2100-01-01T00:00:00.000Z');
+        expect(formatUnixSecondsLocal('253402300799')).toBe('9999-12-31T23:59:59.000Z');
+        expect(locale).toHaveBeenCalledWith(expect.any(String), expect.objectContaining({ timeZoneName: 'short' }));
+    });
+
+    it.each(['', 'abc', '12.5', '-5', '1e9', '1234567890123'])('returns null for %j, which is not a count of seconds', (value) => {
+        expect(formatUnixSecondsLocal(value)).toBeNull();
     });
 });

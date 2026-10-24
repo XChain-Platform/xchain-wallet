@@ -36,7 +36,7 @@ import { addressValidationError } from '../utils/addressValidation.js';
 import { tickerReferenceError } from '../utils/tickerGrammar.js';
 import { useTokenInfo } from '../hooks/useTokenInfo.js';
 import { submitFailureMessage } from '../utils/submitFailureMessage.js';
-import { memoLengthError } from '../utils/memoLimit.js';
+import { memoCharacterError, memoLengthError } from '../utils/memoLimit.js';
 import {
     estimateNativeSendFee,
     estimateNativeSendFeeTiers,
@@ -274,7 +274,7 @@ export function CrossChainOrderForm({ walletId, onBack, initialChainId, initialF
         }
         if (receiveAddressError) return receiveAddressError;
         if (memo.includes('|') || memo.includes(';')) return 'Memo cannot contain "|" or ";".';
-        const memoError = memoLengthError(memo.trim());
+        const memoError = memoLengthError(memo.trim()) || memoCharacterError(memo.trim());
         if (memoError) return memoError;
         return null;
     }, [giveCoinTicker, getCoinTicker, giveTick, getTick, getDescriptor, getChainId,

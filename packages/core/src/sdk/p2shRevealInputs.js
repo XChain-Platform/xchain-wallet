@@ -17,8 +17,8 @@ const LEG_SCRIPT_TYPE = Object.freeze({ P2SH: 'p2sh', P2WSH: 'p2wsh' });
 
 /**
  * Thrown before the reveal is signed when one of its inputs is not a data leg
- * of the commit just broadcast. The commit is on chain by then, so the error
- * carries what a later clean reveal needs to spend its legs.
+ * of the commit. The commit is signed but not yet broadcast, so nothing is on
+ * chain; the error names the commit for diagnosis.
  */
 export class RevealInputsRefusedError extends Error {
     /**
@@ -28,8 +28,7 @@ export class RevealInputsRefusedError extends Error {
     constructor({ reason, inputIndex, phase1Txid, phase1TxHex, chainId, encoding }) {
         super('The revealing transaction built for this action was not signed: '
             + `${inputIndex === null ? 'it' : `its input ${inputIndex}`} ${reason}. The commit `
-            + `${phase1Txid} is on chain and its data outputs stay unspent until a revealing `
-            + 'transaction that spends only them is signed.');
+            + `${phase1Txid} was signed and not broadcast, so nothing was sent.`);
         this.name = 'RevealInputsRefusedError';
         this.code = 'REVEAL_INPUTS_REFUSED';
         this.userFacing = true;

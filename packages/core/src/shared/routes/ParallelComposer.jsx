@@ -34,6 +34,7 @@ import {
 import styles from './IssueTokenForm.module.css';
 import parallelStyles from './ParallelComposer.module.css';
 import { preferredSourceId } from '../addressSelection.js';
+import { isNativeFeeMandatory } from '../../registry/nativeFee.js';
 import {
     AUTHORABLE_ACTIONS,
     isActionDataOfferedInBuild,
@@ -350,10 +351,17 @@ export function ParallelComposer({ walletId, onBack, initialRows, hasDexSurface 
             setStage('compose');
             return;
         }
+        // Off Bitcoin the native-coin output IS the protocol fee, so a row on
+        // such a chain is composed with it; without it a fee-bearing row
+        // broadcasts and the indexer refuses it after the miner fee is spent.
+        const rowNativeFeeMandatory = isNativeFeeMandatory(activeRow.chainId);
         try {
             const result = await activeLane.run({
                 actionData: { action: activeRow.action, params },
-                encoderOpts: feePerKb != null ? { feePerKb } : {},
+                encoderOpts: {
+                    ...(feePerKb != null ? { feePerKb } : {}),
+                    ...(rowNativeFeeMandatory ? { payFeeInNativeCoin: true } : {}),
+                },
                 submitExtra: { action: activeRow.action, params },
             });
             if (activeLane.isWatcherMode) {
@@ -386,6 +394,7 @@ export function ParallelComposer({ walletId, onBack, initialRows, hasDexSurface 
                 error: bad ? 'Incorrect password.' : submitFailureMessage(err, {
                     chainId: activeRow.chainId,
                     coinTicker: activeCoinTicker,
+                    mandatory: rowNativeFeeMandatory,
                     fallback: 'Sign failed.',
                 }),
             });

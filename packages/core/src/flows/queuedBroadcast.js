@@ -27,7 +27,7 @@
 // unreachable), they can call `enqueueSignedTx` with the pending-tx
 // record to preserve the work.
 
-import { createPendingTx } from '../schemas/pendingTx.js';
+import { createPendingTx, queuedRevealOf } from '../schemas/pendingTx.js';
 import { assertSigningAllowed } from './panicMode.js';
 import { assertMainnetActionAllowed } from './mainnetPrelaunch.js';
 import { classifyBroadcastFailure, isAlreadyOnNetworkRejection } from './broadcastPermanence.js';
@@ -143,6 +143,11 @@ export async function listQueuedBroadcasts({ vault, chainId, chainRegistry }) {
  *   permanent failure    → status='failed' (§5.3: inputs gone; only a
  *                          re-compose can succeed, so it stops retrying)
  *
+ * A record carrying a two-phase reveal (`revealTxHex`, commit not landed) sends
+ * its commit and then its reveal. Once the commit is on the network the record
+ * is rewritten as the reveal, marked commit-landed, and the transitions above
+ * apply to the reveal.
+ *
  * @param {DrainQueuedBroadcastOpts} opts
  * @returns {Promise<{ pendingTx: import('../schemas/pendingTx.js').PendingTx, broadcast: boolean, error: string | null, permanence?: 'permanent' | 'transient', alreadyOnNetwork?: boolean }>}
  */
@@ -217,15 +222,51 @@ export async function drainQueuedBroadcast({
         if (onProgress) {
             try { onProgress('broadcasting', { pendingTxId }); } catch { /* swallow */ }
         }
+
+        // A two-phase record carries its signed reveal: the commit goes first and
+        // the reveal follows in the same drain, so the commit is never sent alone.
+        let current = existing;
+        const reveal = queuedRevealOf(existing);
+        if (reveal) {
+            try {
+                await sdk.encoder.broadcastTx(existing.txHex);
+            } catch (err) {
+                // "Already known" is the commit delivered, by an attempt that was
+                // interrupted before its reveal: the reveal still has to go out.
+                if (!isAlreadyOnNetworkRejection(err)) {
+                    return await settleDrainFailure(vault, pendingTxId, existing, err);
+                }
+            }
+            // The commit is on the network, so the record becomes its reveal,
+            // marked commit-landed: a crash from here resumes with the reveal
+            // alone, and a refused reveal keeps the record 'broadcast' on the
+            // commit's txid instead of retiring the commit's spend as 'failed'.
+            current = {
+                ...existing,
+                status: 'broadcasting',
+                error: null,
+                txid: reveal.txid ?? existing.txid,
+                txHex: reveal.txHex,
+                commitLanded: true,
+                commitTxid: existing.txid ?? null,
+            };
+            try {
+                await vault.pendingTxs.put(current);
+            } catch {
+                // The commit is already out, so the reveal goes out regardless:
+                // a refused write leaves the pair on disk, and a resume re-sends
+                // the commit, which the node answers as already known.
+            }
+        }
+
         try {
-            await sdk.encoder.broadcastTx(existing.txHex);
+            await sdk.encoder.broadcastTx(current.txHex);
         } catch (err) {
-            const msg = err && err.message ? String(err.message) : String(err);
             // Settle "already known" as delivery: the node holds this txid, so
             // retiring it as 'failed' would invite a re-compose that pays twice.
             if (isAlreadyOnNetworkRejection(err)) {
                 const delivered = {
-                    ...existing,
+                    ...current,
                     status: 'broadcast',
                     broadcastAt: new Date().toISOString(),
                     error: null,
@@ -236,29 +277,11 @@ export async function drainQueuedBroadcast({
                 }
                 return { pendingTx: delivered, broadcast: true, error: null, alreadyOnNetwork: true };
             }
-            // The SAME permanence split the submit path applies,
-            // applied again on EVERY retry. A queued transaction whose inputs
-            // have since been spent can never confirm as signed, and leaving it
-            // 'queued' invites the user to press "Broadcast now" forever on
-            // something that is already dead - while the balance it reserves
-            // stays committed in their mental model. Permanent failures go to
-            // 'failed', where the surface can offer a re-compose instead.
-            //
-            // Ambiguity resolves to transient (the classifier's own default):
-            // re-queuing a doomed transaction wastes a retry, whereas retiring a
-            // still-valid signed one loses its fee.
-            const permanence = classifyBroadcastFailure(err);
-            const status = permanence === 'permanent' ? 'failed' : 'queued';
-            // A refused reveal whose commit landed stays 'broadcast', the rule submitAction applies.
-            await vault.pendingTxs.put(status === 'failed' && existing.commitLanded === true
-                ? commitLandedRecord(existing, msg)
-                : { ...existing, status, error: msg });
-            const refreshed = await vault.pendingTxs.get(pendingTxId);
-            return { pendingTx: refreshed, broadcast: false, error: msg, permanence };
+            return await settleDrainFailure(vault, pendingTxId, current, err);
         }
 
         const broadcast = {
-            ...existing,
+            ...current,
             status: 'broadcast',
             broadcastAt: new Date().toISOString(),
             error: null,
@@ -271,6 +294,36 @@ export async function drainQueuedBroadcast({
     } finally {
         inFlightDrains.delete(pendingTxId);
     }
+}
+
+/**
+ * Record a drain's refused send. The SAME permanence split the submit path
+ * applies, applied again on EVERY retry. A queued transaction whose inputs
+ * have since been spent can never confirm as signed, and leaving it 'queued'
+ * invites the user to press "Broadcast now" forever on something that is
+ * already dead, while the balance it reserves stays committed in their mental
+ * model. Permanent failures go to 'failed', where the surface can offer a
+ * re-compose instead.
+ *
+ * Ambiguity resolves to transient (the classifier's own default): re-queuing
+ * a doomed transaction wastes a retry, whereas retiring a still-valid signed
+ * one loses its fee.
+ *
+ * @param {import('../storage/Vault.js').Vault} vault
+ * @param {string} pendingTxId
+ * @param {object} record   the record as this drain last wrote it
+ * @param {unknown} err
+ */
+async function settleDrainFailure(vault, pendingTxId, record, err) {
+    const msg = err && err.message ? String(err.message) : String(err);
+    const permanence = classifyBroadcastFailure(err);
+    const status = permanence === 'permanent' ? 'failed' : 'queued';
+    // A refused reveal whose commit landed stays 'broadcast', the rule submitAction applies.
+    await vault.pendingTxs.put(status === 'failed' && record.commitLanded === true
+        ? commitLandedRecord(record, msg)
+        : { ...record, status, error: msg });
+    const refreshed = await vault.pendingTxs.get(pendingTxId);
+    return { pendingTx: refreshed, broadcast: false, error: msg, permanence };
 }
 
 /**

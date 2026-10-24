@@ -64,6 +64,10 @@ async function broadcastSigned(encoder, txHex) {
  * background handlers) can hand it off to the queued-broadcast surface
  * (§49.5) instead of dropping the work.
  *
+ * A failed two-phase commit also carries its signed reveal, so the queue holds
+ * both and sends the commit and then the reveal: a commit queued alone spends
+ * its coin into a script that nothing opens.
+ *
  * Cluster G FOLLOWUP 1.
  */
 export class BroadcastFailedError extends Error {
@@ -76,9 +80,11 @@ export class BroadcastFailedError extends Error {
      *   signedAt: number,
      *   encoding: string,
      *   phase: 'phase1' | 'phase2',
+     *   revealTxHex?: string | null,
+     *   revealTxid?: string | null,
      * }} fields
      */
-    constructor({ cause, signedTxHex, txid, chainId, signedAt, encoding, phase }) {
+    constructor({ cause, signedTxHex, txid, chainId, signedAt, encoding, phase, revealTxHex = null, revealTxid = null }) {
         const inner = cause && typeof cause === 'object' && 'message' in cause
             ? /** @type {{ message: string }} */ (cause).message
             : String(cause);
@@ -91,6 +97,10 @@ export class BroadcastFailedError extends Error {
         this.signedAt = signedAt;
         this.encoding = encoding;
         this.phase = phase;
+        // The reveal that must follow this commit, or null for a transaction
+        // that is the whole action (or is itself the reveal).
+        this.revealTxHex = typeof revealTxHex === 'string' && revealTxHex ? revealTxHex : null;
+        this.revealTxid = this.revealTxHex && typeof revealTxid === 'string' && revealTxid ? revealTxid : null;
     }
 }
 
@@ -98,17 +108,18 @@ export class BroadcastFailedError extends Error {
  * Thrown BEFORE anything is signed or broadcast when the encoder chose the
  * P2SH/P2WSH two-phase lane and the injected signer cannot sign its reveal.
  *
- * The reveal is dispatched after the phase-1 commit is on chain, so a signer
- * that refuses (or fails inside its vendor layer) at that point has already
- * spent coin into a script nothing can open. This is the pre-dispatch
- * capability check `Signer.js#assertCannotSignEnvelopeReveal` says must live
- * here rather than at the signer. Typed and `userFacing` so the forms render
- * the remedy instead of "Couldn't send."
+ * The reveal is signed before the phase-1 commit is broadcast, and a commit
+ * whose reveal cannot be signed spends coin into a script nothing can open, so
+ * a signer that cannot sign the reveal is refused before it signs anything
+ * rather than failing inside its vendor layer once the commit is signed. This
+ * is the pre-dispatch capability check `Signer.js#assertCannotSignEnvelopeReveal`
+ * says must live here rather than at the signer. Typed and `userFacing` so the
+ * forms render the remedy instead of "Couldn't send."
  */
 export class HardwareChunkLaneError extends Error {
     /** @param {{ action: string, encoding: string, signerKind?: string }} fields */
     constructor({ action, encoding, signerKind }) {
-        super(`${chunkLaneOpener(action)}, and the second is signed after the first is `
+        super(`${chunkLaneOpener(action)}, and both must be signed before the first is `
             + `broadcast. ${signerSubject(signerKind)} cannot sign that second transaction, and `
             + 'broadcasting only the first would spend coin into a script that nothing can open '
             + 'and record no action at all. Use a software wallet key for this action.');
@@ -248,7 +259,7 @@ export function assertCompleteEnvelope(built, action) {
  * @property {(txid: string, opts?: { timeout?: number, pollInterval?: number, requireValid?: boolean }) => Promise<unknown>} [waitForTxid]
  * @property {{ timeout?: number, pollInterval?: number, requireValid?: boolean }} [waitOpts]
  * @property {(phase: SubmitPhase, data: object) => void} [onProgress]
- * @property {(transactions: { signed: { signedPsbtHex: string, txHex: string, txid: string }, revealSigned: { signedPsbtHex: string, txHex: string, txid: string } | null }) => void | Promise<void>} [beforeBroadcast] called after every currently signable transaction is signed and before anything is broadcast
+ * @property {(transactions: { signed: { signedPsbtHex: string, txHex: string, txid: string }, revealSigned: { signedPsbtHex: string, txHex: string, txid: string } | null }) => void | Promise<void>} [beforeBroadcast] called after the commit and any reveal (the TAPROOT envelope reveal or the P2SH/P2WSH phase-2 spend) are signed and before anything is broadcast
  * @property {boolean} [verifyBuiltTx]   atomic path only: run the confirm pipeline's tamper checks on the
  *                                       PSBT the encoder returns before the signer sees it (flows/verifyBuiltAction.js).
  *                                       Set by callers whose approval came before the build, such as a dApp signAction.
@@ -545,11 +556,13 @@ export async function submitWithSigner({
 
     // P2SH/P2WSH two-phase: the encoder paid to a script and phase 2 spends it
     // with a second transaction the signer must also sign. Decided ONCE here, and
-    // gated HERE, before the phase-1 commit is signed or broadcast: the reveal is
-    // dispatched after the commit is on chain, so a signer that cannot produce it
-    // (hardware and remote signers drop the `reveal` flag and fail inside their
-    // vendor format layer) would leave coin in a script nothing can open. That
-    // is the stranded-funds event §6 forbids, and the pre-dispatch check
+    // gated HERE, before the phase-1 commit is signed: step 3c signs the reveal
+    // before the commit is broadcast, because a commit without a signed reveal
+    // would leave coin in a script nothing can open, the stranded-funds event §6
+    // forbids. A signer that cannot produce the reveal (hardware and remote
+    // signers drop the `reveal` flag and fail inside their vendor format layer)
+    // is refused here with a typed error instead of failing there after the
+    // user approved the commit: the pre-dispatch check
     // Signer.js#assertCannotSignEnvelopeReveal says belongs in this file.
     const needsPhase2 = encoded.encoding === 'P2SH' || encoded.encoding === 'P2WSH';
     if (needsPhase2 && !signerSupportsChunkReveal(signer)) {
@@ -627,95 +640,19 @@ export async function submitWithSigner({
         });
     }
 
-    if (typeof beforeBroadcast === 'function') {
-        await beforeBroadcast({ signed, revealSigned: envelopeRevealSigned });
-    }
-
-    // §3.5: the key-path cancel needs {outpoint, internal key path, tapleaf
-    // hash} and cannot be rebuilt without them. recordPendingCommit THROWS if it
-    // cannot persist, and a throw here means we never broadcast: an unrecorded
-    // commit is an unrecoverable one.
-    if (envelopePair && encoded.envelope) {
-        recordPendingCommit({
-            commitTxid:      encoded.envelope.commitTxid,
-            commitVout:      encoded.envelope.commitVout,
-            commitValue:     encoded.envelope.commitValue,
-            commitAddress:   encoded.envelope.commitAddress,
-            internalKeyPath: signingPaths?.[0]?.path || encoded.envelope.internalPubkey,
-            tapleafHash:     encoded.envelope.tapleafHash,
-            coin:            chainId,
-        });
-    }
-
-    // Step 4: broadcast phase-1 tx. Wrap rejections so submitAction
-    // (and ultimately the §49.5 queued-broadcast surface) can recover
-    // the signed hex instead of losing it on a network blip.
-    //
-    // This awaited event writes the durable PendingTx checkpoint, including the
-    // exact signed bytes, before the relay can observe them. A restart can then
-    // re-offer those bytes without signing a replacement transaction, and a
-    // failed checkpoint stops the network effect.
-    await onProgress('broadcasting', { txid: signed.txid, txHex: signed.txHex });
-    try {
-        await broadcastSigned(encoder, signed.txHex);
-    } catch (err) {
-        throw new BroadcastFailedError({
-            cause: err,
-            signedTxHex: signed.txHex,
-            txid: signed.txid,
-            chainId,
-            signedAt: Date.now(),
-            encoding: encoded.encoding,
-            phase: 'phase1',
-        });
-    }
-
-    let finalTxid = signed.txid;
-    let finalSigned = signed;
-
-    // Step 4a: the envelope reveal, already signed. The decoder indexes the REVEAL,
-    // so its txid is the action's identity (§3.1), not the commit's.
-    if (envelopePair && envelopeRevealSigned) {
-        onProgress('envelope_revealing', { commitTxid: signed.txid });
-        try {
-            await broadcastSigned(encoder, envelopeRevealSigned.txHex);
-        } catch (err) {
-            // The commit is on chain and the reveal is not: the one stranding path
-            // signing-first cannot remove. Surface it as a broadcast failure carrying
-            // the signed reveal so the queued-rebroadcast surface can retry it; the
-            // recovery record persisted above is what allows a cancel instead.
-            throw new BroadcastFailedError({
-                cause: err,
-                signedTxHex: envelopeRevealSigned.txHex,
-                txid: envelopeRevealSigned.txid,
-                chainId,
-                signedAt: Date.now(),
-                encoding: encoded.encoding,
-                phase: 'envelope_reveal',
-            });
-        }
-        finalTxid = envelopeRevealSigned.txid;
-        finalSigned = envelopeRevealSigned;
-        // The reveal is on the network: nothing after it may turn the outcome into a failure.
-        try {
-            clearPendingCommit(encoded.envelope?.commitTxid, encoded.envelope?.commitVout);
-        } catch { /* the stale recovery record is harmless once the reveal landed */ }
-        try {
-            await onProgress('envelope_revealed', { txid: finalTxid, commitTxid: signed.txid });
-        } catch { /* progress observers cannot fail a delivered reveal */ }
-    }
-
-    // Step 4b: P2SH/P2WSH two-phase: encoder paid to a script, we now
-    // spend that output with a second tx. Signer signs phase-2 too (its
-    // capability to do so was checked above, before phase 1 was signed).
+    // Step 3c: the P2SH/P2WSH reveal, built and signed while nothing is on chain,
+    // in the order the envelope reveal keeps. The reveal spends the commit's own
+    // outputs, so it needs the signed commit bytes and not the commit on the
+    // network. An encoder failure after the commit was broadcast would leave its
+    // coin in a script with no reveal, while the form reported nothing sent.
+    let phase2Signed = null;
     if (needsPhase2) {
-        onProgress('p2sh_spending', { phase1Txid: signed.txid });
         const spendResult = await encoder.spendP2sh({
             pubkey: effectiveEncoderOpts.pubkey,
             // Phase 2 spends the P2SH/P2WSH output created by phase 1. The encoder
             // identifies that output from the phase-1 transaction itself, so p2shHash
-            // is the broadcast phase-1 txid (the create_tx response carries only
-            // { psbt, encoding }; there is no separate hash field).
+            // is the signed phase-1 txid, not yet broadcast (the create_tx response
+            // carries only { psbt, encoding }; there is no separate hash field).
             p2shHash: signed.txid,
             p2shHex: signed.txHex,
             // Phase 2 re-derives the P2SH/P2WSH reveal script chunks from the SAME
@@ -755,7 +692,7 @@ export async function submitWithSigner({
             chainId,
             encoding: encoded.encoding,
         });
-        const phase2Signed = await signer.signPsbt({
+        phase2Signed = await signer.signPsbt({
             psbtHex: spendResult.psbt,
             chainId,
             signingPaths: expandSigningPaths(spendResult.psbt),
@@ -765,6 +702,103 @@ export async function submitWithSigner({
             // signing key; the software signer signs+custom-finalizes every input.
             reveal: true,
         });
+    }
+
+    // The reveal that follows the commit: the TAPROOT envelope reveal, or the
+    // P2SH/P2WSH phase-2 spend, both signed above before anything goes out.
+    const revealSigned = envelopeRevealSigned ?? phase2Signed;
+    if (typeof beforeBroadcast === 'function') {
+        await beforeBroadcast({ signed, revealSigned });
+    }
+
+    // §3.5: the key-path cancel needs {outpoint, internal key path, tapleaf
+    // hash} and cannot be rebuilt without them. recordPendingCommit THROWS if it
+    // cannot persist, and a throw here means we never broadcast: an unrecorded
+    // commit is an unrecoverable one.
+    if (envelopePair && encoded.envelope) {
+        recordPendingCommit({
+            commitTxid:      encoded.envelope.commitTxid,
+            commitVout:      encoded.envelope.commitVout,
+            commitValue:     encoded.envelope.commitValue,
+            commitAddress:   encoded.envelope.commitAddress,
+            internalKeyPath: signingPaths?.[0]?.path || encoded.envelope.internalPubkey,
+            tapleafHash:     encoded.envelope.tapleafHash,
+            coin:            chainId,
+        });
+    }
+
+    // Step 4: broadcast phase-1 tx. Wrap rejections so submitAction
+    // (and ultimately the §49.5 queued-broadcast surface) can recover
+    // the signed hex instead of losing it on a network blip.
+    //
+    // This awaited event writes the durable PendingTx checkpoint, including the
+    // exact signed bytes, before the relay can observe them. A restart can then
+    // re-offer those bytes without signing a replacement transaction, and a
+    // failed checkpoint stops the network effect.
+    //
+    // A two-phase action's reveal is already signed here, so the checkpoint
+    // carries it too: a restart that re-offers the commit alone would spend its
+    // coin into a script with no reveal.
+    await onProgress('broadcasting', {
+        txid: signed.txid,
+        txHex: signed.txHex,
+        ...(revealSigned ? { revealTxid: revealSigned.txid, revealTxHex: revealSigned.txHex } : {}),
+    });
+    try {
+        await broadcastSigned(encoder, signed.txHex);
+    } catch (err) {
+        throw new BroadcastFailedError({
+            cause: err,
+            signedTxHex: signed.txHex,
+            txid: signed.txid,
+            chainId,
+            signedAt: Date.now(),
+            encoding: encoded.encoding,
+            phase: 'phase1',
+            revealTxHex: revealSigned?.txHex ?? null,
+            revealTxid: revealSigned?.txid ?? null,
+        });
+    }
+
+    let finalTxid = signed.txid;
+    let finalSigned = signed;
+
+    // Step 4a: the envelope reveal, already signed. The decoder indexes the REVEAL,
+    // so its txid is the action's identity (§3.1), not the commit's.
+    if (envelopePair && envelopeRevealSigned) {
+        onProgress('envelope_revealing', { commitTxid: signed.txid });
+        try {
+            await broadcastSigned(encoder, envelopeRevealSigned.txHex);
+        } catch (err) {
+            // The commit is on chain and the reveal is not: the one stranding path
+            // signing-first cannot remove. Surface it as a broadcast failure carrying
+            // the signed reveal so the queued-rebroadcast surface can retry it; the
+            // recovery record persisted above is what allows a cancel instead.
+            throw new BroadcastFailedError({
+                cause: err,
+                signedTxHex: envelopeRevealSigned.txHex,
+                txid: envelopeRevealSigned.txid,
+                chainId,
+                signedAt: Date.now(),
+                encoding: encoded.encoding,
+                phase: 'envelope_reveal',
+            });
+        }
+        finalTxid = envelopeRevealSigned.txid;
+        finalSigned = envelopeRevealSigned;
+        // The reveal is on the network: nothing after it may turn the outcome into a failure.
+        try {
+            clearPendingCommit(encoded.envelope?.commitTxid, encoded.envelope?.commitVout);
+        } catch { /* the stale recovery record is harmless once the reveal landed */ }
+        try {
+            await onProgress('envelope_revealed', { txid: finalTxid, commitTxid: signed.txid });
+        } catch { /* progress observers cannot fail a delivered reveal */ }
+    }
+
+    // Step 4b: P2SH/P2WSH two-phase: the commit is on the network, so the reveal
+    // signed in step 3c goes out now.
+    if (needsPhase2) {
+        onProgress('p2sh_spending', { phase1Txid: signed.txid });
         try {
             await broadcastSigned(encoder, phase2Signed.txHex);
         } catch (err) {

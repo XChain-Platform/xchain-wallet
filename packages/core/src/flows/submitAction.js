@@ -128,7 +128,7 @@ export function nativeDebitSatsFromPsbt(decomposed, ownedAddresses) {
  * @property {(phase: string, data: object) => void} [onProgress]
  * @property {(transactions: { signed: object, revealSigned: object | null }) => void | Promise<void>} [beforeBroadcast] awaited after signing and before any broadcast
  * @property {boolean} [verifyBuiltTx]   hold the encoder's PSBT to the confirm pipeline's tamper checks before signing (submitWithSigner)
- * @property {(entry: { signedTxHex: string, txid: string, chainId: string, signedAt: number, summary: string, error: string, pendingTxId: string | null, adsCommit: { chainId: string, donationIncluded: boolean } | null, commitLanded?: true, commitTxid?: string | null }) => boolean | void | Promise<boolean | void>} [onBroadcastFailure]   Cluster G FOLLOWUP 1: fires when the broadcast leg fails after a successful sign. The bridge background host resolves false when the entry did not reach §49.5's durable queued-broadcast surface; legacy void callbacks are treated as accepted handoffs.
+ * @property {(entry: { signedTxHex: string, txid: string, chainId: string, signedAt: number, summary: string, error: string, pendingTxId: string | null, adsCommit: { chainId: string, donationIncluded: boolean } | null, commitLanded?: true, commitTxid?: string | null, revealTxHex?: string, revealTxid?: string | null }) => boolean | void | Promise<boolean | void>} [onBroadcastFailure]   Cluster G FOLLOWUP 1: fires when the broadcast leg fails after a successful sign. A two-phase commit's entry carries its signed reveal (`revealTxHex`), which the queue sends right after the commit. The bridge background host resolves false when the entry did not reach §49.5's durable queued-broadcast surface; legacy void callbacks are treated as accepted handoffs.
  */
 
 /**
@@ -309,6 +309,11 @@ export async function submitAction({
                 status: 'broadcasting',
                 txid: data.txid,
                 ...(typeof data?.txHex === 'string' && data.txHex ? { txHex: data.txHex } : {}),
+                // The signed reveal of a two-phase action, so a restart that
+                // resumes this record sends the commit and then the reveal.
+                ...(typeof data?.revealTxHex === 'string' && data.revealTxHex
+                    ? { revealTxHex: data.revealTxHex, revealTxid: data.revealTxid ?? null }
+                    : {}),
             });
         } else if (phase === 'envelope_revealed' && typeof data?.txid === 'string') {
             // The reveal is the action's identity; the row moves off the commit txid.
@@ -508,18 +513,25 @@ export async function submitAction({
                     // Mark a queued reveal or phase-2 whose commit landed, so a later
                     // permanent retry verdict keeps it 'broadcast' as the branch above does.
                     const commitMark = phase1Landed ? { commitLanded: true, commitTxid } : {};
+                    // A refused commit queues with its signed reveal, so the drain
+                    // sends both and never the commit alone.
+                    const revealMark = !phase1Landed && err.revealTxHex
+                        ? { revealTxHex: err.revealTxHex, revealTxid: err.revealTxid ?? null }
+                        : {};
                     const pendingSaved = await stampPending({
                         status: 'queued',
                         txid: err.txid,
                         txHex: err.signedTxHex,
                         error: err && err.message ? String(err.message) : String(err),
                         ...commitMark,
+                        ...revealMark,
                     });
                     let queueSaved = false;
                     if (typeof onBroadcastFailure === 'function') {
                         try {
                             queueSaved = await onBroadcastFailure({
                                 ...commitMark,
+                                ...revealMark,
                                 signedTxHex: err.signedTxHex,
                                 txid: err.txid,
                                 chainId: err.chainId,

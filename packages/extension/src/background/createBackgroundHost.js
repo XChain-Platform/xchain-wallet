@@ -3651,6 +3651,36 @@ export function createBackgroundHost(deps) {
             await vault.pendingTxs.put({ ...original, status: 'rbf-replaced', rbfReplacement: replacementTxHash });
         } catch (_e) { /* the original stays live */ }
     }
+    // Rewrite a two-phase entry and its PendingTx as the reveal once the commit
+    // is on the network, marked commit-landed, before the reveal goes out. A
+    // crash from here resumes with the reveal alone, and a refused reveal keeps
+    // its record 'broadcast' on the commit's txid (permanentReleasePatch).
+    // Neither write can stop the reveal: the commit is already out.
+    async function advanceToReveal(vault, walletId, q, entry, reveal) {
+        const { revealTxHex: _sentHex, revealTxid: _sentTxid, ...rest } = entry;
+        const advanced = {
+            ...rest,
+            signedTxHex: reveal.txHex,
+            ...(reveal.txid ? { txid: reveal.txid } : {}),
+            commitLanded: true,
+            ...(entry.txid ? { commitTxid: entry.txid } : {}),
+        };
+        const cur = q.findIndex((e) => e.id === entry.id);
+        if (cur >= 0) q[cur] = advanced;
+        await persistQueue();
+        const patch = {
+            status: 'broadcasting',
+            txHex: reveal.txHex,
+            txid: advanced.txid ?? null,
+            commitLanded: true,
+            commitTxid: entry.txid ?? null,
+            error: null,
+        };
+        if (await settleQueuedPendingTx(vault, advanced, patch) === 'unreachable') {
+            recordOwedSettlement(walletId, advanced.pendingTxId, 'patch', patch);
+        }
+        return advanced;
+    }
     // In-flight claims for broadcast.queue.broadcast, keyed walletId:id.
     // `broadcastTx` is an irreversible effector, so a second call for the same
     // entry (double-click, popup and expanded tab racing) must fail before it
@@ -3674,7 +3704,9 @@ export function createBackgroundHost(deps) {
             const q = getQueue(walletId);
             const idx = q.findIndex((entry) => entry.id === id);
             if (idx < 0) throw new Error(`broadcast.queue: no queued entry "${id}"`);
-            const entry = q[idx];
+            // Reassigned once a two-phase entry's commit lands: from then on the
+            // entry is its reveal, and every settlement below describes that.
+            let entry = q[idx];
             const retryAfterMs = Number.isFinite(entry.nextRetryAt)
                 ? Math.ceil(entry.nextRetryAt - Date.now())
                 : 0;
@@ -3740,6 +3772,21 @@ export function createBackgroundHost(deps) {
             // would delete a different, still-valid signed transaction.
             let result;
             try {
+                // A two-phase entry carries its signed reveal: the commit goes
+                // first, and the reveal follows in this same call, so the commit
+                // is never sent alone. A refused commit falls to the catch below
+                // with the entry unchanged, so it is settled as the pair it is.
+                const reveal = schemas.pendingTx.queuedRevealOf(entry);
+                if (reveal) {
+                    try {
+                        await sdk.encoder.broadcastTx(entry.signedTxHex);
+                    } catch (commitErr) {
+                        // "Already known" is the commit delivered by an attempt
+                        // interrupted before its reveal: the reveal still goes out.
+                        if (!saysAlreadyOnNetwork(commitErr)) throw commitErr;
+                    }
+                    entry = await advanceToReveal(vault, walletId, q, entry, reveal);
+                }
                 result = await sdk.encoder.broadcastTx(entry.signedTxHex);
             } catch (err) {
                 // The same permanence split the core queue applies,

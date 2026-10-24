@@ -33,6 +33,7 @@ import { envelopeTransactionLines } from '../../flows/envelopeFeeDisclosure.js';
 import { neutralizeControlText } from '../utils/textHardening.js';
 import { userFacingMessage } from '../utils/userFacingMessage.js';
 import { formatDisplayAmount } from '../utils/amountFormat.js';
+import { formatUnixSecondsLocal } from '../utils/dateTime.js';
 import { formatNativeBaseUnits } from '../../registry/coinTicker.js';
 import { defaultRegistry } from '../../registry/index.js';
 import { OriginIdentity } from './OriginIdentity.jsx';
@@ -80,6 +81,11 @@ function formatReviewDecoded(decoded) {
     if (!decoded) return decoded;
     let summary = String(decoded.summary || '');
     const details = (decoded.details || []).map((detail) => {
+        // An EXPIRATION travels as Unix seconds; the review shows the moment it names.
+        if (String(detail?.label || '') === 'Expiration') {
+            const when = formatUnixSecondsLocal(detail.value);
+            return when ? { ...detail, value: when } : detail;
+        }
         if (!/(^|\s)(amount|quantity)$/i.test(String(detail?.label || ''))) return detail;
         const value = String(detail.value ?? '');
         const formatted = formatDisplayAmount(value);

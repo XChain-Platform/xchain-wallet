@@ -101,6 +101,25 @@ describe('ConfirmActionModal', () => {
         expect(intentSummary.querySelector('[title]')).toHaveAttribute('title', destination);
     });
 
+    it('shows an order expiration as the moment it names, not as Unix seconds', () => {
+        const seconds = '4118400000';
+        render(<ConfirmActionModal {...base({
+            decoded: {
+                summary: 'Create swap on Bitcoin: give 1 AAA for 1 BBB',
+                details: [
+                    { label: 'Give', value: '1 AAA' },
+                    { label: 'Get', value: '1 BBB' },
+                    { label: 'Expiration', value: seconds },
+                ],
+                warnings: [],
+            },
+        })} />);
+
+        const row = screen.getByText('Expiration').closest('div');
+        expect(row.textContent).not.toContain(seconds);
+        expect(row.textContent).toMatch(/2100/);
+    });
+
     it('shows the hardware output caveat only for a hardware signer', () => {
         const { rerender } = render(<ConfirmActionModal {...base()} />);
         expect(screen.queryByText(/A hardware device verifies native outputs/i)).toBeNull();
