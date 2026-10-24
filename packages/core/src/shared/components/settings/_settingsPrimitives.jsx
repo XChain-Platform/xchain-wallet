@@ -109,6 +109,9 @@ export const EMBEDDED_ROW = {
     border: 0,
     borderRadius: 0,
 };
+// With no hint between them, a control that wraps under its label sits one
+// label gap below it, like every other labelled field.
+const HINTLESS_ROW = { rowGap: 'var(--xc-label-gap)' };
 
 /**
  * A settings row that associates one visible label and description with its control.
@@ -129,8 +132,9 @@ export function SettingsFieldRow({ label, hint, children, embedded = false }) {
         'aria-describedby': describedBy,
     });
 
+    const rowStyle = embedded ? EMBEDDED_ROW : ROW_LAYOUT;
     return (
-        <div className={embedded ? undefined : cardStyles.card} style={embedded ? EMBEDDED_ROW : ROW_LAYOUT}>
+        <div className={embedded ? undefined : cardStyles.card} style={hint ? rowStyle : { ...rowStyle, ...HINTLESS_ROW }}>
             <div style={ROW_COPY}>
                 <label htmlFor={controlId} style={ROW_VALUE}>{label}</label>
                 {hint ? <span id={hintId} style={ROW_HINT}>{hint}</span> : null}
