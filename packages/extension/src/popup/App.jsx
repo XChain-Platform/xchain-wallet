@@ -82,7 +82,7 @@ import { ResumeConfirm } from '@xchain-wallet/core/shared/routes/ResumeConfirm.j
 import { CommandPalette } from '@xchain-wallet/core/shared/commandPalette/CommandPalette.jsx';
 import { useCommandPalette } from '@xchain-wallet/core/shared/commandPalette/useCommandPalette.js';
 import { AppHeader } from '@xchain-wallet/core/shared/components/AppHeader.jsx';
-import { buildCommands, contactsToCommands, parseFreeformCommands, balancesToCommands, helpToCommands, settingsSectionsToCommands, sitesToCommands } from '@xchain-wallet/core/shared/commandPalette/commandRegistry.js';
+import { buildCommands, contactsToCommands, parseFreeformCommands, balancesToCommands, helpToCommands, settingsSectionsToCommands, sitesToCommands, hiddenSettingsSectionIds } from '@xchain-wallet/core/shared/commandPalette/commandRegistry.js';
 import { useSettings } from '@xchain-wallet/core/shared/hooks/useSettings.js';
 import { useWalletMode } from '@xchain-wallet/core/shared/hooks/useWalletMode.js';
 import { useDemoAutoWipe } from '@xchain-wallet/core/shared/hooks/useDemoAutoWipe.js';
@@ -896,7 +896,10 @@ function AppInner({ canOpenInTab, titleEnabled }) {
         }),
         ...contactsToCommands(paletteContacts, { navigate: palette.navigate }),
         ...sitesToCommands(paletteSites, { openConnectedSites: () => palette.navigate('connected-sites') }),
-        ...settingsSectionsToCommands({ openSettings: openSettingsSection }),
+        ...settingsSectionsToCommands({
+            openSettings: openSettingsSection,
+            hiddenSettingsSections: hiddenSettingsSectionIds({ settings, compact: true }),
+        }),
         ...helpToCommands({
             openSettings: openSettingsSection,
             openHelp: () => setShortcutHelpOpen(true),

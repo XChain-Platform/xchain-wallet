@@ -16,6 +16,7 @@ import {
     balancesToCommands,
     sitesToCommands,
     settingsSectionsToCommands,
+    hiddenSettingsSectionIds,
     helpToCommands,
     parseFreeformCommands,
     COMMAND_CATEGORIES,
@@ -88,6 +89,25 @@ describe('settingsSectionsToCommands', () => {
         expect(openSettings).toHaveBeenCalledWith('backup');
         // The keyboard section is reachable too.
         expect(cmds.some((c) => c.id === 'settings-keyboard')).toBe(true);
+    });
+});
+
+describe('hidden settings sections', () => {
+    const listed = (ctx) => settingsSectionsToCommands({ openSettings() {}, ...ctx }).map((c) => c.id);
+
+    it('leaves out the sections the Settings screen does not list', () => {
+        expect(listed({ hiddenSettingsSections: ['network-endpoints', 'keyboard'] }))
+            .not.toEqual(expect.arrayContaining(['settings-network-endpoints']));
+        expect(listed({ hiddenSettingsSections: ['network-endpoints', 'keyboard'] }))
+            .not.toContain('settings-keyboard');
+        expect(listed({})).toEqual(expect.arrayContaining(['settings-network-endpoints', 'settings-keyboard']));
+    });
+
+    it('hides Network endpoints once Developer Mode is off and Keyboard in the compact popup', () => {
+        expect(hiddenSettingsSectionIds({ settings: { developerMode: false } })).toEqual(['network-endpoints']);
+        expect(hiddenSettingsSectionIds({ settings: { developerMode: true } })).toEqual([]);
+        expect(hiddenSettingsSectionIds({ settings: null })).toEqual([]);
+        expect(hiddenSettingsSectionIds({ settings: { developerMode: true }, compact: true })).toEqual(['keyboard']);
     });
 });
 

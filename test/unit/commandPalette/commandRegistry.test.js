@@ -270,6 +270,21 @@ describe('buildCommands', () => {
         expect(ids.has('sign-verify')).toBe(true);
     });
 
+    it('drops the create and trade forms from a signer wallet and keeps its signing tools', () => {
+        const commands = buildCommands({
+            navigate() {},
+            hasBtcAddress: true,
+            hasGovernanceAddress: true,
+            isSignerMode: true,
+        });
+        const ids = commands.map((command) => command.id);
+
+        expect(commands.filter((command) => ['Create', 'Trade'].includes(command.category))).toEqual([]);
+        expect(ids).not.toEqual(expect.arrayContaining(['create-mint', 'trade-swap', 'trade-coinpay']));
+        expect(ids).toEqual(expect.arrayContaining(['sign-message', 'sign-psbt', 'sign-verify', 'nav-home']));
+        expect(ids).not.toEqual(expect.arrayContaining(['nav-send']));
+    });
+
     it('keeps create and trade forms browsable for demo wallets but hides signing tools', () => {
         const commands = buildCommands({
             navigate() {},

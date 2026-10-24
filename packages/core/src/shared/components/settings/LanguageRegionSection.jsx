@@ -22,7 +22,7 @@
 //
 // Both fields exist on the v1 Settings schema; no migration needed.
 
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { useSettings } from '../../hooks/useSettings.js';
 import { useBackHandler } from '../../../ui/backStack.js';
 import {
@@ -129,7 +129,27 @@ export function LanguageRegionSection() {
     const [currencyQuery, setCurrencyQuery] = useState('');
     const [currencyError, setCurrencyError] = useState(/** @type {string | null} */ (null));
 
-    useBackHandler(currencyPickerOpen ? () => setCurrencyPickerOpen(false) : undefined);
+    const pickerInputRef = useRef(/** @type {HTMLInputElement | null} */ (null));
+    const skipOpenOnFocusRef = useRef(false);
+
+    // Closing from an option would unmount the focused button and drop focus
+    // to the page, so focus returns to the search field without reopening.
+    const closeCurrencyPicker = () => {
+        const input = pickerInputRef.current;
+        const active = document.activeElement;
+        const focusInList = Boolean(input && active && active !== input && input.parentElement?.contains(active));
+        setCurrencyPickerOpen(false);
+        if (focusInList) {
+            skipOpenOnFocusRef.current = true;
+            input.focus();
+        }
+    };
+
+    const closeCurrencyPickerOnFocusLeave = (e) => {
+        if (!e.currentTarget.contains(e.relatedTarget)) setCurrencyPickerOpen(false);
+    };
+
+    useBackHandler(currencyPickerOpen ? closeCurrencyPicker : undefined);
 
     if (loading) return <Status text={t('common.loading')} />;
     if (error) return <SettingsLoadError error={error} />;
@@ -156,7 +176,7 @@ export function LanguageRegionSection() {
     };
     const onCurrencySelect = async (next) => {
         setCurrencyError(null);
-        setCurrencyPickerOpen(false);
+        closeCurrencyPicker();
         setCurrencyQuery('');
         try { await update({ fiatCurrency: next }); } catch (err) {
             // eslint-disable-next-line no-console
@@ -187,8 +207,10 @@ export function LanguageRegionSection() {
                     <span style={ROW_VALUE}>{t('settings.languageRegion.fiatCurrency')}</span>
                     <span style={ROW_HINT}>{t('settings.languageRegion.showEstimatedWalletValuesIn')}</span>
                 </div>
-                <div data-settings-fill="" style={CONTROLS}>
+                {/* Tabbing out of the field or out of any option closes the list; otherwise it stays open over the rows the focus moved to. */}
+                <div data-settings-fill="" style={CONTROLS} onBlur={closeCurrencyPickerOnFocusLeave}>
                     <input
+                        ref={pickerInputRef}
                         type="search"
                         role="combobox"
                         aria-autocomplete="list"
@@ -202,6 +224,10 @@ export function LanguageRegionSection() {
                             ? currencyQuery
                             : selectedCurrency ? currencyLabel(selectedCurrency) : ''}
                         onFocus={() => {
+                            if (skipOpenOnFocusRef.current) {
+                                skipOpenOnFocusRef.current = false;
+                                return;
+                            }
                             setCurrencyPickerOpen(true);
                             setCurrencyQuery('');
                         }}
@@ -214,11 +240,6 @@ export function LanguageRegionSection() {
                             if (e.key === 'Enter' && filteredCurrencies.length === 1) {
                                 e.preventDefault();
                                 onCurrencySelect(filteredCurrencies[0].code);
-                            }
-                        }}
-                        onBlur={(e) => {
-                            if (!e.currentTarget.parentElement?.contains(e.relatedTarget)) {
-                                setCurrencyPickerOpen(false);
                             }
                         }}
                         style={CURRENCY_INPUT}

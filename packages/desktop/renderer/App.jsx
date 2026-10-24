@@ -149,7 +149,7 @@ import { getSessionStatus, listWallets, lockWallet, listAccounts } from './messa
 import { LeftNav, FullLayoutWithNav } from '@xchain-wallet/core/shared/components/LeftNav.jsx';
 import { CommandPalette } from '@xchain-wallet/core/shared/commandPalette/CommandPalette.jsx';
 import { useCommandPalette } from '@xchain-wallet/core/shared/commandPalette/useCommandPalette.js';
-import { buildCommands, contactsToCommands, parseFreeformCommands, balancesToCommands, sitesToCommands, settingsSectionsToCommands, helpToCommands } from '@xchain-wallet/core/shared/commandPalette/commandRegistry.js';
+import { buildCommands, contactsToCommands, parseFreeformCommands, balancesToCommands, sitesToCommands, settingsSectionsToCommands, helpToCommands, hiddenSettingsSectionIds } from '@xchain-wallet/core/shared/commandPalette/commandRegistry.js';
 import { buildBalanceRows } from '@xchain-wallet/core/shared/components/BalanceList.jsx';
 import { loadDisplayBalances } from '@xchain-wallet/core/shared/utils/displayBalances.js';
 import { useKeyboardShortcuts } from '@xchain-wallet/core/shared/keyboard/useKeyboardShortcuts.js';
@@ -2770,6 +2770,7 @@ function AppInner() {
                 openConnectedSites: () => palette.navigate('connected-sites'),
                 openSettings: openSettingsSection,
                 openHelp: () => setShortcutHelpOpen(true),
+                hiddenSettingsSections: hiddenSettingsSectionIds({ settings }),
             };
             const paletteCommands = [
                 ...buildCommands(paletteCtx),

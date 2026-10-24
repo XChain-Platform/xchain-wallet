@@ -3177,6 +3177,7 @@ function AppInner() {
                                 sites={paletteSites}
                                 navigate={palette.navigate}
                                 parseCtx={paletteParseCtx}
+                                settings={settings}
                             />
                         </Suspense>
                     ) : null}
