@@ -950,7 +950,7 @@ export function MessagingInbox({ walletId, activeAccountId, onCompose, onBack, i
                                                         </Fragment>
                                                     ) : contactsByAddress[c.counterparty]
                                                         ? neutralizeControlText(contactsByAddress[c.counterparty], { maxLength: 255 })
-                                                        : <AddressText address={displayAddress(c.counterparty)} truncate={false} />}
+                                                        : <AddressText address={displayAddress(c.counterparty)} />}
                                                 </span>
                                             </span>
                                             <span className={local.convTime}>

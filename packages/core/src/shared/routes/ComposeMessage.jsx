@@ -279,6 +279,18 @@ function ComposeMessageForm({
         return () => { cancelled = true; };
     }, [messaging]);
 
+    // Read right before the picker shows rows, so a contact edited in another
+    // window cannot leave the picker offering its old address.
+    async function openContactsPicker() {
+        if (typeof messaging.listContacts === 'function') {
+            try {
+                const rows = await messaging.listContacts();
+                setContacts(Array.isArray(rows) ? rows : []);
+            } catch { /* the picker keeps the rows it already has */ }
+        }
+        setContactsPickerOpen(true);
+    }
+
     // The recipient's own chain (the message's COIN / where their key is looked
     // up), derived from the address rather than the delivery network: a message
     // can be addressed to a Bitcoin address yet broadcast over Dogecoin. When
@@ -1061,7 +1073,7 @@ function ComposeMessageForm({
                     setPlaintextConfirmationPending(false);
                     if (submitError) setSubmitError(null);
                 }}
-                onIconClick={() => setContactsPickerOpen(true)}
+                onIconClick={openContactsPicker}
                 placeholder="Recipient address"
                 error={addressError}
             />

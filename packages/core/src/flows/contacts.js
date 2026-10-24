@@ -19,7 +19,7 @@
 // on the extension's local storage for the popup, browser-backed
 // IndexedDB wrapper for the web shell, etc.).
 
-import { createContact, validateContact } from '../schemas/contact.js';
+import { cleanContactName, createContact, validateContact } from '../schemas/contact.js';
 
 const contactMutationTails = new WeakMap();
 
@@ -94,6 +94,7 @@ export async function saveContact({ vault, record, input, replaceIds = [], expec
         } else if (input) {
             rec = createContact(input);
         }
+        rec = { ...rec, name: cleanContactName(rec.name) };
         const validation = validateContact(rec);
         if (!validation.ok) {
             throw new Error(`saveContact: invalid contact: ${validation.errors.join('; ')}`);
@@ -128,7 +129,7 @@ export async function saveContact({ vault, record, input, replaceIds = [], expec
 }
 
 function normalizedName(name) {
-    return String(name || '').trim().toLowerCase();
+    return cleanContactName(name).toLowerCase();
 }
 
 function normalizedEntryKey(entry) {
