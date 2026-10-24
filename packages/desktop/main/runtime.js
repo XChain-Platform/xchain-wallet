@@ -828,6 +828,12 @@ export async function handleIpcMessage(runtime, message) {
                     }
                 },
             });
+            // A locked wallet whose KDF metadata cannot be read can never unlock:
+            // reading it here sends the renderer to the damaged-vault screen
+            // (VaultCorruptError) instead of a password prompt that always fails.
+            if (message.type === 'session.status' && result.hasWallet && !result.hasSession) {
+                await runtime.metaBackend.load();
+            }
             if (message.type === 'session.status' && runtime.autoLockCleanupPending) {
                 return {
                     ok: true,
