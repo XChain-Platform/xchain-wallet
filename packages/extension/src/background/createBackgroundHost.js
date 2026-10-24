@@ -995,7 +995,7 @@ function toSafeWallet(w) {
  * @param {import('./MessageHost.js').MessageHostDeps & {
  *   approvals?: import('../bridge/Approvals.js').Approvals,
  *   getDiagnosticContext?: DiagnosticContext,
- *   surfaceStateEvents?: { publish: (kind: 'wallet' | 'network', payload: Record<string, unknown>) => Promise<unknown> | unknown },
+ *   surfaceStateEvents?: { publish: (kind: 'wallet' | 'wallets' | 'accounts' | 'network', payload: Record<string, unknown>) => Promise<unknown> | unknown },
  * }} deps
  * @returns {MessageHost}
  */
@@ -1469,6 +1469,7 @@ export function createBackgroundHost(deps) {
 
     host.register('wallet.rename', async (req, { vault }) => {
         const updated = await renameWallet({ ...req, vault });
+        await publishSurfaceState('wallets', { change: 'renamed', walletId: updated.id });
         return { wallet: toSafeWallet(updated) };
     });
 
@@ -1478,6 +1479,11 @@ export function createBackgroundHost(deps) {
         if (previous?.name !== updated.name) {
             await announceAccountChange(vault, bridgeEvents, [updated.id]);
         }
+        await publishSurfaceState('accounts', {
+            change: 'renamed',
+            walletId: updated.walletId,
+            accountId: updated.id,
+        });
         return { account: updated };
     });
 
@@ -1523,6 +1529,11 @@ export function createBackgroundHost(deps) {
             sdkRegistry,
         });
         await announceAccountChange(vault, bridgeEvents, [r.account.id]);
+        await publishSurfaceState('accounts', {
+            change: 'added',
+            walletId: r.account.walletId,
+            accountId: r.account.id,
+        });
         return { account: r.account, addresses: r.addresses };
     });
 
@@ -2199,6 +2210,7 @@ export function createBackgroundHost(deps) {
         // blob and rehydrate into every later boot, and no route can list them
         // again because the banner only ever asks for the active wallet.
         await pruneWalletFromQueue(walletId);
+        await publishSurfaceState('wallets', { change: 'removed', walletId });
         const removedAccountIds = new Set(removedAccounts.map((account) => account.id));
         const affectedOrigins = new Set(sitesBefore
             .filter((site) => {
@@ -2279,8 +2291,15 @@ export function createBackgroundHost(deps) {
         if (isOriginBlocked(settings?.blockedOrigins, site.origin)) {
             throw new Error('sites.restore: origin is blocked');
         }
+        // The site may have reconnected after the disconnect. Its new grant is
+        // the one the user last chose, and a second record for the origin would
+        // leave two grants with the bridge reading whichever comes back first.
+        const existing = await vault.connectedSites.findBy('origin', site.origin);
+        if (existing.some((candidate) => candidate.id !== site.id)) {
+            return { ok: true, restored: false };
+        }
         await vault.connectedSites.put(site);
-        return { ok: true };
+        return { ok: true, restored: true };
     });
 
     // §12 / G009: origin blocklist. listBlockedOrigins reads from

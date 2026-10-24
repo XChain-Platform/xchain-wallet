@@ -54,7 +54,7 @@ import { serializeError } from './MessageHost.js';
  *        callback so the backstop does not lock an active request. onWebSender
  *        fires once per accepted `bridge.*` message from a web page, carrying
  *        the browser's own reading of which tab and which origin it came from.
- * @returns {() => void}                                                       detach fn
+ * @returns {(() => void) & { listener: Function }}                            detach fn, carrying the attached listener
  */
 export function attachChromeRuntime(host, chromeRuntime, opts = {}) {
     const runtime =
@@ -181,7 +181,10 @@ export function attachChromeRuntime(host, chromeRuntime, opts = {}) {
     };
 
     runtime.onMessage.addListener(listener);
-    return () => runtime.onMessage.removeListener(listener);
+    const detach = () => runtime.onMessage.removeListener(listener);
+    // The boot gate hands a message it held back to this listener once a host exists.
+    detach.listener = listener;
+    return detach;
 }
 
 /**

@@ -40,6 +40,7 @@ function surface() {
     const calls = {
         refreshSession: vi.fn(),
         selectWallet: vi.fn(),
+        refreshWallets: vi.fn(),
         settingsChanged: vi.fn(),
         remountNetworkState: vi.fn(),
     };
@@ -75,6 +76,7 @@ describe('extension popup and side-panel state synchronization', () => {
         for (const openSurface of [popup, sidePanel]) {
             expect(openSurface.calls.refreshSession).toHaveBeenCalledTimes(1);
             expect(openSurface.calls.selectWallet).toHaveBeenCalledWith('wallet-two');
+            expect(openSurface.calls.refreshWallets).toHaveBeenCalledTimes(1);
             expect(openSurface.calls.settingsChanged).toHaveBeenCalledTimes(2);
             expect(openSurface.calls.settingsChanged).toHaveBeenCalledWith(settings);
             expect(openSurface.calls.remountNetworkState).toHaveBeenCalledTimes(1);

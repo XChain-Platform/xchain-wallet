@@ -71,7 +71,7 @@ import { RenameWalletForm } from '@xchain-wallet/core/shared/routes/RenameWallet
 import { RenameAccountForm } from '@xchain-wallet/core/shared/routes/RenameAccountForm.jsx';
 import { clearActiveAccount, writeActiveAccount } from '@xchain-wallet/core/shared/utils/activeAccountMemory.js';
 import { reconcileActiveAccount } from '@xchain-wallet/core/shared/utils/activeAccountScope.js';
-import { readActiveWallet, writeActiveWallet } from '@xchain-wallet/core/shared/utils/activeWalletMemory.js';
+import { clearActiveWallet, readActiveWallet, writeActiveWallet } from '@xchain-wallet/core/shared/utils/activeWalletMemory.js';
 import { takePostDemoIntent } from '@xchain-wallet/core/shared/utils/demoGraduation.js';
 import { historyScopeForAsset } from '@xchain-wallet/core/shared/utils/historyEntryScope.js';
 import { defaultDexAssetForNetwork, syncDexAssetToNetwork } from '@xchain-wallet/core/shared/chainSelection.js';
@@ -637,9 +637,48 @@ function AppInner({ canOpenInTab, titleEnabled }) {
         return () => { refreshRequestId.current += 1; };
     }, [refresh]);
 
+    // The listener below outlives renders, so it reads what this surface is
+    // showing through a ref.
+    const shownWalletIds = useRef(/** @type {Array<string | null | undefined>} */ ([]));
+    shownWalletIds.current = [activeWalletId, walletDetailsId, walletRenameTarget?.id];
+    const shownWalletId = useRef(/** @type {string | null} */ (null));
+    shownWalletId.current = activeWalletId;
+
     useEffect(() => attachSurfaceStateListener((event) => {
         applySurfaceStateEvent(event, {
             refreshSession: refresh,
+            refreshWallets: () => {
+                listWallets()
+                    .then((list) => { if (Array.isArray(list) && list.length) setWallets(list); })
+                    .catch(() => { /* the next session refresh reloads the list */ });
+            },
+            // A wallet removed in another surface must not stay open here:
+            // the session reload picks the stored wallet if it survives, the
+            // first remaining wallet otherwise, and Welcome when none remain.
+            walletRemoved: (walletId) => {
+                if (readActiveWallet() === walletId) clearActiveWallet();
+                if (shownWalletIds.current.includes(walletId)) {
+                    refresh();
+                    return;
+                }
+                listWallets()
+                    .then((list) => { if (Array.isArray(list) && list.length) setWallets(list); })
+                    .catch(() => { /* the next session refresh reloads the list */ });
+                setSurfaceStateRevision((value) => value + 1);
+            },
+            // An account added or renamed in another surface: re-pick the
+            // active account from the fresh list and reload the open screen.
+            accountsChanged: (walletId) => {
+                if (shownWalletId.current !== walletId) return;
+                listAccounts(walletId)
+                    .then((list) => {
+                        if (shownWalletId.current !== walletId) return;
+                        const sorted = Array.isArray(list) ? [...list].sort((a, b) => a.index - b.index) : [];
+                        setActiveAccountId(reconcileActiveAccount(walletId, sorted));
+                        setSurfaceStateRevision((value) => value + 1);
+                    })
+                    .catch(() => { /* the next wallet switch reloads the accounts */ });
+            },
             selectWallet: (walletId) => {
                 writeActiveWallet(walletId);
                 setActiveWalletId(walletId);
@@ -651,6 +690,8 @@ function AppInner({ canOpenInTab, titleEnabled }) {
             },
             // Chain-scoped routes load from the active network when they mount.
             remountNetworkState: () => setSurfaceStateRevision((value) => value + 1),
+            // Screens that load wallet or account rows on mount read them again.
+            remountScreens: () => setSurfaceStateRevision((value) => value + 1),
         });
     }), [refresh]);
 
