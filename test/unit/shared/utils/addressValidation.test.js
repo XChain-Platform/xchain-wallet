@@ -342,3 +342,28 @@ describe('addressValidationError for a payment link in an address field', () => 
         expect(addressValidationError('bc1qnotanaddress', btc)).toMatch(/typo/);
     });
 });
+
+// Base58 decoding is quadratic in its input, so a pasted blob of tens of
+// thousands of characters would take minutes to refuse; every validator turns
+// a string longer than any address encoding away before it decodes anything.
+describe('strings far longer than any address', () => {
+    const blob = 'x'.repeat(30_000);
+
+    it('are refused without decoding them', () => {
+        const started = performance.now();
+        expect(isValidAddressForChain(blob, 'bitcoin', 'mainnet')).toBe(false);
+        expect(isValidAddressAnyNetwork(blob)).toBe(false);
+        expect(detectAddressChain(blob)).toBeNull();
+        expect(detectAddressCoin(blob)).toBeNull();
+        expect(addressValidationError(blob, { coin: 'bitcoin', networkKind: 'mainnet' }))
+            .toBe('This is not a valid address.');
+        expect(performance.now() - started).toBeLessThan(1000);
+    });
+
+    it('keep accepting the longest real address', () => {
+        const words = bech32.toWords(new Uint8Array(32));
+        const taproot = bech32.encode('bc', [0, ...words], 90);
+        expect(taproot.length).toBeLessThanOrEqual(90);
+        expect(isValidAddressForChain(taproot, 'bitcoin', 'mainnet')).toBe(true);
+    });
+});

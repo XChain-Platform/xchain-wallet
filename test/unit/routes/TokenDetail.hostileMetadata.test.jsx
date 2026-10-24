@@ -122,7 +122,7 @@ describe('TokenDetail issuer metadata', () => {
 });
 
 describe('TokenDetail when token information cannot be read', () => {
-    it('ends the loading state and says the information is unavailable', async () => {
+    it('ends the loading state with one notice that the details could not be loaded', async () => {
         const messaging = {
             getSettings: vi.fn().mockResolvedValue({ walletMode: 'full' }),
             getTokenInfo: vi.fn().mockRejectedValue(new Error('offline')),
@@ -136,7 +136,8 @@ describe('TokenDetail when token information cannot be read', () => {
                 <TokenDetail walletId="w1" chainId={CHAIN} tick="OFFLINE" kind="token" quantity="1" onBack={() => {}} />
             </MessagingProvider>,
         );
-        expect(await screen.findByText('Token information is unavailable')).toBeTruthy();
+        expect(await screen.findAllByText('Token details could not be loaded from the explorer. Try again in a moment.')).toHaveLength(1);
+        expect(screen.queryByText('No additional information')).toBeNull();
         expect(document.querySelector('[aria-busy="true"]')).toBeNull();
     });
 });

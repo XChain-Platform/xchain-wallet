@@ -242,7 +242,7 @@ describe('TokenWizard guided flow', () => {
         fireEvent.submit(screen.getByRole('form', { name: 'Token details' }));
 
         expect(await screen.findByRole('alert'))
-            .toHaveTextContent('Supply cannot exceed 1000000000000000000000.');
+            .toHaveTextContent('Supply cannot be more than 1,000,000,000,000,000,000,000.');
         expect(screen.queryByText('Step 4 of 4: Review')).toBeNull();
         expect(messaging.composeForConfirm).not.toHaveBeenCalled();
     });
@@ -260,7 +260,7 @@ describe('TokenWizard guided flow', () => {
         fireEvent.submit(screen.getByRole('form', { name: 'Token details' }));
 
         expect(await screen.findByRole('alert'))
-            .toHaveTextContent('Description cannot be longer than 250 characters.');
+            .toHaveTextContent('Description cannot be longer than 249 characters.');
         expect(messaging.composeForConfirm).not.toHaveBeenCalled();
     });
 
@@ -324,7 +324,7 @@ describe('TokenWizard guided flow', () => {
     it.each([
         ['javascript:alert(1)', 'Image URL must use http, https, ipfs, or ar.'],
         ['data:image/svg+xml,<svg></svg>', 'Image URL must use http, https, ipfs, or ar.'],
-        [`https://example.test/${'x'.repeat(300)}`, 'Image URL cannot be longer than 250 characters.'],
+        [`https://example.test/${'x'.repeat(300)}`, 'Image URL cannot be longer than 249 characters.'],
     ])(
         'rejects an unsafe or oversized collectible image URL: %s',
         async (url, message) => {

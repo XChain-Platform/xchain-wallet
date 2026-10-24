@@ -84,3 +84,16 @@ describe('classifyRecipients edge cases', () => {
         expect(out.wrongNetwork).toEqual([BTC_REGTEST]);
     });
 });
+
+// One pasted token with no separators costs minutes unless it is refused first:
+// the validators decode it as base58 once per coin and network, and that decode
+// is quadratic.
+describe('classifyRecipients on a very long single entry', () => {
+    it('drops it as invalid in well under a second', () => {
+        const started = performance.now();
+        const result = classifyRecipients(['x'.repeat(30_000)], { coin: 'bitcoin', networkKind: 'mainnet' });
+        expect(result.valid).toEqual([]);
+        expect(result.invalid).toHaveLength(1);
+        expect(performance.now() - started).toBeLessThan(1000);
+    });
+});

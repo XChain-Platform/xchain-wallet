@@ -55,8 +55,9 @@ import { NATIVE_FEE_WARNING } from '../../sdk/nativeFeePreflight.js';
 import { submitFailureMessage } from '../utils/submitFailureMessage.js';
 import { TICKER_HINT, tickerGrammarError } from '../utils/tickerGrammar.js';
 import {
+    MAX_ISSUE_TEXT_LENGTH,
+    issueDescriptionError,
     issueSupplyLimitError,
-    issueTextLengthError,
 } from '../utils/issueFieldValidation.js';
 import { actionTextSafetyError } from '../utils/actionTextSafety.js';
 import { isValidAddressForChain } from '../utils/addressValidation.js';
@@ -451,6 +452,10 @@ export function IssueTokenForm({ walletId, onBack }) {
         if (lockSupply) {
             p.LOCK_MAX_SUPPLY = '1';
             p.LOCK_MINT = '1';
+            // The issuer's own MINT_SUPPLY is a third inflation path that
+            // LOCK_MINT does not close; the wizard's meme and collectible
+            // templates write it for the same reason.
+            p.LOCK_MINT_SUPPLY = '1';
         }
         if (transferTo.trim()) p.TRANSFER = transferTo.trim();
         // Only meaningful beside a MINT_SUPPLY: with nothing minted at issuance
@@ -497,7 +502,8 @@ export function IssueTokenForm({ walletId, onBack }) {
             setFormError(tickerError);
             return;
         }
-        const descriptionError = actionTextSafetyError(description, 'Description');
+        const descriptionError = actionTextSafetyError(description, 'Description')
+            || issueDescriptionError(description);
         if (descriptionError) {
             setFormError(descriptionError);
             return;
@@ -571,11 +577,6 @@ export function IssueTokenForm({ walletId, onBack }) {
                     : 'Max mint per transaction must be a whole number for an indivisible token.');
                 return;
             }
-        }
-        const descriptionLengthError = issueTextLengthError(description, 'Description');
-        if (descriptionLengthError) {
-            setFormError(descriptionLengthError);
-            return;
         }
         if (transferTo.trim() && !isValidIssueAddress(transferTo, descriptor)) {
             setFormError('Transfer ownership address is not valid for the active network.');
@@ -1077,7 +1078,7 @@ export function IssueTokenForm({ walletId, onBack }) {
                 value={description}
                 onChange={(e) => setDescription(e.target.value)}
                 autoComplete="off"
-                maxLength={250}
+                maxLength={MAX_ISSUE_TEXT_LENGTH}
             />
             <Switch
                 label={t('issue.lockSupply')}

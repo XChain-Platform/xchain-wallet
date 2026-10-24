@@ -80,6 +80,12 @@ export function useTokenInfo({ chainId, tick, skip = false, demo = false }) {
             .then(() => messaging.getTokenInfo({ chainId, tick, demo }))
             .then((next) => {
                 if (cancelled) return;
+                // A failed read is never cached, so the next open asks again, and
+                // it never replaces an owner this hook already resolved.
+                if (next?.loadError) {
+                    setInfo((prev) => (prev?.creator && revision === 0 ? prev : next));
+                    return;
+                }
                 writeTokenInfoCache(key, next);
                 setInfo(next);
             })
@@ -113,7 +119,7 @@ export function fetchTokenInfo(messaging, chainId, tick, opts = {}) {
     return Promise.resolve()
         .then(() => messaging.getTokenInfo({ chainId, tick, demo }))
         .then((next) => {
-            writeTokenInfoCache(key, next);
+            if (!next?.loadError) writeTokenInfoCache(key, next);
             return next;
         })
         .catch(() => null);

@@ -89,7 +89,7 @@ describe('TokenAdminForm review interaction safety', () => {
         fireEvent.click(preview);
 
         expect(await screen.findByRole('alert'))
-            .toHaveTextContent('Description cannot be longer than 250 characters.');
+            .toHaveTextContent('Description cannot be longer than 249 characters.');
         expect(buildActionPsbtRequest).not.toHaveBeenCalled();
     });
 

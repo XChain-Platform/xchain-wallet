@@ -22,7 +22,7 @@ async function openManagedToken(page) {
     await expect(page.getByRole('heading', { name: 'Manage token' })).toBeVisible();
 }
 
-for (const width of [360, 412]) {
+for (const width of [320, 360, 412]) {
     test(`every Manage token tab fits at ${width}px`, async ({ page }) => {
         await page.setViewportSize({ width, height: 800 });
         await createWallet(page);

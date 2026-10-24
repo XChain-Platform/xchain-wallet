@@ -51,12 +51,14 @@ import { pickDefaultChainId } from '../chainSelection.js';
 import { submitFailureMessage } from '../utils/submitFailureMessage.js';
 import { tickerReferenceError } from '../utils/tickerGrammar.js';
 import {
+    MAX_ISSUE_TEXT_LENGTH,
+    issueDescriptionError,
     issueSupplyLimitError,
-    issueTextLengthError,
 } from '../utils/issueFieldValidation.js';
 import { QueuedResultPanel } from '../components/QueuedResultPanel.jsx';
 import { currentListMemberCount } from '../../flows/listMembership.js';
-import { compareDecimalStrings, tokenAmountPrecisionError } from '../utils/amountFormat.js';
+import { compareDecimalStrings, formatWithThousands, tokenAmountPrecisionError } from '../utils/amountFormat.js';
+import { mintHeadroom, exceedsHeadroom } from '../utils/mintHeadroom.js';
 import { sharedBlockPickState } from '../utils/sharedBlockPick.js';
 import { listLabel } from '../utils/listLabel.js';
 import { actionTextSafetyError } from '../utils/actionTextSafety.js';
@@ -697,7 +699,7 @@ export function TokenAdminForm({ walletId, mode, onBack, initialChainId, initial
         }
         if (mode === 'description') {
             const descriptionError = actionTextSafetyError(description, 'Description')
-                || issueTextLengthError(description, 'Description');
+                || issueDescriptionError(description);
             if (descriptionError) {
                 setFormError(descriptionError);
                 return;
@@ -709,7 +711,9 @@ export function TokenAdminForm({ walletId, mode, onBack, initialChainId, initial
                 return;
             }
             if (transferToError) {
-                setFormError(transferToError);
+                // The field already shows the reason under itself; the banner
+                // names the field once instead of saying it again.
+                setFormError('Fix the New owner address below.');
                 return;
             }
         }
@@ -755,6 +759,16 @@ export function TokenAdminForm({ walletId, mode, onBack, initialChainId, initial
                     setFormError(amountLimitError);
                     return;
                 }
+            }
+            // Mint-now creates supply in this transaction, so it is bounded by what is
+            // left under the cap exactly as a MINT is; the indexer refuses an excess after the fee is spent.
+            const supplyRoom = mintHeadroom({
+                maxSupply: currentAssetInfo?.maxSupply ?? null,
+                totalSupply: currentAssetInfo?.totalSupply ?? null,
+            });
+            if (mintSupply && exceedsHeadroom(mintSupply, supplyRoom)) {
+                setFormError(`Only ${formatWithThousands(supplyRoom)} ${ticker.trim().toUpperCase()} can still be minted.`);
+                return;
             }
             if (mintStartBlock && !/^\d+$/.test(mintStartBlock.trim())) {
                 setFormError('Minting start must be a whole block number.');
@@ -1383,12 +1397,12 @@ export function TokenAdminForm({ walletId, mode, onBack, initialChainId, initial
             {mode === 'description' ? (
                 <Input
                     label="New description"
-                    hint="Up to 250 characters. Stored on-chain and replaces the current one."
+                    hint={`Up to ${MAX_ISSUE_TEXT_LENGTH} characters. Stored on-chain and replaces the current one.`}
                     value={description}
                     onChange={(e) => setDescription(e.target.value)}
                     disabled={descriptionLocked}
                     autoComplete="off"
-                    maxLength={250}
+                    maxLength={MAX_ISSUE_TEXT_LENGTH}
                 />
             ) : null}
 

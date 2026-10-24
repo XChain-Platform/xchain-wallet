@@ -189,20 +189,24 @@ function TokenDetailContent({
         ? normalizedDivisibility(divisibility)
         : normalizedDivisibility(assetInfo?.divisibility) ?? normalizedDivisibility(divisibility);
     const [tokenMissing, setTokenMissing] = useState(false);
-    // A failed metadata read ends the loading state; the About tab says so.
-    const [infoFailed, setInfoFailed] = useState(false);
+    const [readFailed, setReadFailed] = useState(false);
     useEffect(() => {
         setTokenMissing(false);
-        setInfoFailed(false);
+        setReadFailed(false);
         if (isNative || isDemo || typeof messaging.getTokenInfo !== 'function') return undefined;
         let cancelled = false;
         callAsync(() => messaging.getTokenInfo({ chainId, tick }))
-            .then((info) => { if (!cancelled) setTokenMissing(info == null); })
-            // A read failure is not proof that the token is gone.
-            .catch(() => { if (!cancelled) setInfoFailed(true); });
+            .then((info) => {
+                if (cancelled) return;
+                setTokenMissing(info == null);
+                setReadFailed(info?.loadError === true);
+            })
+            // A read failure is not proof that the token is gone; it is a notice.
+            .catch(() => { if (!cancelled) setReadFailed(true); });
         return () => { cancelled = true; };
     }, [messaging, chainId, tick, isNative, isDemo]);
-    const metadataLoading = !isNative && !assetInfo && !tokenMissing && !infoFailed;
+    const loadFailed = !isNative && (readFailed || assetInfo?.loadError === true);
+    const metadataLoading = !isNative && !assetInfo && !tokenMissing && !readFailed;
 
     // A holder who is also the issuer gets a way back to the admin
     // surface: without this, ManageToken was reachable only via Menu ->
@@ -508,6 +512,11 @@ function TokenDetailContent({
     return (
         <Screen variant={variant} header={header}>
             <ListPage>
+                {loadFailed ? (
+                    <StatusMessage variant="error">
+                        Token details could not be loaded from the explorer. Try again in a moment.
+                    </StatusMessage>
+                ) : null}
                 {/* Token balance hero: gradient block, same style as
                     Home's TotalBalanceHero. Top row carries the label,
                     a swap button for flipping tick ↔ fiat as primary,
@@ -787,10 +796,10 @@ function TokenDetailContent({
                             {activeTab === 'about' ? (
                                 <InfoPanel
                                     isNative={isNative}
-                                    infoFailed={infoFailed}
                                     assetInfo={assetInfo}
                                     hasDescription={hasDescription}
                                     loading={metadataLoading}
+                                    loadFailed={loadFailed}
                                 />
                             ) : null}
 
@@ -1344,7 +1353,7 @@ function DetailRow({ label, children }) {
 // PGP signature) so a token's published metadata renders in one place.
 // When the token has no TIS document the panel renders an empty-state
 // hint so the tab still has something to land on.
-function InfoPanel({ isNative, infoFailed, assetInfo, hasDescription, loading }) {
+function InfoPanel({ isNative, assetInfo, hasDescription, loading, loadFailed = false }) {
     if (isNative) {
         return (
             <EmptyState
@@ -1361,15 +1370,9 @@ function InfoPanel({ isNative, infoFailed, assetInfo, hasDescription, loading })
             </div>
         );
     }
-    if (!assetInfo && infoFailed) {
-        return (
-            <EmptyState
-                title="Token information is unavailable"
-                body="Check the connection, then open this token again."
-                titleAs="p"
-            />
-        );
-    }
+    // The page-level notice already says the read failed; an empty-state here
+    // would claim the issuer published nothing.
+    if (loadFailed && (!assetInfo || assetInfo.loadError)) return null;
     if (!assetInfo) {
         return (
             <EmptyState

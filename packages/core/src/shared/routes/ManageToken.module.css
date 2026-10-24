@@ -306,6 +306,15 @@
     }
 }
 
+/* Under 360px the five labels at the base size run 7px past a 320px strip, so the
+   last tab is cut off until the strip is scrolled. The smaller size keeps all five
+   in view; larger text sizes still scroll the strip. */
+@media not all and (min-width: 360px) {
+    .tab {
+        font-size: var(--xc-text-xs);
+    }
+}
+
 .tabPanel {
     display: flex;
     flex-direction: column;

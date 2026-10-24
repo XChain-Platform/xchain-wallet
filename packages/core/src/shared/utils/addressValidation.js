@@ -22,6 +22,11 @@ import { sha256 } from '@noble/hashes/sha2';
 import { isDevMockAddress } from '../../sdk/devMockAddresses.js';
 
 const bsc = base58check(sha256);
+// The BIP173 cap, and the longest string any supported address encoding can take
+// (base58check addresses are at most 35 characters). Base58 decoding is quadratic
+// in its input, so a pasted blob well past this length would otherwise freeze the
+// page for minutes before being refused.
+const MAX_ADDRESS_LENGTH = 90;
 const COIN_DISPLAY = { bitcoin: 'Bitcoin', litecoin: 'Litecoin', dogecoin: 'Dogecoin' };
 
 // Address version bytes (P2PKH / P2SH) + segwit prefix (HRP) per coin and
@@ -85,6 +90,7 @@ function isSegwitAddress(lower, hrp) {
 // True when `address` is well-formed for one specific coin+network's params.
 function matchesParams(address, params) {
     if (!params) return false;
+    if (address.length > MAX_ADDRESS_LENGTH) return false;
     // Segwit (bech32 / bech32m) when the coin has an HRP and the address looks
     // like a bech32 string for this network.
     if (params.hrp && address.toLowerCase().startsWith(`${params.hrp}1`)) {
@@ -154,7 +160,7 @@ export function detectAddressCoin(address) {
  */
 export function detectAddressChain(address) {
     const a = String(address || '').trim();
-    if (!a) return null;
+    if (!a || a.length > MAX_ADDRESS_LENGTH) return null;
     const lower = a.toLowerCase();
     for (const coin of Object.keys(ADDRESS_PARAMS)) {
         for (const network of Object.keys(ADDRESS_PARAMS[coin])) {

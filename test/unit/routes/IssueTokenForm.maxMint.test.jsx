@@ -132,7 +132,7 @@ describe('IssueTokenForm max mint per transaction', () => {
         await submit();
 
         expect(await screen.findByRole('alert'))
-            .toHaveTextContent('Supply cannot exceed 1000000000000000000000.');
+            .toHaveTextContent('Supply cannot be more than 1,000,000,000,000,000,000,000.');
         expect(composeForConfirm).not.toHaveBeenCalled();
     });
 
@@ -145,7 +145,7 @@ describe('IssueTokenForm max mint per transaction', () => {
         await submit();
 
         expect(await screen.findByRole('alert'))
-            .toHaveTextContent('Description cannot be longer than 250 characters.');
+            .toHaveTextContent('Description cannot be longer than 249 characters.');
         expect(composeForConfirm).not.toHaveBeenCalled();
     });
 });

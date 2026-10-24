@@ -19,13 +19,13 @@ describe('issue field validation', () => {
 
     it('rejects the smallest divisible value above the supply maximum', () => {
         expect(issueSupplyLimitError(`${MAX_TOKEN_SUPPLY}.00000001`))
-            .toBe(`Supply cannot exceed ${MAX_TOKEN_SUPPLY}.`);
+            .toBe('Supply cannot be more than 1,000,000,000,000,000,000,000.');
     });
 
     it('checks text length after trimming surrounding whitespace', () => {
-        expect(issueTextLengthError('x'.repeat(250), 'Description')).toBeNull();
-        expect(issueTextLengthError(`  ${'x'.repeat(251)}  `, 'Description'))
-            .toBe('Description cannot be longer than 250 characters.');
+        expect(issueTextLengthError('x'.repeat(249), 'Description')).toBeNull();
+        expect(issueTextLengthError(`  ${'x'.repeat(250)}  `, 'Description'))
+            .toBe('Description cannot be longer than 249 characters.');
     });
 
     it.each([

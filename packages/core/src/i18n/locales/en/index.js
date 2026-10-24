@@ -557,7 +557,7 @@ export const en = {
     'issue.maxMintHint': 'Caps how much can be minted in one transaction. Leave blank for no limit.',
     'issue.divisible': 'Divisible (8 decimal places)',
     'issue.descriptionOptional': 'Description (optional)',
-    'issue.descriptionHint': 'Up to 250 characters. Stored on-chain.',
+    'issue.descriptionHint': 'Up to 249 characters. Stored on-chain.',
     'issue.lockSupply': 'Lock supply + minting (irreversible)',
     'issue.lockSupplyWarning':
         'Locking minting means the {amount} left under the cap can never be minted. Clear this box to mint it later.',

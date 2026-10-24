@@ -132,6 +132,19 @@ describe('TokenAdminForm mint setting validation', () => {
         expect(composeForConfirm).not.toHaveBeenCalled();
     });
 
+    it('refuses a mint-now amount above the supply left under the cap', async () => {
+        const composeForConfirm = mountMintSettings(Promise.resolve({
+            ...TOKEN_INFO, maxSupply: '1000', totalSupply: '400',
+        }));
+        fireEvent.change(await screen.findByLabelText('Mint supply now (optional)'), {
+            target: { value: '700' },
+        });
+        await submitWhenEnabled();
+
+        expect(await screen.findByRole('alert')).toHaveTextContent('Only 600 MINTABLE can still be minted.');
+        expect(composeForConfirm).not.toHaveBeenCalled();
+    });
+
     it('checks the new-supply destination against the selected chain', async () => {
         const composeForConfirm = mountMintSettings();
         fireEvent.change(await screen.findByLabelText('Mint supply now (optional)'), {
