@@ -85,18 +85,18 @@ describe('operator and oracle dashboard audit', () => {
         const messaging = operatorMessaging();
         mount(OperatorDashboard, messaging, { chainId: CHAIN, address: ADDRESS.address });
 
-        expect(await screen.findByText('Total amount staked: 12.5 XCP')).toBeTruthy();
+        expect(await screen.findByText('Total amount staked: 12.5 XCHAIN')).toBeTruthy();
         expect(screen.getByText(/Validator score: 98/)).toBeTruthy();
         expect(screen.getByText(/Votes recorded: 22/)).toBeTruthy();
         expect(screen.getByText(/Missed validations: 1/)).toBeTruthy();
         expect(screen.getByText('Unclaimed rewards:').closest('p'))
-            .toHaveTextContent('Unclaimed rewards: 2 XCP; Total rewards earned: 3 XCP');
+            .toHaveTextContent('Unclaimed rewards: 2 XCHAIN; Total rewards earned: 3 XCHAIN');
         expect(screen.getByText(/Format version: 2/)).toHaveTextContent('published value: 42000; published at block: 107');
 
         fireEvent.click(screen.getByRole('button', { name: 'Refresh metrics' }));
         expect(await screen.findByText("Couldn't load staking status.")).toBeTruthy();
         expect(screen.queryByText(/Cannot read properties/)).toBeNull();
-        expect(screen.getByText('Total amount staked: 12.5 XCP')).toBeTruthy();
+        expect(screen.getByText('Total amount staked: 12.5 XCHAIN')).toBeTruthy();
     });
 
     it('shows one error naming every section that failed, and one Try again reloads them all', async () => {

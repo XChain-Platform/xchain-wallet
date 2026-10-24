@@ -2211,6 +2211,7 @@ function AppInner() {
                         mode="unstake"
                         walletId={activeWalletId}
                         chainId={stakingRef.chainId}
+                        initialFromAddress={stakingRef.address || undefined}
                         onBack={() => setUnlockedView('stake-detail')}
                     />
                 );
@@ -2221,6 +2222,7 @@ function AppInner() {
                         mode="claim-rewards"
                         walletId={activeWalletId}
                         chainId={stakingRef.chainId}
+                        initialFromAddress={stakingRef.address || undefined}
                         onBack={() => setUnlockedView('stake-detail')}
                     />
                 );
@@ -2231,6 +2233,7 @@ function AppInner() {
                         mode="delegate"
                         walletId={activeWalletId}
                         chainId={stakingRef.chainId}
+                        initialFromAddress={stakingRef.address || undefined}
                         onBack={() => setUnlockedView('stake-detail')}
                     />
                 );
@@ -2241,6 +2244,7 @@ function AppInner() {
                         mode="revoke"
                         walletId={activeWalletId}
                         chainId={stakingRef.chainId}
+                        initialFromAddress={stakingRef.address || undefined}
                         onBack={() => setUnlockedView('stake-detail')}
                     />
                 );

@@ -2349,6 +2349,7 @@ function AppInner({ canOpenInTab, titleEnabled }) {
                         mode="unstake"
                         walletId={activeWalletId}
                         chainId={stakingRef.chainId}
+                        initialFromAddress={stakingRef.address || undefined}
                         onBack={() => setUnlockedView('stake-detail')}
                     />
                 );
@@ -2359,6 +2360,7 @@ function AppInner({ canOpenInTab, titleEnabled }) {
                         mode="claim-rewards"
                         walletId={activeWalletId}
                         chainId={stakingRef.chainId}
+                        initialFromAddress={stakingRef.address || undefined}
                         onBack={() => setUnlockedView('stake-detail')}
                     />
                 );
@@ -2369,6 +2371,7 @@ function AppInner({ canOpenInTab, titleEnabled }) {
                         mode="delegate"
                         walletId={activeWalletId}
                         chainId={stakingRef.chainId}
+                        initialFromAddress={stakingRef.address || undefined}
                         onBack={() => setUnlockedView('stake-detail')}
                     />
                 );
@@ -2379,6 +2382,7 @@ function AppInner({ canOpenInTab, titleEnabled }) {
                         mode="revoke"
                         walletId={activeWalletId}
                         chainId={stakingRef.chainId}
+                        initialFromAddress={stakingRef.address || undefined}
                         onBack={() => setUnlockedView('stake-detail')}
                     />
                 );

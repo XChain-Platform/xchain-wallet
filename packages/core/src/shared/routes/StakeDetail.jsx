@@ -29,6 +29,8 @@ import {
     stakingRowState,
     isPendingContractUnstake,
     sumStakingAmounts,
+    scalarRows,
+    scalarRow,
 } from '../../flows/stakingDashboard.js';
 import { readFailureMessage } from '../utils/readFailureMessage.js';
 import styles from './IssueTokenForm.module.css';
@@ -95,6 +97,9 @@ export function StakeDetail({
     const [delegations, setDelegations] = useState(/** @type {any[]} */ ([]));
     const [rewards, setRewards] = useState(/** @type {any[]} */ ([]));
     const [rewardClaims, setRewardClaims] = useState(/** @type {any[]} */ ([]));
+    // False when the claim ledger could not be read: what is still claimable is
+    // accrued minus claimed, so without it the figure is unknown, not the accrual.
+    const [claimsKnown, setClaimsKnown] = useState(true);
     // Contract lane.
     const [contract, setContract] = useState(/** @type {any} */ (null));
     const [contractStakes, setContractStakes] = useState(/** @type {any[]} */ ([]));
@@ -140,6 +145,7 @@ export function StakeDetail({
             setDelegations([]);
             setRewards([]);
             setRewardClaims([]);
+            setClaimsKnown(true);
             setContract(null);
             setContractStakes([]);
             setContractUnstakes([]);
@@ -173,21 +179,22 @@ export function StakeDetail({
                         // PC-47: the claim ledger. Without it "pending" cannot
                         // be computed at all (see splitRewards).
                         typeof messaging.getRewardClaimsForAddress === 'function'
-                            ? messaging.getRewardClaimsForAddress({ chainId, address }).catch(() => null)
-                            : Promise.resolve(null),
+                            ? messaging.getRewardClaimsForAddress({ chainId, address }).catch(() => undefined)
+                            : Promise.resolve(undefined),
                     ]);
                     if (cancelled) return;
                     setStakes(extractRows(s));
                     setDelegations(extractRows(d));
                     setRewards(extractRows(r));
                     setRewardClaims(extractRows(c));
+                    setClaimsKnown(c !== undefined);
                 } else {
                     const idx = String(contractActionIndex ?? '');
                     // Contract metadata (cooldown, slash destination) is
                     // best-effort; the position still renders without it.
                     try {
                         const c = await messaging.getContractByActionIndex({ chainId, contractActionIndex: idx });
-                        if (!cancelled) setContract(c?.data ?? c ?? null);
+                        if (!cancelled) setContract(scalarRow(c?.data ?? c));
                     } catch { /* metadata optional */ }
                     // Position queries are a Phase 7 follow-up for live
                     // wallets; degrade each lane silently to empty.
@@ -238,14 +245,22 @@ export function StakeDetail({
     const primaryStake = latestEffectiveStakingRow(activeStakes, height);
     const primaryDelegation = latestEffectiveStakingRow(delegations, height);
     const delegatedKey = primaryDelegation?.signing_pubkey || primaryDelegation?.SIGNING_PUBKEY || '';
-    const totalValidatorStaked = useMemo(
-        () => sumStakingAmounts(activeStakes),
-        [activeStakes],
+    // A stake that has not reached its activation block is staked, locked, and
+    // listed as such on the staking list, so the detail reports it too.
+    const lockedStakes = useMemo(
+        () => stakes.filter((row) => stakingRowState(row, height) === 'pending'),
+        [stakes, height],
     );
+    const totalValidatorStaked = useMemo(
+        () => sumStakingAmounts([...activeStakes, ...lockedStakes]),
+        [activeStakes, lockedStakes],
+    );
+    const shownStake = primaryStake || lockedStakes[0] || null;
     const { pending, lifetime } = useMemo(
         () => splitRewards(rewards, rewardClaims),
         [rewards, rewardClaims],
     );
+    const claimable = claimsKnown && compareDecimalStrings(pending, '0') === 1;
     const totalContractStaked = useMemo(
         () => sumStakingAmounts(activeContractStakes),
         [activeContractStakes],
@@ -294,16 +309,21 @@ export function StakeDetail({
 
     return wrap(
         <>
+            {kind === 'validator' && !claimsKnown ? (
+                <StatusMessage variant="error">
+                    Couldn't load your claimed rewards, so the amount you can claim is unknown. Try again later.
+                </StatusMessage>
+            ) : null}
             {/* Hero: what's staked, where, how it's doing. */}
             <dl className={styles.detailsList}>
                 <dt className={styles.detailsLabel}>Staked</dt>
                 <dd className={styles.detailsValue}>
                     {kind === 'validator'
-                        ? (primaryStake
-                            ? `${fmt(totalValidatorStaked)} ${primaryStake.asset ?? 'XCHAIN'}`
+                        ? (shownStake
+                            ? ltr(`${fmt(totalValidatorStaked)} ${shownStake.asset ?? 'XCHAIN'}`)
                             : 'Nothing staked from this address')
                         : (hasContractPosition
-                            ? `${compareDecimalStrings(totalContractStaked, '0') === 1 ? fmt(totalContractStaked) : '0'} ${contractTick || ''}`.trim()
+                            ? ltr(`${compareDecimalStrings(totalContractStaked, '0') === 1 ? fmt(totalContractStaked) : '0'} ${contractTick || ''}`.trim())
                             : 'Nothing staked in this contract')}
                 </dd>
                 {kind === 'validator' && (primaryStake?.capability_label || primaryStake?.capability) ? (
@@ -329,9 +349,9 @@ export function StakeDetail({
                                 : 'None'}
                         </dd>
                         <dt className={styles.detailsLabel}>Pending rewards</dt>
-                        <dd className={styles.detailsValue}>{fmt(pending)} XCHAIN</dd>
+                        <dd className={styles.detailsValue}>{claimsKnown ? ltr(`${fmt(pending)} XCHAIN`) : '-'}</dd>
                         <dt className={styles.detailsLabel}>Lifetime rewards</dt>
-                        <dd className={styles.detailsValue}>{fmt(lifetime)} XCHAIN</dd>
+                        <dd className={styles.detailsValue}>{ltr(`${fmt(lifetime)} XCHAIN`)}</dd>
                     </>
                 ) : (
                     <>
@@ -357,7 +377,7 @@ export function StakeDetail({
                 <dd className={styles.detailsValue}>
                     {kind === 'validator' ? (
                         <span className={`${local.statusPill} ${primaryStake ? local.statusActive : ''}`}>
-                            {primaryStake ? (primaryStake.status || 'active') : 'inactive'}
+                            {primaryStake ? (primaryStake.status || 'active') : lockedStakes.length ? 'locked' : 'inactive'}
                         </span>
                     ) : (
                         <span className={`${local.statusPill} ${inCooldown ? local.statusCooldown : hasContractPosition ? local.statusActive : ''}`}>
@@ -376,8 +396,8 @@ export function StakeDetail({
                         block
                         icon={<span className={local.quickActionIcon}><Icon.DollarIcon /></span>}
                         onClick={onClaimRewards}
-                        disabled={!onClaimRewards || compareDecimalStrings(pending, '0') !== 1}
-                        title={compareDecimalStrings(pending, '0') === 1 ? 'Claim pending rewards' : 'No pending rewards'}
+                        disabled={!onClaimRewards || !claimsKnown || compareDecimalStrings(pending, '0') !== 1}
+                        title={claimable ? 'Claim pending rewards' : claimsKnown ? 'No pending rewards' : 'Claimed rewards could not be loaded'}
                     >
                         Claim
                     </Button>
@@ -524,6 +544,7 @@ export function StakeDetail({
                 rewards.length === 0 ? (
                     <EmptyState title="No reward events yet" body="Reward events for this stake appear here." />
                 ) : (
+                    <>
                     <ul className={local.eventList} aria-label="Reward events">
                         {rewards.slice(0, 25).map((r, i) => (
                         <li key={`${String(r.action_index ?? i)}:${i}`}>
@@ -533,7 +554,7 @@ export function StakeDetail({
                                     {fmt(r.amount ?? r.reward)} XCHAIN
                                     </span>
                                 )}
-                                subtitle={<span className={local.eventMeta}>{detailText(r.status)}</span>}
+                                subtitle={<span className={local.eventMeta}>{detailText(r.reward_type ?? r.status)}</span>}
                                 trailing={<span className={local.eventWhen}>
                                     {r.block_index ? `block ${fmt(r.block_index)}` : '-'}
                                 </span>}
@@ -541,6 +562,10 @@ export function StakeDetail({
                         </li>
                         ))}
                     </ul>
+                    {rewards.length > 25 ? (
+                        <p className={local.eventMeta}>Showing the latest 25 of {fmt(rewards.length)} reward events.</p>
+                    ) : null}
+                    </>
                 )
             ) : null}
 
@@ -662,6 +687,12 @@ export function StakeDetail({
     );
 }
 
+// An amount with its unit reads left to right inside a right-to-left page, so
+// the number stays in front of the unit.
+function ltr(text) {
+    return <bdi dir="ltr">{text}</bdi>;
+}
+
 // Comma-grouped display number; non-numeric input passes through
 // unchanged (formatWithThousands only groups plain digit strings).
 function fmt(value) {
@@ -678,9 +709,9 @@ function detailText(value) {
 
 function extractRows(resp) {
     if (!resp) return [];
-    if (Array.isArray(resp)) return resp;
-    if (Array.isArray(resp.data)) return resp.data;
-    if (Array.isArray(resp.rows)) return resp.rows;
+    if (Array.isArray(resp)) return scalarRows(resp);
+    if (Array.isArray(resp.data)) return scalarRows(resp.data);
+    if (Array.isArray(resp.rows)) return scalarRows(resp.rows);
     return [];
 }
 
