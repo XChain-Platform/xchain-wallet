@@ -150,6 +150,32 @@ describe('flows/priceLookup token rates', () => {
         expect(getTokenFiatRate({ chainCoin: 'bitcoin', tick: 'PEPECASH' })).toBeNull();
     });
 
+    it.each([
+        ['far in the future', Math.floor(NOW / 1000) + 2 * 60 * 60],
+        ['missing its timestamp', null],
+    ])('refuses a market row %s', async (_label, tsSec) => {
+        const fetchImpl = venue({
+            snapshots: [snapshotRow('BTC/USD', '100000')],
+            markets: {
+                'PEPECASH/BTC': marketRow({
+                    tick1: 'PEPECASH',
+                    tick2: 'BTC',
+                    tick1_price: '0.00000020',
+                    tick2_price: '5000000',
+                    tsSec,
+                }),
+            },
+        });
+        configureFiatRateSource({ now: () => NOW, fetch: fetchImpl, explorerUrlByCoin: EXPLORER });
+
+        const res = await refreshTokenFiatRate({
+            chainCoin: 'bitcoin', tick: 'PEPECASH', nativeTicker: 'BTC',
+        });
+
+        expect(res.updated).toBe(false);
+        expect(getTokenFiatRate({ chainCoin: 'bitcoin', tick: 'PEPECASH' })).toBeNull();
+    });
+
     it('refuses a market that has never traded (price 0)', async () => {
         const fetchImpl = venue({
             snapshots: [snapshotRow('BTC/USD', '100000')],

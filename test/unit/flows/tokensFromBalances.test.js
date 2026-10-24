@@ -104,4 +104,26 @@ describe('tokensFromBalances (D-14 decimals mapping)', () => {
         expect(tokensFromBalances(null)).toEqual([]);
         expect(tokensFromBalances({ data: [{ amount: '1' }] })).toEqual([]); // no tick → dropped
     });
+
+    it('rejects malformed and negative monetary rows instead of displaying them', () => {
+        const out = tokensFromBalances({
+            data: [
+                { tick: 'NAN', amount: 'NaN', decimals: 0 },
+                { tick: 'INFINITY', amount: Infinity, decimals: 0 },
+                { tick: 'NEGATIVE', amount: '-1', decimals: 0 },
+                { tick: 'EXPONENT', amount: '1e3', decimals: 0 },
+                { tick: 'BAD_SCALE', amount: '1', decimals: -1 },
+                { tick: 'UNSAFE_NUMBER', quantity: 9007199254740992, divisibility: 0 },
+                { tick: 'EXACT_STRING', quantity: '9007199254740993', divisibility: 0 },
+            ],
+        });
+
+        expect(out).toEqual([{
+            tick: 'EXACT_STRING',
+            quantity: '9007199254740993',
+            divisibility: 0,
+            displayName: 'EXACT_STRING',
+            imageUrl: null,
+        }]);
+    });
 });
