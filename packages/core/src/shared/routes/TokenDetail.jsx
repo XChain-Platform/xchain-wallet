@@ -139,24 +139,30 @@ function TokenDetailContent({
     const [resolvedQuantity, setResolvedQuantity] = useState(
         typeof suppliedQuantity === 'string' ? suppliedQuantity : null,
     );
+    // A failed balance read leaves the amount unknown; it never reads as zero.
+    const [balanceFailed, setBalanceFailed] = useState(false);
     useEffect(() => {
+        setBalanceFailed(false);
         if (typeof suppliedQuantity === 'string') {
             setResolvedQuantity(suppliedQuantity);
             return undefined;
         }
         setResolvedQuantity(null);
-        if (typeof messaging.getWalletBalances !== 'function') return undefined;
+        if (typeof messaging.getWalletBalances !== 'function') {
+            setBalanceFailed(true);
+            return undefined;
+        }
         let cancelled = false;
         messaging.getWalletBalances(walletId, readActiveAccount(walletId) || undefined)
             .then((byChain) => {
                 if (!cancelled) setResolvedQuantity(sumTickOnChain(byChain, chainId, tick));
             })
             .catch(() => {
-                if (!cancelled) setResolvedQuantity('0');
+                if (!cancelled) setBalanceFailed(true);
             });
         return () => { cancelled = true; };
     }, [messaging, walletId, chainId, tick, suppliedQuantity]);
-    const quantity = resolvedQuantity ?? '0';
+    const quantity = resolvedQuantity;
 
     const descriptor = chainRegistry.get(chainId);
     const isNative = kind === 'native';
@@ -183,16 +189,20 @@ function TokenDetailContent({
         ? normalizedDivisibility(divisibility)
         : normalizedDivisibility(assetInfo?.divisibility) ?? normalizedDivisibility(divisibility);
     const [tokenMissing, setTokenMissing] = useState(false);
+    // A failed metadata read ends the loading state; the About tab says so.
+    const [infoFailed, setInfoFailed] = useState(false);
     useEffect(() => {
         setTokenMissing(false);
+        setInfoFailed(false);
         if (isNative || isDemo || typeof messaging.getTokenInfo !== 'function') return undefined;
         let cancelled = false;
         callAsync(() => messaging.getTokenInfo({ chainId, tick }))
             .then((info) => { if (!cancelled) setTokenMissing(info == null); })
-            .catch(() => { /* A read failure is not proof that the token is gone. */ });
+            // A read failure is not proof that the token is gone.
+            .catch(() => { if (!cancelled) setInfoFailed(true); });
         return () => { cancelled = true; };
     }, [messaging, chainId, tick, isNative, isDemo]);
-    const metadataLoading = !isNative && !assetInfo && !tokenMissing;
+    const metadataLoading = !isNative && !assetInfo && !tokenMissing && !infoFailed;
 
     // A holder who is also the issuer gets a way back to the admin
     // surface: without this, ManageToken was reachable only via Menu ->
@@ -371,10 +381,11 @@ function TokenDetailContent({
     // show the right glyph in the header + balance hero.
     const headerIconUrl = useMemo(() => {
         const tisImages = Array.isArray(assetInfo?.images) ? assetInfo.images : [];
-        const iconHit = tisImages.find((i) => String(i?.type || '').toLowerCase() === 'icon');
+        const webImages = tisImages.filter((i) => safeHttpUrl(i?.url));
+        const iconHit = webImages.find((i) => String(i?.type || '').toLowerCase() === 'icon');
         const fromTis = iconHit?.url
-            || tisImages[0]?.url
-            || assetInfo?.imageUrl
+            || webImages[0]?.url
+            || safeHttpUrl(assetInfo?.imageUrl)
             || rowImageUrl
             || null;
         if (fromTis) return fromTis;
@@ -481,7 +492,7 @@ function TokenDetailContent({
     const secondaryCode = showFiatPrimary ? tick : (fiatAvailable ? fiatCurrency : '');
     const atomicQuantity = parseAtomicQuantity(quantity);
     const sendDisabledReason = atomicQuantity == null
-        ? 'Balance is unavailable.'
+        ? (balanceFailed ? 'Balance is unavailable.' : 'Loading balance…')
         : atomicQuantity <= 0n ? 'No balance to send.'
         : !networkActionsAvailable ? 'Send needs a network connection.' : null;
     const tradeDisabledReason = !networkActionsAvailable ? 'Trade needs a network connection.' : null;
@@ -776,6 +787,7 @@ function TokenDetailContent({
                             {activeTab === 'about' ? (
                                 <InfoPanel
                                     isNative={isNative}
+                                    infoFailed={infoFailed}
                                     assetInfo={assetInfo}
                                     hasDescription={hasDescription}
                                     loading={metadataLoading}
@@ -850,16 +862,61 @@ function useSupplyHistory({ messaging, chainId, tick, skip }) {
             .then((resp) => {
                 if (cancelled) return;
                 const list = Array.isArray(resp) ? resp : Array.isArray(resp?.data) ? resp.data : [];
-                const clean = list
-                    .map((p) => ({ at: p?.timestamp ?? p?.height ?? null, supply: Number(p?.supply) }))
-                    .filter((p) => Number.isFinite(p.supply));
-                setPoints(clean);
+                setPoints(cleanSupplyHistory(list));
             })
             .catch(() => { if (!cancelled) setPoints([]); })
             .finally(() => { if (!cancelled) setLoading(false); });
         return () => { cancelled = true; };
     }, [messaging, chainId, tick, available]);
     return { points, loading, available };
+}
+
+const SUPPLY_CHART_MAX_POINTS = 500;
+
+/** A history time as a sortable number, or null when the value is not a time or height. */
+function historyTime(value) {
+    if (typeof value === 'number') return Number.isFinite(value) ? value : null;
+    if (typeof value !== 'string' || !value.trim()) return null;
+    const numeric = Number(value);
+    if (Number.isFinite(numeric)) return numeric;
+    const parsed = Date.parse(value);
+    return Number.isNaN(parsed) ? null : parsed;
+}
+
+/**
+ * Keeps the points with a non-negative decimal supply, orders them by time
+ * when every point carries one, and thins a long history to a drawable size.
+ * The exact supply text rides along for the label because a double cannot
+ * hold a 20-digit supply.
+ */
+function cleanSupplyHistory(list) {
+    let points = [];
+    for (const p of list) {
+        const rawSupply = p?.supply;
+        let text = null;
+        if (typeof rawSupply === 'string') {
+            const trimmed = rawSupply.trim();
+            if (/^\d+(?:\.\d+)?$/.test(trimmed)) text = trimmed;
+        } else if (typeof rawSupply === 'number' && Number.isFinite(rawSupply) && rawSupply >= 0) {
+            text = String(rawSupply);
+        }
+        if (text === null) continue;
+        points.push({ at: historyTime(p?.timestamp ?? p?.height), supply: Number(text), text });
+    }
+    if (points.length > 1 && points.every((p) => p.at !== null)) {
+        points = points
+            .map((p, i) => ({ p, i }))
+            .sort((a, b) => a.p.at - b.p.at || a.i - b.i)
+            .map(({ p }) => p);
+    }
+    if (points.length > SUPPLY_CHART_MAX_POINTS) {
+        const last = points.length - 1;
+        points = Array.from(
+            { length: SUPPLY_CHART_MAX_POINTS },
+            (_, i) => points[Math.round((i * last) / (SUPPLY_CHART_MAX_POINTS - 1))],
+        );
+    }
+    return points;
 }
 
 function SupplyChart({ points, divisibility, tick }) {
@@ -876,7 +933,7 @@ function SupplyChart({ points, divisibility, tick }) {
             return `${i === 0 ? 'M' : 'L'}${x.toFixed(1)} ${y.toFixed(1)}`;
         })
         .join(' ');
-    const latest = formatTokenQuantity(String(points[points.length - 1].supply), divisibility);
+    const latest = formatTokenQuantity(points[points.length - 1].text, divisibility);
     return (
         <section aria-label="Supply over time">
             <SectionHeader title="Supply over time" />
@@ -1126,7 +1183,7 @@ function MarketPanel({ isNative, nativePrice, isDemo, assetInfo, tick, chainId, 
             sparkline = synth.sparkline;
         }
     } else if (!assetInfo) {
-        hint = 'Loading market data…';
+        hint = 'Market data is unavailable.';
     }
 
     return (
@@ -1287,7 +1344,7 @@ function DetailRow({ label, children }) {
 // PGP signature) so a token's published metadata renders in one place.
 // When the token has no TIS document the panel renders an empty-state
 // hint so the tab still has something to land on.
-function InfoPanel({ isNative, assetInfo, hasDescription, loading }) {
+function InfoPanel({ isNative, infoFailed, assetInfo, hasDescription, loading }) {
     if (isNative) {
         return (
             <EmptyState
@@ -1304,6 +1361,15 @@ function InfoPanel({ isNative, assetInfo, hasDescription, loading }) {
             </div>
         );
     }
+    if (!assetInfo && infoFailed) {
+        return (
+            <EmptyState
+                title="Token information is unavailable"
+                body="Check the connection, then open this token again."
+                titleAs="p"
+            />
+        );
+    }
     if (!assetInfo) {
         return (
             <EmptyState
@@ -1313,9 +1379,8 @@ function InfoPanel({ isNative, assetInfo, hasDescription, loading }) {
             />
         );
     }
-    const hasLinks = Boolean(assetInfo.website)
-        || (Array.isArray(assetInfo.socials) && assetInfo.socials.length > 0)
-        || (Array.isArray(assetInfo.files) && assetInfo.files.length > 0);
+    const linkTargets = tokenLinkTargets(assetInfo);
+    const hasLinks = linkTargets.websites.length > 0 || linkTargets.socials.length > 0;
     const hasOwner = Boolean(assetInfo.owner
         && (assetInfo.owner.name || assetInfo.owner.title || assetInfo.owner.organization));
     const hasContacts = Array.isArray(assetInfo.contacts) && assetInfo.contacts.length > 0;
@@ -1617,6 +1682,9 @@ function OwnerBlock({ owner }) {
     );
 }
 
+// A plain address only: a query or fragment after it would add recipients or a body to the draft.
+const PLAIN_EMAIL = /^[^\s@?&#:,;<>()"']+@[^\s@?&#:,;<>()"']+\.[^\s@?&#:,;<>()"']+$/;
+
 const CONTACT_LABELS = {
     email: 'Email',
     phone: 'Phone',
@@ -1633,7 +1701,7 @@ function ContactsBlock({ contacts }) {
                 <tbody>
                     {contacts.map((c, i) => {
                         const label = CONTACT_LABELS[c.type] || (c.type.charAt(0).toUpperCase() + c.type.slice(1));
-                        const isMail = c.type === 'email';
+                        const isMail = c.type === 'email' && PLAIN_EMAIL.test(c.value);
                         const isPhone = c.type === 'phone';
                         const safeUrl = safeHttpUrl(c.value);
                         let display = c.value;
@@ -1819,7 +1887,7 @@ function SocialIcon({ platform }) {
  * null when the TIS document carries none of these so the section
  * disappears entirely for tokens without rich metadata.
  */
-function LinksAndFiles({ assetInfo }) {
+function tokenLinkTargets(assetInfo) {
     // Prefer the `websites` array (primary + alternates) but fall back to
     // the singular `website` field for older bundles that haven't been
     // re-normalized. Files live in the Media tab's Files subtab now;
@@ -1834,6 +1902,20 @@ function LinksAndFiles({ assetInfo }) {
             return url ? [{ ...social, url }] : [];
         })
         : [];
+    return { websites, socials };
+}
+
+/** The host a link opens, as the browser resolves it (punycode exposes look-alike letters). */
+function linkHost(url) {
+    try {
+        return new URL(url).hostname;
+    } catch {
+        return '';
+    }
+}
+
+function LinksAndFiles({ assetInfo }) {
+    const { websites, socials } = tokenLinkTargets(assetInfo);
     const hasAnything = websites.length > 0 || socials.length > 0;
     if (!hasAnything) return null;
     const multipleWebsites = websites.length > 1;
@@ -1853,7 +1935,9 @@ function LinksAndFiles({ assetInfo }) {
                             <span className={styles.socialChipIcon} aria-hidden="true">
                                 <Icon.ExternalLinkIcon />
                             </span>
-                            <span>{multipleWebsites ? `Website ${i + 1}` : 'Website'}</span>
+                            <span>
+                                {multipleWebsites ? `Website ${i + 1}` : 'Website'} · {linkHost(w)}
+                            </span>
                         </a>
                     ))}
                 </div>
@@ -2465,6 +2549,7 @@ function HoldersPanel({
                     return (
                         <li key={holderIdentity(h) || `holder:${i}`}>
                             <ListRow
+                                className={styles.holdersRow}
                                 title={(
                                     <span className={styles.holdersAddrWrap}>
                                         {address === '-' ? (
@@ -2481,6 +2566,7 @@ function HoldersPanel({
                                     </span>
                                 )}
                                 trailing={<span className={styles.holdersQty}>{balance}</span>}
+                                trailingClassName={styles.holdersTrailing}
                             />
                         </li>
                     );
