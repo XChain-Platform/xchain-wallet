@@ -47,6 +47,19 @@ const MULTILINE_LABELS = new Set([
 ]);
 export const MULTILINE_CONTROLS = /[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F-\u009F]/g;
 
+// Emoji ZWJ sequences (family, profession, rainbow flag) need U+200D and
+// U+FE0F to render. U+200D is ordinary only between two pictographs (a skin
+// tone or variation selector may sit on the left one); U+FE0F only right
+// after a pictograph or a keycap base. Anywhere else both stay refused, so a
+// joiner cannot hide between letters or trail a string.
+const EMOJI_JOINER = /(?<=\p{Extended_Pictographic}[️\u{1F3FB}-\u{1F3FF}]*)‍(?=\p{Extended_Pictographic})/gu;
+const EMOJI_VARIATION = /(?<=[\p{Extended_Pictographic}0-9#*])️/gu;
+const VARIATION_SELECTOR = /️/;
+
+function withoutEmojiJoiners(text) {
+    return text.replace(EMOJI_JOINER, '').replace(EMOJI_VARIATION, '');
+}
+
 function matches(pattern, value) {
     pattern.lastIndex = 0;
     return pattern.test(value);
@@ -64,7 +77,8 @@ export function actionTextSafetyError(value, label = 'Text') {
     const text = value == null ? '' : String(value);
     if (matches(MULTILINE_LABELS.has(label) ? MULTILINE_CONTROLS : CONTROLS, text)) return `${label} cannot contain control characters.`;
     if (matches(BIDI_CONTROLS, text)) return `${label} cannot contain text-direction control characters.`;
-    if (matches(ZERO_WIDTH, text)) return `${label} cannot contain zero-width characters.`;
+    const bare = withoutEmojiJoiners(text);
+    if (matches(ZERO_WIDTH, bare) || VARIATION_SELECTOR.test(bare)) return `${label} cannot contain zero-width characters.`;
     return null;
 }
 

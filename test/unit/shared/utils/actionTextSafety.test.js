@@ -56,6 +56,36 @@ describe('actionTextSafetyError', () => {
         expect(actionTextSafetyError('bad\u0000text', 'Message')).toMatch(/control characters/);
     });
 
+    it.each([
+        ['family', '\u{1F468}‍\u{1F469}‍\u{1F467}‍\u{1F466}'],
+        ['rainbow flag', '\u{1F3F3}️‍\u{1F308}'],
+        ['keycap', '1️⃣'],
+        ['skin tone', '\u{1F44D}\u{1F3FD}'],
+        ['profession', '\u{1F469}\u{1F3FD}‍⚕️'],
+        ['heart', '❤️'],
+    ])('accepts the %s emoji in a memo and a message', (_name, emoji) => {
+        expect(actionTextSafetyError(`hi ${emoji} there`, 'Memo')).toBeNull();
+        expect(actionTextSafetyError(`${emoji}`, 'Message')).toBeNull();
+        expect(memoLengthError(`hi ${emoji}`)).toBeNull();
+    });
+
+    it.each([
+        ['bare joiner', '‍'],
+        ['joiner between letters', 'a‍b'],
+        ['trailing joiner', '\u{1F468}‍'],
+        ['leading joiner', '‍\u{1F468}'],
+        ['joiner after a space', '\u{1F468} ‍\u{1F469}'],
+        ['doubled joiner', '\u{1F468}‍‍\u{1F469}'],
+        ['override', '‮'],
+        ['NUL', '\u0000'],
+        ['variation selector after a letter', 'a️'],
+        ['bare variation selector', '️'],
+        ['non-joiner next to an emoji', '\u{1F468}‌\u{1F469}'],
+    ])('refuses a %s', (_name, text) => {
+        expect(actionTextSafetyError(text, 'Memo')).toMatch(/^Memo cannot contain/);
+        expect(actionTextSafetyError(text, 'Message')).toMatch(/^Message cannot contain/);
+    });
+
     it('accepts ordinary printable Unicode, including natural right-to-left text', () => {
         expect(actionTextSafetyError('Café 📦 שלום', 'Memo')).toBeNull();
     });
