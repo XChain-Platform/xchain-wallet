@@ -165,7 +165,7 @@ assert.ok(
 // --- 6. Params composer -----------------------------------------------
 
 assert.ok(/VERSION:\s*'0'/.test(src), 'MintForm pins VERSION=0');
-assert.ok(/\.toUpperCase\(\)/.test(src), 'MintForm uppercases ticker');
+assert.ok(/TICK:\s*ticker\.trim\(\),/.test(src), 'MintForm keeps ticker case');
 assert.ok(/AMOUNT:\s*String/.test(src), 'MintForm sets AMOUNT');
 assert.ok(
     /p\.DESTINATION\s*=\s*destination\.trim\(\)/.test(src),
