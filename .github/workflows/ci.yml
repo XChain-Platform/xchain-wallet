@@ -324,6 +324,13 @@ jobs:
     # One run at a time on the shared regtest venue. Each run covers one rolling
     # quarter of the suite, keeping the venue out of the main CI critical path.
     timeout-minutes: 120
+    # Shared across refs on purpose: there is one regtest venue, so runs must
+    # serialize. GitHub keeps one pending run per group, so a newer run can evict
+    # a queued master or develop run; an eviction is recovered by re-running.
+    # The ci-master-verdict smoke allows exactly this job and group name.
+    concurrency:
+      group: wallet-regtest-venue
+      cancel-in-progress: false
     env:
       XC_REGTEST_SSH_HOST: ${{ vars.XC_REGTEST_SSH_HOST }}
       # Which regtest chain the suite drives (RBTC, RLTC or RDOGE). Bitcoin is the
@@ -383,43 +390,7 @@ jobs:
             -L 3123:localhost:3123 -L 3125:localhost:3125 "$XC_REGTEST_SSH_HOST"
       - name: Run regtest suite shard ${{ steps.shard.outputs.value }}
         if: steps.venue.outputs.configured == 'true'
-        run: |
-          lockDir=$(mktemp -d)
-          lockPipe="$lockDir/input"
-          lockLog="$lockDir/output"
-          mkfifo "$lockPipe"
-          touch "$lockLog"
-          lockPid=
-          cleanup() {
-            status=$?
-            exec 9>&- 2>/dev/null || true
-            if [ -n "$lockPid" ]; then
-              wait "$lockPid" 2>/dev/null || true
-            fi
-            rm -f "$lockPipe" "$lockLog"
-            rmdir "$lockDir"
-            exit "$status"
-          }
-          trap cleanup EXIT
-
-          echo "Waiting for the shared regtest venue lock"
-          ssh -o ServerAliveInterval=30 -o ServerAliveCountMax=10 "$XC_REGTEST_SSH_HOST" \
-            'flock --exclusive "$HOME/.xchain-wallet-regtest.lock" -c "echo venue-lock-acquired; cat >/dev/null"' \
-            < "$lockPipe" > "$lockLog" &
-          lockPid=$!
-          exec 9>"$lockPipe"
-
-          until grep -qx venue-lock-acquired "$lockLog"; do
-            if ! kill -0 "$lockPid" 2>/dev/null; then
-              wait "$lockPid" || lockStatus=$?
-              echo "::error::Failed to acquire the regtest venue lock (ssh status ${lockStatus:-0})"
-              exit 1
-            fi
-            sleep 1
-          done
-
-          echo "Acquired the shared regtest venue lock"
-          pnpm test:e2e:regtest --shard=${{ steps.shard.outputs.value }}
+        run: pnpm test:e2e:regtest --shard=${{ steps.shard.outputs.value }}
         env:
           NODE_OPTIONS: --max-old-space-size=6144
       - name: Upload Playwright report

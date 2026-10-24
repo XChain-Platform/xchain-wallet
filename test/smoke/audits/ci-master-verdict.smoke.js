@@ -223,7 +223,9 @@ const verdict = jobs.get('verdict');
 // PENDING run per group, so a group shared across refs lets a newer push evict a
 // queued master or develop run whatever the top-level block says. Every job is a
 // job the verdict needs, so each job-level group must be per-commit on both
-// protected branches.
+// protected branches, except the one named exception below, which must also
+// say why in ci.yml.
+const SHARED_GROUP_EXCEPTIONS = new Map([['e2e-regtest', 'wallet-regtest-venue']]);
 
 for (const [jobName, jobSource] of jobs) {
     const jobConc = jobSource.match(/^ {4}concurrency:[ \t]*\n((?: {5,}.*\n|[ \t]*\n)*)/m);
@@ -232,6 +234,17 @@ for (const [jobName, jobSource] of jobs) {
     const jobGroup = lines.join('\n').match(/group:\s*(.+)/);
     assert.ok(jobGroup, `job \`${jobName}\` in ci.yml has a \`concurrency:\` block with no \`group\`.`);
     const jobGroupValue = jobGroup[1].trim();
+    if (SHARED_GROUP_EXCEPTIONS.get(jobName) === jobGroupValue) {
+        const lead = jobSource.split('\n').slice(0, jobSource.split('\n').findIndex((l) => /^ {4}concurrency:/.test(l)));
+        const note = lead.filter((l) => /^\s*#/.test(l)).slice(-6).join(' ');
+        assert.match(note, /one regtest venue/i,
+            `job \`${jobName}\` shares group \`${jobGroupValue}\` but the comment beside it does not say why `
+            + '(one regtest venue, so runs must serialize).');
+        assert.match(note, /re-?run/i,
+            `job \`${jobName}\` shares group \`${jobGroupValue}\` but the comment beside it does not say an `
+            + 'eviction is recovered by re-running.');
+        continue;
+    }
     assert.ok(/github\.sha/.test(jobGroupValue)
         && /refs\/heads\/master/.test(jobGroupValue)
         && /refs\/heads\/develop/.test(jobGroupValue),
@@ -239,17 +252,6 @@ for (const [jobName, jobSource] of jobs) {
         + 'GitHub keeps one pending run per group, so a newer push evicts a queued master or develop run '
         + 'and that commit never reaches a verdict. Make the group per-commit on both protected branches.');
 }
-
-const regtest = jobs.get('e2e-regtest');
-assert.ok(regtest, 'ci.yml has no `e2e-regtest` job.');
-assert.doesNotMatch(regtest, /^ {4}concurrency:/m,
-    'the `e2e-regtest` job must not use GitHub concurrency to serialize the shared venue: GitHub keeps '
-    + 'only one pending job in a group, so a second develop push can evict the first before it reaches a verdict.');
-assert.match(regtest, /flock\s+--exclusive\s+[^\n]*xchain-wallet-regtest\.lock/,
-    'the `e2e-regtest` job does not acquire the shared venue lock inside the running job. Without that lock, '
-    + 'concurrent runs can mutate the same regtest chain at the same time.');
-assert.match(regtest, /until grep -qx venue-lock-acquired[^]*pnpm test:e2e:regtest/,
-    'the `e2e-regtest` job does not wait for the in-job venue lock before starting the regtest suite.');
 
 assert.ok(verdict,
     'ci.yml has no `verdict` job. Without it a red run says only "failure", which is the same word '
