@@ -10,6 +10,7 @@ import {
     openSettings,
     test,
 } from '../../fixtures/wallet.js';
+import { selectNamedToken } from '../../fixtures/crossChain.js';
 
 const THEMES = ['light', 'dark'];
 const VIEWPORTS = [
@@ -41,6 +42,25 @@ async function gotoPaletteRoute(page, name) {
     await palette.getByRole('combobox').fill(name);
     await palette.getByRole('option', { name: new RegExp(`^${name}\\b`) }).first().click();
     await expect(palette).toBeHidden();
+}
+
+// Swap shows Max only for a Give token the wallet holds, so the walk picks
+// one before it measures the inline action.
+async function selectHeldGiveToken(page) {
+    const main = page.getByRole('main');
+    const network = main.getByRole('button', { name: /^Give and get network:/ });
+    await expect(network).toBeVisible();
+    if (await network.getAttribute('aria-label') !== 'Give and get network: Bitcoin') {
+        await network.click();
+        await main.getByRole('option', { name: /^Bitcoin\s*BTC$/ }).click();
+        await expect(network).toHaveAttribute('aria-label', 'Give and get network: Bitcoin');
+    }
+    await selectNamedToken(page, 'Give token', {
+        chainId: 'bitcoin-mainnet',
+        chainLabel: 'Bitcoin',
+        tick: 'PEPECASH',
+    });
+    await expect(main.getByRole('button', { name: 'Use max available amount' })).toBeVisible();
 }
 
 async function expectVisibleFieldsHaveBorders(page, label) {
@@ -215,6 +235,7 @@ for (const theme of THEMES) {
                 await test.step(`${context} / Swap`, async () => {
                     await gotoPaletteRoute(page, 'Swap');
                     await expect(page.getByRole('heading', { name: 'Swap tokens', exact: true })).toBeVisible();
+                    await selectHeldGiveToken(page);
                     await checkScreen(page, `${context} / Swap`, ['Max']);
                 });
 
