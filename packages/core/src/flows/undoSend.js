@@ -78,10 +78,18 @@ export function createUndoSendController({
 
         status = 'counting';
         const input = { startedAt, seconds };
+        let lastNow = startedAt;
 
         const tick = () => {
             if (status !== 'counting') return;
-            const current = { ...input, now: now() };
+            const reading = now();
+            // A clock set back would hold the countdown at its full length until
+            // the wall catches up, while the host's own timer keeps running and
+            // broadcasts on schedule. Moving the start back by the jump keeps the
+            // elapsed time continuous across it.
+            if (reading < lastNow) input.startedAt -= lastNow - reading;
+            lastNow = reading;
+            const current = { ...input, now: reading };
             const remaining = undoSendRemainingSeconds(current);
             if (undoSendExpired(current)) {
                 stopTicking();

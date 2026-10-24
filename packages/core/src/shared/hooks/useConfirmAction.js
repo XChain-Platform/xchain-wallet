@@ -357,8 +357,11 @@ export function useConfirmAction() {
         if (approveInFlightRef.current) return;
         approveInFlightRef.current = true;
         const settleUnmountedInterruption = (err = new UserRejectedError()) => {
-            if (mountedRef.current) return;
+            // Every interruption returns before anything was signed or sent, so the
+            // reservation is the user's again: Reject and leaving the page must
+            // release it, whether the page is still mounted or not.
             approvalBeganRef.current = false;
+            if (mountedRef.current) return;
             releaseUnlessApproving(built);
             settleReject(err);
         };
@@ -508,6 +511,7 @@ export function useConfirmAction() {
                     setError(hardwareRetryError);
                     setPhase('ready');
                 });
+                approvalBeganRef.current = false;
                 return { interrupted: true, reason: 'hardware-retry' };
             }
 

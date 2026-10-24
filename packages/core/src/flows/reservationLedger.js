@@ -47,6 +47,18 @@
 
 import { sumDecimalStrings } from '../shared/utils/amountFormat.js';
 
+/**
+ * How long an approval reservation holds a balance before concurrent windows stop
+ * netting it. An approval that is still live finishes (or releases) within minutes,
+ * even waiting on a hardware device; one that outlasts this belongs to a window that
+ * was closed or crashed mid-confirm, whose teardown never ran. In the extension the
+ * ledger is session storage, so without an age limit that hold would warn every other
+ * window about funds that are free until the browser restarts.
+ *
+ * Address-tagged holds (auto-pay) are released by their owner and never age out here.
+ */
+export const RESERVATION_TTL_MS = 30 * 60 * 1000;
+
 // Plain fixed-point form of a reservation amount, or null when it is not a number
 // at all.
 //
@@ -66,19 +78,22 @@ import { sumDecimalStrings } from '../shared/utils/amountFormat.js';
 // remove the guard rather than close it. Same rule as the #4311 tamper check - a money
 // value the wallet cannot represent exactly falls to the blocking branch, never matches
 // on a guess.
+
 const UNREADABLE_RESERVATION = '1000000000000000000000000000000';
 
 function toPlainDecimal(raw) {
     const s = String(raw).trim();
-    if (/^-?\d+(\.\d+)?$/.test(s)) return s;
-    const m = /^(-?)(\d+)(?:\.(\d+))?[eE]([+-]?\d+)$/.exec(s);
+    if (/^\d+(\.\d+)?$/.test(s)) return s;
+    // A negative reservation would be netted as a credit and widen the balance
+    // the next window may spend, so it is unreadable like any other non-amount.
+    const m = /^(\d+)(?:\.(\d+))?[eE]([+-]?\d+)$/.exec(s);
     if (!m) return null;
-    const [, sign, int, frac = '', expText] = m;
+    const [, int, frac = '', expText] = m;
     const digits = int + frac;
     const point = int.length + parseInt(expText, 10);
-    if (point <= 0) return sign + '0.' + '0'.repeat(-point) + digits;
-    if (point >= digits.length) return sign + digits + '0'.repeat(point - digits.length);
-    return sign + digits.slice(0, point) + '.' + digits.slice(point);
+    if (point <= 0) return '0.' + '0'.repeat(-point) + digits;
+    if (point >= digits.length) return digits + '0'.repeat(point - digits.length);
+    return digits.slice(0, point) + '.' + digits.slice(point);
 }
 
 /**
@@ -88,7 +103,7 @@ function toPlainDecimal(raw) {
  *
  * @param {{ store?: ReservationStore }} [opts]
  */
-export function createReservationLedger({ store } = {}) {
+export function createReservationLedger({ store, now = Date.now, ttlMs = RESERVATION_TTL_MS } = {}) {
     /** @type {Reservation[]} */
     let mem = [];
     let hydrated = !store;
@@ -97,9 +112,18 @@ export function createReservationLedger({ store } = {}) {
         if (hydrated) return;
         try {
             const loaded = await store.load();
-            mem = Array.isArray(loaded) ? loaded : [];
+            // A hold stored before entries carried a stamp ages from this load.
+            mem = (Array.isArray(loaded) ? loaded : [])
+                .map((r) => (Number.isFinite(r?.at) ? r : { ...r, at: now() }));
         } catch { mem = []; }
         hydrated = true;
+    }
+
+    // A clock set back leaves a negative age, which holds: the conservative side.
+    function isExpired(r) {
+        if (r.address) return false;
+        const age = now() - Number(r.at);
+        return Number.isFinite(age) && age > ttlMs;
     }
 
     async function persist() {
@@ -116,12 +140,13 @@ export function createReservationLedger({ store } = {}) {
             await ensureHydrated();
             if (!entry || !entry.id || !entry.chainId || !entry.tick) return;
             // Idempotent on id (re-reserve after a rehydrate must not double).
-            mem = mem.filter((r) => r.id !== entry.id);
+            mem = mem.filter((r) => r.id !== entry.id && !isExpired(r));
             mem.push({
                 id: entry.id,
                 chainId: entry.chainId,
                 tick: entry.tick,
                 amount: String(entry.amount),
+                at: now(),
                 ...(entry.address ? { address: entry.address } : {}),
             });
             await persist();
@@ -174,7 +199,7 @@ export function createReservationLedger({ store } = {}) {
             /** @type {Map<string, string[]>} */
             const byTick = new Map();
             for (const r of mem) {
-                if (r.chainId !== chainId || r.id === excludeId) continue;
+                if (r.chainId !== chainId || r.id === excludeId || isExpired(r)) continue;
                 const amount = toPlainDecimal(r.amount);
                 const tick = String(r.tick).toUpperCase();
                 const amounts = byTick.get(tick) || [];

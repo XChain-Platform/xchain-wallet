@@ -152,6 +152,9 @@ export function isChainConfirmedRecord(pendingTx) {
 
 /** @param {unknown} hash */
 function normalizeHash(hash) {
+    // An object or array would stringify to a shared bogus identity and fold
+    // every such malformed row into one entry.
+    if (typeof hash !== 'string' && typeof hash !== 'number') return '';
     return String(hash || '').trim().toLowerCase();
 }
 
@@ -159,6 +162,8 @@ function normalizeHash(hash) {
 function pendingKeyFor(chainId, txHash) {
     return `pending:${chainId}:${normalizeHash(txHash)}`;
 }
+
+const MAX_DATE_MS = 8.64e15;
 
 /**
  * `first_seen` is unix SECONDS on the wire (the decoder column) but History
@@ -172,7 +177,10 @@ function pendingKeyFor(chainId, txHash) {
 export function firstSeenToMs(firstSeen) {
     const n = Number(firstSeen);
     if (!Number.isFinite(n) || n <= 0) return null;
-    return n < 1e12 ? Math.round(n * 1000) : Math.round(n);
+    const ms = n < 1e12 ? Math.round(n * 1000) : Math.round(n);
+    // Past the largest instant a Date holds, the stamp cannot be shown or
+    // sorted meaningfully; the entry falls back to its own first sighting.
+    return ms > MAX_DATE_MS ? null : ms;
 }
 
 /**

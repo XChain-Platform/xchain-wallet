@@ -250,7 +250,29 @@ export async function submitAction({
 
     const writePending = async (patch) => {
         if (!pending) return;
-        pending = { ...pending, ...patch };
+        let next = { ...pending, ...patch };
+        // The mempool and confirmation watchers write this same record while the
+        // broadcast call is still returning. This copy is older than theirs, so a
+        // blind write would turn a confirmed send back into a broadcast one (and
+        // keep subtracting its spend), and erase the network sighting.
+        const stored = typeof vault.pendingTxs.get === 'function'
+            ? await vault.pendingTxs.get(pending.id)
+            : null;
+        if (stored) {
+            if (stored.mempoolSeenAt && !next.mempoolSeenAt) next.mempoolSeenAt = stored.mempoolSeenAt;
+            if (stored.status === 'indexed' && next.status !== 'indexed') {
+                next = {
+                    ...next,
+                    status: 'indexed',
+                    confirmedAt: stored.confirmedAt ?? next.confirmedAt,
+                    ...(stored.chainConfirmed === true ? {
+                        chainConfirmed: true,
+                        confirmedBlockIndex: stored.confirmedBlockIndex ?? null,
+                    } : {}),
+                };
+            }
+        }
+        pending = next;
         await vault.pendingTxs.put(pending);
     };
 

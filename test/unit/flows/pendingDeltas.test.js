@@ -83,3 +83,25 @@ describe('sendDeltaFromAction', () => {
         expect(sendDeltaFromAction({ action: 'SEND', params: { TICK: 'XCHAIN' } })).toBeNull();
     });
 });
+
+describe('unconfirmedPendingDeltas for a multi-leg send', () => {
+    const venue = { coin: 'LTC', network: 'regtest', source: 'mtkx2FQours' };
+    const base = {
+        fromAddress: venue.source, chain: 'LTC', network: 'regtest', status: 'broadcast', txid: 'aa',
+    };
+
+    it('nets every leg of a record that carries no single tick and amount', () => {
+        const record = {
+            ...base,
+            balanceDebits: [{ tick: 'AAA', amount: '5' }, { tick: 'BBB', amount: '0.5' }, { tick: 'AAA', amount: '-1' }],
+        };
+        expect(unconfirmedPendingDeltas([record], venue)).toEqual([
+            { tick: 'AAA', amount: '5' }, { tick: 'BBB', amount: '0.5' },
+        ]);
+    });
+
+    it('counts a single-leg send once when it carries both forms', () => {
+        const record = { ...base, tick: 'AAA', amount: '5', balanceDebits: [{ tick: 'AAA', amount: '5' }] };
+        expect(unconfirmedPendingDeltas([record], venue)).toEqual([{ tick: 'AAA', amount: '5' }]);
+    });
+});
