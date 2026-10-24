@@ -37,7 +37,7 @@ import { ConfirmModal } from '../ConfirmModal.jsx';
 import { t } from '../../../i18n/index.js';
 
 export function NetworkSection({ activeWallet, reload = reloadPage } = {}) {
-    const { settings, loading, error, update } = useSettings();
+    const { settings, loading, error, update } = useSettings({ reportsOwnError: true });
     const { messaging } = useMessaging();
     const confirmDialog = useConfirmModal();
     const [switching, setSwitching] = useState(false);

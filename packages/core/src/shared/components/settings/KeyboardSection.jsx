@@ -107,7 +107,7 @@ function bindingFromEvent(e, kind) {
 }
 
 export function KeyboardSection() {
-    const { settings, update, loading, error } = useSettings();
+    const { settings, update, loading, error } = useSettings({ reportsOwnError: true });
     const overrides = settings?.keyboard?.bindings || {};
     const shortcuts = useMemo(() => resolveBindings(overrides), [overrides]);
     const mac = isMac();

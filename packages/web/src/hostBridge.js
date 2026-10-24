@@ -1371,6 +1371,28 @@ function tearDownFailedOnboarding({ openedVault, ownPool, ownHost }) {
 }
 
 /**
+ * Remove the encrypted blob a failed create / import / restore left behind.
+ * The vault autosaves on every write, so a flow that throws partway (a full
+ * disk, a denied write, or the kdfParams slot refusing its save) leaves a blob
+ * with no kdfParams: unlock answers "no wallet" and every onboarding lane
+ * answers "a wallet already exists", so the half-written wallet could neither
+ * be opened nor replaced. The caller passes the backend only after
+ * `assertFreshVault` proved the device held nothing, so this never discards a
+ * wallet that was there before. A clear that fails too is left for the
+ * original error to report.
+ *
+ * @param {{ clear: () => Promise<void> } | null} ownStorage
+ */
+async function discardPartialVault(ownStorage) {
+    if (!ownStorage) return;
+    try {
+        await ownStorage.clear();
+    } catch (_clearErr) {
+        // The failure being reported is the first one.
+    }
+}
+
+/**
  * Create a fresh BIP39 wallet. Generates kdfParams, derives the master
  * key from `password`, opens a blank Vault, runs the core `createWallet`
  * flow, persists kdfParams to the meta slot, and leaves the host live
@@ -1399,11 +1421,14 @@ export async function createWalletLocal(req) {
     let openedVault = null;
     let ownPool = null;
     let ownHost = null;
+    // The blob backend this call may have written to; set once the vault is known empty.
+    let ownStorage = null;
     try {
         await assertFreshVault({ metaBackend: meta, storageBackend: createStorageBackend() });
         const kdfParams = makeFreshKdfParams();
         masterKey = await deriveMasterKeyAsync(password, kdfParams);
         const storage = createStorageBackend();
+        ownStorage = storage;
         const v = new Vault({ backend: storage, masterKey });
         openedVault = v;
         await v.open();  // blank document
@@ -1447,11 +1472,14 @@ export async function createWalletLocal(req) {
         });
         ownHost = host;
         startNotifications();
-        sessionStarted = true;
         await meta.save({ kdfParams });
+        sessionStarted = true;
         return { mnemonic: result.mnemonic, walletName: result.wallet.name };
     } catch (err) {
-        if (!sessionStarted) tearDownFailedOnboarding({ openedVault, ownPool, ownHost });
+        if (!sessionStarted) {
+            tearDownFailedOnboarding({ openedVault, ownPool, ownHost });
+            await discardPartialVault(ownStorage);
+        }
         throw err;
     } finally {
         if (masterKey) masterKey.fill(0);
@@ -1512,11 +1540,14 @@ export async function importMnemonicLocal(req) {
     let openedVault = null;
     let ownPool = null;
     let ownHost = null;
+    // The blob backend this call may have written to; set once the vault is known empty.
+    let ownStorage = null;
     try {
         await assertFreshVault({ metaBackend: meta, storageBackend: createStorageBackend() });
         const kdfParams = makeFreshKdfParams();
         masterKey = await deriveMasterKeyAsync(password, kdfParams);
         const storage = createStorageBackend();
+        ownStorage = storage;
         const v = new Vault({ backend: storage, masterKey });
         openedVault = v;
         await v.open();
@@ -1576,8 +1607,8 @@ export async function importMnemonicLocal(req) {
         });
         ownHost = host;
         startNotifications();
-        sessionStarted = true;
         await meta.save({ kdfParams });
+        sessionStarted = true;
         // §19.5.2 restore half: bring back the labels + contacts this seed
         // published earlier. Runs after sdkBound() so the explorer endpoints
         // are resolved, and after the wallet is fully persisted so a dead
@@ -1610,7 +1641,10 @@ export async function importMnemonicLocal(req) {
             labelSyncToken,
         };
     } catch (err) {
-        if (!sessionStarted) tearDownFailedOnboarding({ openedVault, ownPool, ownHost });
+        if (!sessionStarted) {
+            tearDownFailedOnboarding({ openedVault, ownPool, ownHost });
+            await discardPartialVault(ownStorage);
+        }
         throw err;
     } finally {
         if (masterKey) masterKey.fill(0);
@@ -1700,12 +1734,15 @@ export async function importBackupLocal(req) {
     let openedVault = null;
     let ownPool = null;
     let ownHost = null;
+    // The blob backend this call may have written to; set once the vault is known empty.
+    let ownStorage = null;
     try {
         await assertFreshVault({ metaBackend: meta, storageBackend: createStorageBackend() });
         const flowsNs = await getFlows();
         const kdfParams = makeFreshKdfParams();
         masterKey = await deriveMasterKeyAsync(password, kdfParams);
         const storage = createStorageBackend();
+        ownStorage = storage;
         const v = new Vault({ backend: storage, masterKey });
         openedVault = v;
         await v.open();
@@ -1763,8 +1800,8 @@ export async function importBackupLocal(req) {
         });
         ownHost = host;
         startNotifications();
-        sessionStarted = true;
         await meta.save({ kdfParams });
+        sessionStarted = true;
         return {
             walletId: result.walletId,
             walletName: result.payload?.wallet?.name,
@@ -1773,7 +1810,10 @@ export async function importBackupLocal(req) {
             rekeyed: result.rekeyed,
         };
     } catch (err) {
-        if (!sessionStarted) tearDownFailedOnboarding({ openedVault, ownPool, ownHost });
+        if (!sessionStarted) {
+            tearDownFailedOnboarding({ openedVault, ownPool, ownHost });
+            await discardPartialVault(ownStorage);
+        }
         throw err;
     } finally {
         if (masterKey) masterKey.fill(0);

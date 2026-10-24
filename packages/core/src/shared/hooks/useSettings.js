@@ -19,6 +19,9 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useMessaging } from '../useMessaging.js';
+import { useToast } from '../components/ToastHost.jsx';
+import { userFacingMessage } from '../utils/userFacingMessage.js';
+import { t } from '../../i18n/index.js';
 import { defaultRegistry, hydrateCustomChainsFromSettings } from '../../registry/index.js';
 import { normalizeDisplayCurrency } from '../utils/displayCurrency.js';
 
@@ -49,8 +52,9 @@ const SESSION_CHANGED_EVENT = 'xc:session-changed';
  *   update: (patch: Record<string, unknown>) => Promise<import('../../schemas/settings.js').Settings>,
  * }}
  */
-export function useSettings() {
+export function useSettings({ reportsOwnError = false } = {}) {
     const { messaging } = useMessaging();
+    const { showToast } = useToast();
     const [settings, setSettings] = useState(/** @type {any} */ (null));
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState(/** @type {Error | null} */ (null));
@@ -92,11 +96,27 @@ export function useSettings() {
         }
     }, [messaging]);
 
+    // A refused write (a full disk, a storage backend that went away) would
+    // otherwise leave the control snapping back with no word. A section that
+    // shows its own message mounts the hook with `reportsOwnError`, so the user
+    // sees one.
     const update = useCallback(async (patch) => {
         if (typeof messaging?.updateSettings !== 'function') {
             throw new Error('messaging.updateSettings is not available in this shell');
         }
-        const next = await messaging.updateSettings(patch);
+        let next;
+        try {
+            next = await messaging.updateSettings(patch);
+        } catch (err) {
+            if (!reportsOwnError) {
+                showToast({
+                    id: 'settings-save-failed',
+                    variant: 'error',
+                    message: userFacingMessage(err, t('settings.saveFailed')),
+                });
+            }
+            throw err;
+        }
         const effective = normalizeDisplayCurrency(next);
         if (aliveRef.current) {
             requestRef.current += 1;
@@ -111,7 +131,7 @@ export function useSettings() {
             } catch { /* CustomEvent unsupported: non-fatal */ }
         }
         return effective.settings;
-    }, [messaging]);
+    }, [messaging, showToast, reportsOwnError]);
 
     useEffect(() => {
         aliveRef.current = true;

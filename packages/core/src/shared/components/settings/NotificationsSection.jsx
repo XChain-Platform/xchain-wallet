@@ -238,7 +238,7 @@ const NOTIFICATION_FLAGS = /** @type {const} */ ([
  * @param {string | null | undefined} [props.walletId]  active wallet; scopes the price-alert manager
  */
 export function NotificationsSection({ walletId } = {}) {
-    const { settings, loading, error, update } = useSettings();
+    const { settings, loading, error, update } = useSettings({ reportsOwnError: true });
     const chromePermissions = globalThis.chrome?.permissions;
     const extensionSupported = typeof chromePermissions?.contains === 'function'
         && typeof chromePermissions?.request === 'function'

@@ -134,6 +134,7 @@ export const en = {
     // --- settings ------------------------------------------------
     'settings.toggle.turnOn': 'Turn on',
     'settings.developerMode.switchAccessibleLabel': 'Turn on developer mode',
+    'settings.saveFailed': "Couldn't save this setting. Try again.",
     'settings.ads.switchAccessibleLabel': 'Turn on Automatic Donation System',
     'settings.network.label': 'Network',
     'settings.network.activeLabel': 'Active network',

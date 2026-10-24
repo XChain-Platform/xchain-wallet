@@ -37,7 +37,9 @@ const { populate, flowBehaviour, built, hoisted } = vi.hoisted(() => {
         async save() { /* accepted */ }
         close() { this.closes += 1; this.key.fill(0); }
     }
-    return { populate, flowBehaviour: {}, built, hoisted: { FakeSignerPool, InertWatcher, RecordingVault } };
+    const storageClear = vi.fn(async () => {});
+    const metaSave = vi.fn(async () => {});
+    return { populate, flowBehaviour: {}, built, hoisted: { FakeSignerPool, InertWatcher, RecordingVault, storageClear, metaSave } };
 });
 
 // hostBridge imports these modules directly (not through the core barrel),
@@ -97,8 +99,8 @@ vi.mock('@xchain-wallet/core', async (importOriginal) => {
 });
 
 vi.mock('../../../packages/web/src/storage/backends.js', () => ({
-    createStorageBackend: () => ({ load: async () => null, save: async () => {} }),
-    createMetaBackend: () => ({ load: async () => null, save: async () => {} }),
+    createStorageBackend: () => ({ load: async () => null, save: async () => {}, clear: (...args) => hoisted.storageClear(...args) }),
+    createMetaBackend: () => ({ load: async () => null, save: (...args) => hoisted.metaSave(...args) }),
     installNativeWipeHook: () => {},
     installNativeScreenGuard: () => {},
 }));
@@ -146,6 +148,10 @@ beforeEach(async () => {
     built.length = 0;
     populate.mockReset();
     populate.mockResolvedValue({});
+    hoisted.storageClear.mockReset();
+    hoisted.storageClear.mockResolvedValue(undefined);
+    hoisted.metaSave.mockReset();
+    hoisted.metaSave.mockResolvedValue(undefined);
     for (const lane of LANES) flowBehaviour[lane.flow] = lane.ok;
     flowBehaviour.restoreLabelSyncAfterImport = async () => null;
 });
@@ -180,6 +186,36 @@ describe('web onboarding closes its Vault when the session never starts', () => 
             expect((await hostError())?.name).not.toBe('VaultClosedError');
             await lockWalletLocal();
             expect(built[0].closes).toBe(1);
+        });
+    }
+});
+
+describe('web onboarding leaves no half-written wallet behind', () => {
+    for (const lane of LANES) {
+        it(`${lane.name}: a refused kdfParams save discards the blob and leaves the page locked`, async () => {
+            hoisted.metaSave.mockRejectedValue(new Error('metadata could not be persisted'));
+            await expect(lane.call()).rejects.toThrow('metadata could not be persisted');
+            expect(hoisted.storageClear).toHaveBeenCalledTimes(1);
+            expect(built).toHaveLength(1);
+            expect(built[0].closes).toBe(1);
+            expect((await hostError())?.name).toBe('VaultClosedError');
+        });
+
+        it(`${lane.name}: a flow that throws after its first write discards the blob`, async () => {
+            flowBehaviour[lane.flow] = async () => { throw new Error('storage is full'); };
+            await expect(lane.call()).rejects.toThrow('storage is full');
+            expect(hoisted.storageClear).toHaveBeenCalledTimes(1);
+        });
+
+        it(`${lane.name}: a blob clear that also fails still reports the original error`, async () => {
+            hoisted.metaSave.mockRejectedValue(new Error('metadata could not be persisted'));
+            hoisted.storageClear.mockRejectedValue(new Error('clear refused'));
+            await expect(lane.call()).rejects.toThrow('metadata could not be persisted');
+        });
+
+        it(`${lane.name}: the success path keeps the blob`, async () => {
+            await lane.call();
+            expect(hoisted.storageClear).not.toHaveBeenCalled();
         });
     }
 });
