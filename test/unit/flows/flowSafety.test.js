@@ -182,12 +182,18 @@ describe('backup wallet and network scope', () => {
                 schemaVersion: 3, id: 'wallet-1', importedKeys: [],
                 encryptedSeed: '', encryptedPassphrase: null,
             },
-            accounts: [{ schemaVersion: 2, id: 'account-1', walletId: 'wallet-1' }],
+            accounts: [{
+                schemaVersion: 2, id: 'account-1', walletId: 'wallet-1', name: 'Primary', index: 0,
+                activeAddressByChainId: {}, createdAt: '2026-10-13T18:00:00.000Z',
+            }],
             addresses: [],
             contacts: [],
             connectedSites: [{
                 schemaVersion: 1, id: 'site-wild', origin: 'https://dapp.example',
-                appName: 'dApp', permissions: { chains: [], accounts: [] },
+                appName: 'dApp', appIcon: '',
+                connectedAt: '2026-10-13T18:00:00.000Z', lastUsedAt: '2026-10-13T18:00:00.000Z',
+                permissions: { chains: [], accounts: [], canSignMessage: false, canSignAction: {} },
+                sessionHistory: [],
             }],
             signers: [],
             pendingTxs: [],
@@ -259,6 +265,9 @@ describe('backup wallet and network scope', () => {
         const ownPending = {
             schemaVersion: 3, id: 'pending-1', chain: 'bitcoin', network: 'mainnet',
             fromAddress: 'same-text-address', txid: 'a'.repeat(64), status: 'broadcast',
+            toAddress: null, action: 'send', actionSummary: '', psbtHex: '', txHex: null,
+            createdAt: '2026-10-13T18:00:00.000Z', broadcastAt: null, confirmedAt: null,
+            rbfReplacement: null, error: null,
         };
         const offNetworkPending = {
             ...ownPending, id: 'pending-2', network: 'testnet',
@@ -272,10 +281,16 @@ describe('backup wallet and network scope', () => {
                 encryptedSeed: '',
                 encryptedPassphrase: null,
             },
-            accounts: [{ schemaVersion: 2, id: 'account-1', walletId: 'wallet-1' }],
+            accounts: [{
+                schemaVersion: 2, id: 'account-1', walletId: 'wallet-1', name: 'Primary', index: 0,
+                activeAddressByChainId: {}, createdAt: '2026-10-13T18:00:00.000Z',
+            }],
             addresses: [{
-                schemaVersion: 1, id: 'address-1', accountId: 'account-1',
+                schemaVersion: 4, id: 'address-1', accountId: 'account-1',
                 chain: 'bitcoin', network: 'mainnet', address: 'same-text-address',
+                source: 'hd', addressType: 'p2wpkh', derivationPath: "m/84'/0'/0'/0/0",
+                publicKey: 'ab'.repeat(33), label: '', pinned: false, hidden: false,
+                signerId: null, role: 'receive', createdAt: '2026-10-13T18:00:00.000Z',
             }],
             contacts: [],
             connectedSites: [],

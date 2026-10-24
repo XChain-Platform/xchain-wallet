@@ -145,10 +145,42 @@ describe('exportBackupFile', () => {
         const source = vaultFixture();
         source.wallet.schemaVersion = 3;
         source.wallet.encryptedSeed = '';
-        source.ownAccount.schemaVersion = 2;
-        source.ownAddress.schemaVersion = 4;
+        Object.assign(source.ownAccount, {
+            schemaVersion: 2,
+            name: 'Primary',
+            index: 0,
+            activeAddressByChainId: {},
+            createdAt: '2026-10-13T18:00:00.000Z',
+        });
+        Object.assign(source.ownAddress, {
+            schemaVersion: 4,
+            chain: 'bitcoin',
+            network: 'mainnet',
+            source: 'hd',
+            addressType: 'p2wpkh',
+            derivationPath: null,
+            publicKey: 'ab'.repeat(33),
+            pinned: false,
+            hidden: false,
+            signerId: null,
+            role: 'receive',
+            createdAt: '2026-10-13T18:00:00.000Z',
+        });
         source.ownAddress.label = 'Client invoices';
-        source.importedAddress.schemaVersion = 4;
+        Object.assign(source.importedAddress, {
+            schemaVersion: 4,
+            chain: 'bitcoin',
+            network: 'mainnet',
+            source: 'imported-wif',
+            addressType: 'p2wpkh',
+            derivationPath: null,
+            publicKey: 'ab'.repeat(33),
+            pinned: false,
+            hidden: false,
+            signerId: null,
+            role: 'receive',
+            createdAt: '2026-10-13T18:00:00.000Z',
+        });
         source.importedAddress.label = 'Imported savings';
         source.vault.contacts = collection([]);
         source.vault.connectedSites = collection([]);
