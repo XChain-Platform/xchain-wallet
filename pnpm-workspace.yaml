@@ -110,6 +110,14 @@ overrides:
   # GHSA-6qxp-vccf-f47h: high advisory in the MCP SDK that xchain-sdk pulls in; patched in 1.31.0.
   '@modelcontextprotocol/sdk': ^1.31.0
   'undici@7': ^7.29.1
+  # GHSA-xjj6-f33q-929c and siblings: high undici advisories in the desktop
+  # shell's fetch, patched in 8.12.2.
+  'undici@8': ^8.12.2
+  # GHSA-27r3-jxmh-p828: high body-parser advisory under express in the SDK
+  # and the MCP SDK, patched in 2.4.0.
+  'body-parser@2': ^2.4.0
+  # High zod advisory below 4.6.6, pulled in by the MCP SDK.
+  'zod@4': ^4.6.6
 
 # "Lifecycle scripts disabled or allowlisted". This is the
 # allowlist. Anything NOT named here has its preinstall/install/postinstall
