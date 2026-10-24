@@ -482,7 +482,7 @@ export async function ensureHost(runtime) {
                 listArmedAlerts: () => vault.priceAlerts.list(),
                 getSettings: () => flowsLib.getSettings(vault),
                 notify: runtime.notify,
-                markTriggered: (id) => flowsLib.markAlertTriggered({ vault, id }),
+                markTriggered: (id, terms) => flowsLib.markAlertTriggered({ vault, id, terms }),
                 logger: console,
             });
             runtime.priceAlertWatcher.start();

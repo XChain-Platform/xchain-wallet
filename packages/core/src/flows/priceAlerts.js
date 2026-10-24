@@ -103,14 +103,18 @@ export async function clearAlert({ vault, id, walletId }) {
  * Disarm an alert after it fires (one-shot). Records when it triggered.
  * Called by the PriceAlertWatcher; a no-op if the id no longer exists.
  *
- * @param {{ vault: import('../storage/Vault.js').Vault, id: string, at?: string }} params
+ * A `terms` key (priceAlertKey of the alert as it fired) leaves an alert that was
+ * edited or re-armed under other terms since then untouched.
+ *
+ * @param {{ vault: import('../storage/Vault.js').Vault, id: string, at?: string, terms?: string }} params
  */
-export async function markAlertTriggered({ vault, id, at }) {
+export async function markAlertTriggered({ vault, id, at, terms }) {
     if (!vault) throw new Error('markAlertTriggered: vault is required');
     if (!id) throw new Error('markAlertTriggered: id is required');
     return withAlertOperation(vault, id, async () => {
         const alert = await vault.priceAlerts.get(id);
         if (!alert) return null;
+        if (terms !== undefined && priceAlertKey(alert) !== terms) return null;
         const updated = { ...alert, status: 'triggered', triggeredAt: at || new Date().toISOString() };
         await vault.priceAlerts.put(updated);
         return updated;

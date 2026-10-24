@@ -73,7 +73,7 @@ describe('PriceAlertWatcher', () => {
         expect(n.kind).toBe('price-alert');
         expect(n.body).toContain('Bitcoin');
         expect(n.body).toContain('$70,000');
-        expect(markTriggered).toHaveBeenCalledWith('a1');
+        expect(markTriggered).toHaveBeenCalledWith('a1', expect.any(String));
     });
 
     it('fires a "below" alert when price <= target', async () => {
@@ -217,7 +217,7 @@ describe('PriceAlertWatcher', () => {
         expect(notify).toHaveBeenCalledTimes(1);
         expect(notify.mock.calls[0][0].data.alertId).toBe('btc');
         expect(markTriggered).toHaveBeenCalledTimes(1);
-        expect(markTriggered).toHaveBeenCalledWith('btc');
+        expect(markTriggered).toHaveBeenCalledWith('btc', expect.any(String));
     });
 
     it('bails on a {disabled:true} oracle result', async () => {
@@ -297,7 +297,7 @@ describe('PriceAlertWatcher', () => {
         });
         await watcher.pollOnce();
         expect(notify).not.toHaveBeenCalled();
-        expect(markTriggered).toHaveBeenCalledWith('a1');
+        expect(markTriggered).toHaveBeenCalledWith('a1', expect.any(String));
     });
 
     it('delivers normally when quiet hours is present but disabled', async () => {
@@ -329,5 +329,113 @@ describe('PriceAlertWatcher', () => {
 
         await watcher.pollOnce();
         expect(notify).toHaveBeenCalledTimes(2);
+    });
+});
+
+describe('PriceAlertWatcher edits during a poll', () => {
+    const baseSettings = { privacy: { priceDataEnabled: true }, notifications: { priceAlerts: true } };
+    const armed = (targetFiat) => ({ id: 'e1', chainId: 'bitcoin-mainnet', direction: 'above', targetFiat, fiatCurrency: 'usd', status: 'armed' });
+
+    it('does not fire or disarm an alert edited while the price was being fetched', async () => {
+        let stored = armed(70000);
+        const notify = vi.fn(async () => true);
+        const markTriggered = vi.fn(async () => {});
+        const watcher = new PriceAlertWatcher({
+            getNativePrices: async () => {
+                stored = armed(90000); // the user saves new terms while the oracle is slow
+                return { prices: { 'bitcoin-mainnet': { priceFiat: 71000 } } };
+            },
+            listArmedAlerts: async () => [stored],
+            getSettings: async () => baseSettings,
+            notify,
+            markTriggered,
+        });
+        await watcher.pollOnce();
+        expect(notify).not.toHaveBeenCalled();
+        expect(markTriggered).not.toHaveBeenCalled();
+    });
+
+    it('hands markTriggered the terms the alert fired under', async () => {
+        const markTriggered = vi.fn(async () => {});
+        const watcher = new PriceAlertWatcher({
+            getNativePrices: async () => ({ prices: { 'bitcoin-mainnet': { priceFiat: 71000 } } }),
+            listArmedAlerts: async () => [armed(70000)],
+            getSettings: async () => baseSettings,
+            notify: async () => true,
+            markTriggered,
+        });
+        await watcher.pollOnce();
+        expect(markTriggered).toHaveBeenCalledWith('e1', 'bitcoin-mainnet::above::70000::usd');
+    });
+
+    it('leaves an alert edited after delivery armed and lets it fire under its new terms', async () => {
+        let stored = armed(70000);
+        let failMark = true;
+        const notify = vi.fn(async () => true);
+        const markTriggered = vi.fn(async () => { if (failMark) throw new Error('store busy'); });
+        const watcher = new PriceAlertWatcher({
+            getNativePrices: async () => ({ prices: { 'bitcoin-mainnet': { priceFiat: 95000 } } }),
+            listArmedAlerts: async () => [stored],
+            getSettings: async () => baseSettings,
+            notify,
+            markTriggered,
+        });
+        await watcher.pollOnce();
+        expect(notify).toHaveBeenCalledTimes(1);
+        stored = armed(90000);
+        failMark = false;
+        await watcher.pollOnce();
+        expect(notify).toHaveBeenCalledTimes(2);
+        expect(markTriggered).toHaveBeenCalledTimes(2);
+        expect(markTriggered).toHaveBeenLastCalledWith('e1', 'bitcoin-mainnet::above::90000::usd');
+    });
+});
+
+describe('PriceAlertWatcher re-arm after a fire', () => {
+    it('fires a re-armed alert on the next poll interval even when no poll saw it triggered', async () => {
+        let clock = 1_000_000;
+        const stored = { id: 'r1', chainId: 'bitcoin-mainnet', direction: 'above', targetFiat: 70000, fiatCurrency: 'usd', status: 'armed' };
+        const notify = vi.fn(async () => true);
+        const watcher = new PriceAlertWatcher({
+            getNativePrices: async () => ({ prices: { 'bitcoin-mainnet': { priceFiat: 71000 } } }),
+            listArmedAlerts: async () => [stored],
+            getSettings: async () => ({ privacy: { priceDataEnabled: true }, notifications: { priceAlerts: true } }),
+            notify,
+            // The write lands and the user re-arms before the next poll, so the
+            // list never shows the alert as triggered.
+            markTriggered: async () => {},
+            intervalMs: 300_000,
+            now: () => clock,
+        });
+        await watcher.pollOnce();
+        expect(notify).toHaveBeenCalledTimes(1);
+        await watcher.pollOnce();
+        expect(notify).toHaveBeenCalledTimes(1);
+        clock += 299_000;
+        await watcher.pollOnce();
+        expect(notify).toHaveBeenCalledTimes(2);
+    });
+});
+
+describe('PriceAlertWatcher stop during a poll', () => {
+    it('delivers nothing when stop() lands while the price is being fetched', async () => {
+        let release;
+        const gate = new Promise((resolve) => { release = resolve; });
+        const notify = vi.fn(async () => true);
+        const markTriggered = vi.fn(async () => {});
+        const watcher = new PriceAlertWatcher({
+            getNativePrices: async () => { await gate; return { prices: { 'bitcoin-mainnet': { priceFiat: 99000 } } }; },
+            listArmedAlerts: async () => [{ id: 's1', chainId: 'bitcoin-mainnet', direction: 'above', targetFiat: 95000, fiatCurrency: 'usd', status: 'armed' }],
+            getSettings: async () => ({ privacy: { priceDataEnabled: true }, notifications: { priceAlerts: true } }),
+            notify,
+            markTriggered,
+        });
+        const poll = watcher.pollOnce();
+        await new Promise((resolve) => setTimeout(resolve, 5));
+        watcher.stop();
+        release();
+        await poll;
+        expect(notify).not.toHaveBeenCalled();
+        expect(markTriggered).not.toHaveBeenCalled();
     });
 });

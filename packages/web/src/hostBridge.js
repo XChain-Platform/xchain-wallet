@@ -951,9 +951,9 @@ function startNotificationsNow() {
                 return flowsNs.getSettings(vault);
             },
             notify,
-            markTriggered: async (id) => {
+            markTriggered: async (id, terms) => {
                 const flowsNs = await getFlows();
-                return flowsNs.markAlertTriggered({ vault, id });
+                return flowsNs.markAlertTriggered({ vault, id, terms });
             },
             logger: console,
         });

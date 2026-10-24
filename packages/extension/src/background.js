@@ -457,7 +457,7 @@ async function buildHost() {
             listArmedAlerts: () => vault.priceAlerts.list(),
             getSettings: () => flowsLib.getSettings(vault),
             notify: chromeNotify,
-            markTriggered: (id) => flowsLib.markAlertTriggered({ vault, id }),
+            markTriggered: (id, terms) => flowsLib.markAlertTriggered({ vault, id, terms }),
             loadFired: () => priceAlertFiredStore.load(),
             saveFired: (ids) => priceAlertFiredStore.save(ids),
             logger: console,
