@@ -9,10 +9,10 @@
 // contact legal@dankest.llc.
 
 // A payment notification toast names an amount. Locking the wallet takes
-// every notification toast off the screen, queued ones included.
+// every notification toast off the screen, queued ones included. The spec
+// uses a password wallet because a demo wallet stays open on Lock.
 
-import { dismissIntroCarousel, expect, test, unlockedShell } from '../../fixtures/wallet.js';
-import { enterDemoWallet } from '../../fixtures/responsive.js';
+import { createWallet, expect, test, unlockButton } from '../../fixtures/wallet.js';
 
 const fire = (page, title) => page.evaluate((text) => {
     window.dispatchEvent(new CustomEvent('xchain:notification', {
@@ -22,12 +22,12 @@ const fire = (page, title) => page.evaluate((text) => {
 
 test('a lock removes the notification toasts from the screen', async ({ page }) => {
     await page.setViewportSize({ width: 320, height: 640 });
-    await enterDemoWallet(page, { dismissIntroCarousel, expect, unlockedShell });
+    await createWallet(page);
     for (let index = 1; index <= 6; index += 1) await fire(page, `${index}.25 LOCKAMT received`);
     await expect(page.getByText('1.25 LOCKAMT received', { exact: false })).toBeVisible();
 
     await page.getByRole('button', { name: 'Lock wallet' }).first().click();
-    await expect(page.getByRole('button', { name: 'Unlock Wallet' })).toBeVisible();
+    await expect(unlockButton(page)).toBeVisible();
     // One read, no retry: a retrying assertion would wait out the toast timers.
     expect(await page.locator('body').innerText()).not.toContain('LOCKAMT');
 });
