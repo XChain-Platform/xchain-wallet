@@ -15,22 +15,92 @@
 // `settings.ads.{enabled, perChain[chainId]}` (schema v1).
 //
 // Donation addresses come from each chain descriptor's
-// `adsDonationAddress`. Per the §35 gap audit / §0.25.0 changelog
-// these still ship as the `PLACEHOLDER_REPLACE_BEFORE_MAINNET`
-// sentinel; the panel surfaces that fact rather than displaying the
-// sentinel as if it were a real address.
+// `adsDonationAddresses`: three per chain and network, carried from the
+// platform coin registry. The user picks one per chain, stored as
+// `ads.perChain[chainId].donationAddressRole` (DONATE1 by default), and the
+// panel shows the chosen address read-only. A role whose address is absent
+// or still the `PLACEHOLDER_REPLACE_BEFORE_MAINNET` sentinel cannot be
+// picked, and the panel says so rather than showing the sentinel.
 
 import { useId } from 'react';
 import { flows as flowsLib, registry as registryLib } from '@xchain-wallet/core';
-import { InfoTip, Input } from '@xchain-wallet/core/ui';
+import { InfoTip, Input, Select } from '@xchain-wallet/core/ui';
 import { useSettings } from '../../hooks/useSettings.js';
-import { ADS_DONATION_ADDRESS_PLACEHOLDER } from '../../../registry/validate.js';
+import {
+    ADS_DEFAULT_DONATION_ADDRESS_ROLE,
+    ADS_DONATION_ADDRESS_ROLES,
+    donationAddressForDescriptor,
+    isDonationAddressConfigured,
+} from '../../../registry/validate.js';
 import { resolveAdsChainConfig } from '../../../schemas/settings.js';
 import { t } from '../../../i18n/index.js';
 import { STACK, SettingsLoadError, Status, ToggleRow } from './_settingsPrimitives.jsx';
 import styles from './AdsSection.module.css';
 
 const chainRegistry = registryLib.defaultRegistry();
+
+// What the picker calls each stored role. The registry names the third
+// destination EXPLORER; users know it as DONATE3.
+const DONATION_ROLE_LABEL_KEYS = {
+    DONATE1: 'settings.ads.roleDonate1',
+    DONATE2: 'settings.ads.roleDonate2',
+    EXPLORER: 'settings.ads.roleDonate3',
+};
+
+// The stored role when it is one the donation flow honours, else the default.
+function selectedDonationRole(chainState) {
+    const stored = chainState?.donationAddressRole;
+    return ADS_DONATION_ADDRESS_ROLES.includes(stored) ? stored : ADS_DEFAULT_DONATION_ADDRESS_ROLE;
+}
+
+/**
+ * The per-chain donation destination: a role picker and the chosen address,
+ * read-only. Roles with no configured address are listed but cannot be chosen.
+ */
+function DonationAddressField({ chainId, descriptor, displayName, role, disabled, onPick }) {
+    const configured = isDonationAddressConfigured(descriptor, role);
+    return (
+        <>
+            <Select
+                label={t('settings.ads.donationRecipient')}
+                aria-label={t('settings.ads.donationRecipientFor', { displayName })}
+                value={role}
+                disabled={disabled}
+                onChange={(event) => onPick(chainId, event.target.value)}
+            >
+                {ADS_DONATION_ADDRESS_ROLES.map((option) => (
+                    <option
+                        key={option}
+                        value={option}
+                        disabled={!isDonationAddressConfigured(descriptor, option)}
+                    >
+                        {t(DONATION_ROLE_LABEL_KEYS[option])}
+                    </option>
+                ))}
+            </Select>
+
+            {configured ? (
+                <Input
+                    label={t('settings.ads.donationAddress')}
+                    readOnly
+                    autoComplete="off"
+                    value={donationAddressForDescriptor(descriptor, role)}
+                    className={styles.address}
+                    aria-label={t('settings.ads.donationAddress2', { displayName })}
+                />
+            ) : (
+                <Input
+                    label={t('settings.ads.donationAddress')}
+                    readOnly
+                    autoComplete="off"
+                    value={t('settings.ads.notAvailableYet')}
+                    className={`${styles.address} ${styles.unavailable}`}
+                    aria-description={t('settings.ads.donationAddressArrivesLater', { displayName })}
+                />
+            )}
+        </>
+    );
+}
 
 /**
  * One whole-number sats field. Blank drops the override and follows the
@@ -158,9 +228,6 @@ export function AdsSection() {
                 const perTxIsDefault = chainState.perTxAmountSats == null;
                 const triggerIsDefault = chainState.triggerAmountSats == null;
                 const displayName = descriptor?.displayName || chainId;
-                const donationAddress = descriptor?.adsDonationAddress || '';
-                const isPlaceholder = donationAddress === ADS_DONATION_ADDRESS_PLACEHOLDER;
-                const placeholderDescription = `A donation address for ${displayName} arrives in a future release; until then nothing is sent on this network.`;
                 return (
                     <div key={chainId} className={styles.chain}>
                         <h3 className={styles.chainName}>{displayName}</h3>
@@ -184,25 +251,14 @@ export function AdsSection() {
                             tip={sharedSentence ? undefined : thresholdTip}
                         />
 
-                        {isPlaceholder ? (
-                            <Input
-                                label={t('settings.ads.donationAddress')}
-                                readOnly
-                                autoComplete="off"
-                                value={t('settings.ads.notAvailableYet')}
-                                className={`${styles.address} ${styles.unavailable}`}
-                                aria-description={placeholderDescription}
-                            />
-                        ) : (
-                            <Input
-                                label={t('settings.ads.donationAddress')}
-                                readOnly
-                                autoComplete="off"
-                                value={donationAddress}
-                                className={styles.address}
-                                aria-label={t('settings.ads.donationAddress2', { displayName })}
-                            />
-                        )}
+                        <DonationAddressField
+                            chainId={chainId}
+                            descriptor={descriptor}
+                            displayName={displayName}
+                            role={selectedDonationRole(chainState)}
+                            disabled={!settings.ads.enabled}
+                            onPick={(id, role) => onChainPatch(id, { donationAddressRole: role })}
+                        />
 
                         <div className={styles.stat}>
                             <span className={styles.statLabel}>{t('settings.ads.pendingDonation')}</span>
