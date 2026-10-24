@@ -73,6 +73,16 @@ function containFrameFocus(win) {
     };
 }
 
+// The shared compact-landscape rules (orientation: landscape, max-height: 480px,
+// min-aspect-ratio: 3/2) strip padding from headers and screens. A narrow frame
+// whose content is short enough to cross that aspect ratio shrinks, which keeps
+// the rules on, or grows, which turns them off, and so flips between the two
+// forever. A phone-width frame is a portrait preview, so it never gets a
+// viewport shorter than the height where the aspect ratio drops below 3/2.
+function portraitFloor(width) {
+    return width <= 480 ? Math.floor(width / 1.5) + 1 : 0;
+}
+
 /**
  * One iframe of a fixed CSS width whose content is a React portal, so the
  * example keeps the guide's context and state while every media query inside
@@ -86,9 +96,10 @@ function containFrameFocus(win) {
  * @param {'light' | 'dark'} [props.theme]       fixed theme for side-by-side theme comparisons
  * @param {import('react').ReactNode} props.children
  */
-export function ViewportFrame({ width, minHeight = 0, padded = true, title, theme, children }) {
+export function ViewportFrame({ width, minHeight: requestedMinHeight = 0, padded = true, title, theme, children }) {
     const ref = useRef(/** @type {HTMLIFrameElement | null} */ (null));
     const [body, setBody] = useState(/** @type {HTMLElement | null} */ (null));
+    const minHeight = Math.max(requestedMinHeight, portraitFloor(width));
     const [height, setHeight] = useState(Math.max(minHeight, 120));
 
     useEffect(() => {
