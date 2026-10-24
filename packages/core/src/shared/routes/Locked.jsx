@@ -410,7 +410,12 @@ export function Locked({ onUnlocked }) {
                 );
                 haptic.error();
             } else {
+                // Two failures carry a sentence that says what to do: another
+                // tab holding the vault, and a browser that cannot coordinate
+                // tabs. "Close and reopen the app" would send the user the wrong way.
                 setError(err?.message === 'Could not prepare unlock'
+                    || err?.name === 'VaultInUseError'
+                    || err?.name === 'VaultCoordinationUnavailableError'
                     ? err.message
                     : 'Could not unlock the wallet. Close and reopen the app, then try again.');
                 haptic.error();

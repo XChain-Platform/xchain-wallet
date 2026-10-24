@@ -176,7 +176,10 @@ export function ImportWallet({
                 : 'mnemonic'
         ),
     );
-    const [name, setName] = useState(isFreeWallet ? 'FreeWallet' : 'Imported Wallet');
+    const defaultWalletName = isFreeWallet ? 'FreeWallet' : 'Imported Wallet';
+    const [name, setName] = useState(defaultWalletName);
+    // A cleared or blank name field names the wallet by its default; the vault refuses an empty name.
+    const walletName = name.trim() || defaultWalletName;
     const [mnemonic, setMnemonic] = useState('');
     const [mnemonicCursor, setMnemonicCursor] = useState(0);
     const [wif, setWif] = useState('');
@@ -611,9 +614,9 @@ export function ImportWallet({
                 if (typeof messaging.addImportedWallet !== 'function') {
                     throw new Error('messaging.addImportedWallet is not available in this shell.');
                 }
-                result = await messaging.addImportedWallet({ password, mnemonic: trimmed, name, bip39Passphrase: passphraseArg });
+                result = await messaging.addImportedWallet({ password, mnemonic: trimmed, name: walletName, bip39Passphrase: passphraseArg });
             } else {
-                result = await messaging.importMnemonic({ password, mnemonic: trimmed, name, bip39Passphrase: passphraseArg });
+                result = await messaging.importMnemonic({ password, mnemonic: trimmed, name: walletName, bip39Passphrase: passphraseArg });
             }
             finishWalletImport(result);
             const showRestoredLabels = (labelSync) => {
@@ -644,7 +647,7 @@ export function ImportWallet({
     function finishWalletImport(result) {
         const walletId = result?.wallet?.id || result?.walletId || null;
         importedWalletRef.current = mode === 'add' && walletId
-            ? { id: walletId, name: result?.wallet?.name || result?.walletName || name }
+            ? { id: walletId, name: result?.wallet?.name || result?.walletName || walletName }
             : null;
         invalidatePendingInput();
         clearSensitiveState();
@@ -698,7 +701,7 @@ export function ImportWallet({
                 password,
                 wif: trimmedWif,
                 chainId: wifChainId,
-                name,
+                name: walletName,
             });
             finishWalletImport(result);
         } catch (err) {

@@ -24,6 +24,7 @@ import {
 } from '../../uri/psbtQr.js';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { formatOrList } from '../../i18n/index.js';
+import { userFacingMessage } from '../utils/userFacingMessage.js';
 
 const MIN_PASSWORD_LENGTH = 8;
 const ACCEPTED_WORD_COUNTS = [12, 15, 18, 21, 24];
@@ -89,6 +90,8 @@ export function PairPartnerWallet({ onBack, onPaired, walletId: existingWalletId
     const [walletId, setWalletId] = useState(existingWalletId || null);
 
     const [name, setName] = useState('Paired Wallet');
+    // A cleared or blank name field names the wallet by its default; the vault refuses an empty name.
+    const walletName = name.trim() || 'Paired Wallet';
     const [mnemonic, setMnemonic] = useState('');
     const [password, setPassword] = useState('');
     const [confirm, setConfirm] = useState('');
@@ -124,7 +127,7 @@ export function PairPartnerWallet({ onBack, onPaired, walletId: existingWalletId
                     walletId,
                     walletMode,
                     password: password || undefined,
-                    label: name,
+                    label: walletName,
                 });
                 if (cancelled) return;
                 setLocalCode(res?.encoded || null);
@@ -139,7 +142,7 @@ export function PairPartnerWallet({ onBack, onPaired, walletId: existingWalletId
             }
         })();
         return () => { cancelled = true; };
-    }, [stage, walletId, localCode, messaging, password, name]);
+    }, [stage, walletId, localCode, messaging, password, walletName]);
 
     // The frames this device shows. A short code uses one still frame. A long
     // one (the normal case: three chains ≈ 1907 characters)
@@ -243,7 +246,7 @@ export function PairPartnerWallet({ onBack, onPaired, walletId: existingWalletId
         setError(null);
         setBusy(true);
         try {
-            const r = await messaging.importMnemonic({ password, mnemonic: trimmed, name });
+            const r = await messaging.importMnemonic({ password, mnemonic: trimmed, name: walletName });
             const id = r?.wallet?.id || r?.walletId || r?.id || null;
             if (!id) {
                 throw new Error('The wallet imported but the shell returned no wallet id, so pairing cannot continue.');
@@ -255,7 +258,7 @@ export function PairPartnerWallet({ onBack, onPaired, walletId: existingWalletId
             setWalletId(id);
             setStage('exchange');
         } catch (err) {
-            setError(err?.message || 'Could not import the recovery phrase.');
+            setError(userFacingMessage(err, 'Could not import the recovery phrase.'));
         } finally {
             setBusy(false);
         }
@@ -288,7 +291,7 @@ export function PairPartnerWallet({ onBack, onPaired, walletId: existingWalletId
                 walletMode,
                 partner: normalizedPartnerCode,
                 password: password || undefined,
-                label: name,
+                label: walletName,
             });
             setVerification(res?.verification || null);
             setStage('done');
