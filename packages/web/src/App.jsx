@@ -1087,7 +1087,9 @@ function AppInner() {
         activeWalletId,
         onLocked: refresh,
     });
-    const nativeSuspended = useNativeAppLifecycle({
+    // While the app is in the background the hook hides the page and keeps
+    // the screen mounted; unmounting it would drop every typed form value.
+    useNativeAppLifecycle({
         checkAutoLock: autoLock.checkNow,
         sessionState: status.state,
         onBackground: () => {
@@ -1111,8 +1113,6 @@ function AppInner() {
             setNativeResumeKey((key) => key + 1);
         },
     });
-
-    if (nativeSuspended && status.state === 'unlocked') return <Loading />;
 
     switch (status.state) {
         case 'loading':

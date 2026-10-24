@@ -132,12 +132,13 @@ describe('mobile-only surfaces use the shared kit', () => {
             .toBeTruthy();
     });
 
-    it('covers a suspended app with the shared Screen and tokenized scanner layer', () => {
+    it('keeps a suspended app mounted and layers the scanner on tokens', () => {
         render(withMessaging(<Loading />));
         expect(document.querySelector(`.${screenStyles.screen}`)).toBeTruthy();
 
         const app = readFileSync(resolve(process.cwd(), 'packages/web/src/App.jsx'), 'utf8');
-        expect(app).toMatch(/if \(nativeSuspended && status\.state === 'unlocked'\) return <Loading \/>/);
+        // The cover hides the mounted screen; swapping it for <Loading /> drops typed form values.
+        expect(app).not.toMatch(/nativeSuspended && status\.state === 'unlocked'/);
         expect(app).toMatch(/aria-labelledby="xc-global-scanner-title"[\s\S]*?zIndex: 'var\(--xc-z-overlay\)'/);
         expect(app).not.toMatch(/aria-labelledby="xc-global-scanner-title"[\s\S]{0,500}?zIndex: 50/);
     });

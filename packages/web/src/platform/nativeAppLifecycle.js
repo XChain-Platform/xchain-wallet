@@ -39,6 +39,9 @@ function isNativeShell() {
  * @param {() => void} opts.onBackground
  * @param {() => void} opts.onUnlockedResume
  * @param {string} [opts.sessionState]
+ * The cover hides the page with `visibility` and keeps the screen mounted, so
+ * a half-typed form comes back as the user left it.
+ *
  * @returns {boolean} whether private app content must stay covered
  */
 export function useNativeAppLifecycle({
@@ -117,6 +120,15 @@ export function useNativeAppLifecycle({
                 .catch(() => { /* already removed */ });
         };
     }, []);
+
+    const covered = suspended && sessionState === 'unlocked';
+    useEffect(() => {
+        if (!covered || typeof document === 'undefined') return undefined;
+        const { style } = document.body;
+        const previous = style.visibility;
+        style.visibility = 'hidden';
+        return () => { style.visibility = previous; };
+    }, [covered]);
 
     return suspended;
 }
