@@ -18,6 +18,7 @@
 import { useLayoutEffect, useRef, useState } from 'react';
 import { Button, Input, Icon } from '@xchain-wallet/core/ui';
 import {
+    dropFieldGrouping,
     formatWithThousands,
     normalizeAmountFieldInput,
 } from '../utils/amountFormat.js';
@@ -136,16 +137,22 @@ export function AmountField({
         : null;
 
     const handleChange = (event) => {
-        const rawValue = String(event.target.value);
+        // A keystroke inside a grouped display ("1,000" plus a digit) leaves the
+        // field's own group mark in the text; it is formatting, not input.
+        const typed = /^(insertText|deleteContent)/.test(event.nativeEvent?.inputType || '');
+        const rawValue = typed
+            ? dropFieldGrouping(String(event.target.value), formatWithThousands(inputValue))
+            : String(event.target.value);
         const cursorPos = event.target.selectionStart;
         const normalized = normalizeAmountFieldInput(rawValue, {
             unit: activeUnit,
             fiatCurrency: isFiat ? fiatCcy : null,
         });
+        const shownValue = String(event.target.value);
         const normalizedCursor = typeof cursorPos === 'number'
-            ? cursorPos === rawValue.length
+            ? cursorPos === shownValue.length
                 ? normalized?.length ?? null
-                : rawValue.slice(0, cursorPos).replace(/[\s,]/g, '').length
+                : shownValue.slice(0, cursorPos).replace(/[\s,]/g, '').length
             : null;
 
         if (normalized === null) {

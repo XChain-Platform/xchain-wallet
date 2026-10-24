@@ -223,6 +223,26 @@ function escapedPattern(value) {
     return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
 
+/**
+ * Remove the group marks the field itself drew from a value the user just
+ * edited by typing. The display groups digits ("1,000"), so one more typed
+ * digit reads "1,0000", which the localized parser takes for the decimal
+ * 1.0000 and turns a million into one. A mark is only the field's own when
+ * the value shown before the edit already carried one.
+ *
+ * @param {string} rawValue         the input's value after the keystroke
+ * @param {string} previousDisplay  the value the input showed before it
+ * @param {string} [locale]
+ * @returns {string}
+ */
+export function dropFieldGrouping(rawValue, previousDisplay, locale) {
+    const { group } = localeNumberSeparators(locale);
+    const spaceLike = /^[\s  ]$/u.test(group);
+    const marks = spaceLike ? /[\s  ]/gu : new RegExp(escapedPattern(group), 'gu');
+    if (!new RegExp(marks.source, 'u').test(String(previousDisplay))) return rawValue;
+    return String(rawValue).replace(marks, '');
+}
+
 /** Normalize an amount that may carry its active unit or fiat symbol. */
 export function normalizeAmountFieldInput(value, { unit = '', fiatCurrency = null, locale } = {}) {
     if (value === null || value === undefined) return null;
