@@ -101,7 +101,11 @@ describe('ComposeMessage notices lead the page', () => {
         // into view, and focus lands on its safe button.
         expect(screen.getByRole('button', { name: /^Encryption: Plain text/ })).toBeTruthy();
         expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Keep encrypted' }));
-        expect(scrolled).toContain(notice);
+        // The page's notice box holds the confirmation as one of its entries,
+        // so the scrolled element is that entry inside the box.
+        const confirmation = document.getElementById('compose-plaintext-confirm');
+        expect(notice.contains(confirmation), 'the confirmation sits in the page notice').toBe(true);
+        expect(scrolled).toContain(confirmation);
 
         fireEvent.click(accept);
         expect(screen.queryByRole('button', { name: 'Send as plain text' })).toBeNull();
