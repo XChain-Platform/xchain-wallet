@@ -268,8 +268,16 @@ function subtractAtomic(quantity, debit) {
  */
 export function applyPendingBalanceDeltas(byChain, pendingTxs, chainRegistry) {
     if (!byChain || !Array.isArray(pendingTxs)) return byChain;
+    // One transaction is one spend: signing an identical payment again leaves a
+    // second record with the same txid, and netting both would debit it twice.
+    const nettedTxids = new Set();
     for (const pending of pendingTxs) {
         if (!pending || !LIVE_PENDING_STATUSES.has(pending.status)) continue;
+        if (typeof pending.txid === 'string' && pending.txid) {
+            const key = `${pending.chain}/${pending.network}/${pending.fromAddress}/${pending.txid.toLowerCase()}`;
+            if (nettedTxids.has(key)) continue;
+            nettedTxids.add(key);
+        }
         const chainId = chainRegistry.chainIdFor(pending.chain, pending.network);
         const entries = chainId && Array.isArray(byChain[chainId]) ? byChain[chainId] : [];
         for (const entry of entries) {

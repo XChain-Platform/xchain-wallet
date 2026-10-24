@@ -70,6 +70,8 @@ const ETA_TONE = { low: 'etaLow', normal: 'etaNormal', fast: 'etaFast', custom: 
  *   - showEstimateNotice  whether fee-source availability notices render
  *   - coinTicker native coin symbol (BTC / LTC / DOGE) shown after the fee
  *               amount so it's unambiguous which coin the fee is paid in
+ *   - error      a refusal about the fee (for example the node's relay
+ *               minimum); renders in the selector's feedback slot
  *
  * @typedef {object} FeeSelectorValue
  * @property {'low' | 'normal' | 'fast' | 'custom'} mode
@@ -86,6 +88,7 @@ export function FeeSelector({
     label = null,
     coinTicker = '',
     showEstimateNotice = true,
+    error = null,
 }) {
     const customInputId = useId();
     const feeInputId = useId();
@@ -292,6 +295,11 @@ export function FeeSelector({
         && customRateNumber > fastPresetRate * HIGH_FEE_MULTIPLIER) {
         customFeedback = 'This rate is more than 10 times the Fast rate. Check it carefully before sending.';
         customFeedbackTone = 'warning';
+    }
+
+    if (error) {
+        customFeedback = error;
+        customFeedbackTone = 'error';
     }
 
     return (

@@ -40,6 +40,7 @@
 // second copy of the wording here would drift from the one on screen. Only the
 // subject differs ("The transaction service").
 import { rateLimitRetryAfterSeconds, rateLimitedMessage } from './explorerErrors.js';
+import { encoderFieldError } from './encoderFieldErrors.js';
 
 // Suffix `annotateEncoderFeeRequirement` appends; `requiredFeeFromError` parses
 // it back. Only the AMOUNT rides along: the quote has no ticker field, and the
@@ -240,6 +241,12 @@ export function encoderErrorMessage(err, { coinTicker, requiredNative } = {}) {
         return isEncoderError(err)
             ? 'The transaction service could not complete this request. Nothing was signed or sent, so nothing was spent.'
             : null;
+    }
+    // A fee under the relay minimum or an amount the inputs cannot cover is the
+    // person's to fix, in a field they can see; say that in the coin's units.
+    if (code === 'ENCODER_RPC_ERROR') {
+        const fieldError = encoderFieldError(err, { coinTicker });
+        if (fieldError) return fieldError.message;
     }
     const coin = coinTicker || 'native coin';
     const needed = trimAmount(requiredNative) || requiredFeeFromError(err);

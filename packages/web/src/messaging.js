@@ -165,8 +165,8 @@ export function createAccount(opts) {
 }
 
 /** @param {string} walletId @param {string} [accountId] */
-export function getWalletBalances(walletId, accountId) {
-    return /** @type {any} */ (sendMessage('balances.wallet', { walletId, accountId }));
+export function getWalletBalances(walletId, accountId, chainId) {
+    return /** @type {any} */ (sendMessage('balances.wallet', chainId ? { walletId, accountId, chainId } : { walletId, accountId }));
 }
 
 /**

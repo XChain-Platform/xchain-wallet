@@ -23,6 +23,7 @@ import { NetworkFilter } from '../components/NetworkFilter.jsx';
 import { BalancesUncheckedState, useBalancesUnchecked } from '../components/BalancesUncheckedState.jsx';
 import { bridgeDisplayTick } from './BridgeTick.js';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
+import { loadBalancesByChain } from '../utils/chainBalanceLoader.js';
 import { useSettings } from '../hooks/useSettings.js';
 import {
     pinnedTokensForWallet,
@@ -135,6 +136,8 @@ export function TokenPicker({
         balances: null,
         addressesByChain: null,
         error: null,
+        slowChainIds: [],
+        pendingCount: 0,
     });
     const balanceLoadMatches = balanceLoad.walletId === walletId
         && balanceLoad.accountId === accountId
@@ -143,6 +146,8 @@ export function TokenPicker({
     const balances = balanceLoadMatches ? balanceLoad.balances : null;
     const addressesByChain = balanceLoadMatches ? balanceLoad.addressesByChain : null;
     const loadError = balanceLoadMatches ? balanceLoad.error : null;
+    const slowChainIds = balanceLoadMatches ? balanceLoad.slowChainIds : [];
+    const pendingChainCount = balanceLoadMatches ? balanceLoad.pendingCount : 0;
 
     const [networkFilterLocal, setNetworkFilterLocal] = useState('all');
     const networkFilter = networkFilterProp ?? networkFilterLocal;
@@ -200,6 +205,8 @@ export function TokenPicker({
             balances: null,
             addressesByChain: null,
             error: null,
+            slowChainIds: [],
+            pendingCount: 0,
         };
         setBalanceLoad(pendingLoad);
         (async () => {
@@ -216,6 +223,60 @@ export function TokenPicker({
                     // both purposes; only Receive keeps the map around.
                     byChain = await messaging.getAddressesByChain(walletId, accountId);
                     b = flowsLib.synthesizeDemoBalances(byChain);
+                } else if (canByChain && typeof messaging.getWalletBalances === 'function') {
+                    // Each chain is read on its own, so a chain whose explorer
+                    // never answers holds back only itself: every other chain
+                    // lists the moment it replies.
+                    byChain = await messaging.getAddressesByChain(walletId, accountId);
+                    const chainIds = Object.keys(byChain || {});
+                    if (cancelled) return;
+                    if (chainIds.length === 0) {
+                        setBalanceLoad({ ...pendingLoad, balances: {}, addressesByChain: isReceive ? byChain : null });
+                        return;
+                    }
+                    setBalanceLoad((prev) => ({ ...prev, pendingCount: chainIds.length }));
+                    const patch = (fn) => setBalanceLoad((prev) => (
+                        prev.walletId === walletId && prev.accountId === accountId
+                            && prev.isReceive === isReceive && prev.reload === balanceReload
+                            ? fn(prev) : prev));
+                    await loadBalancesByChain({
+                        messaging, walletId, accountId, chainIds,
+                        isCancelled: () => cancelled,
+                        onChain: (chainId, entries) => {
+                            patch((prev) => ({
+                                ...prev,
+                                balances: { ...(prev.balances || {}), [chainId]: entries },
+                                addressesByChain: isReceive ? byChain : null,
+                                slowChainIds: prev.slowChainIds.filter((id) => id !== chainId),
+                                pendingCount: Math.max(0, prev.pendingCount - 1),
+                            }));
+                        },
+                        onSlow: (chainId) => patch((prev) => ({
+                            ...prev,
+                            balances: prev.balances || {},
+                            addressesByChain: isReceive ? byChain : null,
+                            slowChainIds: prev.slowChainIds.includes(chainId)
+                                ? prev.slowChainIds : [...prev.slowChainIds, chainId],
+                        })),
+                        onError: (chainId, err) => {
+                            // A chain that fails keeps the chains that answered on
+                            // screen and offers one retry for the whole read.
+                            patch((prev) => ({
+                                ...prev,
+                                error: prev.error || err.message || 'Failed to load balances.',
+                                slowChainIds: prev.slowChainIds.filter((id) => id !== chainId),
+                                pendingCount: Math.max(0, prev.pendingCount - 1),
+                            }));
+                        },
+                    });
+                    if (!cancelled) {
+                        patch((prev) => ({
+                            ...prev,
+                            balances: prev.balances || {},
+                            addressesByChain: isReceive ? byChain : null,
+                        }));
+                    }
+                    return;
                 } else {
                     const byChainPromise = (isReceive && canByChain)
                         ? messaging.getAddressesByChain(walletId, accountId)
@@ -617,12 +678,17 @@ export function TokenPicker({
                     {loadError}
                 </StatusMessage>
             ) : null}
-            {balances === null && !loadError ? (
+            {slowChainIds.map((chainId) => (
+                <StatusMessage key={chainId} variant="warning" className={styles.error}>
+                    {`${chainRegistry.get(chainId)?.displayName || chainId} is not responding. Its assets appear when it answers.`}
+                </StatusMessage>
+            ))}
+            {(balances === null || (pendingChainCount > 0 && allRows.length === 0 && slowChainIds.length < pendingChainCount)) && !loadError ? (
                 <div role="status" aria-label="Loading balances">
                     <Skeleton.List rows={5} />
                 </div>
             ) : null}
-            {balances ? (
+            {balances && !(pendingChainCount > 0 && allRows.length === 0 && slowChainIds.length < pendingChainCount) ? (
                 <div id="xc-token-picker-results" ref={resultsRef} role="group" aria-label="Coins and tokens">
                     {rows.length > 0 ? (
                         <BalanceList
