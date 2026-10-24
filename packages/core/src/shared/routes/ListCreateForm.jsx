@@ -326,8 +326,8 @@ export function ListCreateForm({ walletId, chainId: initialChainId, initialType,
         ITEM: items,
     }), [withMeta, listType, items, trimmedMemo, trimmedName, trimmedDescription]);
     const actionSize = useMemo(
-        () => listActionSize(wireParams, descriptor, isWatcherMode ? null : fromAddress),
-        [wireParams, descriptor, isWatcherMode, fromAddress],
+        () => listActionSize(wireParams),
+        [wireParams],
     );
 
     const recipientsDrop = useDropZone({
@@ -830,7 +830,7 @@ export function ListCreateForm({ walletId, chainId: initialChainId, initialType,
                         <p className={styles.hint}>
                             {recipients.valid.length} valid address{recipients.valid.length === 1 ? '' : 'es'}
                             {recipients.duplicates > 0 ? ` · ${recipients.duplicates} duplicate${recipients.duplicates === 1 ? '' : 's'} removed` : ''}
-                            {recipients.invalid.length > 0 ? ` · ${recipients.invalid.length} invalid skipped` : ''}
+                            {recipients.invalid.length > 0 ? ` · ${recipients.invalid.length} invalid` : ''}
                         </p>
                     ) : null}
                     {recipients.invalid.length > 0 ? (
@@ -850,8 +850,8 @@ export function ListCreateForm({ walletId, chainId: initialChainId, initialType,
                             <p>
                                 {recipients.wrongNetwork.length} address
                                 {recipients.wrongNetwork.length === 1 ? ' is' : 'es are'} for another
-                                network and {recipients.wrongNetwork.length === 1 ? 'was' : 'were'} skipped.
-                                This list is published on the selected network.
+                                network. This list is published on the selected network, so remove
+                                {recipients.wrongNetwork.length === 1 ? ' it' : ' them'} to continue.
                             </p>
                             <DiagnosticDetails
                                 summary={`Skipped addresses (${recipients.wrongNetwork.length})`}

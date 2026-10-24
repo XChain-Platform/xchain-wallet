@@ -82,7 +82,7 @@ describe('list create validation', () => {
         });
         fireEvent.click(screen.getByRole('button', { name: 'Review' }));
 
-        expect(await screen.findByText(/over the 8,192-byte limit/)).toBeTruthy();
+        expect(await screen.findByText(/This list has 34 tokens \(8,\d{3} bytes\), but one action holds 8,192 bytes, which fits 32 of them\. Remove 2 tokens\./)).toBeTruthy();
         expect(screen.queryByText('Review list')).toBeNull();
     });
 

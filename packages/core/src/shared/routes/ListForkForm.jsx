@@ -429,19 +429,19 @@ function ListForkFormScreen({ walletId, listRef, onBack, onDone, repointHandlers
         ITEM: toRemove,
     }), [intermediateIndex, toRemove, trimmedMemo]);
     const firstActionSize = useMemo(
-        () => listActionSize(firstParams, descriptor, isWatcherMode ? null : fromAddress),
-        [firstParams, descriptor, isWatcherMode, fromAddress],
+        () => listActionSize(firstParams),
+        [firstParams],
     );
     const secondActionSize = useMemo(
-        () => listActionSize(secondParams, descriptor, isWatcherMode ? null : fromAddress),
-        [secondParams, descriptor, isWatcherMode, fromAddress],
+        () => listActionSize(secondParams),
+        [secondParams],
     );
     const secondReviewActionSize = useMemo(() => listActionSize({
         ...secondParams,
         // The first leg's index does not exist yet. Reserve a full uint64-width
         // decimal index so the add leg cannot strand an oversized remove leg.
         LIST_ACTION_INDEX: '9'.repeat(20),
-    }, descriptor, isWatcherMode ? null : fromAddress), [secondParams, descriptor, isWatcherMode, fromAddress]);
+    }), [secondParams]);
     const resultingCount = currentItems.length - toRemove.length + toAdd.length;
 
     const firstDecoded = useMemo(() => (

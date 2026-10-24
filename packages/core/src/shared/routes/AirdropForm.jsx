@@ -10,7 +10,7 @@
 
 import { t } from '../../i18n/index.js';
 import { useCallback, useDeferredValue, useEffect, useMemo, useRef, useState } from 'react';
-import { AddressField, AddressText, Button, ChainPicker, EmptyState, FeeSelector, FieldNote, FormNotice, FormPage, Input, ListPage, PageHeader, Screen, Select, StatusMessage, Textarea } from '@xchain-wallet/core/ui';
+import { AddressField, AddressText, Button, ChainPicker, CopyButton, EmptyState, FeeSelector, FieldNote, FormNotice, FormPage, Input, ListPage, PageHeader, Screen, Select, StatusMessage, Textarea } from '@xchain-wallet/core/ui';
 import {
     registry as registryLib,
     decoder as decoderLib,
@@ -74,6 +74,7 @@ import {
     parseCsvEntries,
     parsePasteEntries,
 } from '../../airdrop/parseRecipients.js';
+import { maxListItemsThatFit, splitListItems } from '../../airdrop/listSizeLimit.js';
 
 const chainRegistry = registryLib.defaultRegistry();
 const POLL_INTERVAL_MS = 10_000;
@@ -186,6 +187,9 @@ export function AirdropForm({ walletId, resumeId = null, onBack, initialChainId,
 
     // 'paste' mode: paste/upload addresses -> new ADDRESS list (TYPE=2).
     const [pasteText, setPasteText] = useState('');
+    // Addresses taken off a list too large for one airdrop, kept on screen so
+    // the user can copy them into the next one.
+    const [setAsideRecipients, setSetAsideRecipients] = useState(/** @type {string[]} */ ([]));
     const [committedRecipients, setCommittedRecipients] = useState(
         /** @type {{ valid: string[], invalid: string[], duplicates: number, wrongNetwork: string[], addressRefs?: string[], invalidLines?: Array<{ address: string, line: number }> }} */
         ({ valid: [], invalid: [], duplicates: 0, wrongNetwork: [], addressRefs: [], invalidLines: [] }),
@@ -748,6 +752,28 @@ export function AirdropForm({ walletId, resumeId = null, onBack, initialChainId,
         return p;
     }, [listType, listItems]);
 
+    // Above 8 KB this wallet cannot verify the LIST it would sign
+    // (airdrop/listSizeLimit.js), so a list that large is named here, from the
+    // items it would publish, before anything is composed. Null when it fits.
+    const listFit = useMemo(() => {
+        if (sourceMode === 'existing' || listItems.length === 0) return null;
+        const fits = maxListItemsThatFit(listItems, listType);
+        if (fits >= listItems.length) return null;
+        const batches = splitListItems(listItems, listType);
+        return { fits, total: listItems.length, batches: batches ? batches.length : null };
+    }, [sourceMode, listItems, listType]);
+
+    // Trim the paste box to the first airdrop's worth of valid addresses and
+    // keep the rest on screen for the next one. Nothing is composed here: the
+    // trimmed list still goes through review like any other.
+    const keepFirstListBatch = useCallback(() => {
+        if (!listFit || sourceMode !== 'paste') return;
+        setSetAsideRecipients(listItems.slice(listFit.fits));
+        setImportedRecipientEntries(null);
+        setPasteText(listItems.slice(0, listFit.fits).join('\n'));
+        setFormError(null);
+    }, [listFit, listItems, sourceMode]);
+
     const airdropParams = useMemo(() => {
         /** @type {Record<string, string> } */
         const p = {
@@ -1014,6 +1040,12 @@ export function AirdropForm({ walletId, resumeId = null, onBack, initialChainId,
             return;
         } else if (recipients.valid.length === 0) {
             setFormError('Add at least one valid recipient address.');
+            return;
+        }
+        // A LIST this wallet could not verify is refused here, before compose,
+        // rather than at Approve with a refusal that reads like tampering.
+        if (listFit) {
+            setFormError(listTooLargeMessage(listFit, sourceMode === 'holders' ? 'holders' : 'paste'));
             return;
         }
         if (sourceMode === 'paste') setCommittedRecipients(recipients);
@@ -1874,7 +1906,7 @@ export function AirdropForm({ walletId, resumeId = null, onBack, initialChainId,
                 <Button
                     type="submit"
                     variant="primary"
-                    disabled={sourceMode === 'paste' && recipientsPending}
+                    disabled={sourceMode === 'paste' && (recipientsPending || listFit !== null)}
                 >
                     {sourceMode === 'existing' ? 'Review airdrop' : 'Review recipients'}
                 </Button>
@@ -2035,6 +2067,41 @@ export function AirdropForm({ walletId, resumeId = null, onBack, initialChainId,
                                 ? ` · total ~${formatWithThousands(totalDistribution)} ${token.trim() || 'TOKEN'}`
                                 : ''}
                         </p>
+                    ) : null}
+
+                    {/* One airdrop's LIST is capped in bytes, so the note names how
+                        many of THESE addresses fit and offers to keep that many. */}
+                    {listFit && sourceMode === 'paste' ? (
+                        <FieldNote
+                            variant="warning"
+                            testId="airdrop-list-too-large"
+                            action={(
+                                <Button type="button" variant="secondary" onClick={keepFirstListBatch}>
+                                    Keep the first {formatWithThousands(String(listFit.fits))} addresses
+                                </Button>
+                            )}
+                        >
+                            <p>{listTooLargeMessage(listFit, 'paste')}</p>
+                        </FieldNote>
+                    ) : null}
+                    {setAsideRecipients.length > 0 ? (
+                        <FieldNote
+                            variant="info"
+                            testId="airdrop-set-aside"
+                            action={(
+                                <CopyButton
+                                    value={setAsideRecipients.join('\n')}
+                                    label={`Copy the other ${formatWithThousands(String(setAsideRecipients.length))}`}
+                                    appearance="outlined"
+                                />
+                            )}
+                        >
+                            <p>
+                                {formatWithThousands(String(setAsideRecipients.length))} more
+                                {setAsideRecipients.length === 1 ? ' address was' : ' addresses were'} set
+                                aside for another airdrop. Copy them before leaving this screen.
+                            </p>
+                        </FieldNote>
                     ) : null}
 
                     {recipients.invalid.length > 0 ? (
@@ -2224,6 +2291,24 @@ export function AirdropForm({ walletId, resumeId = null, onBack, initialChainId,
 
         </FormPage>,
     );
+}
+
+/**
+ * Why a list is too large for one airdrop, with the count of THESE items that
+ * fit, since the limit is in bytes and address lengths vary.
+ *
+ * @param {{ fits: number, total: number, batches: number|null }} fit
+ * @param {'paste' | 'holders'} mode
+ * @returns {string}
+ */
+function listTooLargeMessage({ fits, total, batches }, mode) {
+    const noun = mode === 'holders' ? ['token', 'tokens'] : ['address', 'addresses'];
+    const count = (n) => `${formatWithThousands(String(n))} ${n === 1 ? noun[0] : noun[1]}`;
+    const split = batches && batches > 1
+        ? ` Split it into ${formatWithThousands(String(batches))} airdrops of up to ${count(fits)} each.`
+        : ' Split it into several smaller airdrops.';
+    return `This airdrop lists ${count(total)}, more than this wallet can verify in one airdrop: `
+        + `up to ${formatWithThousands(String(fits))} of these fit.${split}`;
 }
 
 function DetailRow({ label, value }) {

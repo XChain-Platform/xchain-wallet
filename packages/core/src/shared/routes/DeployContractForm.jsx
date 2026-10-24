@@ -13,6 +13,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { AddressField, AddressText, Button, ChainBadge, ChainPicker, FeeSelector, FieldNote, FormNotice, FormPage, Icon, Input, ListPage, PageHeader, Screen, StatusMessage, Textarea } from '@xchain-wallet/core/ui';
 import { registry as registryLib } from '@xchain-wallet/core';
 import { normalizeConstructorParams } from '../../flows/deployChunked.js';
+import { DEPLOY_ARGUMENT_WORDS, deployActionFit, variadicSizeMessage } from '../../flows/variadicActionSize.js';
 import { indexerWaitMessage } from '../../flows/deployLegWait.js';
 import { normalizeMetaRead, CONTRACT_META_REQUIRED } from '../../flows/contractMetaPreflight.js';
 import { neutralizeControlText, revealHiddenText } from '../utils/textHardening.js';
@@ -750,6 +751,17 @@ export function DeployContractForm({ walletId, onBack }) {
         if (cooldownBlocks.trim() !== '' && constructorParts.filter(Boolean).length > 1) {
             setFormError('A stake-enabled contract accepts one constructor argument. Pack multiple values into one argument or remove the staking settings.');
             return;
+        }
+        // The deploy's action ends in a repeating constructor-argument field, which
+        // the wallet cannot verify once it passes 8192 compiled bytes. Refuse here,
+        // before anything is composed or any chunk is paid for.
+        if (cooldownBlocks.trim() === '') {
+            const tooLarge = variadicSizeMessage(deployActionFit({
+                code,
+                gasLimit: String(gasLimit || suggestedGas || ''),
+                constructorParams: normalizeConstructorParams(constructorParams),
+            }), DEPLOY_ARGUMENT_WORDS);
+            if (tooLarge) { setFormError(tooLarge); return; }
         }
         setFormError(null);
         // The PLAN decides the lane, not just the wallet mode. `openConfirmScreen`

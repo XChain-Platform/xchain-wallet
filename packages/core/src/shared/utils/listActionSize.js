@@ -9,13 +9,10 @@
 // contact legal@dankest.llc.
 
 import {
-    ENVELOPE_MAX_PAYLOAD,
-    MAX_COMPILED_ACTION_BYTES,
-} from '../../flows/fileSizeLimits.js';
-import {
-    compiledPayloadByteLen,
-    envelopeAvailableFor,
-} from '../../flows/envelopeSelection.js';
+    variadicActionFit,
+    variadicActionString,
+    variadicSizeMessage,
+} from '../../flows/variadicActionSize.js';
 
 /**
  * Serialize the LIST create and edit formats authored by the list forms.
@@ -26,47 +23,53 @@ import {
  * @returns {string}
  */
 export function listActionString(params) {
-    const items = Array.isArray(params?.ITEM) ? params.ITEM : [];
-    if (params?.VERSION === '0') {
-        return ['LIST', '0', params.TYPE || '', params.MEMO || '', ...items].join('|');
+    if (!['0', '1', '4'].includes(params?.VERSION)) {
+        throw new Error(`Unsupported LIST size-check version: ${params?.VERSION || 'missing'}`);
     }
-    if (params?.VERSION === '4') {
-        return [
-            'LIST', '4', params.TYPE || '', params.NAME || '', params.DESCRIPTION || '',
-            params.MEMO || '', ...items,
-        ].join('|');
-    }
-    if (params?.VERSION === '1') {
-        return [
-            'LIST', '1', params.EDIT || '', params.LIST_ACTION_INDEX || '',
-            params.MEMO || '', ...items,
-        ].join('|');
-    }
-    throw new Error(`Unsupported LIST size-check version: ${params?.VERSION || 'missing'}`);
+    return variadicActionString('LIST', params);
 }
 
 /**
- * Measure the exact compiled payload and select the carrier ceiling available
- * to this chain and address. The returned values describe the bytes that the
- * existing wire params produce; this helper never normalizes or rewrites them.
+ * Measure the exact compiled payload against the 8192-byte ceiling. A LIST ends
+ * in a repeating ITEM field, which the wallet cannot verify once the encoder
+ * moves it into a Taproot envelope, so the ceiling is 8192 on every chain and
+ * signer. The returned values describe the bytes that the existing wire params
+ * produce; this helper never normalizes or rewrites them.
  *
  * @param {Record<string, string | string[]>} params
- * @param {{ addressTypes?: string[] } | null} descriptor
- * @param {{ source?: string, publicKey?: string } | null} fromAddress
- * @returns {{ actionString: string, compiledBytes: number, maxBytes: number, oversized: boolean }}
+ * @returns {{ actionString: string, compiledBytes: number, maxBytes: number, oversized: boolean, given: number, fit: number, words: { subject: string, singular: string, plural: string } }}
  */
-export function listActionSize(params, descriptor, fromAddress) {
+export function listActionSize(params) {
     const actionString = listActionString(params);
-    const compiledBytes = compiledPayloadByteLen(actionString);
-    const hasEnvelopeKey = /^(02|03)[0-9a-fA-F]{64}$/.test(fromAddress?.publicKey || '');
-    const maxBytes = hasEnvelopeKey && envelopeAvailableFor(descriptor, fromAddress)
-        ? ENVELOPE_MAX_PAYLOAD
-        : MAX_COMPILED_ACTION_BYTES;
-    return { actionString, compiledBytes, maxBytes, oversized: compiledBytes > maxBytes };
+    const fit = variadicActionFit('LIST', params);
+    return {
+        actionString,
+        compiledBytes: fit.bytes,
+        maxBytes: fit.maxBytes,
+        oversized: !fit.fits,
+        given: fit.given,
+        fit: fit.fit,
+        words: wordsFor(params),
+    };
 }
 
-/** @param {{ compiledBytes: number, maxBytes: number, oversized: boolean }} size */
+// What the list's entries are called. An edit does not carry the list's type,
+// so it says "items".
+function wordsFor(params) {
+    if (params?.VERSION === '1') return { subject: 'This change', singular: 'item', plural: 'items' };
+    return params?.TYPE === '1'
+        ? { subject: 'This list', singular: 'token', plural: 'tokens' }
+        : { subject: 'This list', singular: 'address', plural: 'addresses' };
+}
+
+/** @param {ReturnType<typeof listActionSize>} size */
 export function listActionSizeError(size) {
     if (!size.oversized) return null;
-    return `This list action is ${size.compiledBytes.toLocaleString('en-US')} bytes, over the ${size.maxBytes.toLocaleString('en-US')}-byte limit. Remove some items.`;
+    return variadicSizeMessage({
+        fits: false,
+        bytes: size.compiledBytes,
+        maxBytes: size.maxBytes,
+        given: size.given,
+        fit: size.fit,
+    }, size.words);
 }

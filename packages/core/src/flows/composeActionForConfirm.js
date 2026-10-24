@@ -29,7 +29,7 @@
 import { composeForConfirm } from './composeForConfirm.js';
 import { isBareNativePayment } from './nativePayment.js';
 import { assertNoTamper, TamperDetectedError } from './confirmChecks.js';
-import { checkEnvelopeReveal, envelopeNetworkFees } from './envelopeRevealCheck.js';
+import { checkEnvelopeReveal, envelopeNetworkFees, envelopeRevealRefusalMessage } from './envelopeRevealCheck.js';
 import { totalNetworkFeeSats, sumExactSats, exactSats } from './psbtNetworkFee.js';
 import { satsToCoinDecimal } from './feeEstimate.js';
 import { addressBalances } from './balances.js';
@@ -517,8 +517,8 @@ function checkedEnvelopeFees({ sdk, composed, commit, own }) {
     });
     if (!verdict.ok) {
         throw new TamperDetectedError(
-            'The action encoded in the transaction does not match what you approved.',
-            { reason: verdict.reason });
+            envelopeRevealRefusalMessage(verdict.reason),
+            { reason: verdict.reason, decodeReason: verdict.decodeReason });
     }
     return envelopeNetworkFees(commit, reveal);
 }

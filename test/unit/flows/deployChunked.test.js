@@ -188,6 +188,44 @@ describe('PC-38 planChunkedDeploy', () => {
     });
 });
 
+describe('assembler size limit', () => {
+    // The assembling DEPLOY v2 ends in a repeating CONSTRUCTOR_PARAMS field. Over
+    // 8192 compiled bytes it rides a Taproot envelope the wallet cannot verify,
+    // after every chunk before it is paid for.
+    const manyArgs = Array.from({ length: 300 }, (_, i) => String(i).padStart(44, 'x'));
+
+    it('refuses a chunked plan whose constructor arguments cannot be verified', () => {
+        expect(() => planChunkedDeploy({
+            sdkRegistry: registryOf(fakeSdk()), chainId: 'c', code: 'x'.repeat(500), gasLimit: '100000',
+            constructorParams: manyArgs,
+        })).toThrow('This deploy has 300 arguments (13,583 bytes), but one action holds 8,192 bytes, '
+            + 'which fits 180 of them. Remove 120 arguments.');
+    });
+
+    it('plans a chunked deploy with arguments that fit', () => {
+        const plan = planChunkedDeploy({
+            sdkRegistry: registryOf(fakeSdk()), chainId: 'c', code: 'x'.repeat(500), gasLimit: '100000',
+            constructorParams: manyArgs.slice(0, 100),
+        });
+        expect(plan.single).toBe(false);
+    });
+
+    it('leaves a stakeable deploy, whose argument is one plain field, to the SDK', () => {
+        const plan = planChunkedDeploy({
+            sdkRegistry: registryOf(fakeSdk()), chainId: 'c', code: 'x'.repeat(500), gasLimit: '100000',
+            constructorParams: ['y'.repeat(9000)], cooldownBlocks: '144',
+        });
+        expect(plan.single).toBe(false);
+    });
+
+    it('sends no chunk when the assembler cannot be verified', async () => {
+        submitAction.mockReset();
+        const { opts } = baseOpts({ opts: { constructorParams: manyArgs } });
+        await expect(deployChunkedRun(opts)).rejects.toThrow(/This deploy has 300 arguments/);
+        expect(submitAction).not.toHaveBeenCalled();
+    });
+});
+
 describe('PC-38 deployChunkedRun', () => {
     beforeEach(() => submitAction.mockReset());
 
