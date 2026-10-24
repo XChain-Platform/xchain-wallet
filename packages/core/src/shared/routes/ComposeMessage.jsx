@@ -1132,7 +1132,7 @@ function ComposeMessageForm({
                     </StatusMessage>
                 ) : null,
                 pubkeyState === 'missing' && encryptionValue !== 'plaintext' && !handshakeSent && handshakeError ? (
-                    <StatusMessage key="key-request-error" variant="error">{handshakeError}</StatusMessage>
+                    <StatusMessage key="key-request-error" variant="error" testId="key-request-error">{handshakeError}</StatusMessage>
                 ) : null,
                 pubkeyState === 'error' && encryptionValue !== 'plaintext' && pubkeyError ? (
                     <StatusMessage key="key-lookup-error" variant="error">{pubkeyError}</StatusMessage>

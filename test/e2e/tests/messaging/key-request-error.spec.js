@@ -180,8 +180,11 @@ async function alertText(scope) {
  */
 function pressOutcome(scope) {
     const block = keyRequestBlock(scope);
+    // A form's notices share one box, so the reason is also read as its own
+    // line of that box.
     return block.getByRole('alert').filter({ hasNotText: "don't know the recipient's public key" })
-        .or(block.getByRole('status'));
+        .or(block.getByRole('status'))
+        .or(block.getByTestId('key-request-error'));
 }
 
 /** Fills the recipient and waits for the handshake button to be reachable. */
