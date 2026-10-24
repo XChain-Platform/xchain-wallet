@@ -52,8 +52,9 @@ async function renderManage({ isOwner = true, tokenInfo = {}, ...handlers } = {}
     return messaging;
 }
 
-function sharedBlockListRow() {
-    const moreButton = screen.getByRole('button', { name: 'More' });
+async function sharedBlockListRow() {
+    // The More menu renders once the owner lookup settles, after the marker text.
+    const moreButton = await screen.findByRole('button', { name: 'More' });
     expect(moreButton).toHaveAttribute('aria-busy', 'false');
     fireEvent.click(moreButton);
     const row = screen.getByRole('menuitem', { name: 'Use a shared block list' });
@@ -68,7 +69,7 @@ describe('ManageToken shared block list action', () => {
             tokenInfo: { locks: { description: true } },
             onUpdateDescription,
         });
-        fireEvent.click(screen.getByRole('button', { name: 'More' }));
+        fireEvent.click(await screen.findByRole('button', { name: 'More' }));
 
         const description = screen.getByRole('menuitem', { name: 'Description' });
         expect(description).toBeDisabled();
@@ -84,7 +85,7 @@ describe('ManageToken shared block list action', () => {
         const onUseSharedBlockList = vi.fn();
         await renderManage({ onUseSharedBlockList });
 
-        fireEvent.click(sharedBlockListRow());
+        fireEvent.click(await sharedBlockListRow());
 
         expect(onUseSharedBlockList).toHaveBeenCalledTimes(1);
     });
@@ -93,14 +94,14 @@ describe('ManageToken shared block list action', () => {
         const onAccessLists = vi.fn();
         await renderManage({ onAccessLists });
 
-        fireEvent.click(sharedBlockListRow());
+        fireEvent.click(await sharedBlockListRow());
 
         expect(onAccessLists).toHaveBeenCalledTimes(1);
     });
 
     it('is absent when neither handler is passed', async () => {
         await renderManage();
-        fireEvent.click(screen.getByRole('button', { name: 'More' }));
+        fireEvent.click(await screen.findByRole('button', { name: 'More' }));
 
         expect(screen.queryByRole('menuitem', { name: 'Use a shared block list' })).toBeNull();
     });
