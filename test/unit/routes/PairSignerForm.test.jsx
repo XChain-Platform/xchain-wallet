@@ -79,6 +79,43 @@ describe('PairSignerForm hardware guidance', () => {
         );
     });
 
+    it.each([
+        ['the dashboard answers with an unsupported instruction', 'Ledger device: INS_NOT_SUPPORTED (0x6d00)'],
+        ['the device reports no open app', 'Ledger device: UNKNOWN_ERROR (0x6511)'],
+    ])('explains the Bitcoin app is not open when %s', async (_name, message) => {
+        mount({ pairLedger: vi.fn().mockRejectedValue(new Error(message)) });
+
+        fireEvent.click(screen.getByRole('button', { name: /Ledger/ }));
+
+        expect(await screen.findByRole('alert')).toHaveTextContent(
+            'The Bitcoin app is not open on your Ledger. Open the Bitcoin app on the device, then try again.',
+        );
+    });
+
+    it('says the Ledger is locked instead of the generic pairing failure', async () => {
+        mount({
+            pairLedger: vi.fn().mockRejectedValue(
+                new Error('pairLedgerSigner: failed to read app info: Ledger device: Locked device (0x5515)'),
+            ),
+        });
+
+        fireEvent.click(screen.getByRole('button', { name: /Ledger/ }));
+
+        expect(await screen.findByRole('alert')).toHaveTextContent(
+            'Your Ledger is locked. Enter the PIN on the device, then try again.',
+        );
+    });
+
+    it('names the other app holding the Ledger when the browser cannot open it', async () => {
+        mount({ pairLedger: vi.fn().mockRejectedValue(new Error('The device is already open.')) });
+
+        fireEvent.click(screen.getByRole('button', { name: /Ledger/ }));
+
+        expect(await screen.findByRole('alert')).toHaveTextContent(
+            'Another app or browser tab is using this Ledger. Close Ledger Live and any other wallet tab, then try again.',
+        );
+    });
+
     it('blocks old firmware with vendor-specific update advice', async () => {
         const pairLedger = vi.fn().mockResolvedValue({
             signer: { signPsbt: vi.fn() },

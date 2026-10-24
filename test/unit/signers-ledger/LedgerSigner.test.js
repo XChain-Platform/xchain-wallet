@@ -331,6 +331,8 @@ describe('LedgerSigner.signMessage', () => {
         ['device not found', new Error('No device selected'), 'disconnected', 'HW_DEVICE_NOT_FOUND', /No Ledger was found/],
         ['locked', Object.assign(new Error('Device is locked'), { name: 'LockedDeviceError' }), 'locked', 'HW_LOCKED', /Ledger is locked/],
         ['wrong app', Object.assign(new Error('UNKNOWN_ERROR'), { statusCode: 0x6a82 }), 'wrong-app', 'HW_WRONG_APP', /wrong app is open/],
+        ['dashboard open (instruction not supported)', Object.assign(new Error('INS_NOT_SUPPORTED'), { statusCode: 0x6d00 }), 'wrong-app', 'HW_WRONG_APP', /wrong app is open/],
+        ['no app open', Object.assign(new Error('UNKNOWN_ERROR'), { statusCode: 0x6511 }), 'wrong-app', 'HW_WRONG_APP', /wrong app is open/],
         ['user rejected', Object.assign(new Error('Condition of use not satisfied'), { statusCode: 0x6985 }), 'cancelled', 'HW_CANCELLED', /Nothing was signed/],
         ['cable unplugged', Object.assign(new Error('Device disconnected'), { name: 'DisconnectedDeviceDuringOperation' }), 'disconnected', 'HW_DISCONNECTED', /disconnected before signing finished/],
         ['old firmware', new Error('Device firmware is too old'), 'firmware', 'HW_FIRMWARE', /firmware is too old/],
@@ -340,7 +342,7 @@ describe('LedgerSigner.signMessage', () => {
 
         expect(err).toMatchObject({ status, code });
         expect(err.message).toMatch(copy);
-        expect(err.message).not.toMatch(/UNKNOWN_ERROR|0x6a82|Condition of use/);
+        expect(err.message).not.toMatch(/UNKNOWN_ERROR|INS_NOT_SUPPORTED|0x6a82|0x6d00|0x6511|Condition of use/);
     });
 });
 
@@ -473,6 +475,55 @@ describe('LedgerSigner.signPsbt', () => {
         });
         await expect(signIt(s)).rejects.toMatchObject({ name: 'SignerStatusError', status: 'wrong-app' });
         expect(app.createPaymentTransaction).not.toHaveBeenCalled();
+    });
+
+    // The device transport carries one exchange at a time and rejects a second
+    // that arrives while the user is answering a prompt. The status poll keeps
+    // running behind the sign screen, so it must not touch the transport then.
+    describe('with a transport that refuses overlapping exchanges', () => {
+        function singleExchangeTransport() {
+            let busy = false;
+            const send = vi.fn(async () => {
+                if (busy) throw Object.assign(new Error('An action was already pending on the Ledger device.'), { name: 'TransportRaceCondition' });
+                busy = true;
+                await Promise.resolve();
+                busy = false;
+                return appInfoBytes('Bitcoin');
+            });
+            return { send };
+        }
+
+        it('keeps reporting the device available while a signing prompt is open', async () => {
+            const mockSdk = signPsbtSdk();
+            let release;
+            const app = makeApp({
+                createPaymentTransaction: vi.fn(() => new Promise((resolve) => { release = () => resolve(DEVICE_REPLY); })),
+            });
+            const transport = singleExchangeTransport();
+            const s = makeSigner(app, { sdkRegistry: { get: () => mockSdk }, transport });
+            const signing = signIt(s);
+            await vi.waitFor(() => expect(app.createPaymentTransaction).toHaveBeenCalled());
+            const probesBefore = transport.send.mock.calls.length;
+
+            await expect(s.getStatus({ chainId: 'bitcoin-mainnet' })).resolves.toBe('available');
+            expect(transport.send.mock.calls.length).toBe(probesBefore);
+
+            release();
+            await signing;
+        });
+
+        it('lets a status read that is already in flight finish before the signing read starts', async () => {
+            const mockSdk = signPsbtSdk();
+            const app = makeApp();
+            const transport = singleExchangeTransport();
+            const s = makeSigner(app, { sdkRegistry: { get: () => mockSdk }, transport });
+            const [status, signed] = await Promise.all([
+                s.getStatus({ chainId: 'bitcoin-mainnet' }),
+                signIt(s),
+            ]);
+            expect(status).toBe('available');
+            expect(signed.txid).toBe('deadbeef');
+        });
     });
 
     it('signs with a fresh client for the chain currency when getApp is given', async () => {
