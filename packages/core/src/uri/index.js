@@ -13,6 +13,7 @@ export {
     encodeBip21Uri,
     normalizeBip21Amount,
     InvalidBip21Error,
+    URI_PARAMETER_LIMITS,
 } from './bip21.js';
 export { detectQrContent, PSBT_HEX_PREFIX } from './detectQrContent.js';
 export {

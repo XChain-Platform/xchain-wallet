@@ -314,3 +314,22 @@ describe('detectAddressCoin', () => {
         expect(detectAddressCoin(legacy(0xc4))).toBeNull();
     });
 });
+
+describe('addressValidationError for a payment link in an address field', () => {
+    const btc = { coin: 'bitcoin', networkKind: 'mainnet' };
+
+    it('names a payment link instead of calling it a typo', () => {
+        for (const text of [
+            'bitcoin:bc1qar0srrr7xfkvy5l643lydnw9re59gtzzwf5mdq?amount=1',
+            'BITCOIN:bc1qar0srrr7xfkvy5l643lydnw9re59gtzzwf5mdq',
+            'xchain:BTC/send?to=bc1qar0srrr7xfkvy5l643lydnw9re59gtzzwf5mdq',
+            'web+xchain:BTC/send',
+        ]) {
+            expect(addressValidationError(text, btc), text).toMatch(/payment link, not an address/);
+        }
+    });
+
+    it('keeps the typo copy for other invalid text', () => {
+        expect(addressValidationError('bc1qnotanaddress', btc)).toMatch(/typo/);
+    });
+});

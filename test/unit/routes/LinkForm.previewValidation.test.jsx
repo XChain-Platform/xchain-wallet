@@ -50,7 +50,9 @@ describe('LinkForm action preview validation', () => {
 
         expect(await screen.findByRole('button', { name: 'Looking up actions…' })).toBeDisabled();
         await waitFor(() => expect(screen.getByRole('alert')).toHaveTextContent('Could not verify the action on the network A'));
-        fireEvent.click(screen.getByRole('button', { name: 'Review' }));
+        // The second lookup can still be running when the first one's error
+        // shows, so wait for the button to read Review again.
+        fireEvent.click(await screen.findByRole('button', { name: 'Review' }));
 
         expect(client.buildActionPsbtRequest).not.toHaveBeenCalled();
         expect(screen.queryByText('Review link')).not.toBeInTheDocument();

@@ -504,7 +504,6 @@ export const en = {
     'importWallet.backup.placeholder.version': '"version":1,"kdf":',
     'importWallet.backup.placeholder.kdf': '"name":"argon2id"…',
     'importWallet.backup.overwrite': 'Overwrite if any record collides (advanced)',
-    'importWallet.pastePhrase': 'Paste recovery phrase from clipboard',
     'importWallet.scanQr': 'Scan QR',
     'importWallet.phrase.scannerAlt':
         'Recovery phrase QR scanner',
@@ -1299,7 +1298,6 @@ export const en = {
     'settings.developer.customChainDescriptorJson': 'Custom network descriptor JSON',
     'settings.developer.pasteAFullChaindescriptorJson':
         'Paste a full ChainDescriptor JSON (id, coin, displayName, networkKind, derivationPaths, addressTypes, defaultAddressType, feeStrategy, supportedActions, uriScheme, wifVersionByte, explorer, encoder, hub, adsDonationAddress).',
-    'settings.developer.pasteCustomChainDescriptor': 'Paste custom network descriptor',
     'settings.developer.adding': 'Adding…',
     'settings.developer.addChain': 'Add network',
     'settings.developer.addCustomChain': 'Add custom network…',
@@ -2549,8 +2547,6 @@ export const en = {
     'components.watchOnlyBadge.watchOnly': 'Watch-only',
     'ui.addressCombobox.contact': 'Contact',
     'ui.addressCombobox.recent': 'Recent',
-    'ui.clipboardPasteButton.pasteFromClipboard': 'Paste from clipboard',
-    'ui.clipboardPasteButton.paste': 'Paste',
     'ui.formErrorSummary.formErrors': 'Form errors',
     'ui.formErrorSummary.fixThisField': 'Fix this field:',
     'ui.formErrorSummary.fixTheseFields': 'Fix these {length} fields:',

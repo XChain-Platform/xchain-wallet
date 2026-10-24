@@ -95,7 +95,7 @@ describe('Q through Z routes at a 320px viewport', () => {
         expectNoFixedWidthBeyondViewport(container);
     });
 
-    it('keeps Scan within the viewport and shows its paste action', () => {
+    it('keeps Scan within the viewport and shows its submit action', () => {
         const { container } = renderRoute(
             <ScanRoute onBack={vi.fn()} onClassified={vi.fn()} />,
         );

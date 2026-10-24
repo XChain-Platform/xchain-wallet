@@ -182,9 +182,8 @@
     overflow: hidden;
 }
 
-/* A full-width form of Settings sections draws no wide card, so the cards
-   inside it stay cards. Other full-width pages (the licence terms) keep
-   their inner surfaces flat. */
+/* A full-width form draws no wide card, so the cards inside it stay cards:
+   Settings sections, and the outlined licence terms panel. */
 .cardlessSections {
     composes: cardless from './Card.module.css';
 }

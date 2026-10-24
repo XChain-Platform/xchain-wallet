@@ -3,8 +3,8 @@
 //
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-// The amount input keeps its digits clear of Paste and Max at every text
-// size: the room it reserves follows where the actions really are, not the
+// The amount input keeps its digits clear of Max at every text size: the room
+// it reserves follows where the action really is, not the
 // default-text lanes alone.
 
 import { afterEach, describe, expect, it, vi } from 'vitest';
@@ -27,17 +27,17 @@ describe('amount field action room', () => {
     it('reserves from the input end edge to the first action, plus the 4px gap', () => {
         const wrap = document.createElement('div');
         document.body.appendChild(wrap);
-        // 150% text on a 411px phone: input 12..399, Paste at 230, Max at 329.
-        const room = syncAmountActionsRoom(wrap, box(12, 387), [box(230, 89), box(329, 66)]);
-        expect(room).toBe(173);
-        expect(wrap.style.getPropertyValue('--amount-actions-room')).toBe('173px');
+        // 150% text on a 411px phone: input 12..399, Max at 329.
+        const room = syncAmountActionsRoom(wrap, box(12, 387), [box(329, 66)]);
+        expect(room).toBe(74);
+        expect(wrap.style.getPropertyValue('--amount-actions-room')).toBe('74px');
     });
 
     it('measures from the start edge when the field runs right to left', () => {
         const wrap = document.createElement('div');
         wrap.style.direction = 'rtl';
         document.body.appendChild(wrap);
-        expect(syncAmountActionsRoom(wrap, box(12, 387), [box(16, 66), box(92, 89)])).toBe(173);
+        expect(syncAmountActionsRoom(wrap, box(12, 387), [box(16, 66)])).toBe(74);
     });
 
     it('writes nothing when there is no action or no laid-out input', () => {
@@ -51,6 +51,6 @@ describe('amount field action room', () => {
     it('pads the input to whichever is larger, the default lanes or the measured room', () => {
         render(<AmountField amount="" tick="BTC" onAmountFieldChange={() => {}} onMax={() => {}} />);
         expect(screen.getByRole('textbox', { name: /^Amount/ }).style.paddingInlineEnd)
-            .toBe('max(calc(var(--amount-action-width) * 2), var(--amount-actions-room, 0px))');
+            .toBe('max(var(--amount-action-width), var(--amount-actions-room, 0px))');
     });
 });

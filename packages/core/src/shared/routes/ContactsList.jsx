@@ -716,7 +716,6 @@ export function ContactsList({ walletId, onSend, onSendMessage, onBack, scanPref
                 <Input label="Name" value={formName} onChange={(e) => setFormName(e.target.value)} />
                 <AddressField
                     label="Address"
-                    paste
                     value={entry0.address}
                     onChange={(e) => {
                         const address = e.target.value;
@@ -934,7 +933,6 @@ export function ContactsList({ walletId, onSend, onSendMessage, onBack, scanPref
                             <div id="xc-contact-add-address-title" className={picker.modalTitle}>Add address</div>
                             <AddressField
                                 label="Address"
-                                paste
                                 value={addAddrValue}
                                 onChange={(ev) => { setAddAddrValue(ev.target.value); setAddAddrChain(null); setAddAddrError(null); }}
                                 error={addAddrError}

@@ -75,7 +75,7 @@ describe('lockImmediately', () => {
             expect(clearState).toContain("setUnlockedView('home')");
             for (const setter of transientSetters) expect(clearState).toContain(setter);
             expect(source).toMatch(
-                /if \(status\.state !== 'unlocked'\) \{\s*clearTransientActionState\(\);/,
+                /if \(status\.state !== 'unlocked'\) \{[\s\S]{0,400}?clearTransientActionState\(\)/,
             );
             expect(source).not.toMatch(/lockWallet\(\)\s*\.then\(refresh\)/);
         }
@@ -85,7 +85,7 @@ describe('lockImmediately', () => {
             'utf8',
         );
         expect(popupSource).toMatch(
-            /if \(status\.state !== 'unlocked'\) \{\s*clearTransientActionState\(\);[\s\S]{0,160}?setWallets\(\[\]\)/,
+            /if \(status\.state !== 'unlocked'\) \{[\s\S]{0,400}?clearTransientActionState\(\)[\s\S]{0,160}?setWallets\(\[\]\)/,
         );
     });
 

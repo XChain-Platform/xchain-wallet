@@ -50,3 +50,24 @@ export function createLaunchRouteState() {
         },
     };
 }
+
+/**
+ * Whether a session-state change must wipe the transient screen state.
+ *
+ * A link opened before the wallet is unlocked parks its prefill and its view
+ * while the shell is still loading or locked, so those two states must not
+ * wipe what the link just parked. Leaving an unlocked session, or landing on
+ * any state that is not a pre-unlock wait (no wallet, an error), wipes it.
+ *
+ * @param {string | undefined} previousState  session state before the change; undefined on first mount
+ * @param {string} nextState
+ * @returns {boolean}
+ */
+export function shouldClearTransientState(previousState, nextState) {
+    if (nextState === 'unlocked') return false;
+    const waiting = nextState === 'loading' || nextState === 'locked';
+    const wasWaiting = previousState === undefined
+        || previousState === 'loading'
+        || previousState === 'locked';
+    return !(waiting && wasWaiting);
+}

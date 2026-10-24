@@ -195,3 +195,12 @@ describe('shared URI to view mapping', () => {
         expect(bridge.sendMessage).not.toHaveBeenCalled();
     });
 });
+
+describe('link prefill survives the pre-unlock session states', () => {
+    it('gates the transient-state wipe on the shared session-state rule in the web and popup shells', () => {
+        for (const file of ['packages/web/src/App.jsx', 'packages/extension/src/popup/App.jsx']) {
+            const source = readFileSync(resolve(process.cwd(), file), 'utf8');
+            expect(source, file).toMatch(/shouldClearTransientState\(previousState, status\.state\)\) clearTransientActionState\(\)/);
+        }
+    });
+});

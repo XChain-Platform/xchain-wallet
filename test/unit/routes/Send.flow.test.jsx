@@ -678,9 +678,6 @@ describe('Send flow with mocked messaging', () => {
         await user.tab();
         expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Open address book' }));
         await user.tab();
-        // The recipient field's paste control sits below it, after its in-field icon.
-        expect(document.activeElement).toBe(screen.getAllByRole('button', { name: 'Paste from clipboard' })[0]);
-        await user.tab();
         expect(document.activeElement).toBe(screen.getByLabelText('Token'));
         await user.tab();
         expect(document.activeElement).toBe(screen.getByLabelText(/^Amount \(/));
@@ -812,6 +809,49 @@ describe('Send flow with mocked messaging', () => {
         expect(await screen.findByText(
             'This payment request requires a feature this wallet does not support.',
         )).toBeInTheDocument();
+    });
+
+    it('keeps a refused payment request note after the field loses focus', async () => {
+        mount();
+        const toField = await screen.findByLabelText(/^To$/);
+
+        fireEvent.paste(toField, {
+            clipboardData: { getData: () => `bitcoin:${TO}?req-extra=needed` },
+        });
+        fireEvent.blur(toField);
+
+        expect(await screen.findByText(
+            'This payment request requires a feature this wallet does not support.',
+        )).toBeInTheDocument();
+    });
+
+    it('does not say the amount was cleared when the pasted link supplies one', async () => {
+        mount();
+        const toField = await screen.findByLabelText(/^To$/);
+
+        fireEvent.paste(toField, {
+            clipboardData: { getData: () => `bitcoin:${TO}?amount=0.25&tick=PEPE` },
+        });
+
+        expect(screen.getByLabelText(/^Amount \(/)).toHaveValue('0.25');
+        expect(screen.queryByText(/amount was cleared/i)).toBeNull();
+    });
+
+    it('drops the previous link message when the next pasted link has none', async () => {
+        mount();
+        const toField = await screen.findByLabelText(/^To$/);
+
+        fireEvent.paste(toField, {
+            clipboardData: { getData: () => `bitcoin:${TO}?amount=0.25&message=Rent` },
+        });
+        fireEvent.change(screen.getByLabelText('Token'), { target: { value: 'XCP' } });
+        expect(screen.getByLabelText('Memo (optional)')).toHaveValue('Rent');
+
+        fireEvent.paste(toField, {
+            clipboardData: { getData: () => `bitcoin:${TO}?amount=0.5` },
+        });
+        expect(screen.getByLabelText('Memo (optional)')).toHaveValue('');
+        expect(screen.queryByTestId('payment-request-message')).toBeNull();
     });
 
     it.each([

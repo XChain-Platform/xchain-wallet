@@ -12,7 +12,6 @@
 
 .wrap {
     --address-control-height: var(--xc-control-h-md);
-    --address-paste-width: calc(var(--address-control-height) + var(--xc-space-8));
     --xc-icon-size: var(--xc-control-icon-md, var(--xc-icon-md));
     --address-control-padding-x: var(--xc-control-pad-x-md, var(--xc-control-pad-x));
     --address-control-font-size: var(--xc-control-font-md, var(--xc-control-font));
@@ -146,46 +145,4 @@
 .iconButton > button:disabled {
     background: transparent;
     border-color: transparent;
-}
-
-/* The in-field Paste, as on Send's recipient field (AddressCombobox): inset
-   from the field's end edge and vertically, at the field's inner height, so
-   it never meets the border. The icon action moves in to sit beside it. */
-.withPaste .iconButton {
-    inset-inline-end: var(--address-paste-width);
-}
-
-.pasteAction,
-.pasteAction > span {
-    display: contents !important;
-}
-
-.pasteAction button {
-    position: absolute;
-    z-index: calc(var(--xc-z-base) + 1);
-    inset-inline-end: var(--xc-space-1);
-    top: calc(20px + var(--xc-space-2));
-    flex: none;
-    width: auto;
-    min-width: max-content;
-    max-width: none;
-    height: calc(var(--address-control-height) - var(--xc-space-2));
-    min-height: calc(var(--address-control-height) - var(--xc-space-2));
-    gap: var(--xc-space-1);
-    padding-inline: calc(var(--xc-space-1) / 2);
-    white-space: nowrap;
-}
-
-.pasteAction button > span {
-    min-width: max-content;
-    white-space: nowrap;
-}
-
-.pasteAction [role='alert'] {
-    display: block;
-    margin-block-start: var(--xc-help-gap);
-}
-
-.noLabel .pasteAction button {
-    top: var(--xc-space-1);
 }

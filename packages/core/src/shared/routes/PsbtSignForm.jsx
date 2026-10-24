@@ -60,7 +60,6 @@ import {
     FormPage,
     ListPage,
 } from '@xchain-wallet/core/ui';
-import { ClipboardPasteButton } from '../../ui/ClipboardPasteButton.jsx';
 import { registry as registryLib } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { useSignerReady } from '../hooks/useSignerReady.js';
@@ -332,6 +331,32 @@ export function psbtReviewError(decomposed) {
     }
     if (exactNetworkFeeSats(decomposed) === null) {
         return 'The wallet could not verify this transaction\'s network fee.';
+    }
+    return null;
+}
+
+/**
+ * Name the first input this address would sign whose PSBT asks for a signature
+ * type other than SIGHASH_ALL (a taproot key-path input takes the default type).
+ * Those types leave outputs or other inputs open to change after the signature
+ * exists; the signer refuses them with a developer message after the password is
+ * typed, so the review refuses them first in plain words.
+ *
+ * @param {{ inputs?: Array<{ address?: string | null, sighashType?: number | null, scriptType?: string }> } | null} decomposed
+ * @param {string | undefined} signingAddress
+ * @returns {string | null}
+ */
+export function psbtSighashError(decomposed, signingAddress) {
+    if (!decomposed || !Array.isArray(decomposed.inputs) || !signingAddress) return null;
+    for (let i = 0; i < decomposed.inputs.length; i += 1) {
+        const input = decomposed.inputs[i];
+        if (input?.address !== signingAddress) continue;
+        const type = input.sighashType;
+        if (type === null || type === undefined) continue;
+        const allowed = input.scriptType === 'p2tr' ? 0 : 1;
+        if (type !== allowed) {
+            return `Input ${i + 1} asks for a signature that leaves part of the transaction open to change after you sign. This wallet does not give that signature.`;
+        }
     }
     return null;
 }
@@ -838,11 +863,13 @@ export function PsbtSignForm({ walletId, onBack, initialPsbt }) {
                 ? 'This transaction is already finalized and cannot be signed again.'
                 : 'This transaction contains finalized inputs and cannot be signed on this screen.';
         }
+        const sighashError = psbtSighashError(decomposed, selectedAddress?.address);
+        if (sighashError) return sighashError;
         if (walletOwnedInputCount === 0) {
             return 'This transaction has no inputs this wallet can sign. Check the selected network or import a different transaction.';
         }
         return null;
-    }, [decomposed, finalizedInputCount, walletOwnedInputCount]);
+    }, [decomposed, finalizedInputCount, walletOwnedInputCount, selectedAddress]);
 
     const totalIn = useMemo(() => {
         if (!decomposed) return null;
@@ -1385,12 +1412,6 @@ export function PsbtSignForm({ walletId, onBack, initialPsbt }) {
                     </FieldNote>
                 ) : null}
                 <div style={{ marginTop: 4, fontSize: 'var(--xc-text-sm)', color: 'var(--xc-text-muted)', display: 'flex', alignItems: 'center', gap: 'var(--xc-space-2)', flexWrap: 'wrap' }}>
-                    <span>Or</span>
-                    <ClipboardPasteButton
-                        disabled={busy}
-                        label="Paste transaction from clipboard"
-                        onPaste={(text) => { setPasted(text); if (error) setError(null); }}
-                    />
                     <Button
                         variant="ghost"
                         size="sm"

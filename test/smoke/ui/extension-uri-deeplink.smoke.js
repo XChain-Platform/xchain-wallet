@@ -78,7 +78,7 @@ assert.ok(/deepLinkRoute\(raw,\s*APP_CHAIN_REGISTRY\)/.test(popup),
 // --- 4. Send/receive/execute routing --------------------------------
 
 assert.ok(
-    /route\.view === 'send'\) setSendPrefill\(route\.sendPrefill\)/.test(popup),
+    /route\.view === 'send'\) \{\s*setSendPrefill\(route\.sendPrefill\)/.test(popup),
     'popup applies the shared Send prefill',
 );
 assert.ok(

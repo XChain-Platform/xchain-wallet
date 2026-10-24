@@ -21,11 +21,6 @@ const amountFieldStyles = readFileSync(
     join(process.cwd(), 'packages/core/src/shared/components/AmountField.module.css'),
     'utf8',
 );
-const addressComboboxStyles = readFileSync(
-    join(process.cwd(), 'packages/core/src/ui/AddressCombobox.module.css'),
-    'utf8',
-);
-
 describe('RTL-safe machine-readable fields', () => {
     it('keeps numeric inputs LTR while preserving direction for prose inputs', () => {
         render(
@@ -69,8 +64,8 @@ describe('RTL-safe machine-readable fields', () => {
             />,
         );
 
-        // Paste and Max sit inside the field's trailing edge. The reserved
-        // input padding and the action inset are logical properties, so no
+        // Max sits inside the field's trailing edge. The reserved input
+        // padding and the action inset are logical properties, so no
         // physical left or right value is written for either direction.
         const input = screen.getByRole('textbox', { name: 'Amount (BTC)' });
         const max = screen.getByRole('button', { name: 'Use max available amount' });
@@ -81,17 +76,14 @@ describe('RTL-safe machine-readable fields', () => {
         expect(max.style.right).toBe('');
         expect(input).toHaveAttribute('dir', 'ltr');
         // The input is left to right, so under a right-to-left page its inline
-        // end is the right edge while the actions sit at the left. The same
+        // end is the right edge while the action sits at the left. The same
         // room is handed to the stylesheet, which moves it to the inline start.
         expect(input.style.getPropertyValue('--amount-end-room')).toBe(input.style.paddingInlineEnd);
         expect(amountFieldStyles).toMatch(
-            /:global\(html\[dir='rtl'\]\) \.amountFieldWrap input\s*\{[^}]*padding-inline-start:\s*var\(--amount-end-room\)[^}]*text-align:\s*end/s,
+            /:global\(html\[dir='rtl'\]\) \.amountFieldWrap input\s*\{[^}]*padding-inline-start:\s*var\(--amount-end-room, var\(--xc-control-padding-x\)\)[^}]*text-align:\s*end/s,
         );
         expect(amountFieldStyles).toMatch(
-            /\.amountFieldWrap \.pasteAction button,\s*\.amountFieldWrap \.maxAction\s*\{[^}]*flex:\s*none[^}]*min-width:\s*max-content[^}]*white-space:\s*nowrap/s,
-        );
-        expect(addressComboboxStyles).toMatch(
-            /\.pasteAction button\s*\{[^}]*inset-inline-end:\s*var\(--xc-space-1\)[^}]*flex:\s*none[^}]*min-width:\s*max-content[^}]*white-space:\s*nowrap/s,
+            /\.amountFieldWrap \.maxAction\s*\{[^}]*flex:\s*none[^}]*min-width:\s*max-content[^}]*white-space:\s*nowrap/s,
         );
     });
 });

@@ -14,6 +14,21 @@ export const ShareOutcome = Object.freeze({
 });
 
 /**
+ * Web Share rejects a `url` that is not http or https (Chrome on Android
+ * throws "Invalid URL" for a `bitcoin:` payment link), which leaves the
+ * share sheet closed. A link of any other scheme travels in the text instead.
+ *
+ * @param {{ title?: string, text?: string, url?: string, files?: File[] }} data
+ * @returns {{ title?: string, text?: string, url?: string, files?: File[] }}
+ */
+export function toWebShareData(data) {
+    const url = typeof data?.url === 'string' ? data.url : '';
+    if (!url || /^https?:/i.test(url)) return data;
+    const { url: _link, ...rest } = data;
+    return { ...rest, text: [rest.text, url].filter(Boolean).join('\n') };
+}
+
+/**
  * Share public content through the strongest platform surface available.
  * Native shells own the first attempt because their WebViews may omit the Web
  * Share API even though the operating system has a share sheet.
@@ -40,7 +55,7 @@ export async function shareContent(data, { env = globalThis, fallbackText } = {}
     const nav = env?.navigator;
     if (typeof nav?.share === 'function') {
         try {
-            await nav.share(data);
+            await nav.share(toWebShareData(data));
             return ShareOutcome.SHARED;
         } catch (err) {
             if (err?.name === 'AbortError') return ShareOutcome.CANCELED;
@@ -67,7 +82,7 @@ export async function shareOrCopy(data, fallbackText, { env = globalThis } = {})
     const share = env?.navigator?.share;
     if (typeof share === 'function') {
         try {
-            await share.call(env.navigator, data);
+            await share.call(env.navigator, toWebShareData(data));
             return ShareOutcome.SHARED;
         } catch (err) {
             if (err?.name === 'AbortError') return ShareOutcome.CANCELED;

@@ -5,7 +5,7 @@
 
 import { createRef, useState } from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { fireEvent, render, screen } from '@testing-library/react';
 import { AddressCombobox } from '../../../packages/core/src/ui/AddressCombobox.jsx';
 
 const suggestions = [
@@ -50,18 +50,16 @@ describe('<AddressCombobox> remaining interaction branches', () => {
         expect(objectRef.current).toBe(screen.getByLabelText('Destination'));
     });
 
-    it('rejects hidden text delivered by the clipboard button', async () => {
-        Object.defineProperty(navigator, 'clipboard', {
-            configurable: true,
-            value: { readText: vi.fn().mockResolvedValue('bc1qhid\u200Bden') },
-        });
+    it('rejects hidden text delivered by the native paste event', () => {
         render(<Harness />);
+        const input = screen.getByLabelText('Destination');
 
-        fireEvent.click(screen.getByRole('button', { name: 'Paste from clipboard' }));
+        fireEvent.paste(input, {
+            clipboardData: { getData: () => 'bc1qhid\u200Bden' },
+        });
 
-        expect(await screen.findByRole('alert')).toHaveTextContent('hidden characters');
-        expect(screen.getByLabelText('Destination')).toHaveValue('');
-        await waitFor(() => expect(navigator.clipboard.readText).toHaveBeenCalledOnce());
+        expect(screen.getByRole('alert')).toHaveTextContent('hidden characters');
+        expect(input).toHaveValue('');
     });
 
     it('uses a custom trailing-action label without requiring a handler', () => {

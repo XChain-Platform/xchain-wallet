@@ -130,9 +130,7 @@ describe('DeveloperModeSection unavailable actions', () => {
         expect(screen.getByRole('textbox', {
             name: 'Custom network descriptor JSON',
         })).toBeTruthy();
-        expect(screen.getByRole('button', {
-            name: 'Paste custom network descriptor',
-        })).toBeTruthy();
+        expect(screen.getByRole('button', { name: 'Add network' })).toBeDisabled();
     });
 
     it('explains when no active wallet is available for activation', async () => {

@@ -179,6 +179,8 @@ export function tokensFromBalances(balResp) {
     return tokenRowsFromBalances(balResp).rows;
 }
 
+// A row that is not an object (null, a number) carries no tick; it is skipped
+// so the rest of the ledger stays readable, and the read is marked partial.
 function tokenRowsFromBalances(balResp) {
     if (!balResp || !Array.isArray(balResp.data)) return { rows: [], invalid: true };
     const rows = [];
@@ -351,7 +353,9 @@ function shapeFromReads({ balResp, addrResp, nativeTicker }) {
     // null amounts when its UTXO tracker is not answering, and that body is
     // "could not read", not "holds nothing". It is marked the same way a
     // thrown read is, so Home says Unavailable and the Confirm preview stops
-    // projecting the coin from zero.
+    // projecting the coin from zero. A confirmed amount that is not a
+    // non-negative decimal (text, a negative, an object) is the same
+    // "could not read": the number is unknown, not zero.
     const tokenResult = balOk ? tokenRowsFromBalances(balResp) : { rows: [], invalid: false };
     const balUnreadable = balOk && tokenResult.invalid;
     const addrUnreadable = addrOk && nativeAnswerUnreadable(addrResp);

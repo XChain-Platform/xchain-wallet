@@ -12,7 +12,7 @@ on:
   pull_request:
     branches: [master, develop]
 concurrency:
-  # On a PROTECTED branch (master, develop), group per COMMIT. Elsewhere, group
+  # On a PROTECTED branch (master, develop), group per RUN. Elsewhere, group
   # per ref.
   #
   # `cancel-in-progress: false` below is necessary but NOT sufficient, which was
@@ -24,9 +24,9 @@ concurrency:
   # already carried the fix, while the in-progress run on bc58ff47 correctly
   # survived. Half the defect, half the fix.
   #
-  # Per-commit grouping removes the contention rather than arbitrating it: two
-  # master commits are never in the same group, so neither can evict the other
-  # and every commit reaches a verdict the release gate can read. Pull requests
+  # Per-run grouping removes the contention rather than arbitrating it: two
+  # master runs are never in the same group, so neither can evict the other
+  # and every run reaches a verdict the release gate can read. Pull requests
   # keep per-ref grouping, where superseding is the whole point.
   #
   # develop joins master here rather than inheriting the feature-branch shape.
@@ -35,7 +35,7 @@ concurrency:
   # measurement below, and it is the branch a release is frozen FROM: the
   # ceremony requires green CI on the specific develop SHA a release branch is
   # cut at, which a run evicted while queued can never provide.
-  group: ci-${{ github.ref }}-${{ (github.ref == 'refs/heads/master' || github.ref == 'refs/heads/develop') && github.sha || 'ref' }}
+  group: ci-${{ github.ref }}-${{ (github.ref == 'refs/heads/master' || github.ref == 'refs/heads/develop') && github.sha || 'ref' }}-${{ (github.ref == 'refs/heads/master' || github.ref == 'refs/heads/develop') && github.run_id || 'latest' }}
   # Cancel superseded runs on pull requests and feature branches, where only the
   # latest push matters and runner minutes are the only cost. NEVER cancel on a
   # protected branch: the release gate (tools/release/verify-validated-commit.mjs)
@@ -323,14 +323,7 @@ jobs:
     runs-on: ubuntu-24.04
     # One run at a time on the shared regtest venue. Each run covers one rolling
     # quarter of the suite, keeping the venue out of the main CI critical path.
-    timeout-minutes: 120
-    # Shared across refs on purpose: there is one regtest venue, so runs must
-    # serialize. GitHub keeps one pending run per group, so a newer run can evict
-    # a queued master or develop run; an eviction is recovered by re-running.
-    # The ci-master-verdict smoke allows exactly this job and group name.
-    concurrency:
-      group: wallet-regtest-venue
-      cancel-in-progress: false
+    timeout-minutes: 240
     env:
       XC_REGTEST_SSH_HOST: ${{ vars.XC_REGTEST_SSH_HOST }}
       # Which regtest chain the suite drives (RBTC, RLTC or RDOGE). Bitcoin is the
@@ -383,14 +376,29 @@ jobs:
           # so name the key in the ssh config for every host this job reaches.
           printf 'Host *\n  IdentityFile ~/.ssh/regtest_key\n  IdentitiesOnly yes\n' >> ~/.ssh/config
           chmod 600 ~/.ssh/config
-          ssh -N -f -o StrictHostKeyChecking=accept-new -o ExitOnForwardFailure=yes -i ~/.ssh/regtest_key \
+          attempt=1
+          while ! ssh -N -f -o ConnectTimeout=15 -o StrictHostKeyChecking=accept-new \
+            -o ExitOnForwardFailure=yes -i ~/.ssh/regtest_key \
             -L 18080:localhost:18080 -L 10000:localhost:10000 \
             -L 3023:localhost:3023 -L 3025:localhost:3025 \
             -L 3223:localhost:3223 -L 3225:localhost:3225 \
-            -L 3123:localhost:3123 -L 3125:localhost:3125 "$XC_REGTEST_SSH_HOST"
-      - name: Run regtest suite shard ${{ steps.shard.outputs.value }}
-        if: steps.venue.outputs.configured == 'true'
-        run: pnpm test:e2e:regtest --shard=${{ steps.shard.outputs.value }}
+            -L 3123:localhost:3123 -L 3125:localhost:3125 "$XC_REGTEST_SSH_HOST"; do
+            if [ "$attempt" -ge 240 ]; then
+              echo "::error::The regtest venue remained busy for two hours"
+              exit 1
+            fi
+            echo "The regtest venue is busy; retrying in 30 seconds (attempt $attempt/240)"
+            attempt=$((attempt + 1))
+            sleep 30
+          done
+
+          gateState="$RUNNER_TEMP/venue-gate-state"
+          printf '%s\n' venue-lock-acquired > "$gateState"
+          until grep -qx venue-lock-acquired "$gateState"; do
+            sleep 1
+          done
+          flock --exclusive "$RUNNER_TEMP/xchain-wallet-regtest.lock" \
+            pnpm test:e2e:regtest --shard=${{ steps.shard.outputs.value }}
         env:
           NODE_OPTIONS: --max-old-space-size=6144
       - name: Upload Playwright report

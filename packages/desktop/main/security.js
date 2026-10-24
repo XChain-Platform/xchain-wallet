@@ -243,6 +243,26 @@ export function isTrustedSenderEvent(event, appRoot) {
     return isAppUrl(senderFrameUrl(event), appRoot);
 }
 
+/**
+ * Decide what happens when a page's beforeunload handler tries to cancel an
+ * unload (a form with unsent input registers one). Electron has no prompt of
+ * its own: with no `will-prevent-unload` listener a reload, a window close
+ * and an app quit all stop silently, so a quit, a SIGTERM or a logout
+ * would never finish while such a form is open. A quit in progress always
+ * lets the page go; any other unload asks the person first.
+ *
+ * @param {{ quitting: boolean, testMode?: boolean, confirmLeave: () => boolean }} options
+ * @returns {boolean}  true means ignore the page's handler and unload
+ */
+export function shouldIgnoreBeforeUnload({ quitting, testMode = false, confirmLeave }) {
+    if (quitting || testMode) return true;
+    try {
+        return confirmLeave() === true;
+    } catch {
+        return false;
+    }
+}
+
 const IPC_MESSAGE_TYPE_MAX_LENGTH = 128;
 const OPEN_WINDOW_VIEW_MAX_LENGTH = 128;
 const OPEN_WINDOW_CONTEXT_MAX_LENGTH = 16 * 1024;
