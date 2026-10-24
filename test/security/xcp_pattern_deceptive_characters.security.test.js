@@ -50,4 +50,28 @@ describe('deceptive characters at signing boundaries', () => {
             settings: { testSendThresholdSats: '1000' },
         })).toThrow(/deceptive characters/i);
     });
+
+    it('refuses blank-glyph padding that hides the end of a message', async () => {
+        for (const filler of ['\u2800', '\u3164', '\u115F', '\uFFA0', '\u{E0041}', '\uFE01']) {
+            const signer = { signMessage: vi.fn() };
+            await expect(signMessageFlow({
+                ...common,
+                path: "m/84'/0'/0'/0/0",
+                message: 'Sign in' + filler.repeat(50) + 'and send everything',
+                signer,
+            })).rejects.toThrow(/deceptive characters/i);
+            expect(signer.signMessage).not.toHaveBeenCalled();
+        }
+    });
+
+    it('still signs an emoji with its presentation selector', async () => {
+        const signer = { signMessage: vi.fn().mockResolvedValue({ signature: 'sig' }) };
+        await signMessageFlow({
+            ...common,
+            path: "m/84'/0'/0'/0/0",
+            message: 'thanks \u2764\uFE0F',
+            signer,
+        }).catch(() => {});
+        expect(signer.signMessage).toHaveBeenCalled();
+    });
 });
