@@ -65,20 +65,22 @@
     text-align: start;
 }
 
-.sectionTitle {
+/* Title and body share one rule: this sheet loads at startup, inside the
+   initial CSS budget. */
+.sectionTitle,
+.sectionBody {
     margin: 0;
     font-size: var(--xc-type-body-size);
-    font-weight: var(--xc-type-body-weight);
     line-height: 1.4;
     color: var(--xc-text-muted);
 }
 
+.sectionTitle {
+    font-weight: var(--xc-type-body-weight);
+}
+
 .sectionBody {
-    margin: 0;
     max-width: var(--xc-prose-max-width);
-    font-size: var(--xc-type-body-size);
-    line-height: 1.4;
-    color: var(--xc-text-muted);
 }
 
 .sectionActions {
