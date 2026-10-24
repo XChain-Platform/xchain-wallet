@@ -297,7 +297,7 @@ async function launchUntilReady(cmd, args = []) {
     // them running on the release machine after every signing ceremony.
     const marker = join(work, 'grandchild.pid');
     const forker = script('forker.sh', `sleep 60 & echo $! > ${JSON.stringify(marker)}; sleep 60`);
-    await launchAndWatch(forker, [], { timeoutMs: 600 });
+    await launchAndWatch(forker, [], { timeoutMs: 4000 });
     const pid = Number(readFileSync(marker, 'utf8').trim());
     assert.ok(Number.isFinite(pid) && pid > 0);
     let alive = true;
@@ -454,7 +454,20 @@ async function launchUntilReady(cmd, args = []) {
  * .AppImage, which probeAppImage copies, chmods and executes exactly as it
  * would the real thing.
  */
-async function probeFakeApp(tag, body, { lane, ...options } = {}) {
+// THE OBSERVATION WINDOW OF A FIXTURE IS A LATENCY BOUND, NOT A DURATION.
+// launchAndWatch answers "alive?" at the deadline, so a fixture that has not
+// yet been exec'd, or has not yet written its banner, when the deadline
+// lands reads as a live silent app. On a loaded Mac the first exec of a
+// freshly written script took longer than the old 900ms window: "dies" came
+// back ok, "crashes" ok and "expect-hit" failed on missing output, in about
+// half of the runs. Fixtures that exit resolve on close, so a generous
+// window costs them nothing; fixtures that linger pay the whole window, so
+// it is only as long as start-up latency under load needs.
+const FIXTURE_LIVE_WINDOW_MS = 3000;
+const FIXTURE_EXIT_WINDOW_MS = 30000;
+
+async function probeFakeApp(tag, body, { lane, exits = false, ...options } = {}) {
+    const timeoutMs = exits ? FIXTURE_EXIT_WINDOW_MS : FIXTURE_LIVE_WINDOW_MS;
     const dir = join(work, `fixture-${tag}`);
     mkdirSync(dir, { recursive: true });
     const which = lane || (process.platform === 'darwin' ? 'mac' : 'linux');
@@ -467,7 +480,7 @@ async function probeFakeApp(tag, body, { lane, ...options } = {}) {
         const artifact = join(dir, 'xchain-wallet-0.0.0-x86_64.AppImage');
         writeFileSync(artifact, `#!/bin/sh\n${body}\n`, { mode: 0o755 });
         return probeArtifact(artifact, {
-            platform: 'linux', arch: process.arch, timeoutMs: 900, session: { can: true }, ...options,
+            platform: 'linux', arch: process.arch, timeoutMs, session: { can: true }, ...options,
         });
     }
     const app = join(dir, 'XChain Wallet.app');
@@ -475,7 +488,7 @@ async function probeFakeApp(tag, body, { lane, ...options } = {}) {
     writeFileSync(join(app, 'Contents', 'MacOS', 'XChain Wallet'), `#!/bin/sh\n${body}\n`, { mode: 0o755 });
     const artifact = join(dir, `xchain-wallet-0.0.0-${process.arch === 'arm64' ? 'arm64' : 'x64'}-mac.zip`);
     execFileSync('ditto', ['-c', '-k', '--sequesterRsrc', '--keepParent', app, artifact]);
-    return probeArtifact(artifact, { timeoutMs: 900, session: { can: true }, ...options });
+    return probeArtifact(artifact, { timeoutMs, session: { can: true }, ...options });
 }
 
 if (process.platform === 'darwin' || process.platform === 'linux') {
@@ -489,13 +502,13 @@ if (process.platform === 'darwin' || process.platform === 'linux') {
     const linuxLane = await probeFakeApp('good-linux', 'echo up; sleep 30', { lane: 'linux' });
     assert.equal(linuxLane.state, 'ok', `the AppImage path must pass a live app, got: ${linuxLane.reason}`);
     assert.equal(linuxLane.class, 'linux-appimage');
-    const linuxDies = await probeFakeApp('dies-linux', 'exit 1', { lane: 'linux' });
+    const linuxDies = await probeFakeApp('dies-linux', 'exit 1', { lane: 'linux', exits: true });
     assert.equal(linuxDies.state, 'failed');
     assert.match(linuxDies.reason, /DIED/);
 
     // 2. It exits immediately: the row-144 case, and the one ONLY the
     //    aliveness comparison catches - there is no crash banner to find.
-    const dies = await probeFakeApp('dies', 'exit 0');
+    const dies = await probeFakeApp('dies', 'exit 0', { exits: true });
     assert.equal(dies.state, 'failed', 'an app that exits at once must fail');
     assert.match(dies.reason, /DIED/);
 
