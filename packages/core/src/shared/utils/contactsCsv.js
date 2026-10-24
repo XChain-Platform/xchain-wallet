@@ -22,6 +22,22 @@ export const CONTACT_CSV_COLUMNS = Object.freeze([
 const REQUIRED_COLUMNS = ['name', 'chain', 'address'];
 const CONTACT_FIELDS = ['schemaVersion', 'id', 'name', 'notes', 'avatarSeed', 'createdAt', 'updatedAt'];
 
+// A spreadsheet reads a cell that opens with one of these as a formula. A
+// leading apostrophe makes it plain text; the import removes exactly one.
+// Line breaks inside a cell are written as LF, the only break the parser keeps,
+// so a cell never opens with a bare CR that would read back as LF.
+const FORMULA_LEAD = /^'*[=+\-@\t]/;
+const ESCAPED_FORMULA_LEAD = /^'+[=+\-@\t]/;
+
+function exportCell(value) {
+    const text = String(value ?? '').replace(/\r\n?/g, '\n');
+    return csvField(FORMULA_LEAD.test(text) ? `'${text}` : text);
+}
+
+function importCell(value) {
+    return ESCAPED_FORMULA_LEAD.test(value) ? value.slice(1) : value;
+}
+
 /**
  * Export one row per address. Contact metadata repeats so every row remains
  * understandable in a spreadsheet and rows with the same id reassemble into
@@ -33,7 +49,7 @@ export function contactsToCsv(contacts) {
     const lines = [CONTACT_CSV_COLUMNS.join(',')];
     for (const contact of Array.isArray(contacts) ? contacts : []) {
         for (const entry of Array.isArray(contact?.entries) ? contact.entries : []) {
-            lines.push(CONTACT_CSV_COLUMNS.map((column) => csvField(
+            lines.push(CONTACT_CSV_COLUMNS.map((column) => exportCell(
                 Object.hasOwn(entry, column) ? entry[column] : contact?.[column],
             )).join(','));
         }
@@ -73,7 +89,7 @@ export function contactsFromCsv(text, options = {}) {
 
     for (const row of content.slice(1)) {
         const value = Object.fromEntries(CONTACT_CSV_COLUMNS.map((name) => [name, '']));
-        names.forEach((name, index) => { value[name] = row.cells[index] ?? ''; });
+        names.forEach((name, index) => { value[name] = importCell(row.cells[index] ?? ''); });
         const rowError = validateRow(value, row, names.length);
         if (rowError) {
             failures.push(failure(row.line, value.name, rowError));

@@ -254,7 +254,6 @@ export function AirdropForm({ walletId, resumeId = null, onBack, initialChainId,
     const [indexReadError, setIndexReadError] = useState(/** @type {string | null} */ (null));
     const [hydrated, setHydrated] = useState(false);
     const passwordRef = useRef(/** @type {HTMLInputElement | null} */ (null));
-    const fileInputRef = useRef(/** @type {HTMLInputElement | null} */ (null));
 
     // The active map and the settings read are best-effort: a host without
     // `getActiveAddresses` / `getSettings`, or one whose call fails, still
@@ -928,19 +927,8 @@ export function AirdropForm({ walletId, resumeId = null, onBack, initialChainId,
         setPasteText(normalized);
     }, []);
 
-    const handleFile = useCallback((event) => {
-        const file = event.target?.files?.[0];
-        if (!file) return;
-        const reader = new FileReader();
-        reader.onload = () => {
-            const text = typeof reader.result === 'string' ? reader.result : '';
-            applyImportedRecipients(text);
-        };
-        reader.readAsText(file);
-    }, [applyImportedRecipients]);
-
-    // Recipient CSV and TXT files can be dropped onto the textarea while
-    // the file Input remains the primary affordance.
+    // Recipient CSV and TXT files arrive by drop or by the file picker; both go
+    // through the hook's size cap, type check and read-error report.
     const recipientsDrop = useDropZone({
         accept: ['.csv', '.txt', 'text/csv', 'text/plain'],
         readAs: 'text',
@@ -2037,17 +2025,14 @@ export function AirdropForm({ walletId, resumeId = null, onBack, initialChainId,
                         same pattern Publish file uses. */}
                     <div>
                         <Input
-                            ref={fileInputRef}
-                            type="file"
-                            accept=".csv,.txt,text/csv,text/plain"
-                            onChange={handleFile}
-                            style={{ display: 'none' }}
+                            {...recipientsDrop.pickerProps}
                             aria-label="Upload CSV of addresses"
+                            autoComplete="off"
                         />
                         <Button
                             type="button"
                             variant="secondary"
-                            onClick={() => fileInputRef.current?.click()}
+                            onClick={recipientsDrop.openFilePicker}
                         >
                             Upload a CSV or text file
                         </Button>

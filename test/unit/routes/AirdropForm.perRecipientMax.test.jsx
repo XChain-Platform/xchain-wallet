@@ -479,4 +479,29 @@ describe('AirdropForm CSV upload control', () => {
         fireEvent.click(screen.getByRole('button', { name: 'Upload a CSV or text file' }));
         expect(click).toHaveBeenCalledTimes(1);
     });
+
+    it('refuses a picked file over the size cap instead of loading it', async () => {
+        mountAirdrop();
+        await flushTimers();
+        const input = screen.getByLabelText('Upload CSV of addresses');
+        const big = new File(['x'.repeat(3 * 1024 * 1024)], 'recipients.csv', { type: 'text/csv' });
+        await act(async () => {
+            fireEvent.change(input, { target: { files: [big] } });
+        });
+        await flushTimers();
+        expect(document.body.textContent).toMatch(/File is too large/);
+        expect(screen.getByLabelText('Recipients').value).toBe('');
+    });
+
+    it('refuses a picked file of the wrong type', async () => {
+        mountAirdrop();
+        await flushTimers();
+        const input = screen.getByLabelText('Upload CSV of addresses');
+        const wrong = new File(['PK'], 'recipients.zip', { type: 'application/zip' });
+        await act(async () => {
+            fireEvent.change(input, { target: { files: [wrong] } });
+        });
+        await flushTimers();
+        expect(document.body.textContent).toMatch(/File type not accepted/);
+    });
 });
