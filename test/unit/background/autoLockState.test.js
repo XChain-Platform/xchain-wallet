@@ -51,6 +51,14 @@ describe('autoLockState.shouldAutoLock (pure)', () => {
         expect(shouldAutoLock(state, 1100)).toBe(true);  // exactly at threshold
         expect(shouldAutoLock(state, 5000)).toBe(true);
     });
+
+    it('locks when the clock was set back past the stamp', () => {
+        const MIN = 60_000;
+        const state = { armed: true, idleMs: 15 * MIN, lastActivity: 100 * MIN };
+        expect(shouldAutoLock(state, 100 * MIN - 10 * MIN)).toBe(true);
+        // A small correction inside the tolerance still reads as within the window.
+        expect(shouldAutoLock(state, 100 * MIN - 2 * MIN)).toBe(false);
+    });
 });
 
 describe('autoLockState arm/stamp/clear', () => {
