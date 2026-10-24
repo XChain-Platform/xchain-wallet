@@ -10,6 +10,7 @@
 
 import { useEffect, useRef, useState } from 'react';
 import { Button } from './Button.jsx';
+import { FormNotice } from './FormNotice.jsx';
 import { StatusMessage } from './StatusMessage.jsx';
 import { getNativeQrScanner } from './nativeQrScanner.js';
 import { beginCameraRequest, CAMERA_START_TIMEOUT_MS, waitForCamera } from './cameraWait.js';
@@ -297,7 +298,7 @@ function NativeCameraScan({ scanner, onFrame, alt }) {
                 {t('ui.qrScanner.scanWithCamera')}
             </Button>
             {error ? (
-                <StatusMessage variant="error">{error}</StatusMessage>
+                <FormNotice variant="error">{error}</FormNotice>
             ) : (
                 <p style={{ margin: 0, fontSize: 'var(--xc-text-xs)', color: 'var(--xc-text-muted)' }}>
                     {phase === 'open'
@@ -605,7 +606,7 @@ export function QrScanner({
                 }}
             />
             {error ? (
-                <StatusMessage variant="error">{error}</StatusMessage>
+                <FormNotice variant="error">{error}</FormNotice>
             ) : (
                 <p style={{ margin: 0, fontSize: 'var(--xc-text-xs)', color: 'var(--xc-text-muted)' }}>
                     {running ? t('ui.qrScanner.scanningPointTheCameraAt') : t('ui.qrScanner.startingCamera')}

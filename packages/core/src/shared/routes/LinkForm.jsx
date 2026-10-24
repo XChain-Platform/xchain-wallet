@@ -35,6 +35,7 @@ import { submitFailureMessage } from '../utils/submitFailureMessage.js';
 import { useActionConfirmFlow, useConfirmSubmit, isUserRejection } from '../hooks/useActionConfirmFlow.js';
 import { ActionConfirmScreen } from '../components/ActionConfirmScreen.jsx';
 import { MAX_MEMO_LENGTH, memoLengthError, utf8ByteLength } from '../utils/memoLimit.js';
+import cardStyles from '../../ui/Card.module.css';
 
 const chainRegistry = registryLib.defaultRegistry();
 
@@ -835,13 +836,7 @@ function SidePanel({ title, chainIds, chainId, onChainChange, actionIndex, onAct
     const preview = previewKey ? previewCache[previewKey] : null;
 
     return (
-        <fieldset style={{
-            border: 'var(--xc-card-border)',
-            borderRadius: 'var(--xc-card-radius)',
-            padding: 'var(--xc-card-pad)',
-            margin: 0,
-            background: 'var(--xc-card-bg)',
-        }}>
+        <fieldset className={cardStyles.card} style={{ margin: 0 }}>
             <legend style={{ fontWeight: 600, padding: '0 var(--xc-space-2)' }}>
                 {title}
             </legend>

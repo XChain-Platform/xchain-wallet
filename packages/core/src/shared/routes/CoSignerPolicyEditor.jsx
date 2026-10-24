@@ -23,6 +23,7 @@ import { Button, Checkbox, FormPage, FormSection, Input, Select, Switch } from '
 import { AmountField } from '../components/AmountField.jsx';
 import { actionDisplayLabel } from '../utils/actionDisplayLabel.js';
 import { BITCOIN_ACTIONS } from '../../registry/actions.js';
+import cardStyles from '../../ui/Card.module.css';
 
 /**
  * @typedef {Object} PolicyDraft
@@ -258,11 +259,7 @@ export function buildPolicyDraft(draft) {
 }
 
 const fieldsetStyle = {
-    border: 'var(--xc-card-border)',
-    borderRadius: 'var(--xc-card-radius)',
-    padding: 'var(--xc-card-pad)',
     margin: '0 0 var(--xc-space-3) 0',
-    background: 'var(--xc-card-bg)',
 };
 
 // The stored policy keys are the protocol's own wire names, and they must stay
@@ -343,7 +340,7 @@ export function CoSignerPolicyEditor({ value, onChange }) {
     return (
         <FormPage as="div" sectioned label="Agent spending policy">
             <FormSection title="Policy rules">
-            <fieldset style={fieldsetStyle}>
+            <fieldset className={cardStyles.card} style={fieldsetStyle}>
                 <legend style={legendStyle}>Allowed actions</legend>
                 <p style={helpStyle}>
                     Which actions may the agent sign? Tick each one. The agent can never
@@ -388,7 +385,7 @@ export function CoSignerPolicyEditor({ value, onChange }) {
                 ) : null}
             </fieldset>
 
-            <fieldset style={fieldsetStyle}>
+            <fieldset className={cardStyles.card} style={fieldsetStyle}>
                 <legend style={legendStyle}>Per-action amount limits</legend>
                 <p style={helpStyle}>
                     Cap how much the agent may move in a single action, per token. Pick
@@ -447,7 +444,7 @@ export function CoSignerPolicyEditor({ value, onChange }) {
                 </Button>
             </fieldset>
 
-            <fieldset style={fieldsetStyle}>
+            <fieldset className={cardStyles.card} style={fieldsetStyle}>
                 <legend style={legendStyle}>Rolling limit</legend>
                 <p style={helpStyle}>
                     Cap total activity over a rolling time window (for example, at most
@@ -501,7 +498,7 @@ export function CoSignerPolicyEditor({ value, onChange }) {
                 ) : null}
             </fieldset>
 
-            <fieldset style={fieldsetStyle}>
+            <fieldset className={cardStyles.card} style={fieldsetStyle}>
                 <legend style={legendStyle}>Extra-confirmation threshold</legend>
                 <p style={helpStyle}>
                     Flag requests above this amount with a warning on the approval
@@ -531,7 +528,7 @@ export function CoSignerPolicyEditor({ value, onChange }) {
                 </Button>
             </fieldset>
 
-            <fieldset style={fieldsetStyle}>
+            <fieldset className={cardStyles.card} style={fieldsetStyle}>
                 <legend style={legendStyle}>Allowed recipients</legend>
                 <p style={helpStyle}>
                     Restrict the agent to paying only these addresses. Leave empty to
@@ -554,7 +551,7 @@ export function CoSignerPolicyEditor({ value, onChange }) {
                 </Button>
             </fieldset>
 
-            <fieldset style={fieldsetStyle}>
+            <fieldset className={cardStyles.card} style={fieldsetStyle}>
                 <legend style={legendStyle}>Allowed transaction outputs</legend>
                 <p style={helpStyle}>
                     Anti-drain guard: the signed transaction may only pay these
