@@ -17,6 +17,7 @@ import * as branding from '@xchain-wallet/core/branding/branding.js';
 import {
     getLockoutState,
     getRemainingMs,
+    LOCKOUT_STORAGE_KEY,
     recordFailure as recordLockoutFailure,
     recordSuccess as recordLockoutSuccess,
 } from '../../flows/lockoutTracking.js';
@@ -300,6 +301,26 @@ export function Locked({ onUnlocked }) {
 
     const isLockedOut = remainingMs > 0;
 
+    // The counter lives in storage the whole origin shares, so another tab can
+    // start a wait this screen never saw. Every attempt re-reads it first, and
+    // a storage event brings the banner in without a failed guess of its own.
+    const refreshLockout = useCallback(() => {
+        const state = getLockoutState();
+        const ms = getRemainingMs(state);
+        setLockout(state);
+        setRemainingMs(ms);
+        return ms;
+    }, []);
+
+    useEffect(() => {
+        const onStorage = (event) => {
+            if (event.key !== null && event.key !== LOCKOUT_STORAGE_KEY) return;
+            refreshLockout();
+        };
+        window.addEventListener('storage', onStorage);
+        return () => window.removeEventListener('storage', onStorage);
+    }, [refreshLockout]);
+
     const captureWallet = captureQueue[captureIndex] || null;
     const inCaptureStep = captureWallet !== null;
 
@@ -382,6 +403,7 @@ export function Locked({ onUnlocked }) {
     async function handleSubmit(event) {
         event.preventDefault();
         if (unlockInFlightRef.current || busy || password.length === 0 || isLockedOut) return;
+        if (refreshLockout() > 0) return;
         unlockInFlightRef.current = true;
         setBusy(true);
         setError(null);
@@ -428,6 +450,7 @@ export function Locked({ onUnlocked }) {
 
     async function handleBiometric() {
         if (unlockInFlightRef.current || busy || isLockedOut) return;
+        if (refreshLockout() > 0) return;
         unlockInFlightRef.current = true;
         setBusy(true);
         setError(null);
