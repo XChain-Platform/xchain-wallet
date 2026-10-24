@@ -40,6 +40,7 @@ import { pickDefaultChainId } from '../chainSelection.js';
 import { submitFailureMessage } from '../utils/submitFailureMessage.js';
 import { QueuedResultPanel } from '../components/QueuedResultPanel.jsx';
 import { MAX_MEMO_LENGTH, memoLengthError, utf8ByteLength } from '../utils/memoLimit.js';
+import { actionTextSafetyError } from '../utils/actionTextSafety.js';
 import { parseRawTx } from '../../signers/verifySignedTx.js';
 import { formatNativeBaseUnits, tickerForDescriptor } from '../../registry/coinTicker.js';
 import { readFailureMessage } from '../utils/readFailureMessage.js';
@@ -557,9 +558,9 @@ export function BroadcastForm({ walletId, onBack, onDone, initialChainId, initia
 
     const messageBytes = utf8ByteLength(actionParams.MESSAGE);
     const memoBytes = utf8ByteLength(actionParams.MEMO);
-    const messageLengthError = messageBytes > MAX_BROADCAST_MESSAGE_LENGTH
+    const messageLengthError = actionTextSafetyError(actionParams.MESSAGE, 'Message') || (messageBytes > MAX_BROADCAST_MESSAGE_LENGTH
         ? `Message is ${messageBytes} bytes; the network accepts at most ${MAX_BROADCAST_MESSAGE_LENGTH} bytes.`
-        : null;
+        : null);
     const broadcastMemoLengthError = memoLengthError(actionParams.MEMO || '');
     const broadcastLengthError = messageLengthError || broadcastMemoLengthError;
 

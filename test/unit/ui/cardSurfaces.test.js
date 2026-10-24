@@ -237,12 +237,14 @@ describe('card surfaces', () => {
         const source = readFileSync(join(packagesRoot, 'core/src/ui/Card.module.css'), 'utf8');
         expect(source).toMatch(/\.card \.card,\s*\.card \.flush,\s*\.flush \.card,\s*\.flush \.flush\s*\{[^}]*border:\s*0/);
         expect(source).toMatch(/@media \(min-width: 600px\)\s*\{\s*\.formCard:not\(\.cardless\) \.card,\s*\.formCard:not\(\.cardless\) \.flush\s*\{[^}]*border:\s*0/);
-        // A full-width form of sections draws no card, so it opts out of the
-        // flattening; other full-width pages stay flat.
+        // A full-width form draws no card, so it opts out of the flattening
+        // and the cards inside it (Settings sections, the licence terms
+        // panel) keep their outline.
         const form = readFileSync(join(packagesRoot, 'core/src/ui/FormPage.module.css'), 'utf8');
         expect(form).toMatch(/\.cardlessSections\s*\{\s*composes:\s*cardless from '\.\/Card\.module\.css'/);
         const page = readFileSync(join(packagesRoot, 'core/src/ui/FormPage.jsx'), 'utf8');
-        expect(page).toMatch(/fullWidth && sectioned \? styles\.cardlessSections/);
+        expect(page).toMatch(/fullWidth \? styles\.cardlessSections/);
+        expect(page).not.toMatch(/fullWidth && sectioned \? styles\.cardlessSections/);
     });
 
     it('draws the wide form card with the same tokens', () => {

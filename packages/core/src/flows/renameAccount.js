@@ -11,8 +11,7 @@
 // renameAccount: change the `name` field on an Account record. Pure
 // vault metadata update; no signer needed. Twin of renameWallet.
 
-const NAME_MAX_LENGTH = 64;
-const nameLength = (value) => Array.from(value).length;
+import { NAME_MAX_LENGTH, hasVisibleText, nameKey, nameLength } from '../util/display_name.js';
 
 /**
  * @param {object} opts
@@ -25,7 +24,7 @@ export async function renameAccount({ accountId, name, vault }) {
     if (typeof accountId !== 'string' || accountId.length === 0) {
         throw new Error('renameAccount: accountId is required');
     }
-    if (typeof name !== 'string' || name.trim().length === 0) {
+    if (typeof name !== 'string' || !hasVisibleText(name)) {
         throw new Error('renameAccount: name must be a non-empty string');
     }
     const trimmed = name.trim();
@@ -39,7 +38,7 @@ export async function renameAccount({ accountId, name, vault }) {
 
     const siblings = await vault.accounts.findBy('walletId', account.walletId);
     if (siblings.some((candidate) => candidate.id !== accountId
-        && candidate.name.trim().toLocaleLowerCase() === trimmed.toLocaleLowerCase())) {
+        && nameKey(candidate.name) === nameKey(trimmed))) {
         throw new Error(`An account named "${trimmed}" already exists.`);
     }
 

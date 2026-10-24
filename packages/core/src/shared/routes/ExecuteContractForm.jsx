@@ -53,6 +53,7 @@ import { compareDecimalStrings, formatWithThousands, tokenAmountPrecisionError }
 import { t } from '../../i18n/index.js';
 import { isValidAddressForChain } from '../utils/addressValidation.js';
 import { useTokenInfo } from '../hooks/useTokenInfo.js';
+import { actionTextSafetyError } from '../utils/actionTextSafety.js';
 
 const chainRegistry = registryLib.defaultRegistry();
 
@@ -255,8 +256,17 @@ export function ExecuteContractForm({ walletId, chainId, contractActionIndex, in
                 const names = Object.keys(abi.methods);
                 if (initialMethod && names.includes(initialMethod)) {
                     const declared = abi.methods[initialMethod].params || [];
-                    const given = (initialParamsText || '').split('|');
-                    setAbiParamValues(declared.map((p, i) => (given[i] !== undefined ? given[i] : '')));
+                    const givenText = initialParamsText || '';
+                    const given = givenText === '' ? [] : givenText.split('|');
+                    if (given.length > declared.length) {
+                        // The manual lane exposes every supplied value instead
+                        // of hiding arguments that the ABI does not declare.
+                        setManualMode(true);
+                        return;
+                    }
+                    const declaredValues = declared.map((p, i) => (given[i] !== undefined ? given[i] : ''));
+                    setAbiParamValues(declaredValues);
+                    setParamsText(declaredValues.join('|'));
                 } else if (initialMethod) {
                     setManualMode(true);
                 } else {
@@ -551,6 +561,11 @@ export function ExecuteContractForm({ walletId, chainId, contractActionIndex, in
             setFormError('Method name cannot contain "|" or ";".');
             return;
         }
+        const methodSafetyError = actionTextSafetyError(method, 'Method');
+        if (methodSafetyError) {
+            setFormError(methodSafetyError);
+            return;
+        }
         if (abiActive) {
             const argumentError = abiArgumentErrors.find(Boolean);
             if (argumentError) {
@@ -569,6 +584,11 @@ export function ExecuteContractForm({ walletId, chainId, contractActionIndex, in
         // boundaries. Nothing we can do about those except surface
         // clearly below.
         for (const p of paramsArray) {
+            const parameterSafetyError = actionTextSafetyError(p, 'Parameter');
+            if (parameterSafetyError) {
+                setFormError(parameterSafetyError);
+                return;
+            }
             if (p.includes(';')) {
                 setFormError(`Parameter "${p}" contains a semicolon, which is not allowed in parameters.`);
                 return;

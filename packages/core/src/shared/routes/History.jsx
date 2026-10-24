@@ -316,6 +316,9 @@ export function History({ walletId, accountId, onBack, onReceive, onSelectEntry,
     const [entries, setEntries] = useState(/** @type {HistoryEntry[]} */ ([]));
     const [historyLoaded, setHistoryLoaded] = useState(false);
     const [showingCachedHistory, setShowingCachedHistory] = useState(false);
+    // Chains whose explorer could not be read on the load that filled the list;
+    // the rows of the chains that answered still show.
+    const [unreadChainIds, setUnreadChainIds] = useState(/** @type {string[]} */ ([]));
     const historyLoadedRef = useRef(false);
     historyLoadedRef.current = historyLoaded;
     const [refreshing, setRefreshing] = useState(false);
@@ -732,13 +735,35 @@ export function History({ walletId, accountId, onBack, onReceive, onSelectEntry,
                             mempoolReadOk: mempoolRead.ok,
                             pendingTxs,
                         }
-                    )),
+                    )).catch((err) => {
+                        // On the first load one chain's explorer being down must not
+                        // blank the chains that answered: the task reports itself
+                        // unread. A refresh keeps every shown row instead.
+                        if (historyLoadedRef.current) throw err;
+                        return {
+                            chainId: cid,
+                            address: a.address,
+                            addressLabel: a.label || '',
+                            history: [],
+                            links: [],
+                            mempool: [],
+                            mempoolReadOk: false,
+                            pendingTxs: [],
+                            unread: true,
+                            error: err,
+                        };
+                    }),
                 );
             }
         }
 
         Promise.all(tasks).then((perAddrResults) => {
             if (cancelled) return;
+            // Every read failed: that is the whole-load failure, not a partial one.
+            if (perAddrResults.length > 0 && perAddrResults.every((r) => r.unread)) {
+                throw perAddrResults[0].error;
+            }
+            const unread = [...new Set(perAddrResults.filter((r) => r.unread).map((r) => r.chainId))];
             // The fan-out landed: release the slot and restart the window from
             // here, so the next beat may ask for another and a refocus in
             // between is dropped as too fresh. Every task catches to [], so
@@ -786,6 +811,8 @@ export function History({ walletId, accountId, onBack, onReceive, onSelectEntry,
             const all = [];
             for (const r of perAddrResults) {
                 for (const row of r.history) {
+                    // A hole or a scalar in the feed is one bad row, not a failed load.
+                    if (!row || typeof row !== 'object') continue;
                     const aIdx = String(row.action_index ?? row.actionIndex ?? '');
                     if (!aIdx) continue;
                     // Normalized through the shared helper rather than inline,
@@ -897,11 +924,15 @@ export function History({ walletId, accountId, onBack, onReceive, onSelectEntry,
             setHistoryFetchedAt(Date.now());
             setHistoryLoaded(true);
             setShowingCachedHistory(false);
-            writeHistoryCache(walletId, accountId, {
-                entries: merged.entries,
-                addressesByChain,
-                fetchedAt,
-            }, activeNetwork);
+            setUnreadChainIds(unread);
+            // A snapshot is saved only from a complete load.
+            if (unread.length === 0) {
+                writeHistoryCache(walletId, accountId, {
+                    entries: merged.entries,
+                    addressesByChain,
+                    fetchedAt,
+                }, activeNetwork);
+            }
             setRefreshing(false);
         }).catch((err) => {
             if (cancelled) return;
@@ -913,7 +944,9 @@ export function History({ walletId, accountId, onBack, onReceive, onSelectEntry,
                 // Rows are already on screen (live or saved): keep them, say
                 // so, and name the saved copy when one exists.
                 if (cached) setShowingCachedHistory(true);
+                // One id, so refreshes that fail together share one toast.
                 showToast({
+                    id: 'history-refresh-failed',
                     message: humanizeError(err, 'refresh history').message,
                     variant: 'error',
                 });
@@ -1119,18 +1152,6 @@ export function History({ walletId, accountId, onBack, onReceive, onSelectEntry,
             setFiatToggleBusy(false);
         }
     };
-    const verifyItems = useMemo(
-        () => visibleEntries
-            .filter((e) => Number(e.blockIndex) > 0 && e.actionIndex != null && e.actionIndex !== '')
-            .map((e) => ({ key: e.key, chainId: e.chainId, actionIndex: e.actionIndex })),
-        [visibleEntries],
-    );
-    const actionVerifyMap = useActionProofVerification({
-        messaging,
-        items: verifyItems,
-        enabled: verifyProofsEnabled && browserOnline,
-    });
-
     const chainFilterActive = activeChainIds.some((cid) => !enabledChains.has(cid));
     const activeFilterCount = [
         Boolean(searchQuery),
@@ -1329,6 +1350,29 @@ export function History({ walletId, accountId, onBack, onReceive, onSelectEntry,
             ]),
         [renderedItems, dayGroupingNowMs],
     );
+
+    // Each proof check is two explorer reads, so only the rows the screen can
+    // show are checked: the rendered window, plus the members of an expanded
+    // group card. Checking every filtered row would fan out one check per row
+    // on every open, against the explorer's per-minute limits.
+    const verifyItems = useMemo(() => {
+        const shown = [];
+        for (const item of renderedItems) {
+            if (item.kind !== 'group') {
+                shown.push(item.entry);
+            } else if (expandedGroups.has(item.key)) {
+                shown.push(...item.members.slice(0, groupMemberLimits[item.key] || HISTORY_PAGE_SIZE));
+            }
+        }
+        return shown
+            .filter((e) => Number(e.blockIndex) > 0 && e.actionIndex != null && e.actionIndex !== '')
+            .map((e) => ({ key: e.key, chainId: e.chainId, actionIndex: e.actionIndex }));
+    }, [renderedItems, expandedGroups, groupMemberLimits]);
+    const actionVerifyMap = useActionProofVerification({
+        messaging,
+        items: verifyItems,
+        enabled: verifyProofsEnabled && browserOnline,
+    });
 
     useEffect(() => {
         setListWindow({ scope: listScope, count: HISTORY_PAGE_SIZE });
@@ -1712,6 +1756,12 @@ export function History({ walletId, accountId, onBack, onReceive, onSelectEntry,
                         ? t('history.offline.cached')
                         : t('history.offline.refreshFailed')}
                 </StatusMessage>
+            ) : unreadChainIds.length > 0 && entries.length > 0 ? (
+                <StatusMessage variant="warning" id="history-unread-chains">
+                    {t('history.unreadChains', {
+                        chains: unreadChainIds.map((cid) => chainRegistry.get(cid)?.displayName || cid).join(', '),
+                    })}
+                </StatusMessage>
             ) : null}
             actions={actions}
             toolbar={entries.length > 0 ? (
@@ -2013,7 +2063,9 @@ export function History({ walletId, accountId, onBack, onReceive, onSelectEntry,
 
             {historyFetchedAt && entries.length > 0 ? (
                 <div className={styles.resultsHeader}>
-                    {historyFetchedAt && loadingChains.size === 0 ? (
+                    {/* Offline, the page notice already says the rows are saved, so the
+                        freshness line stays out and one state shows one message. */}
+                    {historyFetchedAt && loadingChains.size === 0 && browserOnline ? (
                         <StalenessLabel lastSyncedAt={historyFetchedAt} />
                     ) : <span />}
                 </div>

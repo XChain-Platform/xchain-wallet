@@ -222,13 +222,18 @@ export class PriceAlertWatcher {
 
     /** @param {import('../schemas/priceAlert.js').PriceAlert} alert @param {number} price */
     _isSatisfied(alert, price) {
+        // A record whose threshold is not a positive number is corrupt: "above 0"
+        // or "below Infinity" would fire on any price, so it never fires.
+        if (typeof alert.targetFiat !== 'number' || !Number.isFinite(alert.targetFiat) || alert.targetFiat <= 0) {
+            return false;
+        }
         if (alert.direction === 'above') return price >= alert.targetFiat;
         if (alert.direction === 'below') return price <= alert.targetFiat;
         return false;
     }
 
     _isFreshPrice(entry) {
-        if (!entry || typeof entry.priceFiat !== 'number' || !Number.isFinite(entry.priceFiat)) return false;
+        if (!entry || typeof entry.priceFiat !== 'number' || !Number.isFinite(entry.priceFiat) || entry.priceFiat <= 0) return false;
         if (entry.fetchedAt === undefined) return true;
         if (typeof entry.fetchedAt !== 'number' || !Number.isFinite(entry.fetchedAt)) return false;
         const ageMs = this._now() - entry.fetchedAt;

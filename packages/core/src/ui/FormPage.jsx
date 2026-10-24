@@ -112,7 +112,7 @@ export const FormPage = forwardRef(function FormPage(
         sectioned ? styles.sectioned : null,
         fill ? styles.fill : null,
         fullWidth ? styles.fullWidth : null,
-        fullWidth && sectioned ? styles.cardlessSections : null,
+        fullWidth ? styles.cardlessSections : null,
         className,
     ].filter(Boolean).join(' ');
     const demoBlocked = !!demoGuard?.blocked;

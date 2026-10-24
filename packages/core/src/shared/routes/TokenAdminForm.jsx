@@ -50,11 +50,16 @@ import { preferredSourceId } from '../addressSelection.js';
 import { pickDefaultChainId } from '../chainSelection.js';
 import { submitFailureMessage } from '../utils/submitFailureMessage.js';
 import { tickerReferenceError } from '../utils/tickerGrammar.js';
+import {
+    issueSupplyLimitError,
+    issueTextLengthError,
+} from '../utils/issueFieldValidation.js';
 import { QueuedResultPanel } from '../components/QueuedResultPanel.jsx';
 import { currentListMemberCount } from '../../flows/listMembership.js';
 import { compareDecimalStrings, tokenAmountPrecisionError } from '../utils/amountFormat.js';
 import { sharedBlockPickState } from '../utils/sharedBlockPick.js';
 import { listLabel } from '../utils/listLabel.js';
+import { actionTextSafetyError } from '../utils/actionTextSafety.js';
 
 const chainRegistry = registryLib.defaultRegistry();
 
@@ -177,7 +182,7 @@ export function TokenAdminForm({ walletId, mode, onBack, initialChainId, initial
         /** @type {string | null} */ (null),
     );
 
-    const [ticker, setTicker] = useState((initialTick || '').toUpperCase());
+    const [ticker, setTicker] = useState(initialTick || '');
     const [description, setDescription] = useState('');
     const [transferTo, setTransferTo] = useState('');
     // Mint settings (mode === 'mint-settings', PC-01): the four ISSUE v2
@@ -343,7 +348,7 @@ export function TokenAdminForm({ walletId, mode, onBack, initialChainId, initial
     // the same owner boundary as Manage Token instead of relying on a later
     // protocol rejection that still spends the action fee.
     const assetInfo = useTokenInfo({ chainId, tick: ticker });
-    const callbackTickKey = callbackTick.trim().toUpperCase();
+    const callbackTickKey = callbackTick.trim();
     const callbackTokenInfo = useTokenInfo({
         chainId,
         tick: callbackTickKey,
@@ -357,7 +362,7 @@ export function TokenAdminForm({ walletId, mode, onBack, initialChainId, initial
         : null;
     const assetInfoMatchesSelection = !assetInfo || (
         (!assetInfo.chainId || assetInfo.chainId === chainId)
-        && (!assetInfo.tick || String(assetInfo.tick).toUpperCase() === ticker.trim().toUpperCase())
+        && (!assetInfo.tick || String(assetInfo.tick) === ticker.trim())
     );
     const currentAssetInfo = assetInfoMatchesSelection ? assetInfo : null;
     const tokenInfoPending = !!chainId && !!ticker && !currentAssetInfo;
@@ -690,6 +695,14 @@ export function TokenAdminForm({ walletId, mode, onBack, initialChainId, initial
             setFormError('Description is required.');
             return;
         }
+        if (mode === 'description') {
+            const descriptionError = actionTextSafetyError(description, 'Description')
+                || issueTextLengthError(description, 'Description');
+            if (descriptionError) {
+                setFormError(descriptionError);
+                return;
+            }
+        }
         if (mode === 'transfer') {
             if (!transferTo.trim()) {
                 setFormError('New owner address is required.');
@@ -735,6 +748,11 @@ export function TokenAdminForm({ walletId, mode, onBack, initialChainId, initial
                 });
                 if (precisionError) {
                     setFormError(precisionError);
+                    return;
+                }
+                const amountLimitError = issueSupplyLimitError(value, noun);
+                if (amountLimitError) {
+                    setFormError(amountLimitError);
                     return;
                 }
             }
@@ -1219,7 +1237,7 @@ export function TokenAdminForm({ walletId, mode, onBack, initialChainId, initial
                 walletId={walletId}
                 title="Select token"
                 onSelect={(sel) => {
-                    setTicker(String(sel.tick || '').toUpperCase());
+                    setTicker(String(sel.tick || ''));
                     if (!lockedToken && sel.chainId) setChainId(sel.chainId);
                     setTokenPickerOpen(false);
                 }}
@@ -1543,7 +1561,7 @@ export function TokenAdminForm({ walletId, mode, onBack, initialChainId, initial
                         label="Callback token"
                         hint="The ticker holders are paid in when you call back. Must be a token you'll hold enough of to cover every holder."
                         value={callbackTick}
-                        onChange={(e) => setCallbackTick(e.target.value.toUpperCase())}
+                        onChange={(e) => setCallbackTick(e.target.value)}
                         autoComplete="off"
                         disabled={callbackFieldsDisabled}
                     />
@@ -1778,7 +1796,7 @@ export function TokenAdminForm({ walletId, mode, onBack, initialChainId, initial
  *   as "Update mint parameters of TICK…".
  */
 function composeAdminParams(mode, form) {
-    const TICK = (form.ticker || '').trim().toUpperCase();
+    const TICK = (form.ticker || '').trim();
     if (mode === 'lock') {
         const p = { VERSION: '3', TICK };
         const checks = form.lockChecks || {};
@@ -1811,7 +1829,7 @@ function composeAdminParams(mode, form) {
         // from the current record), never "clear to zero".
         const p = { VERSION: '4', TICK };
         if (form.callbackBlock) p.CALLBACK_BLOCK = String(form.callbackBlock).trim();
-        if (form.callbackTick) p.CALLBACK_TICK = String(form.callbackTick).trim().toUpperCase();
+        if (form.callbackTick) p.CALLBACK_TICK = String(form.callbackTick).trim();
         if (form.callbackAmount) p.CALLBACK_AMOUNT = String(form.callbackAmount).trim();
         return p;
     }

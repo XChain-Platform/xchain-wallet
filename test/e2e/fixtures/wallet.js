@@ -30,6 +30,8 @@ import { test as base, expect } from '@playwright/test';
 import { LICENSE_VERSION } from '../../../packages/core/src/buildInfo.js';
 import { kdfStepTimeout } from '../timeout-budget.js';
 import { stubPriceFeed } from './priceStub.js';
+import { stubHubRegistry } from './hubStub.js';
+import { guardOutbound } from './outboundGuard.js';
 
 // Every wait below that pays a real Argon2id derivation shares ONE budget,
 // scaled for the machine the run landed on. These were two hand-written
@@ -49,8 +51,12 @@ export const test = base.extend({
     acceptLicense: [true, { option: true }],
 
     page: async ({ page, acceptLicense }, use) => {
+        // Registered first so it runs last: only a request no stub answered reaches it.
+        const outbound = await guardOutbound(page);
         // No spec reaches the live price service; see priceStub.js.
         await stubPriceFeed(page.context());
+        // Nor the mainnet hub registry the app syncs at boot; see hubStub.js.
+        await stubHubRegistry(page.context());
         if (acceptLicense) {
             await page.addInitScript(
                 ([atKey, versionKey, version]) => {
@@ -66,6 +72,7 @@ export const test = base.extend({
             );
         }
         await use(page);
+        expect(outbound.attempts, 'a spec tried to reach a non-local host').toEqual([]);
     },
 });
 

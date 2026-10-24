@@ -105,13 +105,19 @@ async function buildEnvelope() {
             kdfParams: sealed.kdfParams,
             importedKeys: [],
         }]),
+        // Complete records: a restore validates every record before it writes
+        // or tries the wallet password, so a partial one would answer first.
         accounts: memCollection([{
-            id: 'src-account', walletId: 'src-wallet', schemaVersion: 1,
-            label: 'Account 0', accountIndex: 0,
+            id: 'src-account', walletId: 'src-wallet', schemaVersion: 2,
+            name: 'Account 0', index: 0, activeAddressByChainId: {},
+            createdAt: '2026-10-13T18:00:00.000Z',
         }]),
         addresses: memCollection([{
-            id: 'src-address', schemaVersion: 1, accountId: 'src-account',
-            address: 'bc1qexample', derivationPath: "m/84'/0'/0'/0/0", addressType: 'p2wpkh',
+            id: 'src-address', schemaVersion: 4, accountId: 'src-account',
+            chain: 'bitcoin', network: 'mainnet', address: 'bc1qexample',
+            source: 'hd', addressType: 'p2wpkh', derivationPath: "m/84'/0'/0'/0/0",
+            publicKey: 'ab'.repeat(33), label: '', pinned: false, hidden: false,
+            signerId: null, role: 'receive', createdAt: '2026-10-13T18:00:00.000Z',
         }]),
         contacts: memCollection(),
         connectedSites: memCollection(),

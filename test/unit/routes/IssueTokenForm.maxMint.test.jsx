@@ -115,4 +115,37 @@ describe('IssueTokenForm max mint per transaction', () => {
         );
         expect(composeForConfirm).not.toHaveBeenCalled();
     });
+
+    it('accepts the protocol supply maximum without numeric rounding', async () => {
+        mountForm();
+        await fill({ supply: '1000000000000000000000' });
+        await submit();
+
+        const params = await composedParams();
+        expect(params.MAX_SUPPLY).toBe('1000000000000000000000');
+    });
+
+    it('rejects one divisible unit above the protocol supply maximum', async () => {
+        mountForm();
+        await fill({ supply: '1000000000000000000000.00000001' });
+        fireEvent.click(screen.getByLabelText('Divisible (8 decimal places)'));
+        await submit();
+
+        expect(await screen.findByRole('alert'))
+            .toHaveTextContent('Supply cannot exceed 1000000000000000000000.');
+        expect(composeForConfirm).not.toHaveBeenCalled();
+    });
+
+    it('rejects a 10 KB description before composition', async () => {
+        mountForm();
+        await fill({ supply: '10' });
+        fireEvent.change(screen.getByLabelText('Description (optional)'), {
+            target: { value: '<script>markup</script>'.repeat(400) },
+        });
+        await submit();
+
+        expect(await screen.findByRole('alert'))
+            .toHaveTextContent('Description cannot be longer than 250 characters.');
+        expect(composeForConfirm).not.toHaveBeenCalled();
+    });
 });

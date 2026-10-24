@@ -36,6 +36,7 @@ import { BridgeOriginTick } from './BridgeOriginBadge.jsx';
 import { parseBridgedTick, bridgeDisplayTick, coinDisplay } from './BridgeTick.js';
 import {
     decimalFromBaseUnits,
+    expandDecimalNotation,
     formatAtomicAmount,
     formatDecimalAmount,
     formatTokenQuantity,
@@ -2600,7 +2601,7 @@ function fiatValue(quantityStr, divisibility, fiatRate) {
     const scale = normalizedDivisibility(divisibility);
     if (quantity == null || scale == null || typeof fiatRate !== 'number' || !isFinite(fiatRate) || fiatRate <= 0) return null;
     const amount = decimalFromBaseUnits(quantity, scale);
-    return multiplyDecimalStrings(amount, String(fiatRate));
+    return multiplyDecimalStrings(amount, expandDecimalNotation(fiatRate));
 }
 
 // Returns just the symbol-prefixed numeric portion of a fiat value in

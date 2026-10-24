@@ -17,9 +17,8 @@
 
 import { useLayoutEffect, useRef, useState } from 'react';
 import { Button, Input, Icon } from '@xchain-wallet/core/ui';
-import { ClipboardPasteButton } from '../../ui/ClipboardPasteButton.jsx';
-import { inspectFieldPaste } from '../../ui/Input.jsx';
 import {
+    dropFieldGrouping,
     formatWithThousands,
     normalizeAmountFieldInput,
 } from '../utils/amountFormat.js';
@@ -34,11 +33,11 @@ const ACTIONS_TEXT_GAP_PX = 4;
 
 /**
  * Writes `--amount-actions-room` on the field: how far in from the input's
- * end edge its in-field actions (Paste, and Max when shown) really reach,
+ * end edge its in-field Max action really reaches,
  * plus a small gap. The input's end padding is at least this, so typed
  * digits stop before the actions. The stylesheet lanes assume default-size
- * labels; Paste and Max grow with the text size, and at 130 percent text the
- * digits already ran under Paste.
+ * labels; Max can grow with the text size, so its measured width remains the
+ * source of truth for the input padding.
  *
  * @param {HTMLElement | null} wrap     the field wrapper, which owns the property
  * @param {HTMLElement | null} input    the amount input
@@ -108,14 +107,13 @@ export function AmountField({
 }) {
     const [inputError, setInputError] = useState('');
     const wrapRef = useRef(/** @type {HTMLDivElement | null} */ (null));
-    const pasteSlotRef = useRef(/** @type {HTMLSpanElement | null} */ (null));
     const maxRef = useRef(/** @type {HTMLButtonElement | null} */ (null));
     const hasMax = Boolean(onMax);
 
     useLayoutEffect(() => {
         const wrap = wrapRef.current;
         const input = wrap?.querySelector('input') ?? null;
-        const actions = () => [pasteSlotRef.current?.querySelector('button') ?? null, maxRef.current];
+        const actions = () => [maxRef.current];
         const sync = () => syncAmountActionsRoom(wrap, input, actions());
         sync();
         if (!input || typeof ResizeObserver !== 'function') return undefined;
@@ -139,16 +137,22 @@ export function AmountField({
         : null;
 
     const handleChange = (event) => {
-        const rawValue = String(event.target.value);
+        // A keystroke inside a grouped display ("1,000" plus a digit) leaves the
+        // field's own group mark in the text; it is formatting, not input.
+        const typed = /^(insertText|deleteContent)/.test(event.nativeEvent?.inputType || '');
+        const rawValue = typed
+            ? dropFieldGrouping(String(event.target.value), formatWithThousands(inputValue))
+            : String(event.target.value);
         const cursorPos = event.target.selectionStart;
         const normalized = normalizeAmountFieldInput(rawValue, {
             unit: activeUnit,
             fiatCurrency: isFiat ? fiatCcy : null,
         });
+        const shownValue = String(event.target.value);
         const normalizedCursor = typeof cursorPos === 'number'
-            ? cursorPos === rawValue.length
+            ? cursorPos === shownValue.length
                 ? normalized?.length ?? null
-                : rawValue.slice(0, cursorPos).replace(/[\s,]/g, '').length
+                : shownValue.slice(0, cursorPos).replace(/[\s,]/g, '').length
             : null;
 
         if (normalized === null) {
@@ -169,23 +173,19 @@ export function AmountField({
         const usesDotDecimal = formatWithThousands('1.1').includes('.');
         onAmountFieldChange(normalized, usesDotDecimal ? normalizedCursor : null);
     };
-    // The Paste and Max buttons sit over the field at fixed lanes sized for the
-    // English labels. A longer translation widens a button past its lane and the
-    // two overlap, so each lane grows to the measured button. English measures
-    // narrower than the default lane, so its layout is unchanged.
-    const [measured, setMeasured] = useState({ max: 0, paste: 0 });
+    // Max sits over the field in a lane sized for its label. A longer
+    // translation grows that lane to the measured button width.
+    const [measuredMax, setMeasuredMax] = useState(0);
     useLayoutEffect(() => {
         const root = wrapRef.current;
         if (!root) return;
-        const widthOf = (selector) => Math.ceil(root.querySelector(selector)?.getBoundingClientRect().width || 0);
-        const next = { max: widthOf(`.${styles.maxAction}`), paste: widthOf(`.${styles.pasteAction} button`) };
-        setMeasured((prev) => (prev.max === next.max && prev.paste === next.paste ? prev : next));
+        const next = Math.ceil(root.querySelector(`.${styles.maxAction}`)?.getBoundingClientRect().width || 0);
+        setMeasuredMax((prev) => (prev === next ? prev : next));
     });
     const lane = (px) => (px > 0
         ? `max(calc(var(--amount-control-height) + var(--xc-space-8)), calc(${px}px + var(--xc-space-2)))`
         : undefined);
-    const maxLane = lane(measured.max);
-    const pasteLane = lane(measured.paste);
+    const maxLane = lane(measuredMax);
 
     const showSwap = Boolean(fiatRate && toggleAmountInputMode);
     const hasFooter = showSwap || hasBalanceText;
@@ -203,15 +203,13 @@ export function AmountField({
             : `≈ ${formatFiat('0', fiatCcy)} ${otherUnit}${priceSourceLabel}`;
     }
 
-    // Paste and Max sit at the end of the field, and the digits stop short of
-    // them by this much. The input is left to right, so its own inline end is
+    // Max sits at the end of the field, and the digits stop short of it by this
+    // much. The input is left to right, so its own inline end is
     // the right edge; --amount-end-room lets the stylesheet put the same room
     // on the left edge when the page reads right to left.
     const actionsEndRoom = onMax
-        ? (pasteLane
-            ? `max(calc(var(--amount-action-width) + ${pasteLane}), var(--amount-actions-room, 0px))`
-            : 'max(calc(var(--amount-action-width) * 2), var(--amount-actions-room, 0px))')
-        : 'max(calc(var(--amount-action-width) + var(--xc-space-2)), var(--amount-actions-room, 0px))';
+        ? 'max(var(--amount-action-width), var(--amount-actions-room, 0px))'
+        : null;
 
     return (
         <div className={styles.amountBlock}>
@@ -220,9 +218,8 @@ export function AmountField({
                 className={[
                     styles.amountFieldWrap,
                     styles[size] || '',
-                    onMax ? styles.hasMax : '',
                 ].filter(Boolean).join(' ')}
-                style={(onMax ? maxLane : pasteLane) ? { '--amount-action-width': onMax ? maxLane : pasteLane } : undefined}
+                style={maxLane ? { '--amount-action-width': maxLane } : undefined}
             >
                 <Input
                     ref={inputRef}
@@ -236,30 +233,11 @@ export function AmountField({
                     onChange={handleChange}
                     autoComplete="off"
                     placeholder="0.00"
-                    // Paste sits one action lane in from Max, so two lanes
-                    // clear both at default text; a 320px field keeps 120px for
-                    // digits. Larger text widens the actions, and the measured
-                    // room (syncAmountActionsRoom) then holds the digits clear.
-                    style={{ paddingInlineEnd: actionsEndRoom, '--amount-end-room': actionsEndRoom }}
+                    style={actionsEndRoom ? {
+                        paddingInlineEnd: actionsEndRoom,
+                        '--amount-end-room': actionsEndRoom,
+                    } : undefined}
                 />
-                <span className={styles.pasteAction} ref={pasteSlotRef}>
-                    <ClipboardPasteButton
-                        onMessage={(message) => { if (message) setInputError(message); }}
-                        onPaste={(text) => {
-                            const inspected = inspectFieldPaste(text);
-                            if (!inspected.ok) {
-                                setInputError(inspected.error);
-                                return;
-                            }
-                            handleChange({
-                                target: {
-                                    value: inspected.value,
-                                    selectionStart: inspected.value.length,
-                                },
-                            });
-                        }}
-                    />
-                </span>
                 {onMax ? (
                     <Button
                         variant="primary"

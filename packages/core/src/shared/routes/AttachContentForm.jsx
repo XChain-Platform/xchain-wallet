@@ -34,6 +34,7 @@ import { useActionConfirmFlow, useConfirmSubmit, isUserRejection } from '../hook
 import { ActionConfirmScreen } from '../components/ActionConfirmScreen.jsx';
 import { QueuedResultPanel } from '../components/QueuedResultPanel.jsx';
 import { MEMO_HINT, memoLengthError } from '../utils/memoLimit.js';
+import { actionTextSafetyError } from '../utils/actionTextSafety.js';
 import { imagePreviewDataUrl, publishFileType } from '../utils/publishingFile.js';
 import { isValidAddressForChain } from '../utils/addressValidation.js';
 
@@ -512,6 +513,11 @@ export function AttachContentForm({ walletId, chainId, tick, issuerAddress = nul
         const readId = ++fileReadIdRef.current;
         setFileMeta(null);
         setFormError(null);
+        const fileNameError = actionTextSafetyError(file.name || 'file', 'File name');
+        if (fileNameError) {
+            setFormError(fileNameError);
+            return;
+        }
         const { error: typeError } = artworkFileType(file);
         if (typeError) {
             setFormError(typeError);
@@ -559,6 +565,12 @@ export function AttachContentForm({ walletId, chainId, tick, issuerAddress = nul
         }
         if ((title && /[|;]/.test(title)) || (memo && /[|;]/.test(memo)) || /[|;]/.test(fileMeta.name)) {
             setFormError('File name, title, and memo cannot contain | or ; characters.');
+            return;
+        }
+        const unsafeMetadata = actionTextSafetyError(fileMeta.name, 'File name')
+            || actionTextSafetyError(title, 'Title');
+        if (unsafeMetadata) {
+            setFormError(unsafeMetadata);
             return;
         }
         if (fileParams.TITLE.length > MAX_TITLE_LENGTH) {
@@ -695,7 +707,7 @@ export function AttachContentForm({ walletId, chainId, tick, issuerAddress = nul
     const tisJson = useMemo(() => {
         if (!fileMeta || !fileActionIndex) return null;
         const doc = {
-            tick: String(tick).toUpperCase(),
+            tick: String(tick),
             categories: [{ type: 'main', data: 'NFT' }],
             images: [{
                 data_ref: 'action:' + String(fileActionIndex),
@@ -716,7 +728,7 @@ export function AttachContentForm({ walletId, chainId, tick, issuerAddress = nul
         // UTF-8 bytes first, then to the Latin-1 binary string the encoder
         // expects.
         const rawData = latin1Of(new TextEncoder().encode(tisJson));
-        const tisName = String(tick).toUpperCase() + '.json';
+        const tisName = String(tick) + '.json';
         await runLegThroughConfirm({
             actionData: {
                 action: 'FILE',
@@ -757,7 +769,7 @@ export function AttachContentForm({ walletId, chainId, tick, issuerAddress = nul
         // ISSUE v1: edit description (owner-only at the indexer).
         const issueParams = {
             VERSION: '1',
-            TICK: String(tick).toUpperCase(),
+            TICK: String(tick),
             DESCRIPTION: 'action:' + String(tisActionIndex),
         };
         await runLegThroughConfirm({
@@ -988,7 +1000,7 @@ export function AttachContentForm({ walletId, chainId, tick, issuerAddress = nul
                 </p>
                 <dl className={styles.detailsList}>
                     <dt className={styles.detailsLabel}>Document</dt>
-                    <dd className={styles.detailsValue}>{String(tick).toUpperCase()}.json</dd>
+                    <dd className={styles.detailsValue}>{String(tick)}.json</dd>
                     <dt className={styles.detailsLabel}>Type</dt>
                     <dd className={styles.detailsValue}>application/json</dd>
                     <dt className={styles.detailsLabel}>Title</dt>

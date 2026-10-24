@@ -262,6 +262,14 @@ describe('320x568 modal layout contracts', () => {
         expect(rule(overlay, '.body')).toMatch(/overflow-y:\s*auto/);
     });
 
+    it('wraps the palette no-match line so a long unbroken query stays inside the panel', () => {
+        const palette = readFileSync(
+            join(COMPONENT_DIR, '..', 'commandPalette', 'CommandPalette.module.css'),
+            'utf8',
+        );
+        expect(rule(palette, '.empty')).toMatch(/overflow-wrap:\s*anywhere/);
+    });
+
     it('bounds the phone command sheet and keeps its results as the scroll region', () => {
         const palette = readFileSync(
             join(COMPONENT_DIR, '..', 'commandPalette', 'CommandPalette.module.css'),

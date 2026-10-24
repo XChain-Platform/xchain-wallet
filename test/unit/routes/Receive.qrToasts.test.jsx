@@ -231,7 +231,7 @@ describe('Receive QR copy and share toasts', () => {
         expect(screen.getByRole('form', { name: 'Receive payment' })).toBeInTheDocument();
         expect(showToast).not.toHaveBeenCalled();
         await user.tab();
-        expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Paste from clipboard' }));
+        expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Switch input to USD' }));
     });
 
     it('adds and edits the label of the receive address shown', async () => {
@@ -449,7 +449,7 @@ describe('Receive QR copy and share toasts', () => {
         });
     });
 
-    it('shares a title, text, and the exact payment URL when Web Share is available', async () => {
+    it('shares a title and text carrying the exact payment link when Web Share is available', async () => {
         const share = vi.fn(async () => {});
         const writeText = vi.fn(async () => {});
         stubBrowser({ writeText, share, canShare: () => false });
@@ -462,8 +462,7 @@ describe('Receive QR copy and share toasts', () => {
         await waitFor(() => expect(share).toHaveBeenCalledTimes(1));
         expect(share).toHaveBeenCalledWith({
             title: 'Receive BTC with XChain',
-            text: 'Send 0.00000001 BTC to this XChain wallet.',
-            url: 'bitcoin:bcrt1qexample?chain=bitcoin-regtest&amount=0.00000001&label=Daily%20deposits',
+            text: 'Send 0.00000001 BTC to this XChain wallet.\nbitcoin:bcrt1qexample?chain=bitcoin-regtest&amount=0.00000001&label=Daily%20deposits',
         });
         expect(writeText).not.toHaveBeenCalled();
         expect(showToast).not.toHaveBeenCalled();

@@ -157,6 +157,48 @@ describe('State table reads the explorer\'s real field names', () => {
         const cells = Array.from(utils.container.querySelectorAll('td'));
         expect(cells.some((td) => td.textContent === 'onlykey')).toBe(true);
     });
+
+    it('ignores malformed state rows and renders the valid sibling', async () => {
+        const { messaging } = harness({
+            getContractState: () => Promise.resolve({
+                data: [null, 'bad', ['also bad'], { state_key: 'safe', state_value: '"value"' }],
+                total: 4,
+            }),
+        });
+        let utils;
+        await domAct(async () => {
+            utils = mount(messaging);
+            await drain();
+        });
+        await domAct(async () => {
+            expandState(utils);
+            await drain();
+        });
+        expect(utils.container.textContent).toContain('safe');
+        expect(utils.container.textContent).toContain('value');
+        expect(utils.container.textContent).not.toContain('also bad');
+    });
+
+    it('renders a bare explorer state array', async () => {
+        const { messaging } = harness({
+            getContractState: () => Promise.resolve([
+                { state_key: '<state-key>', state_value: '"<b>plain text</b>"' },
+            ]),
+        });
+        let utils;
+        await domAct(async () => {
+            utils = mount(messaging);
+            await drain();
+        });
+        expect(utils.container.textContent).toContain('1 state key(s)');
+        await domAct(async () => {
+            expandState(utils);
+            await drain();
+        });
+        expect(utils.container.textContent).toContain('<state-key>');
+        expect(utils.container.textContent).toContain('<b>plain text</b>');
+        expect(utils.container.querySelector('b')).toBeNull();
+    });
 });
 
 describe('Execution history reads the explorer\'s real field names', () => {
@@ -267,6 +309,24 @@ describe('Execution history reads the explorer\'s real field names', () => {
             await drain();
         });
         expect(utils.container.textContent).not.toContain('(method)');
+    });
+
+    it('ignores malformed execution rows and renders the valid sibling', async () => {
+        const { messaging } = harness({
+            getExecutionsForContract: () => Promise.resolve({
+                data: [null, false, 'bad', ['also bad'], {
+                    action_index: '202', method_name: 'safeMethod', status: 'valid', block_index: '9',
+                }],
+                total: 5,
+            }),
+        });
+        let utils;
+        await domAct(async () => {
+            utils = mount(messaging);
+            await drain();
+        });
+        expect(utils.container.textContent).toContain('safeMethod #202');
+        expect(utils.container.textContent).not.toContain('also bad');
     });
 });
 

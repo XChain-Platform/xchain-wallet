@@ -50,6 +50,7 @@ import { tokenAmountPrecisionError } from '../utils/amountFormat.js';
 import { addressValidationError } from '../utils/addressValidation.js';
 import { tickerReferenceError } from '../utils/tickerGrammar.js';
 import { t } from '../../i18n/index.js';
+import { memoLengthError } from '../utils/memoLimit.js';
 
 // A classified failure (offline, rejected fee) keeps its own copy; an unclassified one gets plain order copy.
 function orderFailureFallback(err) {
@@ -74,6 +75,11 @@ function localInputToUnix(localStr) {
     if (!Number.isFinite(ms)) return null;
     return Math.floor(ms / 1000);
 }
+
+// The indexer reads a coin-named ticker as an unknown token and marks the order
+// invalid, so the native coin is chosen with the Native option, not typed.
+const isNativeCoinName = (tick, coinTicker) => Boolean(coinTicker) && String(tick).trim().toUpperCase() === coinTicker;
+const nativeCoinTickMessage = (coinTicker) => `${coinTicker} is the network coin. Choose Native ${coinTicker} for that side instead of typing it as a token.`;
 
 const isPlainPositive = (v) => /^\d+(\.\d+)?$/.test(String(v).trim()) && Number(String(v).trim()) > 0;
 const isCanonicalActionIndex = (value, { allowZero = false } = {}) => (
@@ -295,6 +301,7 @@ export function CreateOrderForm({ walletId, onBack, initialChainId, initialFromA
             if (!giveTick.trim()) { setFormError('Enter the ticker to give.'); return false; }
             const tickError = tickerReferenceError(giveTick, { noun: 'Give ticker', allowRef: true });
             if (tickError) { setFormError(tickError); return false; }
+            if (isNativeCoinName(giveTick, coinTicker)) { setFormError(nativeCoinTickMessage(coinTicker)); return false; }
             if (!giveOwnership && !isPlainPositive(giveAmount)) { setFormError('Enter a positive amount to give.'); return false; }
         } else if (!isPlainPositive(giveAmount)) {
             setFormError(`Enter a positive amount of ${coinTicker} to give.`); return false;
@@ -316,6 +323,7 @@ export function CreateOrderForm({ walletId, onBack, initialChainId, initialFromA
             if (!getTick.trim()) { setFormError('Enter the ticker to get.'); return false; }
             const tickError = tickerReferenceError(getTick, { noun: 'Get ticker', allowRef: true });
             if (tickError) { setFormError(tickError); return false; }
+            if (isNativeCoinName(getTick, coinTicker)) { setFormError(nativeCoinTickMessage(coinTicker)); return false; }
             if (!getOwnership && !isPlainPositive(getAmount)) { setFormError('Enter a positive amount to get.'); return false; }
         } else if (!isPlainPositive(getAmount)) {
             setFormError(`Enter a positive amount of ${coinTicker} to get.`); return false;
@@ -340,6 +348,8 @@ export function CreateOrderForm({ walletId, onBack, initialChainId, initialFromA
         }
         const m = memo.trim();
         if (m.includes('|') || m.includes(';')) { setFormError('Memo cannot contain "|" or ";".'); return false; }
+        const memoError = memoLengthError(m);
+        if (memoError) { setFormError(memoError); return false; }
         if (allowListIdx && !isCanonicalActionIndex(allowListIdx)) {
             setFormError('Allow-list ID must be a positive whole number.'); return false;
         }

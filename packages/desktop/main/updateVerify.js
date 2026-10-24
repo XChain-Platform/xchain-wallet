@@ -605,6 +605,49 @@ export async function sha512File(path) {
     return createHash('sha512').update(buf).digest('hex');
 }
 
+/** Largest feed documents the main process reads into memory. */
+export const MAX_POINTER_BYTES = 256 * 1024;
+export const MAX_MANIFEST_BYTES = 4 * 1024 * 1024;
+export const MAX_SIGNATURE_BYTES = 64 * 1024;
+
+/**
+ * Read a feed response body, refusing one larger than `maxBytes`. The feed is
+ * the host nobody trusts, so an oversized body must not be buffered whole
+ * into the main process before any signature check can refuse it.
+ *
+ * @param {{ headers?: { get?: (name: string) => string | null }, body?: any, arrayBuffer?: () => Promise<ArrayBuffer>, text?: () => Promise<string> }} res
+ * @param {number} maxBytes
+ * @returns {Promise<Uint8Array>}
+ */
+async function readBodyCapped(res, maxBytes) {
+    const declared = Number(res.headers?.get?.('content-length'));
+    if (Number.isFinite(declared) && declared > maxBytes) throw new Error('response is too large');
+    if (typeof res.body?.getReader !== 'function') {
+        const bytes = typeof res.arrayBuffer === 'function'
+            ? new Uint8Array(await res.arrayBuffer())
+            : new TextEncoder().encode(await res.text());
+        if (bytes.length > maxBytes) throw new Error('response is too large');
+        return bytes;
+    }
+    const reader = res.body.getReader();
+    const chunks = [];
+    let total = 0;
+    for (;;) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        total += value.length;
+        if (total > maxBytes) {
+            await reader.cancel().catch(() => {});
+            throw new Error('response is too large');
+        }
+        chunks.push(value);
+    }
+    const out = new Uint8Array(total);
+    let at = 0;
+    for (const chunk of chunks) { out.set(chunk, at); at += chunk.length; }
+    return out;
+}
+
 /**
  * Fetch the channel pointer this build follows.
  *
@@ -643,7 +686,8 @@ export async function fetchChannelPointer({ feedBaseUrl, pointerName, fetch: fet
         if (!res?.ok) {
             return { ok: false, reason: `channel pointer fetch failed (${res?.status ?? 'no response'})` };
         }
-        return { ok: true, pointerText: await res.text() };
+        const pointerBytes = await readBodyCapped(res, MAX_POINTER_BYTES);
+        return { ok: true, pointerText: new TextDecoder().decode(pointerBytes) };
     } catch (err) {
         return { ok: false, reason: `channel pointer unreachable: ${String(err?.message || err)}` };
     }
@@ -680,8 +724,8 @@ export async function fetchReleaseManifest({ feedBaseUrl, tag, fetch: fetchImpl 
         if (!sRes?.ok) return { ok: false, reason: `signature fetch failed (${sRes?.status ?? 'no response'})` };
         return {
             ok: true,
-            manifestBytes: new Uint8Array(await mRes.arrayBuffer()),
-            armoredSignature: await sRes.text(),
+            manifestBytes: await readBodyCapped(mRes, MAX_MANIFEST_BYTES),
+            armoredSignature: new TextDecoder().decode(await readBodyCapped(sRes, MAX_SIGNATURE_BYTES)),
         };
     } catch (err) {
         return { ok: false, reason: `update manifest unreachable: ${String(err?.message || err)}` };

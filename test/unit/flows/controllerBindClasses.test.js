@@ -125,6 +125,14 @@ describe('controller-bind value validation', () => {
             .toMatch(/252 bytes.*at most 250 bytes/);
     });
 
+    it.each([
+        ['a control character', 'safe\u0000unsafe', /control characters/],
+        ['a direction override', 'safe\u202eunsafe', /text-direction/],
+        ['a zero-width character', 'safe\u200bunsafe', /zero-width/],
+    ])('refuses %s in a memo', (_name, memo, message) => {
+        expect(controllerBindValidationError({ ...valid, memo })).toMatch(message);
+    });
+
     it('keeps ignored bind-only values out of unbind validation', () => {
         expect(controllerBindValidationError({
             ...valid,

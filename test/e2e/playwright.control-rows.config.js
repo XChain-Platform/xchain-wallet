@@ -16,6 +16,7 @@ export default defineConfig({
         name: `control-rows-${width}`,
         use: {
             ...devices['Desktop Chrome'],
+            channel: 'chromium',
             viewport: { width, height: 900 },
         },
     })),

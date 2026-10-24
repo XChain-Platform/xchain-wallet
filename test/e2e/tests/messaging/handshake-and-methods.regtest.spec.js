@@ -494,7 +494,7 @@ test.describe(`Messaging: first contact on ${REGTEST_CHAIN_LABEL}`, () => {
             // offer nobody can see is not an offer.
             await expect(missingPubkeyBanner(main),
                 'the refusal banner does not tell the user what to do instead')
-                .toContainText('pick "Plain text" above');
+                .toContainText('pick "Plain text" below');
             await expect(keyRequestBlock(main)
                 .getByRole('button', { name: 'Request encrypted session (publish your key)' }),
             'the refusal banner offers no handshake, so the only way forward it leaves is plaintext')

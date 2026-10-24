@@ -77,13 +77,19 @@ function sampleWallet(id) {
         importedKeys: [],
     };
 }
+// Complete records: a restore validates every record before its first write.
 function sampleAccount(id, walletId) {
-    return { id, walletId, schemaVersion: 1, label: `Account ${id}`, accountIndex: 0 };
+    return {
+        id, walletId, schemaVersion: 2, name: `Account ${id}`, index: 0,
+        activeAddressByChainId: {}, createdAt: '2026-01-01T00:00:00.000Z',
+    };
 }
 function sampleAddress(id, accountId) {
     return {
-        id, schemaVersion: 1, accountId, address: `bc1q${id}`,
-        derivationPath: "m/84'/0'/0'/0/0", addressType: 'p2wpkh',
+        id, schemaVersion: 4, accountId, chain: 'bitcoin', network: 'mainnet', address: `bc1q${id}`,
+        source: 'hd', derivationPath: "m/84'/0'/0'/0/0", addressType: 'p2wpkh',
+        publicKey: 'ab'.repeat(33), label: '', pinned: false, hidden: false,
+        signerId: null, role: 'receive', createdAt: '2026-01-01T00:00:00.000Z',
     };
 }
 

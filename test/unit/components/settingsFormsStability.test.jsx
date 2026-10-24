@@ -97,6 +97,32 @@ describe('settings form validation', () => {
         expect(capacitorApp.minimizeApp).not.toHaveBeenCalled();
     });
 
+    it('closes the fiat currency list when focus leaves an option for another control', () => {
+        render(<><LanguageRegionSection /><button type="button">After</button></>);
+        const picker = screen.getByLabelText('Fiat currency');
+        act(() => picker.focus());
+        const listbox = screen.getByRole('listbox', { name: 'Supported fiat currencies' });
+        act(() => within(listbox).getAllByRole('option')[0].focus());
+        expect(screen.getByRole('listbox', { name: 'Supported fiat currencies' })).toBeInTheDocument();
+
+        act(() => screen.getByRole('button', { name: 'After' }).focus());
+
+        expect(screen.queryByRole('listbox', { name: 'Supported fiat currencies' })).toBeNull();
+    });
+
+    it('returns focus to the fiat currency search when Back closes the list from an option', () => {
+        render(<LanguageRegionSection />);
+        const picker = screen.getByLabelText('Fiat currency');
+        act(() => picker.focus());
+        act(() => within(screen.getByRole('listbox', { name: 'Supported fiat currencies' }))
+            .getAllByRole('option')[2].focus());
+
+        act(() => nativeBack({ canGoBack: false }));
+
+        expect(screen.queryByRole('listbox', { name: 'Supported fiat currencies' })).toBeNull();
+        expect(picker).toHaveFocus();
+    });
+
     it('explains the USD fallback for an unsupported saved currency', () => {
         settings = { ...settings, fiatCurrency: 'USD' };
         unsupportedFiatCurrency = 'XYZ';

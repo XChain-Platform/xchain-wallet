@@ -152,7 +152,7 @@ function registryStatusText(status, manualResult) {
             });
     }
     if (!status?.error) {
-        return 'No refresh yet; the networks bundled with this wallet are active.';
+        return t('settings.endpoints.noRefreshYet');
     }
     const raw = userFacingMessage(status.error, 'The registry could not be refreshed.');
     const unreachable = /fetch|network|timed? out|timeout|unreachable|econn|enotfound|connection/i.test(raw);
@@ -181,21 +181,30 @@ function formatRelative(iso) {
 // Anything else would be handed straight to the SDK now that overrides
 // are live, so it is refused at the edit surface instead.
 const LOOPBACK_HOSTS = new Set(['localhost', '127.0.0.1', '[::1]']);
+// The longest URL the editor stores; real endpoints are far shorter, and
+// a multi-kilobyte value only bloats the settings record.
+const URL_MAX_LENGTH = 2048;
+// What a DNS name, IPv4 address or bracketed IPv6 literal can contain. The
+// URL parser percent-encodes a space inside a host instead of refusing it.
+const HOSTNAME_RE = /^(?:[a-z0-9.-]+|\[[0-9a-f:.]+\])$/i;
 
 function endpointError(value, descriptor) {
+    if (value.length > URL_MAX_LENGTH) return t('settings.endpoints.errorTooLong', { max: URL_MAX_LENGTH });
     let parsed;
     try {
         parsed = new URL(value);
     } catch {
-        return 'Enter a full URL, for example http://localhost:18080';
+        return t('settings.endpoints.errorFullUrl');
     }
     if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
-        return 'Only http:// and https:// URLs are supported.';
+        return t('settings.endpoints.errorScheme');
     }
-    if (!parsed.hostname) return 'That URL has no host.';
+    if (!parsed.hostname) return t('settings.endpoints.errorNoHost');
+    if (!HOSTNAME_RE.test(parsed.hostname)) return t('settings.endpoints.errorBadHost');
+    if (parsed.username || parsed.password) return t('settings.endpoints.errorCredentials');
     const allowsHttp = descriptor?.networkKind === 'regtest' || LOOPBACK_HOSTS.has(parsed.hostname);
     if (parsed.protocol === 'http:' && !allowsHttp) {
-        return 'Use https:// for remote hosts. http:// is allowed only for regtest and local hosts.';
+        return t('settings.endpoints.errorHttpRemote');
     }
     return null;
 }
@@ -204,6 +213,9 @@ function canonicalEndpoint(value) {
     const trimmed = value.trim();
     try {
         const parsed = new URL(trimmed);
+        // Rebuilding from the origin would drop a user name and password
+        // silently; keep the text so the validator can refuse it.
+        if (parsed.username || parsed.password) return trimmed;
         parsed.pathname = parsed.pathname.replace(/\/+$/, '');
         const path = parsed.pathname === '/' ? '' : parsed.pathname;
         return `${parsed.origin}${path}${parsed.search}${parsed.hash}`;
@@ -273,9 +285,9 @@ function ChainEndpointBlock({ descriptor, override, onSave }) {
             hubUrl: canonicalEndpoint(draft.hubUrl) || defaults.hubUrl,
         };
         const bad = [
-            ['Explorer URL', next.explorerUrl],
-            ['Encoder URL', next.encoderUrl],
-            ['Hub URL', next.hubUrl],
+            [t('settings.endpoints.explorerUrl'), next.explorerUrl],
+            [t('settings.endpoints.encoderUrl'), next.encoderUrl],
+            [t('settings.endpoints.hubUrl'), next.hubUrl],
         ]
             .map(([label, value]) => {
                 const err = endpointError(value, descriptor);

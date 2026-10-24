@@ -138,7 +138,7 @@ function decodeActionData({ action, params, chainId, chainRegistry }) {
                 ...(memo ? [{ label: 'Memo', value: memo }] : []),
             ],
             warnings: [
-                'Sweep moves the selected balances and ownerships from the source address. Double-check the destination.',
+                `Sweep moves the selected categories (${sweptLabel}) from the source address. Double-check the destination.`,
                 ...(!dest ? ['Destination is empty.'] : []),
             ],
         };

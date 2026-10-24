@@ -24,7 +24,7 @@ const biometricSource = read(
 const attachmentSource = read('packages/core/src/shared/routes/ComposeMessage.jsx');
 const endpointSource = read(
     'packages/core/src/shared/components/settings/NetworkEndpointsSection.jsx',
-);
+) + read('packages/core/src/i18n/locales/en/index.js');
 
 function plistString(key) {
     const match = new RegExp(

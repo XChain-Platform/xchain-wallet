@@ -86,6 +86,17 @@ describe('unclaimedRewards', () => {
         expect(totals.hasRejectedClaim).toBe(false);
     });
 
+    it('does not let malformed negative rows inflate the claimable balance', () => {
+        const totals = unclaimedRewards({
+            rewards: [{ amount: '10' }, { amount: '-7' }],
+            claims: [{ amount: '-100', status: 'valid' }],
+        });
+
+        expect(totals.accrued).toBe('10');
+        expect(totals.claimed).toBe('0');
+        expect(totals.unclaimed).toBe('10');
+    });
+
     it('handles no rewards and no claims', () => {
         expect(unclaimedRewards()).toEqual({
             accrued: '0', claimed: '0', unclaimed: '0',

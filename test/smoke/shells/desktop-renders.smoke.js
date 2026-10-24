@@ -95,11 +95,13 @@ const userDataDir = mkdtempSync(join(tmpdir(), 'xc-desktop-renders-'));
 
 // Under the app's test network guard, as every desktop test launch is.
 const app = await launchGuardedElectron(electron, {
-    args: ['.', `--user-data-dir=${userDataDir}`],
+    args: ['.', `--user-data-dir=${userDataDir}`, '--use-mock-keychain'],
     cwd: desktopDir,
     env: {
         ...process.env,
         ELECTRON_ENABLE_LOGGING: process.env.ELECTRON_ENABLE_LOGGING || '1',
+        XCHAIN_TEST_NO_FOCUS: '1',
+        XCHAIN_TEST_MOCK_KEYCHAIN: '1',
     },
 });
 const pageErrors = [];

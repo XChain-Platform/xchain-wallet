@@ -143,6 +143,17 @@ describe('BroadcastForm text limits', () => {
         expect(submit.disabled).toBe(true);
         expect(messaging.composeForConfirm).not.toHaveBeenCalled();
     });
+
+    it('refuses a direction override before compose', async () => {
+        const messaging = mount(BroadcastForm, { initialChainId: BTC });
+        const message = await screen.findByLabelText('Message (optional)');
+
+        fireEvent.change(message, { target: { value: 'safe\u202eunsafe' } });
+
+        expect(screen.getByText('Message cannot contain text-direction control characters.')).toBeTruthy();
+        expect(screen.getByRole('button', { name: 'Broadcast' }).disabled).toBe(true);
+        expect(messaging.composeForConfirm).not.toHaveBeenCalled();
+    });
 });
 
 describe('ComposeMessage text limit', () => {
@@ -338,6 +349,21 @@ describe('CallbackForm memo limit', () => {
         fireEvent.change(memo, { target: { value: OVER_LIMIT } });
         expect(screen.getByText(/Memo is 251 bytes/)).toBeTruthy();
         expect(submit.disabled).toBe(true);
+        expect(messaging.composeForConfirm).not.toHaveBeenCalled();
+    });
+
+    it('refuses a control character before compose', async () => {
+        const messaging = mount(CallbackForm, {
+            initialChainId: BTC,
+            initialTick: 'CALLABLE',
+            initialFromAddress: SOURCE.address,
+        });
+        const memo = await screen.findByLabelText('Memo (optional)');
+
+        fireEvent.change(memo, { target: { value: 'safe\u0000unsafe' } });
+
+        expect(screen.getByText('Memo cannot contain control characters.')).toBeTruthy();
+        expect(screen.getByRole('button', { name: 'Execute callback' }).disabled).toBe(true);
         expect(messaging.composeForConfirm).not.toHaveBeenCalled();
     });
 });

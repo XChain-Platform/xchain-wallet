@@ -14,8 +14,10 @@
     display: grid;
     /* Two lines: the title and amount on top, the context, status and time
        below. The title owns the flexible column, so the context and amount
-       give way first and the title is never cut to a few letters. */
-    grid-template-columns: auto minmax(0, 1fr) auto auto auto;
+       give way first and the title is never cut to a few letters. The title
+       column keeps a floor, so a long amount wraps inside its own column
+       instead of squeezing the label to nothing. */
+    grid-template-columns: auto minmax(3rem, 1fr) auto auto auto;
     grid-template-areas:
         "mark label primary primary trailing"
         "mark label status time trailing";
@@ -102,6 +104,9 @@
     font-size: var(--xc-text-sm);
     font-weight: 700;
     text-align: end;
+    white-space: normal;
+    overflow-wrap: anywhere;
+    text-overflow: clip;
 }
 
 .status {

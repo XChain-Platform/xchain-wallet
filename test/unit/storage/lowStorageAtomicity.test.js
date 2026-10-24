@@ -105,7 +105,7 @@ describe('low-storage writes', () => {
     it('trims disposable web and extension caches before retrying a critical write', async () => {
         const values = new Map([
             ['xc:balanceCache:wallet:account', 'large balances'],
-            ['xc:historyCache:v1:wallet:all', 'large history'],
+            ['xc:historyCache:v2:wallet:all', 'large history'],
             ['xchain-wallet:fiat-rates:v1', 'large rates'],
             ['xchain.logConsole', 'large logs'],
             ['xc:activeWallet', 'keep'],
@@ -166,7 +166,7 @@ describe('low-storage writes', () => {
         expect(await meta.load()).toEqual({ kdfParams: { iterations: 3 } });
         expect(values.get('xc:activeWallet')).toBe('keep');
         expect(values.has('xc:balanceCache:wallet:account')).toBe(false);
-        expect(values.has('xc:historyCache:v1:wallet:all')).toBe(false);
+        expect(values.has('xc:historyCache:v2:wallet:all')).toBe(false);
         expect(values.has('xchain-wallet:fiat-rates:v1')).toBe(false);
         expect(values.has('xchain.logConsole')).toBe(false);
         expect(chromeLocal.remove).toHaveBeenCalledWith(['xchain.logConsole']);

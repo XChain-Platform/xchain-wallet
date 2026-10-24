@@ -54,6 +54,7 @@ import {
     formatDisplayAmount,
     formatHistoryAmount,
     formatHistoryAmountForSpeech,
+    isDisplayableAmount,
 } from '../utils/amountFormat.js';
 import { formatFiatAmountForSpeech } from '../utils/fiatAmountFormat.js';
 import { RelativeTime } from '../components/RelativeTime.jsx';
@@ -1157,7 +1158,7 @@ function fullDetailRows(entry, balancesHidden = false, chainTip = null, walletAd
     }
 
     rows.push(['Direction', transfer.label]);
-    rows.push(['Amount', amount != null && asset ? (
+    rows.push(['Amount', amount != null && asset && isDisplayableAmount(amount) ? (
         balancesHidden
             ? `••••• ${asset}`
             : `${formatDetailAmount(amount, transfer.amountDirection)} ${asset}`

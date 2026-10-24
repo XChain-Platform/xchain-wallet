@@ -46,8 +46,9 @@ function isPositiveDecimalString(amount) {
  * Pending debits to subtract from a source's balance in pre-flight.
  *
  * Pure: takes the raw PendingTx list and the venue/source to filter on, returns
- * `[{ tick, amount }]` (same shape the §4.7 reservation ledger yields). Only
- * records carrying a v2 single-tick debit contribute; the rest net nothing.
+ * `[{ tick, amount }]` (same shape the §4.7 reservation ledger yields). Records
+ * carrying a v2 tick/amount debit or per-leg balanceDebits contribute; the
+ * rest net nothing.
  *
  * @param {Array<import('../schemas/pendingTx.js').PendingTx>} pendingTxs
  * @param {{ coin: string, network: string, source: string }} venue
@@ -60,15 +61,23 @@ export function unconfirmedPendingDeltas(pendingTxs, { coin, network, source } =
         if (!p || p.fromAddress !== source) continue;
         if (p.chain !== coin || p.network !== network) continue;
         if (!UNCONFIRMED.has(p.status)) continue;
-        if (!p.tick || p.amount == null || p.amount === '') continue;
-        // Every delta here is SUBTRACTED from what the user may spend, so a
-        // non-positive amount would be netted as a credit and hand them
-        // spendable balance for a transaction the network has not accepted.
-        // The schema only checks that `amount` is a string, so nothing
-        // upstream rules this out; refusing it here is the cheap half of
-        // M2.5's rule that a pending amount is never added to a balance.
-        if (!isPositiveDecimalString(p.amount)) continue;
-        out.push({ tick: String(p.tick), amount: String(p.amount) });
+        // A multi-leg SEND records its debits per leg and no single tick/amount,
+        // so the legs are the source whenever the record carries them; a
+        // single-leg record has the same debit in both places and counts once.
+        const legs = Array.isArray(p.balanceDebits) && p.balanceDebits.length > 0
+            ? p.balanceDebits
+            : [{ tick: p.tick, amount: p.amount }];
+        for (const leg of legs) {
+            if (!leg || !leg.tick || leg.amount == null || leg.amount === '') continue;
+            // Every delta here is SUBTRACTED from what the user may spend, so a
+            // non-positive amount would be netted as a credit and hand them
+            // spendable balance for a transaction the network has not accepted.
+            // The schema only checks that `amount` is a string, so nothing
+            // upstream rules this out; refusing it here is the cheap half of
+            // M2.5's rule that a pending amount is never added to a balance.
+            if (!isPositiveDecimalString(leg.amount)) continue;
+            out.push({ tick: String(leg.tick), amount: String(leg.amount) });
+        }
     }
     return out;
 }

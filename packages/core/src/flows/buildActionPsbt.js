@@ -39,6 +39,7 @@ import { isChunkEncoding } from './nativeFeeLane.js';
 import { capRbfToDescriptor } from './rbfCap.js';
 import { chunkLaneOpener } from '../shared/utils/chunkLaneCopy.js';
 import { applyAdsPlanToEncoderOpts } from './ads.js';
+import { assertSafeActionText } from '../shared/utils/actionTextSafety.js';
 
 /**
  * Defer ADS output insertion until `createTx`, after the shared submit pipeline
@@ -172,6 +173,7 @@ export async function buildActionPsbt(opts) {
     if (!opts.actionData.params || typeof opts.actionData.params !== 'object') {
         throw new Error('buildActionPsbt: actionData.params is required');
     }
+    assertSafeActionText(opts.actionData);
     const source = normalizeSource(opts.from, 'buildActionPsbt');
 
     const descriptor = opts.chainRegistry.get(opts.chainId);

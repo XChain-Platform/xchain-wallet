@@ -49,8 +49,9 @@ export const test = base.extend({
         }
         const userDataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'xc-ext-iso-e2e-'));
         const context = await chromium.launchPersistentContext(userDataDir, {
-            // Chromium loads extensions only in a headed context.
-            headless: false,
+            // New headless loads extensions, so no window opens.
+            channel: 'chromium',
+            headless: true,
             viewport: { width: 400, height: 700 },
             args: [
                 `--disable-extensions-except=${EXTENSION_DIST}`,

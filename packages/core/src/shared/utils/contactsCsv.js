@@ -1,7 +1,7 @@
 // Copyright © 2025-2026 Dankest, LLC
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-import { validateContact } from '../../schemas/contact.js';
+import { cleanContactName, validateContact } from '../../schemas/contact.js';
 import { randomUUID } from '../../util/uuid.js';
 import { detectAddressCoin, isValidAddressAnyNetwork } from './addressValidation.js';
 import { csvField, parseCsvRecords } from './csv.js';
@@ -80,10 +80,10 @@ export function contactsFromCsv(text, options = {}) {
             continue;
         }
 
-        const groupKey = value.id.trim() || `name:${value.name.trim().toLocaleLowerCase()}`;
+        const groupKey = value.id.trim() || `name:${cleanContactName(value.name).toLocaleLowerCase()}`;
         let group = groups.get(groupKey);
         if (!group) {
-            const nameKey = value.name.trim().toLowerCase();
+            const nameKey = cleanContactName(value.name).toLowerCase();
             const nameOwner = nameOwners.get(nameKey);
             if (nameOwner && nameOwner.groupKey !== groupKey) {
                 failures.push(failure(
@@ -125,7 +125,7 @@ export function contactsFromCsv(text, options = {}) {
             const record = {
                 schemaVersion: value.schemaVersion.trim() === '' ? 1 : Number(value.schemaVersion),
                 id: value.id.trim() || makeId(),
-                name: value.name.trim(),
+                name: cleanContactName(value.name),
                 notes: value.notes,
                 entries: [],
                 avatarSeed: value.avatarSeed || value.address.trim(),
@@ -134,7 +134,7 @@ export function contactsFromCsv(text, options = {}) {
             };
             group = { record, line: row.line, source: value };
             groups.set(groupKey, group);
-            nameOwners.set(value.name.trim().toLowerCase(), {
+            nameOwners.set(cleanContactName(value.name).toLowerCase(), {
                 groupKey,
                 line: row.line,
                 name: record.name,

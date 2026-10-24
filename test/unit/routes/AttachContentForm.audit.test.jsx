@@ -149,6 +149,20 @@ describe('AttachContentForm validation and review', () => {
     });
 
     it.each([
+        ['Title (optional)', 'safe\u202eunsafe', 'Title cannot contain text-direction control characters.'],
+        ['Memo (optional)', 'safe\u200bunsafe', 'Memo cannot contain zero-width characters.'],
+    ])('refuses hostile %s text before review', async (label, value, message) => {
+        mount();
+        await chooseFile();
+        fireEvent.change(screen.getByLabelText(label), { target: { value } });
+
+        await review();
+
+        expect(await screen.findByRole('alert')).toHaveTextContent(message);
+        expect(screen.queryByRole('form', { name: 'Review artwork upload' })).toBeNull();
+    });
+
+    it.each([
         ['', 'Enter a custom fee rate greater than zero.'],
         ['0', 'Enter a custom fee rate greater than zero.'],
         ['-1', 'Enter a custom fee rate greater than zero.'],

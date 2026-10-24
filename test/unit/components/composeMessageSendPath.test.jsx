@@ -175,6 +175,19 @@ describe('message validation is visible from the primary action', () => {
         expect(alertText(utils)).toMatch(/Write a message to send/);
     });
 
+    it('shows unsafe invisible characters on the message field and blocks compose', async () => {
+        const messaging = stubMessaging();
+        const utils = await openFilledForm(messaging);
+
+        fireEvent.change(utils.getByLabelText('Message'), {
+            target: { value: 'pay\u202Etxt\u200Bnow' },
+        });
+
+        expect(utils.getByText('Message cannot contain text-direction control characters.')).toBeTruthy();
+        expect(sendButton(utils)).toBeDisabled();
+        expect(messaging.composeMessageForConfirm).not.toHaveBeenCalled();
+    });
+
     it.each([
         ['', /greater than zero/i],
         ['0', /greater than zero/i],

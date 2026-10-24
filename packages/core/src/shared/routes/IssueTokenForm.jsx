@@ -53,6 +53,11 @@ import { NativeFeeToggle } from '../components/NativeFeeToggle.jsx';
 import { NATIVE_FEE_WARNING } from '../../sdk/nativeFeePreflight.js';
 import { submitFailureMessage } from '../utils/submitFailureMessage.js';
 import { TICKER_HINT, tickerGrammarError } from '../utils/tickerGrammar.js';
+import {
+    issueSupplyLimitError,
+    issueTextLengthError,
+} from '../utils/issueFieldValidation.js';
+import { actionTextSafetyError } from '../utils/actionTextSafety.js';
 import { isValidAddressForChain } from '../utils/addressValidation.js';
 import { tickLookupVerdict } from '../utils/listTickItems.js';
 import { useNativeFee } from '../hooks/useNativeFee.js';
@@ -485,6 +490,11 @@ export function IssueTokenForm({ walletId, onBack }) {
             setFormError(tickerError);
             return;
         }
+        const descriptionError = actionTextSafetyError(description, 'Description');
+        if (descriptionError) {
+            setFormError(descriptionError);
+            return;
+        }
         const checkedTicker = ticker.trim();
         if (tickerLookupSupported
             && (tickerCheck.ticker !== checkedTicker || tickerCheck.status === 'checking')) {
@@ -507,6 +517,11 @@ export function IssueTokenForm({ walletId, onBack }) {
             setFormError(divisible
                 ? 'Supply can have at most 8 decimal places.'
                 : 'Supply must be a whole number for an indivisible token.');
+            return;
+        }
+        const supplyLimitError = issueSupplyLimitError(supply);
+        if (supplyLimitError) {
+            setFormError(supplyLimitError);
             return;
         }
         // An initial mint above the cap is rejected outright by the
@@ -549,6 +564,11 @@ export function IssueTokenForm({ walletId, onBack }) {
                     : 'Max mint per transaction must be a whole number for an indivisible token.');
                 return;
             }
+        }
+        const descriptionLengthError = issueTextLengthError(description, 'Description');
+        if (descriptionLengthError) {
+            setFormError(descriptionLengthError);
+            return;
         }
         if (transferTo.trim() && !isValidIssueAddress(transferTo, descriptor)) {
             setFormError('Transfer ownership address is not valid for the active network.');

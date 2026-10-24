@@ -18,6 +18,7 @@ import styles from './BalanceList.module.css';
 import { addPlainDecimals } from '../../flows/escrowedTokens.js';
 import {
     decimalFromBaseUnits,
+    expandDecimalNotation,
     formatAtomicAmount,
     formatDecimalAmount,
     multiplyDecimalStrings,
@@ -866,7 +867,9 @@ export function formatAmount(quantityStr, divisibility, numberFormat = 'full') {
 export function fiatValue(quantityStr, divisibility, fiatRate) {
     if (typeof fiatRate !== 'number' || !isFinite(fiatRate)) return null;
     const amount = decimalFromBaseUnits(safeBigInt(quantityStr), divisibility || 0);
-    return multiplyDecimalStrings(amount, String(fiatRate));
+    // String() of a rate under 1e-6 is exponent text ("1e-7"), which the exact
+    // multiply reads as not a number and drops the row as unpriced.
+    return multiplyDecimalStrings(amount, expandDecimalNotation(fiatRate));
 }
 
 /**

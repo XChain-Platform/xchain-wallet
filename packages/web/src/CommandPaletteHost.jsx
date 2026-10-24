@@ -18,6 +18,7 @@ import {
     buildCommands,
     contactsToCommands,
     helpToCommands,
+    hiddenSettingsSectionIds,
     parseFreeformCommands,
     settingsSectionsToCommands,
     sitesToCommands,
@@ -34,16 +35,20 @@ import {
  * @param {any[]} props.sites
  * @param {(view: string) => void} props.navigate
  * @param {object} props.parseCtx context for free-form queries such as "send 100 MYTOKEN"
+ * @param {{ developerMode?: boolean } | null} [props.settings] decides which Settings sections the palette lists
  */
 export function CommandPaletteHost({
-    open, onClose, ctx, entityCtx, tokenRows, contacts, sites, navigate, parseCtx,
+    open, onClose, ctx, entityCtx, tokenRows, contacts, sites, navigate, parseCtx, settings,
 }) {
     const commands = [
         ...buildCommands(ctx),
         ...balancesToCommands(tokenRows, entityCtx),
         ...contactsToCommands(contacts, { navigate }),
         ...sitesToCommands(sites, entityCtx),
-        ...settingsSectionsToCommands(entityCtx),
+        ...settingsSectionsToCommands({
+            ...entityCtx,
+            hiddenSettingsSections: hiddenSettingsSectionIds({ settings }),
+        }),
         ...helpToCommands(entityCtx),
     ];
     const parseQuery = (q) => parseFreeformCommands(q, parseCtx);

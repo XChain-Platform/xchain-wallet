@@ -122,6 +122,26 @@ describe('PriceAlertWatcher value boundaries', () => {
         expect(markTriggered).not.toHaveBeenCalled();
     });
 
+    it('never fires on a corrupt threshold or a non-positive price', async () => {
+        const corrupt = [0, -5, '100', null, Number.POSITIVE_INFINITY];
+        for (const targetFiat of corrupt) {
+            const { watcher, notify, markTriggered } = makeWatcher({
+                listArmedAlerts: vi.fn(async () => [alert({ targetFiat })]),
+            });
+            await watcher.pollOnce();
+            expect(notify).not.toHaveBeenCalled();
+            expect(markTriggered).not.toHaveBeenCalled();
+        }
+        for (const priceFiat of [0, -1]) {
+            const { watcher, notify } = makeWatcher({
+                getNativePrices: vi.fn(async () => ({ prices: { 'bitcoin-mainnet': { priceFiat } } })),
+                listArmedAlerts: vi.fn(async () => [alert({ direction: 'below' })]),
+            });
+            await watcher.pollOnce();
+            expect(notify).not.toHaveBeenCalled();
+        }
+    });
+
     it('formats fractional non-USD targets and falls back to a raw chain id', async () => {
         const { watcher, notify } = makeWatcher({
             listArmedAlerts: vi.fn(async () => [alert({

@@ -323,6 +323,7 @@ export async function ensureGasToken({ baseURL, log = console.log }) {
     // read the explorer cross-origin, and the spec fixture's license bypass is
     // seeded here by hand because this page is not a test's `page`.
     const browser = await chromium.launch({
+        channel: 'chromium',
         args: ['--disable-web-security', '--disable-features=IsolateOrigins,site-per-process'],
     });
     let page = null;

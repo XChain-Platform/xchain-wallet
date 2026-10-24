@@ -24,6 +24,7 @@ for (const mode of ['dark', 'rtl', 'darkset']) {
             metadata: { mode },
             use: {
                 browserName: 'chromium',
+                channel: 'chromium',
                 viewport: { width, height },
                 // darkset keeps the OS light and turns dark on through the app's setting.
                 colorScheme: mode === 'dark' ? 'dark' : 'light',

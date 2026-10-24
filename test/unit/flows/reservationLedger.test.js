@@ -4,7 +4,7 @@
 // In-flight approval reservation ledger (§4.7).
 
 import { describe, it, expect, vi } from 'vitest';
-import { createReservationLedger } from '../../../packages/core/src/flows/reservationLedger.js';
+import { createReservationLedger, RESERVATION_TTL_MS } from '../../../packages/core/src/flows/reservationLedger.js';
 
 describe('reservationLedger (in-memory)', () => {
 
@@ -139,5 +139,51 @@ describe('reservationLedger (session-store backed, extension)', () => {
         const store = { load: async () => { throw new Error('storage boom'); }, save: async () => {} };
         const led = createReservationLedger({ store });
         expect(await led.all()).toEqual([]);
+    });
+});
+
+describe('reservation age and unreadable amounts', () => {
+    const entry = (over = {}) => ({ id: 'a', chainId: 'btc', tick: 'JDOG', amount: '5', ...over });
+
+    it('stops netting a hold whose window is long gone', async () => {
+        let clock = 1_000_000;
+        const led = createReservationLedger({ now: () => clock });
+        await led.reserve(entry());
+        expect(await led.localDeltas('btc')).toEqual([{ tick: 'JDOG', amount: '5' }]);
+        clock += RESERVATION_TTL_MS + 1;
+        expect(await led.localDeltas('btc')).toEqual([]);
+    });
+
+    it('keeps netting after the clock is set back', async () => {
+        let clock = 1_000_000;
+        const led = createReservationLedger({ now: () => clock });
+        await led.reserve(entry());
+        clock -= 3 * 60 * 60 * 1000;
+        expect(await led.localDeltas('btc')).toEqual([{ tick: 'JDOG', amount: '5' }]);
+    });
+
+    it('never ages out an address-tagged auto-pay hold', async () => {
+        let clock = 1_000_000;
+        const led = createReservationLedger({ now: () => clock });
+        await led.reserve(entry({ id: 'autopay:btc:1', address: 'addr1' }));
+        clock += 10 * RESERVATION_TTL_MS;
+        expect(await led.localDeltas('btc')).toEqual([{ tick: 'JDOG', amount: '5' }]);
+    });
+
+    it('ages a hold restored from a store that carried no stamp from the restore', async () => {
+        let clock = 1_000_000;
+        const store = { load: async () => [entry()], save: async () => {} };
+        const led = createReservationLedger({ store, now: () => clock });
+        expect(await led.localDeltas('btc')).toEqual([{ tick: 'JDOG', amount: '5' }]);
+        clock += RESERVATION_TTL_MS + 1;
+        expect(await led.localDeltas('btc')).toEqual([]);
+    });
+
+    it('treats a negative amount as unreadable instead of a credit', async () => {
+        const led = createReservationLedger();
+        await led.reserve(entry({ id: 'a', amount: '5' }));
+        await led.reserve(entry({ id: 'b', amount: '-5' }));
+        const [delta] = await led.localDeltas('btc');
+        expect(BigInt(delta.amount.split('.')[0])).toBeGreaterThan(10n ** 20n);
     });
 });

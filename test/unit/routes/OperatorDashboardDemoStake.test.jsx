@@ -13,7 +13,7 @@ const CHAIN = 'bitcoin-regtest';
 const DEMO_ID_KEY = 'xc:demoWalletId';
 const DEMO_ID = 'demo-wallet-1';
 
-function makeMessaging() {
+function makeMessaging(overrides = {}) {
     const methods = {
         getSettings: vi.fn().mockResolvedValue({ walletMode: 'full' }),
         getStakesForAddress: vi.fn().mockResolvedValue([]),
@@ -22,6 +22,7 @@ function makeMessaging() {
         getRewardClaimsForAddress: vi.fn().mockResolvedValue([]),
         getBroadcastsForAddress: vi.fn().mockResolvedValue({ data: [] }),
         getValidatorsForChain: vi.fn().mockResolvedValue([]),
+        ...overrides,
     };
     const messaging = new Proxy(methods, {
         get(target, property) {
@@ -33,8 +34,8 @@ function makeMessaging() {
     return { messaging, methods };
 }
 
-function mount(walletId) {
-    const harness = makeMessaging();
+function mount(walletId, overrides) {
+    const harness = makeMessaging(overrides);
     render(React.createElement(
         MessagingProvider,
         { shell: 'web', messaging: harness.messaging },
@@ -111,5 +112,30 @@ describe('OperatorDashboard demo wallet staking', () => {
             "Couldn't load the latest feed. Try again.",
         );
         expect(screen.queryByText(/Cannot read properties/)).toBeNull();
+    });
+
+    it('renders malformed validator metrics as bounded plain text', async () => {
+        const signingPubkey = 'ab'.repeat(32);
+        const rlo = String.fromCharCode(0x202e);
+        mount('wallet-1', {
+            getStakesForAddress: vi.fn().mockResolvedValue([
+                { amount: '10', status: 'valid' },
+            ]),
+            getDelegationsForAddress: vi.fn().mockResolvedValue([
+                { signing_pubkey: signingPubkey, status: 'valid' },
+            ]),
+            getValidatorsForChain: vi.fn().mockResolvedValue([
+                {
+                    signing_pubkey: signingPubkey,
+                    uptime: { malformed: true },
+                    score: `9${rlo}1`,
+                    last_seen_block: { malformed: true },
+                },
+            ]),
+        });
+
+        expect(await screen.findByText('Uptime: unavailable')).toBeInTheDocument();
+        expect(screen.getByText('Validator score: 9\u24261')).toBeInTheDocument();
+        expect(screen.getByText('Last seen at block: unavailable')).toBeInTheDocument();
     });
 });

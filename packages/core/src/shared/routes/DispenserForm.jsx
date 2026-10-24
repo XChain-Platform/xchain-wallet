@@ -228,7 +228,7 @@ export function DispenserForm({ walletId, activeAccountId, onBack, initialChainI
     );
     const [derivingGetAddress, setDerivingGetAddress] = useState(false);
 
-    const [ticker, setTicker] = useState((initialTick || reopen?.tick || '').toUpperCase());
+    const [ticker, setTicker] = useState(initialTick || reopen?.tick || '');
     const giveTokenInfo = useTokenInfo({ chainId, tick: ticker, skip: !ticker.trim() });
     // PC-26: dispenses carry no gated-key handoff; warn when the
     // dispensed token has gated content.
@@ -512,7 +512,7 @@ export function DispenserForm({ walletId, activeAccountId, onBack, initialChainI
     // any failure leaves the default untouched. Skipped when
     // the source is pinned by an incoming `initialFromAddress` or a reopen.
     useEffect(() => {
-        const tick = ticker.trim().toUpperCase();
+        const tick = ticker.trim();
         if (pinnedFromAddress || manualSourceRef.current) return undefined;
         if (!chainId || !addressesByChain || !tick) return undefined;
         if (typeof messaging.getWalletBalances !== 'function') return undefined;
@@ -527,7 +527,7 @@ export function DispenserForm({ walletId, activeAccountId, onBack, initialChainI
                     for (const entry of entries) {
                         if (!entry || !entry.balances) continue;
                         const rows = decoderLib.balancesFromSdk(entry.balances) || [];
-                        const match = rows.find((b) => String(b.tick).toUpperCase() === tick);
+                        const match = rows.find((b) => String(b.tick) === tick);
                         const amount = match ? String(match.amount) : '0';
                         if (compareDecimalStrings(amount, bestAmount) === 1) {
                             bestAmount = amount;
@@ -715,7 +715,7 @@ export function DispenserForm({ walletId, activeAccountId, onBack, initialChainI
     // escrow AmountField (Max + "available"). Debounced on the ticker for
     // the same reason as the source-resolve effect above.
     useEffect(() => {
-        const tick = ticker.trim().toUpperCase();
+        const tick = ticker.trim();
         setSourceTickBalance(null);
         if (!chainId || !sourceAddress || !tick) return undefined;
         if (typeof messaging.getWalletBalances !== 'function') return undefined;
@@ -727,7 +727,7 @@ export function DispenserForm({ walletId, activeAccountId, onBack, initialChainI
                     const entries = byChain[chainId] || [];
                     const entry = entries.find((e) => e && e.address === sourceAddress.address);
                     const rows = entry ? decoderLib.balancesFromSdk(entry.balances) || [] : [];
-                    const match = rows.find((b) => String(b.tick).toUpperCase() === tick);
+                    const match = rows.find((b) => String(b.tick) === tick);
                     setSourceTickBalance(match ? String(match.amount) : '0');
                 })
                 .catch(() => { /* footer just stays empty on failure */ });
@@ -740,11 +740,11 @@ export function DispenserForm({ walletId, activeAccountId, onBack, initialChainI
     }, [giveAmount, escrow]);
 
     const summaryLine = useMemo(() => {
-        const tick = ticker.trim().toUpperCase() || 'TOKEN';
+        const tick = ticker.trim() || 'TOKEN';
         const per = giveAmount.trim() || '?';
         const esc = escrow.trim() || '?';
         if (payWith === 'token') {
-            const paymentTick = getTick.trim().toUpperCase() || 'TOKEN';
+            const paymentTick = getTick.trim() || 'TOKEN';
             const paymentAmount = getTokenAmount.trim() || '?';
             const fillsNote = fillsEstimate !== null ? ` The dispenser holds about ${fillsEstimate} fills.` : '';
             return `You will lock ${esc} ${tick}. Each time someone sends ${paymentAmount} ${paymentTick}, they will receive ${per} ${tick}.${fillsNote}`;
@@ -767,7 +767,7 @@ export function DispenserForm({ walletId, activeAccountId, onBack, initialChainI
     const actionParams = useMemo(() => {
         /** @type {Record<string, string>} */
         const p = { VERSION: '0' };
-        const tick = ticker.trim().toUpperCase();
+        const tick = ticker.trim();
         const ga = giveAmount.trim();
         const esc = escrow.trim();
         const trig = triggerPrice.trim();
@@ -801,7 +801,7 @@ export function DispenserForm({ walletId, activeAccountId, onBack, initialChainI
             // PC-20 token-priced lane: buyers pay a fixed amount of a TOKEN
             // (GET_TICK) rather than the native coin. Oracle/fiat pricing is
             // coin-only and does not apply here.
-            if (getTick.trim()) p.GET_TICK = getTick.trim().toUpperCase();
+            if (getTick.trim()) p.GET_TICK = getTick.trim();
             if (getTokenAmount.trim()) p.GET_AMOUNT = getTokenAmount.trim();
         } else if (oracle) {
             // Oracle pricing: validator path (fiatAmount + code) or user-
@@ -895,7 +895,7 @@ export function DispenserForm({ walletId, activeAccountId, onBack, initialChainI
         }
         if (exceedsBalance(esc, sourceTickBalance)) {
             setFormError(
-                `This address holds only ${formatWithThousands(sourceTickBalance)} ${ticker.trim().toUpperCase()}. `
+                `This address holds only ${formatWithThousands(sourceTickBalance)} ${ticker.trim()}. `
                 + 'Enter an escrow amount at or below that balance.',
             );
             return;
@@ -1437,7 +1437,7 @@ export function DispenserForm({ walletId, activeAccountId, onBack, initialChainI
                 accountId={activeAccountId}
                 title="Select token"
                 onSelect={(sel) => {
-                    setTicker(String(sel.tick || '').toUpperCase());
+                    setTicker(String(sel.tick || ''));
                     if (!lockedToken && sel.chainId) setChainId(sel.chainId);
                     setTokenPickerOpen(false);
                 }}
@@ -1668,7 +1668,7 @@ export function DispenserForm({ walletId, activeAccountId, onBack, initialChainI
                     : undefined}
                 maxDisabled={!sourceTickBalance}
                 balanceText={sourceTickBalance != null && ticker.trim()
-                    ? `${formatWithThousands(sourceTickBalance)} ${ticker.trim().toUpperCase()} available`
+                    ? `${formatWithThousands(sourceTickBalance)} ${ticker.trim()} available`
                     : null}
             />
             <AmountField
@@ -1687,7 +1687,7 @@ export function DispenserForm({ walletId, activeAccountId, onBack, initialChainI
                     : undefined}
                 maxDisabled={!sourceTickBalance}
                 balanceText={sourceTickBalance != null && ticker.trim()
-                    ? `${formatWithThousands(sourceTickBalance)} ${ticker.trim().toUpperCase()} available`
+                    ? `${formatWithThousands(sourceTickBalance)} ${ticker.trim()} available`
                     : null}
             />
             <RadioGroup
@@ -1707,7 +1707,7 @@ export function DispenserForm({ walletId, activeAccountId, onBack, initialChainI
                         label="Payment token"
                         hint="Ticker buyers pay with (a token, not the native coin)."
                         value={getTick}
-                        onChange={(e) => setGetTick(e.target.value.toUpperCase())}
+                        onChange={(e) => setGetTick(e.target.value)}
                         autoComplete="off"
                         autoCapitalize="off"
                         autoCorrect="off"

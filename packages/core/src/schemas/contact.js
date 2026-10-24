@@ -21,8 +21,35 @@ import {
     result,
 } from './validate.js';
 import { randomUUID } from '../util/uuid.js';
+import { BIDI_CONTROLS, CONTROLS, HIDDEN_MARKS } from '../shared/utils/textHardening.js';
 
 export const CURRENT_VERSION = 1;
+
+// Characters that change how a name reads without being visible: control
+// characters, zero-width characters, and the bidirectional embeddings,
+// overrides and isolates. A name carrying them can display as a different name
+// than the one stored, or sit beside a lookalike with no visible difference.
+// The classes are the ones neutralizeControlText uses for display, so a stored
+// name and a displayed one agree. The zero-width joiners U+200C and U+200D
+// stay, since Persian and Indic names spell with them.
+const NAME_ZERO_WIDTH = /[\u200B\u2060\uFEFF]/g;
+
+/**
+ * Contact name as it is stored and compared: invisible and control characters
+ * removed (controls become spaces), runs of whitespace collapsed, ends trimmed.
+ *
+ * @param {unknown} name
+ * @returns {string}
+ */
+export function cleanContactName(name) {
+    return String(name ?? '')
+        .replace(CONTROLS, ' ')
+        .replace(BIDI_CONTROLS, '')
+        .replace(HIDDEN_MARKS, '')
+        .replace(NAME_ZERO_WIDTH, '')
+        .replace(/\s+/g, ' ')
+        .trim();
+}
 
 /**
  * @typedef {Object} ContactEntry

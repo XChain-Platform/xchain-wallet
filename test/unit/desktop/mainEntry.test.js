@@ -119,6 +119,7 @@ const electron = vi.hoisted(() => {
             fromPartition: vi.fn(() => isolatedSession),
         },
         shell: { openExternal: vi.fn(async () => {}) },
+        dialog: { showMessageBoxSync: vi.fn(() => 0) },
         Notification: class Notification {},
     };
 });
@@ -965,6 +966,36 @@ describe('desktop main entry point', () => {
         const webview = { preventDefault: vi.fn() };
         handlers.get('will-attach-webview')(webview);
         expect(webview.preventDefault).toHaveBeenCalledOnce();
+    });
+
+    it('lets a quit past a page that cancels its unload and asks before any other unload', async () => {
+        await import('../../../packages/desktop/main/index.js');
+        const handlers = new Map();
+        const contents = {
+            session: electron.session.defaultSession,
+            getURL: () => appIndex,
+            setWindowOpenHandler: vi.fn(),
+            on: vi.fn((name, handler) => { handlers.set(name, handler); }),
+        };
+        electron.appListeners.get('web-contents-created')({}, contents);
+
+        const stay = { preventDefault: vi.fn() };
+        electron.dialog.showMessageBoxSync.mockReturnValueOnce(0);
+        handlers.get('will-prevent-unload')(stay);
+        expect(electron.dialog.showMessageBoxSync).toHaveBeenCalledOnce();
+        expect(stay.preventDefault).not.toHaveBeenCalled();
+
+        const leave = { preventDefault: vi.fn() };
+        electron.dialog.showMessageBoxSync.mockReturnValueOnce(1);
+        handlers.get('will-prevent-unload')(leave);
+        expect(leave.preventDefault).toHaveBeenCalledOnce();
+
+        electron.appListeners.get('before-quit')({ preventDefault: vi.fn() });
+        electron.dialog.showMessageBoxSync.mockClear();
+        const quitting = { preventDefault: vi.fn() };
+        handlers.get('will-prevent-unload')(quitting);
+        expect(electron.dialog.showMessageBoxSync).not.toHaveBeenCalled();
+        expect(quitting.preventDefault).toHaveBeenCalledOnce();
     });
 
     it('provides context editing actions without exposing an inspect action', async () => {

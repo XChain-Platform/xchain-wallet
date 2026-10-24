@@ -84,6 +84,12 @@ export function HwSignBlock({
         onStatusChangeRef.current?.({ status, detail, refresh });
     }, [status, detail, refresh]);
 
+    // The host answers 'idle' with a detail when the paired device has no live
+    // connection in this session (after a reload or a lock). That is a state
+    // the reader can act on, unlike the empty pre-first-poll 'idle'.
+    const notConnected = status === 'idle' && Boolean(detail);
+    const shownStatus = notConnected ? 'not-connected' : status;
+
     return (
         <div className={styles.root}>
             {signerInfo ? <HwFirmwareBanner signerInfo={signerInfo} /> : null}
@@ -100,13 +106,13 @@ export function HwSignBlock({
                 requireExplicitConfirm={requireExplicitConfirm}
                 onConfirmedChange={onConfirmedChange}
             />
-            {status !== 'idle' ? (
-                <div className={styles.statusRow} data-status={status} role="status">
+            {shownStatus !== 'idle' ? (
+                <div className={styles.statusRow} data-status={notConnected ? 'disconnected' : status} role="status">
                     <span className={styles.statusDot} aria-hidden="true" />
                     <span className={styles.statusText}>
-                        {statusCopy(status, signerKind, chainId)}
+                        {statusCopy(shownStatus, signerKind, chainId)}
                     </span>
-                    {status !== 'available' ? (
+                    {shownStatus !== 'available' ? (
                         <button
                             type="button"
                             onClick={refresh}
@@ -142,6 +148,8 @@ export function statusCopy(status, signerKind, chainId, detail) {
             return detail
                 ? `Device not detected. ${userFacingMessage(detail, 'Check its connection, unlock it, and try again.')}`
                 : 'Device not detected. Check its connection, unlock it, and try again.';
+        case 'not-connected':
+            return `This ${signerKind === 'trezor' ? 'Trezor' : 'Ledger'} is not connected in this session. Connect it again with Pair hardware signer, then try again.`;
         case 'cancelled':
             return 'Signing was cancelled on your device. Nothing was signed. Review the details and try again when you are ready.';
         case 'error':

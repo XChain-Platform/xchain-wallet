@@ -38,6 +38,18 @@ import { balancesFromSdk } from '../decoder/balanceAdapter.js';
 import { withListRemovalDescriptions } from '../decoder/list_removal_description.js';
 import { resolveDustThreshold } from '../sdk/nativeFeePreflight.js';
 
+// The built PSBT is checked after the encoder has reserved its inputs. A check
+// that refuses the bytes ends the compose without a confirm surface to hand the
+// release back to, so the refusal gives the inputs back before it propagates.
+async function releasingOnRefusal(composed, check) {
+    try {
+        return check();
+    } catch (err) {
+        try { await composed.releaseEncoderInputs?.(); } catch { /* the reservation lapses on its own */ }
+        throw err;
+    }
+}
+
 function hasOwnChangeOutput(outputs, expectedOutputs, ownAddresses) {
     const consumed = new Set();
     for (const expected of expectedOutputs?.addressed || []) {
@@ -239,7 +251,7 @@ export async function composeActionForConfirm({
         && !hasOwnChangeOutput(decomposed.outputs || [], composed.expectedOutputs, own)
         ? dustFloor
         : null;
-    assertNoTamper({
+    await releasingOnRefusal(composed, () => assertNoTamper({
         psbtHex: composed.psbt,
         expected: composed.expectedOutputs,
         ownAddresses: [...own],
@@ -265,13 +277,13 @@ export async function composeActionForConfirm({
         rawDataCompressed: composed.compression?.compressed === true,
         network: sdk.config && sdk.config.network,
         verifyCarrierScripts: sdk.decoder.verifyCarrierScripts,
-    });
+    }));
 
     // A Taproot envelope is two transactions signed on one Approve, so the
     // reveal is checked too and each transaction's own fee is stated.
-    const envelopeFees = composed.revealPsbt
+    const envelopeFees = await releasingOnRefusal(composed, () => (composed.revealPsbt
         ? checkedEnvelopeFees({ sdk, composed, commit: decomposed, own })
-        : null;
+        : null));
     if (envelopeFees) networkFeeSats = envelopeFees.totalFeeSats;
 
     // §5.2.3 balance deltas. Computed HERE, not per-form, for the same reason

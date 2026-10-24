@@ -6,7 +6,7 @@
 // The side panel is a full-layout surface and titles its window with the screen
 // it shows, through the same hook as the web shell.
 
-import { cleanup, render, screen } from '@testing-library/react';
+import { cleanup, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { App } from '../../../packages/extension/src/popup/App.jsx';
 
@@ -54,7 +54,9 @@ describe('extension window title', () => {
         installChrome({ ok: true, result: { state: 'no-wallet' } });
         render(<App />);
         await screen.findByRole('button', { name: 'Create new wallet' });
-        expect(document.title).toBe('XChain Wallet - Welcome');
+        // The title is written in a passive effect, which can land after the
+        // screen it names has painted on a loaded runner.
+        await waitFor(() => expect(document.title).toBe('XChain Wallet - Welcome'));
     });
 
     it('titles the side panel on the unlock screen', async () => {
@@ -62,6 +64,6 @@ describe('extension window title', () => {
         installChrome({ ok: true, result: { state: 'locked' } });
         render(<App />);
         await screen.findByRole('button', { name: 'Unlock Wallet' });
-        expect(document.title).toBe('XChain Wallet - Unlock');
+        await waitFor(() => expect(document.title).toBe('XChain Wallet - Unlock'));
     });
 });

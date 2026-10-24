@@ -44,7 +44,6 @@ import {
 // EMPTY message, so those reached the recovery screen verbatim.
 import { userFacingMessage } from '../utils/userFacingMessage.js';
 import { takeForgotPasswordRestoreLane } from '../utils/forgotPasswordRecovery.js';
-import { ClipboardPasteButton } from '../../ui/ClipboardPasteButton.jsx';
 import { useBackHandler } from '../../ui/backStack.js';
 // The three password fields, their hints, and the copy for every way
 // a restore can fail, all from one place so a message can never name a field
@@ -1104,21 +1103,6 @@ export function ImportWallet({
                     aria-describedby="xc-mnemonic-status"
                     actions={(
                         <>
-                            <ClipboardPasteButton
-                                disabled={busy}
-                                label={t('importWallet.pastePhrase')}
-                                onPaste={(text) => {
-                                    if (inputGeneration !== inputGenerationRef.current || activeLaneRef.current !== 'mnemonic') return;
-                                    const normalized = normalizePhraseEntry(text);
-                                    setMnemonic(normalized);
-                                    setMnemonicCursor(normalized.length);
-                                    if (error) setError(null);
-                                }}
-                                // Inside the box there is no room for its own
-                                // notice, so a clipboard failure becomes the
-                                // form's error instead.
-                                onMessage={(message) => { if (message) setError(message); }}
-                            />
                             <Button
                                 type="button"
                                 variant="ghost"

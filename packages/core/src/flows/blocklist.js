@@ -34,6 +34,8 @@
 // patterns are kept verbatim (no scheme) so the stored entry tells
 // the user it's a pattern, not an origin.
 
+import { serializeSettingsWrites } from './settings.js';
+
 const WILDCARD_RE = /^\*\.([a-z0-9-]+(?:\.[a-z0-9-]+)+)$/i;
 
 /**
@@ -217,7 +219,11 @@ export async function listBlocklistAuditLog({ vault }) {
  * @param {{ vault: any }} args
  * @returns {Promise<{ cleared: number }>}
  */
-export async function clearBlocklistAuditLog({ vault }) {
+export function clearBlocklistAuditLog(args) {
+    return serializeSettingsWrites(args?.vault, () => clearBlocklistAuditLogNow(args));
+}
+
+async function clearBlocklistAuditLogNow({ vault }) {
     const settings = await readSettings(vault);
     if (!settings) return { cleared: 0 };
     const before = asAuditList(settings).length;
@@ -248,7 +254,11 @@ export async function listBlockedOrigins({ vault }) {
  * @param {{ vault: any, origin: string }} args
  * @returns {Promise<{ blocked: string, alreadyBlocked: boolean, evictedSiteIds: string[] }>}
  */
-export async function addBlockedOrigin({ vault, origin }) {
+export function addBlockedOrigin(args) {
+    return serializeSettingsWrites(args?.vault, () => addBlockedOriginNow(args));
+}
+
+async function addBlockedOriginNow({ vault, origin }) {
     const normalized = normalizeBlocklistEntry(origin);
     if (!normalized) {
         throw new Error(`addBlockedOrigin: ${JSON.stringify(origin)} is not a valid origin or wildcard`);
@@ -300,7 +310,11 @@ export async function addBlockedOrigin({ vault, origin }) {
  * @param {{ vault: any, origin: string }} args
  * @returns {Promise<{ removed: string | null }>}
  */
-export async function removeBlockedOrigin({ vault, origin }) {
+export function removeBlockedOrigin(args) {
+    return serializeSettingsWrites(args?.vault, () => removeBlockedOriginNow(args));
+}
+
+async function removeBlockedOriginNow({ vault, origin }) {
     const normalized = normalizeBlocklistEntry(origin);
     if (!normalized) {
         return { removed: null };

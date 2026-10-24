@@ -24,7 +24,7 @@ import { useWalletMode } from '../hooks/useWalletMode.js';
 import { isDemoWallet } from '../../flows/demoMode.js';
 import { useToast } from '../components/ToastHost.jsx';
 import { copyText } from '../clipboard.js';
-import { shareContent, ShareOutcome } from '../share.js';
+import { shareContent, ShareOutcome, toWebShareData } from '../share.js';
 import { dataUrlToBlob } from '../dataUrl.js';
 import { AmountField } from '../components/AmountField.jsx';
 import { TickerIcon } from '../components/TickerIcon.jsx';
@@ -53,6 +53,29 @@ const chainRegistry = registryLib.defaultRegistry();
 const NATIVE_COIN_DECIMALS = 8;
 const TOKEN_AMOUNT_MAX_DECIMALS = 18;
 const QR_FALLBACK_PIXEL_SIZE = 512;
+// The label a request carries is bounded by the limit the parser applies to a
+// scanned link, so a long label never becomes a code this wallet's own Send
+// screen refuses.
+const REQUEST_LABEL_MAX = uriLib.URI_PARAMETER_LIMITS.label;
+
+/** A leading decimal mark is a zero whole part (".5" is 0.5), never a dropped key that leaves the "5" to read as five coins. */
+export function withLeadingZero(typed) {
+    return typed.startsWith('.') ? `0${typed}` : typed;
+}
+
+/**
+ * The address label as it travels in a payment request: control characters
+ * replaced and the text cut, on a whole character, to the URI label limit.
+ */
+export function requestLabelFor(label) {
+    const clean = String(label || '').replace(/[\u0000-\u001f\u007f-\u009f]/g, ' ').trim();
+    let out = '';
+    for (const character of clean) {
+        if (out.length + character.length > REQUEST_LABEL_MAX) break;
+        out += character;
+    }
+    return out.trim();
+}
 
 export function qrPixelSizeFor(cssWidth, devicePixelRatio) {
     const width = Number(cssWidth);
@@ -700,7 +723,8 @@ export function Receive({ walletId, accountId, prefill = null, onBack, onChangeA
     });
 
     const onAmountFieldChange = useCallback((rawValue, cursorPos) => {
-        const stripped = String(rawValue).replace(/,/g, '');
+        const typedValue = String(rawValue).replace(/,/g, '');
+        const stripped = withLeadingZero(typedValue);
         const validDecimal = /^\d+(?:\.\d*)?$/.test(stripped);
         const fraction = stripped.includes('.') ? stripped.split('.')[1] : '';
         const exceedsCoinPrecision = amountInputMode === 'coin'
@@ -725,7 +749,8 @@ export function Receive({ walletId, accountId, prefill = null, onBack, onChangeA
         }
         if (typeof cursorPos === 'number' && amountInputRef.current) {
             const formattedNew = formatWithThousands(stripped);
-            const nonCommaBefore = countNonCommaBefore(String(rawValue), cursorPos);
+            const addedZero = stripped.length - typedValue.length;
+            const nonCommaBefore = countNonCommaBefore(String(rawValue), cursorPos) + addedZero;
             const nextCursor = indexAfterNonCommaCount(formattedNew, nonCommaBefore);
             const el = amountInputRef.current;
             requestAnimationFrame(() => {
@@ -773,7 +798,7 @@ export function Receive({ walletId, accountId, prefill = null, onBack, onChangeA
             scheme: descriptor.uriScheme,
             address: address.address,
             amount,
-            label: address.label || undefined,
+            label: requestLabelFor(address.label) || undefined,
             params: {
                 chain: activeChainId,
                 ...(tick ? { tick } : {}),
@@ -985,7 +1010,7 @@ export function Receive({ walletId, accountId, prefill = null, onBack, onChangeA
                     ...shareData,
                     files: [new File([blob], qrFileName, { type: blob.type })],
                 };
-                if (nav.canShare(withFile)) data = withFile;
+                if (nav.canShare(toWebShareData(withFile))) data = withFile;
             } catch { /* text and URL remain shareable without the QR image */ }
         }
 
@@ -1252,6 +1277,7 @@ export function Receive({ walletId, accountId, prefill = null, onBack, onChangeA
                         })}
                         onKeyDown={onLabelKeyDown}
                         placeholder={t('receive.addALabel')}
+                        maxLength={REQUEST_LABEL_MAX}
                         autoComplete="off"
                         error={labelError || undefined}
                     />

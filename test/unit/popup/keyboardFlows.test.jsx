@@ -218,8 +218,6 @@ describe('extension popup keyboard flows', () => {
         await user.tab();
         expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Open address book' }));
         await user.tab();
-        expect(document.activeElement).toBe(screen.getAllByRole('button', { name: 'Paste from clipboard' })[0]);
-        await user.tab();
         expect(document.activeElement).toBe(screen.getByLabelText('Token'));
         await user.tab();
         const amount = screen.getByLabelText(/^Amount \(/);
@@ -237,7 +235,7 @@ describe('extension popup keyboard flows', () => {
         ));
     });
 
-    it('keeps the Receive request in a logical Token, Amount, paste order', async () => {
+    it('wraps from the final Receive amount field to the screen header', async () => {
         const user = userEvent.setup();
         render(popupProvider(
             <Receive walletId={WALLET_ID} accountId="account-1" onBack={() => {}} />,
@@ -253,7 +251,7 @@ describe('extension popup keyboard flows', () => {
         await user.keyboard('{Enter}');
         expect(screen.getByRole('form', { name: 'Receive payment' })).toBeInTheDocument();
         await user.tab();
-        expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Paste from clipboard' }));
+        expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Back to home' }));
     });
 });
 

@@ -521,8 +521,14 @@ function pairingErrorMessage(err, vendor) {
     if (/firmware.*(?:too old|outdated|unsupported)|(?:too old|unsupported).*firmware/i.test(raw)) {
         return firmwareUpdateAdvice(vendor);
     }
-    if (/wrong app|app.*(?:not|isn't).*open|app is open|0x6a82|0x6e00|cla_not_supported|(?:bitcoin test|testnet).*app/i.test(raw)) {
+    if (/wrong app|app.*(?:not|isn't).*open|app is open|0x6a82|0x6e00|0x6d00|0x6511|cla_not_supported|ins_not_supported|(?:bitcoin test|testnet).*app/i.test(raw)) {
         return 'The Bitcoin app is not open on your Ledger. Open the Bitcoin app on the device, then try again.';
+    }
+    if (/locked device|device (?:is )?locked|pin locked|0x5515|LockedDevice/i.test(raw)) {
+        return `Your ${labelFor(vendor)} is locked. Enter the PIN on the device, then try again.`;
+    }
+    if (/already open|failed to open the device|device is busy|in use by another/i.test(raw)) {
+        return `Another app or browser tab is using this ${labelFor(vendor)}. Close ${vendor === 'trezor' ? 'Trezor Suite' : 'Ledger Live'} and any other wallet tab, then try again.`;
     }
     if (/cancel|reject|denied|declined|user.*closed|popup.*closed/i.test(raw)) {
         return `Pairing was canceled. Approve the connection on your ${labelFor(vendor)} and in any browser prompt, then try again.`;

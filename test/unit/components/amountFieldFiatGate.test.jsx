@@ -61,13 +61,11 @@ describe('AmountField fiat gate', () => {
         expect(u.container.textContent).toMatch(/≈\s*\$134,000\.00 USD/);
     });
 
-    it('uses the shared small control size for the fiat toggle and Paste', () => {
+    it('uses the shared small control size for the fiat toggle', () => {
         const u = mount({ fiatRate: RATE });
         const toggle = u.getByRole('button', { name: /switch input to usd/i });
-        const paste = u.getByRole('button', { name: 'Paste from clipboard' });
 
         expect(toggle).toHaveClass(buttonStyles.btn, buttonStyles.sm);
-        expect(paste).toHaveClass(buttonStyles.btn, buttonStyles.sm);
     });
 
     it('formats the preview in the selected fiat currency', () => {
@@ -116,7 +114,7 @@ describe('AmountField fiat gate', () => {
 });
 
 describe('AmountField input contract', () => {
-    it.each([320, 360])('keeps Paste and Max on one line in a %ipx field', (width) => {
+    it.each([320, 360])('keeps Max on one line in a %ipx field', (width) => {
         const u = render(
             <div style={{ width }}>
                 <AmountField
@@ -128,10 +126,7 @@ describe('AmountField input contract', () => {
             </div>,
         );
         const input = u.getByRole('textbox', { name: 'Amount (BTC)' });
-        const actions = [
-            u.getByRole('button', { name: 'Paste from clipboard' }),
-            u.getByRole('button', { name: 'Use max available amount' }),
-        ];
+        const max = u.getByRole('button', { name: 'Use max available amount' });
 
         expect(input.style.paddingInlineEnd).toContain('--amount-action-width');
         expect(amountFieldStyles).toMatch(
@@ -139,11 +134,16 @@ describe('AmountField input contract', () => {
         );
         expect(amountFieldStyles).toMatch(/\.amountFieldWrap input\s*\{[^}]*min-width:\s*0/s);
         expect(amountFieldStyles).toMatch(
-            /\.pasteAction button > span,\s*\.maxAction > span\s*\{[^}]*min-width:\s*max-content[^}]*white-space:\s*nowrap/s,
+            /\.maxAction > span\s*\{[^}]*min-width:\s*max-content[^}]*white-space:\s*nowrap/s,
         );
-        for (const action of actions) {
-            expect(action.textContent).not.toMatch(/\s/);
-        }
+        expect(max.textContent).not.toMatch(/\s/);
+    });
+
+    it('uses normal input padding when Max is absent', () => {
+        const u = mount();
+        const input = u.getByRole('textbox', { name: 'Amount (BTC)' });
+        expect(input.style.paddingInlineEnd).toBe('');
+        expect(input.style.getPropertyValue('--amount-end-room')).toBe('');
     });
 
     it('switches display modes without replacing the canonical coin value', () => {

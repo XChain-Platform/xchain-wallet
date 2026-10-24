@@ -29,10 +29,19 @@
 
 // U+202A-U+202E (LRE/RLE/PDF/LRO/RLO), U+2066-U+2069 (LRI/RLI/FSI/PDI),
 // U+200E/U+200F (LRM/RLM). Mirrors the SDK's BIDI_CONTROLS.
-export const BIDI_CONTROLS = /[\u202A-\u202E\u2066-\u2069\u200E\u200F]/g;
+export const BIDI_CONTROLS = /[\u061C\u202A-\u202E\u2066-\u2069\u200E\u200F]/g;
 
 // Zero-width space/non-joiner/joiner, word joiner, BOM.
 export const ZERO_WIDTH = /[\u200B-\u200D\u2060\uFEFF]/g;
+
+// Glyphs that draw nothing but are not whitespace: Braille blank, Hangul and
+// Khmer fillers. Shown as the visible placeholder so a padded message cannot
+// look empty.
+export const BLANK_GLYPHS = /[\u2800\u115F\u1160\u17B4\u17B5\u3164\uFFA0]/g;
+
+// Variation selectors other than the emoji pair, and tag characters: invisible
+// and carrying no layout, so they are dropped like zero-width characters.
+export const HIDDEN_MARKS = /[\u00AD\u034F\uFE00-\uFE0D\u{E0000}-\u{E007F}]/gu;
 
 // C0/C1 controls, which would otherwise break the line the text sits on
 // (a CRLF pair can fake a second line in a plain-text render).
@@ -58,6 +67,8 @@ export function neutralizeControlText(value, opts = {}) {
     let s = String(value)
         .replace(BIDI_CONTROLS, BIDI_PLACEHOLDER)
         .replace(ZERO_WIDTH, '')
+        .replace(HIDDEN_MARKS, '')
+        .replace(BLANK_GLYPHS, BIDI_PLACEHOLDER)
         .replace(CONTROLS, ' ')
         .replace(/\s+/g, ' ')
         .trim();

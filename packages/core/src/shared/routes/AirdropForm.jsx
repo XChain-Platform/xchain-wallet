@@ -63,7 +63,7 @@ import { submitFailureMessage, SIGNED_NOT_BROADCAST_MESSAGE } from '../utils/sub
 import { tickerReferenceError } from '../utils/tickerGrammar.js';
 import { classifyTickItems } from '../utils/listTickItems.js';
 import { currentListItems } from '../../flows/listMembership.js';
-import { MEMO_HINT } from '../utils/memoLimit.js';
+import { MEMO_HINT, memoLengthError } from '../utils/memoLimit.js';
 import { listLabel } from '../utils/listLabel.js';
 import { listStatusText } from '../utils/listItemStatusText.js';
 import { readFailureMessage } from '../utils/readFailureMessage.js';
@@ -170,7 +170,7 @@ export function AirdropForm({ walletId, resumeId = null, onBack, initialChainId,
         /** @type {string | null} */ (null),
     );
 
-    const [token, setToken] = useState((initialTick || '').toUpperCase());
+    const [token, setToken] = useState(initialTick || '');
     // PC-26: airdrops carry no gated-key handoff; warn when the dropped
     // token has gated content.
     const gatedDropNotice = useGatedTickNotice({ messaging, chainId, tick: token });
@@ -643,7 +643,7 @@ export function AirdropForm({ walletId, resumeId = null, onBack, initialChainId,
     // cannot pay 16.6666 to each of three addresses).
     const dropInfo = useTokenInfo({
         chainId,
-        tick: token.trim().toUpperCase(),
+        tick: token.trim(),
         skip: !token.trim(),
     });
 
@@ -752,7 +752,7 @@ export function AirdropForm({ walletId, resumeId = null, onBack, initialChainId,
         /** @type {Record<string, string> } */
         const p = {
             VERSION: '0',
-            TICK: token.trim().toUpperCase(),
+            TICK: token.trim(),
             AMOUNT: String(amountPer).trim(),
             LIST_ACTION_INDEX: listActionIndex || '',
         };
@@ -971,7 +971,7 @@ export function AirdropForm({ walletId, resumeId = null, onBack, initialChainId,
         // projected total and the balance are known, so an explorer
         // hiccup leaves the form ungated.
         if (fundedDistribution && exceedsBalance(fundedDistribution, tickAmtBalance)) {
-            const TICK = token.trim().toUpperCase();
+            const TICK = token.trim();
             const lead = fundedCount === recipientPreview.count ? 'This pays' : 'Paying every listed address takes';
             setFormError(
                 `${lead} ~${formatWithThousands(fundedDistribution)} ${TICK} in total, more than the `
@@ -984,6 +984,8 @@ export function AirdropForm({ walletId, resumeId = null, onBack, initialChainId,
             setFormError('Memo cannot contain | or ; characters.');
             return;
         }
+        const memoError = memoLengthError(memo.trim());
+        if (memoError) { setFormError(memoError); return; }
         if (sourceMode === 'existing') {
             if (!listActionIndex) {
                 setFormError('Choose an existing list first.');
@@ -1116,7 +1118,7 @@ export function AirdropForm({ walletId, resumeId = null, onBack, initialChainId,
                                 walletId,
                                 chainId,
                                 fromAddress: fromAddress.address,
-                                token: token.trim().toUpperCase(),
+                                token: token.trim(),
                                 amountPer: String(amountPer).trim(),
                                 recipients: listItems,
                                 listTxid: '',
@@ -1146,7 +1148,7 @@ export function AirdropForm({ walletId, resumeId = null, onBack, initialChainId,
                 walletId,
                 chainId,
                 fromAddress: fromAddress.address,
-                token: token.trim().toUpperCase(),
+                token: token.trim(),
                 amountPer: String(amountPer).trim(),
                 recipients: listItems,
                 listTxid: txid,
@@ -1253,7 +1255,7 @@ export function AirdropForm({ walletId, resumeId = null, onBack, initialChainId,
                 walletId,
                 chainId,
                 fromAddress: fromAddress.address,
-                token: token.trim().toUpperCase(),
+                token: token.trim(),
                 amountPer: String(amountPer).trim(),
                 recipients: listItems,
                 listTxid: txid,
@@ -1550,13 +1552,13 @@ export function AirdropForm({ walletId, resumeId = null, onBack, initialChainId,
                             label={recipientPreview.volatile
                                 ? 'Estimated distribution at current count'
                                 : 'Total distribution'}
-                            value={`~${formatWithThousands(totalDistribution)} ${token.trim().toUpperCase()}`}
+                            value={`~${formatWithThousands(totalDistribution)} ${token.trim()}`}
                         />
                     ) : null}
                     {roundingRemainder !== null ? (
                         <DetailRow
                             label="Rounding remainder"
-                            value={`${formatWithThousands(roundingRemainder)} ${token.trim().toUpperCase()} stays at the source address`}
+                            value={`${formatWithThousands(roundingRemainder)} ${token.trim()} stays at the source address`}
                         />
                     ) : null}
                     <DetailRow
@@ -1666,7 +1668,7 @@ export function AirdropForm({ walletId, resumeId = null, onBack, initialChainId,
                             key={d.label}
                             label={d.label}
                             value={d.label === 'Per-recipient amount'
-                                ? `${d.value} ${token.trim().toUpperCase()}`
+                                ? `${d.value} ${token.trim()}`
                                 : d.value}
                         />
                     ))}
@@ -1686,14 +1688,14 @@ export function AirdropForm({ walletId, resumeId = null, onBack, initialChainId,
                         <>
                             <dt className={styles.detailsLabel}>Total distribution</dt>
                             <dd className={styles.detailsValue}>
-                                ~{formatWithThousands(totalDistribution)} {token.trim().toUpperCase()}
+                                ~{formatWithThousands(totalDistribution)} {token.trim()}
                             </dd>
                         </>
                     ) : null}
                     {roundingRemainder !== null ? (
                         <DetailRow
                             label="Rounding remainder"
-                            value={`${formatWithThousands(roundingRemainder)} ${token.trim().toUpperCase()} stays at the source address`}
+                            value={`${formatWithThousands(roundingRemainder)} ${token.trim()} stays at the source address`}
                         />
                     ) : null}
                     <DetailRow
@@ -1761,7 +1763,7 @@ export function AirdropForm({ walletId, resumeId = null, onBack, initialChainId,
                     Airdrops have a protocol fee that grows with the number of
                     recipients, and the network sets the exact amount when the
                     airdrop confirms. Make sure the source address holds enough
-                    {' '}{token.trim().toUpperCase() || 'of the token'} for the full
+                    {' '}{token.trim() || 'of the token'} for the full
                     distribution, plus enough to pay the protocol fee.
                 </p>
                 {/* Credentials live on the confirm page for leg 2 too. */}
@@ -1809,7 +1811,7 @@ export function AirdropForm({ walletId, resumeId = null, onBack, initialChainId,
                 walletId={walletId}
                 title="Select token"
                 onSelect={(sel) => {
-                    setToken(String(sel.tick || '').toUpperCase());
+                    setToken(String(sel.tick || ''));
                     // Picking a token on ANOTHER chain re-targets the whole
                     // form, so the source address has to be re-defaulted with
                     // it: the default effect below returns early once
@@ -1962,14 +1964,14 @@ export function AirdropForm({ walletId, resumeId = null, onBack, initialChainId,
                 onMax={maxPayable ? () => setAmountPer(maxPerRecipient) : undefined}
                 maxDisabled={!maxPayable}
                 balanceText={tickAmtBalance != null && (token)
-                    ? `${formatWithThousands(tickAmtBalance)} ${String(token).toUpperCase()} available${
+                    ? `${formatWithThousands(tickAmtBalance)} ${String(token)} available${
                         maxPayable ? ` · up to ${formatWithThousands(maxPerRecipient)} each` : ''}`
                     : null}
             />
             {roundingRemainder !== null ? (
                 <p className={styles.hint}>
                     Rounding remainder: {formatWithThousands(roundingRemainder)}
-                    {' '}{token.trim().toUpperCase()} stays at the source address because
+                    {' '}{token.trim()} stays at the source address because
                     the per-recipient amount is limited to {dropInfo?.divisibility ?? 8}
                     {' '}decimal place{(dropInfo?.divisibility ?? 8) === 1 ? '' : 's'}.
                 </p>
@@ -2030,7 +2032,7 @@ export function AirdropForm({ walletId, resumeId = null, onBack, initialChainId,
                                 ? ` · ${recipients.invalid.length} invalid skipped`
                                 : ''}
                             {totalDistribution !== null
-                                ? ` · total ~${formatWithThousands(totalDistribution)} ${token.trim().toUpperCase() || 'TOKEN'}`
+                                ? ` · total ~${formatWithThousands(totalDistribution)} ${token.trim() || 'TOKEN'}`
                                 : ''}
                         </p>
                     ) : null}

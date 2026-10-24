@@ -482,6 +482,19 @@ export function registerBridgeHandlers(host, opts = {}) {
         const site = await requireSite(deps.vault, req);
         assertChainPermitted(site, req.chainId);
         await assertAddressPermitted(deps, site, req.chainId, req.address);
+        // The prompt shows the message as text and the signer refuses anything
+        // else, so a non-string is refused before it can cost the user a
+        // password entry and a throttle token.
+        if (typeof req.message !== 'string') {
+            throw bridgeError('INVALID_PARAMS', 'message must be a string');
+        }
+        // The signer refuses hidden or confusable characters after the password
+        // is typed; refuse them here so the user is never asked first.
+        try {
+            flows.assertNoDeceptiveCharacters({ message: req.message }, 'signMessage');
+        } catch {
+            throw bridgeError('INVALID_PARAMS', 'message contains hidden or deceptive characters');
+        }
         assertNotThrottled(signThrottle, req);
 
         const settings = await deps.vault.settings.get().catch(() => null);

@@ -217,7 +217,7 @@ export {
     filterSuggestions,
 } from './recentDestinations.js';
 export { checkRecipientNovelty } from './recipientNovelty.js';
-export { classifySignRisk } from './signRiskClassifier.js';
+export { classifySignRisk, assertNoDeceptiveCharacters } from './signRiskClassifier.js';
 export {
     estimateNativeSendFee,
     estimateNativeSendFeeTiers,

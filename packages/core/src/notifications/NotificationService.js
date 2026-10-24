@@ -199,6 +199,9 @@ export class NotificationService {
 
         this._started = false;
         this._syncGeneration = 0;
+        // Bumped by every stop(): an event already past its first await when the
+        // wallet locks must not deliver a notification that names an amount.
+        this._stopEpoch = 0;
         /** @type {Map<string, { unsub: () => void, chainId: string }>} subKey -> entry */
         this._subs = new Map();
         /** @type {Map<string, import('../sdk/SDKRegistry.js').XChainSDKLike>} chainId -> connected sdk */
@@ -231,6 +234,7 @@ export class NotificationService {
     /** Tear everything down. */
     stop() {
         this._syncGeneration += 1;
+        this._stopEpoch += 1;
         for (const { unsub } of this._subs.values()) {
             try { unsub(); } catch (e) { this._log.warn('NotificationService: unsubscribe failed', e); }
         }
@@ -391,6 +395,7 @@ export class NotificationService {
      */
     async _handle(addr, msg) {
         if (!msg || !msg.type) return;
+        const epoch = this._stopEpoch;
 
         let settings = null;
         let settingsReadable = true;
@@ -400,6 +405,7 @@ export class NotificationService {
             this._log.error('NotificationService: getSettings failed', e);
             settingsReadable = false;
         }
+        if (epoch !== this._stopEpoch) return;
         if (settings?.activeNetwork && addr.network
             && settings.activeNetwork !== addr.network) return;
 
@@ -424,6 +430,7 @@ export class NotificationService {
         // below needs, so the pending-set lookup happens exactly once.
         let confirmedOwnSend = false;
         if (msg.type === 'NEW_ACTION') confirmedOwnSend = await this._recordConfirmedOwnSend(addr, msg);
+        if (epoch !== this._stopEpoch) return;
 
         // catch_up events are historical replays sent on (re)connect, not a
         // live occurrence, so never notify on them.
@@ -544,6 +551,7 @@ export class NotificationService {
             : data.action_index != null
                 ? String(data.action_index)
                 : String(msg.timestamp || this._now());
+        if (epoch !== this._stopEpoch) return;
         if (this._isDuplicate(`${plan.kind}:${addr.address}:${ident}`)) return;
 
         const transactionKey = TX_DEDUP_KINDS.has(plan.kind) && txHash ? `${addr.chainId}:${txHash}` : null;

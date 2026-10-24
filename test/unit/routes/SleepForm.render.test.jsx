@@ -32,7 +32,7 @@ describe('SleepForm rendering', () => {
             getSettings: vi.fn().mockResolvedValue({ walletMode: 'full' }),
             signerReady: vi.fn().mockResolvedValue({ ready: true }),
             getIndexerWatermark: vi.fn().mockResolvedValue({ watermark: 100 }),
-            getTokenInfo: vi.fn().mockResolvedValue({ tick: 'GATE', locks: {} }),
+            getTokenInfo: vi.fn().mockResolvedValue({ tick: 'gate', locks: {} }),
             sleepState: vi.fn().mockResolvedValue({ resumeBlock: -1 }),
         };
 
@@ -49,7 +49,7 @@ describe('SleepForm rendering', () => {
         );
 
         expect(await screen.findByRole('heading', { name: 'Pause token' })).toBeInTheDocument();
-        expect(await screen.findByText('GATE is currently PAUSED indefinitely.')).toBeInTheDocument();
+        expect(await screen.findByText('gate is currently PAUSED indefinitely.')).toBeInTheDocument();
 
         fireEvent.click(screen.getByRole('radio', { name: 'Resume now (unpause)' }));
 

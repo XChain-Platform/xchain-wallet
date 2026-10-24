@@ -306,6 +306,24 @@ describe('SweepForm form-level errors (D-58)', () => {
     });
 });
 
+describe('SweepForm destination spelling', () => {
+    it('treats the capitalised source address as the source itself', async () => {
+        const q = await mountSweep();
+        fireEvent.change(q.destination(), { target: { value: SOURCE.address.toUpperCase() } });
+        fireEvent.click(q.submit());
+        await waitFor(() => expect(q.alerts()).toMatch(/would move nothing anywhere/));
+    });
+
+    it('does not announce a capitalised copy of an own address as a third party', async () => {
+        const second = { ...SOURCE, id: 'addr-own-2', address: OTHER };
+        const q = await mountSweep({
+            addressesByChain: { [CHAIN]: [SOURCE, second] },
+        });
+        fireEvent.change(q.destination(), { target: { value: OTHER.toUpperCase() } });
+        await waitFor(() => expect(q.container.textContent).not.toContain('Not your address'));
+    });
+});
+
 describe('SweepForm gated key details', () => {
     it('lists every missing unlock key hash', async () => {
         const { container, missingHash } = await mountGatedSweep();

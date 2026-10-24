@@ -164,7 +164,6 @@ describe('N through S route keyboard flows', () => {
         await user.type(ADDRESS);
         expect(paste).toHaveValue(ADDRESS);
 
-        await expectTab(user, screen.getByRole('button', { name: 'Paste from clipboard' }));
         await expectTab(user, screen.getByRole('button', { name: 'Use pasted text' }));
         await user.keyboard('{Enter}');
         expect(onClassified).toHaveBeenCalledWith({

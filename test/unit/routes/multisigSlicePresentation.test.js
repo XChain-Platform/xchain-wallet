@@ -24,9 +24,9 @@ describe('multisig slice presentation safeguards', () => {
         const inbox = route('MessagingInbox.jsx');
 
         expect(compose).not.toMatch(/#ef5350|#f59e0b/i);
-        // The key-request warning and its failure use the shared field-note tones.
-        expect(compose).toMatch(/<FieldNote variant="warning" role="alert">\s*We don't know the recipient's public key/);
-        expect(compose).toContain('<FieldNote variant="error">{handshakeError}</FieldNote>');
+        // The key-request warning and its failure use the shared status tones.
+        expect(compose).toMatch(/<StatusMessage key="key-missing" variant="warning" role="alert">[\s\S]*?We don't know the recipient's public key/);
+        expect(compose).toContain('<StatusMessage key="key-request-error" variant="error">{handshakeError}</StatusMessage>');
         expect(parallel + parallelStyles).not.toContain("color: '#b00'");
         expect(parallelStyles).toContain('color: var(--xc-danger-fg);');
         expect(inbox).not.toContain("color: isOutgoing ? '#FFFFFF'");

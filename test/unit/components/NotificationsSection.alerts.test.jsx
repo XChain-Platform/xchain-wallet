@@ -195,6 +195,23 @@ describe('notification categories and permission', () => {
 });
 
 describe('price alert manager', () => {
+    it('groups only the whole-number part of a saved target', () => {
+        priceAlerts.alerts = [
+            alertRecord({ id: 'a1', chainId: 'dogecoin-mainnet', direction: 'below', targetFiat: 0.1234 }),
+            alertRecord({ id: 'a2', targetFiat: 70000.123456 }),
+            alertRecord({ id: 'a3', targetFiat: 1e21 }),
+            alertRecord({ id: 'a4', chainId: 'litecoin-mainnet', targetFiat: 1e-7 }),
+        ];
+        const { container } = render(<NotificationsSection walletId="wallet-1" />);
+
+        const text = container.textContent;
+        expect(text).toContain('Dogecoin falls below $0.1234');
+        expect(text).toContain('Bitcoin rises above $70,000.123456');
+        expect(text).toContain('$1,000,000,000,000,000,000,000');
+        expect(text).toContain('Litecoin rises above $0.0000001');
+    });
+
+
     it('keeps and labels an alert in its original currency after a display-currency switch', async () => {
         settings = { ...settings, fiatCurrency: 'EUR' };
         priceAlerts.alerts = [alertRecord({ fiatCurrency: 'usd' })];

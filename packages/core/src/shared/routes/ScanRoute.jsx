@@ -39,7 +39,6 @@ import { parseXchainUri, hardenUriIntentText, safeChainIdParam } from '../../uri
 import { neutralizeControlText } from '../utils/textHardening.js';
 import { isValidAddressAnyNetwork, isValidAddressForChain } from '../utils/addressValidation.js';
 import { t } from '../../i18n/index.js';
-import { ClipboardPasteButton } from '../../ui/ClipboardPasteButton.jsx';
 import { defaultRegistry } from '../../registry/index.js';
 
 const DEFAULT_CHAIN_REGISTRY = defaultRegistry();
@@ -334,15 +333,6 @@ export function ScanRoute({ onClassified, onBack, chainRegistry, embedded = fals
                     spellCheck={false}
                     autoComplete="off"
                     autoCorrect="off"
-                    actions={(
-                        <ClipboardPasteButton
-                            disabled={stopped}
-                            onPaste={(text) => { setPaste(text); setStatus(''); }}
-                            // Inside the box a clipboard failure has no room of its
-                            // own, so it becomes the screen's status line.
-                            onMessage={(message) => { if (message) setStatus(message); }}
-                        />
-                    )}
                 />
             </FormPage>
         </Screen>

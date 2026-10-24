@@ -189,15 +189,23 @@ describe('integration/flows/backup restore: which password opens the seed', () =
                     importedAt: '2026-01-01T00:00:00.000Z',
                 }],
             }],
-            accounts: [{ id: 'acc-src', walletId: 'src', schemaVersion: 1, label: 'Account 0', accountIndex: 0 }],
+            // Complete records: a restore validates every record before it opens the seed.
+            accounts: [{
+                id: 'acc-src', walletId: 'src', schemaVersion: 2, name: 'Account 0', index: 0,
+                activeAddressByChainId: {}, createdAt: '2026-01-01T00:00:00.000Z',
+            }],
             addresses: [
                 {
-                    id: 'addr-1', schemaVersion: 1, accountId: 'acc-src', address: 'bc1qexample',
-                    derivationPath: "m/84'/0'/0'/0/0", addressType: 'p2wpkh',
+                    id: 'addr-1', schemaVersion: 4, accountId: 'acc-src', chain: 'bitcoin', network: 'mainnet',
+                    address: 'bc1qexample', source: 'hd', derivationPath: "m/84'/0'/0'/0/0", addressType: 'p2wpkh',
+                    publicKey: 'ab'.repeat(33), label: '', pinned: false, hidden: false,
+                    signerId: null, role: 'receive', createdAt: '2026-01-01T00:00:00.000Z',
                 },
                 {
-                    id: 'addr-imp', schemaVersion: 1, accountId: null, address: 'bc1qimported',
-                    derivationPath: null, addressType: 'p2wpkh',
+                    id: 'addr-imp', schemaVersion: 4, accountId: null, chain: 'bitcoin', network: 'mainnet',
+                    address: 'bc1qimported', source: 'imported-wif', derivationPath: null, addressType: 'p2wpkh',
+                    publicKey: 'ab'.repeat(33), label: '', pinned: false, hidden: false,
+                    signerId: null, role: 'receive', createdAt: '2026-01-01T00:00:00.000Z',
                 },
             ],
         });

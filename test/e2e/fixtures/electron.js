@@ -38,11 +38,18 @@ export function guardedLaunchOptions(options = {}) {
         args: [
             ...(options.args ?? []),
             `--${GUARD_SWITCH}`,
+            // Chromium's mock keychain: a test launch never reads or prompts
+            // for the Keychain item of an installed wallet.
+            '--use-mock-keychain',
             ...(allow ? [`--${ALLOW_SWITCH}=${allow}`] : []),
         ],
         // electron.launch replaces the environment when `env` is given, so
         // start from this process's own.
-        env: { ...process.env, ...(options.env ?? {}), [GUARD_ENV]: '1' },
+        env: { ...process.env, ...(options.env ?? {}), [GUARD_ENV]: '1',
+            // Test launches never take focus or show in the Dock.
+            XCHAIN_TEST_NO_FOCUS: '1',
+            XCHAIN_TEST_MOCK_KEYCHAIN: '1',
+        },
     };
 }
 

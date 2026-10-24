@@ -47,7 +47,7 @@ import { clearActiveAccount, writeActiveAccount } from '@xchain-wallet/core/shar
 import { reconcileActiveAccount } from '@xchain-wallet/core/shared/utils/activeAccountScope.js';
 import { readActiveWallet, writeActiveWallet } from '@xchain-wallet/core/shared/utils/activeWalletMemory.js';
 import { takePostDemoIntent } from '@xchain-wallet/core/shared/utils/demoGraduation.js';
-import { createLaunchRouteState } from '@xchain-wallet/core/shared/utils/launchRouteState.js';
+import { createLaunchRouteState, shouldClearTransientState } from '@xchain-wallet/core/shared/utils/launchRouteState.js';
 import { historyScopeForAsset } from '@xchain-wallet/core/shared/utils/historyEntryScope.js';
 import { defaultDexAssetForNetwork, syncDexAssetToNetwork } from '@xchain-wallet/core/shared/chainSelection.js';
 import { lockImmediately } from '@xchain-wallet/core/shared/utils/lockAction.js';
@@ -66,6 +66,7 @@ import {
     cancelSendAssetSwitch,
 } from '@xchain-wallet/core/shared/utils/sendAssetSwitch.js';
 import { NOTIFICATION_EVENT } from './notifications/webNotifyAdapter.js';
+import { createNotificationToastGate } from './notifications/notificationToastGate.js';
 import { ReachabilityBanner } from '@xchain-wallet/core/shared/components/ReachabilityBanner.jsx';
 // §6 / D4. Renders nothing unless a shell installed a direct-update
 // provider, which only a sideloaded Android APK does; see flows/directUpdate.js.
@@ -88,7 +89,6 @@ import { BottomTabBar } from '@xchain-wallet/core/shared/components/BottomTabBar
 // so those route components are not in the bundle at all and every entry point
 // below goes with them: each one is wired only when DEX_SURFACE_ENABLED.
 import { DEX_SURFACE_ENABLED, renderDexRoute } from './surfaces/dex.jsx';
-import { buildActionEntries } from '@xchain-wallet/core/shared/actionEntries.js';
 import { buildWalletAlerts } from '@xchain-wallet/core/shared/walletAlerts.js';
 import { NoticeModal } from '@xchain-wallet/core/shared/components/NoticeModal.jsx';
 import { useFocusTrap } from '@xchain-wallet/core/shared/utils/focusTrap.js';
@@ -137,7 +137,18 @@ const SendPicker = lazyRoute(() => import('@xchain-wallet/core/shared/routes/Sen
 const Receive = lazyRoute(() => import('@xchain-wallet/core/shared/routes/Receive.jsx'), 'Receive');
 const ReceivePicker = lazyRoute(() => import('@xchain-wallet/core/shared/routes/ReceivePicker.jsx'), 'ReceivePicker');
 const ScanRoute = lazyRoute(() => import('@xchain-wallet/core/shared/routes/ScanRoute.jsx'), 'ScanRoute');
-const ActionsMenu = lazyRoute(() => import('@xchain-wallet/core/shared/routes/ActionsMenu.jsx'), 'ActionsMenu');
+// The Actions menu is the one screen that reads the action catalogue (every
+// action's label and description), so the two load together the first time the
+// menu opens. That is why `entries` is a function of the catalogue's builder.
+const loadActionsMenu = () => Promise.all([
+    import('@xchain-wallet/core/shared/routes/ActionsMenu.jsx'),
+    import('@xchain-wallet/core/shared/actionEntries.js'),
+]).then(([menu, catalogue]) => ({
+    default: function ActionsMenuWithCatalogue({ entries, ...props }) {
+        return <menu.ActionsMenu {...props} entries={entries(catalogue.buildActionEntries)} />;
+    },
+}));
+const ActionsMenu = lazy(loadActionsMenu);
 const MyTokens = lazyRoute(() => import('@xchain-wallet/core/shared/routes/MyTokens.jsx'), 'MyTokens');
 const ManageToken = lazyRoute(() => import('@xchain-wallet/core/shared/routes/ManageToken.jsx'), 'ManageToken');
 const IssueTokenForm = lazyRoute(() => import('@xchain-wallet/core/shared/routes/IssueTokenForm.jsx'), 'IssueTokenForm');
@@ -301,7 +312,7 @@ function AppInner() {
     // by <FullLayoutWithNav> from its measured container width; the variant
     // only decides the dev-preview frame and the messaging shell, both of
     // which are resolved in <App> above.
-    const { showToast } = useToast();
+    const { showToast, dismissToast } = useToast();
     // §34.1: settings carry the keyboard-shortcut overrides threaded into
     // the palette hook, the dispatcher, and the help modal below.
     const { settings } = useSettings();
@@ -663,6 +674,10 @@ function AppInner() {
     useEffect(() => {
         setMarketsAsset((current) => syncDexAssetToNetwork(current, settings?.activeNetwork));
     }, [settings?.activeNetwork]);
+    // Counts payment links that prefilled Send. It keys the Send route so a
+    // link arriving while Send is open replaces the form (the earlier one is
+    // kept as a draft) instead of being dropped silently.
+    const [sendLinkSeq, setSendLinkSeq] = useState(0);
     // §47 / Cluster L FOLLOWUP 1: deep-link prefill for Send. Populated
     // once on mount from `?uri=` in `location.search`; consumed by the
     // 'send' route below and cleared after the user submits or backs out.
@@ -806,7 +821,10 @@ function AppInner() {
                 launchRouteState.current.clear();
                 return;
             }
-            if (route.view === 'send') setSendPrefill(route.sendPrefill);
+            if (route.view === 'send') {
+                setSendPrefill(route.sendPrefill);
+                setSendLinkSeq((n) => n + 1);
+            }
             if (route.view === 'contract-execute') {
                 setContractRef(route.contractRef);
                 setExecutePrefill(route.executePrefill);
@@ -861,9 +879,14 @@ function AppInner() {
     // user re-enters their password (threat model §1, §2.1:
     // https://docs.xchain.io/components/wallet/threat-model).
 
+    const previousSessionStateRef = useRef(undefined);
     useEffect(() => {
+        const previousState = previousSessionStateRef.current;
+        previousSessionStateRef.current = status.state;
         if (status.state !== 'unlocked') {
-            clearTransientActionState();
+            // A link opened before unlock parks its prefill while the shell
+            // loads or sits locked; only leaving an unlocked session wipes it.
+            if (shouldClearTransientState(previousState, status.state)) clearTransientActionState();
             setActiveWalletId(null);
             setActiveAccountId(null);
             setWalletList([]);
@@ -901,17 +924,28 @@ function AppInner() {
     // adapter shows an OS notification instead, so we skip the toast then.
     useEffect(() => {
         if (status.state !== 'unlocked') return undefined;
+        const gate = createNotificationToastGate();
+        // Ids this effect put on screen: a lock must take them off again, since
+        // a notification toast names an amount and the lock screen shows none.
+        const shownIds = new Set();
+        let sequence = 0;
         const onNotify = (event) => {
             if (typeof document !== 'undefined' && document.visibilityState === 'hidden') return;
             const detail = (event && event.detail) || {};
             const message = detail.title && detail.body
                 ? `${detail.title}: ${detail.body}`
                 : (detail.title || detail.body || 'Notification');
-            showToast({ message, variant: 'default' });
+            const toast = gate(message);
+            const id = toast.id || `notification-${sequence += 1}`;
+            shownIds.add(id);
+            showToast({ id, message: toast.message, variant: 'default' });
         };
         window.addEventListener(NOTIFICATION_EVENT, onNotify);
-        return () => window.removeEventListener(NOTIFICATION_EVENT, onNotify);
-    }, [status.state, showToast]);
+        return () => {
+            window.removeEventListener(NOTIFICATION_EVENT, onNotify);
+            for (const id of shownIds) dismissToast(id);
+        };
+    }, [status.state, showToast, dismissToast]);
 
     // Mirror of popup App: load accounts for the active wallet and
     // auto-select the first (lowest-index) one. Reset on wallet switch.
@@ -1171,7 +1205,7 @@ function AppInner() {
             if (unlockedView === 'send' && activeWalletId) {
                 return (
                     <Send
-                        key={`${activeWalletId}:${activeAccountId || 'all'}`}
+                        key={`${activeWalletId}:${activeAccountId || 'all'}:${sendLinkSeq}`}
                         walletId={activeWalletId}
                         accountId={activeAccountId || undefined}
                         onViewHistory={(target) => {
@@ -2595,7 +2629,7 @@ function AppInner() {
             if (unlockedView === 'actions' && activeWalletId) {
                 return (
                     <ActionsMenu
-                        entries={buildActionEntries({
+                        entries={(buildActionEntries) => buildActionEntries({
                             onIssue: () => setUnlockedView('issue'),
                             onMint: () => setUnlockedView('mint'),
                             onDestroy: () => setUnlockedView('destroy'),
@@ -3177,6 +3211,7 @@ function AppInner() {
                                 sites={paletteSites}
                                 navigate={palette.navigate}
                                 parseCtx={paletteParseCtx}
+                                settings={settings}
                             />
                         </Suspense>
                     ) : null}

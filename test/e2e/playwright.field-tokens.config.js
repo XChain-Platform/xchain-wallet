@@ -23,8 +23,8 @@ export default defineConfig({
     reporter: 'list',
     use: { baseURL: BASE_URL, actionTimeout: 20_000, navigationTimeout: 60_000, trace: 'off', video: 'off', screenshot: 'off' },
     projects: [
-        { name: 'dark-1440', use: { browserName: 'chromium', viewport: { width: 1440, height: 900 }, colorScheme: 'dark' } },
-        { name: 'dark-360', use: { browserName: 'chromium', viewport: { width: 360, height: 800 }, colorScheme: 'dark', isMobile: true, hasTouch: true } },
+        { name: 'dark-1440', use: { browserName: 'chromium', channel: 'chromium', viewport: { width: 1440, height: 900 }, colorScheme: 'dark' } },
+        { name: 'dark-360', use: { browserName: 'chromium', channel: 'chromium', viewport: { width: 360, height: 800 }, colorScheme: 'dark', isMobile: true, hasTouch: true } },
     ],
     webServer: {
         command: `pnpm -C ../../packages/web dev --port ${PORT} --strictPort`,

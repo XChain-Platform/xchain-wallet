@@ -63,19 +63,25 @@
         gap: var(--xc-space-2);
     }
 
-    /* The tab row has the whole width here. The five labels take a little
-       under 12.25rem at any text size, so each tab's side padding gives
-       way, down to 1px, when the 12px default would push Activity behind a
-       sideways scroll: a 320px phone, or 130 and 150 percent text. Rows
-       with room keep the 12px padding unchanged. A WebView without
-       container queries keeps the 12px padding and the scrolling row. */
+    /* The tab row has the whole width here. The five labels take about
+       16.4em at the tab font size on the widest text rendering a platform
+       gives Inter (hinted, whole-pixel advances run several percent wider
+       than the unhinted measure), so each tab's side padding gives way, down
+       to 1px, when the 12px default would push Activity behind a sideways
+       scroll: a 320px phone, or 130 and 150 percent text. When even 1px of
+       padding cannot hold the labels, the tab font size gives way to what
+       the row can carry, so the tabs never scroll sideways. Rows with room
+       keep the 12px padding and the token font size unchanged. A WebView
+       without container queries keeps the 12px padding and the scrolling
+       row. */
     @supports (container-type: inline-size) and (width: 1cqw) {
         .tabsRow {
             container-type: inline-size;
         }
 
         .tabsRow [role='tab'] {
-            padding-inline: clamp(calc(var(--xc-space-1) / 4), calc((100cqw - 12.25rem) / 10), var(--xc-space-3));
+            font-size: min(var(--xc-text-sm), calc((100cqw - 10px) / 16.4));
+            padding-inline: clamp(calc(var(--xc-space-1) / 4), calc((100cqw - 16.4em) / 10), var(--xc-space-3));
         }
     }
 

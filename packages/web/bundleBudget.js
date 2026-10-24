@@ -11,7 +11,11 @@
 // The startup trim (first-paint modules off the core barrels, the palette,
 // help and variant badge and the header chain filter loaded on demand)
 // measured 765,361 bytes of JavaScript and 92,488 bytes of CSS, so both
-// ceilings are back at their long-standing values.
+// ceilings are back at their long-standing values. The English dictionary
+// has since grown from 66,604 to 191,859 source bytes as screen copy moved
+// into it; with the action catalogue loading beside the Actions menu and the
+// signed chain-registry sync after first paint, the entry measures 865,629
+// bytes of JavaScript.
 export const WEB_INITIAL_JS_SIZE_LIMIT = 900_000;
 export const WEB_INITIAL_CSS_SIZE_LIMIT = 100_000;
 

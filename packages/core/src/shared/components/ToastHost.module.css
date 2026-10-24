@@ -165,6 +165,14 @@
     flex: 1 1 auto;
     min-width: 0;
     word-break: break-word;
+    /* A toast is a glance, not a document: a hostile or runaway message stops at
+       six lines so the card stays on screen and its dismiss button stays
+       reachable. */
+    display: -webkit-box;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 6;
+    line-clamp: 6;
+    overflow: hidden;
 }
 
 /* The controls box passes taps through too; only the buttons inside it take

@@ -54,6 +54,7 @@ import styles from './IssueTokenForm.module.css';
 import { useNativeFee } from '../hooks/useNativeFee.js';
 import { useTokenInfo } from '../hooks/useTokenInfo.js';
 import { QueuedResultPanel } from '../components/QueuedResultPanel.jsx';
+import { memoLengthError } from '../utils/memoLimit.js';
 
 const chainRegistry = registryLib.defaultRegistry();
 
@@ -317,6 +318,8 @@ export function SwapForm({ walletId, onBack, initialChainId, initialGiveTick, in
         if (allowListIdx && !isPositiveActionIndex(allowListIdx)) return 'Allow-list ID must be a positive whole number.';
         if (blockListIdx && !isPositiveActionIndex(blockListIdx)) return 'Block-list ID must be a positive whole number.';
         if (memo.includes('|') || memo.includes(';')) return 'Memo cannot contain "|" or ";".';
+        const memoError = memoLengthError(memo.trim());
+        if (memoError) return memoError;
         return null;
     }, [giveTick, getTick, coinTicker, giveOwnership, giveAmount, getOwnership, getAmount,
         giveTokenInfo?.divisibility, getTokenInfo?.divisibility, giveBalance, getAddress,

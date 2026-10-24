@@ -958,8 +958,11 @@ export function Send({ walletId, accountId, onBack, prefill = null, onDone, onCh
             if (requestError) {
                 setPastedRecipient(null);
                 setPasteHint(null);
-                setToError(requestError);
-                setPasteWarning(null);
+                // A field error is recomputed from the (unchanged) address on the
+                // next blur and would erase this, so the refusal is a note that
+                // stays until the user types.
+                setToError(null);
+                setPasteWarning(requestError);
                 return;
             }
             const tickParam = parts.params?.tick;
@@ -987,9 +990,11 @@ export function Send({ walletId, accountId, onBack, prefill = null, onDone, onCh
                 } else if (!perRecipientToken) {
                     setExtraLegs((rows) => rows.map((row) => ({ ...row, amount: '' })));
                 }
-                setAssetSwitchNotice(chainChanged
+                // A link that carries its own amount keeps it, so a notice saying
+                // the amount was cleared would contradict the field.
+                setAssetSwitchNotice(parts.amount ? null : (chainChanged
                     ? 'Network changed. The amount and network fee were reset because they may not be valid on the new network.'
-                    : 'Token changed. The amount was cleared because the new token may use different decimal places.');
+                    : 'Token changed. The amount was cleared because the new token may use different decimal places.'));
             }
             if (nextTick !== tick) {
                 // Pasted text is the same untrusted-URI class as
@@ -1002,6 +1007,7 @@ export function Send({ walletId, accountId, onBack, prefill = null, onDone, onCh
             const safeMessage = memoParam ? neutralizeControlText(memoParam) : '';
             setRequestMessage(safeMessage);
             if (safeMessage) setMemo(safeMessage);
+            else if (memo === requestMessage) setMemo('');
             if (chainChanged) {
                 setChainId(requestChainId);
             }
@@ -1037,13 +1043,16 @@ export function Send({ walletId, accountId, onBack, prefill = null, onDone, onCh
                 } else if (!perRecipientToken) {
                     setExtraLegs((rows) => rows.map((row) => ({ ...row, amount: '' })));
                 }
-                setAssetSwitchNotice(chainChanged
+                // A link that carries its own amount keeps it, so a notice saying
+                // the amount was cleared would contradict the field.
+                setAssetSwitchNotice(intent.amount ? null : (chainChanged
                     ? 'Network changed. The amount and network fee were reset because they may not be valid on the new network.'
-                    : 'Token changed. The amount was cleared because the new token may use different decimal places.');
+                    : 'Token changed. The amount was cleared because the new token may use different decimal places.'));
             }
             const safeMessage = intent.message ?? intent.label ?? intent.memo ?? '';
             setRequestMessage(safeMessage);
             if (intent.memo) setMemo(intent.memo);
+            else if (memo === requestMessage) setMemo('');
             if (intent.chainId && intent.chainId !== chainId) {
                 setChainId(intent.chainId);
             }
@@ -1072,7 +1081,7 @@ export function Send({ walletId, accountId, onBack, prefill = null, onDone, onCh
                 if (!res.ok) setPasteWarning(res.reason || 'The clipboard changed after you pasted. Check the address before sending.');
             })
             .catch(() => { /* silent */ });
-    }, [addressesByChain, chainId, perRecipientToken, tick, cancelMax]);
+    }, [addressesByChain, chainId, perRecipientToken, tick, cancelMax, memo, requestMessage]);
 
     // §21.4 test-send protection. Session-scoped acknowledgement set;
     // marking an address tested suppresses the gate for the rest of
@@ -1744,9 +1753,11 @@ export function Send({ walletId, accountId, onBack, prefill = null, onDone, onCh
                 if (cancelled) return;
                 const entries = byChain?.[chainId];
                 const addressCount = (addressesByChain[chainId] || []).length;
-                // An incomplete or failed aggregate cannot prove the chain is empty.
+                // An incomplete or failed aggregate, or one whose coin balance could not be
+                // read, cannot prove the chain is empty.
                 if (!Array.isArray(entries) || entries.length < addressCount
-                    || entries.some((entry) => entry?.error || !entry?.balances)) {
+                    || entries.some((entry) => entry?.error || !entry?.balances
+                        || (Array.isArray(entry.balances.unavailable) && entry.balances.unavailable.includes('native')))) {
                     setChainBalanceState({ chainId, status: 'unknown' });
                     return;
                 }
@@ -2065,7 +2076,7 @@ export function Send({ walletId, accountId, onBack, prefill = null, onDone, onCh
         };
     }, [previewBalances.sdkShape, tick]);
 
-    const amountBalanceError = useMemo(() => {
+    const firstAmountBalanceError = useMemo(() => {
         if (!sourceBalance || balancesUnchecked || balancesHidden) return null;
         const divisibility = sourceBalance.divisibility
             ?? (isNativeSend ? nativeDecimalsFor(descriptor) : null);
@@ -2080,6 +2091,26 @@ export function Send({ walletId, accountId, onBack, prefill = null, onDone, onCh
         }
         return 'Amount exceeds the available balance.';
     }, [amount, balancesHidden, balancesUnchecked, descriptor, isNativeSend, sourceBalance]);
+
+    // A multi-recipient send spends the SUM of its legs, and each leg can sit
+    // under the balance while the total does not (500 + 500.00000001 against
+    // 1,000). The first-row check above only sees its own amount, so the form
+    // composed, previewed and offered to sign an action the chain rejects after
+    // the network fee is spent. Totals are exact decimal sums per token.
+    const legTotalsBalanceError = useMemo(() => {
+        if (!isMultiSend || nativeMultiSendBlock || balancesUnchecked || balancesHidden) return null;
+        if (!previewBalances.sdkShape) return null;
+        const held = decoderLib.balancesFromSdk(previewBalances.sdkShape);
+        for (const total of sendTotals) {
+            const balance = held.find((entry) => entry.tick === total.tick);
+            if (!balance) continue;
+            if (compareDecimalStrings(total.amount, String(balance.amount ?? '0').trim()) === 1) {
+                return `The total ${total.tick} across all recipients exceeds the available balance.`;
+            }
+        }
+        return null;
+    }, [isMultiSend, nativeMultiSendBlock, balancesUnchecked, balancesHidden, previewBalances.sdkShape, sendTotals]);
+    const amountBalanceError = firstAmountBalanceError || legTotalsBalanceError;
 
     const unusualSendWarnings = useMemo(() => {
         const exactFeeSats = confirmAction.composed?.networkFeeSats;

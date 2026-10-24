@@ -128,7 +128,10 @@ async function expectBackAtStartWithMirroredChevrons(page, label) {
     const back = page.locator('button:has(svg[data-xc-directional]):visible').first();
     await expect(back, `${label}: the route has no visible back control`).toBeVisible();
 
-    const geometry = await back.evaluate((button) => {
+    // A lazy route paints its loading skeleton first, and the first visible
+    // directional button can belong to the screen being left. Poll until the
+    // route's own header owns the first one.
+    const readGeometry = () => back.evaluate((button) => {
         const buttonBox = button.getBoundingClientRect();
         const headerBox = button.parentElement.getBoundingClientRect();
         return {
@@ -136,11 +139,13 @@ async function expectBackAtStartWithMirroredChevrons(page, label) {
             startGap: Math.round(headerBox.right - buttonBox.right),
         };
     });
+    await expect
+        .poll(async () => Math.abs((await readGeometry()).startGap), {
+            message: `${label}: the back control is not at the RTL start edge`,
+        })
+        .toBeLessThanOrEqual(1);
+    const geometry = await readGeometry();
     expect(geometry.direction, `${label}: the route header is not RTL`).toBe('rtl');
-    expect(
-        Math.abs(geometry.startGap),
-        `${label}: the back control is ${geometry.startGap}px from the RTL start edge`,
-    ).toBeLessThanOrEqual(1);
 
     const chevrons = page.locator('svg[data-xc-directional]:visible');
     const transforms = await chevrons.evaluateAll((icons) => icons.map((icon) => {

@@ -34,3 +34,12 @@ describe('PanicModeRow style-guide actions', () => {
         expect(warn).not.toHaveBeenCalled();
     });
 });
+
+describe('PanicModeRow confirmation layout', () => {
+    it('gives the confirmation text a basis so the actions wrap under it on a narrow screen', () => {
+        render(<PanicModeRow />);
+        fireEvent.click(screen.getByRole('button', { name: 'Activate' }));
+        const text = screen.getByText('Confirm panic mode').parentElement;
+        expect(text.style.flex).toBe('1 1 12rem');
+    });
+});

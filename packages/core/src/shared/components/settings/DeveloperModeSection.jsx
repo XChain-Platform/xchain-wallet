@@ -55,7 +55,6 @@ import {
     Select,
     Textarea,
 } from '@xchain-wallet/core/ui';
-import { ClipboardPasteButton } from '../../../ui/ClipboardPasteButton.jsx';
 import { useMessaging } from '../../useMessaging.js';
 import { useSettings } from '../../hooks/useSettings.js';
 import { LogConsole } from '../LogConsole.jsx';
@@ -767,11 +766,6 @@ function CustomChainsRow({ developerMode }) {
                         spellCheck={false}
                         disabled={busy}
                         className={styles.descriptor}
-                    />
-                    <ClipboardPasteButton
-                        onPaste={setPasted}
-                        disabled={busy}
-                        label={t('settings.developer.pasteCustomChainDescriptor')}
                     />
                     <div className={styles.actions}>
                         <Button type="submit" size="sm" icon={null} disabled={busy || pasted.length === 0}>

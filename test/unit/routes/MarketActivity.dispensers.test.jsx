@@ -229,3 +229,25 @@ describe('Marketplace network scope', () => {
         expect(marks.every((src) => /regtest/.test(src))).toBe(true);
     });
 });
+
+describe('Marketplace on unreadable rows', () => {
+    it('keeps listing the readable rows when a feed carries a null row or a numeric ticker', async () => {
+        const once = (rows) => {
+            let answered = false;
+            return vi.fn().mockImplementation(() => {
+                if (answered) return Promise.resolve({ data: [] });
+                answered = true;
+                return Promise.resolve({ data: rows });
+            });
+        };
+        const order = { action_index: '40', status: 'valid', give_tick: 'XCHAIN', get_tick: 'BTC', give_amount: '3', get_amount: '4' };
+        const swap = { ...order, action_index: '41', current_status: 'complete' };
+        renderMarket({
+            getOrdersForToken: once([null, { ...order, action_index: '42', give_tick: 12345, get_tick: { x: 1 } }, order]),
+            getSwapsForToken: once([swap, null]),
+        });
+        expect(await screen.findByText('Sell 3 XCHAIN for 4 BTC')).toBeInTheDocument();
+        expect(screen.getByText('Sold 3 XCHAIN for 4 BTC')).toBeInTheDocument();
+        expect(screen.getByRole('heading', { name: 'Marketplace' })).toBeInTheDocument();
+    });
+});

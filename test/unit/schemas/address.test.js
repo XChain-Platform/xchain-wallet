@@ -15,6 +15,8 @@ import {
     createAddress,
     validateAddress,
     CURRENT_VERSION,
+    defaultAddressLabel,
+    normalizeAddressLabel,
 } from '../../../packages/core/src/schemas/address.js';
 
 const BASE_INPUT = {
@@ -236,5 +238,26 @@ describe('validateAddress', () => {
         const a = createAddress(BASE_INPUT);
         const r = validateAddress({ ...a, label: 42 });
         expect(r.ok).toBe(false);
+    });
+
+    describe('normalizeAddressLabel', () => {
+        const record = createAddress(BASE_INPUT);
+
+        it('trims a typed label', () => {
+            expect(normalizeAddressLabel('  Rent  ', record)).toBe('Rent');
+        });
+
+        it.each(['', '   ', '\u200B', '\u2800', ' \u202E\u202C '])(
+            'falls back to the generated label for %j',
+            (typed) => {
+                expect(normalizeAddressLabel(typed, record)).toBe(defaultAddressLabel(record));
+            },
+        );
+
+        it('refuses a label over 64 characters and keeps one of exactly 64', () => {
+            expect(normalizeAddressLabel('x'.repeat(64), record)).toBe('x'.repeat(64));
+            expect(() => normalizeAddressLabel('x'.repeat(65), record))
+                .toThrow('Address labels must be 64 characters or fewer.');
+        });
     });
 });

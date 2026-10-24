@@ -120,7 +120,7 @@ export function MintForm({ walletId, onBack, initialChainId, initialTick, initia
     });
 
 
-    const [ticker, setTicker] = useState((initialTick || '').toUpperCase());
+    const [ticker, setTicker] = useState(initialTick || '');
 
     // What a MINT can carry is the token's remaining headroom -
     // min(MAX_MINT, MAX_SUPPLY - current supply) - never the minter's
@@ -270,7 +270,7 @@ export function MintForm({ walletId, onBack, initialChainId, initialTick, initia
         /** @type {Record<string, string>} */
         const p = {
             VERSION: '0',
-            TICK: ticker.trim().toUpperCase(),
+            TICK: ticker.trim(),
             AMOUNT: String(amount).trim(),
         };
         if (destination.trim()) p.DESTINATION = destination.trim();
@@ -417,7 +417,7 @@ export function MintForm({ walletId, onBack, initialChainId, initialTick, initia
             return;
         }
         if (exceedsHeadroom(amt, headroom)) {
-            const TICK = ticker.trim().toUpperCase();
+            const TICK = ticker.trim();
             setFormError(Number(headroom) > 0
                 ? `Only ${formatWithThousands(headroom)} ${TICK} can still be minted.`
                 : `${TICK} is at its supply cap - no more can be minted.`);
@@ -673,7 +673,7 @@ export function MintForm({ walletId, onBack, initialChainId, initialTick, initia
                 walletId={walletId}
                 title="Select token"
                 onSelect={(sel) => {
-                    setTicker(String(sel.tick || '').toUpperCase());
+                    setTicker(String(sel.tick || ''));
                     if (!lockedToken && sel.chainId) setChainId(sel.chainId);
                     setTokenPickerOpen(false);
                 }}
@@ -788,7 +788,7 @@ export function MintForm({ walletId, onBack, initialChainId, initialTick, initia
                 // the same screen, so the window's own sentence replaces it
                 // rather than sitting beside it.
                 balanceText={blockedNotice || (headroom !== null && ticker
-                    ? `${formatWithThousands(headroom)} ${String(ticker).toUpperCase()} available to mint`
+                    ? `${formatWithThousands(headroom)} ${String(ticker)} available to mint`
                         + (addressCap
                             ? `, ${formatWithThousands(addressCap)} per address in total`
                             : '')

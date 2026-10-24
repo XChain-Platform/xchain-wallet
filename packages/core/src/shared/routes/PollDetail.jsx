@@ -48,7 +48,12 @@ import { userFacingMessage } from '../utils/userFacingMessage.js';
 import { memoLengthError, MEMO_HINT } from '../utils/memoLimit.js';
 import { useTickBalance } from '../hooks/useTickBalance.js';
 import { compareDecimalStrings } from '../utils/amountFormat.js';
-import { latestBallotRows, pollResultPercentages } from './pollDisplay.js';
+import {
+    latestBallotRows,
+    pollResultPercentages,
+    pollRowForDisplay,
+    samePollIndex,
+} from './pollDisplay.js';
 
 const chainRegistry = registryLib.defaultRegistry();
 
@@ -155,9 +160,12 @@ export function PollDetail({ walletId, chainId, pollIndex, onBack }) {
                         : Promise.resolve(null),
                 ]);
                 if (cancelled) return;
-                const loadedPoll = extractPoll(p);
-                if (!loadedPoll) {
-                    if (firstLoad) setLoadError('Poll not found.');
+                const loadedPoll = pollRowForDisplay(extractPoll(p));
+                if (!loadedPoll || !samePollIndex(loadedPoll.action_index, pollIndex)) {
+                    setPoll(null);
+                    setResults(null);
+                    setCurrentHeight(null);
+                    setLoadError('Poll not found.');
                     return;
                 }
                 const height = heightResponse?.watermark == null || heightResponse.watermark === ''
@@ -175,7 +183,11 @@ export function PollDetail({ walletId, chainId, pollIndex, onBack }) {
                 const closeReached = Number.isFinite(endBlock) && usableHeight !== null && usableHeight > endBlock;
                 if (terminal || closeReached) {
                     const r = await messaging.governancePollResults({ chainId, pollIndex }).catch(() => null);
-                    if (!cancelled) setResults(extractRows(r));
+                    if (!cancelled) {
+                        setResults(extractRows(r).filter((row) => (
+                            row && typeof row === 'object' && !Array.isArray(row)
+                        )));
+                    }
                 } else {
                     setResults(null);
                 }

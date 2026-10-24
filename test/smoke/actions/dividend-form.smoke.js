@@ -140,7 +140,7 @@ assert.ok(
 // --- 7. Params composer -----------------------------------------------
 
 assert.ok(/VERSION:\s*['"]0['"]/.test(src), 'DividendForm pins VERSION=0');
-assert.ok(/\.toUpperCase\(\)/.test(src), 'DividendForm uppercases tickers');
+assert.ok(/TICK:\s*tick\.trim\(\),/.test(src) && /DIVIDEND_TICK:\s*dividendTick\.trim\(\),/.test(src), 'DividendForm keeps ticker case');
 assert.ok(
     /if \(memo\.trim\(\)\) p\.MEMO\s*=/.test(src),
     'DividendForm only sets MEMO when non-empty',

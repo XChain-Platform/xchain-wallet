@@ -347,3 +347,33 @@ describe('confirmed PendingTx retention', () => {
         expect(vault.store.size).toBe(0);
     });
 });
+
+describe('livePendingTxs and a confirmed fee bump', () => {
+    it('drops the replaced original once its replacement is confirmed', async () => {
+        const vault = vaultOf([
+            record({ id: 'orig', txid: 'aa', status: 'rbf-replaced', rbfReplacement: 'bb' }),
+            record({ id: 'bump', txid: 'bb', status: 'indexed', confirmedAt: '2026-08-27T01:00:00.000Z' }),
+            record({ id: 'live', txid: 'cc' }),
+        ]);
+        const rows = await livePendingTxs({ vault, chainRegistry: registry, chainId: CHAIN_ID });
+        expect(rows.map((r) => r.id)).toEqual(['live']);
+    });
+
+    it('drops every original in a chain of bumps', async () => {
+        const vault = vaultOf([
+            record({ id: 'o', txid: 'aa', status: 'rbf-replaced', rbfReplacement: 'bb' }),
+            record({ id: 'b1', txid: 'bb', status: 'rbf-replaced', rbfReplacement: 'cc' }),
+            record({ id: 'b2', txid: 'CC', status: 'indexed' }),
+        ]);
+        expect(await livePendingTxs({ vault, chainRegistry: registry, chainId: CHAIN_ID })).toEqual([]);
+    });
+
+    it('keeps the replaced original while its replacement is still in flight', async () => {
+        const vault = vaultOf([
+            record({ id: 'orig', txid: 'aa', status: 'rbf-replaced', rbfReplacement: 'bb' }),
+            record({ id: 'bump', txid: 'bb' }),
+        ]);
+        const rows = await livePendingTxs({ vault, chainRegistry: registry, chainId: CHAIN_ID });
+        expect(rows.map((r) => r.id).sort()).toEqual(['bump', 'orig']);
+    });
+});

@@ -44,7 +44,7 @@
 // any other module evaluates (see networkGuardBoot.js). Off unless a test
 // harness sets XCHAIN_TEST_NETWORK_GUARD or --xchain-test-network-guard.
 import { networkGuard, runNetworkGuardProbeAndExit } from './networkGuardBoot.js';
-import { app, BrowserWindow, Menu, ipcMain, powerMonitor, safeStorage, screen, session, shell, Notification, Tray } from 'electron';
+import { app, BrowserWindow, dialog, Menu, ipcMain, powerMonitor, safeStorage, screen, session, shell, Notification, Tray } from 'electron';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -70,6 +70,7 @@ import {
     shouldBlockNavigation,
     isTrustedSenderEvent,
     isTrezorConnectBridgeWindowOpen,
+    shouldIgnoreBeforeUnload,
 } from './security.js';
 import { attachHidPermissions, attachHidDenial, observeHidFrames } from './permissions.js';
 import {
@@ -89,6 +90,13 @@ import {
 } from './errorBoundary.js';
 import { stateChangeForMessage } from './multiWindowState.js';
 import { createQuitDeferral, isQuitDeferringMessage } from './quitGuard.js';
+import {
+    applyTestMockKeychain,
+    applyTestNoFocusPolicy,
+    focusWindow,
+    noFocusEnabled,
+    showWindow,
+} from './testFocus.js';
 import {
     FileWindowBoundsStore,
     MIN_WINDOW_BOUNDS,
@@ -313,6 +321,28 @@ function hardenWebContents(contents) {
             }
         }
     });
+    // A form with unsent input registers a beforeunload handler. Without this
+    // listener Electron blocks the reload, the window close and the app quit
+    // it guards without a word, so quitting hangs behind an open form.
+    contents.on('will-prevent-unload', (event) => {
+        let ignore = false;
+        runMainCallback(() => {
+            ignore = shouldIgnoreBeforeUnload({
+                quitting: isQuitting,
+                testMode: noFocusEnabled(),
+                confirmLeave: () => dialog.showMessageBoxSync(BrowserWindow.fromWebContents(contents) ?? undefined, {
+                    type: 'question',
+                    buttons: ['Stay', 'Leave'],
+                    defaultId: 0,
+                    cancelId: 0,
+                    title: 'Leave this page?',
+                    message: 'Leave this page?',
+                    detail: 'Changes you made may not be saved.',
+                }) === 1,
+            });
+        }, 'unload guard');
+        if (ignore) event.preventDefault();
+    });
     contents.on('will-attach-webview', (event) => {
         // The wallet never embeds a <webview>; refuse any attempt.
         event.preventDefault();
@@ -359,8 +389,8 @@ function windowToReveal() {
 export function revealWindow(win) {
     if (!win || win.isDestroyed()) return false;
     if (win.isMinimized()) win.restore();
-    if (!win.isVisible()) win.show();
-    win.focus();
+    if (!win.isVisible()) showWindow(win);
+    focusWindow(win);
     return true;
 }
 
@@ -612,10 +642,10 @@ export function createWindow(opts = {}) {
     void runMainTask(
         () => win.loadFile(join(APP_ROOT, 'index.html'), loadOpts),
         'renderer load',
-        { recover: () => { if (!win.isDestroyed() && !closingWindows.has(win)) win.show(); } },
+        { recover: () => { if (!win.isDestroyed() && !closingWindows.has(win)) showWindow(win); } },
     );
     win.once('ready-to-show', () => {
-        runMainCallback(() => { if (!win.isDestroyed() && !closingWindows.has(win)) win.show(); }, 'renderer reveal');
+        runMainCallback(() => { if (!win.isDestroyed() && !closingWindows.has(win)) showWindow(win); }, 'renderer reveal');
     });
     win.on('move', () => { runMainCallback(() => rememberWindowBounds(win), 'window move'); });
     win.on('resize', () => { runMainCallback(() => rememberWindowBounds(win), 'window resize'); });
@@ -984,6 +1014,9 @@ function buildApplicationMenu() {
 // no preload-bearing frame can be navigated to, or spawn a window loading,
 // remote content. Registered before whenReady so the very first window is
 // covered.
+// Test launches only: Chromium's mock keychain, set before app ready.
+applyTestMockKeychain(app);
+
 app.on('web-contents-created', (_event, contents) => {
     runMainCallback(() => hardenWebContents(contents), 'web contents hardening');
 });
@@ -1014,6 +1047,7 @@ function ensureRendererCspHeaders() {
 
 void runMainTask(async () => {
     await app.whenReady();
+    applyTestNoFocusPolicy(app);
     // Before anything in main can fetch or open a window.
     networkGuard.attachSession(session.defaultSession, 'default session');
     if (networkGuard.probe) {

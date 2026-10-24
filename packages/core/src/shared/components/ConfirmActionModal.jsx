@@ -123,7 +123,7 @@ function reviewDetailLabel(label) {
     return value.replace(/^Recipient(?=\s|$)/, 'To');
 }
 
-function reviewActionLabel(decoded, fallback, chainLabel) {
+export function reviewActionLabel(decoded, fallback, chainLabel) {
     const summary = String(decoded?.summary || '').trim();
     if (!summary) return fallback;
 
@@ -159,7 +159,14 @@ function reviewActionLabel(decoded, fallback, chainLabel) {
         .split(/:\s|\s+to\s+/i)[0]
         .replace(/\s+\([^)]*\)\s*$/, '')
         .trim();
-    return actionPhrase.split(/\s+/).slice(0, 3).join(' ') || fallback;
+    const words = actionPhrase.split(/\s+/);
+    // A list of categories ("Sweep balances, ownerships, open orders, open
+    // dispensers") cut at three words reads "Sweep balances, ownerships," or
+    // "Sweep balances, open": a trailing comma, and a button that hides the
+    // orders and dispensers the sweep closes. The verb alone is accurate; the
+    // summary line above the details lists everything.
+    if (words.length > 3 && actionPhrase.includes(',')) return words[0] || fallback;
+    return words.slice(0, 3).join(' ') || fallback;
 }
 
 /**

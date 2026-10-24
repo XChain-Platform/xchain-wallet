@@ -417,6 +417,11 @@ function parseQuery(queryPart) {
             continue;
         }
         try { key = decodeURIComponent(key); } catch { /* keep raw */ }
+        // BIP21 names are case-insensitive for the req- marker and the three
+        // standard fields, as in bip21.js.
+        if (key.toLowerCase().startsWith('req-') || ['amount', 'label', 'message'].includes(key.toLowerCase())) {
+            key = key.toLowerCase();
+        }
         if (key.startsWith('req-')) {
             // Store under the FULL `req-<name>` key (like bip21.js), never the
             // bare name: a req- value must not be silently applied as if it
@@ -426,6 +431,7 @@ function parseQuery(queryPart) {
             params[key] = value;
         } else {
             try {
+                if (Object.hasOwn(params, key)) throw new Error(`${key} appears more than once`);
                 // Preserve custom xchain: amount text because action paths
                 // validate it before review and valid links must not be rewritten.
                 if (key === 'amount' && value.length <= URI_PARAMETER_LIMITS.amount) {

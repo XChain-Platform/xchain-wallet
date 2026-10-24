@@ -43,6 +43,15 @@ describe('neutralizeControlText', () => {
         expect(neutralizeControlText(`${BOM}Yes`)).toBe('Yes');
     });
 
+    it('shows blank glyphs as the placeholder and drops hidden marks', () => {
+        const out = neutralizeControlText('Sign in\u2800\u2800\u3164 now\u{E0041}\uFE01');
+        expect(out).toBe('Sign in' + BIDI_PLACEHOLDER.repeat(3) + ' now');
+    });
+
+    it('keeps the emoji presentation selector', () => {
+        expect(neutralizeControlText('ok \u2764\uFE0F')).toBe('ok \u2764\uFE0F');
+    });
+
     it('turns a NUL and other C0 controls into a space, then collapses it', () => {
         expect(neutralizeControlText(`TICK${NUL}X`)).toBe('TICK X');
         expect(neutralizeControlText('Yes\r\nplease')).toBe('Yes please');

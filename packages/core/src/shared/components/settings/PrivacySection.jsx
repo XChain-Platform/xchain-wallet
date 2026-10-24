@@ -191,11 +191,16 @@ function PrivacySaveError({ visible }) {
 function ClipboardAutoClearRow({ settings, update }) {
     const [saveError, setSaveError] = useState(false);
     const [inputError, setInputError] = useState(false);
+    // What the user has typed while the field has focus. A controlled value
+    // alone refuses every keystroke that is not a valid number yet (an empty
+    // field, a lone minus), so the field could never be cleared and retyped.
+    const [typed, setTyped] = useState(/** @type {string | null} */ (null));
     const stored = settings?.privacy?.clipboardAutoClearSeconds;
     const current = Number.isInteger(stored) ? stored : CLIPBOARD_AUTO_CLEAR_DEFAULT;
     const onChange = async (event) => {
         const raw = event.target.value.trim();
         const next = Number(raw);
+        setTyped(event.target.value);
         if (raw === ''
             || !Number.isInteger(next)
             || next < CLIPBOARD_AUTO_CLEAR_MIN
@@ -231,8 +236,9 @@ function ClipboardAutoClearRow({ settings, update }) {
                 min={CLIPBOARD_AUTO_CLEAR_MIN}
                 max={CLIPBOARD_AUTO_CLEAR_MAX}
                 step="1"
-                value={current}
+                value={typed ?? current}
                 onChange={onChange}
+                onBlur={() => { setTyped(null); setInputError(false); }}
                 onWheel={blurNumberInputOnWheel}
                 aria-label={t('settings.privacy.clipboardAutoClearSeconds')}
                 style={{ ...INPUT, width: '6rem' }}

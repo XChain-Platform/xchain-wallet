@@ -8,17 +8,13 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-import { forwardRef, useCallback, useId, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { forwardRef, useCallback, useId, useMemo, useRef, useState } from 'react';
 import { Input } from './Input.jsx';
-import { ClipboardPasteButton } from './ClipboardPasteButton.jsx';
-import { inspectClipboardPaste, syncPasteWidth } from './inFieldPaste.js';
 import { UsersIcon, ScanIcon } from './icons/index.jsx';
 import { AddressText } from './AddressText.jsx';
 import { filterSuggestions } from '../flows/recentDestinations.js';
 import styles from './AddressCombobox.module.css';
 import { t } from '../i18n/index.js';
-
-export { syncPasteWidth };
 
 const ICONS = {
     contacts: { Component: UsersIcon, defaultLabel: 'Open address book' },
@@ -92,20 +88,7 @@ export const AddressCombobox = /* @__PURE__ */ forwardRef(function AddressCombob
     const listboxId = useId();
     const [open, setOpen] = useState(false);
     const [activeIndex, setActiveIndex] = useState(-1);
-    const [pasteError, setPasteError] = useState('');
     const containerRef = useRef(/** @type {HTMLDivElement | null} */ (null));
-    const inputRef = useRef(/** @type {HTMLInputElement | null} */ (null));
-    const pasteSlotRef = useRef(/** @type {HTMLSpanElement | null} */ (null));
-
-    useLayoutEffect(() => {
-        const wrap = containerRef.current;
-        const paste = pasteSlotRef.current?.querySelector('button') ?? null;
-        syncPasteWidth(wrap, paste);
-        if (!paste || typeof ResizeObserver !== 'function') return undefined;
-        const observer = new ResizeObserver(() => syncPasteWidth(wrap, paste));
-        observer.observe(paste);
-        return () => observer.disconnect();
-    }, []);
 
     const filtered = useMemo(
         () => filterSuggestions(suggestions, value),
@@ -170,11 +153,7 @@ export const AddressCombobox = /* @__PURE__ */ forwardRef(function AddressCombob
     return (
         <div className={wrapClass} ref={containerRef} onBlur={onBlur}>
             <Input
-                ref={(node) => {
-                    inputRef.current = node;
-                    if (typeof ref === 'function') ref(node);
-                    else if (ref) ref.current = node;
-                }}
+                ref={ref}
                 role="combobox"
                 aria-expanded={showDropdown ? 'true' : 'false'}
                 aria-controls={listboxId}
@@ -186,16 +165,12 @@ export const AddressCombobox = /* @__PURE__ */ forwardRef(function AddressCombob
                 disabled={disabled}
                 dir="ltr"
                 autoComplete="off"
-                style={{
-                    // Room for Paste, and for the icon action beside it.
-                    '--address-end-room': IconComponent
-                        ? 'calc(var(--address-paste-width) + var(--address-control-height))'
-                        : 'var(--address-paste-width)',
+                style={IconComponent ? {
+                    '--address-end-room': 'calc(var(--address-control-height) + var(--xc-space-2))',
                     ...style,
-                }}
+                } : style}
                 value={value}
                 onChange={(e) => {
-                    setPasteError('');
                     onChange(e);
                     setOpen(true);
                     setActiveIndex(-1);
@@ -224,7 +199,7 @@ export const AddressCombobox = /* @__PURE__ */ forwardRef(function AddressCombob
                     setActiveIndex(-1);
                 }}
                 pasteGuard
-                error={pasteError || error}
+                error={error}
                 {...rest}
             />
             {IconComponent ? (
@@ -242,31 +217,6 @@ export const AddressCombobox = /* @__PURE__ */ forwardRef(function AddressCombob
                     <IconComponent />
                 </button>
             ) : null}
-            <span className={styles.pasteAction} ref={pasteSlotRef}>
-                <ClipboardPasteButton
-                    disabled={disabled}
-                    onMessage={(message) => { if (message) setPasteError(message); }}
-                    onPaste={(text) => {
-                        const inspected = inspectClipboardPaste(text);
-                        if (!inspected.ok) {
-                            setPasteError(inspected.error);
-                            return;
-                        }
-                        setPasteError('');
-                        const pasteEvent = {
-                            clipboardData: { getData: () => inspected.value },
-                            defaultPrevented: false,
-                            currentTarget: inputRef.current,
-                            target: inputRef.current,
-                            preventDefault() { this.defaultPrevented = true; },
-                        };
-                        onPaste?.(pasteEvent);
-                        if (!pasteEvent.defaultPrevented) onChange({ target: { value: inspected.value } });
-                        setOpen(true);
-                        setActiveIndex(-1);
-                    }}
-                />
-            </span>
             {showDropdown ? (
                 <ul
                     id={listboxId}

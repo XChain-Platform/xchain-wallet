@@ -61,7 +61,7 @@ assert.ok(/windows\.add\(win\)/.test(src),
     'createWindow registers the new window with the windows Set');
 assert.ok(/win\.on\('closed',\s*\(\)\s*=>\s*\{\s*windows\.delete\(win\)/.test(src),
     'window unregisters from the Set on closed');
-assert.ok(/win\.once\('ready-to-show',[\s\S]*?win\.show\(\)/.test(src),
+assert.ok(/win\.once\('ready-to-show',[\s\S]*?showWindow\(win\)/.test(src),
     'each window shows itself on ready-to-show');
 assert.ok(/return win;/.test(src),
     'createWindow returns the new window so callers can pin behaviour');

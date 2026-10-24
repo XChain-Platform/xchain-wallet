@@ -35,13 +35,17 @@ import { t } from '../i18n/index.js';
 
 const BIDI_CONTROLS = /[\u061C\u200E\u200F\u202A-\u202E\u2066-\u2069]/u;
 const ZERO_WIDTH = /[\u00AD\u034F\u180E\u200B-\u200D\u2060-\u2064\u206A-\u206F\uFEFF]/u;
+// Glyphs that draw nothing yet are not whitespace: Braille blank, Hangul and
+// Khmer fillers, variation selectors other than the emoji pair, and tag
+// characters. Left in, they pad a message so its real text sits below the fold.
+const BLANK_GLYPHS = /[\u2800\u115F\u1160\u17B4\u17B5\u3164\uFFA0\uFE00-\uFE0D\u{E0000}-\u{E007F}]/u;
 const LATIN = /\p{Script_Extensions=Latin}/u;
 const GREEK_OR_CYRILLIC = /[\p{Script_Extensions=Greek}\p{Script_Extensions=Cyrillic}]/u;
 const WORDLIKE_RUNS = /[\p{L}\p{N}]+/gu;
 const ASCII_ALPHANUMERIC = /[A-Za-z0-9]/u;
 
 function deceptiveString(value) {
-    if (BIDI_CONTROLS.test(value) || ZERO_WIDTH.test(value)) return true;
+    if (BIDI_CONTROLS.test(value) || ZERO_WIDTH.test(value) || BLANK_GLYPHS.test(value)) return true;
     const mixedScriptWord = (value.match(WORDLIKE_RUNS) ?? [])
         .some((word) => LATIN.test(word) && GREEK_OR_CYRILLIC.test(word));
     if (mixedScriptWord) return true;

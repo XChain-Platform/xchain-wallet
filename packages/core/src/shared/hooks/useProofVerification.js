@@ -41,7 +41,7 @@
 // unit-tested directly; the hook just wires them to React state + the
 // concurrency pool.
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 
 const POOL = 6;
 
@@ -217,6 +217,11 @@ export function useProofVerification({ messaging, balances, enabled }) {
  */
 export function useActionProofVerification({ messaging, items, enabled }) {
     const [verifyMap, setVerifyMap] = useState(/** @type {Record<string, any>} */ ({}));
+    // Verdicts that settled as verified or failed stay for the life of the
+    // hook, so a list that grows by one page checks only the new rows rather
+    // than every row again. An unavailable verdict is not kept: the block may
+    // be checkpointed by the next pass.
+    const settledRef = useRef(/** @type {Map<string, any>} */ (new Map()));
     const list = Array.isArray(items) ? items : [];
     const sig = list.map((i) => i.key).sort().join('|');
 
@@ -226,14 +231,24 @@ export function useActionProofVerification({ messaging, items, enabled }) {
             return undefined;
         }
         let cancelled = false;
+        const settled = settledRef.current;
         const seed = {};
-        for (const it of list) seed[it.key] = { status: 'pending', reason: null, trust: 'explorer' };
+        const todo = [];
+        for (const it of list) {
+            const kept = settled.get(it.key);
+            if (kept) {
+                seed[it.key] = kept;
+            } else {
+                seed[it.key] = { status: 'pending', reason: null, trust: 'explorer' };
+                todo.push(it);
+            }
+        }
         setVerifyMap(seed);
 
         let cursor = 0;
         const worker = async () => {
-            while (!cancelled && cursor < list.length) {
-                const it = list[cursor++];
+            while (!cancelled && cursor < todo.length) {
+                const it = todo[cursor++];
                 let res;
                 try {
                     res = await messaging.verifyAction({ chainId: it.chainId, actionIndex: it.actionIndex });
@@ -242,18 +257,17 @@ export function useActionProofVerification({ messaging, items, enabled }) {
                 }
                 if (cancelled) return;
                 const status = res && res.status ? res.status : 'unavailable';
-                setVerifyMap((prev) => ({
-                    ...prev,
-                    [it.key]: {
-                        status,
-                        reason: status === 'verified' ? null : (res && res.reason) || null,
-                        trust: res && res.trust === 'pinned' ? 'pinned' : 'explorer',
-                    },
-                }));
+                const verdict = {
+                    status,
+                    reason: status === 'verified' ? null : (res && res.reason) || null,
+                    trust: res && res.trust === 'pinned' ? 'pinned' : 'explorer',
+                };
+                if (status === 'verified' || status === 'failed') settled.set(it.key, verdict);
+                setVerifyMap((prev) => ({ ...prev, [it.key]: verdict }));
             }
         };
 
-        const pool = Math.min(POOL, list.length);
+        const pool = Math.min(POOL, todo.length);
         Promise.all(Array.from({ length: pool }, () => worker())).catch(() => { /* per-job errors already folded in */ });
 
         return () => { cancelled = true; };

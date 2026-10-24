@@ -87,10 +87,12 @@ async function expectTrailingActionsFit(input, label, actionNames) {
     ).toBeGreaterThanOrEqual(120);
 
     for (const action of metrics.actions) {
+        // An icon-only action (the address book) has no text line to count;
+        // a labelled one (Max) must keep its label on one line.
         expect(
             action.lineCount,
-            `${label}: ${action.text} wraps onto multiple lines\n${diagnostic}`,
-        ).toBe(1);
+            `${label}: ${action.text || action.name} wraps onto multiple lines\n${diagnostic}`,
+        ).toBe(action.text ? 1 : 0);
         // The actions sit inset inside the field border, so they are a little
         // shorter than the control and centred on it.
         expect(
@@ -152,7 +154,7 @@ async function checkViewports(page, surface, fields) {
     }
 }
 
-test('Paste and Max stay inside their fields without squeezing input text', async ({ page }) => {
+test('trailing field actions stay inside their fields without squeezing input text', async ({ page }) => {
     test.slow();
     // Demo wallets hide the Swap command, so this walk uses a real dev wallet.
     await createWallet(page);
@@ -163,12 +165,12 @@ test('Paste and Max stay inside their fields without squeezing input text', asyn
         {
             name: 'To',
             input: main.getByLabel('To', { exact: true }),
-            actions: ['Paste from clipboard'],
+            actions: ['Open address book'],
         },
         {
             name: 'Amount',
             input: main.getByRole('textbox', { name: /^Amount/ }),
-            actions: ['Paste from clipboard', 'Use max available amount'],
+            actions: ['Use max available amount'],
         },
     ]);
 
@@ -185,7 +187,7 @@ test('Paste and Max stay inside their fields without squeezing input text', asyn
         {
             name: 'Give amount',
             input: main.getByRole('textbox', { name: /^Give amount/ }),
-            actions: ['Paste from clipboard', 'Use max available amount'],
+            actions: ['Use max available amount'],
         },
     ]);
 
@@ -195,7 +197,7 @@ test('Paste and Max stay inside their fields without squeezing input text', asyn
         {
             name: 'Amount',
             input: main.getByRole('textbox', { name: /^Amount/ }),
-            actions: ['Paste from clipboard'],
+            actions: [],
         },
     ]);
 });

@@ -169,6 +169,8 @@ export async function withMarketExpiry(sdk, response, kind, { hydrate = false } 
     });
 }
 
+const ORDER_CLOSED_STATUSES = new Set(['filled', 'complete', 'cancelled']);
+
 const ACTION_REFERENCE = Object.freeze({
     ORDER: { kind: 'order', field: 'ORDER_ACTION_INDEX' },
     SWAP: { kind: 'swap', field: 'SWAP_ACTION_INDEX' },
@@ -196,8 +198,17 @@ export async function assertReferencedOfferActionable({ sdkRegistry, chainId, ac
     } catch {
         throw offerRefusal(`Could not verify whether this ${ref.kind} has expired. Try again.`);
     }
-    if (marketLifecycleStatusOf(detail, ref.kind) === 'expired') {
+    const lifecycle = marketLifecycleStatusOf(detail, ref.kind);
+    if (lifecycle === 'expired') {
         throw offerRefusal(`This ${ref.kind} has expired.`);
+    }
+    // The indexer records a cancel or edit of a filled or cancelled order as
+    // invalid and keeps the fee, so a fill or cancel that landed after the list
+    // loaded is refused here, before anything is signed.
+    if (ref.kind === 'order' && ORDER_CLOSED_STATUSES.has(lifecycle)) {
+        throw offerRefusal(lifecycle === 'cancelled'
+            ? 'This order has already been cancelled.'
+            : 'This order has already been filled.');
     }
 
     const expiration = marketExpirationOf(detail);

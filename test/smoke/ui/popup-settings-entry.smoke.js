@@ -108,7 +108,7 @@ for (const shell of ['web', 'desktop']) {
 
 // The palette commands were dropped BECAUSE there was no route. Now there is.
 assert.ok(
-    /settingsSectionsToCommands\(\{ openSettings: openSettingsSection \}\)/.test(popupApp),
+    /settingsSectionsToCommands\(\{[^}]*openSettings: openSettingsSection/.test(popupApp),
     'popup palette offers the Settings sections',
 );
 assert.ok(

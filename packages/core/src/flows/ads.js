@@ -43,6 +43,7 @@ import {
     isDonationAddressConfigured,
 } from '../registry/validate.js';
 import { resolveAdsChainConfig } from '../schemas/settings.js';
+import { serializeSettingsWrites } from './settings.js';
 
 /**
  * @param {import('../schemas/settings.js').Settings | null} settings
@@ -212,6 +213,10 @@ export function stepAdsAccumulator(settings, chainId, { donationIncluded, chainR
  */
 export async function commitAdsStep({ vault, chainId, donationIncluded, chainRegistry }) {
     if (!vault) throw new Error('commitAdsStep: vault is required');
+    return serializeSettingsWrites(vault, () => commitAdsStepNow({ vault, chainId, donationIncluded, chainRegistry }));
+}
+
+async function commitAdsStepNow({ vault, chainId, donationIncluded, chainRegistry }) {
     const settings = await vault.settings.get();
     if (!settings) return null;
     const next = stepAdsAccumulator(settings, chainId, { donationIncluded, chainRegistry });
