@@ -21,6 +21,8 @@ import { AddAddressModal, addressTypeHint } from './AddAddressModal.jsx';
 import { coinFromChainId, formatAmount, fiatValue, formatFiat } from '../components/BalanceList.jsx';
 import { useSettings } from '../hooks/useSettings.js';
 import { userFacingMessage } from '../utils/userFacingMessage.js';
+import { offeredAddressType } from '../utils/supportedAddressTypes.js';
+import { useSupportedAddressTypes } from '../hooks/useSupportedAddressTypes.js';
 import { addressTypeLabel } from '../utils/addressTypeLabel.js';
 import { recordLastUsedChain } from '../chainSelection.js';
 import { useBalancesHidden } from '../hooks/useBalancesHidden.js';
@@ -425,8 +427,9 @@ export function AddressList({
     // '' from the select means "untouched"; resolve the default here so it
     // tracks both the picked chain and the late-arriving wallet format.
     const wifDescriptor = wifChainId ? chainRegistry.get(wifChainId) : null;
-    const effectiveWifAddressType = wifAddressType
-        || (wifDescriptor ? flowsLib.defaultAddressTypeForFormat(wifDescriptor, walletFormat) : '');
+    const wifOfferedTypes = useSupportedAddressTypes(wifDescriptor);
+    const wifDefaultType = wifDescriptor ? flowsLib.defaultAddressTypeForFormat(wifDescriptor, walletFormat) : '';
+    const effectiveWifAddressType = offeredAddressType(wifAddressType || wifDefaultType, wifOfferedTypes, wifDefaultType);
 
     function resetWifForm() {
         setWifAddressType('');
@@ -554,10 +557,15 @@ export function AddressList({
     const advancedDescriptor = effectiveAdvancedChainId
         ? chainRegistry.get(effectiveAdvancedChainId)
         : null;
-    const effectiveAdvancedAddressType = advancedAddressType
-        || (advancedDescriptor
-            ? flowsLib.defaultAddressTypeForFormat(advancedDescriptor, walletFormat)
-            : '');
+    const advancedOfferedTypes = useSupportedAddressTypes(advancedDescriptor);
+    const advancedDefaultType = advancedDescriptor
+        ? flowsLib.defaultAddressTypeForFormat(advancedDescriptor, walletFormat)
+        : '';
+    const effectiveAdvancedAddressType = offeredAddressType(
+        advancedAddressType || advancedDefaultType,
+        advancedOfferedTypes,
+        advancedDefaultType,
+    );
 
     function resetAdvancedGenerate() {
         setAdvancedAddressType('');
@@ -785,7 +793,7 @@ export function AddressList({
                             disabled={advancedBusy}
                         >
                             {/* Select uses native options because the kit has no option primitive. */}
-                            {(advancedDescriptor.addressTypes || []).map((type) => {
+                            {advancedOfferedTypes.map((type) => {
                                 const hint = addressTypeHint(advancedDescriptor, type);
                                 return (
                                     <option key={type} value={type}>
@@ -877,7 +885,7 @@ export function AddressList({
                                 disabled={wifBusy}
                             >
                                 {/* Select uses native options because the kit has no option primitive. */}
-                                {(wifDescriptor?.addressTypes || []).map((type) => {
+                                {wifOfferedTypes.map((type) => {
                                     const hint = addressTypeHint(wifDescriptor, type);
                                     return (
                                         <option key={type} value={type}>

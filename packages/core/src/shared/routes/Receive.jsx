@@ -39,6 +39,9 @@ import {
 import { pickDefaultChainId } from '../chainSelection.js';
 import { addressTypeLabel } from '../utils/addressTypeLabel.js';
 import { explorerPageUrl } from '../utils/explorerLinks.js';
+import { unsupportedAddressTypeMessage } from '../utils/userFacingMessage.js';
+import { loadSupportedAddressTypes, offeredAddressType } from '../utils/supportedAddressTypes.js';
+import { useSupportedAddressTypes } from '../hooks/useSupportedAddressTypes.js';
 import { Settings } from './Settings.jsx';
 import {
     hasAvailableChain,
@@ -382,16 +385,28 @@ export function Receive({ walletId, accountId, prefill = null, onBack, onChangeA
                     activeChainId,
                     accountId,
                 );
+                const nextDescriptor = chainRegistry.get(activeChainId);
+                const offered = await loadSupportedAddressTypes(messaging, nextDescriptor);
+                // A newest address of a type the SDK cannot generate (stored by an
+                // older build or imported) keeps its record; the screen opens on the
+                // chain default instead, on that type's own address when one exists.
+                const nextType = offeredAddressType(
+                    newest?.addressType,
+                    offered,
+                    nextDescriptor?.defaultAddressType,
+                );
+                const typeSwapped = Boolean(newest?.addressType) && nextType !== newest.addressType;
+                const swappedAddresses = typeSwapped
+                    ? ((await messaging.getAddressesByChain(walletId, accountId))?.[activeChainId] || [])
+                    : null;
                 if (!cancelled) {
                     setAddressContextKey(receiveContextKey);
-                    const nextDescriptor = chainRegistry.get(activeChainId);
-                    const nextType = newest?.addressType || nextDescriptor?.defaultAddressType || '';
                     addressTypeRef.current = nextType;
-                    const chainAddresses = chainsByWalletRef.current?.[activeChainId] || [];
+                    const chainAddresses = swappedAddresses || chainsByWalletRef.current?.[activeChainId] || [];
                     const includesNewest = newest && chainAddresses.some((candidate) => (
                         candidate?.id === newest.id
                     ));
-                    const preferred = includesNewest
+                    const preferred = (includesNewest || typeSwapped)
                         ? preferredAddressOfType(
                             chainAddresses,
                             nextType,
@@ -399,7 +414,7 @@ export function Receive({ walletId, accountId, prefill = null, onBack, onChangeA
                             addressUsageRef.current,
                         )
                         : null;
-                    setAddress(preferred || newest);
+                    setAddress(preferred || (typeSwapped ? null : newest));
                     setAddressType(nextType);
                 }
             } catch {
@@ -655,6 +670,7 @@ export function Receive({ walletId, accountId, prefill = null, onBack, onChangeA
     // address + active chain + the optional amount/tick customization.
 
     const descriptor = activeChainId ? chainRegistry.get(activeChainId) : null;
+    const offeredTypes = useSupportedAddressTypes(descriptor);
     const addressExplorerUrl = explorerPageUrl({
         chainId: activeChainId,
         kind: 'address',
@@ -875,9 +891,12 @@ export function Receive({ walletId, accountId, prefill = null, onBack, onChangeA
                     [chainId]: [...withoutDuplicate, generated],
                 };
             });
-        } catch {
+        } catch (err) {
             if (generateRequestRef.current !== request || receiveContextRef.current !== contextKey) return;
-            setGenerateError('Could not create a new receive address. Check your connection and try again.');
+            setGenerateError(
+                unsupportedAddressTypeMessage(err)
+                || 'Could not create a new receive address. Check your connection and try again.',
+            );
         } finally {
             if (generateRequestRef.current === request) {
                 generateBusyRef.current = false;
@@ -1194,7 +1213,7 @@ export function Receive({ walletId, accountId, prefill = null, onBack, onChangeA
                 />
             ) : null}
 
-            {descriptor?.addressTypes?.length > 1 ? (
+            {offeredTypes.length > 1 ? (
                 <Select
                     size="md"
                     label={t('receive.addressType')}
@@ -1202,7 +1221,7 @@ export function Receive({ walletId, accountId, prefill = null, onBack, onChangeA
                     onChange={(event) => changeAddressType(event.target.value)}
                     disabled={generating || !addressType}
                 >
-                    {descriptor.addressTypes.map((type) => (
+                    {offeredTypes.map((type) => (
                         <option key={type} value={type}>{addressTypeLabel(type)}</option>
                     ))}
                 </Select>

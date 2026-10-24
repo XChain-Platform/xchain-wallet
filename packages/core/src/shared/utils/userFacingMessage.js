@@ -142,6 +142,26 @@ export function isShowableRefusal(text) {
         && !SERIALIZED_DATA.test(value);
 }
 
+/** Shown when the SDK refuses to build an address of a type it does not know. */
+export const UNSUPPORTED_ADDRESS_TYPE_MESSAGE = 'This address type is not available yet. Choose another address type.';
+
+/**
+ * The clear message for the SDK's unknown-address-type refusal, or null for any
+ * other error. The refusal names the SDK's own list of types, which is
+ * developer output, and without this branch it falls to the caller's generic
+ * fallback (for address generation, a hint about unlocking the wallet).
+ *
+ * @param {unknown} err
+ * @returns {string|null}
+ */
+export function unsupportedAddressTypeMessage(err) {
+    const code = err && typeof err === 'object' ? /** @type {any} */ (err).code : undefined;
+    if (code === 'INVALID_ADDRESS_TYPE' || /unknown address type/i.test(errorText(err))) {
+        return UNSUPPORTED_ADDRESS_TYPE_MESSAGE;
+    }
+    return null;
+}
+
 /**
  * @param {unknown} err       the caught error (Error, string, or anything)
  * @param {string} fallback   house-voice copy to show when the message is
@@ -151,6 +171,8 @@ export function isShowableRefusal(text) {
 export function userFacingMessage(err, fallback = 'Something went wrong. Try again.') {
     const refusal = protocolRefusalReason(err);
     if (refusal) return refusal;
+    const unsupportedType = unsupportedAddressTypeMessage(err);
+    if (unsupportedType) return unsupportedType;
     const text = errorText(err);
     if (isDeveloperMessage(err)) return fallback;
     return text;

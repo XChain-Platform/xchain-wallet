@@ -17,6 +17,7 @@ import {
     userFacingMessage,
     isDeveloperMessage,
     protocolRefusalReason,
+    unsupportedAddressTypeMessage,
 } from '../../../packages/core/src/shared/utils/userFacingMessage.js';
 
 const FALLBACK = 'Could not import that private key.';
@@ -171,5 +172,30 @@ describe('userFacingMessage', () => {
         expect(protocolRefusalReason(err)).toBeNull();
         expect(userFacingMessage(err, FALLBACK)).toBe(FALLBACK);
         expect(isDeveloperMessage(err)).toBe(true);
+    });
+});
+
+describe('userFacingMessage for an address type the SDK does not know', () => {
+    const FALLBACK_UNLOCK = 'Could not generate addresses. Make sure the wallet is unlocked or your hardware device is connected.';
+
+    it('names the address type instead of the generic fallback', () => {
+        const err = Object.assign(
+            new Error('Unknown address type: "p2tr". Supported: p2pkh, p2wpkh, p2sh-p2wpkh'),
+            { name: 'SDKWalletError', code: 'INVALID_ADDRESS_TYPE' },
+        );
+        const message = userFacingMessage(err, FALLBACK_UNLOCK);
+        expect(message).toBe('This address type is not available yet. Choose another address type.');
+        expect(message).not.toMatch(/unlocked/i);
+    });
+
+    it('recognises the refusal after a messaging hop strips the code', () => {
+        expect(userFacingMessage(new Error('Unknown address type: "p2tr".'), FALLBACK_UNLOCK))
+            .toMatch(/not available yet/);
+    });
+
+    it('leaves other errors on their own fallback', () => {
+        expect(userFacingMessage(new Error('device disconnected'), FALLBACK_UNLOCK))
+            .toBe('device disconnected');
+        expect(unsupportedAddressTypeMessage(new Error('wallet.unlock: bad password'))).toBeNull();
     });
 });

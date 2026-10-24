@@ -293,6 +293,11 @@ export function getNewestAddress(walletId, chainId, accountId) {
     );
 }
 
+/** Which registry address types the installed SDK can generate on a chain. @param {string} chainId */
+export function getSupportedAddressTypes(chainId) {
+    return /** @type {any} */ (sendMessage('sdk.addressTypes', { chainId }));
+}
+
 /** Rename an address (set its label). @param {string} id @param {string} label */
 export function setAddressLabel(id, label) {
     return /** @type {any} */ (sendMessage('addresses.setLabel', { id, label }));

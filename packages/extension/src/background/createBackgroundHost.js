@@ -27,6 +27,7 @@ import { WALLET_VERSION } from '@xchain-wallet/core/buildInfo.js';
 import { sharedListDirectory } from '@xchain-wallet/core/flows/sharedLists.js';
 import { listTickCoinSupport } from '@xchain-wallet/core/flows/listTickCoinSupport.js';
 import { listAnyCoinItemsSupport } from '@xchain-wallet/core/flows/listAnyCoinItemsSupport.js';
+import { sdkSupportedAddressTypes } from '@xchain-wallet/core/flows/sdkAddressTypes.js';
 import { supplyHistoryFor } from '@xchain-wallet/core/flows/supplyHistory.js';
 import { capRbfToDescriptor } from '@xchain-wallet/core/flows/rbfCap.js';
 import {
@@ -2542,6 +2543,21 @@ export function createBackgroundHost(deps) {
 
     host.register('addresses.newest', async (req, { vault, chainRegistry }) => {
         return newestAddress(req, { vault, chainRegistry });
+    });
+
+    // Which of the chain's registry address types the installed SDK can generate,
+    // so no picker offers one that generation then refuses. `supported` is null
+    // when the SDK cannot be asked yet; the caller then keeps the registry list.
+    host.register('sdk.addressTypes', async (req, { chainRegistry, sdkRegistry }) => {
+        const descriptor = chainRegistry.get(req?.chainId);
+        if (!descriptor) throw new Error(`sdk.addressTypes: unknown chain "${req?.chainId}"`);
+        let sdk;
+        try {
+            sdk = sdkRegistry.get(descriptor.id);
+        } catch {
+            return { supported: null };
+        }
+        return { supported: sdkSupportedAddressTypes(sdk, descriptor.addressTypes) };
     });
 
     // Rename an address: set its user-facing label by record id.
