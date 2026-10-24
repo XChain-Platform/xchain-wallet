@@ -92,6 +92,15 @@ export async function provisionCoSignerAccount(opts = {}) {
         throw new Error('provisionCoSignerAccount: deriveMuSig2P2TR did not return an aggregate address');
     }
 
+    // The aggregate address is fixed by the key pair, so a second account on it
+    // is a second policy for the same funds. The inbound resolver returns the
+    // first enabled match, which makes the stricter or the looser record win by
+    // insertion order alone.
+    const sameAddress = await vault.coSignerAccounts.findBy('aggregateAddress', derived.address);
+    if (sameAddress.some((a) => a.walletId === walletId && a.chainId === chainId)) {
+        throw new Error('An agent account with these two keys already exists in this wallet. Open it to change its policy.');
+    }
+
     const record = createCoSignerAccount({
         walletId,
         chainId,

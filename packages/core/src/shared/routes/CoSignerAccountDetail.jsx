@@ -295,6 +295,7 @@ export function CoSignerAccountDetail({ accountId, walletId, onBack }) {
 
     return wrap(
         <ListPage>
+            {error ? <StatusMessage variant="error">{error}</StatusMessage> : null}
             <p className={styles.successTitle}>{account.name}</p>
             <p className={styles.hint} style={{ textAlign: 'left' }}>
                 {account.enabled
@@ -333,8 +334,6 @@ export function CoSignerAccountDetail({ accountId, walletId, onBack }) {
                 <dt className={styles.detailsLabel}>Activity in current window</dt>
                 <dd className={styles.detailsValue}>{windowCount} action(s)</dd>
             </dl>
-
-            {error ? <StatusMessage variant="error">{error}</StatusMessage> : null}
 
             <div className={styles.actions}>
                 <Button variant="secondary" onClick={startEdit} disabled={busy}>Edit policy</Button>

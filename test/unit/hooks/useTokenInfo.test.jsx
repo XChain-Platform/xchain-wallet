@@ -168,6 +168,33 @@ describe('useTokenInfo cache', () => {
     });
 });
 
+describe('useTokenInfo across ticks', () => {
+    it('never serves the previous tick' + "'s record while another tick loads or fails", async () => {
+        const messaging = {
+            getTokenInfo: vi.fn(async ({ tick }) => {
+                if (tick === 'FIRST') return { creator: OLD_OWNER, divisibility: 8, bridgeChains: 'DOGE' };
+                if (tick === 'BROKEN') return { loadError: 'indexer offline' };
+                throw new Error('offline');
+            }),
+        };
+        const { result, rerender } = renderHook(
+            ({ tick }) => useTokenInfo({ chainId: CHAIN, tick }),
+            { wrapper: wrapperFor(messaging), initialProps: { tick: 'FIRST' } },
+        );
+        await waitFor(() => expect(result.current?.creator).toBe(OLD_OWNER));
+
+        rerender({ tick: 'BROKEN' });
+        expect(result.current).toBeNull();
+        await waitFor(() => expect(messaging.getTokenInfo).toHaveBeenCalledTimes(2));
+        await waitFor(() => expect(result.current?.loadError).toBe('indexer offline'));
+
+        rerender({ tick: 'THROWS' });
+        expect(result.current).toBeNull();
+        await waitFor(() => expect(messaging.getTokenInfo).toHaveBeenCalledTimes(3));
+        expect(result.current).toBeNull();
+    });
+});
+
 describe('ticksFromActionParams', () => {
     it('names the tick of every issuer action that can invalidate a record', () => {
         // An ownership transfer is an ISSUE carrying TRANSFER; a lock, a

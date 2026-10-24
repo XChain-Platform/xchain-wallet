@@ -169,6 +169,37 @@ describe('CoSignerProvision states', () => {
         }));
     });
 
+    it('refuses an agent key that is any key of this wallet, whatever its parity byte', async () => {
+        const otherKey = 'c'.repeat(64);
+        mount(vi.fn().mockResolvedValue({
+            [CHAIN]: [
+                { ...addresses('address-1')[CHAIN][0] },
+                {
+                    id: 'address-2',
+                    address: 'bc1qrp33g0q5c5txsp9arysrx4k6zdkfs4nce4xj0gdcccefvpysxf3qccfmv3',
+                    publicKey: '02' + otherKey,
+                    derivationPath: "m/84'/0'/0'/0/1",
+                },
+            ],
+        }));
+
+        fireEvent.change(await screen.findByLabelText("This wallet's key"), {
+            target: { value: 'address-1' },
+        });
+        fireEvent.click(screen.getByRole('checkbox', { name: 'Send' }));
+        for (const key of ['02' + otherKey, '03' + otherKey]) {
+            fireEvent.change(screen.getByLabelText('Agent public key (hex, 33-byte compressed)'), {
+                target: { value: key },
+            });
+            expect(await screen.findByText('The agent key must differ from every key in this wallet.')).toBeInTheDocument();
+            expect(screen.getByRole('button', { name: 'Review agent account' })).toBeDisabled();
+        }
+        fireEvent.change(screen.getByLabelText('Agent public key (hex, 33-byte compressed)'), {
+            target: { value: AGENT_KEY },
+        });
+        await waitFor(() => expect(screen.getByRole('button', { name: 'Review agent account' })).toBeEnabled());
+    });
+
     it('filters developer errors from provisioning', async () => {
         const provisionCoSignerAccount = vi.fn().mockRejectedValue(
             new Error('provisionCoSignerAccount: sdkRegistry is required'),

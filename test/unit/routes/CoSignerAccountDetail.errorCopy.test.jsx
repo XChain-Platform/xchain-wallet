@@ -278,3 +278,23 @@ describe('CoSignerAccountDetail async state', () => {
         expect(screen.queryByText('First account')).toBeNull();
     });
 });
+
+describe('CoSignerAccountDetail update failure', () => {
+    it('shows a failed enable as the first item of page content', async () => {
+        render(
+            <MessagingProvider shell="extension" messaging={{
+                getCoSignerAccount: vi.fn().mockResolvedValue(account({ enabled: false })),
+                updateCoSignerAccount: vi.fn().mockRejectedValue(new Error('The vault is locked.')),
+            }}>
+                <CoSignerAccountDetail accountId="acct-1" walletId="wallet-1" onBack={() => {}} />
+            </MessagingProvider>,
+        );
+
+        await screen.findByText('Treasury agent');
+        fireEvent.click(screen.getByRole('button', { name: 'Enable' }));
+
+        const notice = await screen.findByText('The vault is locked.');
+        const title = screen.getByText('Treasury agent');
+        expect(notice.compareDocumentPosition(title) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    });
+});
