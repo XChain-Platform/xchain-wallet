@@ -105,8 +105,10 @@ assert.ok(webShare < copyFallback, 'Web Share precedes clipboard fallback');
 
 // --- buttons ---------------------------------------------------------
 
-assert.match(recvSrc, /receive\.copyQr\b/, 'Copy QR button');
-assert.match(recvSrc, /receive\.shareQr\b/, 'Share QR button is always offered for a rendered request');
+// The smoke runner reads wallet source with each t() key replaced by its
+// English copy, so the buttons are matched by the label a user reads.
+assert.match(recvSrc, /Copy QR\b/, 'Copy QR button');
+assert.match(recvSrc, /Share QR\b/, 'Share QR button is always offered for a rendered request');
 assert.doesNotMatch(
     recvSrc,
     /\{canShareFiles \? \(/,
