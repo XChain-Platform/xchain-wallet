@@ -6,9 +6,8 @@
 // This file is part of XChain Platform. Licensed under the GNU Affero
 // General Public License v3.0 or later; see LICENSE.md.
 
-// The parser preserves unknown action segments as send-shaped intents for
-// generic URI tooling. The external-link router is the sole consumer allowed
-// to inspect that segment, and it admits only send, receive, and execute.
+// The parser refuses action segments outside send, receive, and execute. The
+// external-link router is the sole consumer allowed to inspect that segment.
 
 import { describe, it, expect } from 'vitest';
 import { readFileSync, readdirSync, statSync } from 'node:fs';

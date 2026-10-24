@@ -16,14 +16,9 @@ const chainRegistry = {
 };
 
 describe('XChain URI low-coverage branches', () => {
-    it('defaults a coin-code URI with an empty action to send', () => {
+    it('refuses a coin-code URI with an empty action', () => {
         expect(parseXchainUri('xchain:BTC/?label=Invoice&message=Thanks', { chainRegistry }))
-            .toMatchObject({
-                kind: 'send',
-                action: 'send',
-                label: 'Invoice',
-                message: 'Thanks',
-            });
+            .toEqual({ kind: 'unknown' });
     });
 
     it('parses every optional legacy path-style field', () => {
@@ -50,7 +45,7 @@ describe('XChain URI low-coverage branches', () => {
 
     it('parses every optional BIP21-style field', () => {
         expect(parseXchainUri(
-            'xchain:bc1qexample?amount=3&label=Invoice&message=Thanks&memo=hello'
+            'xchain:bc1qar0srrr7xfkvy5l643lydnw9re59gtzzwf5mdq?amount=3&label=Invoice&message=Thanks&memo=hello'
             + '&tick=BTC&chain=bitcoin-mainnet&feePriority=LOW',
         )).toMatchObject({
             kind: 'send',

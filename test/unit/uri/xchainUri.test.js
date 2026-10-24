@@ -36,7 +36,7 @@ describe('parseXchainUri BIP21 req- enforcement', () => {
     // send / applying the value as an ordinary param.
     it('rejects a coin-code URI carrying a req- param', () => {
         expect(
-            parseXchainUri('xchain:TBTC/send?to=addr&amount=1&req-orderbind=42', { chainRegistry }).kind,
+            parseXchainUri('xchain:TBTC/send?to=tb1qw508d6qejxtdg4y5r3zarvary0c5xw7kxpjzsx&amount=1&req-orderbind=42', { chainRegistry }).kind,
         ).toBe('unknown');
     });
 
@@ -48,12 +48,12 @@ describe('parseXchainUri BIP21 req- enforcement', () => {
 
     it('rejects a BIP21-style xchain: address URI carrying a req- param', () => {
         expect(
-            parseXchainUri('xchain:bc1qexample?amount=1&req-somethingcritical=1', { chainRegistry }).kind,
+            parseXchainUri('xchain:bc1qar0srrr7xfkvy5l643lydnw9re59gtzzwf5mdq?amount=1&req-somethingcritical=1', { chainRegistry }).kind,
         ).toBe('unknown');
     });
 
     it('still parses the same URIs without the req- param', () => {
-        expect(parseXchainUri('xchain:TBTC/send?to=addr&amount=1', { chainRegistry }).kind).toBe('send');
+        expect(parseXchainUri('xchain:TBTC/send?to=tb1qw508d6qejxtdg4y5r3zarvary0c5xw7kxpjzsx&amount=1', { chainRegistry }).kind).toBe('send');
     });
 });
 
@@ -83,10 +83,8 @@ describe('parseXchainUri execute action', () => {
         expect(intent.executeParams).toBe(params);
     });
 
-    it('still parses (kind execute) without contract=; callers must guard', () => {
-        const intent = parseXchainUri('xchain:RBTC/execute?method=fund', { chainRegistry });
-        expect(intent.kind).toBe('execute');
-        expect(intent.contractActionIndex).toBeUndefined();
+    it('refuses an execute link without contract=', () => {
+        expect(parseXchainUri('xchain:RBTC/execute?method=fund', { chainRegistry })).toEqual({ kind: 'unknown' });
     });
 
     it('resolves chainId only when a registry is supplied (both shells must pass one)', () => {
@@ -97,13 +95,13 @@ describe('parseXchainUri execute action', () => {
     });
 
     it('leaves send/receive routing untouched', () => {
-        expect(parseXchainUri('xchain:TBTC/send?to=x&amount=1', { chainRegistry }).kind).toBe('send');
+        expect(parseXchainUri('xchain:TBTC/send?to=tb1qw508d6qejxtdg4y5r3zarvary0c5xw7kxpjzsx&amount=1', { chainRegistry }).kind).toBe('send');
         expect(parseXchainUri('xchain:TBTC/receive', { chainRegistry }).kind).toBe('receive');
     });
 
     it('does not leak send-shaped fields (tick/to/amount/memo) into an execute intent', () => {
         const intent = parseXchainUri(
-            'xchain:RBTC/execute?contract=9&method=m&tick=PEPECREATURE&to=bcrt1qattacker&amount=99&memo=hi',
+            'xchain:RBTC/execute?contract=9&method=m&tick=PEPECREATURE&to=bcrt1qw508d6qejxtdg4y5r3zarvary0c5xw7kygt080&amount=99&memo=hi',
             { chainRegistry },
         );
         expect(intent.kind).toBe('execute');
@@ -114,14 +112,12 @@ describe('parseXchainUri execute action', () => {
         expect(intent.contractActionIndex).toBe('9');
     });
 
-    it('drops a non-numeric contract index (falls back to the manual form)', () => {
+    it('refuses a non-numeric contract index', () => {
         const intent = parseXchainUri(
             'xchain:RBTC/execute?contract=<script>&method=m&gas=lots',
             { chainRegistry },
         );
-        expect(intent.kind).toBe('execute');
-        expect(intent.contractActionIndex).toBeUndefined();
-        expect(intent.gasLimit).toBeUndefined();
+        expect(intent).toEqual({ kind: 'unknown' });
     });
 
     it('drops a malformed raw chainId from legacy path-style and BIP21 chain= input', () => {
@@ -156,7 +152,7 @@ describe('parseXchainUri execute action', () => {
 describe('hardenUriIntentText', () => {
     it('neutralizes a bidi override in memo rather than letting it reorder the field', () => {
         const intent = parseXchainUri(
-            `xchain:TBTC/send?to=addr&amount=1&memo=${encodeURIComponent(`Pay${RLO}rent`)}`,
+            `xchain:TBTC/send?to=tb1qw508d6qejxtdg4y5r3zarvary0c5xw7kxpjzsx&amount=1&memo=${encodeURIComponent(`Pay${RLO}rent`)}`,
             { chainRegistry },
         );
         expect(intent.memo).toContain(RLO);
@@ -167,7 +163,7 @@ describe('hardenUriIntentText', () => {
 
     it('collapses a CRLF in memo instead of letting it fake a second line', () => {
         const intent = parseXchainUri(
-            `xchain:TBTC/send?to=addr&amount=1&memo=${encodeURIComponent('rent\r\nAmount: 999')}`,
+            `xchain:TBTC/send?to=tb1qw508d6qejxtdg4y5r3zarvary0c5xw7kxpjzsx&amount=1&memo=${encodeURIComponent('rent\r\nAmount: 999')}`,
             { chainRegistry },
         );
         expect(intent.memo).toContain('\r\n');
@@ -179,7 +175,7 @@ describe('hardenUriIntentText', () => {
 
     it('drops a NUL from tick', () => {
         const intent = parseXchainUri(
-            `xchain:TBTC/send?to=addr&amount=1&tick=${encodeURIComponent(`PEPE${NUL}COIN`)}`,
+            `xchain:TBTC/send?to=tb1qw508d6qejxtdg4y5r3zarvary0c5xw7kxpjzsx&amount=1&tick=${encodeURIComponent(`PEPE${NUL}COIN`)}`,
             { chainRegistry },
         );
         expect(intent.tick).toContain(NUL);
@@ -198,23 +194,23 @@ describe('hardenUriIntentText', () => {
         expect(hardened.executeParams).not.toContain(NUL);
     });
 
-    it('never touches address: a hostile character stays exactly as the link sent it', () => {
+    it('never touches address: a valid address stays exactly as the link sent it', () => {
         // The field is deliberately NOT neutralized - see the function's own
-        // comment. A destination is validated by its own checksum before
-        // signing, and mangling it here risks corrupting one that was fine.
+        // comment. A hostile character cannot survive the parser's address
+        // check, so the link is refused before hardening sees it.
         const hostileAddress = `bc1q${RLO}attacker`;
-        const intent = parseXchainUri(
+        expect(parseXchainUri(
             `xchain:TBTC/send?to=${encodeURIComponent(hostileAddress)}&amount=1`,
             { chainRegistry },
-        );
-        const hardened = hardenUriIntentText(intent);
-        expect(hardened.address).toBe(hostileAddress);
+        )).toEqual({ kind: 'unknown' });
+        const intent = parseXchainUri('xchain:TBTC/send?to=tb1qw508d6qejxtdg4y5r3zarvary0c5xw7kxpjzsx&amount=1', { chainRegistry });
+        expect(hardenUriIntentText(intent).address).toBe('tb1qw508d6qejxtdg4y5r3zarvary0c5xw7kxpjzsx');
     });
 
     it('never touches amount: downstream decimal parsing already rejects tampering', () => {
         const hostileAmount = `1${RLO}0000`;
         const intent = parseXchainUri(
-            `xchain:TBTC/send?to=addr&amount=${encodeURIComponent(hostileAmount)}`,
+            `xchain:TBTC/send?to=tb1qw508d6qejxtdg4y5r3zarvary0c5xw7kxpjzsx&amount=${encodeURIComponent(hostileAmount)}`,
             { chainRegistry },
         );
         const hardened = hardenUriIntentText(intent);
@@ -223,7 +219,7 @@ describe('hardenUriIntentText', () => {
 
     it('does not mutate the intent object it was given', () => {
         const intent = parseXchainUri(
-            `xchain:TBTC/send?to=addr&amount=1&memo=${encodeURIComponent(`Pay${RLO}rent`)}`,
+            `xchain:TBTC/send?to=tb1qw508d6qejxtdg4y5r3zarvary0c5xw7kxpjzsx&amount=1&memo=${encodeURIComponent(`Pay${RLO}rent`)}`,
             { chainRegistry },
         );
         const before = { ...intent };
@@ -277,8 +273,8 @@ describe('safeChainIdParam', () => {
         // Guards the refactor that introduced it: the parser must still drop a
         // hostile chain= on the BIP21 road and a hostile first segment on the
         // legacy path-style road.
-        expect(parseXchainUri('xchain:bc1qexample?chain=../../evil').chainId).toBeUndefined();
-        expect(parseXchainUri('xchain:bc1qexample?chain=bitcoin-mainnet').chainId).toBe('bitcoin-mainnet');
+        expect(parseXchainUri('xchain:bc1qar0srrr7xfkvy5l643lydnw9re59gtzzwf5mdq?chain=../../evil').chainId).toBeUndefined();
+        expect(parseXchainUri('xchain:bc1qar0srrr7xfkvy5l643lydnw9re59gtzzwf5mdq?chain=bitcoin-mainnet').chainId).toBe('bitcoin-mainnet');
         expect(parseXchainUri('xchain://../../etc/passwd/BTC').chainId).toBeUndefined();
         expect(parseXchainUri('xchain://bitcoin-mainnet/BTC').chainId).toBe('bitcoin-mainnet');
     });

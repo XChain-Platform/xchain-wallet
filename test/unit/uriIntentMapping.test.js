@@ -47,9 +47,9 @@ describe('shared URI to view mapping', () => {
     });
 
     it.each([
-        ['bitcoin', 'bitcoin-mainnet', 'BTC', 'bc1qrecipient'],
-        ['litecoin', 'litecoin-mainnet', 'LTC', 'ltc1qrecipient'],
-        ['dogecoin', 'dogecoin-mainnet', 'DOGE', 'DRecipient'],
+        ['bitcoin', 'bitcoin-mainnet', 'BTC', 'bc1qar0srrr7xfkvy5l643lydnw9re59gtzzwf5mdq'],
+        ['litecoin', 'litecoin-mainnet', 'LTC', 'ltc1qw508d6qejxtdg4y5r3zarvary0c5xw7kgmn4n9'],
+        ['dogecoin', 'dogecoin-mainnet', 'DOGE', 'DH5yaieqoZN36fDVciNyRueRGvGLR3mr7L'],
     ])('routes %s payment links to Send with every supported field', (scheme, chainId, tick, address) => {
         expect(deepLinkRoute(
             `${scheme}:${address}?amount=1.25&message=Coffee%20%E2%80%AEshop`,
@@ -68,9 +68,9 @@ describe('shared URI to view mapping', () => {
 
     it('unwraps full and shorthand web+xchain protocol-handler links', () => {
         expect(deepLinkRoute('web+xchain:xchain:BTC/receive', registry)).toEqual({ view: 'receive' });
-        expect(deepLinkRoute('web+xchain:BTC/send?to=bc1qrecipient&amount=2', registry)).toMatchObject({
+        expect(deepLinkRoute('web+xchain:BTC/send?to=bc1qar0srrr7xfkvy5l643lydnw9re59gtzzwf5mdq&amount=2', registry)).toMatchObject({
             view: 'send',
-            sendPrefill: { address: 'bc1qrecipient', amount: '2', chainId: 'bitcoin-mainnet' },
+            sendPrefill: { address: 'bc1qar0srrr7xfkvy5l643lydnw9re59gtzzwf5mdq', amount: '2', chainId: 'bitcoin-mainnet' },
         });
     });
 
@@ -107,10 +107,10 @@ describe('shared URI to view mapping', () => {
             'litecoin:Labc?amount=not-a-number',
             'dogecoin:Dabc?req-unknown=1',
             'xchain:',
-            'xchain:BTC/send?to=bc1qrecipient&amount=not-a-number',
-            'xchain:BTC/send?to=bc1qrecipient&amount=0.000000001',
-            'xchain:BTC/sign?to=bc1qrecipient&amount=1',
-            'xchain:BTC/connect?to=bc1qrecipient',
+            'xchain:BTC/send?to=bc1qar0srrr7xfkvy5l643lydnw9re59gtzzwf5mdq&amount=not-a-number',
+            'xchain:BTC/send?to=bc1qar0srrr7xfkvy5l643lydnw9re59gtzzwf5mdq&amount=0.000000001',
+            'xchain:BTC/sign?to=bc1qar0srrr7xfkvy5l643lydnw9re59gtzzwf5mdq&amount=1',
+            'xchain:BTC/connect?to=bc1qar0srrr7xfkvy5l643lydnw9re59gtzzwf5mdq',
             'web+xchain:',
         ]) {
             expect(deepLinkRoute(raw, registry), raw).toEqual({
@@ -123,7 +123,7 @@ describe('shared URI to view mapping', () => {
     it('holds a payment link while locked and applies it after unlock', async () => {
         const bridge = {
             takePending: vi.fn(async () => ({
-                raw: 'dogecoin:DRecipient?amount=3&submit=1&confirm=1',
+                raw: 'dogecoin:DH5yaieqoZN36fDVciNyRueRGvGLR3mr7L?amount=3&submit=1&confirm=1',
             })),
             onUri: vi.fn(() => vi.fn()),
             sendMessage: vi.fn(),
@@ -153,7 +153,7 @@ describe('shared URI to view mapping', () => {
         expect(apply.mock.calls[0][0]).toEqual({
             view: 'send',
             sendPrefill: {
-                address: 'DRecipient',
+                address: 'DH5yaieqoZN36fDVciNyRueRGvGLR3mr7L',
                 amount: '3',
                 tick: 'DOGE',
                 chainId: 'dogecoin-mainnet',
@@ -166,7 +166,7 @@ describe('shared URI to view mapping', () => {
     it('holds a malformed claimed link while locked, then applies only its plain error', async () => {
         const bridge = {
             takePending: vi.fn(async () => ({
-                raw: 'xchain:BTC/sign?to=bc1qrecipient&amount=1&submit=1',
+                raw: 'xchain:BTC/sign?to=bc1qar0srrr7xfkvy5l643lydnw9re59gtzzwf5mdq&amount=1&submit=1',
             })),
             onUri: vi.fn(() => vi.fn()),
             sendMessage: vi.fn(),

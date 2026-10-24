@@ -41,3 +41,20 @@ describe('xchain link token amounts', () => {
         expect(deepLinkRoute(`xchain:BTC/send?to=${ADDR}&amount=0.123456789`, registry)).toEqual(INVALID);
     });
 });
+
+describe('coin-scheme links whose target is not an address', () => {
+    it('refuses a junk address', () => {
+        expect(deepLinkRoute('bitcoin:zzzz', registry)).toEqual(INVALID);
+        expect(deepLinkRoute('litecoin:zzzz?amount=1', registry)).toEqual(INVALID);
+    });
+
+    it('refuses an address for another chain', () => {
+        expect(deepLinkRoute('litecoin:ltc1qw508d6qejxtdg4y5r3zarvary0c5xw7kgmn4n9x', registry)).toEqual(INVALID);
+        expect(deepLinkRoute(`litecoin:${ADDR}`, registry)).toEqual(INVALID);
+    });
+
+    it('opens Send for a valid address', () => {
+        expect(deepLinkRoute(`bitcoin:${ADDR}`, registry).view).toBe('send');
+        expect(deepLinkRoute('litecoin:ltc1qw508d6qejxtdg4y5r3zarvary0c5xw7kgmn4n9', registry).view).toBe('send');
+    });
+});

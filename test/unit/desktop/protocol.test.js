@@ -107,7 +107,7 @@ describe('desktop deep-link classification', () => {
 
     it('classifies and hardens xchain intents', () => {
         const rlo = String.fromCharCode(0x202e);
-        const raw = `xchain:TBTC/send?to=addr&amount=1&memo=${encodeURIComponent(`Pay${rlo}rent`)}`;
+        const raw = `xchain:TBTC/send?to=tb1qw508d6qejxtdg4y5r3zarvary0c5xw7kxpjzsx&amount=1&memo=${encodeURIComponent(`Pay${rlo}rent`)}`;
         const link = classifyDeepLink(raw);
 
         expect(link.scheme).toBe('xchain');

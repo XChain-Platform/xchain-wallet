@@ -17,6 +17,7 @@
 import { useEffect, useState } from 'react';
 import { normalizeBip21Amount, parseBip21Uri } from '../../core/src/uri/bip21.js';
 import { hardenUriIntentText, parseXchainUri } from '../../core/src/uri/xchainUri.js';
+import { isValidAddressForChain } from '../../core/src/shared/utils/addressValidation.js';
 import { tickerReferenceError } from '../../core/src/shared/utils/tickerGrammar.js';
 
 const COIN_SCHEMES = Object.freeze({
@@ -70,6 +71,8 @@ export function deepLinkRoute(raw, chainRegistry) {
             const hardened = hardenUriIntentText({ kind: 'send', memo, tick: parts.params?.tick });
             const chainId = chainRegistry?.chainIdFor?.(coinScheme.coin, 'mainnet') || undefined;
             if (!chainId) return invalidRoute();
+            // The link's target must be an address on the scheme's own chain.
+            if (!isValidAddressForChain(parts.address, coinScheme.coin, 'mainnet')) return invalidRoute();
             // A request that names another network cannot be shown as a
             // payment on this scheme's own chain, and a named token must not
             // fall back to the coin: either would prefill a different payment
