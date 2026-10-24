@@ -38,7 +38,17 @@ export async function listContacts({ vault }) {
     // schema-checked, but older or externally restored storage can still hold
     // malformed data. Keep valid contacts available and leave repair of the
     // damaged rows to an explicit recovery path.
-    return rows.filter((row) => validateContact(row).ok);
+    return rows.filter((row) => validateContact(row).ok).map(withCleanName);
+}
+
+// A record saved before names were cleaned can still carry invisible or
+// bidirectional characters. Every read hands out the cleaned name, so such a
+// contact displays as what it says, and the stored record is left as it is
+// until the user saves it.
+function withCleanName(contact) {
+    if (!contact || typeof contact.name !== 'string') return contact;
+    const name = cleanContactName(contact.name);
+    return name === contact.name ? contact : { ...contact, name };
 }
 
 /**
@@ -63,7 +73,7 @@ export async function findContactByAddress({ vault, chain, address }) {
     const needle = normalizedEntryKey({ chain, address });
     for (const c of Array.isArray(rows) ? rows : []) {
         for (const e of Array.isArray(c?.entries) ? c.entries : []) {
-            if (normalizedEntryKey(e) === needle) return c;
+            if (normalizedEntryKey(e) === needle) return withCleanName(c);
         }
     }
     return null;
@@ -106,7 +116,7 @@ export async function saveContact({ vault, record, input, replaceIds = [], expec
             && normalizedName(contact.name) === normalizedName(rec.name)
         ));
         if (duplicateName) {
-            throw new Error(`A contact named "${duplicateName.name}" already exists.`);
+            throw new Error(`A contact named "${cleanContactName(duplicateName.name)}" already exists.`);
         }
         const seen = new Set();
         for (const entry of rec.entries) {
@@ -120,7 +130,7 @@ export async function saveContact({ vault, record, input, replaceIds = [], expec
             if (contact.id === rec.id || replaced.has(contact.id)) continue;
             const duplicate = (contact.entries || []).find((entry) => seen.has(normalizedEntryKey(entry)));
             if (duplicate) {
-                throw new Error(`This address is already saved for ${contact.name}: ${duplicate.address}`);
+                throw new Error(`This address is already saved for ${cleanContactName(contact.name)}: ${duplicate.address}`);
             }
         }
         await vault.contacts.put(rec);

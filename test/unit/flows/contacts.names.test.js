@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 import { describe, expect, it, vi } from 'vitest';
-import { saveContact } from '../../../packages/core/src/flows/contacts.js';
+import { findContactByAddress, listContacts, saveContact } from '../../../packages/core/src/flows/contacts.js';
 import { cleanContactName } from '../../../packages/core/src/schemas/contact.js';
 import { contactsFromCsv } from '../../../packages/core/src/shared/utils/contactsCsv.js';
 
@@ -50,5 +50,41 @@ describe('contact names hide nothing', () => {
         const csv = 'name,chain,address\n"‮abc",bitcoin,bc1qar0srrr7xfkvy5l643lydnw9re59gtzzwf5mdq\n';
         const out = contactsFromCsv(csv);
         expect(out.records[0].record.name).toBe('abc');
+    });
+});
+
+describe('contacts saved before name cleaning display safely', () => {
+    const stored = {
+        schemaVersion: 1,
+        id: 'old-1',
+        name: 'Erin​ Calloway‮',
+        notes: '',
+        entries: [{ chain: 'bitcoin', address: 'bc1qa', label: '' }],
+        avatarSeed: 'bc1qa',
+        createdAt: '2026-01-01T00:00:00.000Z',
+        updatedAt: '2026-01-01T00:00:00.000Z',
+    };
+
+    it('listContacts returns the cleaned name and leaves the stored record alone', async () => {
+        const vault = fakeVault();
+        vault.rows.set(stored.id, stored);
+        const rows = await listContacts({ vault });
+        expect(rows[0].name).toBe('Erin Calloway');
+        expect(vault.rows.get(stored.id).name).toBe('Erin​ Calloway‮');
+        expect(vault.contacts.put).not.toHaveBeenCalled();
+    });
+
+    it('findContactByAddress returns the cleaned name', async () => {
+        const vault = fakeVault();
+        vault.rows.set(stored.id, stored);
+        const found = await findContactByAddress({ vault, chain: 'bitcoin', address: 'bc1qa' });
+        expect(found.name).toBe('Erin Calloway');
+    });
+
+    it('a new contact with the cleaned name collides with the old record', async () => {
+        const vault = fakeVault();
+        vault.rows.set(stored.id, stored);
+        await expect(saveContact({ vault, input: input('Erin Calloway', 'bc1qb') }))
+            .rejects.toThrow('A contact named "Erin Calloway" already exists.');
     });
 });
