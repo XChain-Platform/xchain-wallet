@@ -40,6 +40,7 @@ import { actionDisplayLabel } from '../shared/utils/actionDisplayLabel.js';
 import { withAdsPlanAtEncode } from './buildActionPsbt.js';
 import { importedAddressIdsFor } from './_importedAddressIds.js';
 import { assertReferencedOfferActionable } from './marketExpiry.js';
+import { assertSafeActionText } from '../shared/utils/actionTextSafety.js';
 
 /**
  * §4.7: the single-tick debit a SEND moves, for the concurrent-window
@@ -167,6 +168,7 @@ export async function submitAction({
     onBroadcastFailure,
     verifyBuiltTx = false,
 }) {
+    assertSafeActionText(actionData);
     if (!injectedSigner && (typeof password !== 'string' || password.length === 0)) {
         throw new Error('submitAction: either `password` or `signer` is required');
     }

@@ -131,6 +131,17 @@ describe('ExecuteContractForm argument validation', () => {
         expect(await screen.findByRole('alert')).toHaveTextContent('Method name is required.');
     });
 
+    it('refuses hostile method text before review', async () => {
+        mount();
+        fireEvent.click(await screen.findByRole('button', { name: 'Enter method manually' }));
+        fireEvent.change(screen.getByLabelText('Method'), { target: { value: 'pay\u202eout' } });
+        fireEvent.click(screen.getByRole('button', { name: 'Call contract' }));
+
+        expect(await screen.findByRole('alert'))
+            .toHaveTextContent('Method cannot contain text-direction control characters.');
+        expect(screen.queryByRole('form', { name: /Review/ })).toBeNull();
+    });
+
     it('rejects malformed declared addresses before compose', async () => {
         mount('full', 'recipient', {
             getContractByActionIndex: () => Promise.resolve({

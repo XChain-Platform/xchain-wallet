@@ -37,7 +37,7 @@
 import { submitAction } from './submitAction.js';
 import { normalizeSource } from './sendToken.js';
 import { exportPrivateKey } from './exportPrivateKey.js';
-import { hasUnsafeMessageCharacters } from '../shared/utils/messageTextSafety.js';
+import { actionTextSafetyError } from '../shared/utils/actionTextSafety.js';
 
 const PROTOCOL_COIN_TICKER = {
     bitcoin: 'BTC',
@@ -67,10 +67,11 @@ export function messageWireByteLength(message, method) {
     return (plaintextBytes + envelopeBytes) * 2;
 }
 
+// The plaintext path and the prebuilt confirm path both run this, so a
+// prebuilt PLAINTEXT_MESSAGE gets the same refusal as freshly typed text.
 function assertMessageTextSafe(message) {
-    if (hasUnsafeMessageCharacters(message)) {
-        throw new TypeError('messageAction: Message contains unsupported control or invisible characters.');
-    }
+    const safetyError = actionTextSafetyError(message, 'Message');
+    if (safetyError) throw new TypeError(`messageAction: ${safetyError}`);
 }
 
 function assertMessageFieldFits(value, label) {

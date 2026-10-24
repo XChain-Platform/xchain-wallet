@@ -21,6 +21,7 @@ import { useTickBalance } from '../hooks/useTickBalance.js';
 import { useNativeFee } from '../hooks/useNativeFee.js';
 import { NativeFeeToggle } from '../components/NativeFeeToggle.jsx';
 import { submitFailureMessage } from '../utils/submitFailureMessage.js';
+import { memoLengthError } from '../utils/memoLimit.js';
 import { compareDecimalStrings, divideDecimalStrings, formatWithThousands, tokenAmountPrecisionError } from '../utils/amountFormat.js';
 import { addressValidationError } from '../utils/addressValidation.js';
 import { tickerReferenceError } from '../utils/tickerGrammar.js';
@@ -317,6 +318,8 @@ export function CrossChainSwapForm({ walletId, onBack }) {
             if (addressError) return addressError;
         }
         if (memo.includes('|') || memo.includes(';')) return 'Memo cannot contain "|" or ";".';
+        const memoError = memoLengthError(memo.trim());
+        if (memoError) return memoError;
         const expirationError = expirationValidationError(expMode, expInput);
         if (expirationError) return expirationError;
         return null;

@@ -47,6 +47,7 @@ import {
 } from '../../flows/addressPreferences.js';
 import styles from './IssueTokenForm.module.css';
 import { submitFailureMessage } from '../utils/submitFailureMessage.js';
+import { memoLengthError } from '../utils/memoLimit.js';
 
 const PROTOCOL_COIN_TICKER = { bitcoin: 'BTC', litecoin: 'LTC', dogecoin: 'DOGE' };
 const chainRegistry = registryLib.defaultRegistry();
@@ -190,6 +191,8 @@ export function AddressPreferencesForm({ walletId, chainId: initialChainId, addr
     async function handleReview(event) {
         event.preventDefault();
         setFormError(null);
+        const memoError = memoLengthError(memo.trim());
+        if (memoError) { setFormError(memoError); return; }
         initialPrefillOpen.current = false;
         try {
             const fresh = await messaging.getAddressPreferences({ chainId, address });

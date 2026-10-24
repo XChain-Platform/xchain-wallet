@@ -297,6 +297,27 @@ describe('CreateBetFeedForm: the live market-cost quote', () => {
 
 describe('CreateBetFeedForm: compose and submit', () => {
     it.each([
+        ['What is being bet on', 'safe\u202eunsafe', /Title cannot contain text-direction/],
+        ['Outcome 0', 'safe\u200bunsafe', /Outcome cannot contain zero-width/],
+    ])('refuses hostile %s text before compose', async (label, value, message) => {
+        const { messaging, calls } = harness();
+        let utils;
+        await domAct(async () => {
+            utils = mount(CreateBetFeedForm, messaging, { chainId: CHAIN, presetTick: 'PEPECREATURE' });
+            await drain();
+        });
+        await fillMarket(utils);
+        await domAct(async () => {
+            typeIn(utils, label, value);
+            fireEvent.click(button(utils, /Review market/i));
+            await drain();
+        });
+
+        expect(utils.container.textContent).toMatch(message);
+        expect(calls.find((call) => call.method === 'composeBetForConfirm')).toBeUndefined();
+    });
+
+    it.each([
         ['1,5', '1.5'],
         ['1.5', '1.5'],
     ])('normalizes a pasted percentage %s without changing its wire value', async (

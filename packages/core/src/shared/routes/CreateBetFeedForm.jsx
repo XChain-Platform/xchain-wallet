@@ -36,6 +36,8 @@ import {
     formatWithThousands,
     normalizeLocalizedDecimal,
 } from '../utils/amountFormat.js';
+import { actionTextSafetyError } from '../utils/actionTextSafety.js';
+import { memoLengthError } from '../utils/memoLimit.js';
 
 const chainRegistry = registryLib.defaultRegistry();
 
@@ -388,6 +390,15 @@ export function CreateBetFeedForm({
     function validate() {
         if (!fromAddress) return 'No address on this network to create a market from.';
         if (!label.trim()) return 'Give the market a question or title.';
+        const textSafetyError = actionTextSafetyError(label, 'Title')
+            || cleanOutcomes.map((outcome) => actionTextSafetyError(outcome, 'Outcome')).find(Boolean)
+            || actionTextSafetyError(description, 'Description')
+            || actionTextSafetyError(resolutionCriteria, 'Settlement rule')
+            || actionTextSafetyError(source, 'Result source')
+            || actionTextSafetyError(category, 'Category')
+            || outcomeNotes.map((note) => actionTextSafetyError(note, 'Outcome note')).find(Boolean)
+            || memoLengthError(memo.trim());
+        if (textSafetyError) return textSafetyError;
         if (label.trim().length > MAX_LABEL) return `The title is ${label.trim().length} characters; the limit is ${MAX_LABEL}.`;
         if (!tick.trim()) return 'Choose the token bets are placed in. Betting is token-only: the network coin cannot be wagered.';
         if (cleanOutcomes.length !== outcomes.length) return 'Fill in every outcome, or remove the empty one.';

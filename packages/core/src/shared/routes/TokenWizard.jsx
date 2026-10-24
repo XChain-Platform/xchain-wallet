@@ -42,6 +42,7 @@ import {
     issueSupplyLimitError,
     issueTextLengthError,
 } from '../utils/issueFieldValidation.js';
+import { actionTextSafetyError } from '../utils/actionTextSafety.js';
 import styles from './TokenWizard.module.css';
 import { useNativeFee } from '../hooks/useNativeFee.js';
 import {
@@ -391,6 +392,11 @@ export function TokenWizard({ walletId, onBack }) {
         const nameError = tickerGrammarError(name, { noun: 'Token name' });
         if (nameError) {
             setFormError(nameError);
+            return;
+        }
+        const descriptionError = actionTextSafetyError(description, 'Description');
+        if (descriptionError) {
+            setFormError(descriptionError);
             return;
         }
         if (template === 'subtoken') {

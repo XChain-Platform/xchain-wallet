@@ -169,6 +169,26 @@ describe('governance route audit', () => {
         expect(messaging.composeVoteForConfirm).not.toHaveBeenCalled();
     });
 
+    it.each([
+        ['Question (optional)', 'safe\u202eunsafe', 'Question cannot contain text-direction control characters.'],
+        ['Option 0', 'safe\u200bunsafe', 'Option cannot contain zero-width characters.'],
+    ])('refuses hostile poll text from %s before compose', async (label, value, message) => {
+        const messaging = messagingWith();
+        mount(CreatePollForm, {
+            walletId: 'wallet-1', chainId: CHAIN, presetTick: 'VOTE', onBack() {},
+        }, messaging);
+        await screen.findByDisplayValue(ADDRESS.address);
+        fireEvent.change(screen.getByLabelText('Option 0'), { target: { value: 'Yes' } });
+        fireEvent.change(screen.getByLabelText('Option 1'), { target: { value: 'No' } });
+        fireEvent.change(screen.getByLabelText('Closes at block'), { target: { value: '244' } });
+        fireEvent.change(screen.getByLabelText(label), { target: { value } });
+
+        fireEvent.click(screen.getByRole('button', { name: 'Create poll' }));
+
+        expect(await screen.findByText(message)).toBeTruthy();
+        expect(messaging.composeVoteForConfirm).not.toHaveBeenCalled();
+    });
+
     it('refuses poll creation from an address with no governance-token balance', async () => {
         const messaging = messagingWith({
             getWalletBalances: vi.fn().mockResolvedValue({

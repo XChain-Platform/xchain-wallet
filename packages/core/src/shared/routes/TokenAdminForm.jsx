@@ -59,6 +59,7 @@ import { currentListMemberCount } from '../../flows/listMembership.js';
 import { compareDecimalStrings, tokenAmountPrecisionError } from '../utils/amountFormat.js';
 import { sharedBlockPickState } from '../utils/sharedBlockPick.js';
 import { listLabel } from '../utils/listLabel.js';
+import { actionTextSafetyError } from '../utils/actionTextSafety.js';
 
 const chainRegistry = registryLib.defaultRegistry();
 
@@ -695,9 +696,10 @@ export function TokenAdminForm({ walletId, mode, onBack, initialChainId, initial
             return;
         }
         if (mode === 'description') {
-            const descriptionLengthError = issueTextLengthError(description, 'Description');
-            if (descriptionLengthError) {
-                setFormError(descriptionLengthError);
+            const descriptionError = actionTextSafetyError(description, 'Description')
+                || issueTextLengthError(description, 'Description');
+            if (descriptionError) {
+                setFormError(descriptionError);
                 return;
             }
         }

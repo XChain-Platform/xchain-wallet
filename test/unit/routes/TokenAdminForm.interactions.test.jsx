@@ -158,6 +158,21 @@ describe('TokenAdminForm review interaction safety', () => {
         expect(buildActionPsbtRequest).not.toHaveBeenCalled();
     });
 
+    it('refuses a hostile description before watcher review', async () => {
+        const buildActionPsbtRequest = vi.fn();
+        mountAdmin('description', { buildActionPsbtRequest });
+        fireEvent.change(await screen.findByLabelText('New description'), {
+            target: { value: 'safe\u202eunsafe' },
+        });
+
+        fireEvent.click(screen.getByRole('button', { name: 'Preview' }));
+
+        expect(await screen.findByRole('alert'))
+            .toHaveTextContent('Description cannot contain text-direction control characters.');
+        expect(screen.queryByRole('form', { name: 'Review description update' })).toBeNull();
+        expect(buildActionPsbtRequest).not.toHaveBeenCalled();
+    });
+
     it('does not offer already-locked supply and description flags again', async () => {
         mountAdmin('lock', {
             getTokenInfo: vi.fn().mockResolvedValue({

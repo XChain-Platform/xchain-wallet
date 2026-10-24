@@ -41,6 +41,7 @@ import { isBareNativePayment, withNativePaymentOutput } from './nativePayment.js
 import { compressionFieldOf, declaresDeflateRaw } from './payloadCompression.js';
 import { compiledPayloadByteLen, envelopeEncoderOpts, rawDataByteLen } from './envelopeSelection.js';
 import { capRbfToDescriptor } from './rbfCap.js';
+import { assertSafeActionText } from '../shared/utils/actionTextSafety.js';
 
 // FILE v0's COMPRESSION field index in the full action string, and the encoder's
 // own field-setting rule mirrored byte for byte (pad the optional fields up to
@@ -147,6 +148,7 @@ function carriedPayloadOf(composedActionString, suppliedRawData, compression) {
 export async function composeForConfirm({
     sdkRegistry, chainRegistry, vault, chainId, actionData, encoderOpts: callerEncoderOpts, source, signal, signer = null,
 }) {
+    assertSafeActionText(actionData);
     const descriptor = chainRegistry.get(chainId);
     if (!descriptor) throw new Error(`composeForConfirm: unknown chain "${chainId}"`);
     // Cap RBF before anything reads the options, so the preview and the signed bytes agree.

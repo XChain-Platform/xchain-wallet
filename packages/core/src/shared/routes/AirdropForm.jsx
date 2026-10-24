@@ -63,7 +63,7 @@ import { submitFailureMessage, SIGNED_NOT_BROADCAST_MESSAGE } from '../utils/sub
 import { tickerReferenceError } from '../utils/tickerGrammar.js';
 import { classifyTickItems } from '../utils/listTickItems.js';
 import { currentListItems } from '../../flows/listMembership.js';
-import { MEMO_HINT } from '../utils/memoLimit.js';
+import { MEMO_HINT, memoLengthError } from '../utils/memoLimit.js';
 import { listLabel } from '../utils/listLabel.js';
 import { listStatusText } from '../utils/listItemStatusText.js';
 import { readFailureMessage } from '../utils/readFailureMessage.js';
@@ -984,6 +984,8 @@ export function AirdropForm({ walletId, resumeId = null, onBack, initialChainId,
             setFormError('Memo cannot contain | or ; characters.');
             return;
         }
+        const memoError = memoLengthError(memo.trim());
+        if (memoError) { setFormError(memoError); return; }
         if (sourceMode === 'existing') {
             if (!listActionIndex) {
                 setFormError('Choose an existing list first.');

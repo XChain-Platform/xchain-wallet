@@ -183,7 +183,7 @@ describe('message validation is visible from the primary action', () => {
             target: { value: 'pay\u202Etxt\u200Bnow' },
         });
 
-        expect(utils.getByText(/unsupported control or invisible characters/i)).toBeTruthy();
+        expect(utils.getByText('Message cannot contain text-direction control characters.')).toBeTruthy();
         expect(sendButton(utils)).toBeDisabled();
         expect(messaging.composeMessageForConfirm).not.toHaveBeenCalled();
     });

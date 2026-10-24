@@ -50,6 +50,7 @@ import { tokenAmountPrecisionError } from '../utils/amountFormat.js';
 import { addressValidationError } from '../utils/addressValidation.js';
 import { tickerReferenceError } from '../utils/tickerGrammar.js';
 import { t } from '../../i18n/index.js';
+import { memoLengthError } from '../utils/memoLimit.js';
 
 // A classified failure (offline, rejected fee) keeps its own copy; an unclassified one gets plain order copy.
 function orderFailureFallback(err) {
@@ -347,6 +348,8 @@ export function CreateOrderForm({ walletId, onBack, initialChainId, initialFromA
         }
         const m = memo.trim();
         if (m.includes('|') || m.includes(';')) { setFormError('Memo cannot contain "|" or ";".'); return false; }
+        const memoError = memoLengthError(m);
+        if (memoError) { setFormError(memoError); return false; }
         if (allowListIdx && !isCanonicalActionIndex(allowListIdx)) {
             setFormError('Allow-list ID must be a positive whole number.'); return false;
         }

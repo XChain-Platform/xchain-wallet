@@ -31,6 +31,8 @@
 //
 // Messages are user-facing: plain language, no wire field names.
 
+import { actionTextSafetyError } from '../shared/utils/actionTextSafety.js';
+
 /**
  * @typedef {Object} BindingPollFields
  * @property {string} [callbackContract]   contract's deploy action_index
@@ -80,6 +82,8 @@ export function bindingPollErrors(fields) {
 
     if (isBlank(fields.callbackMethod)) {
         errors.push('Name the method the contract should run when the poll finishes.');
+    } else if (actionTextSafetyError(fields.callbackMethod, 'Method')) {
+        errors.push(actionTextSafetyError(fields.callbackMethod, 'Method'));
     } else if (String(fields.callbackMethod).trim().length > METHOD_MAX_LENGTH) {
         errors.push(`The method name is too long (limit ${METHOD_MAX_LENGTH} characters).`);
     }
@@ -89,6 +93,8 @@ export function bindingPollErrors(fields) {
     }
 
     if (!isBlank(fields.callbackParams)) {
+        const safetyError = actionTextSafetyError(fields.callbackParams, 'Callback arguments');
+        if (safetyError) errors.push(safetyError);
         let ok = false;
         try { ok = Array.isArray(JSON.parse(String(fields.callbackParams))); } catch { ok = false; }
         if (!ok) errors.push('Extra arguments must be a JSON list, for example ["treasury", 1000].');

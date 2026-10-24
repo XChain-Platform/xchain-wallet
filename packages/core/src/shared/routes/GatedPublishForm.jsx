@@ -28,6 +28,7 @@ import { ActionConfirmScreen } from '../components/ActionConfirmScreen.jsx';
 import { QueuedResultPanel } from '../components/QueuedResultPanel.jsx';
 import { imagePreviewDataUrl, publishFeeValidationError, publishFileType } from '../utils/publishingFile.js';
 import { memoLengthError } from '../utils/memoLimit.js';
+import { actionTextSafetyError } from '../utils/actionTextSafety.js';
 import styles from './IssueTokenForm.module.css';
 import { t } from '../../i18n/index.js';
 
@@ -211,6 +212,8 @@ export function GatedPublishForm({ walletId, chainId, tick, issuerAddress = null
         if (!file) return;
         const readId = ++fileReadIdRef.current;
         setFileMeta(null);
+        const fileNameError = actionTextSafetyError(file.name || 'file', 'File name');
+        if (fileNameError) { setFormError(fileNameError); return; }
         const { type, error: typeError } = publishFileType(file);
         if (typeError) { setFormError(typeError); return; }
         const cap = plainCapFor(file.name, type);
@@ -261,6 +264,9 @@ export function GatedPublishForm({ walletId, chainId, tick, issuerAddress = null
             setFormError('File name, title, and memo cannot contain | or ; characters.');
             return;
         }
+        const unsafeMetadata = actionTextSafetyError(fileMeta.name, 'File name')
+            || actionTextSafetyError(title, 'Title');
+        if (unsafeMetadata) { setFormError(unsafeMetadata); return; }
         const memoError = memoLengthError(memo.trim());
         if (memoError) { setFormError(memoError); return; }
         const feeError = publishFeeValidationError(feePick, feeCustomEstimate);

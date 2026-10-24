@@ -45,6 +45,7 @@ import { OwnAddressPickerScreen } from '../components/OwnAddressPickerScreen.jsx
 import styles from './IssueTokenForm.module.css';
 import { submitFailureMessage } from '../utils/submitFailureMessage.js';
 import { QueuedResultPanel } from '../components/QueuedResultPanel.jsx';
+import { memoLengthError } from '../utils/memoLimit.js';
 
 const chainRegistry = registryLib.defaultRegistry();
 
@@ -522,6 +523,8 @@ export function SweepForm({
             setFormError('Memo cannot contain "|" or ";".');
             return;
         }
+        const memoError = memoLengthError(m);
+        if (memoError) { setFormError(memoError); return; }
         if (!gateSatisfied) {
             setFormError(`Unlock keys for ${gateMissingTicks.join(', ')} are not in the vault yet. Recover them below, or acknowledge sweeping without them.`);
             return;

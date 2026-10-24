@@ -57,6 +57,7 @@ import {
     issueSupplyLimitError,
     issueTextLengthError,
 } from '../utils/issueFieldValidation.js';
+import { actionTextSafetyError } from '../utils/actionTextSafety.js';
 import { isValidAddressForChain } from '../utils/addressValidation.js';
 import { tickLookupVerdict } from '../utils/listTickItems.js';
 import { useNativeFee } from '../hooks/useNativeFee.js';
@@ -487,6 +488,11 @@ export function IssueTokenForm({ walletId, onBack }) {
         const tickerError = tickerGrammarError(ticker);
         if (tickerError) {
             setFormError(tickerError);
+            return;
+        }
+        const descriptionError = actionTextSafetyError(description, 'Description');
+        if (descriptionError) {
+            setFormError(descriptionError);
             return;
         }
         const checkedTicker = ticker.trim();

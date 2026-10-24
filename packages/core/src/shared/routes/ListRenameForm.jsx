@@ -51,6 +51,7 @@ const TICKER_BY_COIN = { bitcoin: 'BTC', litecoin: 'LTC', dogecoin: 'DOGE' };
 const META_ERROR_TEXT = {
     pipe: 'Cannot contain the | character.',
     semicolon: 'Cannot contain the ; character.',
+    unsafe: 'Cannot contain control, text-direction, or zero-width characters.',
     length: 'Too long.',
     format: 'Invalid format.',
 };

@@ -62,6 +62,24 @@ describe('TokenWizard guided flow', () => {
         fireEvent.submit(screen.getByRole('form', { name: 'Choose token network' }));
     }
 
+    it('refuses a hostile description before the review step', async () => {
+        const messaging = mountWizard();
+        await reachDetails('Meme token');
+        fireEvent.change(screen.getByLabelText('Token name (ticker)'), {
+            target: { value: 'SAFE' },
+        });
+        fireEvent.change(screen.getByLabelText('Supply'), { target: { value: '1' } });
+        fireEvent.change(screen.getByLabelText('Description (optional)'), {
+            target: { value: 'safe\u0000unsafe' },
+        });
+
+        fireEvent.submit(screen.getByRole('form', { name: 'Token details' }));
+
+        expect(await screen.findByRole('alert')).toHaveTextContent('Description cannot contain control characters.');
+        expect(screen.getByRole('form', { name: 'Token details' })).toBeTruthy();
+        expect(messaging.composeForConfirm).not.toHaveBeenCalled();
+    });
+
     it('blocks token composition with one plain reason while the device is offline', async () => {
         Object.defineProperty(navigator, 'onLine', { configurable: true, value: false });
         const composeForConfirm = vi.fn();

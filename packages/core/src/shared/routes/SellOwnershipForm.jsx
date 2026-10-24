@@ -39,6 +39,7 @@ import { ActionConfirmScreen } from '../components/ActionConfirmScreen.jsx';
 import { QueuedResultPanel } from '../components/QueuedResultPanel.jsx';
 import { tokenAmountPrecisionError } from '../utils/amountFormat.js';
 import { tickerReferenceError } from '../utils/tickerGrammar.js';
+import { memoLengthError } from '../utils/memoLimit.js';
 
 const chainRegistry = registryLib.defaultRegistry();
 
@@ -206,6 +207,8 @@ export function SellOwnershipForm({ walletId, onBack, chainId: initialChainId, t
         if (memo.includes('|') || memo.includes(';')) {
             return 'Memo cannot contain "|" or ";".';
         }
+        const memoError = memoLengthError(memo.trim());
+        if (memoError) return memoError;
         return null;
     }, [getMode, getTick, coinTicker, tokenTick, expiration, memo]);
 

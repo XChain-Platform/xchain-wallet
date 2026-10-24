@@ -29,7 +29,7 @@
 
 // U+202A-U+202E (LRE/RLE/PDF/LRO/RLO), U+2066-U+2069 (LRI/RLI/FSI/PDI),
 // U+200E/U+200F (LRM/RLM). Mirrors the SDK's BIDI_CONTROLS.
-export const BIDI_CONTROLS = /[\u202A-\u202E\u2066-\u2069\u200E\u200F]/g;
+export const BIDI_CONTROLS = /[\u061C\u202A-\u202E\u2066-\u2069\u200E\u200F]/g;
 
 // Zero-width space/non-joiner/joiner, word joiner, BOM.
 export const ZERO_WIDTH = /[\u200B-\u200D\u2060\uFEFF]/g;

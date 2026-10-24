@@ -59,7 +59,7 @@ import styles from './IssueTokenForm.module.css';
 import { preferredSourceId } from '../addressSelection.js';
 import { pickDefaultChainId } from '../chainSelection.js';
 import { QueuedResultPanel } from '../components/QueuedResultPanel.jsx';
-import { MEMO_HINT } from '../utils/memoLimit.js';
+import { MEMO_HINT, memoLengthError } from '../utils/memoLimit.js';
 import { listMembers } from '../../flows/allowListSelfCheck.js';
 import { normalizeProtocolFee } from '../../flows/protocolFeeRow.js';
 
@@ -647,6 +647,8 @@ export function DividendForm({ walletId, onBack, initialChainId, initialTick, in
             setFormError('Memo cannot contain | or ; characters.');
             return;
         }
+        const memoError = memoLengthError(memo.trim());
+        if (memoError) { setFormError(memoError); return; }
         setFormError(null);
         if (singleEncode) { openConfirmScreen(); return; }
         setStage('review');

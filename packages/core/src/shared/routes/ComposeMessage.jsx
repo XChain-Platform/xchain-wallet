@@ -40,7 +40,7 @@ import {
     MESSAGE_ATTACHMENT_TYPES,
     serializeMessageContent,
 } from '../utils/messageContent.js';
-import { hasUnsafeMessageCharacters } from '../utils/messageTextSafety.js';
+import { actionTextSafetyError } from '../utils/actionTextSafety.js';
 import { MAX_MESSAGE_BYTES, messageWireByteLength } from '../../flows/messageAction.js';
 import styles from './IssueTokenForm.module.css';
 
@@ -472,9 +472,7 @@ function ComposeMessageForm({
     const messageLengthError = wireMessageBytes > MAX_MESSAGE_BYTES
         ? `${messageLengthSubject} ${wireMessageBytes.toLocaleString()} bytes; the network accepts at most ${MAX_MESSAGE_BYTES.toLocaleString()} bytes.`
         : undefined;
-    const messageCharacterError = hasUnsafeMessageCharacters(message)
-        ? 'Message contains unsupported control or invisible characters.'
-        : undefined;
+    const messageCharacterError = actionTextSafetyError(message, 'Message') || undefined;
     const messageError = messageCharacterError || messageLengthError;
 
     function handleAttachmentPick(event) {

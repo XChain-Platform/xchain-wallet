@@ -97,6 +97,19 @@ afterEach(() => cleanup());
 beforeEach(() => { composeForConfirm = undefined; });
 
 describe('IssueTokenForm initial mint', () => {
+    it('refuses a hostile description before compose', async () => {
+        mountForm();
+        await fill({ supply: '10' });
+        fireEvent.change(screen.getByLabelText('Description (optional)'), {
+            target: { value: 'safe\u200bunsafe' },
+        });
+
+        await submit();
+
+        expect(await screen.findByRole('alert')).toHaveTextContent('Description cannot contain zero-width characters.');
+        expect(composeForConfirm).not.toHaveBeenCalled();
+    });
+
     it('ignores a stale taken-name result after the ticker changes', async () => {
         let resolveOld;
         let resolveCurrent;
