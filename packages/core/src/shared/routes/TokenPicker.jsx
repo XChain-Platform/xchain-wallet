@@ -705,6 +705,10 @@ export function TokenPicker({
                                 `${row.chainId}:${row.tick}` === optionTabStop ? 0 : -1
                             )}
                         />
+                    ) : loadError ? (
+                        // A failed read with nothing listed is already said by the
+                        // error notice above, with its own Try again.
+                        null
                     ) : (platformResults.length === 0 && !platformBusy && !platformError && balancesUnchecked && !tokenQueryTrim) ? (
                         // An empty list while balances could not be checked is
                         // not proof of an empty wallet: say that once instead.
