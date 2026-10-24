@@ -202,7 +202,7 @@ export async function assertReferencedOfferActionable({ sdkRegistry, chainId, ac
     if (lifecycle === 'expired') {
         throw offerRefusal(`This ${ref.kind} has expired.`);
     }
-    // The indexer records a cancel or edit of an order that is no longer open as
+    // The indexer records a cancel or edit of a filled or cancelled order as
     // invalid and keeps the fee, so a fill or cancel that landed after the list
     // loaded is refused here, before anything is signed.
     if (ref.kind === 'order' && ORDER_CLOSED_STATUSES.has(lifecycle)) {
