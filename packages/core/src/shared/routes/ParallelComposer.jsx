@@ -22,6 +22,8 @@ import { WatcherResultPanel } from '../components/WatcherResultPanel.jsx';
 import { isUserRejection } from '../hooks/useActionConfirmFlow.js';
 import { useOwnerActionLane } from '../hooks/useOwnerActionLane.js';
 import { useSignerReady } from '../hooks/useSignerReady.js';
+import { useFormDraft } from '../hooks/useFormDraft.js';
+import { useFormLeaveGuard } from '../hooks/useFormLeaveGuard.js';
 import { actionDisplayLabel } from '../utils/actionDisplayLabel.js';
 import { submitFailureMessage } from '../utils/submitFailureMessage.js';
 import { userFacingMessage } from '../utils/userFacingMessage.js';
@@ -113,6 +115,46 @@ export function ParallelComposer({ walletId, onBack, initialRows, hasDexSurface 
     );
     const [activeRowIndex, setActiveRowIndex] = useState(0);
     const [watcherResult, setWatcherResult] = useState(/** @type {any | null} */ (null));
+
+    // A run that stops part-way keeps its unsent rows as a draft, so leaving the
+    // composer never loses them and a broadcast row is never offered again.
+    const draft = useFormDraft({ view: 'parallel-composer', walletId });
+    const [resumeNotice, setResumeNotice] = useState(
+        /** @type {{ sent: number, unsent: number } | null} */ (null),
+    );
+    // Rows broadcast in earlier visits to this run, and whether this screen owns a
+    // stored draft (it resumed one or wrote one); an owned draft stays current until
+    // the run ends, then is cleared.
+    const priorSentRef = useRef(0);
+    const resumedRef = useRef(false);
+    const sentCount = rows.filter((r) => r.status === 'success').length;
+    const unsentRows = rows.filter((r) => r.status !== 'success' && r.status !== 'skipped');
+    const runPartWay = sentCount > 0 && unsentRows.length > 0;
+    const leaveGuard = useFormLeaveGuard({
+        submitting: rows.some((r) => r.status === 'submitting'),
+        unsentRows: runPartWay ? unsentRows.length : 0,
+        onLeave: onBack,
+    });
+    useEffect(() => {
+        if (!runPartWay && !resumedRef.current) return;
+        // A row still submitting may already be broadcast, so it never enters the draft.
+        const keep = rows.filter((r) => r.status === 'pending' || r.status === 'failed');
+        if (stage === 'done' || keep.length === 0) {
+            draft.clear();
+            resumedRef.current = false;
+            return;
+        }
+        resumedRef.current = true;
+        draft.save({
+            sentCount: priorSentRef.current + sentCount,
+            rows: keep.map((r) => ({
+                chainId: r.chainId,
+                fromAddressId: r.fromAddressId,
+                action: r.action,
+                paramsJson: r.paramsJson,
+            })),
+        });
+    }, [rows, stage, runPartWay, sentCount, draft]);
     useEffect(() => {
         let cancelled = false;
         Promise.all([
@@ -160,14 +202,39 @@ export function ParallelComposer({ walletId, onBack, initialRows, hasDexSurface 
                         error: null,
                     })));
                 } else {
-                    setRows([blankRow(chains[0], byChain, active)]);
+                    const saved = draft.load();
+                    const resumed = (Array.isArray(saved?.rows) ? saved.rows : [])
+                        .filter((r) => r && typeof r.chainId === 'string' && (byChain[r.chainId] || []).length > 0
+                            && typeof r.action === 'string' && typeof r.paramsJson === 'string')
+                        .map((r) => ({
+                            id: newRowId(),
+                            chainId: r.chainId,
+                            fromAddressId: (byChain[r.chainId] || []).some((a) => a.id === r.fromAddressId)
+                                ? r.fromAddressId
+                                : pickDefaultAddressId(byChain[r.chainId] || [], active?.[r.chainId]),
+                            action: r.action,
+                            paramsJson: r.paramsJson,
+                            status: 'pending',
+                            txid: null,
+                            error: null,
+                        }));
+                    if (resumed.length > 0) {
+                        const sent = Number.isFinite(saved.sentCount) ? saved.sentCount : 0;
+                        priorSentRef.current = sent;
+                        resumedRef.current = true;
+                        setResumeNotice({ sent, unsent: resumed.length });
+                        setRows(resumed);
+                    } else {
+                        draft.clear();
+                        setRows([blankRow(chains[0], byChain, active)]);
+                    }
                 }
             })
             .catch((err) => {
                 if (!cancelled) setLoadError(userFacingMessage(err, 'Failed to load wallet.'));
             });
         return () => { cancelled = true; };
-    }, [walletId, messaging, hasDexSurface]);
+    }, [walletId, messaging, hasDexSurface, draft]);
 
     const chainsWithAddresses = useMemo(() => {
         if (!addressesByChain) return [];
@@ -277,6 +344,7 @@ export function ParallelComposer({ walletId, onBack, initialRows, hasDexSurface 
 
     const startSigning = () => {
         if (!acknowledgedNoRollback) return;
+        setResumeNotice(null);
         setStage('signing');
         setActiveRowIndex(rows.findIndex((r) => r.status !== 'success'));
     };
@@ -405,13 +473,14 @@ export function ParallelComposer({ walletId, onBack, initialRows, hasDexSurface 
 
     const header = (
         <PageHeader
-            onBack={stage === 'review' ? () => setStage('compose') : onBack}
+            onBack={stage === 'review' ? () => setStage('compose') : leaveGuard.guardedOnBack}
             title="Parallel cross-chain actions"
         />
     );
     const wrap = (children) => (
         <Screen variant={variant} header={header} restoreScroll={stage !== 'review'}>
             {children}
+            {leaveGuard.confirmation}
         </Screen>
     );
 
@@ -615,9 +684,16 @@ export function ParallelComposer({ walletId, onBack, initialRows, hasDexSurface 
                 await goReview();
             }}
             sectioned
-            status={shownComposeError || validationError ? (
-                <StatusMessage variant="error">{shownComposeError || validationError}</StatusMessage>
-            ) : null}
+            status={[
+                shownComposeError || validationError ? (
+                    <StatusMessage key="error" variant="error">{shownComposeError || validationError}</StatusMessage>
+                ) : null,
+                resumeNotice ? (
+                    <StatusMessage key="resume" variant="status">
+                        {resumeNoticeText(resumeNotice)}
+                    </StatusMessage>
+                ) : null,
+            ]}
             actions={(
                 <>
                     <Button type="button" variant="secondary" onClick={addRow}>
@@ -897,6 +973,12 @@ function getAnyChainId() {
     // chain id as a stable anchor.
     const all = chainRegistry.supportedChains();
     return all[0]?.id || 'bitcoin-mainnet';
+}
+
+function resumeNoticeText({ sent, unsent }) {
+    const unsentText = `${unsent} ${unsent === 1 ? 'row has' : 'rows have'} not been sent yet.`;
+    if (sent === 0) return `Your earlier run stopped before it finished. ${unsentText}`;
+    return `Your earlier run stopped part-way. ${sent} ${sent === 1 ? 'row was' : 'rows were'} already broadcast and will not be sent again. ${unsentText}`;
 }
 
 function shortenTxid(t) {

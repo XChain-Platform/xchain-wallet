@@ -47,6 +47,22 @@ describe('useFormLeaveGuard in-app navigation', () => {
         expect(onLeave).not.toHaveBeenCalled();
     });
 
+    it('names the rows a part-way run has not sent', async () => {
+        const { result, onLeave } = mountGuard({ unsentRows: 2 });
+        let pending;
+
+        act(() => { pending = result.current.guardedOnBack(); });
+        expect(result.current.confirmation.props.message).toBe('2 rows have not been sent. Leave anyway?');
+        expect(result.current.confirmation.props.confirmLabel).toBe('Leave anyway');
+        act(() => result.current.confirmation.props.onConfirm());
+        await pending;
+        expect(onLeave).toHaveBeenCalledOnce();
+
+        const single = mountGuard({ unsentRows: 1 });
+        act(() => { single.result.current.guardedOnBack(); });
+        expect(single.result.current.confirmation.props.message).toBe('1 row has not been sent. Leave anyway?');
+    });
+
     it('uses transaction safety copy for an unsaved signed result', async () => {
         const { result, onLeave } = mountGuard({ signedUnbroadcast: true });
         let pending;

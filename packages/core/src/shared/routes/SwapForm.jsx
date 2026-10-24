@@ -35,6 +35,7 @@ import { useSignerInfo } from '../hooks/useSignerInfo.js';
 import { actionDisplayLabel } from '../utils/actionDisplayLabel.js';
 import { NativeFeeToggle } from '../components/NativeFeeToggle.jsx';
 import { NATIVE_FEE_WARNING } from '../../sdk/nativeFeePreflight.js';
+import { memoCharacterError, memoLengthError } from '../utils/memoLimit.js';
 import { submitFailureMessage } from '../utils/submitFailureMessage.js';
 import {
     hasAnyAddress,
@@ -54,7 +55,6 @@ import styles from './IssueTokenForm.module.css';
 import { useNativeFee } from '../hooks/useNativeFee.js';
 import { useTokenInfo } from '../hooks/useTokenInfo.js';
 import { QueuedResultPanel } from '../components/QueuedResultPanel.jsx';
-import { memoLengthError } from '../utils/memoLimit.js';
 
 const chainRegistry = registryLib.defaultRegistry();
 
@@ -318,7 +318,7 @@ export function SwapForm({ walletId, onBack, initialChainId, initialGiveTick, in
         if (allowListIdx && !isPositiveActionIndex(allowListIdx)) return 'Allow-list ID must be a positive whole number.';
         if (blockListIdx && !isPositiveActionIndex(blockListIdx)) return 'Block-list ID must be a positive whole number.';
         if (memo.includes('|') || memo.includes(';')) return 'Memo cannot contain "|" or ";".';
-        const memoError = memoLengthError(memo.trim());
+        const memoError = memoLengthError(memo.trim()) || memoCharacterError(memo.trim());
         if (memoError) return memoError;
         return null;
     }, [giveTick, getTick, coinTicker, giveOwnership, giveAmount, getOwnership, getAmount,

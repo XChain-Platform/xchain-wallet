@@ -319,4 +319,28 @@ describe('CreateOrderForm coverage', () => {
         expect(document.body).not.toHaveTextContent('/internal/order');
         expect(screen.getByTestId('action-intent')).toHaveTextContent('2.5 XCP');
     });
+
+    it.each([
+        ['over 250 bytes', 'x'.repeat(251), /251 bytes; the network accepts at most 250 bytes/],
+        // The shared action-text refusal answers first, before the memo's own check.
+        ['a bidirectional override', 'pay \u202etxt.exe', /Memo cannot contain text-direction control characters/],
+        ['a tab', 'a\tb', /Memo cannot contain control characters/],
+    ])('refuses a memo %s before composing', async (_label, memo, message) => {
+        await renderForm();
+        fillBasicOrder();
+        fireEvent.click(screen.getByRole('button', { name: 'Advanced options (lists, memo)' }));
+        fireEvent.change(screen.getByLabelText('Memo (optional)'), { target: { value: memo } });
+        fireEvent.click(screen.getByRole('button', { name: 'Place order' }));
+        expect(await screen.findByText(message)).toBeInTheDocument();
+        expect(state.confirm).not.toHaveBeenCalled();
+    });
+
+    it('accepts a memo of exactly 250 bytes', async () => {
+        await renderForm();
+        fillBasicOrder();
+        fireEvent.click(screen.getByRole('button', { name: 'Advanced options (lists, memo)' }));
+        fireEvent.change(screen.getByLabelText('Memo (optional)'), { target: { value: 'x'.repeat(250) } });
+        fireEvent.click(screen.getByRole('button', { name: 'Place order' }));
+        await waitFor(() => expect(state.messaging.composeForConfirm.mock.calls.length + state.confirm.mock.calls.length + state.submit.mock.calls.length).toBeGreaterThan(0));
+    });
 });
