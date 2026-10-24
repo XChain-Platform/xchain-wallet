@@ -78,3 +78,52 @@ export function neutralizeControlText(value, opts = {}) {
     }
     return s;
 }
+
+// Characters that are invisible or reorder text: C0/C1 controls, zero-width
+// characters, bidi marks, overrides and isolates, and the byte-order mark.
+const INVISIBLE_RANGES = [
+    [0x00, 0x1F], [0x7F, 0x9F], [0x200B, 0x200F], [0x202A, 0x202E], [0x2060, 0x2069], [0xFEFF, 0xFEFF],
+];
+// Characters that read as a space while being something else.
+const SPACE_LIKE_RANGES = [
+    [0xA0, 0xA0], [0x1680, 0x1680], [0x2000, 0x200A], [0x2028, 0x2029], [0x202F, 0x202F], [0x205F, 0x205F], [0x3000, 0x3000],
+];
+// Written as code point ranges so no invisible character sits in this source.
+const escapeCodePoint = (n) => '\\u' + n.toString(16).padStart(4, '0');
+const classOf = (ranges) => new RegExp(
+    '[' + ranges.map(([from, to]) => escapeCodePoint(from) + (to > from ? '-' + escapeCodePoint(to) : '')).join('') + ']',
+    'g',
+);
+const HIDDEN_TEXT_CHARS = classOf([...INVISIBLE_RANGES, ...SPACE_LIKE_RANGES]);
+// Free text keeps its line breaks and tabs: those are layout, not a hidden difference.
+const HIDDEN_TEXT_CHARS_KEEPING_LAYOUT = classOf([
+    [0x00, 0x08], [0x0B, 0x0C], [0x0E, 0x1F], [0x7F, 0x9F], [0x200B, 0x200F], [0x202A, 0x202E], [0x2060, 0x2069], [0xFEFF, 0xFEFF],
+]);
+
+const spell = (ch) => `[U+${ch.codePointAt(0).toString(16).toUpperCase().padStart(4, '0')}]`;
+
+/**
+ * Show a value exactly as it travels, for a screen where a hidden difference
+ * would matter (a contract argument is compared byte for byte by the contract,
+ * so `x<ZWSP>y` must not read as `xy`).
+ *
+ * `neutralizeControlText` makes text safe to render by dropping or collapsing
+ * what a reader cannot see; this keeps every character and spells out the
+ * ones that cannot be seen as `[U+XXXX]`. By default a single interior space
+ * stays a space and any other run of spaces is spelled out too, because a
+ * renderer collapses it to one. With `keepLayout` spaces, tabs and line breaks
+ * stay as they are and only the characters that cannot be seen are spelled
+ * out, for free text a contract stored.
+ *
+ * @param {unknown} value
+ * @param {{ keepLayout?: boolean }} [opts]
+ * @returns {string}
+ */
+export function revealHiddenText(value, { keepLayout = false } = {}) {
+    if (value === null || value === undefined) return '';
+    const text = String(value);
+    if (keepLayout) return text.replace(HIDDEN_TEXT_CHARS_KEEPING_LAYOUT, spell);
+    return text
+        .replace(HIDDEN_TEXT_CHARS, spell)
+        .replace(/^ +| +$| {2,}/g, (run) => run.replace(/ /g, spell(' ')));
+}

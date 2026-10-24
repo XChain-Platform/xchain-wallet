@@ -24,6 +24,7 @@ import {
 } from '../../sdk/nativeFeePreflight.js';
 import { submitFailureMessage } from '../utils/submitFailureMessage.js';
 import { userFacingMessage } from '../utils/userFacingMessage.js';
+import { revealHiddenText } from '../utils/textHardening.js';
 import { SignCredentials } from '../components/SignCredentials.jsx';
 import { useSignerReady } from '../hooks/useSignerReady.js';
 import { WatcherResultPanel } from '../components/WatcherResultPanel.jsx';
@@ -52,6 +53,7 @@ import { useTickBalance } from '../hooks/useTickBalance.js';
 import { compareDecimalStrings, formatWithThousands, tokenAmountPrecisionError } from '../utils/amountFormat.js';
 import { t } from '../../i18n/index.js';
 import { isValidAddressForChain } from '../utils/addressValidation.js';
+import { tickerReferenceError } from '../utils/tickerGrammar.js';
 import { useTokenInfo } from '../hooks/useTokenInfo.js';
 import { actionTextSafetyError } from '../utils/actionTextSafety.js';
 
@@ -83,6 +85,13 @@ function abiArgumentError(param, value, descriptor) {
     if (type === 'address' && (!descriptor?.coin || !descriptor?.networkKind
         || !isValidAddressForChain(text, descriptor.coin, descriptor.networkKind))) {
         return `${name} must be a valid address for ${descriptor?.displayName || 'this network'}.`;
+    }
+    if (type === 'tick') {
+        // A ticker a call names must be one the chain could have coined; a
+        // stray space or comma would be sent as typed and the paid call would
+        // fail at runtime.
+        const tickError = tickerReferenceError(text, { noun: name, allowRef: true });
+        if (tickError) return tickError;
     }
     if (type === 'number' && !/^-?(?:\d+(?:\.\d+)?|\.\d+)$/.test(text)) {
         return `${name} must be a decimal number.`;
@@ -849,7 +858,7 @@ export function ExecuteContractForm({ walletId, chainId, contractActionIndex, in
                             <dd className={styles.detailsValue}>
                                 <ol style={{ margin: 0, paddingLeft: '1.25rem' }}>
                                     {paramsArray.map((p, i) => (
-                                        <li key={i} className={contractStyles.monospaceValue}>{p}</li>
+                                        <li key={i} className={contractStyles.monospaceValue}>{revealHiddenText(p)}</li>
                                     ))}
                                 </ol>
                             </dd>

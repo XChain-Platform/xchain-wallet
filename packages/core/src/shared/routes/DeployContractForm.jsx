@@ -15,7 +15,7 @@ import { registry as registryLib } from '@xchain-wallet/core';
 import { normalizeConstructorParams } from '../../flows/deployChunked.js';
 import { indexerWaitMessage } from '../../flows/deployLegWait.js';
 import { normalizeMetaRead, CONTRACT_META_REQUIRED } from '../../flows/contractMetaPreflight.js';
-import { neutralizeControlText } from '../utils/textHardening.js';
+import { neutralizeControlText, revealHiddenText } from '../utils/textHardening.js';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { useDemoGuard } from '../hooks/useDemoGuard.jsx';
 import { useActionConfirmFlow, useConfirmSubmit, isUserRejection } from '../hooks/useActionConfirmFlow.js';
@@ -45,9 +45,14 @@ import {
 import styles from './IssueTokenForm.module.css';
 import contractStyles from './ContractScreens.module.css';
 import { QueuedResultPanel } from '../components/QueuedResultPanel.jsx';
+import { ConfirmModal } from '../components/ConfirmModal.jsx';
+import { useConfirmModal } from '../hooks/useConfirmModal.js';
 import { isValidAddressForChain } from '../utils/addressValidation.js';
 
 const chainRegistry = registryLib.defaultRegistry();
+
+/** Why a resumed publish's gas, constructor and staking fields cannot be edited. */
+const RESUME_FIELD_HINT = 'Fixed when this publish started. Discard it to change this.';
 
 /** How often a running chunked deploy's record is re-read for an indexer wait. */
 const INDEXER_WAIT_POLL_MS = 5000;
@@ -101,6 +106,15 @@ function normalizeValidationDiagnostics(value) {
         const identifierLabel = object.ruleId || object.rule ? 'Rule' : (object.code ? 'Code' : null);
         return { message, line, column, identifier, identifierLabel };
     }).filter((entry) => entry.message);
+}
+
+/**
+ * Chunk transactions of an unfinished publish that are already sent, counted on
+ * the txid as well as the action_index: the index is written after the indexer
+ * answers, the txid at broadcast.
+ */
+function sentChunkCount(record) {
+    return (record.chunks || []).filter((c) => c.actionIndex || c.txid).length;
 }
 
 function countLabel(count, noun) {
@@ -244,6 +258,12 @@ export function DeployContractForm({ walletId, onBack }) {
     // PC-38: interrupted runs whose chunks are already paid for on chain.
     const [resumable, setResumable] = useState(/** @type {any[]} */ ([]));
     const [resumeId, setResumeId] = useState(/** @type {string | null} */ (null));
+    // The id of the resumed run whose phase-2 fields came from its own record.
+    // The flow assembles from that record, so while it is the run being
+    // resumed those fields are fixed: an edit would change the review and not
+    // the transaction.
+    const [resumeFieldsFrom, setResumeFieldsFrom] = useState(/** @type {string | null} */ (null));
+    const assembleLocked = resumeId !== null && resumeId === resumeFieldsFrom;
 
     const [stage, setStage] = useState(
         /** @type {'form' | 'review' | 'submitting' | 'done'} */ ('form'),
@@ -251,6 +271,7 @@ export function DeployContractForm({ walletId, onBack }) {
     const [formError, setFormError] = useState(/** @type {string | null} */ (null));
     const [submitError, setSubmitError] = useState(/** @type {string | null} */ (null));
     const [toolBusy, setToolBusy] = useState(/** @type {string | null} */ (null));
+    const confirmDialog = useConfirmModal();
     const [result, setResult] = useState(/** @type {any | null} */ (null));
     const passwordRef = useRef(/** @type {HTMLInputElement | null} */ (null));
     const submitInFlightRef = useRef(false);
@@ -644,6 +665,20 @@ export function DeployContractForm({ walletId, onBack }) {
 
     async function handleDiscardPending(id) {
         if (toolBusy) return;
+        // The record is the only way back to the chunks already paid for, so
+        // forgetting it is asked about first.
+        const record = resumable.find((r) => r.id === id);
+        const sent = record ? sentChunkCount(record) : 0;
+        if (sent > 0) {
+            const confirmed = await confirmDialog.confirm({
+                title: 'Discard this unfinished publish?',
+                message: `${sent} of ${record.totalChunks} chunk transactions are already sent and paid for. `
+                    + 'Discarding forgets them, and publishing this contract again pays for every chunk again.',
+                confirmLabel: 'Discard',
+                danger: true,
+            });
+            if (!confirmed) return;
+        }
         setToolBusy(`discard:${id}`);
         try {
             await messaging.clearPendingDeploy({ id });
@@ -925,21 +960,20 @@ export function DeployContractForm({ walletId, onBack }) {
      */
     function restoreAssembleFields(assembleParams) {
         if (!assembleParams || typeof assembleParams !== 'object') return;
-        if (assembleParams.GAS_LIMIT) setGasLimit(String(assembleParams.GAS_LIMIT));
+        // Every field is set, a blank for one the record does not carry, so the
+        // form shows exactly the plan the run will assemble and nothing typed
+        // before Resume survives beside it.
+        setGasLimit(assembleParams.GAS_LIMIT ? String(assembleParams.GAS_LIMIT) : '');
         const ctor = assembleParams.CONSTRUCTOR_PARAMS;
-        if (ctor !== undefined && ctor !== null) {
-            // v2 stores the REST field as an array, v3 as a single value; the
-            // form collects both as one pipe-delimited string.
-            setConstructorParams(Array.isArray(ctor) ? ctor.join('|') : String(ctor));
-        }
-        if (assembleParams.COOLDOWN_BLOCKS) setCooldownBlocks(String(assembleParams.COOLDOWN_BLOCKS));
+        // v2 stores the REST field as an array, v3 as a single value; the
+        // form collects both as one pipe-delimited string.
+        setConstructorParams(ctor === undefined || ctor === null ? '' : (Array.isArray(ctor) ? ctor.join('|') : String(ctor)));
+        setCooldownBlocks(assembleParams.COOLDOWN_BLOCKS ? String(assembleParams.COOLDOWN_BLOCKS) : '');
         // The form's convention is that a BLANK destination means BURN, and the
         // wire params spell BURN out, so map it back rather than typing the
         // literal into a field whose placeholder already means it.
-        if (assembleParams.SLASH_DESTINATION) {
-            setSlashDestination(String(assembleParams.SLASH_DESTINATION) === 'BURN'
-                ? '' : String(assembleParams.SLASH_DESTINATION));
-        }
+        setSlashDestination(assembleParams.SLASH_DESTINATION && String(assembleParams.SLASH_DESTINATION) !== 'BURN'
+            ? String(assembleParams.SLASH_DESTINATION) : '');
     }
 
     function handleBuildAnother() {
@@ -1081,7 +1115,9 @@ export function DeployContractForm({ walletId, onBack }) {
                     <dt className={styles.detailsLabel}>Network fee</dt>
                     <dd className={styles.detailsValue}>
                         {feeEstimate
-                            ? `${feeEstimate.coinAmount} ${coinTicker}${feeEstimate.rate ? ` (${feeEstimate.rate})` : ''}`
+                            ? `${feeEstimate.coinAmount} ${coinTicker}${feeEstimate.rate ? ` (${feeEstimate.rate})` : ''}${
+                                // Every leg of a chunked run is its own transaction with its own fee.
+                                plan && plan.single === false ? ` for each of ${plan.totalChunks + 1} transactions` : ''}`
                             : 'Estimate unavailable'}
                     </dd>
                     {actionParams.CONSTRUCTOR_PARAMS ? (
@@ -1091,10 +1127,10 @@ export function DeployContractForm({ walletId, onBack }) {
                                 {Array.isArray(actionParams.CONSTRUCTOR_PARAMS) ? (
                                     <ol style={{ margin: 0, paddingLeft: '1.25rem' }}>
                                         {actionParams.CONSTRUCTOR_PARAMS.map((value, index) => (
-                                            <li key={index} className={contractStyles.monospaceValue}>{value}</li>
+                                            <li key={index} className={contractStyles.monospaceValue}>{revealHiddenText(value)}</li>
                                         ))}
                                     </ol>
-                                ) : actionParams.CONSTRUCTOR_PARAMS}
+                                ) : revealHiddenText(actionParams.CONSTRUCTOR_PARAMS)}
                             </dd>
                         </>
                     ) : null}
@@ -1218,6 +1254,7 @@ export function DeployContractForm({ walletId, onBack }) {
     }
 
     return wrap(
+        <>
         <FormPage
             demoGuard={demoGuard}
             label="Publish contract"
@@ -1240,7 +1277,7 @@ export function DeployContractForm({ walletId, onBack }) {
                             // never confirmed is still only sent; the resumed run
                             // re-checks each one against the chain and re-sends
                             // whatever is genuinely missing.
-                            const done = (r.chunks || []).filter((c) => c.actionIndex || c.txid).length;
+                            const done = sentChunkCount(r);
                             return (
                                 <div key={r.id}>
                                     <p>
@@ -1265,6 +1302,7 @@ export function DeployContractForm({ walletId, onBack }) {
                                                 // back empty against an original 50000. `assembleParams`
                                                 // is the record's copy of exactly these values.
                                                 restoreAssembleFields(r.assembleParams);
+                                                setResumeFieldsFrom(r.assembleParams && typeof r.assembleParams === 'object' ? r.id : null);
                                             }}
                                         >
                                             Resume publishing
@@ -1497,7 +1535,8 @@ export function DeployContractForm({ walletId, onBack }) {
 
             <Input
                 label="Gas limit"
-                hint="Maximum computation allowed when deploying or calling the contract."
+                hint={assembleLocked ? RESUME_FIELD_HINT : 'Maximum computation allowed when deploying or calling the contract.'}
+                disabled={assembleLocked}
                 inputMode="numeric"
                 value={gasLimit}
                 onChange={(e) => { setGasLimit(e.target.value); setFormError(null); }}
@@ -1506,7 +1545,8 @@ export function DeployContractForm({ walletId, onBack }) {
 
             <Input
                 label="Constructor params (optional)"
-                hint="Values passed to the contract when it is created. Separate them with |."
+                hint={assembleLocked ? RESUME_FIELD_HINT : 'Values passed to the contract when it is created. Separate them with |.'}
+                disabled={assembleLocked}
                 value={constructorParams}
                 onChange={(e) => { setConstructorParams(e.target.value); setFormError(null); }}
                 className={contractStyles.monospaceInput}
@@ -1515,7 +1555,8 @@ export function DeployContractForm({ walletId, onBack }) {
 
             <Input
                 label="Cooldown blocks (optional)"
-                hint="Enables contract staking and sets the blocks between unstaking and token release (1–100000). Leave blank to disable staking."
+                hint={assembleLocked ? RESUME_FIELD_HINT : 'Enables contract staking and sets the blocks between unstaking and token release (1–100000). Leave blank to disable staking.'}
+                disabled={assembleLocked}
                 inputMode="numeric"
                 value={cooldownBlocks}
                 onChange={(e) => setCooldownBlocks(e.target.value)}
@@ -1524,7 +1565,8 @@ export function DeployContractForm({ walletId, onBack }) {
 
             <Input
                 label="Slash destination (optional)"
-                hint="Address that receives slashed tokens. Enter BURN or leave blank to destroy them. Cannot change after deployment."
+                hint={assembleLocked ? RESUME_FIELD_HINT : 'Address that receives slashed tokens. Enter BURN or leave blank to destroy them. Cannot change after deployment.'}
+                disabled={assembleLocked}
                 value={slashDestination}
                 onChange={(e) => setSlashDestination(e.target.value)}
                 className={contractStyles.monospaceInput}
@@ -1547,6 +1589,14 @@ export function DeployContractForm({ walletId, onBack }) {
 
             <NativeFeeToggle {...nativeFee.toggleProps} coinTicker={coinTicker} unverified />
 
-        </FormPage>,
+        </FormPage>
+        {confirmDialog.request ? (
+            <ConfirmModal
+                {...confirmDialog.request}
+                onConfirm={confirmDialog.onConfirm}
+                onCancel={confirmDialog.onCancel}
+            />
+        ) : null}
+        </>,
     );
 }

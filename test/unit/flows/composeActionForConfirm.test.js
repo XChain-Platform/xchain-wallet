@@ -236,6 +236,30 @@ describe('composeActionForConfirm', () => {
         ]);
     });
 
+    it('lists every constructor argument of a deploy on the signing review', async () => {
+        // The SDK's DEPLOY description carries no constructor arguments, and a
+        // constructor runs once on an immutable deploy.
+        const h = makeHarness({ inputs: [{ value: 5000 }] });
+        h.sdk.decoder.parse = vi.fn(() => ({
+            ok: true,
+            action: 'DEPLOY',
+            version: 0,
+            params: { CODE_ENCODING: 'YQ==', GAS_LIMIT: '200000', CONSTRUCTOR_PARAMS: ['alpha', 'beta'] },
+        }));
+        h.sdk.decoder.describe = vi.fn(() => ({
+            summary: 'Deploy smart contract',
+            details: [{ label: 'Gas limit', value: '200000' }],
+            warnings: [],
+        }));
+
+        const composed = await composeActionForConfirm(ARGS(h));
+        expect(composed.decoded.details).toEqual([
+            { label: 'Gas limit', value: '200000' },
+            { label: 'Constructor argument 1', value: 'alpha' },
+            { label: 'Constructor argument 2', value: 'beta' },
+        ]);
+    });
+
     it('leaves the intent null when the composed action cannot be described', async () => {
         // Null, and nothing substitutes for it: the confirm screen renders
         // intent only from composed.decoded, so an undescribable action shows

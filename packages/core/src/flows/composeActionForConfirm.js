@@ -36,6 +36,7 @@ import { addressBalances } from './balances.js';
 import { simulateAction } from '../decoder/txSimulator.js';
 import { balancesFromSdk } from '../decoder/balanceAdapter.js';
 import { withListRemovalDescriptions } from '../decoder/list_removal_description.js';
+import { withContractCallDescriptions } from '../decoder/contract_call_description.js';
 import { resolveDustThreshold } from '../sdk/nativeFeePreflight.js';
 
 // The built PSBT is checked after the encoder has reserved its inputs. A check
@@ -343,6 +344,7 @@ export async function composeActionForConfirm({
                 ownAddresses: [...own],
             });
             decoded = withListRemovalDescriptions(decoded, parsed);
+            decoded = withContractCallDescriptions(decoded, parsed);
         }
     } catch {
         // Leave it null: the confirm screen takes no caller-supplied `decoded`,

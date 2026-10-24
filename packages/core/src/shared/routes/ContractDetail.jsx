@@ -24,6 +24,7 @@ import { OwnerWithdrawWarning } from '../components/OwnerWithdrawWarning.jsx';
 import tableStyles from '../components/DataTable.module.css';
 import { actionDisplayLabel } from '../utils/actionDisplayLabel.js';
 import { readFailureMessage } from '../utils/readFailureMessage.js';
+import { revealHiddenText } from '../utils/textHardening.js';
 import styles from './ActionsMenu.module.css';
 
 /**
@@ -469,7 +470,7 @@ function StateTable({ state }) {
             <tbody>
                 {entries.map(([k, v]) => (
                     <tr key={k}>
-                        <td className={`${tableStyles.cell} ${tableStyles.mono}`} data-label="Key" style={{ verticalAlign: 'top' }}>{k}</td>
+                        <td className={`${tableStyles.cell} ${tableStyles.mono}`} data-label="Key" style={{ verticalAlign: 'top' }}>{revealHiddenText(k, { keepLayout: true })}</td>
                         <td className={`${tableStyles.cell} ${tableStyles.mono}`} data-label="Value">{renderStateValue(v)}</td>
                     </tr>
                 ))}
@@ -601,18 +602,28 @@ function stateRowsToEntries(rows) {
     });
 }
 
+// state_value is the JSON text the contract stored. A JSON string is shown
+// unquoted; every other value is shown as the stored text, because a parsed
+// number cannot say what was stored (12345678901234567890 reads back as
+// 12345678901234567000, 1.50 as 1.5, 1e21 as 1e+21) and a parsed object loses
+// the same digits inside it.
 function parseStateValue(v) {
     if (v === null || v === undefined) return null;
     if (typeof v !== 'string') return v;
     try {
-        return JSON.parse(v);
+        const parsed = JSON.parse(v);
+        return typeof parsed === 'string' ? parsed : v.trim();
     } catch {
         return v;
     }
 }
 
+// Contract-controlled text: a bidi override or a zero-width character is
+// spelled out so a stored value cannot read as something else.
 function renderStateValue(v) {
     if (v === null || v === undefined) return 'null';
-    if (typeof v === 'string' || typeof v === 'number' || typeof v === 'boolean') return String(v);
-    try { return JSON.stringify(v); } catch { return String(v); }
+    if (typeof v === 'string' || typeof v === 'number' || typeof v === 'boolean') {
+        return revealHiddenText(v, { keepLayout: true });
+    }
+    try { return revealHiddenText(JSON.stringify(v), { keepLayout: true }); } catch { return String(v); }
 }

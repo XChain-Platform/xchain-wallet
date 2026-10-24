@@ -287,3 +287,70 @@ describe('ExecuteContractForm argument validation', () => {
         ]);
     });
 });
+
+describe('ExecuteContractForm tick arguments', () => {
+    const tickAbi = () => ({
+        getContractByActionIndex: () => Promise.resolve({
+            data: {
+                abi: {
+                    version: 1,
+                    methods: { claim: { params: [{ name: 'asset', type: 'tick' }] } },
+                },
+            },
+        }),
+    });
+
+    it.each(['XCH AIN', 'A,B', 'A;B', '.A', 'A..B'])('rejects the ticker %j before compose', async (value) => {
+        mount('full', 'config', tickAbi());
+        fireEvent.change(await screen.findByLabelText('asset (tick)'), { target: { value } });
+        fireEvent.click(screen.getByRole('button', { name: 'Call contract' }));
+
+        expect((await screen.findAllByText(/^asset /)).length).toBeGreaterThan(0);
+        expect(screen.queryByRole('heading', { name: 'Review contract call' })).toBeNull();
+    });
+
+    it.each(['XCHAIN', 'Mixed-Case.sub', '^123'])('accepts the ticker %j', async (value) => {
+        mount('watcher', 'config', tickAbi());
+        fireEvent.change(await screen.findByLabelText('asset (tick)'), { target: { value } });
+        fireEvent.click(screen.getByRole('button', { name: 'Preview' }));
+
+        expect(await screen.findByRole('heading', { name: 'Review contract call' })).toBeInTheDocument();
+    });
+});
+
+describe('ExecuteContractForm link prefill against a declared method', () => {
+    const twoParamAbi = () => ({
+        getContractByActionIndex: () => Promise.resolve({
+            data: {
+                abi: {
+                    version: 1,
+                    methods: {
+                        pay: { params: [{ name: 'who', type: 'string' }, { name: 'note', type: 'string' }] },
+                        ping: { params: [] },
+                    },
+                },
+            },
+        }),
+    });
+
+    it('fills the typed inputs when the link carries the declared arguments', async () => {
+        mount('full', 'config', twoParamAbi(), { initialMethod: 'pay', initialParamsText: 'ann|thanks' });
+
+        expect(await screen.findByLabelText('who (string)')).toHaveValue('ann');
+        expect(screen.getByLabelText('note (string)')).toHaveValue('thanks');
+    });
+
+    it('keeps every argument visible when the link carries more than the method declares', async () => {
+        mount('full', 'config', twoParamAbi(), { initialMethod: 'pay', initialParamsText: 'ann|thanks|extra' });
+
+        expect(await screen.findByLabelText('Arguments (optional)')).toHaveValue('ann|thanks|extra');
+        expect(screen.queryByLabelText('who (string)')).toBeNull();
+    });
+
+    it('keeps the declared inputs for a no-argument method and a link with no arguments', async () => {
+        mount('full', 'config', twoParamAbi(), { initialMethod: 'ping', initialParamsText: '' });
+
+        expect(await screen.findByRole('button', { name: 'Enter method manually' })).toBeInTheDocument();
+        expect(screen.queryByLabelText('Arguments (optional)')).toBeNull();
+    });
+});
