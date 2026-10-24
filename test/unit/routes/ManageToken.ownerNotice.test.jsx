@@ -54,6 +54,20 @@ describe('ManageToken owner notice', () => {
         expect(screen.getByRole('button', { name: 'Dividends' })).toBeInTheDocument();
     });
 
+    it('leaves the outage to the failed read, with owner-only actions still hidden', async () => {
+        // A failed explorer read resolves a record marked loadError with no
+        // creator; the panel's own load error states the outage once.
+        mount(MINE, { creator: null, divisibility: null, loadError: true }, {
+            onMint: vi.fn(),
+            onDestroy: vi.fn(),
+        });
+        await screen.findByRole('region', { name: 'Token identity' });
+
+        expect(screen.queryByText(/issuer could not be confirmed/)).toBeNull();
+        expect(screen.queryByRole('button', { name: 'Mint' })).toBeNull();
+        expect(screen.getByRole('button', { name: 'Destroy' })).toBeInTheDocument();
+    });
+
     it('leads the page content, above the token identity', async () => {
         mount(MINE);
         const notice = await screen.findByText(/This wallet doesn.t hold the token.s issuer address/);

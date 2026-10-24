@@ -586,7 +586,9 @@ export function ManageToken({
                         {t('routes.manageToken.thisWalletDoesnTHold')} <AddressText address={owner} />.
                     </StatusMessage>
                 ) : null}
-                {assetInfo && !owner ? (
+                {/* A failed read (loadError) is an outage, which the failed panel
+                    states once; owner-only actions stay hidden either way. */}
+                {assetInfo && !assetInfo.loadError && !owner ? (
                     <StatusMessage variant="warning" role="status">
                         {UNKNOWN_TOKEN_ISSUER_MESSAGE}
                     </StatusMessage>
