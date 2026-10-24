@@ -483,7 +483,7 @@ export function ConfirmActionModal({
                     {variant === 'message' && messageText !== undefined ? (
                         <section className={styles.messageBox} aria-label={t('components.confirmActionModal.messageToSign')}>
                             <p className={styles.messageLabel}>{t('components.confirmActionModal.messageToSign')}</p>
-                            <pre className={styles.messageText} data-testid="confirm-message-text">
+                            <pre className={styles.messageText} data-testid="confirm-message-text" dir="auto">
                                 {messageText}
                             </pre>
                         </section>

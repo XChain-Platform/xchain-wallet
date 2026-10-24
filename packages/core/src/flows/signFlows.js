@@ -24,7 +24,7 @@ import { unlockWallet } from './unlockWallet.js';
 import { assertSigningAllowed } from './panicMode.js';
 import { assertNoDeceptiveCharacters } from './signRiskClassifier.js';
 
-const SIGN_IN_CHALLENGE_PREFIX = 'XChain Sign-In v2';
+export const SIGN_IN_CHALLENGE_PREFIX = 'XChain Sign-In v2';
 
 /**
  * @typedef {Object} SignMessageFlowOpts

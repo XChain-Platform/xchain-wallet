@@ -3180,6 +3180,14 @@ export function createBackgroundHost(deps) {
         if (!sdk?.auth?.verifyMessage) {
             throw new Error(`auth.verifyMessage: SDK for "${chainId}" lacks auth.verifyMessage`);
         }
+        // Message verification recovers a key hash and ignores the address version
+        // byte, so an address of another network (testnet while mainnet is chosen)
+        // would verify. Refuse any address the chosen network does not accept.
+        if (typeof sdk.wallet?.validateAddress === 'function') {
+            let addressVerdict = null;
+            try { addressVerdict = sdk.wallet.validateAddress(address); } catch (_err) { addressVerdict = { valid: false }; }
+            if (addressVerdict && addressVerdict.valid === false) return { valid: false };
+        }
         let valid = false;
         try {
             // Read the SDK's { valid, error } answer by its field; the demo stubs answer a bare boolean

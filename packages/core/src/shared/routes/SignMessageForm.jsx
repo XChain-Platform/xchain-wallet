@@ -43,8 +43,30 @@ import {
 } from '../addressSelection.js';
 import { pickDefaultChainId } from '../chainSelection.js';
 import { readFailureMessage } from '../utils/readFailureMessage.js';
+import { assertNoDeceptiveCharacters } from '../../flows/signRiskClassifier.js';
+import { SIGN_IN_CHALLENGE_PREFIX } from '../../flows/signFlows.js';
 
 const chainRegistry = registryLib.defaultRegistry();
+
+/**
+ * Why a message cannot be signed, worded for the person typing it, or null
+ * when it can. The signing flow refuses the same texts; naming the reason here
+ * keeps the refusal from reading as a generic failure after the review page.
+ *
+ * @param {string} message
+ * @returns {string | null}
+ */
+export function messageRefusalReason(message) {
+    if (message.startsWith(SIGN_IN_CHALLENGE_PREFIX)) {
+        return `Messages that start with "${SIGN_IN_CHALLENGE_PREFIX}" are reserved for site sign-in and cannot be signed here.`;
+    }
+    try {
+        assertNoDeceptiveCharacters({ message }, 'message');
+    } catch {
+        return 'This message has invisible, look-alike or direction-control characters, which can hide what is signed. Remove them and try again.';
+    }
+    return null;
+}
 
 /**
  * @param {object} props
@@ -241,6 +263,8 @@ export function SignMessageForm({ walletId, onBack }) {
         if (!chainId) { setError('Pick a network.'); return; }
         if (!addressId || !selectedAddress) { setError('Pick an address.'); return; }
         if (message.length === 0) { setError('Type a message to sign.'); return; }
+        const refusal = messageRefusalReason(message);
+        if (refusal) { setError(refusal); return; }
         if (typeof messaging.signMessageRequest !== 'function') {
             setError('Message signing is not available in this app.');
             return;
@@ -305,7 +329,7 @@ export function SignMessageForm({ walletId, onBack }) {
                     <div style={{ color: 'var(--xc-text-muted)', fontSize: 'var(--xc-text-sm)', marginBottom: 4 }}>
                         Message
                     </div>
-                    <pre style={{
+                    <pre dir="auto" style={{
                         background: 'var(--xc-surface)',
                         border: '1px solid var(--xc-border)',
                         borderRadius: 'var(--xc-radius-md)',
@@ -327,7 +351,7 @@ export function SignMessageForm({ walletId, onBack }) {
                         </span>
                         <CopyButton value={signedResult.signature} label="Copy signature" />
                     </div>
-                    <pre style={{
+                    <pre dir="ltr" style={{
                         background: 'var(--xc-surface)',
                         border: '1px solid var(--xc-border)',
                         borderRadius: 'var(--xc-radius-md)',
