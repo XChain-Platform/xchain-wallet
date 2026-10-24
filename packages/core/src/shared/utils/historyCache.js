@@ -8,7 +8,8 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-const HISTORY_CACHE_PREFIX = 'xc:historyCache:v2:';
+/** Prefix every history snapshot key starts with; the wipe and the per-wallet clear read it from here. */
+export const HISTORY_CACHE_PREFIX = 'xc:historyCache:v2:';
 
 function walletPrefix(walletId) {
     return `${HISTORY_CACHE_PREFIX}${encodeURIComponent(String(walletId || ''))}:`;

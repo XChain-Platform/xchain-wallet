@@ -2532,8 +2532,7 @@ export function createBackgroundHost(deps) {
         if (!id) throw new Error('addresses.setLabel: id is required');
         const rec = await vault.addresses.get(id);
         if (!rec) throw new Error('addresses.setLabel: address not found');
-        const requestedLabel = typeof req?.label === 'string' ? req.label.trim() : '';
-        const label = requestedLabel || schemas.address.defaultAddressLabel(rec);
+        const label = schemas.address.normalizeAddressLabel(req?.label, rec);
         await vault.addresses.put({ ...rec, label });
         // §19.5.2 auto-sync: the label just changed on disk, so the
         // on-chain copy is stale. The scheduler batches this with every

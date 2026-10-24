@@ -11,10 +11,8 @@
 import { useEffect, useRef, useState } from 'react';
 import { Button, FormPage, Screen, Input, PageHeader } from '@xchain-wallet/core/ui';
 import { t } from '../../i18n/index.js';
+import { NAME_MAX_LENGTH, hasVisibleText, nameKey, nameLength } from '../../util/display_name.js';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
-
-const NAME_MAX_LENGTH = 64;
-const nameLength = (value) => Array.from(value).length;
 
 /**
  * RenameWalletForm: change a Wallet record's `name` field. No
@@ -71,7 +69,7 @@ export function RenameWalletForm({ walletId, initialName = '', onBack, onRenamed
         if (busy) return;
         const trimmed = name.trim();
         // Require a visible wallet name after surrounding whitespace is removed.
-        if (trimmed.length === 0) {
+        if (!hasVisibleText(trimmed)) {
             setError('Wallet name is required.');
             return;
         }
@@ -84,7 +82,7 @@ export function RenameWalletForm({ walletId, initialName = '', onBack, onRenamed
             return;
         }
         if (wallets.some((wallet) => wallet?.id !== walletId
-            && wallet?.name?.trim().toLocaleLowerCase() === trimmed.toLocaleLowerCase())) {
+            && nameKey(wallet?.name) === nameKey(trimmed))) {
             setError(`A wallet named "${trimmed}" already exists.`);
             return;
         }
@@ -104,7 +102,7 @@ export function RenameWalletForm({ walletId, initialName = '', onBack, onRenamed
         }
     }
 
-    const saveDisabled = busy || wallets === null || name.trim().length === 0
+    const saveDisabled = busy || wallets === null || !hasVisibleText(name)
         || nameLength(name.trim()) > NAME_MAX_LENGTH;
 
     const header = (

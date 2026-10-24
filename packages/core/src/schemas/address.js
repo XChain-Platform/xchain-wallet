@@ -40,6 +40,7 @@ import {
     result,
 } from './validate.js';
 import { randomUUID } from '../util/uuid.js';
+import { NAME_MAX_LENGTH, hasVisibleText, nameLength } from '../util/display_name.js';
 import { tickerForCoin } from '../registry/coinTicker.js';
 
 export const CURRENT_VERSION = 4;
@@ -63,6 +64,25 @@ export function defaultAddressLabel(record) {
     if (record?.role === 'change') return `${prefix}Change${number}`;
     if (record?.role === 'dispenser') return `${prefix}Dispenser${number}`;
     return `${prefix}Address${number}`;
+}
+
+/**
+ * The label to store for a user-typed value. A value that draws no visible
+ * character gets the generated default, and one longer than the shared name
+ * cap is refused so a label cannot grow the encrypted label-sync payload
+ * without bound.
+ *
+ * @param {unknown} label
+ * @param {Partial<Address>} record
+ * @returns {string}
+ */
+export function normalizeAddressLabel(label, record) {
+    const trimmed = typeof label === 'string' ? label.trim() : '';
+    if (!hasVisibleText(trimmed)) return defaultAddressLabel(record);
+    if (nameLength(trimmed) > NAME_MAX_LENGTH) {
+        throw new Error(`Address labels must be ${NAME_MAX_LENGTH} characters or fewer.`);
+    }
+    return trimmed;
 }
 
 /**

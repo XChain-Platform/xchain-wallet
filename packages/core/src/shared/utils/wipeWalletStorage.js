@@ -13,6 +13,7 @@ import { clearDuressPassphrase } from '../../flows/duressPassphrase.js';
 import { clearPanicModeState } from '../../flows/panicMode.js';
 import { clearBackupReminderState } from '../../flows/backupReminder.js';
 import { clearBalanceCache } from './balanceCache.js';
+import { HISTORY_CACHE_PREFIX } from './historyCache.js';
 
 /** Key a renderer-hosted broadcast queue persists under; core owns it so the wipe and the store agree. */
 export const BROADCAST_QUEUE_STORAGE_KEY = 'xchain.broadcastQueue';
@@ -51,7 +52,7 @@ const WALLET_LOCAL_STORAGE_PREFIXES = Object.freeze([
     'xc:alertCenter:',
     'xc:balanceCache:',
     'xc:balances:sort:',
-    'xc:historyCache:v1:',
+    HISTORY_CACHE_PREFIX,
     'xc:homeFilters:',
 ]);
 
@@ -172,7 +173,7 @@ export function clearRemovedWalletStorage(walletId) {
         ]);
         const walletPrefixes = [
             `xc:balanceCache:${encodedId}:`,
-            `xc:historyCache:v1:${encodedId}:`,
+            `${HISTORY_CACHE_PREFIX}${encodedId}:`,
             `xc:msgRead:${walletId}:`,
             `xc:msgUnread:${walletId}:`,
             `xc:msgRequestDeclined:${walletId}:`,

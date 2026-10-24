@@ -107,6 +107,31 @@ describe('renameWallet', () => {
         expect(accountPut).toHaveBeenCalledOnce();
     });
 
+    it.each(['\u200B', '\u2800\u2800', ' \u202E\u202C ', '\u3164'])(
+        'rejects the name %j that draws no visible character in both rename flows',
+        async (name) => {
+            const { vault, put, accountPut } = makeVault();
+
+            await expect(renameWallet({ walletId: 'w', name, vault }))
+                .rejects.toThrow('renameWallet: name must be a non-empty string');
+            await expect(renameAccount({ accountId: 'a', name, vault }))
+                .rejects.toThrow('renameAccount: name must be a non-empty string');
+            expect(put).not.toHaveBeenCalled();
+            expect(accountPut).not.toHaveBeenCalled();
+        },
+    );
+
+    it('rejects a name that differs from another only by invisible characters', async () => {
+        const { vault, put, accountPut } = makeVault();
+
+        await expect(renameWallet({ walletId: 'w', name: 'Savings\u200B', vault }))
+            .rejects.toThrow('already exists');
+        await expect(renameAccount({ accountId: 'a', name: 'Sav\u200Dings', vault }))
+            .rejects.toThrow('already exists');
+        expect(put).not.toHaveBeenCalled();
+        expect(accountPut).not.toHaveBeenCalled();
+    });
+
     it('preserves emoji and right-to-left text', async () => {
         const { vault, put } = makeVault();
 
