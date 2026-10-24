@@ -47,7 +47,16 @@ export function readHistoryCache(walletId, accountId, activeNetwork) {
     }
 }
 
-/** Save only a complete successful load so an interrupted refresh cannot replace good rows. */
+// Most rows a snapshot keeps. The feed is newest first, so the cap drops the
+// oldest rows; a storage quota that is smaller still halves the kept rows
+// until the write fits.
+export const HISTORY_CACHE_MAX_ENTRIES = 2000;
+
+/**
+ * Save only a complete successful load so an interrupted refresh cannot
+ * replace good rows. A snapshot too large for the storage quota is saved as
+ * its newest rows rather than dropped, so offline still shows the cached part.
+ */
 export function writeHistoryCache(walletId, accountId, snapshot, activeNetwork) {
     if (!walletId) return false;
     const network = networkScope(activeNetwork);
@@ -55,11 +64,22 @@ export function writeHistoryCache(walletId, accountId, snapshot, activeNetwork) 
     try {
         const storage = globalThis.localStorage;
         if (!storage) return false;
-        storage.setItem(
-            historyCacheKey(walletId, accountId, network),
-            JSON.stringify({ ...snapshot, activeNetwork: network }),
-        );
-        return true;
+        const key = historyCacheKey(walletId, accountId, network);
+        const all = Array.isArray(snapshot?.entries) ? snapshot.entries : [];
+        let keep = Math.min(all.length, HISTORY_CACHE_MAX_ENTRIES);
+        for (;;) {
+            try {
+                storage.setItem(key, JSON.stringify({
+                    ...snapshot,
+                    entries: keep === all.length ? all : all.slice(0, keep),
+                    activeNetwork: network,
+                }));
+                return true;
+            } catch (err) {
+                if (keep === 0) throw err;
+                keep = Math.floor(keep / 2);
+            }
+        }
     } catch {
         return false;
     }

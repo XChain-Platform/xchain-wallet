@@ -358,6 +358,18 @@ export function formatDisplayAmount(value, locale) {
     return nonZero ? `${sign}${formatted}` : formatted;
 }
 
+/**
+ * True when a wire amount is a plain decimal a row can print: a finite number,
+ * a bigint, or a decimal string (exponent form included). An object, NaN or
+ * Infinity is not an amount, and printing it would show [object Object] or NaN.
+ */
+export function isDisplayableAmount(value) {
+    if (typeof value === 'bigint') return true;
+    if (typeof value === 'number') return Number.isFinite(value);
+    if (typeof value !== 'string') return false;
+    return /^[+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:e[+-]?\d+)?$/i.test(value.trim());
+}
+
 /** Add a History direction sign without changing the stored amount. */
 export function formatHistoryAmount(value, direction, locale) {
     const raw = String(value ?? '').trim();
