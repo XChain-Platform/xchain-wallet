@@ -119,7 +119,7 @@ export function SleepForm({ walletId, onBack, mode, initialChainId, initialTick,
             'No addresses on any network yet. Use Receive to generate one first.',
     });
 
-    const ticker = isTick ? (initialTick || '').toUpperCase() : '';
+    const ticker = isTick ? (initialTick || '') : '';
     // Pause target: the tick (v1) or the signing address itself (v0).
     const [resumeMode, setResumeMode] = useState(
         /** @type {'until' | 'indefinite' | 'resume'} */ ('until'),

@@ -21,12 +21,12 @@ const SOURCE = {
     signerId: 'signer-1',
 };
 
-function mountAdmin(mode, overrides = {}) {
+function mountAdmin(mode, overrides = {}, initialTick = 'TOKEN') {
     const target = {
         getAddressesByChain: vi.fn().mockResolvedValue({ [CHAIN]: [SOURCE] }),
         getActiveAddresses: vi.fn().mockResolvedValue({ [CHAIN]: SOURCE }),
         getSettings: vi.fn().mockResolvedValue({ walletMode: 'watcher' }),
-        getTokenInfo: vi.fn().mockResolvedValue({ tick: 'TOKEN', locks: {} }),
+        getTokenInfo: vi.fn().mockResolvedValue({ tick: initialTick, locks: {} }),
         signerReady: vi.fn().mockResolvedValue({ ready: false }),
         ...overrides,
     };
@@ -42,7 +42,7 @@ function mountAdmin(mode, overrides = {}) {
                 walletId="w"
                 mode={mode}
                 initialChainId={CHAIN}
-                initialTick="TOKEN"
+                initialTick={initialTick}
                 initialFromAddress={SOURCE.address}
                 onBack={() => {}}
             />
@@ -57,6 +57,42 @@ afterEach(() => {
 });
 
 describe('TokenAdminForm review interaction safety', () => {
+    it('keeps a lowercase managed ticker exact in the composed admin action', async () => {
+        const buildActionPsbtRequest = vi.fn().mockResolvedValue({
+            psbtHex: '70736274ff00',
+            chainId: CHAIN,
+        });
+        mountAdmin('description', { buildActionPsbtRequest }, 'caseSensitive');
+
+        fireEvent.change(await screen.findByLabelText('New description'), {
+            target: { value: 'Exact ticker update' },
+        });
+        const preview = screen.getByRole('button', { name: 'Preview' });
+        await waitFor(() => expect(preview).toBeEnabled());
+        fireEvent.click(preview);
+        fireEvent.submit(await screen.findByRole('form', { name: 'Review description update' }));
+
+        await waitFor(() => expect(buildActionPsbtRequest).toHaveBeenCalled());
+        const params = buildActionPsbtRequest.mock.calls[0][0].actionData.params;
+        expect(params.TICK).toBe('caseSensitive');
+    });
+
+    it('rejects an overlong managed-token description before review', async () => {
+        const buildActionPsbtRequest = vi.fn();
+        mountAdmin('description', { buildActionPsbtRequest });
+
+        fireEvent.change(await screen.findByLabelText('New description'), {
+            target: { value: '<b>markup</b>\u202e'.repeat(700) },
+        });
+        const preview = screen.getByRole('button', { name: 'Preview' });
+        await waitFor(() => expect(preview).toBeEnabled());
+        fireEvent.click(preview);
+
+        expect(await screen.findByRole('alert'))
+            .toHaveTextContent('Description cannot be longer than 250 characters.');
+        expect(buildActionPsbtRequest).not.toHaveBeenCalled();
+    });
+
     it('states that an ownership transfer cannot be undone on review', async () => {
         mountAdmin('transfer', {
             getTokenInfo: vi.fn().mockResolvedValue({

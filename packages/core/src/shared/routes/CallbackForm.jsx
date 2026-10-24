@@ -106,8 +106,8 @@ export function callbackFeeError(feePick, feeEstimate) {
 }
 
 function sameCallbackTerms(left, right) {
-    return String(left?.callbackTick || '').trim().toUpperCase()
-            === String(right?.callbackTick || '').trim().toUpperCase()
+    return String(left?.callbackTick || '').trim()
+            === String(right?.callbackTick || '').trim()
         && compareDecimalStrings(left?.callbackAmount, right?.callbackAmount) === 0
         && String(BigInt(String(left?.callbackBlock || '0')))
             === String(BigInt(String(right?.callbackBlock || '0')))
@@ -121,7 +121,7 @@ function tokenBalanceAt(byChain, chainId, address, tick) {
     if (!entry || entry.balances?.unavailable?.includes('tokens')) return null;
     const balances = decoderLib.balancesFromSdk(entry.balances) || [];
     const match = balances.find((balance) => (
-        String(balance?.tick || '').toUpperCase() === String(tick || '').toUpperCase()
+        String(balance?.tick || '') === String(tick || '')
     ));
     if (match?.unknown || (match && compareDecimalStrings(match.amount, '0') == null)) return null;
     return match ? String(match.amount) : '0';
@@ -176,7 +176,7 @@ export function CallbackForm({ walletId, onBack, initialChainId, initialTick, in
             'No addresses on any network yet. Use Receive to generate one before a callback.',
     });
 
-    const ticker = (initialTick || '').toUpperCase();
+    const ticker = initialTick || '';
     const [memo, setMemo] = useState('');
     const trimmedMemo = memo.trim();
     const memoTooLong = memoLengthError(trimmedMemo);

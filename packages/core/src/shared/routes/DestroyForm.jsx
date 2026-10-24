@@ -120,7 +120,7 @@ export function DestroyForm({ walletId, onBack, initialChainId, initialTick, ini
     const [typedConfirm, setTypedConfirm] = useState('');
     const typedConfirmOk = typedConfirm.trim().toUpperCase() === 'DESTROY';
 
-    const [ticker, setTicker] = useState((initialTick || '').toUpperCase());
+    const [ticker, setTicker] = useState(initialTick || '');
 
     // Balance of the amount tick at the source address (Max + "available").
     const tickAmtBalance = useTickBalance({
@@ -194,7 +194,7 @@ export function DestroyForm({ walletId, onBack, initialChainId, initialTick, ini
 
     const actionParams = useMemo(() => ({
         VERSION: '0',
-        TICK: ticker.trim().toUpperCase(),
+        TICK: ticker.trim(),
         AMOUNT: String(amount).trim(),
     }), [ticker, amount]);
 
@@ -319,7 +319,7 @@ export function DestroyForm({ walletId, onBack, initialChainId, initialTick, ini
         }
         // Refuse a burn the selected source address cannot fund.
         if (exceedsBalance(amt, tickAmtBalance)) {
-            const TICK = ticker.trim().toUpperCase();
+            const TICK = ticker.trim();
             setFormError(
                 `This address holds only ${formatWithThousands(tickAmtBalance)} ${TICK}. `
                 + 'Enter an amount at or below that balance.',
@@ -621,7 +621,7 @@ export function DestroyForm({ walletId, onBack, initialChainId, initialTick, ini
                 walletId={walletId}
                 title="Select token"
                 onSelect={(sel) => {
-                    setTicker(String(sel.tick || '').toUpperCase());
+                    setTicker(String(sel.tick || ''));
                     if (!lockedToken && sel.chainId) setChainId(sel.chainId);
                     setTokenPickerOpen(false);
                 }}
@@ -697,7 +697,7 @@ export function DestroyForm({ walletId, onBack, initialChainId, initialTick, ini
                     : undefined}
                 maxDisabled={!tickAmtBalance}
                 balanceText={tickAmtBalance != null && (ticker)
-                    ? `${formatWithThousands(tickAmtBalance)} ${String(ticker).toUpperCase()} available`
+                    ? `${formatWithThousands(tickAmtBalance)} ${String(ticker)} available`
                     : null}
             />
 

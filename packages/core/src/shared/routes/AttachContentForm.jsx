@@ -695,7 +695,7 @@ export function AttachContentForm({ walletId, chainId, tick, issuerAddress = nul
     const tisJson = useMemo(() => {
         if (!fileMeta || !fileActionIndex) return null;
         const doc = {
-            tick: String(tick).toUpperCase(),
+            tick: String(tick),
             categories: [{ type: 'main', data: 'NFT' }],
             images: [{
                 data_ref: 'action:' + String(fileActionIndex),
@@ -716,7 +716,7 @@ export function AttachContentForm({ walletId, chainId, tick, issuerAddress = nul
         // UTF-8 bytes first, then to the Latin-1 binary string the encoder
         // expects.
         const rawData = latin1Of(new TextEncoder().encode(tisJson));
-        const tisName = String(tick).toUpperCase() + '.json';
+        const tisName = String(tick) + '.json';
         await runLegThroughConfirm({
             actionData: {
                 action: 'FILE',
@@ -757,7 +757,7 @@ export function AttachContentForm({ walletId, chainId, tick, issuerAddress = nul
         // ISSUE v1: edit description (owner-only at the indexer).
         const issueParams = {
             VERSION: '1',
-            TICK: String(tick).toUpperCase(),
+            TICK: String(tick),
             DESCRIPTION: 'action:' + String(tisActionIndex),
         };
         await runLegThroughConfirm({
@@ -988,7 +988,7 @@ export function AttachContentForm({ walletId, chainId, tick, issuerAddress = nul
                 </p>
                 <dl className={styles.detailsList}>
                     <dt className={styles.detailsLabel}>Document</dt>
-                    <dd className={styles.detailsValue}>{String(tick).toUpperCase()}.json</dd>
+                    <dd className={styles.detailsValue}>{String(tick)}.json</dd>
                     <dt className={styles.detailsLabel}>Type</dt>
                     <dd className={styles.detailsValue}>application/json</dd>
                     <dt className={styles.detailsLabel}>Title</dt>

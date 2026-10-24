@@ -42,14 +42,20 @@ const ADDRESSES = {
 // lookup looked plausible: the wrong number and a believable one.
 const HELD = '5000';
 
-function mountMint({ maxSupply = '5000', totalSupply = '5000', mintMax = null, divisibility = 0 } = {}) {
+function mountMint({
+    maxSupply = '5000',
+    totalSupply = '5000',
+    mintMax = null,
+    divisibility = 0,
+    initialTick = 'S18PROBE',
+} = {}) {
     const messaging = {
         getAddressesByChain: vi.fn().mockResolvedValue(ADDRESSES),
         getActiveAddresses: vi.fn().mockResolvedValue({}),
         listContacts: vi.fn().mockResolvedValue([]),
         getTokenInfo: vi.fn().mockResolvedValue({
             chainId: 'bitcoin-mainnet',
-            tick: 'S18PROBE',
+            tick: initialTick,
             maxSupply,
             totalSupply,
             mintMax,
@@ -80,7 +86,7 @@ function mountMint({ maxSupply = '5000', totalSupply = '5000', mintMax = null, d
             React.createElement(MintForm, {
                 walletId: 'w',
                 initialChainId: 'bitcoin-mainnet',
-                initialTick: 'S18PROBE',
+                initialTick,
                 onBack() {},
             }),
         ),
@@ -192,6 +198,19 @@ describe('MintForm sizes off mint headroom, not holdings', () => {
         fireEvent.change(await amountField(), { target: { value: '3800' } });
         fireEvent.click(submitButton());
         await waitFor(() => expect(messaging.composeForConfirm).toHaveBeenCalled());
+    });
+
+    it('keeps a lowercase ticker exact in the locked context and composed action', async () => {
+        const messaging = mountMint({
+            initialTick: 'caseSensitive',
+            totalSupply: '1200',
+        });
+        fireEvent.change(await amountField(), { target: { value: '10' } });
+        fireEvent.click(submitButton());
+
+        await waitFor(() => expect(messaging.composeForConfirm).toHaveBeenCalled());
+        const params = messaging.composeForConfirm.mock.calls[0][0].actionData.params;
+        expect(params.TICK).toBe('caseSensitive');
     });
 
     it('stays ungated when the token record cannot be read', async () => {

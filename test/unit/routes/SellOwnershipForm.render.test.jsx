@@ -62,7 +62,7 @@ describe('SellOwnershipForm rendering', () => {
     it('renders both sale choices and updates their selected tabs', async () => {
         mount(messagingWith());
 
-        expect(await screen.findByRole('heading', { name: 'Sell ALPHA name' })).toBeInTheDocument();
+        expect(await screen.findByRole('heading', { name: 'Sell alpha name' })).toBeInTheDocument();
         const openOrder = screen.getByRole('tab', { name: 'Open order' });
         const instantBuy = screen.getByRole('tab', { name: 'Instant buy' });
         expect(openOrder).toHaveAttribute('aria-selected', 'true');
@@ -106,7 +106,7 @@ describe('SellOwnershipForm rendering', () => {
         fireEvent.click(screen.getByRole('button', { name: 'List name for sale' }));
 
         expect(screen.getByText('Enter a custom fee rate greater than zero.')).toBeInTheDocument();
-        expect(screen.getByRole('heading', { name: 'Sell ALPHA name' })).toBeInTheDocument();
+        expect(screen.getByRole('heading', { name: 'Sell alpha name' })).toBeInTheDocument();
     });
 
     it('rejects an invalid price-token ticker returned by wallet data', async () => {
@@ -129,7 +129,7 @@ describe('SellOwnershipForm rendering', () => {
         expect(await screen.findByRole('alert')).toHaveTextContent(
             'Price token can only use letters, numbers, dots and',
         );
-        expect(screen.getByRole('heading', { name: 'Sell ALPHA name' })).toBeInTheDocument();
+        expect(screen.getByRole('heading', { name: 'Sell alpha name' })).toBeInTheDocument();
     });
 
     it('shows price tokens only from the sale network', async () => {
@@ -252,7 +252,7 @@ describe('SellOwnershipForm rendering', () => {
             params: {
                 VERSION: '0',
                 GIVE_COIN: 'BTC',
-                GIVE_TICK: 'ALPHA',
+                GIVE_TICK: 'alpha',
                 GIVE_OWNERSHIP: '1',
                 GET_COIN: 'BTC',
                 GET_AMOUNT: '5.00',

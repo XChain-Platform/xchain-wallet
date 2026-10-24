@@ -37,6 +37,11 @@ import { NativeFeeToggle } from '../components/NativeFeeToggle.jsx';
 import { NATIVE_FEE_WARNING } from '../../sdk/nativeFeePreflight.js';
 import { submitFailureMessage } from '../utils/submitFailureMessage.js';
 import { TICKER_HINT, tickerGrammarError } from '../utils/tickerGrammar.js';
+import {
+    issueImageUrlError,
+    issueSupplyLimitError,
+    issueTextLengthError,
+} from '../utils/issueFieldValidation.js';
 import styles from './TokenWizard.module.css';
 import { useNativeFee } from '../hooks/useNativeFee.js';
 import {
@@ -432,6 +437,11 @@ export function TokenWizard({ walletId, onBack }) {
                     : 'Supply can have at most 8 decimal places.');
                 return;
             }
+            const supplyLimitError = issueSupplyLimitError(supply);
+            if (supplyLimitError) {
+                setFormError(supplyLimitError);
+                return;
+            }
         }
         if ((template === 'utility' || template === 'custom') && maxMint.trim()) {
             if (!isPositiveDecimal(maxMint)) {
@@ -485,6 +495,18 @@ export function TokenWizard({ walletId, onBack }) {
         if ((template === 'collectible' || template === 'edition') && !imageUrl.trim()) {
             setFormError('Image URL is required for this template.');
             return;
+        }
+        const descriptionLengthError = issueTextLengthError(description, 'Description');
+        if (descriptionLengthError) {
+            setFormError(descriptionLengthError);
+            return;
+        }
+        if (template === 'collectible' || template === 'edition') {
+            const imageError = issueImageUrlError(imageUrl);
+            if (imageError) {
+                setFormError(imageError);
+                return;
+            }
         }
         // PC-06: the advanced fields share the create transaction, so a
         // bad one costs the whole token, not just the field. Pre-flight
