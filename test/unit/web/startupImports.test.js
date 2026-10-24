@@ -183,6 +183,15 @@ describe('web startup imports', () => {
         expect(appSource).not.toMatch(/from '\.\/DevVariantBadge\.jsx'/);
     });
 
+    it('loads the action catalogue together with the Actions menu', () => {
+        // Every action's label and description is copy only that menu shows.
+        expect(appSource).not.toMatch(/from '@xchain-wallet\/core\/shared\/actionEntries\.js'/);
+        expect(appSource).toContain("import('@xchain-wallet/core/shared/routes/ActionsMenu.jsx')");
+        expect(appSource).toContain("import('@xchain-wallet/core/shared/actionEntries.js')");
+        expect(appSource).toContain('const ActionsMenu = lazy(loadActionsMenu);');
+        expect(appSource).toContain('entries={(buildActionEntries) => buildActionEntries({');
+    });
+
     it('loads the header chain filter with the settings popover', () => {
         const headerSettingsSource = readFileSync(
             resolve(process.cwd(), 'packages/core/src/shared/components/HeaderSettingsButton.jsx'),

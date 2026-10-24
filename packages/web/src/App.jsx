@@ -88,7 +88,6 @@ import { BottomTabBar } from '@xchain-wallet/core/shared/components/BottomTabBar
 // so those route components are not in the bundle at all and every entry point
 // below goes with them: each one is wired only when DEX_SURFACE_ENABLED.
 import { DEX_SURFACE_ENABLED, renderDexRoute } from './surfaces/dex.jsx';
-import { buildActionEntries } from '@xchain-wallet/core/shared/actionEntries.js';
 import { buildWalletAlerts } from '@xchain-wallet/core/shared/walletAlerts.js';
 import { NoticeModal } from '@xchain-wallet/core/shared/components/NoticeModal.jsx';
 import { useFocusTrap } from '@xchain-wallet/core/shared/utils/focusTrap.js';
@@ -137,7 +136,18 @@ const SendPicker = lazyRoute(() => import('@xchain-wallet/core/shared/routes/Sen
 const Receive = lazyRoute(() => import('@xchain-wallet/core/shared/routes/Receive.jsx'), 'Receive');
 const ReceivePicker = lazyRoute(() => import('@xchain-wallet/core/shared/routes/ReceivePicker.jsx'), 'ReceivePicker');
 const ScanRoute = lazyRoute(() => import('@xchain-wallet/core/shared/routes/ScanRoute.jsx'), 'ScanRoute');
-const ActionsMenu = lazyRoute(() => import('@xchain-wallet/core/shared/routes/ActionsMenu.jsx'), 'ActionsMenu');
+// The Actions menu is the one screen that reads the action catalogue (every
+// action's label and description), so the two load together the first time the
+// menu opens. That is why `entries` is a function of the catalogue's builder.
+const loadActionsMenu = () => Promise.all([
+    import('@xchain-wallet/core/shared/routes/ActionsMenu.jsx'),
+    import('@xchain-wallet/core/shared/actionEntries.js'),
+]).then(([menu, catalogue]) => ({
+    default: function ActionsMenuWithCatalogue({ entries, ...props }) {
+        return <menu.ActionsMenu {...props} entries={entries(catalogue.buildActionEntries)} />;
+    },
+}));
+const ActionsMenu = lazy(loadActionsMenu);
 const MyTokens = lazyRoute(() => import('@xchain-wallet/core/shared/routes/MyTokens.jsx'), 'MyTokens');
 const ManageToken = lazyRoute(() => import('@xchain-wallet/core/shared/routes/ManageToken.jsx'), 'ManageToken');
 const IssueTokenForm = lazyRoute(() => import('@xchain-wallet/core/shared/routes/IssueTokenForm.jsx'), 'IssueTokenForm');
@@ -2607,7 +2617,7 @@ function AppInner() {
             if (unlockedView === 'actions' && activeWalletId) {
                 return (
                     <ActionsMenu
-                        entries={buildActionEntries({
+                        entries={(buildActionEntries) => buildActionEntries({
                             onIssue: () => setUnlockedView('issue'),
                             onMint: () => setUnlockedView('mint'),
                             onDestroy: () => setUnlockedView('destroy'),
