@@ -2703,6 +2703,12 @@ export function Send({ walletId, accountId, onBack, prefill = null, onDone, onCh
                 // The HW route runs the SAME send flow with a remote
                 // signer, so it signs the prebuilt PSBT byte-identically.
                 onApprove: (_creds, composed) => {
+                    // Approve is the point of no return: the payment lives in the
+                    // pending-activity record, not in the form draft. A draft left behind
+                    // would tell a user who locked or reloaded mid-send that nothing was
+                    // sent and offer to restore and send it a second time.
+                    draftDiscardedRef.current = true;
+                    draft.clear();
                     // The shared mapping: a multi-recipient send takes the chunk
                     // lane, so its deferred outputs and any envelope must ride along.
                     const prebuiltPsbt = prebuiltPsbtFromComposed(composed);
@@ -2744,6 +2750,8 @@ export function Send({ walletId, accountId, onBack, prefill = null, onDone, onCh
             setDraftPending(false);
         } catch (err) {
             if (!mountedRef.current) return;
+            // A send that stays on this form resumes saving the next edit.
+            draftDiscardedRef.current = false;
             if (isUndoSendCancellation(err)) {
                 clearUndoHold();
                 setFormError(null);

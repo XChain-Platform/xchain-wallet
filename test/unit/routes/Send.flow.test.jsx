@@ -1364,6 +1364,32 @@ describe('Send flow with mocked messaging', () => {
 
         expect(vibrate).not.toHaveBeenCalled();
     });
+
+    it('drops the form draft when Approve dispatches so a lock mid-send cannot offer the payment again', async () => {
+        const broadcast = deferred();
+        const draftKey = `xc:formdraft:send:${WALLET_ID}`;
+        const messaging = mount({
+            messagingOverrides: {
+                getSettings: vi.fn().mockResolvedValue({
+                    walletMode: 'full',
+                    activeNetwork: 'mainnet',
+                    grace: { testSendThresholdSats: 0 },
+                    privacy: { formDraftTtlMs: 86_400_000 },
+                }),
+                sendToken: vi.fn(() => broadcast.promise),
+            },
+        });
+        await openPasswordConfirm(messaging);
+        expect(localStorage.getItem(draftKey)).not.toBeNull();
+
+        await approveWithPassword(messaging);
+
+        expect(localStorage.getItem(draftKey)).toBeNull();
+        messaging.unmountView();
+        broadcast.resolve({ txid: TXID });
+        await Promise.resolve();
+        expect(localStorage.getItem(draftKey)).toBeNull();
+    });
 });
 
 describe.each(['ledger', 'trezor'])('%s hardware signing flow', (kind) => {
