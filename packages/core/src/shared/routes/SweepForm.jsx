@@ -71,6 +71,21 @@ function destinationAddressError(address, descriptor) {
     return `This is not a valid ${chainName} address. Check it for typos.`;
 }
 
+// Bech32 is case-insensitive and a QR code carries it in capitals, but its
+// canonical form is lowercase, which is the form the wallet derives and
+// compares. Left as typed, the capitalised copy of the source address slipped
+// past the same-as-source guard, was announced as a third party's address, and
+// went into the action string in a spelling nothing else uses. An address that
+// is only valid as its lowercase form is canonicalised; anything else, base58
+// included, is left exactly as entered.
+function canonicalDestination(address, descriptor) {
+    const a = (address || '').trim();
+    const lower = a.toLowerCase();
+    if (a === lower || a !== a.toUpperCase()) return a;
+    if (!descriptor?.coin || !descriptor?.networkKind) return a;
+    return isValidAddressForChain(lower, descriptor.coin, descriptor.networkKind) ? lower : a;
+}
+
 const CATEGORY_META = [
     { key: 'balances', label: 'Token balances', defaultOn: true, hint: 'Every token balance this address holds.' },
     { key: 'ownerships', label: 'Token ownerships', defaultOn: true, hint: 'Issuer control of every token this address owns.' },
@@ -348,7 +363,7 @@ export function SweepForm({
     }
 
     // ---- Destination rails ----
-    const destTrimmed = destination.trim();
+    const destTrimmed = canonicalDestination(destination, descriptor);
     const destFormatError = destinationAddressError(destTrimmed, descriptor);
     const destinationIsOwn = useMemo(() => {
         if (!destTrimmed || !chainId || !addressesByChain) return false;

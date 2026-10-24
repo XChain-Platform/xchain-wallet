@@ -271,18 +271,35 @@ export async function composeForConfirm({
         throw annotateEncoderFeeRequirement(err, feePreflight.quote);
     }
 
+    // From here the encoder holds this build's inputs for its reservation window.
+    // A refusal below (an incomplete envelope, a compression report that does not
+    // match, an unspendable reveal) ends the compose before any confirm surface can
+    // hand the release back, so every refusal gives the inputs back itself;
+    // otherwise the next compose on a one-coin address fails "all candidate
+    // inputs are reserved" for five minutes.
+    const heldReservationId = encoded?.reservation?.id;
+    const refuseAfterBuild = async (err) => {
+        if (heldReservationId && typeof sdk.encoder.releaseInputs === 'function') {
+            try { await sdk.encoder.releaseInputs(heldReservationId); } catch { /* the reservation lapses on its own */ }
+        }
+        throw err;
+    };
+
     // A TAPROOT envelope rides this lane as a pair: the commit PSBT, the reveal
     // PSBT and the recovery record all go to the signer, and a pair missing one
     // is refused before the modal opens. Keyed off the encoder's answer, not the request.
-    assertCompleteEnvelope(encoded, actionData?.action);
+    try { assertCompleteEnvelope(encoded, actionData?.action); } catch (err) { await refuseAfterBuild(err); }
     const envelope = isEnvelopePair(encoded) ? encoded.envelope : null;
 
     // What the PSBT just built really carries, compression included. Everything
     // below that describes these bytes - the confirm string, the carrier
     // allowance, what the reveal is rebuilt from - reads THIS, not the request.
-    const carried = bareNativePayment
-        ? { actionString: null, rawData: builtEncoderOpts.rawData ?? null, compressed: false }
-        : carriedPayloadOf(createResult.actionString, builtEncoderOpts.rawData, encoded.compression);
+    let carried;
+    try {
+        carried = bareNativePayment
+            ? { actionString: null, rawData: builtEncoderOpts.rawData ?? null, compressed: false }
+            : carriedPayloadOf(createResult.actionString, builtEncoderOpts.rawData, encoded.compression);
+    } catch (err) { await refuseAfterBuild(err); }
 
     // Now that the encoder has answered, place the fee output.
     // A chunk encoding means the action rides a reveal, so the fee rides it too
@@ -327,8 +344,8 @@ export async function composeForConfirm({
     // spent. Refuse instead of composing that, if the encoder compressed but
     // withheld the bytes: unspendable-after-broadcast is not recoverable.
     if (isChunkEncoding(encoded.encoding) && carried.compressed && carried.rawData === null) {
-        throw new Error(
-            'The action encoded in the transaction does not match what you approved.');
+        await refuseAfterBuild(new Error(
+            'The action encoded in the transaction does not match what you approved.'));
     }
     const revealOpts = isChunkEncoding(encoded.encoding)
         ? {

@@ -131,6 +131,28 @@ describe('simulateAction', () => {
             expect(r.notes.some((n) => /ownerships only/i.test(n))).toBe(true);
         });
 
+        it('does not claim an ownerships-only sweep when only open orders are selected', () => {
+            const r = simulateAction({
+                action: 'SWEEP',
+                params: { DESTINATION: 'bc1qrecip', BALANCES: '0', OWNERSHIPS: '0', ORDERS: '1' },
+                balances: balances('BTC', '1', [['XCP', '50']]),
+                feeEstimate: '0',
+            });
+            expect(r.notes.some((n) => /ownerships only/i.test(n))).toBe(false);
+            expect(r.notes).toContain('Token balances stay at the source address.');
+            expect(r.notes.some((n) => /Open orders at the source address are force-closed/.test(n))).toBe(true);
+        });
+
+        it('names every escrow category that is force-closed', () => {
+            const r = simulateAction({
+                action: 'SWEEP',
+                params: { DESTINATION: 'bc1qrecip', ORDERS: '1', SWAPS: '1', DISPENSERS: '1' },
+                balances: balances('BTC', '1', [['XCP', '50']]),
+                feeEstimate: '0',
+            });
+            expect(r.notes.some((n) => /Open orders, swaps, dispensers .* force-closed/.test(n))).toBe(true);
+        });
+
         it('includes the sweep note', () => {
             const r = simulateAction({ action: 'SWEEP', params: { DESTINATION: 'x' }, balances: [] });
             expect(r.notes.some((n) => /sweep/i.test(n))).toBe(true);

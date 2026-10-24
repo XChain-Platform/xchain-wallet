@@ -2065,7 +2065,7 @@ export function Send({ walletId, accountId, onBack, prefill = null, onDone, onCh
         };
     }, [previewBalances.sdkShape, tick]);
 
-    const amountBalanceError = useMemo(() => {
+    const firstAmountBalanceError = useMemo(() => {
         if (!sourceBalance || balancesUnchecked || balancesHidden) return null;
         const divisibility = sourceBalance.divisibility
             ?? (isNativeSend ? nativeDecimalsFor(descriptor) : null);
@@ -2080,6 +2080,26 @@ export function Send({ walletId, accountId, onBack, prefill = null, onDone, onCh
         }
         return 'Amount exceeds the available balance.';
     }, [amount, balancesHidden, balancesUnchecked, descriptor, isNativeSend, sourceBalance]);
+
+    // A multi-recipient send spends the SUM of its legs, and each leg can sit
+    // under the balance while the total does not (500 + 500.00000001 against
+    // 1,000). The first-row check above only sees its own amount, so the form
+    // composed, previewed and offered to sign an action the chain rejects after
+    // the network fee is spent. Totals are exact decimal sums per token.
+    const legTotalsBalanceError = useMemo(() => {
+        if (!isMultiSend || nativeMultiSendBlock || balancesUnchecked || balancesHidden) return null;
+        if (!previewBalances.sdkShape) return null;
+        const held = decoderLib.balancesFromSdk(previewBalances.sdkShape);
+        for (const total of sendTotals) {
+            const balance = held.find((entry) => entry.tick === total.tick);
+            if (!balance) continue;
+            if (compareDecimalStrings(total.amount, String(balance.amount ?? '0').trim()) === 1) {
+                return `The total ${total.tick} across all recipients exceeds the available balance.`;
+            }
+        }
+        return null;
+    }, [isMultiSend, nativeMultiSendBlock, balancesUnchecked, balancesHidden, previewBalances.sdkShape, sendTotals]);
+    const amountBalanceError = firstAmountBalanceError || legTotalsBalanceError;
 
     const unusualSendWarnings = useMemo(() => {
         const exactFeeSats = confirmAction.composed?.networkFeeSats;
