@@ -30,6 +30,10 @@ const STORAGE_KEY = 'xc:demoWalletId';
 const TIMESTAMP_KEY = 'xc:demoWalletCreatedAt';
 const TTL_KEY = 'xc:demoWalletTtlMs';
 const PASSWORD_KEY = 'xc:demoWalletPassword';
+// sessionStorage, not localStorage: a held lock lasts for the tab session, so
+// a reload or a history pop inside the same tab keeps the wallet locked and a
+// new session starts with the usual silent re-unlock.
+const LOCK_HELD_KEY = 'xc:demoLockHeld';
 export const DEMO_DEFAULT_TTL_MS = 24 * 60 * 60 * 1000;
 
 /**
@@ -68,6 +72,7 @@ export function markDemoWallet(walletId, opts = {}) {
             // The wallet ID is the commit marker. Readers cannot observe new
             // timing or password fields as belonging to a new demo until it lands.
             storage.removeItem(STORAGE_KEY);
+            releaseDemoLock();
             storage.setItem(TIMESTAMP_KEY, String(now));
             storage.setItem(TTL_KEY, String(ttlMs));
             if (typeof safeOpts.password === 'string' && safeOpts.password) {
@@ -161,6 +166,33 @@ export function clearDemoWalletId() {
         globalThis.localStorage?.removeItem(TTL_KEY);
         globalThis.localStorage?.removeItem(PASSWORD_KEY);
     } catch { /* best-effort */ }
+    releaseDemoLock();
+}
+
+/**
+ * Records that the user pressed Lock on the demo wallet, so the Locked screen
+ * does not silently re-unlock it with the stored throwaway password. Does
+ * nothing when no demo wallet exists, so a real wallet never carries it.
+ */
+export function holdDemoLock() {
+    try {
+        const id = getDemoWalletId();
+        if (id) globalThis.sessionStorage?.setItem(LOCK_HELD_KEY, id);
+    } catch { /* best-effort */ }
+}
+
+/** @returns {boolean} true while a user lock on the current demo wallet is held */
+export function isDemoLockHeld() {
+    try {
+        const id = getDemoWalletId();
+        return Boolean(id) && globalThis.sessionStorage?.getItem(LOCK_HELD_KEY) === id;
+    } catch {
+        return false;
+    }
+}
+
+export function releaseDemoLock() {
+    try { globalThis.sessionStorage?.removeItem(LOCK_HELD_KEY); } catch { /* best-effort */ }
 }
 
 /**

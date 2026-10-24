@@ -31,6 +31,7 @@ import {
     getDemoWalletId,
     getDemoWalletPassword,
     isDemoWalletExpired,
+    isDemoLockHeld,
     clearDemoWalletId,
 } from '../../flows/demoMode.js';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
@@ -268,12 +269,14 @@ export function Locked({ onUnlocked }) {
     // Demo wallets persist their auto-generated password (a throwaway
     // wallet holding only synthetic data), so a reload can silently
     // re-unlock instead of stranding the user on a password screen for a
-    // key they never typed. Try it once on mount; on any failure fall
+    // key they never typed. Try it once on mount, unless the user locked it; on any failure fall
     // through to the normal unlock UI.
     const demoAutoUnlockTriedRef = useRef(false);
     useEffect(() => {
         if (demoAutoUnlockTriedRef.current) return undefined;
         if (!demoWalletId || isDemoWalletExpired()) return undefined;
+        // The user pressed Lock: stay on this screen instead of undoing it.
+        if (isDemoLockHeld()) return undefined;
         if (typeof messaging?.unlockWallet !== 'function') return undefined;
         const pw = getDemoWalletPassword();
         if (!pw) return undefined;

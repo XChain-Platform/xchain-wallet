@@ -8,6 +8,8 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
+import { holdDemoLock } from '../../flows/demoMode.js';
+
 /**
  * Leave the unlocked UI before waiting for the host to destroy its secrets.
  * Persisted form drafts remain governed by useFormDraft; the shell callback
@@ -26,6 +28,8 @@ export function lockImmediately({
     clearTransientState,
     recover,
 }) {
+    // Before the Locked screen mounts: its demo re-unlock reads this on mount.
+    holdDemoLock();
     clearTransientState();
     showLocked();
 
