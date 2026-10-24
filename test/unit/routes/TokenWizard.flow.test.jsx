@@ -255,7 +255,7 @@ describe('TokenWizard guided flow', () => {
         });
         fireEvent.change(screen.getByLabelText('Supply'), { target: { value: '1' } });
         fireEvent.change(screen.getByLabelText('Description (optional)'), {
-            target: { value: '<b>markup</b>\u202e'.repeat(700) },
+            target: { value: '<b>markup</b>'.repeat(700) },
         });
         fireEvent.submit(screen.getByRole('form', { name: 'Token details' }));
 
@@ -264,10 +264,27 @@ describe('TokenWizard guided flow', () => {
         expect(messaging.composeForConfirm).not.toHaveBeenCalled();
     });
 
-    it('renders markup and bidi text as inert description text', async () => {
+    it('refuses a bidi override in the description before review', async () => {
+        const messaging = mountWizard();
+        await reachDetails('Custom');
+        fireEvent.change(screen.getByLabelText('Token name (ticker)'), {
+            target: { value: 'SAFETEXT' },
+        });
+        fireEvent.change(screen.getByLabelText('Supply'), { target: { value: '1' } });
+        fireEvent.change(screen.getByLabelText('Description (optional)'), {
+            target: { value: 'safe \u202eTXT' },
+        });
+        fireEvent.submit(screen.getByRole('form', { name: 'Token details' }));
+
+        expect(await screen.findByRole('alert'))
+            .toHaveTextContent('Description cannot contain text-direction control characters.');
+        expect(messaging.composeForConfirm).not.toHaveBeenCalled();
+    });
+
+    it('renders markup as inert description text', async () => {
         mountWizard();
         await reachDetails('Custom');
-        const hostile = '<img src=x onerror=alert(1)> \u202eTXT';
+        const hostile = '<img src=x onerror=alert(1)> TXT';
         fireEvent.change(screen.getByLabelText('Token name (ticker)'), {
             target: { value: 'SAFETEXT' },
         });

@@ -82,7 +82,7 @@ describe('TokenAdminForm review interaction safety', () => {
         mountAdmin('description', { buildActionPsbtRequest });
 
         fireEvent.change(await screen.findByLabelText('New description'), {
-            target: { value: '<b>markup</b>\u202e'.repeat(700) },
+            target: { value: '<b>markup</b>'.repeat(700) },
         });
         const preview = screen.getByRole('button', { name: 'Preview' });
         await waitFor(() => expect(preview).toBeEnabled());

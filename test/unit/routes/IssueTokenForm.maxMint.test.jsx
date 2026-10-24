@@ -140,7 +140,7 @@ describe('IssueTokenForm max mint per transaction', () => {
         mountForm();
         await fill({ supply: '10' });
         fireEvent.change(screen.getByLabelText('Description (optional)'), {
-            target: { value: '<script>markup</script>\u202e'.repeat(400) },
+            target: { value: '<script>markup</script>'.repeat(400) },
         });
         await submit();
 
