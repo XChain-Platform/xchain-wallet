@@ -132,6 +132,26 @@ describe('ContactsPickerScreen empty and listing states', () => {
         expect(container.querySelector('img')).toBeNull();
         expect(globalThis.contactExecuted).toBeUndefined();
     });
+
+    it('neutralizes directional and zero-width controls in contact names', () => {
+        const hostileName = 'Alice\u202Etxt.exe\u200B';
+        mount({
+            contacts: [{ id: 'hostile', name: hostileName, entries: [bitcoinEntry] }],
+        });
+
+        expect(screen.queryByText(hostileName)).toBeNull();
+        expect(screen.getByText('Alice\u2426txt.exe')).toBeInTheDocument();
+        expect(screen.getByText('bc1-alice')).toBeInTheDocument();
+    });
+
+    it('ignores a malformed stored contact while keeping valid rows usable', () => {
+        const { props } = mount({
+            contacts: [{ id: 'broken', name: 'Broken', entries: {} }, ...contacts],
+        });
+
+        fireEvent.click(screen.getByRole('button', { name: /Alice.*bc1-alice/ }));
+        expect(props.onPick).toHaveBeenCalledWith(bitcoinEntry);
+    });
 });
 
 describe('ContactsPickerScreen filters', () => {

@@ -59,6 +59,11 @@
 }
 
 .abName {
+    display: block;
+    max-width: 100%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
     font-weight: 700;
     font-size: var(--xc-text-md);
 }
