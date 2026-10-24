@@ -5,8 +5,8 @@
 
 import { useState } from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
-import { AddressCombobox, syncPasteWidth } from '../../../packages/core/src/ui/AddressCombobox.jsx';
+import { fireEvent, render, screen } from '@testing-library/react';
+import { AddressCombobox } from '../../../packages/core/src/ui/AddressCombobox.jsx';
 
 const suggestions = [
     { address: 'bc1qalice', label: 'Alice', source: 'contact' },
@@ -85,39 +85,6 @@ describe('<AddressCombobox>', () => {
         expect(input).toHaveValue('bc1qfromuri');
     });
 
-    it('trims clipboard button text and explains denied clipboard access', async () => {
-        Object.defineProperty(navigator, 'clipboard', {
-            configurable: true,
-            value: { readText: vi.fn().mockResolvedValue('  bc1qclipboard\n') },
-        });
-        const view = render(<ControlledCombobox />);
-
-        fireEvent.click(screen.getByRole('button', { name: 'Paste from clipboard' }));
-        await waitFor(() => expect(screen.getByLabelText('To')).toHaveValue('bc1qclipboard'));
-
-        navigator.clipboard.readText.mockResolvedValueOnce(' bitcoin:bc1qfromuri?amount=1 ');
-        view.rerender(
-            <ControlledCombobox
-                onPaste={(event) => {
-                    event.preventDefault();
-                    event.currentTarget.value = 'bc1qfromuri';
-                    fireEvent.change(event.currentTarget);
-                }}
-            />,
-        );
-        fireEvent.click(screen.getByRole('button', { name: 'Paste from clipboard' }));
-        await waitFor(() => expect(screen.getByLabelText('To')).toHaveValue('bc1qfromuri'));
-
-        navigator.clipboard.readText.mockRejectedValueOnce(new DOMException('denied', 'NotAllowedError'));
-        fireEvent.click(screen.getByRole('button', { name: 'Paste from clipboard' }));
-        const alert = await screen.findByRole('alert');
-        expect(alert).toHaveTextContent('Clipboard access was denied. Paste manually instead.');
-        // The failure is the field's own error under the field, not a second
-        // message inside the field box beside the Paste button.
-        expect(screen.getAllByRole('alert')).toHaveLength(1);
-        expect(screen.getByLabelText('To').getAttribute('aria-describedby')).toContain(alert.id);
-    });
-
     it('clears the value and resets keyboard selection', () => {
         render(<ControlledCombobox value="Alice" />);
         const input = screen.getByLabelText('To');
@@ -164,52 +131,5 @@ describe('<AddressCombobox>', () => {
 
         const option = screen.getByRole('option');
         expect(option.querySelectorAll('[tabindex]')).toHaveLength(0);
-    });
-});
-
-describe('in-field Paste width', () => {
-    function pasteButton(width, inset = '4px') {
-        const button = document.createElement('button');
-        button.style.setProperty('inset-inline-end', inset);
-        button.getBoundingClientRect = () => ({ width });
-        document.body.appendChild(button);
-        return button;
-    }
-
-    afterEach(() => {
-        document.body.replaceChildren();
-    });
-
-    it('sizes the room for Paste from the button it measures, rounded up, with its inset on both sides', () => {
-        const wrap = document.createElement('div');
-        // Default text: Paste is 68px, which keeps the stylesheet estimate.
-        expect(syncPasteWidth(wrap, pasteButton(67.6))).toBe(76);
-        expect(wrap.style.getPropertyValue('--address-paste-width')).toBe('76px');
-        // Largest text: Paste grows to about 89px and the room follows it.
-        expect(syncPasteWidth(wrap, pasteButton(88.78))).toBe(97);
-        expect(wrap.style.getPropertyValue('--address-paste-width')).toBe('97px');
-    });
-
-    it('leaves the stylesheet estimate alone when there is nothing to measure', () => {
-        const wrap = document.createElement('div');
-        expect(syncPasteWidth(wrap, null)).toBeNull();
-        expect(syncPasteWidth(wrap, pasteButton(0))).toBeNull();
-        expect(wrap.style.getPropertyValue('--address-paste-width')).toBe('');
-    });
-
-    it('lays the address book and the input text out against the measured Paste width', () => {
-        const rect = vi.spyOn(HTMLButtonElement.prototype, 'getBoundingClientRect')
-            .mockReturnValue({ width: 88.78, height: 36, top: 0, left: 0, right: 88.78, bottom: 36, x: 0, y: 0 });
-        try {
-            const { container } = render(<ControlledCombobox icon="contacts" onIconClick={() => {}} />);
-            const wrap = container.firstElementChild;
-            expect(wrap.style.getPropertyValue('--address-paste-width')).toMatch(/^\d+px$/);
-            expect(Number.parseFloat(wrap.style.getPropertyValue('--address-paste-width'))).toBeGreaterThanOrEqual(89);
-            const input = screen.getByRole('combobox', { name: 'To' });
-            expect(input.style.getPropertyValue('--address-end-room'))
-                .toBe('calc(var(--address-paste-width) + var(--address-control-height))');
-        } finally {
-            rect.mockRestore();
-        }
     });
 });

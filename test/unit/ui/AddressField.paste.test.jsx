@@ -8,14 +8,12 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// The address fields put Paste inside the field by ruling. AddressField
-// takes the same in-field Paste as Send's recipient field (AddressCombobox):
-// the same clipboard check, the host's onPaste first, then onChange. The
-// New contact form's address field had none.
+// Address fields rely on the native paste event. The host's onPaste handler
+// runs first, then unconsumed text is normalized through onChange.
 
 import { useState } from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
 import { ContactsList } from '../../../packages/core/src/shared/routes/ContactsList.jsx';
 import { AddressField } from '../../../packages/core/src/ui/AddressField.jsx';
@@ -33,7 +31,6 @@ describe('AddressField in-field Paste', () => {
         return (
             <AddressField
                 label="Address"
-                paste
                 value={value}
                 onChange={(event) => { setValue(event.target.value); onChange(event.target.value); }}
                 {...props}
@@ -41,51 +38,45 @@ describe('AddressField in-field Paste', () => {
         );
     }
 
-    it('sets the field through onChange with the trimmed clipboard text', async () => {
-        Object.defineProperty(navigator, 'clipboard', {
-            configurable: true,
-            value: { readText: vi.fn().mockResolvedValue('\n bc1qclipboard \t') },
-        });
+    it('sets the field through onChange with trimmed native paste text', () => {
         const onChange = vi.fn();
         render(<Harness onChange={onChange} />);
-        fireEvent.click(screen.getByRole('button', { name: 'Paste from clipboard' }));
-        await waitFor(() => expect(screen.getByLabelText('Address')).toHaveValue('bc1qclipboard'));
+        fireEvent.paste(screen.getByLabelText('Address'), {
+            clipboardData: { getData: () => '\n bc1qclipboard \t' },
+        });
+        expect(screen.getByLabelText('Address')).toHaveValue('bc1qclipboard');
         expect(onChange).toHaveBeenCalledWith('bc1qclipboard');
     });
 
-    it('refuses text with hidden characters and shows why on the field', async () => {
-        Object.defineProperty(navigator, 'clipboard', {
-            configurable: true,
-            value: { readText: vi.fn().mockResolvedValue('bc1q‮evil') },
-        });
+    it('refuses native paste text with hidden characters and shows why on the field', () => {
         render(<Harness />);
-        fireEvent.click(screen.getByRole('button', { name: 'Paste from clipboard' }));
-        expect(await screen.findByText('Pasted text contains hidden characters. Check it and try again.')).toBeTruthy();
+        fireEvent.paste(screen.getByLabelText('Address'), {
+            clipboardData: { getData: () => 'bc1q‮evil' },
+        });
+        expect(screen.getByText('Pasted text contains hidden characters. Check it and try again.')).toBeTruthy();
         expect(screen.getByLabelText('Address')).toHaveValue('');
     });
 
-    it('lets the host consume the paste first, as Send does for payment links', async () => {
-        Object.defineProperty(navigator, 'clipboard', {
-            configurable: true,
-            value: { readText: vi.fn().mockResolvedValue('bitcoin:bc1qfromuri') },
-        });
+    it('lets the host consume the native paste first, as Send does for payment links', () => {
         const onChange = vi.fn();
         const onPaste = vi.fn((event) => event.preventDefault());
         render(<Harness onChange={onChange} onPaste={onPaste} />);
-        fireEvent.click(screen.getByRole('button', { name: 'Paste from clipboard' }));
-        await waitFor(() => expect(onPaste).toHaveBeenCalledOnce());
-        expect(onPaste.mock.calls[0][0].clipboardData.getData()).toBe('bitcoin:bc1qfromuri');
+        fireEvent.paste(screen.getByLabelText('Address'), {
+            clipboardData: { getData: () => 'bitcoin:bc1qfromuri' },
+        });
+        expect(onPaste).toHaveBeenCalledOnce();
+        expect(onPaste.mock.calls[0][0].clipboardData.getData('text')).toBe('bitcoin:bc1qfromuri');
         expect(onChange).not.toHaveBeenCalled();
     });
 
-    it('shows no Paste on a read-only field or when not asked for', () => {
+    it('shows no Paste button on editable or read-only fields', () => {
         render(
             <>
-                <AddressField label="From" paste readOnly value={BTC} onChange={() => {}} />
+                <AddressField label="From" readOnly value={BTC} onChange={() => {}} />
                 <AddressField label="Plain" value="" onChange={() => {}} />
             </>,
         );
-        expect(screen.queryByRole('button', { name: 'Paste from clipboard' })).toBeNull();
+        expect(screen.queryByRole('button')).toBeNull();
     });
 });
 
@@ -96,11 +87,7 @@ describe('New contact', () => {
         deleteContact: vi.fn(),
     };
 
-    it('gives the New contact address field the in-field Paste', async () => {
-        Object.defineProperty(navigator, 'clipboard', {
-            configurable: true,
-            value: { readText: vi.fn().mockResolvedValue(`  ${BTC}\n`) },
-        });
+    it('accepts native paste in the New contact address field', async () => {
         render(
             <MessagingProvider shell="web" messaging={messaging}>
                 <ContactsList walletId="wallet-1" onBack={() => {}} />
@@ -108,8 +95,10 @@ describe('New contact', () => {
         );
         fireEvent.click(await screen.findByRole('button', { name: 'Create first contact' }));
         await screen.findByRole('heading', { level: 1, name: 'New contact' });
-        fireEvent.click(screen.getByRole('button', { name: 'Paste from clipboard' }));
-        await waitFor(() => expect(screen.getByLabelText('Address')).toHaveValue(BTC));
+        fireEvent.paste(screen.getByLabelText('Address'), {
+            clipboardData: { getData: () => `  ${BTC}\n` },
+        });
+        expect(screen.getByLabelText('Address')).toHaveValue(BTC);
         // The pasted value runs the same network detection as typing it.
         expect(screen.getByText(/Bitcoin/)).toBeTruthy();
     });

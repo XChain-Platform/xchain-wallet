@@ -152,7 +152,7 @@ async function checkViewports(page, surface, fields) {
     }
 }
 
-test('Paste and Max stay inside their fields without squeezing input text', async ({ page }) => {
+test('trailing field actions stay inside their fields without squeezing input text', async ({ page }) => {
     test.slow();
     // Demo wallets hide the Swap command, so this walk uses a real dev wallet.
     await createWallet(page);
@@ -163,12 +163,12 @@ test('Paste and Max stay inside their fields without squeezing input text', asyn
         {
             name: 'To',
             input: main.getByLabel('To', { exact: true }),
-            actions: ['Paste from clipboard'],
+            actions: ['Open address book'],
         },
         {
             name: 'Amount',
             input: main.getByRole('textbox', { name: /^Amount/ }),
-            actions: ['Paste from clipboard', 'Use max available amount'],
+            actions: ['Use max available amount'],
         },
     ]);
 
@@ -185,7 +185,7 @@ test('Paste and Max stay inside their fields without squeezing input text', asyn
         {
             name: 'Give amount',
             input: main.getByRole('textbox', { name: /^Give amount/ }),
-            actions: ['Paste from clipboard', 'Use max available amount'],
+            actions: ['Use max available amount'],
         },
     ]);
 
@@ -195,7 +195,7 @@ test('Paste and Max stay inside their fields without squeezing input text', asyn
         {
             name: 'Amount',
             input: main.getByRole('textbox', { name: /^Amount/ }),
-            actions: ['Paste from clipboard'],
+            actions: [],
         },
     ]);
 });

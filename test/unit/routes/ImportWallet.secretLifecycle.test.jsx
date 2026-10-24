@@ -72,29 +72,6 @@ describe('ImportWallet secret lifecycle', () => {
         expect(screen.getByLabelText(/isn't recoverable from a recovery phrase/)).not.toBeChecked();
     });
 
-    it('discards a clipboard result from an earlier visit to the phrase lane', async () => {
-        let resolveClipboard;
-        Object.defineProperty(navigator, 'clipboard', {
-            configurable: true,
-            value: {
-                readText: vi.fn(() => new Promise((resolve) => {
-                    resolveClipboard = resolve;
-                })),
-            },
-        });
-        renderImport();
-
-        fireEvent.click(screen.getByRole('button', { name: 'Paste recovery phrase from clipboard' }));
-        fireEvent.click(screen.getByRole('tab', { name: 'Private key' }));
-        fireEvent.click(screen.getByRole('tab', { name: 'Recovery phrase' }));
-        await act(async () => {
-            resolveClipboard(PHRASE);
-            await Promise.resolve();
-        });
-
-        expect(screen.getByLabelText('Recovery phrase')).toHaveValue('');
-    });
-
     it('locks same-tick submissions before the busy render commits', async () => {
         let finishImport;
         const importMnemonic = vi.fn(() => new Promise((resolve) => {

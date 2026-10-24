@@ -1,6 +1,5 @@
 .wrap {
     --address-control-height: var(--xc-control-h-md);
-    --address-paste-width: calc(var(--address-control-height) + var(--xc-space-8));
     --xc-icon-size: var(--xc-control-icon-md, var(--xc-icon-md));
     position: relative;
     min-width: 0;
@@ -50,7 +49,7 @@
     min-block-size: var(--xc-tap-min);
     position: absolute;
     z-index: calc(var(--xc-z-base) + 1);
-    inset-inline-end: var(--address-paste-width);
+    inset-inline-end: 0;
     top: calc(20px + var(--xc-space-1));
     width: var(--address-control-height);
     height: var(--address-control-height);
@@ -65,45 +64,8 @@
     cursor: pointer;
 }
 
-.pasteAction,
-.pasteAction > span {
-    display: contents !important;
-}
-
-/* Paste sits inside the field box: inset from the field's end edge and
-   vertically, at the field's inner height, so it never meets the border. */
-.pasteAction button {
-    position: absolute;
-    z-index: calc(var(--xc-z-base) + 1);
-    inset-inline-end: var(--xc-space-1);
-    top: calc(20px + var(--xc-space-2));
-    flex: none;
-    width: auto;
-    min-width: max-content;
-    max-width: none;
-    height: calc(var(--address-control-height) - var(--xc-space-2));
-    min-height: calc(var(--address-control-height) - var(--xc-space-2));
-    gap: var(--xc-space-1);
-    padding-inline: calc(var(--xc-space-1) / 2);
-    white-space: nowrap;
-}
-
-.pasteAction button > span {
-    min-width: max-content;
-    white-space: nowrap;
-}
-
-.pasteAction [role='alert'] {
-    display: block;
-    margin-block-start: var(--xc-help-gap);
-}
-
 .noLabel .iconButton {
     top: 0;
-}
-
-.noLabel .pasteAction button {
-    top: var(--xc-space-1);
 }
 
 .iconButton:hover:not(:disabled) {

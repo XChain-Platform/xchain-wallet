@@ -119,7 +119,7 @@ async function expectInlineActionsInsideFields(page, label, requiredNames = []) 
             || element.tagName.toLowerCase();
 
         const actions = [...body.querySelectorAll('button')].filter((button) => (
-            visible(button) && ['Paste', 'Max'].includes(button.textContent.trim())
+            visible(button) && button.textContent.trim() === 'Max'
         ));
         const measurements = actions.map((button) => {
             let owner = button.parentElement;
@@ -177,7 +177,7 @@ async function expectInlineActionsInsideFields(page, label, requiredNames = []) 
     }
     expect(
         result.measurements.filter(({ inside }) => !inside),
-        `${label}: Paste or Max action escapes its field\n${JSON.stringify(result.measurements, null, 2)}`,
+        `${label}: Max action escapes its field\n${JSON.stringify(result.measurements, null, 2)}`,
     ).toEqual([]);
 }
 
@@ -209,19 +209,19 @@ for (const theme of THEMES) {
                 await test.step(`${context} / Send`, async () => {
                     await gotoSection(page, 'Send');
                     await expect(page.getByRole('heading', { name: 'Send', exact: true })).toBeVisible();
-                    await checkScreen(page, `${context} / Send`, ['Paste', 'Max']);
+                    await checkScreen(page, `${context} / Send`, ['Max']);
                 });
 
                 await test.step(`${context} / Swap`, async () => {
                     await gotoPaletteRoute(page, 'Swap');
                     await expect(page.getByRole('heading', { name: 'Swap tokens', exact: true })).toBeVisible();
-                    await checkScreen(page, `${context} / Swap`, ['Paste']);
+                    await checkScreen(page, `${context} / Swap`, ['Max']);
                 });
 
                 await test.step(`${context} / Receive`, async () => {
                     await gotoSection(page, 'Receive');
                     await expect(page.getByRole('heading', { name: 'Receive', exact: true })).toBeVisible();
-                    await checkScreen(page, `${context} / Receive`, ['Paste']);
+                    await checkScreen(page, `${context} / Receive`);
                 });
 
                 await test.step(`${context} / Settings search`, async () => {

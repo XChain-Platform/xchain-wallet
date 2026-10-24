@@ -8,11 +8,10 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// The Scan screen's paste box carries its Paste button inside the field, like
-// every other field that takes pasted text, and a click fills the box.
+// The Scan screen's paste box accepts text through the native paste path.
 
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { ScanRoute } from '../../../packages/core/src/shared/routes/ScanRoute.jsx';
 
 describe('ScanRoute paste box', () => {
@@ -21,15 +20,12 @@ describe('ScanRoute paste box', () => {
         vi.restoreAllMocks();
     });
 
-    it('puts a Paste button inside the field and fills it from the clipboard', async () => {
-        const readText = vi.fn().mockResolvedValue('bitcoin:bc1qexample');
-        Object.defineProperty(navigator, 'clipboard', { configurable: true, value: { readText } });
+    it('has no in-field Paste button and accepts native pasted text', () => {
         render(<ScanRoute onClassified={() => {}} />);
         const field = screen.getByRole('textbox');
-        const button = screen.getByRole('button', { name: /paste from clipboard/i });
-        expect(field.parentElement.contains(button)).toBe(true);
-        fireEvent.click(button);
-        await waitFor(() => expect(field.value).toBe('bitcoin:bc1qexample'));
+        expect(screen.queryByRole('button', { name: /^paste/i })).toBeNull();
+        fireEvent.change(field, { target: { value: 'bitcoin:bc1qexample' } });
+        expect(field).toHaveValue('bitcoin:bc1qexample');
     });
 
     it('shows an unreadable paste as the first item of the form, above the scanner and the field', () => {

@@ -70,16 +70,16 @@ describe('<Textarea>', () => {
                     rows={2}
                     value="one two three"
                     onChange={() => {}}
-                    actions={<button type="button">Paste</button>}
+                    actions={<button type="button">Insert</button>}
                 />,
             );
             const control = screen.getByRole('textbox', { name: 'Notes' });
             const wrapper = control.parentElement;
-            const paste = screen.getByRole('button', { name: 'Paste' });
+            const action = screen.getByRole('button', { name: 'Insert' });
 
             expect(wrapper.firstElementChild).toBe(control);
-            expect(wrapper.contains(paste)).toBe(true);
-            expect(control.compareDocumentPosition(paste) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+            expect(wrapper.contains(action)).toBe(true);
+            expect(control.compareDocumentPosition(action) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
             // The hint stays outside the box, below it.
             const hint = screen.getByText('Keep it short');
             expect(wrapper.contains(hint)).toBe(false);

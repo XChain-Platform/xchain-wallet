@@ -144,7 +144,7 @@ test('overlap measurement reports controls drawn over each other, not overlays',
             .bar { position: fixed; top: 330px; left: 300px; width: 200px; height: 40px; background: white; }
         </style>
         <button style="left: 10px">Contacts</button>
-        <button style="left: 60px">Paste</button>
+        <button style="left: 60px">Adjacent</button>
         <button style="left: 200px">Apart</button>
         <button style="left: 10px; top: 60px; width: 200px; height: 30px">Row</button>
         <button style="left: 170px; top: 63px; width: 24px; height: 24px">Row action</button>
@@ -154,7 +154,7 @@ test('overlap measurement reports controls drawn over each other, not overlays',
         <div class="bar"><button style="left: 10px; top: 0">Nav</button></div>
     `);
     const { overlaps } = await page.evaluate(measureInPage, {});
-    expect(overlaps).toEqual([{ el: 'button "Contacts"', with: 'button "Paste"', w: 30, h: 40 }]);
+    expect(overlaps).toEqual([{ el: 'button "Contacts"', with: 'button "Adjacent"', w: 30, h: 40 }]);
 });
 
 test('layout sweep', async ({ page }, testInfo) => {

@@ -60,7 +60,6 @@ import {
     FormPage,
     ListPage,
 } from '@xchain-wallet/core/ui';
-import { ClipboardPasteButton } from '../../ui/ClipboardPasteButton.jsx';
 import { registry as registryLib } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { useSignerReady } from '../hooks/useSignerReady.js';
@@ -1385,12 +1384,6 @@ export function PsbtSignForm({ walletId, onBack, initialPsbt }) {
                     </FieldNote>
                 ) : null}
                 <div style={{ marginTop: 4, fontSize: 'var(--xc-text-sm)', color: 'var(--xc-text-muted)', display: 'flex', alignItems: 'center', gap: 'var(--xc-space-2)', flexWrap: 'wrap' }}>
-                    <span>Or</span>
-                    <ClipboardPasteButton
-                        disabled={busy}
-                        label="Paste transaction from clipboard"
-                        onPaste={(text) => { setPasted(text); if (error) setError(null); }}
-                    />
                     <Button
                         variant="ghost"
                         size="sm"
