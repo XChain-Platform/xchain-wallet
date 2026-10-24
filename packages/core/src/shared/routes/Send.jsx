@@ -68,6 +68,7 @@ import { prebuiltPsbtFromComposed } from '../../flows/prebuiltPsbtFromComposed.j
 import { ActionConfirmScreen } from '../components/ActionConfirmScreen.jsx';
 import { UndoSendToast } from '../components/UndoSendToast.jsx';
 import { PanicFreezeNotice, SigningReadyNote } from '../safety/PanicFreezeNotice.jsx';
+import { panicRefusalMessage } from '../safety/panicNotice.js';
 import {
     resolveFeeConfig,
     resolvePreflightPrivacy,
@@ -602,6 +603,10 @@ export function Send({ walletId, accountId, onBack, prefill = null, onDone, onCh
     const [submitError, setSubmitError] = useState(/** @type {string | null} */ (null));
     // Recognized recovery cause for affordances that must not match display copy.
     const [submitErrorCause, setSubmitErrorCause] = useState(/** @type {string | null} */ (null));
+    // Remounts the freeze notice so it re-reads the freeze at once after a
+    // refusal, instead of on its next tick: the notice is then the one
+    // message for that state, and the submit error stays empty.
+    const [panicNoticeKey, setPanicNoticeKey] = useState(0);
     // An encoder refusal the person fixes in one field (a fee rate under the
     // relay minimum, an amount the inputs cannot cover) shows under that field.
     const [submitFieldError, setSubmitFieldError] = useState(
@@ -2783,6 +2788,16 @@ export function Send({ walletId, accountId, onBack, prefill = null, onDone, onCh
                 setPassword('');
                 return;
             }
+            // A freeze the user armed is stated by the notice at the top of
+            // the form; a second, generic "try again" line under it would
+            // contradict it.
+            if (panicRefusalMessage(err)) {
+                setSubmitError(null);
+                setSubmitErrorCause(null);
+                setPanicNoticeKey((k) => k + 1);
+                haptic.error();
+                return;
+            }
             // Everything else (compose/tamper failure, bad password, broadcast
             // failure) surfaces in the form's existing error banner; the modal
             // has already unmounted (terminal phase leaves CONFIRM_MODAL_PHASES).
@@ -2891,6 +2906,15 @@ export function Send({ walletId, accountId, onBack, prefill = null, onDone, onCh
                 setPassword('');
                 setStage('form');
                 showToast({ message: 'Transaction cancelled.' });
+                return;
+            }
+            if (panicRefusalMessage(err)) {
+                setSubmitError(null);
+                setSubmitErrorCause(null);
+                setPanicNoticeKey((k) => k + 1);
+                setPassword('');
+                setStage('form');
+                haptic.error();
                 return;
             }
             if (isBadPassword) {
@@ -3760,7 +3784,7 @@ export function Send({ walletId, accountId, onBack, prefill = null, onDone, onCh
               * has already watched the whole transaction get composed.
               * Duress-armed freezes render nothing here, by design.
               */}
-            {!isWatcherMode ? <PanicFreezeNotice surface="send" /> : null}
+            {!isWatcherMode ? <PanicFreezeNotice key={panicNoticeKey} surface="send" /> : null}
             {assetSwitchNotice ? (
                 <FormNotice variant="status">{assetSwitchNotice}</FormNotice>
             ) : null}

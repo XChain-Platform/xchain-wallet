@@ -149,6 +149,7 @@ const runtime = vi.hoisted(() => ({
     enforceSystemAutoLock: vi.fn(),
     ensureHost: vi.fn(),
     handleIpcMessage: vi.fn(),
+    installPanicModePersistence: vi.fn(async () => {}),
     tearDownHost: vi.fn(),
     wipeRuntimeStores: vi.fn(),
 }));

@@ -3529,6 +3529,10 @@ export function createBackgroundHost(deps) {
         if (typeof signed?.txHex !== 'string' || !signed.txHex || typeof signed?.txid !== 'string' || !signed.txid) {
             throw new Error('tx.replace: signer did not return a complete transaction');
         }
+        // The freeze is checked again once the signer returns: a hardware
+        // prompt can hold the sign open while panic mode is armed elsewhere,
+        // and the replacement must not reach the network or the ledger then.
+        flows.assertSigningAllowed();
 
         let pending = schemas.createPendingTx({
             chain: descriptor.coin,

@@ -710,6 +710,12 @@ export async function submitWithSigner({
     if (typeof beforeBroadcast === 'function') {
         await beforeBroadcast({ signed, revealSigned });
     }
+    // The freeze is checked again at the last moment before the bytes leave:
+    // an Undo hold or a hardware signer can keep a signed send waiting here,
+    // and panic mode armed meanwhile (another tab, the popup, a duress entry)
+    // must stop it. Nothing is persisted or broadcast yet, so the refusal
+    // leaves no recovery record and no queued retry.
+    assertSigningAllowed();
 
     // §3.5: the key-path cancel needs {outpoint, internal key path, tapleaf
     // hash} and cannot be rebuilt without them. recordPendingCommit THROWS if it
