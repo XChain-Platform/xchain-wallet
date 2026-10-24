@@ -1552,6 +1552,13 @@ export const en = {
     'settings.ads.donationAddress': 'Donation address',
     'settings.ads.notAvailableYet': 'Not available yet.',
     'settings.ads.donationAddress2': '{displayName} donation address',
+    'settings.ads.donationAddressArrivesLater':
+        'A donation address for {displayName} arrives in a future release; until then nothing is sent on this network.',
+    'settings.ads.donationRecipient': 'Donate to',
+    'settings.ads.donationRecipientFor': '{displayName} donation recipient',
+    'settings.ads.roleDonate1': 'DONATE1 · protocol',
+    'settings.ads.roleDonate2': 'DONATE2 · community',
+    'settings.ads.roleDonate3': 'DONATE3 · explorer',
     'settings.ads.pendingDonation': 'Pending donation',
     'settings.ads.lifetimeDonations': 'Lifetime donations',
     'settings.biometric.biometricUnlock': 'Biometric unlock',
