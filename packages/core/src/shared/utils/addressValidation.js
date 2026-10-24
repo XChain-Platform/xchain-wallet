@@ -221,6 +221,8 @@ function chainLabel(coin, network) {
     return `${name} ${network}`;
 }
 
+const PAYMENT_LINK_RE = /^(?:bitcoin|litecoin|dogecoin|xchain|web\+xchain):/i;
+
 /**
  * Plain-language validation copy for an address field tied to one chain.
  * A checksum failure is presented as a typo. A well-formed address for a
@@ -241,6 +243,10 @@ export function addressValidationError(address, descriptor) {
     if (!a || !coin || !network) return null;
     if (isValidAddressForChain(a, coin, network)) return null;
 
+    // A payment link in an address field is not a typo; say what it is.
+    if (PAYMENT_LINK_RE.test(a)) {
+        return 'This is a payment link, not an address. Paste the whole link into this field to fill in the payment.';
+    }
     const target = chainLabel(coin, network);
     const detected = detectAddressChain(a);
     if (detected?.coin && detected.network) {

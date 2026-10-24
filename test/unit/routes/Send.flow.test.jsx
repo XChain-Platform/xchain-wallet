@@ -811,6 +811,49 @@ describe('Send flow with mocked messaging', () => {
         )).toBeInTheDocument();
     });
 
+    it('keeps a refused payment request note after the field loses focus', async () => {
+        mount();
+        const toField = await screen.findByLabelText(/^To$/);
+
+        fireEvent.paste(toField, {
+            clipboardData: { getData: () => `bitcoin:${TO}?req-extra=needed` },
+        });
+        fireEvent.blur(toField);
+
+        expect(await screen.findByText(
+            'This payment request requires a feature this wallet does not support.',
+        )).toBeInTheDocument();
+    });
+
+    it('does not say the amount was cleared when the pasted link supplies one', async () => {
+        mount();
+        const toField = await screen.findByLabelText(/^To$/);
+
+        fireEvent.paste(toField, {
+            clipboardData: { getData: () => `bitcoin:${TO}?amount=0.25&tick=PEPE` },
+        });
+
+        expect(screen.getByLabelText(/^Amount \(/)).toHaveValue('0.25');
+        expect(screen.queryByText(/amount was cleared/i)).toBeNull();
+    });
+
+    it('drops the previous link message when the next pasted link has none', async () => {
+        mount();
+        const toField = await screen.findByLabelText(/^To$/);
+
+        fireEvent.paste(toField, {
+            clipboardData: { getData: () => `bitcoin:${TO}?amount=0.25&message=Rent` },
+        });
+        fireEvent.change(screen.getByLabelText('Token'), { target: { value: 'XCP' } });
+        expect(screen.getByLabelText('Memo (optional)')).toHaveValue('Rent');
+
+        fireEvent.paste(toField, {
+            clipboardData: { getData: () => `bitcoin:${TO}?amount=0.5` },
+        });
+        expect(screen.getByLabelText('Memo (optional)')).toHaveValue('');
+        expect(screen.queryByTestId('payment-request-message')).toBeNull();
+    });
+
     it.each([
         ['malformed', 'bitcoin', TO, '../../evil'],
         ['unsupported', 'bitcoin', TO, 'monero-mainnet'],

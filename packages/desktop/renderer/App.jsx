@@ -328,6 +328,10 @@ function AppInner() {
     // §24.3 / Cluster Y FOLLOWUP 1: `<ScanRoute>` outcomes route into
     // the existing 'send' view via this prefill slot. Cleared after
     // submit / back to avoid leaking a stale prefill into a future Send.
+    // Counts payment links that prefilled Send. It keys the Send route so a
+    // link arriving while Send is open replaces the form (the earlier one is
+    // kept as a draft) instead of being dropped silently.
+    const [sendLinkSeq, setSendLinkSeq] = useState(0);
     const [sendPrefill, setSendPrefill] = useState(
         /** @type {{ address?: string, amount?: string, tick?: string, chainId?: string, memo?: string } | null} */ (null),
     );
@@ -836,7 +840,10 @@ function AppInner() {
                 setDeepLinkNotice(route.message);
                 return;
             }
-            if (route.sendPrefill) setSendPrefill(route.sendPrefill);
+            if (route.sendPrefill) {
+                setSendPrefill(route.sendPrefill);
+                setSendLinkSeq((n) => n + 1);
+            }
             if (route.contractRef) setContractRef(route.contractRef);
             if (route.executePrefill) setExecutePrefill(route.executePrefill);
             setUnlockedView(route.view);
@@ -920,7 +927,7 @@ function AppInner() {
             if (unlockedView === 'send' && activeWalletId) {
                 return (
                     <Send
-                        key={`${activeWalletId}:${activeAccountId || 'all'}`}
+                        key={`${activeWalletId}:${activeAccountId || 'all'}:${sendLinkSeq}`}
                         walletId={activeWalletId}
                         accountId={activeAccountId || undefined}
                         onViewHistory={(target) => {

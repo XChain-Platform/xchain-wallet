@@ -214,6 +214,11 @@ export function parseBip21Uri(uri) {
                     const key = STANDARD_PARAM_KEYS.has(lowerKey) ? lowerKey : decodedKey;
                     try {
                         if (isSafeUriParameter(key, decodedVal, { deferChainShape: true })) {
+                            // Two values for one parameter leave no way to tell
+                            // which the sender meant, so the link is refused.
+                            if (Object.hasOwn(params, key)) {
+                                throw new Error(`${key} appears more than once`);
+                            }
                             params[key] = decodedVal;
                         }
                     } catch (err) {

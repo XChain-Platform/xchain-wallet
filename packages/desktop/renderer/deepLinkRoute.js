@@ -67,15 +67,23 @@ export function deepLinkRoute(raw, chainRegistry) {
             const parts = parseBip21Uri(normalized);
             if (parts.required?.length > 0) return invalidRoute();
             const memo = parts.message ?? parts.label;
-            const hardened = hardenUriIntentText({ kind: 'send', memo });
+            const hardened = hardenUriIntentText({ kind: 'send', memo, tick: parts.params?.tick });
             const chainId = chainRegistry?.chainIdFor?.(coinScheme.coin, 'mainnet') || undefined;
             if (!chainId) return invalidRoute();
+            // A request that names another network cannot be shown as a
+            // payment on this scheme's own chain, and a named token must not
+            // fall back to the coin: either would prefill a different payment
+            // than the link describes.
+            const namedChain = parts.params?.chain;
+            if (namedChain !== undefined && namedChain !== chainId) return invalidRoute();
+            const namedTick = hardened.tick ? hardened.tick.toUpperCase() : undefined;
+            if (namedTick && tickerReferenceError(namedTick, { allowRef: true })) return invalidRoute();
             return {
                 view: 'send',
                 sendPrefill: {
                     address: parts.address,
                     amount: parts.amount,
-                    tick: coinScheme.tick,
+                    tick: namedTick || coinScheme.tick,
                     chainId,
                     memo: hardened.memo,
                 },
@@ -105,7 +113,9 @@ export function deepLinkRoute(raw, chainRegistry) {
         }
         let amount = intent.amount;
         try {
-            amount = normalizeBip21Amount(amount);
+            // Token amounts carry up to 18 decimals, the same bound the BIP21
+            // parser applies when a tick is named.
+            amount = normalizeBip21Amount(amount, intent.tick ? 18 : undefined);
         } catch {
             return invalidRoute();
         }

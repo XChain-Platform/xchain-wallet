@@ -957,8 +957,11 @@ export function Send({ walletId, accountId, onBack, prefill = null, onDone, onCh
             if (requestError) {
                 setPastedRecipient(null);
                 setPasteHint(null);
-                setToError(requestError);
-                setPasteWarning(null);
+                // A field error is recomputed from the (unchanged) address on the
+                // next blur and would erase this, so the refusal is a note that
+                // stays until the user types.
+                setToError(null);
+                setPasteWarning(requestError);
                 return;
             }
             const tickParam = parts.params?.tick;
@@ -986,9 +989,11 @@ export function Send({ walletId, accountId, onBack, prefill = null, onDone, onCh
                 } else if (!perRecipientToken) {
                     setExtraLegs((rows) => rows.map((row) => ({ ...row, amount: '' })));
                 }
-                setAssetSwitchNotice(chainChanged
+                // A link that carries its own amount keeps it, so a notice saying
+                // the amount was cleared would contradict the field.
+                setAssetSwitchNotice(parts.amount ? null : (chainChanged
                     ? 'Network changed. The amount and network fee were reset because they may not be valid on the new network.'
-                    : 'Token changed. The amount was cleared because the new token may use different decimal places.');
+                    : 'Token changed. The amount was cleared because the new token may use different decimal places.'));
             }
             if (nextTick !== tick) {
                 // Pasted text is the same untrusted-URI class as
@@ -1001,6 +1006,7 @@ export function Send({ walletId, accountId, onBack, prefill = null, onDone, onCh
             const safeMessage = memoParam ? neutralizeControlText(memoParam) : '';
             setRequestMessage(safeMessage);
             if (safeMessage) setMemo(safeMessage);
+            else if (memo === requestMessage) setMemo('');
             if (chainChanged) {
                 setChainId(requestChainId);
             }
@@ -1036,13 +1042,16 @@ export function Send({ walletId, accountId, onBack, prefill = null, onDone, onCh
                 } else if (!perRecipientToken) {
                     setExtraLegs((rows) => rows.map((row) => ({ ...row, amount: '' })));
                 }
-                setAssetSwitchNotice(chainChanged
+                // A link that carries its own amount keeps it, so a notice saying
+                // the amount was cleared would contradict the field.
+                setAssetSwitchNotice(intent.amount ? null : (chainChanged
                     ? 'Network changed. The amount and network fee were reset because they may not be valid on the new network.'
-                    : 'Token changed. The amount was cleared because the new token may use different decimal places.');
+                    : 'Token changed. The amount was cleared because the new token may use different decimal places.'));
             }
             const safeMessage = intent.message ?? intent.label ?? intent.memo ?? '';
             setRequestMessage(safeMessage);
             if (intent.memo) setMemo(intent.memo);
+            else if (memo === requestMessage) setMemo('');
             if (intent.chainId && intent.chainId !== chainId) {
                 setChainId(intent.chainId);
             }
@@ -1071,7 +1080,7 @@ export function Send({ walletId, accountId, onBack, prefill = null, onDone, onCh
                 if (!res.ok) setPasteWarning(res.reason || 'The clipboard changed after you pasted. Check the address before sending.');
             })
             .catch(() => { /* silent */ });
-    }, [addressesByChain, chainId, perRecipientToken, tick, cancelMax]);
+    }, [addressesByChain, chainId, perRecipientToken, tick, cancelMax, memo, requestMessage]);
 
     // §21.4 test-send protection. Session-scoped acknowledgement set;
     // marking an address tested suppresses the gate for the rest of

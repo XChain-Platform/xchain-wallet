@@ -190,6 +190,7 @@ import {
     parseExtensionHandoff,
     shellForExtensionView,
 } from './launchState.js';
+import { shouldClearTransientState } from '@xchain-wallet/core/shared/utils/launchRouteState.js';
 import { usePopupPaletteData } from './usePopupPaletteData.js';
 import {
     activeTabSupportsWallet,
@@ -456,6 +457,10 @@ function AppInner({ canOpenInTab, titleEnabled }) {
     // the manifest's `protocol_handlers` route to popup.html?uri=<uri>.
     // Parsed on mount, prefill goes into the Send route, then the param
     // is stripped via history.replaceState.
+    // Counts payment links that prefilled Send. It keys the Send route so a
+    // link arriving while Send is open replaces the form (the earlier one is
+    // kept as a draft) instead of being dropped silently.
+    const [sendLinkSeq, setSendLinkSeq] = useState(0);
     const [sendPrefill, setSendPrefill] = useState(
         /** @type {{ address?: string, amount?: string, tick?: string, chainId?: string, memo?: string } | null} */ (null),
     );
@@ -666,7 +671,10 @@ function AppInner({ canOpenInTab, titleEnabled }) {
                 setDeepLinkNotice(route.message);
                 return;
             }
-            if (route.view === 'send') setSendPrefill(route.sendPrefill);
+            if (route.view === 'send') {
+                setSendPrefill(route.sendPrefill);
+                setSendLinkSeq((n) => n + 1);
+            }
             if (route.view === 'contract-execute') {
                 setContractRef(route.contractRef);
                 setExecutePrefill(route.executePrefill);
@@ -684,9 +692,14 @@ function AppInner({ canOpenInTab, titleEnabled }) {
         }
     }, []);
 
+    const previousSessionStateRef = useRef(undefined);
     useEffect(() => {
+        const previousState = previousSessionStateRef.current;
+        previousSessionStateRef.current = status.state;
         if (status.state !== 'unlocked') {
-            clearTransientActionState();
+            // A link opened before unlock parks its prefill while the popup
+            // loads or sits locked; only leaving an unlocked session wipes it.
+            if (shouldClearTransientState(previousState, status.state)) clearTransientActionState();
             setActiveWalletId(null);
             setActiveAccountId(null);
             setWallets([]);
@@ -1020,7 +1033,7 @@ function AppInner({ canOpenInTab, titleEnabled }) {
             if (unlockedView === 'send' && activeWalletId) {
                 return (
                     <Send
-                        key={`${activeWalletId}:${activeAccountId || 'all'}`}
+                        key={`${activeWalletId}:${activeAccountId || 'all'}:${sendLinkSeq}`}
                         walletId={activeWalletId}
                         accountId={activeAccountId || undefined}
                         onViewHistory={(target) => {
