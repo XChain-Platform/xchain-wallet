@@ -263,7 +263,10 @@ origin therefore stops the run before `vite build` starts. Global setup keeps
 the same check before the venue check and before stdin is read by calling
 `assertOriginsAllowed`. The check sends one `OPTIONS` request carrying the
 suite origin to each encoder, explorer and hub URL named by the testnet
-descriptor, skipping an empty hub URL. A service is allowed only when it
+descriptor, skipping an empty hub URL. Each request goes to the URL with a
+trailing slash, because the SDK clients request paths under the descriptor
+URL and the browser therefore preflights `<base>/`; `encoder.xchain.io/TBTC`
+answers CORS only there and sends no CORS headers on the bare `/TBTC`. A service is allowed only when it
 answers with a 2xx status and an
 `access-control-allow-origin` header that is `*` or exactly the suite origin.
 Otherwise setup stops the run with one error starting `Origin preflight refused`

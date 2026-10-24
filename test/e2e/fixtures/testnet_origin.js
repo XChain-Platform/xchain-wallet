@@ -35,6 +35,16 @@ function rejectionCode(error) {
     return typeof code === 'string' && ERROR_CODE_RE.test(code) ? code : 'unknown';
 }
 
+// The URL a browser preflights for this service. The SDK clients take the
+// descriptor URL as an axios baseURL and request paths under it ('/' for the
+// encoder's JSON-RPC), so the browser asks `<base>/`, never the bare base. On
+// encoder.xchain.io the two differ: `/TBTC/` answers CORS for an allowed
+// origin while `/TBTC` answers 200 with no CORS headers at all, which made
+// this check refuse an origin the wallet can actually use.
+export function preflightUrl(endpoint) {
+    return endpoint.endsWith('/') ? endpoint : `${endpoint}/`;
+}
+
 export async function assertOriginsAllowed(
     endpoints,
     { origin, fetch = globalThis.fetch },
@@ -43,7 +53,7 @@ export async function assertOriginsAllowed(
         .filter(([, endpoint]) => endpoints[endpoint])
         .map(async ([role, endpoint]) => {
             try {
-                const response = await fetch(endpoints[endpoint], {
+                const response = await fetch(preflightUrl(endpoints[endpoint]), {
                     method: 'OPTIONS',
                     headers: {
                         Origin: origin,
