@@ -23,6 +23,21 @@ import {
 const alertOperationTails = new WeakMap();
 
 /**
+ * Fired on the window once the watcher disarms an alert, so an open alerts list
+ * re-reads the store instead of showing a fired alert as armed until reopened.
+ * Hosts without a window (a background worker, Electron main) dispatch nothing.
+ */
+export const PRICE_ALERTS_CHANGED_EVENT = 'xchain:price-alerts-changed';
+
+function announcePriceAlertsChanged() {
+    try {
+        if (typeof window !== 'undefined' && typeof window.dispatchEvent === 'function') {
+            window.dispatchEvent(new CustomEvent(PRICE_ALERTS_CHANGED_EVENT));
+        }
+    } catch { /* a listener must never fail the write that announced it */ }
+}
+
+/**
  * @param {{ vault: import('../storage/Vault.js').Vault, walletId: string }} params
  */
 export async function listAlertsForWallet({ vault, walletId }) {
@@ -111,7 +126,7 @@ export async function clearAlert({ vault, id, walletId }) {
 export async function markAlertTriggered({ vault, id, at, terms }) {
     if (!vault) throw new Error('markAlertTriggered: vault is required');
     if (!id) throw new Error('markAlertTriggered: id is required');
-    return withAlertOperation(vault, id, async () => {
+    const result = await withAlertOperation(vault, id, async () => {
         const alert = await vault.priceAlerts.get(id);
         if (!alert) return null;
         if (terms !== undefined && priceAlertKey(alert) !== terms) return null;
@@ -119,6 +134,8 @@ export async function markAlertTriggered({ vault, id, at, terms }) {
         await vault.priceAlerts.put(updated);
         return updated;
     });
+    if (result) announcePriceAlertsChanged();
+    return result;
 }
 
 /**

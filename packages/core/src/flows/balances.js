@@ -492,7 +492,20 @@ export async function addressBalances({ sdkRegistry, chainRegistry, chainId, add
     const sdk = sdkRegistry.get(chainId);
     const descriptor = chainRegistry ? chainRegistry.descriptorFor(chainId) : null;
     const nativeTicker = tickerForCoin(descriptor && descriptor.coin);
-    return fetchAddressShape({ sdk, address, nativeTicker, opts });
+    const shape = await fetchAddressShape({ sdk, address, nativeTicker, opts });
+    if (!vault || !chainRegistry || !shape || typeof shape !== 'object') return shape;
+    // Net this address's unconfirmed sends the way Home does, so the Send form's
+    // available amount and Max never offer coins an earlier send already spent.
+    let pendingTxs = [];
+    try {
+        pendingTxs = await vault.pendingTxs.list();
+    } catch {
+        pendingTxs = [];
+    }
+    const netted = applyPendingBalanceDeltas(
+        { [chainId]: [{ address, balances: shape }] }, pendingTxs, chainRegistry,
+    );
+    return netted[chainId][0].balances;
 }
 
 /**
