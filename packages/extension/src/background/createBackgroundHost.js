@@ -876,6 +876,8 @@ function assertReplacementPsbt({ replacement, plan, actionString, decodeActionSt
     }
 }
 
+const NETWORK_SWITCH_CANCEL_REASON = 'Network changed, request cancelled';
+
 async function cancelMatchingApprovals(approvals, matches) {
     if (typeof approvals?.cancelOriginsMatching !== 'function') return 0;
     return approvals.cancelOriginsMatching(matches);
@@ -908,8 +910,14 @@ async function announceWalletSwitch(req, vault, bridgeEvents) {
     return { ok: true };
 }
 
-async function announceNetworkChange(previous, next, vault, chainRegistry, bridgeEvents) {
+async function announceNetworkChange(previous, next, vault, chainRegistry, bridgeEvents, approvals) {
     if (getActiveNetwork(previous) === getActiveNetwork(next)) return;
+    // An open approval was composed for the network it was requested on, so a
+    // switch rejects every one of them (the dApp sees USER_REJECTED) and closes
+    // the windows before the new network is announced.
+    if (typeof approvals?.cancelAll === 'function') {
+        await approvals.cancelAll(NETWORK_SWITCH_CANCEL_REASON);
+    }
     if (typeof bridgeEvents?.chainChanged !== 'function') return;
     const activeChainIds = filterChainIdsByActiveNetwork(
         Object.keys(next?.fees ?? {}),
@@ -1670,6 +1678,7 @@ export function createBackgroundHost(deps) {
             vault,
             chainRegistry,
             bridgeEvents,
+            approvals,
         );
         await publishSurfaceState('network', { settings });
         return { settings, addresses };
@@ -1723,6 +1732,7 @@ export function createBackgroundHost(deps) {
                 vault,
                 chainRegistry,
                 bridgeEvents,
+                approvals,
             );
             await publishSurfaceState('network', { settings: result });
         }

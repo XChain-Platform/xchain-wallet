@@ -62,6 +62,7 @@ import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { useSignerReady } from '../hooks/useSignerReady.js';
 import { useDeveloperMode } from '../hooks/useDeveloperMode.js';
 import { useSettings } from '../hooks/useSettings.js';
+import { getActiveNetwork } from '../../flows/effectiveNetwork.js';
 import { useConfirmAction } from '../hooks/useConfirmAction.js';
 import { prebuiltPsbtFromComposed } from '../../flows/prebuiltPsbtFromComposed.js';
 import { ActionConfirmScreen } from '../components/ActionConfirmScreen.jsx';
@@ -624,12 +625,18 @@ export function Send({ walletId, accountId, onBack, prefill = null, onDone, onCh
     const formDraftTtlMs = Number.isFinite(settings?.privacy?.formDraftTtlMs)
         ? Number(settings.privacy.formDraftTtlMs)
         : undefined;
-    const draft = useFormDraft({ view: 'send', walletId, ttlMs: formDraftTtlMs });
+    const draftNetwork = settings ? getActiveNetwork(settings) : null;
+    const draft = useFormDraft({ view: 'send', walletId, network: draftNetwork, ttlMs: formDraftTtlMs });
     // A stored draft waits for an explicit Restore. A fresh form starts
     // saving immediately so an auto-lock unmount cannot erase typed values.
     const [draftPending, setDraftPending] = useState(
         () => !hasMeaningfulSendDraft(draft.load()),
     );
+    // Settings resolve after the first render; once the network is known a draft
+    // from another network reads as absent, so the form saves from then on.
+    useEffect(() => {
+        if (draftNetwork && !hasMeaningfulSendDraft(draft.load())) setDraftPending(true);
+    }, [draftNetwork]); // eslint-disable-line react-hooks/exhaustive-deps
     // A confirmed "Discard and leave" drops the saved draft and stops the
     // autosave, so no render between the confirm and the unmount can write
     // the discarded values back.
@@ -652,6 +659,7 @@ export function Send({ walletId, accountId, onBack, prefill = null, onDone, onCh
             memo,
             amountInputMode,
             fiatAmount,
+            fiatCurrency: settings?.fiatCurrency || 'USD',
             extraLegs,
             perRecipientToken,
         };
@@ -660,11 +668,11 @@ export function Send({ walletId, accountId, onBack, prefill = null, onDone, onCh
     }, [
         stage, draftPending, draft, chainId, fromAddressId, pickedSourceChain,
         toAddress, tick, amount, memo, amountInputMode, fiatAmount, extraLegs,
-        perRecipientToken,
+        perRecipientToken, settings?.fiatCurrency,
     ]);
     const restoreDraft = useCallback(() => {
         const v = draft.load();
-        if (!v) { setDraftPending(false); return; }
+        if (!v) { setDraftPending(true); return; }
         cancelMax();
         if (typeof v.chainId === 'string') setChainId(v.chainId);
         if (typeof v.toAddress === 'string') setToAddress(v.toAddress);
@@ -673,10 +681,13 @@ export function Send({ walletId, accountId, onBack, prefill = null, onDone, onCh
         if (typeof v.memo === 'string') setMemo(v.memo);
         if (typeof v.fromAddressId === 'string') setFromAddressId(v.fromAddressId);
         if (typeof v.pickedSourceChain === 'string') setPickedSourceChain(v.pickedSourceChain);
-        if (v.amountInputMode === 'coin' || v.amountInputMode === 'fiat') {
+        // Typed fiat text belongs to the currency it was typed in. Under a
+        // different display currency the coin amount is the value to keep.
+        const sameFiat = !v.fiatCurrency || v.fiatCurrency === (settings?.fiatCurrency || 'USD');
+        if (v.amountInputMode === 'coin' || (v.amountInputMode === 'fiat' && sameFiat)) {
             setAmountInputMode(v.amountInputMode);
         }
-        if (typeof v.fiatAmount === 'string') setFiatAmount(v.fiatAmount);
+        if (typeof v.fiatAmount === 'string' && sameFiat) setFiatAmount(v.fiatAmount);
         if (Array.isArray(v.extraLegs)) {
             setExtraLegs(v.extraLegs.slice(0, MAX_SEND_LEGS - 1).flatMap((leg) => (
                 leg && typeof leg.id === 'string'
@@ -691,7 +702,7 @@ export function Send({ walletId, accountId, onBack, prefill = null, onDone, onCh
         }
         if (typeof v.perRecipientToken === 'boolean') setPerRecipientToken(v.perRecipientToken);
         setDraftPending(true);
-    }, [draft, cancelMax]);
+    }, [draft, cancelMax, settings?.fiatCurrency]);
     const dismissDraft = useCallback(() => {
         draft.clear();
         setDraftPending(true);

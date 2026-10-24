@@ -40,6 +40,7 @@ import { WatcherResultPanel } from '../components/WatcherResultPanel.jsx';
 import { useWalletMode } from '../hooks/useWalletMode.js';
 import { useFormDraft } from '../hooks/useFormDraft.js';
 import { useSettings } from '../hooks/useSettings.js';
+import { getActiveNetwork } from '../../flows/effectiveNetwork.js';
 import { OwnAddressPickerScreen } from '../components/OwnAddressPickerScreen.jsx';
 import { ContactsPickerScreen } from '../components/ContactsPickerScreen.jsx';
 import {
@@ -189,10 +190,16 @@ export function IssueTokenForm({ walletId, onBack }) {
     const formDraftTtlMs = Number.isFinite(settings?.privacy?.formDraftTtlMs)
         ? Number(settings.privacy.formDraftTtlMs)
         : undefined;
-    const draft = useFormDraft({ view: 'issue-token', walletId, ttlMs: formDraftTtlMs });
+    const draftNetwork = settings ? getActiveNetwork(settings) : null;
+    const draft = useFormDraft({ view: 'issue-token', walletId, network: draftNetwork, ttlMs: formDraftTtlMs });
     // A stored draft waits for an explicit Restore. A fresh form starts
     // saving immediately so an auto-lock unmount cannot erase typed values.
     const [draftPending, setDraftPending] = useState(() => !draft.hasDraft());
+    // Settings resolve after the first render; once the network is known a draft
+    // from another network reads as absent, so the form saves from then on.
+    useEffect(() => {
+        if (draftNetwork && !draft.hasDraft()) setDraftPending(true);
+    }, [draftNetwork]); // eslint-disable-line react-hooks/exhaustive-deps
     // A confirmed "Discard and leave" drops the saved draft and stops the
     // autosave, so no render between the confirm and the unmount can write
     // the discarded values back.
@@ -214,7 +221,7 @@ export function IssueTokenForm({ walletId, onBack }) {
     ]);
     const restoreDraft = useCallback(() => {
         const v = draft.load();
-        if (!v) { setDraftPending(false); return; }
+        if (!v) { setDraftPending(true); return; }
         if (typeof v.chainId === 'string') setChainId(v.chainId);
         if (typeof v.fromAddressId === 'string') setFromAddressId(v.fromAddressId);
         if (typeof v.ticker === 'string') setTicker(v.ticker);

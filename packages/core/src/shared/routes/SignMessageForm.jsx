@@ -29,6 +29,7 @@ import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { useSignerReady } from '../hooks/useSignerReady.js';
 import { useFormDraft } from '../hooks/useFormDraft.js';
 import { useSettings } from '../hooks/useSettings.js';
+import { getActiveNetwork } from '../../flows/effectiveNetwork.js';
 import { useWalletMode } from '../hooks/useWalletMode.js';
 import { useConfirmAction, isConfirmOpenPhase } from '../hooks/useConfirmAction.js';
 import { isUserRejection } from '../hooks/useActionConfirmFlow.js';
@@ -106,15 +107,23 @@ export function SignMessageForm({ walletId, onBack }) {
     const formDraftTtlMs = Number.isFinite(settings?.privacy?.formDraftTtlMs)
         ? Number(settings.privacy.formDraftTtlMs)
         : undefined;
-    const draft = useFormDraft({ view: 'sign-message', walletId, ttlMs: formDraftTtlMs });
-    const [draftPending, setDraftPending] = useState(() => draft.hasDraft());
+    const draftNetwork = settings ? getActiveNetwork(settings) : null;
+    const draft = useFormDraft({ view: 'sign-message', walletId, network: draftNetwork, ttlMs: formDraftTtlMs });
+    // draftPending is true once the form may autosave: a fresh form saves at
+    // once, a stored draft waits for an explicit Restore or Discard.
+    const [draftPending, setDraftPending] = useState(() => !draft.hasDraft());
+    // Settings resolve after the first render; once the network is known a draft
+    // from another network reads as absent, so the form saves from then on.
+    useEffect(() => {
+        if (draftNetwork && !draft.hasDraft()) setDraftPending(true);
+    }, [draftNetwork]); // eslint-disable-line react-hooks/exhaustive-deps
     useEffect(() => {
         if (signedResult || !draftPending) return;
         draft.save({ chainId, addressId, message });
     }, [signedResult, draftPending, draft, chainId, addressId, message]);
     const restoreDraft = useCallback(() => {
         const v = draft.load();
-        if (!v) { setDraftPending(false); return; }
+        if (!v) { setDraftPending(true); return; }
         if (typeof v.chainId === 'string') setChainId(v.chainId);
         if (typeof v.addressId === 'string') setAddressId(v.addressId);
         if (typeof v.message === 'string') setMessage(v.message);
@@ -122,7 +131,7 @@ export function SignMessageForm({ walletId, onBack }) {
     }, [draft]);
     const dismissDraft = useCallback(() => {
         draft.clear();
-        setDraftPending(false);
+        setDraftPending(true);
     }, [draft]);
 
     // The active map and the settings read are best-effort: a host without
