@@ -58,6 +58,7 @@ import { LinkForm } from '../../packages/core/src/shared/routes/LinkForm.jsx';
 import { BatchComposerForm } from '../../packages/core/src/shared/routes/BatchComposerForm.jsx';
 import { PlaceOrderPanel } from '../../packages/core/src/shared/components/PlaceOrderPanel.jsx';
 import { ComposeMessage } from '../../packages/core/src/shared/routes/ComposeMessage.jsx';
+import { __clearTokenInfoCache } from '../../packages/core/src/shared/hooks/useTokenInfo.js';
 import { PollDetail } from '../../packages/core/src/shared/routes/PollDetail.jsx';
 
 const CHAIN = 'bitcoin-mainnet';
@@ -85,6 +86,8 @@ const COMPOSED = Object.freeze({
 });
 
 beforeEach(() => {
+    // A token record cached by one case must not answer the issuer check of the next.
+    __clearTokenInfoCache();
     vi.useFakeTimers({
         toFake: [
             'setTimeout', 'clearTimeout', 'setInterval', 'clearInterval',
@@ -92,6 +95,12 @@ beforeEach(() => {
             'cancelAnimationFrame', 'requestIdleCallback', 'cancelIdleCallback',
         ],
     });
+});
+
+// Owner-only token actions refuse until the issuer is confirmed; this record
+// names the auto-selected source as JDOG's issuer for the cases that need it.
+const OWNED_JDOG = Object.freeze({
+    getTokenInfo: ({ tick } = {}) => Promise.resolve({ chainId: CHAIN, tick, creator: HD_ADDRESS.address, locks: {} }),
 });
 
 // Recording messaging mock. Real shapes for the calls the confirm pipeline
@@ -529,7 +538,7 @@ describe('Action forms confirm via the single-encode pipeline', () => {
     it('ControllerBindForm composes the host-built bind action and signs the prebuilt PSBT', async () => {
         const { calls } = await driveThroughConfirm({
             Form: ControllerBindForm,
-            props: { tick: 'JDOG' },
+            props: { tick: 'JDOG', messagingOverrides: OWNED_JDOG },
             actionLabel: 'Bind',
             fill: (utils) => setValue(utils, 'Guard contract', '7'),
         });
@@ -552,7 +561,7 @@ describe('Action forms confirm via the single-encode pipeline', () => {
     it('ControllerBindForm composes an UNBIND with no guard contract at all', async () => {
         const { calls } = await driveThroughConfirm({
             Form: ControllerBindForm,
-            props: { tick: 'JDOG' },
+            props: { tick: 'JDOG', messagingOverrides: OWNED_JDOG },
             actionLabel: 'Unbind',
             fill: (utils) => {
                 fireEvent.click(utils.getByLabelText(/^Unbind/));
@@ -710,7 +719,7 @@ describe('Action forms confirm via the single-encode pipeline', () => {
     it('TokenAdminForm composes ISSUE and signs the prebuilt PSBT', async () => {
         const { calls } = await driveThroughConfirm({
             Form: TokenAdminForm,
-            props: { mode: 'description', initialChainId: CHAIN, initialTick: 'JDOG' },
+            props: { mode: 'description', initialChainId: CHAIN, initialTick: 'JDOG', messagingOverrides: OWNED_JDOG },
             actionLabel: 'Update token',
             fill: (utils) => setValue(utils, 'New description', 'a better token'),
         });
@@ -735,6 +744,53 @@ describe('Action forms confirm via the single-encode pipeline', () => {
             submitMethod: 'advancedAction',
         });
         expect(submit.args.action).toBe('BROADCAST');
+    });
+
+    describe('AdvancedActionsForm gates irreversible raw actions behind a typed word', () => {
+        const fieldsFor = (fields) => ({
+            messagingOverrides: {
+                listActions: () => Promise.resolve(['DESTROY', 'BROADCAST']),
+                getActionFormats: () => Promise.resolve({ 0: ['VERSION', ...fields].join('|') }),
+                getActionFields: () => Promise.resolve(fields),
+            },
+        });
+        const approveButton = (utils) => Array.from(utils.container.querySelectorAll('button'))
+            .find((button) => /approve/i.test(button.textContent || ''));
+
+        it('keeps Approve disabled for DESTROY until DESTROY is typed', async () => {
+            const { utils } = await mountFilledForm({
+                Form: AdvancedActionsForm,
+                props: fieldsFor(['TICK', 'AMOUNT']),
+                fill: (u) => {
+                    fireEvent.change(u.getByLabelText('Action'), { target: { value: 'DESTROY' } });
+                },
+            });
+            await domAct(async () => { await drainMicrotasks(); });
+            setValue(utils, 'TICK', 'JDOG');
+            setValue(utils, 'AMOUNT', '5');
+            await clickAction(utils, 'Sign action');
+
+            expect(approveButton(utils).disabled).toBe(true);
+            await domAct(async () => {
+                setValue(utils, 'Type "DESTROY" to confirm', 'destroy');
+                await drainMicrotasks();
+            });
+            expect(approveButton(utils).disabled).toBe(false);
+        });
+
+        it('asks for no typed word on an action that can be undone', async () => {
+            const { utils } = await mountFilledForm({
+                Form: AdvancedActionsForm,
+                props: fieldsFor([]),
+                fill: (u) => {
+                    fireEvent.change(u.getByLabelText('Action'), { target: { value: 'BROADCAST' } });
+                },
+            });
+            await clickAction(utils, 'Sign action');
+
+            expect(utils.queryByLabelText(/to confirm/)).toBeNull();
+            expect(approveButton(utils).disabled).toBe(false);
+        });
     });
 
     it('TokenWizard skips its own preview/sign stages and confirms the composed ISSUE', async () => {
@@ -960,7 +1016,7 @@ describe('Action forms confirm via the single-encode pipeline', () => {
     it('SellOwnershipForm composes ORDER and signs the prebuilt PSBT', async () => {
         const { calls } = await driveThroughConfirm({
             Form: SellOwnershipForm,
-            props: { tick: 'JDOG' },
+            props: { tick: 'JDOG', messagingOverrides: OWNED_JDOG },
             actionLabel: 'List name for sale',
             fill: (utils) => setValue(utils, /^Price/, '5'),
         });
@@ -1227,7 +1283,7 @@ describe('Hardware signers confirm on the single-encode surface', () => {
         {
             name: 'TokenAdminForm',
             Form: TokenAdminForm,
-            props: { mode: 'description', initialChainId: CHAIN, initialTick: 'JDOG' },
+            props: { mode: 'description', initialChainId: CHAIN, initialTick: 'JDOG', messagingOverrides: OWNED_JDOG },
             actionLabel: 'Update token',
             fill: (utils) => setValue(utils, 'New description', 'a better token'),
             software: 'issueToken',

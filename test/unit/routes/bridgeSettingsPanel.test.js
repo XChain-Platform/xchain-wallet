@@ -33,7 +33,8 @@ function mountAdmin(tokenInfo) {
     const base = {
         getAddressesByChain: vi.fn().mockResolvedValue({ [DOGE]: [DOGE_ADDRESS] }),
         getActiveAddresses: vi.fn().mockResolvedValue({}),
-        getTokenInfo: vi.fn().mockResolvedValue(tokenInfo),
+        // Token settings are owner-only; the DOGE source issued the token.
+        getTokenInfo: vi.fn().mockResolvedValue({ creator: DOGE_ADDRESS.address, ...tokenInfo }),
         getSettings: vi.fn().mockResolvedValue({ walletMode: 'full' }),
         signerReady: vi.fn().mockResolvedValue({ ready: true }),
         getSignerStatus: vi.fn().mockResolvedValue({ status: 'unlocked' }),

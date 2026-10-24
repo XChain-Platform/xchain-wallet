@@ -21,6 +21,7 @@ function messagingFor({
     walletMode = 'full',
     actionClasses,
     composeError,
+    tokenInfo,
 } = {}) {
     const target = {
         getAddressesByChain: vi.fn().mockResolvedValue({
@@ -38,6 +39,7 @@ function messagingFor({
         )),
         getSettings: vi.fn().mockResolvedValue({ walletMode }),
         signerReady: vi.fn().mockResolvedValue({ ready: false }),
+        getTokenInfo: vi.fn().mockResolvedValue(tokenInfo || { creator: address }),
         buildControllerBindParams: vi.fn().mockResolvedValue({ action: 'ADDRESS', params: {} }),
         composeForConfirm: composeError
             ? vi.fn().mockRejectedValue(composeError)
@@ -90,6 +92,16 @@ function mountDelegation(options) {
 afterEach(() => cleanup());
 
 describe('controller binding and signing-key delegation disclosures', () => {
+    it('refuses a token controller change before review when the issuer is unknown', async () => {
+        const messaging = mountController({ tick: 'CONTROLLED', tokenInfo: { creator: null } });
+
+        expect(await screen.findByRole('alert')).toHaveTextContent(
+            "The token's issuer could not be confirmed, so this action is not available. Try again when the explorer answers.",
+        );
+        expect(screen.getByRole('button', { name: 'Bind' })).toBeDisabled();
+        expect(messaging.buildControllerBindParams).not.toHaveBeenCalled();
+    });
+
     it('keeps binding guidance in a collapsed disclosure', async () => {
         mountController();
 

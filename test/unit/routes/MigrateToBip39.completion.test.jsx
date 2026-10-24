@@ -78,8 +78,9 @@ function expectOnlyPageTitle(name) {
     expect(screen.getAllByRole('heading')).toHaveLength(1);
 }
 
-async function reachBackup(context) {
+async function reachBackup(context, { name } = {}) {
     fireEvent.click(screen.getByRole('button', { name: 'Continue' }));
+    if (name !== undefined) fireEvent.change(screen.getByLabelText('New wallet name'), { target: { value: name } });
     fireEvent.change(screen.getByLabelText('Password'), {
         target: { value: 'password1' },
     });
@@ -99,8 +100,8 @@ async function reachBackup(context) {
     expect(context.messaging.getAddressesByChain).not.toHaveBeenCalled();
 }
 
-async function reachVerify(context) {
-    await reachBackup(context);
+async function reachVerify(context, options) {
+    await reachBackup(context, options);
     fireEvent.click(screen.getByRole('checkbox'));
     fireEvent.click(screen.getByRole('button', { name: 'Verify recovery phrase' }));
     expect(await screen.findByRole('heading', { level: 1, name: 'Verify your written copy' })).toBeTruthy();
@@ -118,6 +119,29 @@ function answerQuiz({ wrongFirst = false } = {}) {
 }
 
 describe('MigrateToBip39 safety and completion', () => {
+    it('names the new wallet by its default when the name field is cleared or blank', async () => {
+        const context = renderMigration();
+        await reachVerify(context, { name: '   ' });
+        answerQuiz();
+        fireEvent.click(screen.getByRole('button', { name: 'Create BIP39 wallet' }));
+
+        await waitFor(() => expect(context.messaging.addImportedWallet).toHaveBeenCalledWith(
+            expect.objectContaining({ name: 'XChain BIP39 Wallet' }),
+        ));
+    });
+
+    it('trims the typed name before saving', async () => {
+        const context = renderMigration();
+        await reachVerify(context, { name: '  Cold storage  ' });
+        answerQuiz();
+        fireEvent.click(screen.getByRole('button', { name: 'Create BIP39 wallet' }));
+
+        await waitFor(() => expect(context.messaging.addImportedWallet).toHaveBeenCalledWith(
+            expect.objectContaining({ name: 'Cold storage' }),
+        ));
+    });
+
+
     it('shows and verifies the phrase before saving or reading the legacy wallet', async () => {
         let resolveCreate;
         const messaging = makeMessaging({

@@ -93,7 +93,7 @@ describe('action form validation feedback', () => {
     });
 
     it('AttachContentForm explains that a file is required', async () => {
-        mount(AttachContentForm, { chainId: BTC, tick: 'ART' });
+        mount(AttachContentForm, { chainId: BTC, tick: 'ART', issuerAddress: ADDRESS.address });
 
         await press('Review upload');
 

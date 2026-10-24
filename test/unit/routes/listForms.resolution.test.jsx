@@ -576,7 +576,7 @@ describe('two-step copy does not ask an unlocked wallet for a password', () => {
     });
 
     it('ProjectRosterForm, unlocked', async () => {
-        mount(ProjectRosterForm, { walletId: 'w', chainId: DOGE, tick: 'PROJ', onBack() {} }, messagingWith({
+        mount(ProjectRosterForm, { walletId: 'w', chainId: DOGE, tick: 'PROJ', issuerAddress: BY_CHAIN[DOGE][0].address, onBack() {} }, messagingWith({
             signerReady: vi.fn().mockResolvedValue({ ready: true }),
             getGenesisForToken: vi.fn().mockResolvedValue({ action_index: 77 }),
         }));
@@ -605,7 +605,7 @@ describe('two-step copy does not ask an unlocked wallet for a password', () => {
             checkInputLiveness: vi.fn().mockResolvedValue({ live: true }),
             requoteNativeFee: vi.fn().mockResolvedValue(null),
         });
-        mount(ProjectRosterForm, { walletId: 'w', chainId: DOGE, tick: 'PROJ', onBack() {} }, messaging);
+        mount(ProjectRosterForm, { walletId: 'w', chainId: DOGE, tick: 'PROJ', issuerAddress: BY_CHAIN[DOGE][0].address, onBack() {} }, messaging);
         fireEvent.change(await screen.findByLabelText('Tokens (one per line)'), { target: { value: 'SWAPTEST' } });
         fireEvent.click(await screen.findByRole('button', { name: 'Review list' }));
         fireEvent.click(await screen.findByRole('button', { name: 'Publish list' }));

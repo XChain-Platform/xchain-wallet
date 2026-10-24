@@ -58,6 +58,8 @@ async function mountTransfer() {
         getSignerStatus: () => Promise.resolve({ status: 'unlocked' }),
         getWalletBalances: () => Promise.resolve({ [CHAIN]: [] }),
         listContacts: () => Promise.resolve([]),
+        // Owner-only actions refuse until the issuer is confirmed; SOURCE owns it.
+        getTokenInfo: ({ tick }) => Promise.resolve({ chainId: CHAIN, tick, creator: SOURCE.address, locks: {} }),
     };
     const messaging = new Proxy(target, {
         get(t, prop) {

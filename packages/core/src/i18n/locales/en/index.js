@@ -429,9 +429,6 @@ export const en = {
     'gatedPublish.formHint.beforeToken': 'Publish a file that only holders of',
     'gatedPublish.formHint.afterToken':
         'can read. The file is encrypted before it touches the network; the key travels automatically with every normal send of the token.',
-    'gatedPublish.ownerMissing.beforeAddress': "This wallet doesn't hold the owner address",
-    'gatedPublish.ownerMissing.afterAddress':
-        'for {tick}. Only the token owner can publish gated files.',
     'gatedPublish.fileLimit': 'File (up to about {bytes} bytes)',
     'gatedPublish.fileToPublish': 'File to publish',
     'gatedPublish.titleOptional': 'Title (optional)',

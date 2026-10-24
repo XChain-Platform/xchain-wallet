@@ -68,7 +68,8 @@ function messaging(composeForConfirm, { walletMode = 'full', buildActionPsbtRequ
         getSettings: vi.fn().mockResolvedValue({ walletMode }),
         signerReady: vi.fn().mockResolvedValue({ ready: true }),
         getSignerStatus: vi.fn().mockResolvedValue({ status: 'unlocked' }),
-        getTokenInfo: vi.fn().mockResolvedValue({ divisibility: 8 }),
+        // ADDRESS issued ALPHA, so the owner-only ownership sale opens for it.
+        getTokenInfo: vi.fn().mockResolvedValue({ divisibility: 8, creator: ADDRESS.address }),
         composeForConfirm,
         ...(buildActionPsbtRequest ? { buildActionPsbtRequest } : {}),
     };

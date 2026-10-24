@@ -30,13 +30,14 @@ function messagingWith(overrides = {}) {
     };
 }
 
-function mount(messaging = messagingWith()) {
+function mount(messaging = messagingWith(), issuerAddress = ADDRESS.address) {
     render(
         <MessagingProvider shell="web" messaging={messaging}>
             <ProjectRosterForm
                 walletId="wallet-1"
                 chainId={CHAIN}
                 tick="PROJ"
+                issuerAddress={issuerAddress}
                 onBack={() => {}}
             />
         </MessagingProvider>,
@@ -46,6 +47,17 @@ function mount(messaging = messagingWith()) {
 afterEach(cleanup);
 
 describe('ProjectRosterForm editing validation', () => {
+    it('refuses before review when the issuer is unknown', async () => {
+        const messaging = messagingWith({ createList: vi.fn() });
+        mount(messaging, null);
+
+        expect(await screen.findByRole('alert')).toHaveTextContent(
+            "The token's issuer could not be confirmed, so this action is not available. Try again when the explorer answers.",
+        );
+        expect(screen.getByRole('button', { name: 'Review list' })).toBeDisabled();
+        expect(messaging.createList).not.toHaveBeenCalled();
+    });
+
     it('preserves protocol-valid spelling and removes case-insensitive duplicates', async () => {
         mount();
         await screen.findByText('No list published yet. This will be the first.');

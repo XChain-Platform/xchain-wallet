@@ -18,6 +18,7 @@ import { useSignerReady } from '../hooks/useSignerReady.js';
 import { useWalletMode } from '../hooks/useWalletMode.js';
 import { useDropZone } from '../hooks/useDropZone.js';
 import { useNativeFee } from '../hooks/useNativeFee.js';
+import { tokenIssuerEligibility } from '../utils/tokenIssuerEligibility.js';
 import { NativeFeeToggle } from '../components/NativeFeeToggle.jsx';
 import { normalizeGenesisRow } from './ManageToken.jsx';
 import {
@@ -315,6 +316,13 @@ export function AttachContentForm({ walletId, chainId, tick, issuerAddress = nul
         if (!fromAddressId || !addressesByChain) return null;
         return (addressesByChain[chainId] || []).find((a) => a.id === fromAddressId) || null;
     }, [chainId, fromAddressId, addressesByChain]);
+    const issuerEligibility = tokenIssuerEligibility({
+        tokenInfo: { creator: issuerAddress },
+        addressesByChain,
+        chainId,
+        tick,
+        sourceAddress: fromAddress?.address,
+    });
 
     // Network fee: Low / Normal / Fast / Custom via FeeSelector; feePerKb
     // prices every broadcast in this multi-step flow (file / link / TIS / edit).
@@ -362,7 +370,7 @@ export function AttachContentForm({ walletId, chainId, tick, issuerAddress = nul
 
     // Owner mismatch: the LINK leg will be recorded but not honoured
     // unless it's signed by the token's current owner.
-    const ownerMismatch = !!(issuerAddress && fromAddress && fromAddress.address !== issuerAddress);
+    const ownerMismatch = !!issuerEligibility.error;
 
     const hw = isHwSource(fromAddress);
     const [hwStatus, setHwStatus] = useState('idle');
@@ -549,6 +557,14 @@ export function AttachContentForm({ walletId, chainId, tick, issuerAddress = nul
         event.preventDefault();
         if (!fromAddress) {
             setFormError('No signing address available on this network.');
+            return;
+        }
+        if (issuerEligibility.pending) {
+            setFormError(`Wait for the wallet to verify the current owner of ${tick}.`);
+            return;
+        }
+        if (issuerEligibility.error) {
+            setFormError(issuerEligibility.error);
             return;
         }
         if (!fileMeta) {
@@ -1249,8 +1265,8 @@ export function AttachContentForm({ walletId, chainId, tick, issuerAddress = nul
                     </dd>
                 </dl>
                 {ownerMismatch ? (
-                    <FormNotice variant="warning" role="alert">
-                        {`This wallet isn't signing from the token's owner address (${issuerAddress}). The link will only be honoured if it's signed by the current owner.`}
+                    <FormNotice variant="error" role="alert">
+                        {issuerEligibility.error}
                     </FormNotice>
                 ) : null}
                 <SignCredentials
@@ -1279,15 +1295,15 @@ export function AttachContentForm({ walletId, chainId, tick, issuerAddress = nul
             demoGuard={demoGuard}
             label="Attach artwork"
             onSubmit={handleReviewFile}
-            status={formError ? (
-                <StatusMessage variant="error">{formError}</StatusMessage>
+            status={formError || issuerEligibility.error ? (
+                <StatusMessage variant="error">{formError || issuerEligibility.error}</StatusMessage>
             ) : null}
             actions={(
                 <Button
                     type="submit"
                     variant="primary"
                     loading={genesisRefreshing}
-                    disabled={genesisRefreshing}
+                    disabled={genesisRefreshing || issuerEligibility.pending || !!issuerEligibility.error}
                 >
                     Review upload
                 </Button>
@@ -1375,13 +1391,6 @@ export function AttachContentForm({ walletId, chainId, tick, issuerAddress = nul
                 onChange={(e) => setSetAsTokenInfo(e.target.checked)}
                 disabled={Boolean(fileMeta && !previewUrl)}
             />
-            {ownerMismatch ? (
-                <FormNotice variant="warning" role="alert">
-                        This wallet doesn't hold the token's owner address.
-                        the final link step will only be honoured if signed
-                        by the current owner.
-                </FormNotice>
-            ) : null}
             {feeTiers ? (
                 <FeeSelector
                     label="Network fee"

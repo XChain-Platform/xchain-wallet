@@ -58,9 +58,12 @@ import {
 import { QueuedResultPanel } from '../components/QueuedResultPanel.jsx';
 import { currentListMemberCount } from '../../flows/listMembership.js';
 import { compareDecimalStrings, formatWithThousands, tokenAmountPrecisionError } from '../utils/amountFormat.js';
-import { mintHeadroom, exceedsHeadroom } from '../utils/mintHeadroom.js';
+import { exceedsHeadroom, mintHeadroom } from '../utils/mintHeadroom.js';
+import { isNativeCoinTick, unknownTickMessage } from '../utils/dividendTickChecks.js';
+import { tickLookupVerdict } from '../utils/listTickItems.js';
 import { sharedBlockPickState } from '../utils/sharedBlockPick.js';
 import { listLabel } from '../utils/listLabel.js';
+import { tokenIssuerEligibility } from '../utils/tokenIssuerEligibility.js';
 import { actionTextSafetyError } from '../utils/actionTextSafety.js';
 
 const chainRegistry = registryLib.defaultRegistry();
@@ -369,20 +372,14 @@ export function TokenAdminForm({ walletId, mode, onBack, initialChainId, initial
     const currentAssetInfo = assetInfoMatchesSelection ? assetInfo : null;
     const tokenInfoPending = !!chainId && !!ticker && !currentAssetInfo;
     const tokenLocks = currentAssetInfo?.locks || {};
-    const tokenOwner = currentAssetInfo?.creator || null;
-    const walletOwnsToken = tokenOwner && addressesByChain && chainId
-        ? (addressesByChain[chainId] || []).some((address) => (
-            String(address?.address || '').toLowerCase() === String(tokenOwner).toLowerCase()
-        ))
-        : null;
-    const selectedSourceOwnsToken = !tokenOwner || !fromAddress
-        ? null
-        : String(fromAddress.address || '').toLowerCase() === String(tokenOwner).toLowerCase();
-    const ownershipError = walletOwnsToken === false
-        ? `This wallet does not own ${ticker}. Only the current owner can make this change.`
-        : selectedSourceOwnsToken === false
-            ? `The selected source address does not own ${ticker}. Choose the current owner address.`
-            : null;
+    const ownerEligibility = tokenIssuerEligibility({
+        tokenInfo: currentAssetInfo,
+        addressesByChain,
+        chainId,
+        tick: ticker,
+        sourceAddress: fromAddress?.address,
+    });
+    const ownershipError = ownerEligibility.error;
     const descriptionLocked = mode === 'description' && !!tokenLocks.description;
     const eligibilityError = descriptionLocked
         ? `The description for ${ticker} is permanently locked and cannot be updated.`
@@ -760,16 +757,6 @@ export function TokenAdminForm({ walletId, mode, onBack, initialChainId, initial
                     return;
                 }
             }
-            // Mint-now creates supply in this transaction, so it is bounded by what is
-            // left under the cap exactly as a MINT is; the indexer refuses an excess after the fee is spent.
-            const supplyRoom = mintHeadroom({
-                maxSupply: currentAssetInfo?.maxSupply ?? null,
-                totalSupply: currentAssetInfo?.totalSupply ?? null,
-            });
-            if (mintSupply && exceedsHeadroom(mintSupply, supplyRoom)) {
-                setFormError(`Only ${formatWithThousands(supplyRoom)} ${ticker.trim().toUpperCase()} can still be minted.`);
-                return;
-            }
             if (mintStartBlock && !/^\d+$/.test(mintStartBlock.trim())) {
                 setFormError('Minting start must be a whole block number.');
                 return;
@@ -785,6 +772,19 @@ export function TokenAdminForm({ walletId, mode, onBack, initialChainId, initial
             }
             if (mintStartBlock && mintStopBlock && Number(mintStopBlock) <= Number(mintStartBlock)) {
                 setFormError('Minting must close after it opens. Check the block numbers.');
+                return;
+            }
+            // Mint supply creates supply in this transaction, so it is bounded by what
+            // is left under the cap exactly as a MINT is; the indexer refuses an excess
+            // after the fee is spent. The form refuses it while the cap (above 0, since
+            // 0 is uncapped) and the current supply are both known for this ticker.
+            const capInfo = currentAssetInfo;
+            const capped = capInfo?.maxSupply != null && compareDecimalStrings(capInfo.maxSupply, '0') === 1;
+            const supplyRoom = capped && capInfo?.totalSupply != null
+                ? mintHeadroom({ maxSupply: capInfo.maxSupply, totalSupply: capInfo.totalSupply })
+                : null;
+            if (mintSupply && exceedsHeadroom(mintSupply, supplyRoom)) {
+                setFormError(`Only ${formatWithThousands(supplyRoom)} ${ticker.trim()} can still be minted.`);
                 return;
             }
             if (transferSupply && !mintSupply) {
@@ -820,6 +820,19 @@ export function TokenAdminForm({ walletId, mode, onBack, initialChainId, initial
                 : null;
             if (callbackTickError) {
                 setFormError(callbackTickError);
+                return;
+            }
+            // The payout token must be an XChain token on this chain: a callback that names the
+            // chain's own coin or a token that does not exist can never pay, and the terms freeze
+            // once supply is distributed.
+            if (callbackTickKey && isNativeCoinTick(callbackTickKey, { coinTicker, descriptor })) {
+                setFormError(`${coinTicker} is ${descriptor?.displayName || 'the native coin'} itself, not an XChain token. A callback pays holders in an XChain token, so enter one of those.`);
+                return;
+            }
+            const callbackTickMatches = callbackTokenInfo?.chainId === chainId && callbackTokenInfo?.tick === callbackTickKey;
+            if (callbackTickKey && !callbackTickKey.startsWith('^') && callbackTickMatches
+                && tickLookupVerdict(callbackTokenInfo) === 'missing') {
+                setFormError(unknownTickMessage(callbackTickKey, descriptor?.displayName || 'the active network'));
                 return;
             }
             if (callbackAmount && !isPositiveDecimal(callbackAmount)) {

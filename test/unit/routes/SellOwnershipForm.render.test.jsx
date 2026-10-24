@@ -7,6 +7,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
 import { SellOwnershipForm } from '../../../packages/core/src/shared/routes/SellOwnershipForm.jsx';
+import { __clearTokenInfoCache } from '../../../packages/core/src/shared/hooks/useTokenInfo.js';
 
 const CHAIN = 'bitcoin-mainnet';
 const BTC_TESTNET = 'bitcoin-testnet';
@@ -37,6 +38,9 @@ function messagingWith(overrides = {}) {
         getActiveAddresses: vi.fn().mockResolvedValue({ [CHAIN]: { id: ADDRESS.id } }),
         getSettings: vi.fn().mockResolvedValue({ walletMode: 'full' }),
         getWalletBalances: vi.fn().mockResolvedValue({}),
+        getTokenInfo: vi.fn(async ({ tick }) => (
+            String(tick).toUpperCase() === 'ALPHA' ? { tick, creator: ADDRESS.address } : { tick, divisibility: 8 }
+        )),
         signerReady: vi.fn().mockResolvedValue({ ready: true }),
         ...overrides,
     };
@@ -56,9 +60,27 @@ function mount(messaging, props = {}) {
     );
 }
 
-afterEach(cleanup);
+afterEach(() => {
+    cleanup();
+    __clearTokenInfoCache();
+});
 
 describe('SellOwnershipForm rendering', () => {
+    it('refuses before review when the issuer is unknown', async () => {
+        const composeForConfirm = vi.fn();
+        const messaging = messagingWith({
+            getTokenInfo: vi.fn().mockResolvedValue({ tick: 'ALPHA', creator: null }),
+            composeForConfirm,
+        });
+        mount(messaging);
+
+        expect(await screen.findByRole('alert')).toHaveTextContent(
+            "The token's issuer could not be confirmed, so this action is not available. Try again when the explorer answers.",
+        );
+        expect(screen.getByRole('button', { name: 'List name for sale' })).toBeDisabled();
+        expect(composeForConfirm).not.toHaveBeenCalled();
+    });
+
     it('renders both sale choices and updates their selected tabs', async () => {
         mount(messagingWith());
 

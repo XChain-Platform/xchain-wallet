@@ -41,6 +41,7 @@ import styles from './ManageToken.module.css';
 import { formatTokenQuantity, formatWithThousands } from '../utils/amountFormat.js';
 import { formatRelativeDateTime } from '../utils/dateTimeFormat.js';
 import { t } from '../../i18n/index.js';
+import { UNKNOWN_TOKEN_ISSUER_MESSAGE } from '../utils/tokenIssuerEligibility.js';
 
 const chainRegistry = registryLib.defaultRegistry();
 
@@ -451,7 +452,7 @@ export function ManageToken({
     // Transfer / Broadcast / Lock require the calling address to match
     // the on-chain creator. Dispenser / Airdrop / Destroy operate on a
     // balance and don't have that constraint.
-    const blockIssuerActions = isOwner === false;
+    const blockIssuerActions = isOwner !== true;
     // ISSUE v7 LOCK_BRIDGE: consensus refuses any further BRIDGE_CHAINS /
     // MIN_DEPTH edit once it is set, so the row stays visible and explains
     // itself rather than vanishing. Only an explicit true freezes it: the
@@ -480,7 +481,7 @@ export function ManageToken({
         // actually cover (PC-01).
         { id: 'mint-settings', label: 'Mint settings', Icon: Icon.GearIcon, onSelect: blockIssuerActions ? undefined : onMintSettings },
         { id: 'dispenser', label: 'Dispenser', Icon: Icon.DollarIcon, onSelect: onCreateDispenser },
-        { id: 'dividend', label: 'Dividends', Icon: Icon.TokenIcon, onSelect: blockIssuerActions ? undefined : onPayDividend },
+        { id: 'dividend', label: 'Dividends', Icon: Icon.TokenIcon, onSelect: onPayDividend },
         { id: 'airdrop', label: 'Airdrop', Icon: Icon.SendIcon, onSelect: onAirdrop },
         {
             id: 'description',
@@ -575,6 +576,22 @@ export function ManageToken({
     return (
         <Screen variant={variant} header={header}>
             <ListPage className={styles.body}>
+                {/* Owner-mismatch banner: surfaces when the wallet
+                    holds the token but none of its addresses matches
+                    the on-chain creator. Issuer-only actions are
+                    auto-hidden below; the banner explains why. It is the
+                    first item of page content, as every notice is. */}
+                {isOwner === false ? (
+                    <StatusMessage variant="warning" role="status">
+                        {t('routes.manageToken.thisWalletDoesnTHold')} <AddressText address={owner} />.
+                    </StatusMessage>
+                ) : null}
+                {assetInfo && !owner ? (
+                    <StatusMessage variant="warning" role="status">
+                        {UNKNOWN_TOKEN_ISSUER_MESSAGE}
+                    </StatusMessage>
+                ) : null}
+
                 {/* Hero: identity (no Total Balance; this is the issuer view). */}
                 <section className={styles.hero} aria-label={t('routes.manageToken.tokenIdentity')}>
                     <div className={styles.heroIconWrap}>
@@ -733,16 +750,6 @@ export function ManageToken({
                         />
                     )}
                 </section>
-
-                {/* Owner-mismatch banner: surfaces when the wallet
-                    holds the token but none of its addresses matches
-                    the on-chain creator. Issuer-only actions are
-                    auto-hidden below; the banner explains why. */}
-                {isOwner === false ? (
-                    <StatusMessage variant="warning" role="status">
-                        {t('routes.manageToken.thisWalletDoesnTHold')} <AddressText address={owner} />.
-                    </StatusMessage>
-                ) : null}
 
                 {/* Action buttons: same 3-primary + More pattern as Home. */}
                 <div className={styles.manageGrid} role="group" aria-label={t('routes.manageToken.manageActions')}>

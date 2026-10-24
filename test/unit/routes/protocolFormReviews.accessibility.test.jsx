@@ -15,6 +15,7 @@ import { CreatePollForm } from '../../../packages/core/src/shared/routes/CreateP
 import { DispenserForm } from '../../../packages/core/src/shared/routes/DispenserForm.jsx';
 import { IssueTokenForm } from '../../../packages/core/src/shared/routes/IssueTokenForm.jsx';
 import { SleepForm } from '../../../packages/core/src/shared/routes/SleepForm.jsx';
+import { __clearTokenInfoCache } from '../../../packages/core/src/shared/hooks/useTokenInfo.js';
 import { expectNoSeriousAxeViolations } from '../../a11y/helpers/axe.js';
 
 const CHAIN = 'bitcoin-mainnet';
@@ -207,11 +208,18 @@ describe('protocol form review accessibility', () => {
         fireEvent.click(screen.getByRole('button', { name: 'Preview' }));
         await auditReview(addressReview.container, 'Review lock address');
         cleanup();
+        // A TOKEN record cached without an issuer must not answer the owner check.
+        __clearTokenInfoCache();
 
         const tokenConfirm = mount(SleepForm, 'full', {
             mode: 'tick',
             initialChainId: CHAIN,
             initialTick: 'TOKEN',
+        }, {
+            // Pausing a token is owner-only; SOURCE issued TOKEN.
+            getTokenInfo: vi.fn().mockResolvedValue({
+                chainId: CHAIN, tick: 'TOKEN', divisibility: 8, locks: {}, creator: SOURCE,
+            }),
         });
         fireEvent.change(await screen.findByLabelText('Duration (blocks)'), { target: { value: '12' } });
         fireEvent.click(screen.getByRole('button', { name: 'Pause token' }));

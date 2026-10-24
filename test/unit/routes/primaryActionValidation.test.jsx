@@ -49,6 +49,10 @@ function makeMessaging(addressesByChain) {
         getWalletBalances: vi.fn().mockResolvedValue({}),
         getListsForSource: vi.fn().mockResolvedValue([]),
         searchTokens: vi.fn().mockResolvedValue([]),
+        // Selling ownership is owner-only; the BTC source issued ALPHA.
+        getTokenInfo: vi.fn(async ({ tick } = {}) => (tick === 'ALPHA'
+            ? { chainId: BTC, tick, creator: BTC_ADDRESS.address, locks: {} }
+            : { rows: [] })),
     };
     return new Proxy(target, {
         get(object, prop) {

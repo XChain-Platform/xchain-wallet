@@ -77,6 +77,20 @@ afterEach(() => {
 });
 
 describe('publish forms replace file state safely', () => {
+    it('refuses gated publishing before review when the issuer is unknown', async () => {
+        const client = messaging();
+        mount(
+            <GatedPublishForm walletId="w" chainId={CHAIN} tick="GATE" issuerAddress={null} onBack={() => {}} />,
+            client,
+        );
+
+        expect(await screen.findByRole('alert')).toHaveTextContent(
+            "The token's issuer could not be confirmed, so this action is not available. Try again when the explorer answers.",
+        );
+        expect(screen.getByRole('button', { name: 'Review' })).toBeDisabled();
+        expect(client.buildActionPsbtRequest).not.toHaveBeenCalled();
+    });
+
     it('exposes gated metadata through the shared field roles and counters', async () => {
         mount(<GatedPublishForm walletId="w" chainId={CHAIN} tick="GATE" issuerAddress={SOURCE.address} onBack={() => {}} />);
 

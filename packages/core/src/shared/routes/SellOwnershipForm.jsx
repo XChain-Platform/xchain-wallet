@@ -40,6 +40,7 @@ import { QueuedResultPanel } from '../components/QueuedResultPanel.jsx';
 import { tokenAmountPrecisionError } from '../utils/amountFormat.js';
 import { tickerReferenceError } from '../utils/tickerGrammar.js';
 import { memoLengthError } from '../utils/memoLimit.js';
+import { tokenIssuerEligibility } from '../utils/tokenIssuerEligibility.js';
 
 const chainRegistry = registryLib.defaultRegistry();
 
@@ -185,6 +186,14 @@ export function SellOwnershipForm({ walletId, onBack, chainId: initialChainId, t
     const { isWatcherMode } = useWalletMode();
 
     const tokenTick = String(tick || '');
+    const ownershipTokenInfo = useTokenInfo({ chainId, tick: tokenTick, skip: !tokenTick });
+    const issuerEligibility = tokenIssuerEligibility({
+        tokenInfo: ownershipTokenInfo,
+        addressesByChain,
+        chainId,
+        tick: tokenTick,
+        sourceAddress: fromAddress?.address,
+    });
     const wantLabel = getMode === 'coin' ? coinTicker : (getTick.trim() || 'token');
 
     const validationError = useMemo(() => {
@@ -354,6 +363,14 @@ export function SellOwnershipForm({ walletId, onBack, chainId: initialChainId, t
         event.preventDefault();
         if (!fromAddress || !chainId) {
             setFormError('Pick a source address first.');
+            return;
+        }
+        if (issuerEligibility.pending) {
+            setFormError(`Wait for the wallet to verify the current owner of ${tokenTick}.`);
+            return;
+        }
+        if (issuerEligibility.error) {
+            setFormError(issuerEligibility.error);
             return;
         }
         if (getMode === 'token' && !getTick.trim()) {
@@ -669,7 +686,7 @@ export function SellOwnershipForm({ walletId, onBack, chainId: initialChainId, t
             inert={actionConfirm.composing ? '' : undefined}
             aria-busy={actionConfirm.composing ? 'true' : undefined}
             onChangeCapture={() => { if (formError) setFormError(null); }}
-            status={validationError || feeValidationError || formError ? (
+            status={validationError || feeValidationError || formError || issuerEligibility.error ? (
                 <>
                     {validationError ? (
                         <StatusMessage variant="error">{validationError}</StatusMessage>
@@ -680,6 +697,9 @@ export function SellOwnershipForm({ walletId, onBack, chainId: initialChainId, t
                     {formError ? (
                         <StatusMessage variant="error">{formError}</StatusMessage>
                     ) : null}
+                    {!formError && issuerEligibility.error ? (
+                        <StatusMessage variant="error">{issuerEligibility.error}</StatusMessage>
+                    ) : null}
                 </>
             ) : null}
             actions={(
@@ -687,7 +707,7 @@ export function SellOwnershipForm({ walletId, onBack, chainId: initialChainId, t
                     type="submit"
                     variant="primary"
                     loading={actionConfirm.composing}
-                    disabled={actionConfirm.composing}
+                    disabled={issuerEligibility.pending || !!issuerEligibility.error || actionConfirm.composing}
                 >
                     {actionConfirm.composing
                         ? 'Preparing review…'

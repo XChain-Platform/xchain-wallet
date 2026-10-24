@@ -26,7 +26,7 @@ function mountAdmin(mode, overrides = {}, initialTick = 'TOKEN') {
         getAddressesByChain: vi.fn().mockResolvedValue({ [CHAIN]: [SOURCE] }),
         getActiveAddresses: vi.fn().mockResolvedValue({ [CHAIN]: SOURCE }),
         getSettings: vi.fn().mockResolvedValue({ walletMode: 'watcher' }),
-        getTokenInfo: vi.fn().mockResolvedValue({ tick: initialTick, locks: {} }),
+        getTokenInfo: vi.fn().mockResolvedValue({ tick: initialTick, creator: SOURCE.address, locks: {} }),
         signerReady: vi.fn().mockResolvedValue({ ready: false }),
         ...overrides,
     };
@@ -137,6 +137,25 @@ describe('TokenAdminForm review interaction safety', () => {
         expect(buildActionPsbtRequest).not.toHaveBeenCalled();
     });
 
+    it('refuses an admin action before review when the issuer is unknown', async () => {
+        const buildActionPsbtRequest = vi.fn();
+        mountAdmin('transfer', {
+            getTokenInfo: vi.fn().mockResolvedValue({
+                chainId: CHAIN,
+                tick: 'TOKEN',
+                creator: null,
+                locks: {},
+            }),
+            buildActionPsbtRequest,
+        });
+
+        expect(await screen.findByRole('alert')).toHaveTextContent(
+            "The token's issuer could not be confirmed, so this action is not available. Try again when the explorer answers.",
+        );
+        expect(screen.getByRole('button', { name: 'Preview' })).toBeDisabled();
+        expect(buildActionPsbtRequest).not.toHaveBeenCalled();
+    });
+
     it('refuses a description update after the description is locked', async () => {
         const buildActionPsbtRequest = vi.fn();
         mountAdmin('description', {
@@ -242,7 +261,7 @@ describe('TokenAdminForm review interaction safety', () => {
         const nextInfo = new Promise((resolve) => { resolveNext = resolve; });
         const getTokenInfo = vi.fn(({ tick }) => {
             if (tick === 'TOKEN') {
-                return Promise.resolve({ chainId: CHAIN, tick, locks: {} });
+                return Promise.resolve({ chainId: CHAIN, tick, creator: SOURCE.address, locks: {} });
             }
             if (tick === 'DIVISIBLE') {
                 return Promise.resolve({ chainId: CHAIN, tick, divisibility: 8 });

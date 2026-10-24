@@ -48,6 +48,7 @@ import { QueuedResultPanel } from '../components/QueuedResultPanel.jsx';
 import { isValidAddressForChain } from '../utils/addressValidation.js';
 import { memoLengthError } from '../utils/memoLimit.js';
 import { tickerReferenceError } from '../utils/tickerGrammar.js';
+import { tokenIssuerEligibility } from '../utils/tokenIssuerEligibility.js';
 
 const chainRegistry = registryLib.defaultRegistry();
 
@@ -140,6 +141,13 @@ export function SleepForm({ walletId, onBack, mode, initialChainId, initialTick,
 
     // Tick record: LOCK_SLEEP gate (tick mode only).
     const assetInfo = useTokenInfo({ chainId, tick: ticker, skip: !isTick || !ticker });
+    const issuerEligibility = tokenIssuerEligibility({
+        tokenInfo: isTick ? assetInfo : { creator: fromAddress?.address },
+        addressesByChain,
+        chainId,
+        tick: ticker,
+        sourceAddress: fromAddress?.address,
+    });
     const sleepLocked = isTick && !!assetInfo?.locks?.sleep;
 
     // Current chain height (future-block validation + date estimate + state).
@@ -402,6 +410,14 @@ export function SleepForm({ walletId, onBack, mode, initialChainId, initialTick,
         event.preventDefault();
         const initialError = validationError(currentHeight, { requireHeight: false });
         if (initialError) { setFormError(initialError); return; }
+        if (isTick && issuerEligibility.pending) {
+            setFormError(`Wait for the wallet to verify the current owner of ${ticker}.`);
+            return;
+        }
+        if (isTick && issuerEligibility.error) {
+            setFormError(issuerEligibility.error);
+            return;
+        }
         let height = currentHeight;
         if (resumeMode === 'until') {
             setRefreshingHeight(true);
@@ -692,15 +708,17 @@ export function SleepForm({ walletId, onBack, mode, initialChainId, initialTick,
             demoGuard={demoGuard}
             label={titleNoun}
             onSubmit={handleReview}
-            status={formError ? (
-                <StatusMessage variant="error">{formError}</StatusMessage>
+            status={formError || (isTick && issuerEligibility.error) ? (
+                <StatusMessage variant="error">{formError || issuerEligibility.error}</StatusMessage>
             ) : null}
             actions={(
                 <Button
                     type="submit"
                     variant="primary"
                     loading={refreshingHeight || confirmAction.composing}
-                    disabled={!fromAddress || (isTick && sleepLocked) || refreshingHeight || confirmAction.composing}
+                    disabled={!fromAddress || (isTick && (
+                        sleepLocked || !!issuerEligibility.error
+                    )) || refreshingHeight || confirmAction.composing}
                 >
                     {(!isWatcherMode && isTick) ? titleNoun : 'Preview'}
                 </Button>

@@ -34,6 +34,7 @@ import { SellOwnershipForm } from '../../../packages/core/src/shared/routes/Sell
 import { DispenserDetail } from '../../../packages/core/src/shared/routes/DispenserDetail.jsx';
 import { SweepForm } from '../../../packages/core/src/shared/routes/SweepForm.jsx';
 import { useActionForm } from '../../../packages/core/src/shared/hooks/useActionForm.js';
+import { __clearTokenInfoCache } from '../../../packages/core/src/shared/hooks/useTokenInfo.js';
 
 const CHAIN = 'bitcoin-mainnet';
 
@@ -107,7 +108,10 @@ async function fromValue() {
     return field.value;
 }
 
-afterEach(() => cleanup());
+afterEach(() => {
+    cleanup();
+    __clearTokenInfoCache();
+});
 
 describe('useActionForm source default (D-57)', () => {
     it('MintForm opens on the chain ACTIVE address, not the newest HD address', async () => {
@@ -333,12 +337,17 @@ describe('bespoke forms source default', () => {
         expect(await fromValue()).toBe(ADDR_ACTIVE.address);
     });
 
-    async function sellSource(activeAddresses) {
+    async function sellSource(activeAddresses, issuer) {
         const composeForConfirm = vi.fn().mockRejectedValue(new Error('stop'));
         mountWith({
             Form: SellOwnershipForm,
             props: { chainId: CHAIN, tick: 'TICK' },
-            overrides: { composeForConfirm, getActiveAddresses: vi.fn().mockResolvedValue(activeAddresses) },
+            overrides: {
+                composeForConfirm,
+                getActiveAddresses: vi.fn().mockResolvedValue(activeAddresses),
+                // Selling ownership is owner-only; the expected source issued TICK.
+                getTokenInfo: vi.fn().mockResolvedValue({ chainId: CHAIN, tick: 'TICK', creator: issuer, locks: {} }),
+            },
         });
         const price = await screen.findByLabelText(/^Price/);
         fireEvent.change(price, { target: { value: '1' } });
@@ -348,11 +357,11 @@ describe('bespoke forms source default', () => {
     }
 
     it('SellOwnershipForm composes from the chain ACTIVE address', async () => {
-        expect(await sellSource({ [CHAIN]: { id: ADDR_ACTIVE.id } })).toBe(ADDR_ACTIVE.address);
+        expect(await sellSource({ [CHAIN]: { id: ADDR_ACTIVE.id } }, ADDR_ACTIVE.address)).toBe(ADDR_ACTIVE.address);
     });
 
     it('SellOwnershipForm falls back to the newest HD address without an active entry', async () => {
-        expect(await sellSource({})).toBe(ADDR_NEWEST.address);
+        expect(await sellSource({}, ADDR_NEWEST.address)).toBe(ADDR_NEWEST.address);
     });
 
     it('DispenserDetail preselects the ACTIVE address as the buyer', async () => {

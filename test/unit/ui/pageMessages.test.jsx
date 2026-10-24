@@ -30,6 +30,7 @@ import { FullLayoutWithNav } from '../../../packages/core/src/shared/components/
 import { ReachabilityBanner } from '../../../packages/core/src/shared/components/ReachabilityBanner.jsx';
 import { ToastHost } from '../../../packages/core/src/shared/components/ToastHost.jsx';
 import { ROUTE_REGISTRY } from '../../../packages/core/src/shared/routeRegistry.js';
+import { __clearTokenInfoCache } from '../../../packages/core/src/shared/hooks/useTokenInfo.js';
 
 // jsdom draws no canvas; the market chart gets a stand-in that accepts any call.
 vi.mock('lightweight-charts', () => {
@@ -188,6 +189,8 @@ beforeAll(() => {
 
 afterEach(() => {
     cleanup();
+    // Each route state reads its own answers, never a token record another state cached.
+    __clearTokenInfoCache();
     localStorage.clear();
     vi.restoreAllMocks();
 });

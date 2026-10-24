@@ -48,6 +48,7 @@ import { QueuedResultPanel } from '../components/QueuedResultPanel.jsx';
 import { MAX_MEMO_LENGTH, memoLengthError, utf8ByteLength } from '../utils/memoLimit.js';
 import { isValidAddressForChain } from '../utils/addressValidation.js';
 import { tickerReferenceError } from '../utils/tickerGrammar.js';
+import { tokenIssuerEligibility } from '../utils/tokenIssuerEligibility.js';
 import { compareDecimalStrings, tokenAmountPrecisionError } from '../utils/amountFormat.js';
 
 const chainRegistry = registryLib.defaultRegistry();
@@ -206,6 +207,13 @@ export function CallbackForm({ walletId, onBack, initialChainId, initialTick, in
         ? Number(cbBlockText)
         : null;
     const owner = assetInfo?.creator || null;
+    const issuerEligibility = tokenIssuerEligibility({
+        tokenInfo: assetInfo,
+        addressesByChain,
+        chainId,
+        tick: ticker,
+        sourceAddress: fromAddress?.address,
+    });
     const payoutInfo = useTokenInfo({ chainId, tick: cbTick, skip: !cbTick });
     const payoutDivisibility = payoutInfo == null
         ? null
@@ -463,6 +471,14 @@ export function CallbackForm({ walletId, onBack, initialChainId, initialTick, in
         const tickerError = tickerReferenceError(ticker, { noun: 'Token ticker' });
         if (tickerError) {
             setFormError(tickerError);
+            return false;
+        }
+        if (issuerEligibility.pending) {
+            setFormError(`Wait for the wallet to verify the current owner of ${ticker}.`);
+            return false;
+        }
+        if (issuerEligibility.error) {
+            setFormError(issuerEligibility.error);
             return false;
         }
         if (!configComplete) {
@@ -865,8 +881,8 @@ export function CallbackForm({ walletId, onBack, initialChainId, initialTick, in
             demoGuard={demoGuard}
             label="Execute callback"
             onSubmit={handleReview}
-            status={formError ? (
-                <StatusMessage variant="error">{formError}</StatusMessage>
+            status={formError || issuerEligibility.error ? (
+                <StatusMessage variant="error">{formError || issuerEligibility.error}</StatusMessage>
             ) : null}
             actions={(
                 <Button
@@ -874,6 +890,8 @@ export function CallbackForm({ walletId, onBack, initialChainId, initialTick, in
                     variant="primary"
                     loading={refreshing || confirmAction.composing}
                     disabled={!fromAddress
+                        || issuerEligibility.pending
+                        || !!issuerEligibility.error
                         || !configComplete
                         || !!memoTooLong
                         || refreshing

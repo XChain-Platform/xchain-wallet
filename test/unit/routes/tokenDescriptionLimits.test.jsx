@@ -125,7 +125,10 @@ describe('IssueTokenForm description rules', () => {
 
 describe('TokenAdminForm description rules', () => {
     it('refuses a semicolon in a replacement description', async () => {
-        const { messaging, composeForConfirm } = messagingFor();
+        // The admin form is owner-only, so SOURCE is named as the issuer.
+        const { messaging, composeForConfirm } = messagingFor({
+            getTokenInfo: vi.fn().mockResolvedValue({ chainId: CHAIN, tick: 'OWNED', divisibility: 0, locks: {}, creator: SOURCE.address }),
+        });
         render(
             <MessagingProvider shell="web" messaging={messaging}>
                 <TokenAdminForm

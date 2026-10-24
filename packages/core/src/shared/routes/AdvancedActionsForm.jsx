@@ -23,6 +23,7 @@ import { useDemoGuard } from '../hooks/useDemoGuard.jsx';
 import { useGatedTickNotice } from '../hooks/useGatedTickNotice.js';
 import { useActionConfirmFlow, useConfirmSubmit, isUserRejection } from '../hooks/useActionConfirmFlow.js';
 import { ActionConfirmScreen } from '../components/ActionConfirmScreen.jsx';
+import { irreversibleConfirmWord } from '../utils/irreversibleActionGate.js';
 import { SignCredentials } from '../components/SignCredentials.jsx';
 import { useSignerReady } from '../hooks/useSignerReady.js';
 import { WatcherResultPanel } from '../components/WatcherResultPanel.jsx';
@@ -350,6 +351,12 @@ export function AdvancedActionsForm({ walletId, onBack, hasDexSurface = true }) 
         [fields, values, version],
     );
 
+    // Destroy, a lock and an address lock cannot be undone: the confirm page asks for the typed word the
+    // dedicated forms ask for, and opening the confirm page starts the typing over.
+    const confirmWord = irreversibleConfirmWord(action, actionParams);
+    const [typedConfirm, setTypedConfirm] = useState('');
+    const typedConfirmOk = !confirmWord || typedConfirm.trim().toUpperCase() === confirmWord;
+
     const decoded = useMemo(() => {
         if (stage !== 'review' && stage !== 'submitting') return null;
         return decoderLib.decodeAction({
@@ -444,6 +451,7 @@ export function AdvancedActionsForm({ walletId, onBack, hasDexSurface = true }) 
             signerId: fromAddress.signerId,
         };
         setSubmitError(null);
+        setTypedConfirm('');
         try {
             const res = await actionConfirm.run({
                 chainId,
@@ -731,6 +739,18 @@ export function AdvancedActionsForm({ walletId, onBack, hasDexSurface = true }) 
                 onHwStatusChange={onHwStatusChange}
                 chainId={chainId}
                 getSignerStatus={messaging.getSignerStatus}
+                credentialsReady={(isHwSource
+                    ? hwStatus === 'available'
+                    : (signerReady || password.length > 0)) && typedConfirmOk}
+                extraCredentials={confirmWord ? (
+                    <Input
+                        label={`Type "${confirmWord}" to confirm`}
+                        hint="This cannot be undone."
+                        value={typedConfirm}
+                        onChange={(e) => setTypedConfirm(e.target.value)}
+                        autoComplete="off"
+                    />
+                ) : null}
             />
         );
     }

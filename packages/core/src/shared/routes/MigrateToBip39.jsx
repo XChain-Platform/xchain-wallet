@@ -47,6 +47,7 @@ import { nextPaint } from '../utils/nextPaint.js';
 
 const chainRegistry = registryLib.defaultRegistry();
 const MIN_PASSWORD_LENGTH = 8;
+const DEFAULT_WALLET_NAME = 'XChain BIP39 Wallet';
 
 /**
  * Migrate-to-BIP39 wizard (§40.13).
@@ -82,7 +83,7 @@ export function MigrateToBip39({ legacyWalletId, onBack, onMigrated, onSweepChai
     const [stage, setStage] = useState(
         /** @type {'explain' | 'create' | 'backup' | 'verify' | 'submitting' | 'done'} */ ('explain'),
     );
-    const [name, setName] = useState('XChain BIP39 Wallet');
+    const [name, setName] = useState(DEFAULT_WALLET_NAME);
     const [password, setPassword] = useState('');
     const [confirm, setConfirm] = useState('');
     const [error, setError] = useState(/** @type {string | null} */ (null));
@@ -215,7 +216,7 @@ export function MigrateToBip39({ legacyWalletId, onBack, onMigrated, onSweepChai
             if (typeof messaging.addImportedWallet !== 'function') {
                 throw new Error('Adding a second wallet is not supported in this version of the app.');
             }
-            const result = await messaging.addImportedWallet({ password, mnemonic, name, origin: 'created' });
+            const result = await messaging.addImportedWallet({ password, mnemonic, name: name.trim() || DEFAULT_WALLET_NAME, origin: 'created' });
             const id = result?.walletId || result?.id || result?.wallet?.id;
             // Warn against a blind retry: the save may have stored the wallet even without returning its id
             if (!id) throw new Error('The new wallet could not be confirmed. Check your wallet list before trying again.');

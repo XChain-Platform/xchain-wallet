@@ -29,6 +29,7 @@ import { QueuedResultPanel } from '../components/QueuedResultPanel.jsx';
 import { imagePreviewDataUrl, publishFeeValidationError, publishFileType } from '../utils/publishingFile.js';
 import { memoLengthError } from '../utils/memoLimit.js';
 import { actionTextSafetyError } from '../utils/actionTextSafety.js';
+import { tokenIssuerEligibility } from '../utils/tokenIssuerEligibility.js';
 import styles from './IssueTokenForm.module.css';
 import { t } from '../../i18n/index.js';
 
@@ -153,7 +154,14 @@ export function GatedPublishForm({ walletId, chainId, tick, issuerAddress = null
         if (issuerAddress) return onChain.find((a) => a.address === issuerAddress) || null;
         return onChain[0] || null;
     }, [addressesByChain, chainId, issuerAddress]);
-    const ownerMissing = !!(addressesByChain && issuerAddress && !fromAddress);
+    const issuerEligibility = tokenIssuerEligibility({
+        tokenInfo: { creator: issuerAddress },
+        addressesByChain,
+        chainId,
+        tick,
+        sourceAddress: fromAddress?.address,
+    });
+    const ownerMissing = !!issuerEligibility.error;
     const hw = isHwSource(fromAddress);
     const actionConfirm = useActionConfirmFlow({ messaging, walletId });
     const passwordValueRef = useRef('');
@@ -253,6 +261,14 @@ export function GatedPublishForm({ walletId, chainId, tick, issuerAddress = null
 
     async function handleReview(event) {
         event.preventDefault();
+        if (issuerEligibility.pending) {
+            setFormError(`Wait for the wallet to verify the current owner of ${tick}.`);
+            return;
+        }
+        if (issuerEligibility.error) {
+            setFormError(issuerEligibility.error);
+            return;
+        }
         if (!fileMeta) { setFormError('Pick a file first.'); return; }
         if (!fromAddress) {
             setFormError(ownerMissing
@@ -646,14 +662,16 @@ export function GatedPublishForm({ walletId, chainId, tick, issuerAddress = null
                 formError ? <StatusMessage variant="error">{formError}</StatusMessage> : null,
                 ownerMissing ? (
                     <StatusMessage variant="error">
-                        {t('gatedPublish.ownerMissing.beforeAddress')}
-                        {' '}(<AddressText address={issuerAddress} />){' '}
-                        {t('gatedPublish.ownerMissing.afterAddress', { tick })}
+                        {issuerEligibility.error}
                     </StatusMessage>
                 ) : null,
             ]}
             actions={(
-                <Button type="submit" variant="primary">
+                <Button
+                    type="submit"
+                    variant="primary"
+                    disabled={issuerEligibility.pending || !!issuerEligibility.error}
+                >
                     {t('common.review')}
                 </Button>
             )}

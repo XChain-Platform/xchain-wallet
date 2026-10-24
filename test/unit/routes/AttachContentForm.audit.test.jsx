@@ -52,14 +52,14 @@ function messagingFor({ source = SOURCE, genesis, overrides = {} } = {}) {
     });
 }
 
-function mount(client = messagingFor()) {
+function mount(client = messagingFor(), issuerAddress = SOURCE.address) {
     render(
         <MessagingProvider shell="web" messaging={client}>
             <AttachContentForm
                 walletId="wallet-1"
                 chainId={CHAIN}
                 tick="ART"
-                issuerAddress={SOURCE.address}
+                issuerAddress={issuerAddress}
                 onBack={() => {}}
             />
         </MessagingProvider>,
@@ -92,6 +92,17 @@ afterEach(() => {
 });
 
 describe('AttachContentForm validation and review', () => {
+    it('refuses before review when the issuer is unknown', async () => {
+        const client = messagingFor();
+        mount(client, null);
+
+        expect(await screen.findByRole('alert')).toHaveTextContent(
+            "The token's issuer could not be confirmed, so this action is not available. Try again when the explorer answers.",
+        );
+        expect(screen.getByRole('button', { name: 'Review upload' })).toBeDisabled();
+        expect(client.composeForConfirm).not.toHaveBeenCalled();
+    });
+
     it('shows normalized FILE values and keeps the draft when Back returns to the form', async () => {
         mount();
         await chooseFile(' art.png ', 'image/png');
@@ -218,7 +229,7 @@ describe('AttachContentForm validation and review', () => {
     });
 
     it('refuses a malformed selected signing address', async () => {
-        mount(messagingFor({ source: { ...SOURCE, address: 'not-an-address' } }));
+        mount(messagingFor({ source: { ...SOURCE, address: 'not-an-address' } }), 'not-an-address');
         await chooseFile();
 
         await review();

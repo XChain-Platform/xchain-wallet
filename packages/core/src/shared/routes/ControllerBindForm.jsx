@@ -35,6 +35,8 @@ import { pickDefaultChainId } from '../chainSelection.js';
 import { QueuedResultPanel } from '../components/QueuedResultPanel.jsx';
 import { isValidAddressForChain } from '../utils/addressValidation.js';
 import { controllerBindValidationError } from '../../flows/controllerBind.js';
+import { useTokenInfo } from '../hooks/useTokenInfo.js';
+import { tokenIssuerEligibility } from '../utils/tokenIssuerEligibility.js';
 
 const chainRegistry = registryLib.defaultRegistry();
 
@@ -202,6 +204,14 @@ export function ControllerBindForm({ walletId, chainId: initialChainId, tick, on
         if (!fromAddressId || !addressesByChain) return null;
         return (addressesByChain[chainId] || []).find((a) => a.id === fromAddressId) || null;
     }, [chainId, fromAddressId, addressesByChain]);
+    const tokenInfo = useTokenInfo({ chainId, tick, skip: target !== 'token' || !tick });
+    const issuerEligibility = tokenIssuerEligibility({
+        tokenInfo: target === 'token' ? tokenInfo : { creator: fromAddress?.address },
+        addressesByChain,
+        chainId,
+        tick,
+        sourceAddress: fromAddress?.address,
+    });
 
     const isHwSource = fromAddress?.source === 'trezor' || fromAddress?.source === 'ledger';
     const [hwStatus, setHwStatus] = useState('idle');
@@ -315,6 +325,14 @@ export function ControllerBindForm({ walletId, chainId: initialChainId, tick, on
         event.preventDefault();
         if (!fromAddress) {
             setFormError('No source address available.');
+            return;
+        }
+        if (target === 'token' && issuerEligibility.pending) {
+            setFormError(`Wait for the wallet to verify the current owner of ${tick}.`);
+            return;
+        }
+        if (target === 'token' && issuerEligibility.error) {
+            setFormError(issuerEligibility.error);
             return;
         }
         if (!descriptor?.coin || !descriptor?.networkKind || !isValidAddressForChain(
@@ -648,15 +666,17 @@ export function ControllerBindForm({ walletId, chainId: initialChainId, tick, on
             demoGuard={demoGuard}
             label={`${verb} controller`}
             onSubmit={handleReview}
-            status={formError ? (
-                <StatusMessage variant="error">{formError}</StatusMessage>
+            status={formError || (target === 'token' && issuerEligibility.error) ? (
+                <StatusMessage variant="error">{formError || issuerEligibility.error}</StatusMessage>
             ) : null}
             actions={(
                 <Button
                     type="submit"
                     variant="primary"
                     loading={actionConfirm.composing}
-                    disabled={!fromAddress || actionConfirm.composing}
+                    disabled={!fromAddress
+                        || (target === 'token' && (issuerEligibility.pending || !!issuerEligibility.error))
+                        || actionConfirm.composing}
                 >
                     {singleEncode ? (unbind ? 'Unbind' : 'Bind') : 'Preview'}
                 </Button>
