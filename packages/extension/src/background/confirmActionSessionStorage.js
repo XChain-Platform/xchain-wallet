@@ -67,20 +67,37 @@ export function createConfirmActionSessionStorage() {
     const set = (key, value) => new Promise((resolve) => {
         try { area.set({ [key]: value }, () => resolve()); } catch { resolve(); }
     });
+    const loadSessionMap = async () => {
+        const v = await get(REQUEST_KEY);
+        return (v && typeof v === 'object') ? v : {};
+    };
+    // chrome.storage has no atomic update primitive. Serialize the session-map
+    // read/modify/write operations so two confirm pages cannot both read the
+    // same snapshot and erase each other's entry with their writes.
+    let sessionMutation = Promise.resolve();
+    const mutateSessions = (mutation) => {
+        const pending = sessionMutation.then(mutation, mutation);
+        sessionMutation = pending.catch(() => {});
+        return pending;
+    };
 
     return {
         async loadSessions() {
-            const v = await get(REQUEST_KEY);
-            return (v && typeof v === 'object') ? v : {};
+            await sessionMutation;
+            return loadSessionMap();
         },
         async putSession(id, session) {
-            const all = await this.loadSessions();
-            all[id] = session;
-            await set(REQUEST_KEY, all);
+            await mutateSessions(async () => {
+                const all = await loadSessionMap();
+                all[id] = session;
+                await set(REQUEST_KEY, all);
+            });
         },
         async removeSession(id) {
-            const all = await this.loadSessions();
-            if (all[id]) { delete all[id]; await set(REQUEST_KEY, all); }
+            await mutateSessions(async () => {
+                const all = await loadSessionMap();
+                if (all[id]) { delete all[id]; await set(REQUEST_KEY, all); }
+            });
         },
         async loadReservations() {
             const v = await get(RESERVATION_KEY);

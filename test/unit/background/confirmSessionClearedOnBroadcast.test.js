@@ -11,17 +11,27 @@
 // A popup that closes between Approve and the end of the send never clears
 // its stored confirm. The host drops the stored confirm for the PSBT it has
 // just broadcast, so Home does not offer to finish a payment that has already
-// left the wallet. `sendToken` is stubbed: the scenario is about the store.
+// left the wallet. LIST and AIRDROP are resumable too, so they get the same
+// drop. The flows are stubbed: the scenario is about the store.
 
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-const stubs = vi.hoisted(() => ({ sendToken: vi.fn() }));
+const stubs = vi.hoisted(() => ({
+    sendToken: vi.fn(),
+    createList: vi.fn(),
+    airdropAction: vi.fn(),
+}));
 
 vi.mock('@xchain-wallet/core', async (importOriginal) => {
     const actual = await importOriginal();
     return {
         ...actual,
-        flows: { ...actual.flows, sendToken: (...args) => stubs.sendToken(...args) },
+        flows: {
+            ...actual.flows,
+            sendToken: (...args) => stubs.sendToken(...args),
+            createList: (...args) => stubs.createList(...args),
+            airdropAction: (...args) => stubs.airdropAction(...args),
+        },
     };
 });
 
@@ -40,7 +50,7 @@ function stubChromeSessionStorage() {
     });
 }
 
-async function makeHost() {
+async function makeHost(activeNetwork = { current: 'regtest' }) {
     stubChromeSessionStorage();
     const { createBackgroundHost } = await import(
         '../../../packages/extension/src/background/createBackgroundHost.js'
@@ -49,7 +59,7 @@ async function makeHost() {
     const host = createBackgroundHost({
         vault: {
             wallets: { list: async () => [{ id: W }] },
-            settings: { get: async () => ({ schemaVersion: 2, activeNetwork: 'regtest', ads: { enabled: false, perChain: {} } }) },
+            settings: { get: async () => ({ schemaVersion: 2, activeNetwork: activeNetwork.current, ads: { enabled: false, perChain: {} } }) },
         },
         chainRegistry: { get: () => ({ id: CHAIN, coin: 'bitcoin', networkKind: 'regtest' }), list: () => [] },
         sdkRegistry: { get: () => sdk, for: () => sdk },
@@ -70,7 +80,27 @@ const putSession = (call, id, psbt) => call('action.confirmSession.put', {
 const storedIds = async (call) => (await call('action.confirmSession.list')).result.sessions.map((s) => s.id);
 
 describe('a stored confirm is dropped when its PSBT is broadcast', () => {
-    afterEach(() => { vi.unstubAllGlobals(); stubs.sendToken.mockReset(); });
+    afterEach(() => {
+        vi.unstubAllGlobals();
+        stubs.sendToken.mockReset();
+        stubs.createList.mockReset();
+        stubs.airdropAction.mockReset();
+    });
+
+    it.each([
+        ['action.createList', 'createList'],
+        ['action.airdrop', 'airdropAction'],
+    ])('removes the session for a PSBT that %s broadcast', async (type, flow) => {
+        const call = await makeHost();
+        await putSession(call, 'cs:sent', 'psbt-sent');
+        await putSession(call, 'cs:other', 'psbt-other');
+        stubs[flow].mockResolvedValueOnce({ txid: 'tx-A' });
+
+        const res = await call(type, { walletId: W, chainId: CHAIN, prebuiltPsbt: { psbtHex: 'psbt-sent' } });
+
+        expect(res.ok).toBe(true);
+        expect(await storedIds(call)).toEqual(['cs:other']);
+    });
 
     it('removes the session for the broadcast PSBT and keeps the others', async () => {
         const call = await makeHost();
@@ -82,6 +112,50 @@ describe('a stored confirm is dropped when its PSBT is broadcast', () => {
 
         expect(res.ok).toBe(true);
         expect(await storedIds(call)).toEqual(['cs:other']);
+    });
+
+    // A LIST or AIRDROP confirm composed on one network, stored or open in a
+    // second window, must not sign after the wallet switches network, the
+    // same rule Send follows.
+    it.each([
+        ['action.createList', 'createList'],
+        ['action.airdrop', 'airdropAction'],
+    ])('refuses %s after the active network changes', async (type, flow) => {
+        const activeNetwork = { current: 'regtest' };
+        const call = await makeHost(activeNetwork);
+        await putSession(call, 'cs:sent', 'psbt-sent');
+        activeNetwork.current = 'testnet';
+        stubs[flow].mockResolvedValue({ txid: 'must-not-send' });
+
+        const res = await call(type, { walletId: W, chainId: CHAIN, prebuiltPsbt: { psbtHex: 'psbt-sent' } });
+
+        expect(res.ok).toBe(false);
+        expect(res.error.message).toMatch(/active network changed to testnet/i);
+        expect(stubs[flow]).not.toHaveBeenCalled();
+        expect(await storedIds(call)).toEqual(['cs:sent']);
+    });
+
+    // A queued broadcast already holds the signed bytes and a permanent refusal
+    // can never confirm, so neither may stay offered as an unsent action. An
+    // unsaved transient failure keeps it: the stored confirm is then the only
+    // way back to that transaction.
+    it.each([
+        ['action.send', 'sendToken', 'BroadcastFailedTransientError', []],
+        ['action.send', 'sendToken', 'BroadcastFailedPermanentError', []],
+        ['action.send', 'sendToken', 'BroadcastFailedTransientUnsavedError', ['cs:sent']],
+        ['action.createList', 'createList', 'BroadcastFailedTransientError', []],
+        ['action.airdrop', 'airdropAction', 'BroadcastFailedPermanentError', []],
+    ])('%s through %s failing with %s keeps %j', async (type, flow, name, kept) => {
+        const call = await makeHost();
+        await putSession(call, 'cs:sent', 'psbt-sent');
+        const failure = new Error('broadcast refused');
+        failure.name = name;
+        stubs[flow].mockRejectedValueOnce(failure);
+
+        const res = await call(type, { walletId: W, chainId: CHAIN, prebuiltPsbt: { psbtHex: 'psbt-sent' } });
+
+        expect(res.ok).toBe(false);
+        expect(await storedIds(call)).toEqual(kept);
     });
 
     it('keeps the session when the send fails, so the confirm stays resumable', async () => {
