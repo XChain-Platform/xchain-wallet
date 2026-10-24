@@ -45,6 +45,7 @@ import { useEffect, useState } from 'react';
 import { registry as registryLib, schemas } from '@xchain-wallet/core';
 import { DEFAULT_MINER_URL } from '../../../branding/branding.js';
 import { fundActiveWalletFromMiner } from '../../../flows/regtestFaucet.js';
+import { MAX_CUSTOM_DESCRIPTOR_CHARS } from '../../../flows/customChains.js';
 import {
     Button,
     EmptyState,
@@ -640,6 +641,10 @@ function CustomChainsRow({ developerMode }) {
         if (busy) return;
         if (typeof messaging?.addCustomChain !== 'function') {
             setErrorText('addCustomChain is not wired in this shell yet.');
+            return;
+        }
+        if (pasted.length > MAX_CUSTOM_DESCRIPTOR_CHARS) {
+            setErrorText('That text is too large to be a chain descriptor.');
             return;
         }
         let descriptor;

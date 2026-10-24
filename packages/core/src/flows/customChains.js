@@ -55,7 +55,11 @@
 // invalidate already-persisted records; the registry's own validator
 // is the single source of truth for "is this descriptor usable?".
 
-import { validateChainDescriptor } from '../registry/validate.js';
+import { customChainReservedIdError, validateChainDescriptor } from '../registry/validate.js';
+
+// A pasted descriptor is stored in the vault settings and read on every boot,
+// so its serialized size is capped well above any real descriptor.
+export const MAX_CUSTOM_DESCRIPTOR_CHARS = 32768;
 
 async function readSettings(vault) {
     return vault.settings.get();
@@ -104,9 +108,16 @@ export async function addCustomChain({ vault, chainRegistry, descriptor, sdkRegi
     if (!descriptor || typeof descriptor !== 'object') {
         throw new Error('addCustomChain: descriptor must be an object');
     }
+    if (JSON.stringify(descriptor).length > MAX_CUSTOM_DESCRIPTOR_CHARS) {
+        throw new Error('addCustomChain: descriptor is too large');
+    }
     const res = validateChainDescriptor(descriptor);
     if (!res.ok) {
         throw new Error(`addCustomChain: invalid descriptor: ${res.errors.join('; ')}`);
+    }
+    const reserved = customChainReservedIdError(descriptor);
+    if (reserved) {
+        throw new Error(`addCustomChain: invalid descriptor: ${reserved}`);
     }
     if (chainRegistry?.has?.(descriptor.id)) {
         throw new Error(`addCustomChain: chain "${descriptor.id}" is already registered`);

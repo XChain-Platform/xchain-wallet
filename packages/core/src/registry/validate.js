@@ -126,13 +126,19 @@ export const FEE_STRATEGY_NAMES = /** @type {const} */ ([
 // chains and loopback hosts (cleartext to the local machine is not
 // interceptable in transit).
 const LOOPBACK_HOSTS = new Set(['localhost', '127.0.0.1', '[::1]']);
+// A descriptor URL is capped in length and carries no userinfo: embedded
+// credentials would be stored in the vault, logged with the URL and sent on
+// every request.
+export const MAX_DESCRIPTOR_URL_LENGTH = 2048;
 const isSecureEndpointUrl = (raw, allowInsecure) => {
+    if (typeof raw !== 'string' || raw.length > MAX_DESCRIPTOR_URL_LENGTH) return false;
     let url;
     try {
         url = new URL(raw);
     } catch {
         return false;
     }
+    if (url.username !== '' || url.password !== '') return false;
     if (url.protocol === 'https:' || url.protocol === 'wss:') return true;
     if (url.protocol !== 'http:' && url.protocol !== 'ws:') return false;
     return allowInsecure || LOOPBACK_HOSTS.has(url.hostname);
@@ -151,7 +157,8 @@ const isTransactionExplorer = (v) =>
     isNonEmptyString(v.url) &&
     v.url.includes('{txid}') &&
     isSecureEndpointUrl(v.url, false) &&
-    (v.iconImg === undefined || isString(v.iconImg));
+    (v.iconImg === undefined ||
+        (isString(v.iconImg) && v.iconImg.startsWith('https://') && isSecureEndpointUrl(v.iconImg, false)));
 
 const isFeeStrategy = (v) => {
     if (!isPlainObject(v)) return false;
@@ -225,6 +232,17 @@ export const FAMILY_RBF_SUPPORTED = { dogecoin: false };
 // a custom rate far below the 1 DOGE/kB relay floor. Bitcoin and litecoin stay free.
 export const FAMILY_FEE_UNIT = { dogecoin: 'sats-per-kbyte' };
 
+// Identifier and display fields of a descriptor end up in routes, storage keys,
+// CSS custom properties, image paths and deep-link handlers, so each is
+// confined to the shape the bundled descriptors already use.
+const ID_RE = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
+const COLOR_RE = /^#[0-9a-fA-F]{3,8}$/;
+const ICON_FILE_RE = /^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/;
+const URI_SCHEME_RE = /^[a-z][a-z0-9+.-]{0,31}$/;
+const BLOCKED_URI_SCHEMES = new Set([
+    'javascript', 'data', 'file', 'vbscript', 'blob', 'about', 'http', 'https', 'ws', 'wss', 'ftp', 'mailto', 'tel', 'chrome', 'chrome-extension',
+]);
+
 const isDerivationPaths = (v) => {
     if (!isPlainObject(v)) return false;
     for (const [k, val] of Object.entries(v)) {
@@ -236,6 +254,27 @@ const isDerivationPaths = (v) => {
 };
 
 /**
+ * Extra rule for a descriptor the user pastes (Developer Mode): a known
+ * family on mainnet belongs to its reserved id alone. Address validation keys
+ * off coin and networkKind, so any other id carrying coin "bitcoin" on
+ * mainnet would accept real mainnet addresses and show mainnet-shaped funds
+ * from endpoints the user pasted. Signed registry descriptors are exempt.
+ *
+ * @param {any} record
+ * @returns {string | null} the error, or null when the descriptor is fine
+ */
+export function customChainReservedIdError(record) {
+    if (
+        record?.networkKind === 'mainnet' &&
+        Object.prototype.hasOwnProperty.call(FAMILY_MAINNET_COIN_TYPE_SLOT, record.coin) &&
+        record.id !== `${record.coin}-mainnet`
+    ) {
+        return `id: must be "${record.coin}-mainnet" for a ${record.coin} mainnet chain`;
+    }
+    return null;
+}
+
+/**
  * @param {unknown} record
  * @returns {{ ok: true, errors: [] } | { ok: false, errors: string[] }}
  */
@@ -245,11 +284,14 @@ export function validateChainDescriptor(record) {
         return result(errors);
     const r = /** @type {ChainDescriptor} */ (record);
     check(errors, 'id', isNonEmptyString(r.id), 'must be a non-empty string');
-    check(errors, 'coin', isNonEmptyString(r.coin), 'must be a non-empty string');
-    check(errors, 'displayName', isNonEmptyString(r.displayName), 'must be a non-empty string');
+    if (isNonEmptyString(r.id)) {
+        check(errors, 'id', r.id.length <= 64 && ID_RE.test(r.id), 'must be 1-64 lowercase letters, digits and hyphens');
+    }
+    check(errors, 'coin', isNonEmptyString(r.coin) && r.coin.length <= 32, 'must be a non-empty string of at most 32 characters');
+    check(errors, 'displayName', isNonEmptyString(r.displayName) && r.displayName.length <= 64, 'must be a non-empty string of at most 64 characters');
     check(errors, 'networkKind', isOneOf(r.networkKind, NETWORKS), `must be one of ${NETWORKS.join(', ')}`);
-    check(errors, 'color', isNonEmptyString(r.color), 'must be a non-empty string');
-    check(errors, 'icon', isString(r.icon), 'must be a string');
+    check(errors, 'color', isString(r.color) && COLOR_RE.test(r.color), 'must be a CSS hex color like #F7931A');
+    check(errors, 'icon', isString(r.icon) && (r.icon === '' || ICON_FILE_RE.test(r.icon)), 'must be empty or a plain file name');
     check(errors, 'derivationPaths', isDerivationPaths(r.derivationPaths), 'malformed');
     // Reserved-id integrity. Both parity pins below key off the free-form `coin`
     // field, while the registry overrides entries by `id` (index.js) and every
@@ -311,7 +353,10 @@ export function validateChainDescriptor(record) {
     );
     check(errors, 'feeStrategy', isFeeStrategy(r.feeStrategy), 'malformed');
     checkEach(errors, 'supportedActions', r.supportedActions, isNonEmptyString, 'must be a non-empty string');
-    check(errors, 'uriScheme', isNonEmptyString(r.uriScheme), 'must be a non-empty string');
+    check(errors, 'uriScheme', isString(r.uriScheme) && URI_SCHEME_RE.test(r.uriScheme) && !BLOCKED_URI_SCHEMES.has(r.uriScheme), 'must be a lowercase URI scheme that is not a web, script or file scheme');
+    if (r.nativeTicker !== undefined) {
+        check(errors, 'nativeTicker', isNonEmptyString(r.nativeTicker) && r.nativeTicker.length <= 12, 'must be a non-empty string of at most 12 characters');
+    }
     check(
         errors,
         'wifVersionByte',

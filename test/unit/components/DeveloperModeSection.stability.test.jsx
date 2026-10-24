@@ -133,6 +133,20 @@ describe('DeveloperModeSection unavailable actions', () => {
         expect(screen.getByRole('button', { name: 'Add network' })).toBeDisabled();
     });
 
+    it('refuses an oversized custom network paste without calling the host', async () => {
+        messaging.addCustomChain = vi.fn(async () => ({}));
+        render(<DeveloperModeSection />);
+
+        fireEvent.click(await screen.findByRole('button', { name: 'Add custom network…' }));
+        fireEvent.change(screen.getByRole('textbox', { name: 'Custom network descriptor JSON' }), {
+            target: { value: `{"note":"${'x'.repeat(1024 * 1024)}"}` },
+        });
+        fireEvent.click(screen.getByRole('button', { name: 'Add network' }));
+
+        expect(await screen.findByText('That text is too large to be a chain descriptor.')).toBeTruthy();
+        expect(messaging.addCustomChain).not.toHaveBeenCalled();
+    });
+
     it('explains when no active wallet is available for activation', async () => {
         render(
             <RegtestRow
