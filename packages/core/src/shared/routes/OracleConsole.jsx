@@ -475,17 +475,20 @@ export function OracleConsole({ walletId, accountId, onOpenMarket, onDuplicate, 
                                         consequences: this choice pays the whole pot out one way and
                                         cannot be undone. The selected outcome has to be announced. */}
                                     <div role="group" aria-label="Winning outcome" className={consoleStyles.outcomeRow}>
-                                        {labels.map((l, i) => (
-                                            <Button
-                                                key={i}
-                                                variant={outcome === i ? 'primary' : 'ghost'}
-                                                size="md"
-                                                aria-pressed={outcome === i}
-                                                onClick={() => setOutcome(i)}
-                                            >
-                                                {safeOutcomeLabel(l) || `Outcome ${i}`}
-                                            </Button>
-                                        ))}
+                                        {labels.map((l, i) => {
+                                            const outcomeText = safeOutcomeLabel(l) || `Outcome ${i}`;
+                                            return (
+                                                <Button
+                                                    key={i}
+                                                    variant={outcome === i ? 'primary' : 'ghost'}
+                                                    size="md"
+                                                    aria-pressed={outcome === i}
+                                                    onClick={() => setOutcome(i)}
+                                                >
+                                                    {outcomeText}
+                                                </Button>
+                                            );
+                                        })}
                                     </div>
                                     {!isWatcherMode && !isHw && !signerReady ? (
                                         <Input label="Password" type="password" value={password} onChange={(e) => setPassword(e.target.value)} autoComplete="current-password" />

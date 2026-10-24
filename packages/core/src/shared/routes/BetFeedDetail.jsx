@@ -700,17 +700,20 @@ export function BetFeedDetail({ walletId, chainId, feedIndex, onOpenOracle, onSe
                                 is the button's background colour. A screen reader announced
                                 two identical "Yes" / "No" buttons with no selected state. */}
                             <div role="group" aria-label="Outcome to back" className={styles.betWagerChoices}>
-                                {outcomes.map((label, i) => (
-                                    <Button
-                                        key={i}
-                                        style={{ whiteSpace: 'normal', overflowWrap: 'anywhere', textAlign: 'center' }}
-                                        variant={outcome === i ? 'primary' : 'ghost'}
-                                        aria-pressed={outcome === i}
-                                        onClick={() => setOutcome(i)}
-                                    >
-                                        {safeOutcomeLabel(label) || `Outcome ${i}`}
-                                    </Button>
-                                ))}
+                                {outcomes.map((label, i) => {
+                                    const outcomeText = safeOutcomeLabel(label) || `Outcome ${i}`;
+                                    return (
+                                        <Button
+                                            key={i}
+                                            style={{ whiteSpace: 'normal', overflowWrap: 'anywhere', textAlign: 'center' }}
+                                            variant={outcome === i ? 'primary' : 'ghost'}
+                                            aria-pressed={outcome === i}
+                                            onClick={() => setOutcome(i)}
+                                        >
+                                            {outcomeText}
+                                        </Button>
+                                    );
+                                })}
                             </div>
                             <Input
                                 label={`Stake${feed.tick ? ` (${feed.tick})` : ''}`}
