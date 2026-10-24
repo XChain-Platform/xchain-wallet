@@ -27,6 +27,7 @@ import {
     MIN_SEED_MARGIN_SECONDS,
     NATIVE_FEE_ONLY,
     ORACLE_MAX_PRICE_AGE_SECONDS,
+    PRICE_SEED_MARKER_FLOOR,
     SYNTHETIC_ROUNDS,
     VENUE_PRICE,
     XCHAIN_PAIR,
@@ -41,6 +42,7 @@ import {
     settlePrice,
     unusablePriceMessage,
     venueDisagreement,
+    writePriceSeedRows,
     writeRowsScript,
 } from '../../e2e/fixtures/priceSeed.js';
 
@@ -332,6 +334,38 @@ describe('e2e price seed', () => {
             const script = writeRowsScript(rows);
             expect(script).toContain(JSON.stringify(rows));
             expect(script).toContain('ON DUPLICATE KEY UPDATE');
+        });
+
+        it('refuses an active oracle database before writing any fixture row', async () => {
+            const calls = [];
+            const query = async (sql, params) => {
+                calls.push({ sql, params });
+                return [{ live_oracle: 1 }];
+            };
+
+            await expect(writePriceSeedRows(query, rows)).rejects.toThrow(/active oracle/);
+            expect(calls).toHaveLength(1);
+            expect(calls[0].sql).toContain("status = 'finalized'");
+            expect(calls[0].sql).toContain('INTERVAL 5 MINUTE');
+            expect(calls[0].params).toEqual([PRICE_SEED_MARKER_FLOOR]);
+        });
+
+        it('keys the live-oracle check below every synthetic round a sibling seed writes', () => {
+            expect(SYNTHETIC_ROUNDS.every((round) => round >= PRICE_SEED_MARKER_FLOOR)).toBe(true);
+            expect(PRICE_SEED_MARKER_FLOOR).toBe(990001);
+        });
+
+        it('writes every planned row when the hub database oracle is idle', async () => {
+            const calls = [];
+            const query = async (sql, params) => {
+                calls.push({ sql, params });
+                return calls.length === 1 ? [] : { affectedRows: 1 };
+            };
+
+            await expect(writePriceSeedRows(query, rows)).resolves.toBe(rows.length);
+            expect(calls).toHaveLength(rows.length + 1);
+            expect(calls.slice(1).every(call => call.sql.includes('INSERT INTO price_snapshots')))
+                .toBe(true);
         });
 
         it('expands the pair list into real placeholders', () => {
