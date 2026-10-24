@@ -503,6 +503,11 @@ export function CrossChainSwapForm({ walletId, onBack }) {
             return;
         }
         if (validationError || feeError) return;
+        // The memoized check keeps the clock of the last edit, so ask again now.
+        if (expirationValidationError(expMode, expInput)) {
+            setFormError('Expiration must be a future date and time.');
+            return;
+        }
         setFormError(null);
         if (singleEncode) { void openConfirmScreen(); return; }
         setStage('review');

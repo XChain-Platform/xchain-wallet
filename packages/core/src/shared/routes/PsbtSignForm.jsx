@@ -761,6 +761,11 @@ export function PsbtSignForm({ walletId, onBack, initialPsbt }) {
             return undefined;
         }
         let cancelled = false;
+        // A review always belongs to the bytes that get signed: drop the
+        // previous transaction's review while the new paste or network parses.
+        setDecomposed(null);
+        setParsedAction(null);
+        setParsedActionReason(null);
         setParsing(true);
         setParseError(null);
         messaging.parsePsbtRequest({ chainId, psbtHex })
