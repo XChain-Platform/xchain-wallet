@@ -341,6 +341,59 @@ describe('settings form validation', () => {
         expect(input.getAttribute('aria-describedby').split(' ')).toContain(error.id);
     });
 
+    it.each([
+        ['0', /greater than zero/],
+        ['0.5', /at least 1 sat\/vB/],
+        ['1001', /no higher than 1,000 sat\/vB/],
+    ])('does not save an out-of-bounds Bitcoin custom fee rate %s', (value, message) => {
+        settings = {
+            ...createDefaultSettings(),
+            fees: {
+                'bitcoin-mainnet': {
+                    strategy: 'custom',
+                    customSatsPerKb: 6000,
+                    rbfByDefault: true,
+                },
+            },
+        };
+        render(<FeesSection />);
+        const input = screen.getByLabelText('Bitcoin custom fee rate');
+
+        fireEvent.change(input, { target: { value } });
+        fireEvent.blur(input);
+
+        expect(update).not.toHaveBeenCalled();
+        expect(screen.getByRole('alert')).toHaveTextContent(message);
+        expect(input).toHaveAttribute('aria-invalid', 'true');
+    });
+
+    it('sends field-only fee patches so two in-flight saves cannot restore stale values', () => {
+        settings = {
+            ...createDefaultSettings(),
+            fees: {
+                'bitcoin-mainnet': {
+                    strategy: 'normal',
+                    customSatsPerKb: 6000,
+                    rbfByDefault: true,
+                },
+            },
+        };
+        update = vi.fn(() => new Promise(() => {}));
+        render(<FeesSection />);
+
+        fireEvent.change(screen.getByLabelText('Bitcoin fee strategy'), {
+            target: { value: 'fast' },
+        });
+        fireEvent.click(screen.getByRole('switch', { name: /Bitcoin allow fee bump/ }));
+
+        expect(update).toHaveBeenNthCalledWith(1, {
+            fees: { 'bitcoin-mainnet': { strategy: 'fast', customSatsPerKb: null } },
+        });
+        expect(update).toHaveBeenNthCalledWith(2, {
+            fees: { 'bitcoin-mainnet': { rbfByDefault: false } },
+        });
+    });
+
     it('does not repeat the active network kind in fee headings', () => {
         settings = {
             ...createDefaultSettings(),
@@ -380,9 +433,7 @@ describe('settings form validation', () => {
         expect(update).toHaveBeenCalledWith({
             fees: {
                 'bitcoin-mainnet': {
-                    strategy: 'custom',
                     customSatsPerKb: 2750,
-                    rbfByDefault: true,
                 },
             },
         });
