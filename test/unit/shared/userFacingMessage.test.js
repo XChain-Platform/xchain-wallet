@@ -123,6 +123,13 @@ describe('userFacingMessage', () => {
         expect(userFacingMessage(Object.assign(new Error(message), { code }), FALLBACK)).toBe(message);
     });
 
+    it('keeps the sentence a rejected private key carries beside the SDK machine code', () => {
+        const message = 'That private key is for a different network. Pick the chain the key belongs to, or paste a key for this chain.';
+        const err = Object.assign(new Error(message), { name: 'InvalidWifError', code: 'NETWORK_MISMATCH' });
+        expect(userFacingMessage(err, FALLBACK)).toBe(message);
+        expect(isDeveloperMessage(err)).toBe(false);
+    });
+
     it('hides platform storage exceptions, with or without their class', () => {
         expect(userFacingMessage(new DOMException('Private storage payload detail', 'QuotaExceededError'), FALLBACK))
             .toBe(FALLBACK);

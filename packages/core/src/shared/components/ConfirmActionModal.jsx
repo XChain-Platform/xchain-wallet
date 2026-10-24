@@ -37,6 +37,7 @@ import { formatNativeBaseUnits } from '../../registry/coinTicker.js';
 import { defaultRegistry } from '../../registry/index.js';
 import { OriginIdentity } from './OriginIdentity.jsx';
 import { useFocusTrap } from '../utils/focusTrap.js';
+import { approveSettle } from '../utils/approveSettle.js';
 import { useLongOperationStatus } from '../hooks/useLongOperationStatus.js';
 import { CONTRACT_CALL_WARNING } from '../utils/securityMomentCopy.js';
 import { WalletIdentity } from './WalletIdentity.jsx';
@@ -323,6 +324,13 @@ export function ConfirmActionModal({
     const titleRef = useRef(null);
     useFocusTrap(pageRef, { active: open, initialFocusRef: titleRef });
     const previewReady = phase === 'ready' && !reportLoading;
+    const [settledRequest, setSettledRequest] = useState(null);
+    useEffect(() => {
+        if (!previewReady || approveSettle.ms <= 0) return undefined;
+        const timer = setTimeout(() => setSettledRequest(composed ?? true), approveSettle.ms);
+        return () => clearTimeout(timer);
+    }, [previewReady, composed]);
+    const approveSettled = previewReady && (approveSettle.ms <= 0 || settledRequest === (composed ?? true));
     const approveDisabled = approvalAttempt !== null && approvalAttempt.request === composed;
     const signingTime = useLongOperationStatus(signaturePhase);
 
@@ -367,7 +375,7 @@ export function ConfirmActionModal({
     const handleApprove = useCallback((e) => {
         if (e) e.preventDefault();
         if (approveInFlightRef.current && approveInFlightRef.current.request === composed) return;
-        if (approveDisabled || !previewReady || !canApprove || !credentialsReady || refusal) return;
+        if (approveDisabled || !approveSettled || !canApprove || !credentialsReady || refusal) return;
         const attempt = { request: composed };
         const finish = () => {
             if (approveInFlightRef.current === attempt) approveInFlightRef.current = null;
@@ -380,7 +388,7 @@ export function ConfirmActionModal({
         } catch {
             finish();
         }
-    }, [approveDisabled, previewReady, canApprove, credentialsReady, refusal, composed, onApprove]);
+    }, [approveDisabled, approveSettled, canApprove, credentialsReady, refusal, composed, onApprove]);
 
     const handleReject = useCallback((e) => {
         if (e) e.preventDefault();
@@ -417,7 +425,7 @@ export function ConfirmActionModal({
                 variant="success"
                 icon={<Icon.ThumbsUpIcon />}
                 onClick={handleApprove}
-                disabled={approveDisabled || !previewReady || signaturePhase || terminal || !canApprove || !credentialsReady || !!refusal}
+                disabled={approveDisabled || !approveSettled || signaturePhase || terminal || !canApprove || !credentialsReady || !!refusal}
                 data-testid="confirm-approve"
                 aria-label={resolvedApproveLabel}
             >

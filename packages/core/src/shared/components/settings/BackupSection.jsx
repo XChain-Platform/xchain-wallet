@@ -157,8 +157,12 @@ export function BackupSection({ activeWallet }) {
         setRevealError(null);
     }, [activeWalletId]);
 
+    // Leaving the screen (a lock included) retires any reveal or export still
+    // in flight, so a reply that lands afterwards neither shows a phrase nor
+    // saves a file the user no longer asked to see.
     useEffect(() => () => {
         revealAttemptRef.current += 1;
+        exportAttemptRef.current += 1;
     }, []);
 
     // §19.6 dry-run restore state.

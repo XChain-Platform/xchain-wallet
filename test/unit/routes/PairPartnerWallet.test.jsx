@@ -203,6 +203,34 @@ describe('PairPartnerWallet: seed stage', () => {
         expect(messaging.pairingPayloadRequest).not.toHaveBeenCalled();
     });
 
+    it('hides a flow-prefixed precondition behind the import failure copy', async () => {
+        const messaging = mkMessaging({
+            importMnemonic: vi.fn(async () => { throw new Error('importMnemonic: password is required'); }),
+        });
+        await reachExchange(messaging);
+        expect(screen.getByRole('alert')).toHaveTextContent('Could not import the recovery phrase.');
+        expect(screen.getByRole('alert')).not.toHaveTextContent(/importMnemonic:/);
+    });
+
+    it.each(['', '    '])('imports under the default name when the name field holds %j', async (typed) => {
+        const messaging = mkMessaging();
+        mount(messaging);
+        fireEvent.click(screen.getByRole('button', { name: /pair a signer/i }));
+        fill(/Wallet name/i, typed);
+        fill(/Shared recovery phrase/i, PHRASE);
+        fill(/^Password for this device$/i, PASSWORD);
+        fill(/Confirm password/i, PASSWORD);
+        await act(async () => {
+            fireEvent.click(screen.getByRole('button', { name: /Continue/i }));
+        });
+        expect(messaging.importMnemonic).toHaveBeenCalledWith(
+            expect.objectContaining({ name: 'Paired Wallet' }),
+        );
+        expect(messaging.pairingPayloadRequest).toHaveBeenCalledWith(
+            expect.objectContaining({ label: 'Paired Wallet' }),
+        );
+    });
+
     it('refuses to continue when the shell returns no wallet id', async () => {
         const messaging = mkMessaging({ importMnemonic: vi.fn(async () => ({})) });
         await reachExchange(messaging);

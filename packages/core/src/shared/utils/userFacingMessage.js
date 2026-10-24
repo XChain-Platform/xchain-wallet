@@ -44,6 +44,10 @@ const MAX_REFUSAL_REASON_LENGTH = 500;
 // (the confirm page's refusals); the code names the case and is not developer
 // output, so it must not hide that sentence.
 const USER_COPY_CODES = new Set(['NATIVE_FEE_CHANGED', 'INPUTS_SPENT']);
+// A rejected private key carries the SDK's machine code beside a sentence the
+// flow already wrote for the user (wifFailureMessage), so the code must not
+// hide that sentence.
+const USER_COPY_ERROR_NAMES = new Set(['InvalidWifError']);
 // The encoder's coin-selection shortfall is a build failure, not a rule the
 // node enforced, so it keeps the encoder copy that says nothing was signed or
 // sent instead of being shown as a bare reason.
@@ -168,7 +172,7 @@ export function isDeveloperMessage(err) {
         if (/^SDK[A-Za-z]*Error$/.test(String(e.name || ''))) return true;
         if (RUNTIME_ERROR_NAMES.has(String(e.name || ''))) return true;
         if (isPlatformException(e)) return true;
-        if (typeof e.code === 'string' && !USER_COPY_CODES.has(e.code) && /^[A-Z][A-Z0-9_]+$/.test(e.code)) return true;
+        if (typeof e.code === 'string' && !USER_COPY_CODES.has(e.code) && !USER_COPY_ERROR_NAMES.has(String(e.name || '')) && /^[A-Z][A-Z0-9_]+$/.test(e.code)) return true;
     }
     return DEV_PREFIX.test(text) || INTERNALS.test(text)
         || containsInternalErrorIdentifier(text)
