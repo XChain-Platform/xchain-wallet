@@ -3439,7 +3439,7 @@ export function Send({ walletId, accountId, onBack, prefill = null, onDone, onCh
                             the shell's reachability notice steps aside. */}
                         <HideReachabilityNotice />
                         <StatusMessage variant="warning">
-                            {t('send.offline.body')}
+                            {t(previewBalances.sdkShape ? 'send.offline.body' : 'send.offline.bodyNoCache')}
                         </StatusMessage>
                     </>
                 ) : null, testSendGateBanner]}
@@ -3758,7 +3758,7 @@ export function Send({ walletId, accountId, onBack, prefill = null, onDone, onCh
                         shell's reachability notice steps aside. */}
                     <HideReachabilityNotice />
                     <StatusMessage variant="warning">
-                        {t('send.offline.body')}
+                        {t(previewBalances.sdkShape ? 'send.offline.body' : 'send.offline.bodyNoCache')}
                     </StatusMessage>
                 </>
             ) : null, testSendGateBanner, draftBanner, requestMessage ? (

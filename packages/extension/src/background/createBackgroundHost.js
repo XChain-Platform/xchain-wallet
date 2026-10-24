@@ -2494,7 +2494,7 @@ export function createBackgroundHost(deps) {
     // rest of the session.
     host.register('chainRegistry.addCustomChain', async (req, { vault, chainRegistry, sdkRegistry }) => {
         if (!req || typeof req !== 'object' || !req.descriptor) {
-            throw new Error('chainRegistry.addCustomChain: descriptor required');
+            throw new Error('A network description is required.');
         }
         return addCustomChain({ vault, chainRegistry, sdkRegistry, descriptor: req.descriptor });
     });

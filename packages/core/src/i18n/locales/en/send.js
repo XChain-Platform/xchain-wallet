@@ -96,6 +96,7 @@ const messages = {
     'send.source.choose': 'Choose source address',
     'send.source.hint': 'Only what this address holds can be sent.',
     'send.source.noAddress': 'No address on this network. Use Receive to generate one first.',
+    'send.offline.bodyNoCache': 'Sending needs a network connection.',
     'send.offline.body': 'Sending needs a network connection. Your cached balance remains available.',
     'send.offline.title': 'Sending needs a network connection',
     'send.destination.placeholder': 'Enter an address or name…',

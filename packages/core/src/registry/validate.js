@@ -264,12 +264,27 @@ const isDerivationPaths = (v) => {
  * @returns {string | null} the error, or null when the descriptor is fine
  */
 export function customChainReservedIdError(record) {
+    for (const field of ['coin', 'id']) {
+        const v = record?.[field];
+        if (typeof v === 'string' && v !== v.trim()) return `${field}: must not start or end with a space`;
+    }
+    // Case and surrounding space do not make a coin a different family.
+    const coin = typeof record?.coin === 'string' ? record.coin.trim().toLowerCase() : '';
     if (
         record?.networkKind === 'mainnet' &&
-        Object.prototype.hasOwnProperty.call(FAMILY_MAINNET_COIN_TYPE_SLOT, record.coin) &&
-        record.id !== `${record.coin}-mainnet`
+        Object.prototype.hasOwnProperty.call(FAMILY_MAINNET_COIN_TYPE_SLOT, coin) &&
+        record.id !== `${coin}-mainnet`
     ) {
-        return `id: must be "${record.coin}-mainnet" for a ${record.coin} mainnet chain`;
+        return `id: must be "${coin}-mainnet" for a ${coin} mainnet chain`;
+    }
+    // A mainnet id that extends a reserved id ("bitcoin-mainnet-x") reads as
+    // that family's chain whatever coin it carries.
+    if (record?.networkKind === 'mainnet' && typeof record.id === 'string') {
+        for (const family of Object.keys(FAMILY_MAINNET_COIN_TYPE_SLOT)) {
+            if (record.id.startsWith(`${family}-mainnet-`)) {
+                return `id: must not extend the reserved id "${family}-mainnet"`;
+            }
+        }
     }
     return null;
 }
