@@ -3877,7 +3877,9 @@ export function Send({ walletId, accountId, onBack, prefill = null, onDone, onCh
                 toggleAmountInputMode={toggleAmountInputMode}
                 inputRef={amountInputRef}
                 onMax={onMax}
-                maxDisabled={!sourceBalance}
+                // Offline the page already says sending needs a connection and Review is
+                // off, so Max (which quotes a fee over the network) is off with it.
+                maxDisabled={!sourceBalance || networkOffline}
                 maxBusy={maxBusy}
                 balanceText={
                     previewBalances.loading

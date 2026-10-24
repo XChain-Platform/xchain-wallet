@@ -89,7 +89,7 @@ import { useDemoAutoWipe } from '@xchain-wallet/core/shared/hooks/useDemoAutoWip
 import { useKeyboardShortcuts } from '@xchain-wallet/core/shared/keyboard/useKeyboardShortcuts.js';
 import { ShortcutHelp } from '@xchain-wallet/core/shared/keyboard/ShortcutHelp.jsx';
 import { TokenDetail } from '@xchain-wallet/core/shared/routes/TokenDetail.jsx';
-import { ToastHost, useToast } from '@xchain-wallet/core/shared/components/ToastHost.jsx';
+import { ToastHost, useClearToastsOnLock, useToast } from '@xchain-wallet/core/shared/components/ToastHost.jsx';
 import { ReachabilityBanner } from '@xchain-wallet/core/shared/components/ReachabilityBanner.jsx';
 import { QueuedBroadcastBanner } from '@xchain-wallet/core/shared/components/QueuedBroadcastBanner.jsx';
 import { BottomTabBar } from '@xchain-wallet/core/shared/components/BottomTabBar.jsx';
@@ -293,6 +293,7 @@ export function App() {
 function AppInner({ canOpenInTab, titleEnabled }) {
     const { showToast } = useToast();
     const [status, setStatus] = useState(/** @type {any} */ ({ state: 'loading' }));
+    useClearToastsOnLock(status.state);
     const [surfaceStateRevision, setSurfaceStateRevision] = useState(0);
     const [extensionHandoff] = useState(() => (
         typeof window === 'undefined' ? null : parseExtensionHandoff(window.location.search)

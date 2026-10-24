@@ -57,7 +57,7 @@ import { CoinpayObligationsProvider, useSharedCoinpayObligations } from '@xchain
 import { useDemoAutoWipe } from '@xchain-wallet/core/shared/hooks/useDemoAutoWipe.js';
 import { Locked } from '@xchain-wallet/core/shared/routes/Locked.jsx';
 import { isDemoWallet } from '../../core/src/flows/demoMode.js';
-import { ToastHost, useToast } from '@xchain-wallet/core/shared/components/ToastHost.jsx';
+import { ToastHost, useClearToastsOnLock, useToast } from '@xchain-wallet/core/shared/components/ToastHost.jsx';
 import { RouteErrorBoundary } from '@xchain-wallet/core/shared/components/RouteErrorBoundary.jsx';
 import { ShellRouteOutlet } from '@xchain-wallet/core/shared/components/ShellRouteOutlet.jsx';
 import {
@@ -317,6 +317,7 @@ function AppInner() {
     // the palette hook, the dispatcher, and the help modal below.
     const { settings } = useSettings();
     const [status, setStatus] = useState(/** @type {any} */ ({ state: 'loading' }));
+    useClearToastsOnLock(status.state);
     const statusStateRef = useRef(status.state);
     statusStateRef.current = status.state;
     const nativeSuspendedRef = useRef(false);

@@ -318,3 +318,21 @@ export function useToast() {
         dismissStaleToasts: () => {},
     });
 }
+
+/**
+ * Takes every toast off the screen when the session reaches the lock screen,
+ * so nothing from the unlocked session (an amount, a wallet name, an undo
+ * prompt) stays on it. A passing `loading` state (a status refresh after
+ * adding a wallet) leaves toasts alone. Call it once from each shell's App.
+ *
+ * @param {string} sessionState
+ */
+export function useClearToastsOnLock(sessionState) {
+    const { clearToasts } = useToast();
+    const previous = useRef(sessionState);
+    useEffect(() => {
+        const was = previous.current;
+        previous.current = sessionState;
+        if (was !== sessionState && (sessionState === 'locked' || sessionState === 'no-wallet')) clearToasts();
+    }, [sessionState, clearToasts]);
+}

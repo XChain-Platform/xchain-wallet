@@ -213,7 +213,7 @@ describe('ComposeMessage text limit', () => {
         fireEvent.click(screen.getByRole('button', { name: /Encryption: Standard/ }));
         fireEvent.click(screen.getByRole('option', { name: /Plain text/ }));
 
-        expect(screen.getByRole('button', { name: /Encryption: Standard/ })).toBeTruthy();
+        expect(screen.getByRole('button', { name: /Encryption: Plain text/ })).toBeTruthy();
         expect(screen.getByText(/Send this message as plain text/)).toBeTruthy();
 
         fireEvent.click(screen.getByRole('button', { name: 'Send as plain text' }));

@@ -19,7 +19,7 @@ vi.mock('../../../../packages/core/src/shared/hooks/useHaptic.js', () => ({
     HapticProvider: ({ children }) => children,
 }));
 
-import { ToastHost, useToast } from '../../../../packages/core/src/shared/components/ToastHost.jsx';
+import { ToastHost, useClearToastsOnLock, useToast } from '../../../../packages/core/src/shared/components/ToastHost.jsx';
 
 let toastApi;
 
@@ -229,5 +229,58 @@ describe('ToastHost', () => {
         expect(notification).toBeInTheDocument();
         expect(notification.closest('[aria-label="Notifications"]').querySelector('script')).toBeNull();
         expect(globalThis.notificationExecuted).toBeUndefined();
+    });
+});
+
+describe('useClearToastsOnLock', () => {
+    function Probe({ state }) {
+        useClearToastsOnLock(state);
+        return null;
+    }
+
+    it('removes every toast, action toasts included, when the session locks', () => {
+        const view = render(
+            <ToastHost>
+                <CaptureToastApi />
+                <Probe state="unlocked" />
+            </ToastHost>,
+        );
+        show({ id: 'a', message: 'Sent 1.5 TICK', durationMs: 0 });
+        show({ id: 'b', message: 'Undo send', actionLabel: 'Undo', onAction: () => {}, durationMs: 0 });
+        expect(screen.getByText('Sent 1.5 TICK')).toBeInTheDocument();
+
+        view.rerender(
+            <ToastHost>
+                <CaptureToastApi />
+                <Probe state="locked" />
+            </ToastHost>,
+        );
+        expect(screen.queryByText('Sent 1.5 TICK')).toBeNull();
+        expect(screen.queryByText('Undo send')).toBeNull();
+    });
+
+    it('keeps toasts shown through a status refresh and when the session unlocks', () => {
+        const view = render(
+            <ToastHost>
+                <CaptureToastApi />
+                <Probe state="locked" />
+            </ToastHost>,
+        );
+        show({ id: 'a', message: 'Lock screen notice', durationMs: 0 });
+        view.rerender(
+            <ToastHost>
+                <CaptureToastApi />
+                <Probe state="unlocked" />
+            </ToastHost>,
+        );
+        expect(screen.getByText('Lock screen notice')).toBeInTheDocument();
+
+        view.rerender(
+            <ToastHost>
+                <CaptureToastApi />
+                <Probe state="loading" />
+            </ToastHost>,
+        );
+        expect(screen.getByText('Lock screen notice')).toBeInTheDocument();
     });
 });

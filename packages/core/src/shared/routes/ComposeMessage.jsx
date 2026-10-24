@@ -204,10 +204,12 @@ function ComposeMessageForm({
     const plaintextAckRef = useRef(false);
     // The warning leads the page while Send message sits at the bottom, so on a
     // narrow screen it would appear out of sight. Bring it into view when it
-    // opens from the send button.
+    // opens, and put focus on its safe button so a keyboard or screen-reader
+    // user lands on the question.
     useEffect(() => {
-        if (plaintextConfirmationPending !== 'send') return;
+        if (!plaintextConfirmationPending) return;
         document.getElementById('compose-plaintext-confirm')?.scrollIntoView?.({ block: 'nearest' });
+        document.getElementById('compose-plaintext-cancel')?.focus?.({ preventScroll: true });
     }, [plaintextConfirmationPending]);
     // Encryption choice when the recipient's pubkey is known: 'ecies' (default,
     // only the recipient can read) or 'ecdh' (a shared session key both parties
@@ -548,6 +550,9 @@ function ComposeMessageForm({
     // The selected encryption, as a single dropdown value. 'plaintext' maps to
     // the unencrypted (v3) send; 'ecies'/'ecdh' are the encrypted methods.
     const encryptionValue = sendUnencrypted ? 'plaintext' : encryptionChoice;
+    // The control shows the choice being asked about while the confirmation is
+    // open; the send itself still follows encryptionValue until it is accepted.
+    const encryptionControlValue = plaintextConfirmationPending === 'select' ? 'plaintext' : encryptionValue;
     function onEncryptionChange(value) {
         if (value === 'plaintext') {
             if (!fixedEncryption) {
@@ -1098,6 +1103,7 @@ function ComposeMessageForm({
                         </Button>{' '}
                         <Button
                             type="button"
+                            id="compose-plaintext-cancel"
                             variant="secondary"
                             size="sm"
                             onClick={() => setPlaintextConfirmationPending(false)}
@@ -1220,7 +1226,7 @@ function ComposeMessageForm({
                 conversation keeps the method it started with. */}
             <IconSelect
                 label="Encryption"
-                value={encryptionValue}
+                value={encryptionControlValue}
                 onChange={onEncryptionChange}
                 options={encryptionOptions}
                 disabled={Boolean(fixedEncryption)}

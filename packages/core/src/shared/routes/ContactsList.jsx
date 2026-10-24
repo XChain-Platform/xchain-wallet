@@ -34,6 +34,12 @@ import {
     mergeContactGroup,
 } from '../utils/contactMerge.js';
 import picker from './ContactsList.module.css';
+import { BIDI_CONTROLS } from '../utils/textHardening.js';
+
+// A right-to-left override typed into the name would reverse the text shown in
+// the field while the stored name (cleaned on save) reads in order, so the
+// field never holds one: what it shows is what is saved.
+const stripBidiControls = (value) => value.replace(BIDI_CONTROLS, '');
 
 const chainRegistry = registryLib.defaultRegistry();
 const CONTACTS_SORT_STORAGE_KEY = 'xc:contacts:sort';
@@ -713,7 +719,7 @@ export function ContactsList({ walletId, onSend, onSendMessage, onBack, scanPref
                     </Button>
                 )}
             >
-                <Input label="Name" value={formName} onChange={(e) => setFormName(e.target.value)} />
+                <Input label="Name" value={formName} onChange={(e) => setFormName(stripBidiControls(e.target.value))} />
                 <AddressField
                     label="Address"
                     value={entry0.address}
@@ -757,7 +763,7 @@ export function ContactsList({ walletId, onSend, onSendMessage, onBack, scanPref
                     </Button>
                 )}
             >
-                <Input label="Name" value={formName} onChange={(e) => setFormName(e.target.value)} />
+                <Input label="Name" value={formName} onChange={(e) => setFormName(stripBidiControls(e.target.value))} />
                 <Textarea
                     label="Notes"
                     aria-label="Notes"
