@@ -32,15 +32,19 @@ export function extractSingle(resp) {
 // custody is safe, inventing some is not.
 export function contractBalanceRows(balances) {
     if (!balances) return [];
-    if (Array.isArray(balances)) return balances.map(normalizeContractBalance);
-    if (Array.isArray(balances.data)) return balances.data.map(normalizeContractBalance);
-    if (Array.isArray(balances.balances)) return balances.balances.map(normalizeContractBalance);
+    if (Array.isArray(balances)) return balances.filter(isRecord).map(normalizeContractBalance);
+    if (Array.isArray(balances.data)) return balances.data.filter(isRecord).map(normalizeContractBalance);
+    if (Array.isArray(balances.balances)) return balances.balances.filter(isRecord).map(normalizeContractBalance);
     if (typeof balances === 'object') {
         return Object.entries(balances)
             .filter(([k]) => k !== 'data' && k !== 'total')
             .map(([tick, quantity]) => ({ tick, quantity }));
     }
     return [];
+}
+
+function isRecord(value) {
+    return !!value && typeof value === 'object' && !Array.isArray(value);
 }
 
 function normalizeContractBalance(row) {
@@ -78,18 +82,19 @@ export function contractBalanceOf(balances, tick) {
 // guaranteed a `params` array of {name,type}. Returns a safe {version, methods}
 // or null when nothing usable remains (callers fall back to the manual lane).
 export function sanitizeAbi(abi) {
-    if (!abi || typeof abi !== 'object') return null;
+    if (!isRecord(abi)) return null;
     const rawMethods = abi.methods;
-    if (!rawMethods || typeof rawMethods !== 'object') return null;
-    const methods = {};
+    if (!isRecord(rawMethods)) return null;
+    const methods = Object.create(null);
     for (const [name, spec] of Object.entries(rawMethods)) {
-        if (!spec || typeof spec !== 'object') continue;
+        if (!isRecord(spec)) continue;
         let params = [];
         if (spec.params !== undefined && spec.params !== null) {
             if (!Array.isArray(spec.params)) continue;
-            params = spec.params
-                .filter((p) => p && typeof p === 'object')
-                .map((p) => ({ name: String(p.name ?? ''), type: String(p.type ?? '') }));
+            if (!spec.params.every((p) => isRecord(p)
+                && typeof p.name === 'string' && p.name.trim() !== ''
+                && typeof p.type === 'string' && p.type.trim() !== '')) continue;
+            params = spec.params.map((p) => ({ name: p.name, type: p.type }));
         }
         const entry = { params };
         if (typeof spec.summary === 'string') entry.summary = spec.summary;

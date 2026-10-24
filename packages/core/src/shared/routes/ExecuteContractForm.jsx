@@ -255,8 +255,17 @@ export function ExecuteContractForm({ walletId, chainId, contractActionIndex, in
                 const names = Object.keys(abi.methods);
                 if (initialMethod && names.includes(initialMethod)) {
                     const declared = abi.methods[initialMethod].params || [];
-                    const given = (initialParamsText || '').split('|');
-                    setAbiParamValues(declared.map((p, i) => (given[i] !== undefined ? given[i] : '')));
+                    const givenText = initialParamsText || '';
+                    const given = givenText === '' ? [] : givenText.split('|');
+                    if (given.length > declared.length) {
+                        // The manual lane exposes every supplied value instead
+                        // of hiding arguments that the ABI does not declare.
+                        setManualMode(true);
+                        return;
+                    }
+                    const declaredValues = declared.map((p, i) => (given[i] !== undefined ? given[i] : ''));
+                    setAbiParamValues(declaredValues);
+                    setParamsText(declaredValues.join('|'));
                 } else if (initialMethod) {
                     setManualMode(true);
                 } else {

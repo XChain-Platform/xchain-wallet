@@ -9,7 +9,7 @@
 // contact legal@dankest.llc.
 
 import { readFileSync } from 'node:fs';
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import React from 'react';
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
@@ -167,6 +167,36 @@ describe('ExecuteContractForm argument validation', () => {
             .not.toHaveLength(0);
     });
 
+    it('rejects wrong boolean types and negative amounts before compose', async () => {
+        mount('full', 'enabled', {
+            getContractByActionIndex: () => Promise.resolve({
+                data: {
+                    abi: {
+                        version: 1,
+                        methods: {
+                            configure: {
+                                params: [
+                                    { name: 'enabled', type: 'bool' },
+                                    { name: 'limit', type: 'amount' },
+                                ],
+                            },
+                        },
+                    },
+                },
+            }),
+        });
+        fireEvent.change(await screen.findByLabelText('enabled (bool)'), {
+            target: { value: 'TRUE' },
+        });
+        fireEvent.change(screen.getByLabelText('limit (amount)'), { target: { value: '-1' } });
+        fireEvent.click(screen.getByRole('button', { name: 'Call contract' }));
+        expect(await screen.findAllByText('enabled must be true or false.')).not.toHaveLength(0);
+
+        fireEvent.change(screen.getByLabelText('enabled (bool)'), { target: { value: 'false' } });
+        fireEvent.click(screen.getByRole('button', { name: 'Call contract' }));
+        expect(await screen.findAllByText('limit must be a positive decimal amount.')).not.toHaveLength(0);
+    });
+
     it('rejects a malformed contract ID before compose', async () => {
         mount('full', 'config', {}, { contractActionIndex: '0' });
         fireEvent.change(await screen.findByLabelText('config (json)'), {
@@ -224,5 +254,25 @@ describe('ExecuteContractForm argument validation', () => {
         expect(await screen.findByRole('form', { name: 'Call contract' })).toBeInTheDocument();
         expect(screen.getByLabelText('config (json)')).toHaveValue('{"enabled":true}');
         expect(screen.getByLabelText('limit (amount)')).toHaveValue('2.5');
+    });
+
+    it('shows undeclared deep-link arguments and composes the visible values exactly', async () => {
+        const composeForConfirm = vi.fn(() => new Promise(() => {}));
+        mount('full', 'config', { composeForConfirm }, {
+            initialMethod: 'configure',
+            initialParamsText: '{"safe":true}|9007199254740993|hidden',
+        });
+
+        expect(await screen.findByLabelText('Arguments (optional)'))
+            .toHaveValue('{"safe":true}|9007199254740993|hidden');
+        expect(screen.queryByLabelText('config (json)')).toBeNull();
+
+        fireEvent.click(screen.getByRole('button', { name: 'Call contract' }));
+        await waitFor(() => expect(composeForConfirm).toHaveBeenCalledTimes(1));
+        expect(composeForConfirm.mock.calls[0][0].actionData.params.PARAMS).toEqual([
+            '{"safe":true}',
+            '9007199254740993',
+            'hidden',
+        ]);
     });
 });

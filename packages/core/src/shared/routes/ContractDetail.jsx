@@ -527,16 +527,16 @@ function Pagination({ page, total, pageSize, onChange }) {
 
 function extractRows(resp) {
     if (!resp) return [];
-    if (Array.isArray(resp)) return resp;
-    if (Array.isArray(resp.data)) return resp.data;
-    if (Array.isArray(resp.rows)) return resp.rows;
-    return [];
+    const rows = Array.isArray(resp)
+        ? resp
+        : (Array.isArray(resp.data) ? resp.data : (Array.isArray(resp.rows) ? resp.rows : []));
+    return rows.filter((row) => row && typeof row === 'object' && !Array.isArray(row));
 }
 
 function stateKeyCount(state) {
     if (!state) return 0;
-    if (Array.isArray(state)) return state.length;
-    if (Array.isArray(state.data)) return state.data.length;
+    if (Array.isArray(state)) return state.filter(isStateRow).length;
+    if (Array.isArray(state.data)) return state.data.filter(isStateRow).length;
     if (state.state && typeof state.state === 'object') return Object.keys(state.state).length;
     if (typeof state === 'object') return Object.keys(state).length;
     return 0;
@@ -548,14 +548,8 @@ function toKeyValueEntries(state) {
     // { data: [{ state_key, state_value }, ...] } is what GET /contract/{idx}/state
     // actually returns; state_value is a JSON-encoded scalar there, so it gets
     // parsed once rather than passed through as raw escaped text.
-    if (Array.isArray(state.data)) {
-        return state.data.map((row) => {
-            const key = String(row.key ?? row.KEY ?? row.state_key ?? '');
-            if (row.value !== undefined) return [key, row.value];
-            if (row.VALUE !== undefined) return [key, row.VALUE];
-            return [key, parseStateValue(row.state_value ?? null)];
-        });
-    }
+    if (Array.isArray(state)) return stateRowsToEntries(state);
+    if (Array.isArray(state.data)) return stateRowsToEntries(state.data);
     // Shape B: { state: { k: v, ... } }
     if (state.state && typeof state.state === 'object') {
         return Object.entries(state.state);
@@ -565,6 +559,19 @@ function toKeyValueEntries(state) {
         return Object.entries(state);
     }
     return [];
+}
+
+function isStateRow(row) {
+    return !!row && typeof row === 'object' && !Array.isArray(row);
+}
+
+function stateRowsToEntries(rows) {
+    return rows.filter(isStateRow).map((row) => {
+        const key = String(row.key ?? row.KEY ?? row.state_key ?? '');
+        if (row.value !== undefined) return [key, row.value];
+        if (row.VALUE !== undefined) return [key, row.VALUE];
+        return [key, parseStateValue(row.state_value ?? null)];
+    });
 }
 
 function parseStateValue(v) {
