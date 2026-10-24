@@ -52,7 +52,7 @@ describe('Send memo characters', () => {
         fireEvent.click(screen.getByText('Advanced'));
         fireEvent.change(screen.getByLabelText('Memo (optional)'), { target: { value: 'hi‮evil' } });
 
-        expect(screen.getAllByText(/control characters or text direction overrides/).length).toBeGreaterThan(0);
+        expect(screen.getAllByText('Memo cannot contain text-direction control characters.').length).toBeGreaterThan(0);
         fireEvent.click(sendButton());
         await waitFor(() => expect(screen.getAllByRole('alert').length).toBeGreaterThan(0));
         expect(messaging.composeForConfirm).not.toHaveBeenCalled();
