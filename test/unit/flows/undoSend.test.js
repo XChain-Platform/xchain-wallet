@@ -12,6 +12,7 @@ import { describe, expect, it, vi, afterEach } from 'vitest';
 import { render, screen, fireEvent, waitFor, cleanup } from '@testing-library/react';
 import React from 'react';
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
+import { ToastHost } from '../../../packages/core/src/shared/components/ToastHost.jsx';
 import { Send } from '../../../packages/core/src/shared/routes/Send.jsx';
 import {
     createUndoSendController,
@@ -119,7 +120,7 @@ describe('Send route undo-send countdown toast', () => {
 
     afterEach(() => cleanup());
 
-    async function mountAndApprove() {
+    async function mountAndApprove(overrides = {}) {
         const settings = createDefaultSettings();
         settings.grace.undoSendEnabled = true;
         settings.grace.undoSendSeconds = 10;
@@ -154,6 +155,7 @@ describe('Send route undo-send countdown toast', () => {
             getAddressHistory: vi.fn().mockResolvedValue([{ action: 'SEND', destination: TO }]),
             sendToken: vi.fn(() => new Promise((_resolve, reject) => { rejectSend = reject; })),
             sendHoldCancel: vi.fn().mockResolvedValue(undefined),
+            ...overrides,
         };
         const messaging = new Proxy(base, {
             get(target, prop) {
@@ -167,7 +169,7 @@ describe('Send route undo-send countdown toast', () => {
             React.createElement(
                 MessagingProvider,
                 { shell: 'web', messaging },
-                React.createElement(Send, { walletId: 'w', onBack() {} }),
+                React.createElement(ToastHost, null, React.createElement(Send, { walletId: 'w', onBack() {} })),
             ),
         );
         fireEvent.change(await screen.findByLabelText(/^To$/), { target: { value: TO } });
@@ -178,6 +180,12 @@ describe('Send route undo-send countdown toast', () => {
         await waitFor(() => expect(approve.disabled).toBe(false));
         fireEvent.click(approve);
         return { messaging, rejectSend: (e) => rejectSend(e) };
+    }
+
+    async function approveAgain() {
+        const approve = await screen.findByRole('button', { name: /^(Approve|Confirm|Sign)/i });
+        await waitFor(() => expect(approve.disabled).toBe(false));
+        fireEvent.click(approve);
     }
 
     it('shows the countdown from Approve and Cancel calls sendHoldCancel', async () => {
@@ -234,5 +242,55 @@ describe('Send route undo-send countdown toast', () => {
         rejectSend(secondCancelled);
         await waitFor(() => expect(screen.queryByText(/Sending in \d+ s|Send cancelled/)).toBeNull());
         expect(messaging.sendToken).toHaveBeenCalledTimes(2);
+    });
+
+    it('drops the countdown when the host reports the hold already ran out', async () => {
+        const sendToken = vi.fn(() => new Promise(() => {}));
+        const { messaging } = await mountAndApprove({
+            sendToken,
+            sendHoldCancel: vi.fn().mockResolvedValue({ cancelled: false }),
+        });
+        await waitFor(() => expect(messaging.sendToken).toHaveBeenCalledOnce());
+
+        fireEvent.click(await screen.findByRole('button', { name: /^Cancel$/ }));
+
+        await waitFor(() => expect(messaging.sendHoldCancel).toHaveBeenCalledOnce());
+        expect(await screen.findByText('Checking whether the send was stopped.')).toBeInTheDocument();
+        expect(screen.queryByText('Send cancelled')).toBeNull();
+        expect(screen.queryByText(/Sending in \d+ s/)).toBeNull();
+    });
+
+    it('keeps the cancelled notice when the host did cancel the hold', async () => {
+        const { messaging } = await mountAndApprove({
+            sendHoldCancel: vi.fn().mockResolvedValue({ cancelled: true }),
+        });
+        await waitFor(() => expect(messaging.sendToken).toHaveBeenCalledOnce());
+
+        fireEvent.click(await screen.findByRole('button', { name: /^Cancel$/ }));
+
+        expect(await screen.findByText('Send cancelled')).toBeInTheDocument();
+        expect(screen.queryByText('Checking whether the send was stopped.')).toBeNull();
+    });
+
+    it('ends the countdown of a rejected attempt so the next Approve sends', async () => {
+        const wrongPassword = new Error('Incorrect password');
+        wrongPassword.name = 'InvalidPasswordError';
+        let attempt = 0;
+        const sendToken = vi.fn(() => {
+            attempt += 1;
+            return attempt === 1
+                ? Promise.reject(wrongPassword)
+                : new Promise(() => {});
+        });
+        const { messaging } = await mountAndApprove({ sendToken });
+        await waitFor(() => expect(messaging.sendToken).toHaveBeenCalledOnce());
+        await waitFor(() => expect(screen.queryByText(/Sending in \d+ s/)).toBeNull());
+        expect(messaging.sendHoldCancel).not.toHaveBeenCalled();
+
+        await approveAgain();
+
+        await waitFor(() => expect(messaging.sendToken).toHaveBeenCalledTimes(2));
+        expect(await screen.findByText('Sending in 10 s')).toBeInTheDocument();
+        expect(screen.queryByText(/Couldn't send/)).toBeNull();
     });
 });

@@ -464,16 +464,25 @@ export function Send({ walletId, accountId, onBack, prefill = null, onDone, onCh
             });
         };
         try {
-            Promise.resolve(messaging.sendHoldCancel(holdId)).catch(reportFailure);
+            Promise.resolve(messaging.sendHoldCancel(holdId)).then((outcome) => {
+                // The host holds nothing for this id once its window has run out, or when
+                // this cancel beat the hold. The countdown's "Send cancelled" is then
+                // unconfirmed until the send's own outcome arrives.
+                if (outcome && outcome.cancelled === false) {
+                    clearUndoHold();
+                    showToast({ message: 'Checking whether the send was stopped.' });
+                }
+            }).catch(reportFailure);
         } catch (err) {
             reportFailure(err);
         }
-    }, [messaging, showToast]);
+    }, [messaging, showToast, clearUndoHold]);
     const {
         status: undoSendStatus,
         remaining: undoSendRemaining,
         start: startUndoSend,
         cancel: cancelUndoSend,
+        reset: resetUndoSend,
     } = useUndoSend({
         onElapsed: clearUndoHold,
         onCancelHold: cancelUndoHold,
@@ -2648,18 +2657,31 @@ export function Send({ walletId, accountId, onBack, prefill = null, onDone, onCh
                     // The shared mapping: a multi-recipient send takes the chunk
                     // lane, so its deferred outputs and any envelope must ride along.
                     const prebuiltPsbt = prebuiltPsbtFromComposed(composed);
-                    if (sendBase.holdId && sendBase.undoSeconds) {
+                    const holding = Boolean(sendBase.holdId && sendBase.undoSeconds);
+                    if (holding) {
                         undoHoldIdRef.current = sendBase.holdId;
                         setUndoHoldActive(true);
                         startUndoSend(sendBase.undoSeconds);
                     }
-                    return isHwSource
+                    const dispatched = isHwSource
                         ? messaging.sendAssetHw({
                             ...sendBase, signerId: fromAddress.signerId, prebuiltPsbt,
                         })
                         : messaging.sendToken({
                             ...sendBase, password: passwordValueRef.current, prebuiltPsbt,
                         });
+                    // A rejected attempt (wrong password, device retry) leaves the confirm
+                    // open for another Approve. Its countdown ends here, or the retry
+                    // would start a second one while the first still counts.
+                    return holding
+                        ? Promise.resolve(dispatched).catch((err) => {
+                            if (!isUndoSendCancellation(err)) {
+                                resetUndoSend();
+                                clearUndoHold();
+                            }
+                            throw err;
+                        })
+                        : dispatched;
                 },
             });
             recordLastUsedChain(messaging, chainId);
@@ -2700,7 +2722,7 @@ export function Send({ walletId, accountId, onBack, prefill = null, onDone, onCh
         chainId, fromAddress, walletId, toAddress, tick, amount, memo, rbfForSend,
         feePerKb, settings, messaging, confirmAction, draft, haptic,
         isNativeSend, isHwSource, isMultiSend, sendLegs, sendTotals, startUndoSend,
-        clearUndoHold, showToast, changeAddress, coinControlEnabled, selectedUtxos,
+        clearUndoHold, resetUndoSend, showToast, changeAddress, coinControlEnabled, selectedUtxos,
     ]);
 
     async function handleSubmit(event) {

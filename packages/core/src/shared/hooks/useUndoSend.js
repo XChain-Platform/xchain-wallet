@@ -20,6 +20,8 @@ export function useUndoSend({ onElapsed, onCancelHold, now, setTick, clearTick }
 
     const controllerRef = useRef(null);
     const mountedRef = useRef(true);
+    // Set while reset() stops the controller, so the stop does not read as a user cancel.
+    const quietStopRef = useRef(false);
     const onElapsedRef = useRef(onElapsed);
     const onCancelHoldRef = useRef(onCancelHold);
     const clockRef = useRef({ now, setTick, clearTick });
@@ -56,7 +58,7 @@ export function useUndoSend({ onElapsed, onCancelHold, now, setTick, clearTick }
                 if (onElapsedRef.current) onElapsedRef.current();
             },
             onCancel: () => {
-                if (!mountedRef.current) return;
+                if (!mountedRef.current || quietStopRef.current) return;
                 setStatus('cancelled');
                 if (onCancelHoldRef.current) onCancelHoldRef.current();
             },
@@ -76,5 +78,22 @@ export function useUndoSend({ onElapsed, onCancelHold, now, setTick, clearTick }
         return controller ? controller.cancel() : false;
     }, []);
 
-    return { status, remaining, start, cancel };
+    // Drops a running countdown without a cancel: the send it counted for never
+    // reached the host hold (a failed signing attempt), so nothing is held or cancelled.
+    const reset = useCallback(() => {
+        const controller = controllerRef.current;
+        if (!controller || controller.state() !== 'counting') return;
+        quietStopRef.current = true;
+        try {
+            controller.cancel();
+        } finally {
+            quietStopRef.current = false;
+        }
+        if (mountedRef.current) {
+            setStatus('idle');
+            setRemaining(0);
+        }
+    }, []);
+
+    return { status, remaining, start, cancel, reset };
 }

@@ -43,6 +43,7 @@ import {
     setQueuedResultHandoff,
 } from '../utils/submitFailureMessage.js';
 import { holdAutoLock } from './autoLockGuard.js';
+import { randomUUID } from '../../util/uuid.js';
 
 // Module-level singleton: only ONE confirm modal may be live per window.
 let activeInstanceId = null;
@@ -75,6 +76,9 @@ export function isConfirmOpenPhase(phase) {
 
 export function useConfirmAction() {
     const instanceId = useRef(Symbol('confirm-action')).current;
+    // Names this window in reservation ids. A Symbol's description is the same text in
+    // every window, so it cannot tell two windows apart.
+    const windowTag = useRef(randomUUID()).current;
     const abortRef = useRef(null);
     const resolveRef = useRef(null);
     const rejectRef = useRef(null);
@@ -482,7 +486,7 @@ export function useConfirmAction() {
             ? args.reserve
             : reserveFromSimulation(built.simulation);
         if (args.reservationLedger && reserve && reserve.tick && !optsRef.current.reservationId) {
-            const rid = built.actionString + ':' + String(instanceId).slice(0, 8) + ':' + Date.now();
+            const rid = built.actionString + ':' + windowTag + ':' + Date.now();
             optsRef.current.reservationId = rid;
             try {
                 await args.reservationLedger.reserve({
@@ -569,7 +573,7 @@ export function useConfirmAction() {
             releaseAutoLock();
         }
     }, [
-        report, acknowledged, instanceId, settleResolve, settleReject,
+        report, acknowledged, instanceId, windowTag, settleResolve, settleReject,
         updateMounted, releaseUnlessApproving,
     ]);
 
