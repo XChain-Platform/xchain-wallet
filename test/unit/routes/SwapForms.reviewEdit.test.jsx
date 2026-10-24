@@ -196,7 +196,7 @@ describe('swap review editing', () => {
         setAmount('Get amount (BETA)', '3');
         fireEvent.click(screen.getByRole('button', { name: 'Advanced options' }));
         fireEvent.change(screen.getByLabelText('Receive at (optional)'), { target: { value: 'not an address' } });
-        expect(await screen.findByText('This address has a typo. Check it and try again.')).toBeInTheDocument();
+        expect(await screen.findByText('This is not a valid address.')).toBeInTheDocument();
 
         fireEvent.change(screen.getByLabelText('Receive at (optional)'), { target: { value: BTC_ADDRESS.address } });
         fireEvent.click(screen.getByLabelText('Expire at a specific time'));
@@ -699,7 +699,7 @@ describe('swap review editing', () => {
         setAmount('Give amount (ALPHA)', '1');
         await waitFor(() => expect(screen.queryByText('Give amount is above your available ALPHA balance.')).toBeNull());
         fireEvent.change(screen.getByLabelText('Receive at'), { target: { value: 'not an address' } });
-        expect(await screen.findByText('This address has a typo. Check it and try again.')).toBeInTheDocument();
+        expect(await screen.findByText('This is not a valid address.')).toBeInTheDocument();
 
         fireEvent.change(screen.getByLabelText('Receive at'), { target: { value: BTC_ADDRESS.address } });
         fireEvent.click(screen.getByLabelText('Expire at a specific time'));

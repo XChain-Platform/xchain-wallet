@@ -152,7 +152,10 @@
     direction: ltr;
     unicode-bidi: isolate;
     min-width: 0;
-    font-family: var(--xc-font-mono);
+    /* Proportional face with tabular digits: a monospace face gives the
+       separators a full digit cell, which WebKit shows as "15 , 858 . 71". */
+    font-family: var(--xc-font-sans);
+    font-variant-numeric: tabular-nums;
     /* Keep the untokenized 32px headline above the body type scale. */
     font-size: 32px;
     font-weight: 800;

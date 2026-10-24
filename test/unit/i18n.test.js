@@ -270,7 +270,7 @@ describe('translations', () => {
             .map(([, value]) => value);
         expect(narrativeValues.filter((value) => !/[.!?…]$/.test(value))).toEqual([]);
         expect(en['send.memoCount']).toBe('{used, number} / {max, number} {used, plural, one {byte} other {bytes}}');
-        expect(en['send.destination.placeholder']).toBe('Enter or paste an address or name…');
+        expect(en['send.destination.placeholder']).toBe('Enter an address or name…');
     });
 
     it('keeps localized A-to-M route copy plain and consistent', () => {

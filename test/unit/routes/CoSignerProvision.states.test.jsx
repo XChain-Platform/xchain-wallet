@@ -103,7 +103,7 @@ describe('CoSignerProvision states', () => {
         fireEvent.click(screen.getByRole('button', { name: '+ Add recipient' }));
         fireEvent.change(screen.getByLabelText('Address 1'), { target: { value: 'not-an-address' } });
 
-        expect(await screen.findByText('Allowed recipient 1: This address has a typo. Check it and try again.')).toBeInTheDocument();
+        expect(await screen.findByText('Allowed recipient 1: This is not a valid address.')).toBeInTheDocument();
         expect(screen.getByRole('button', { name: 'Review agent account' })).toBeDisabled();
         expect(screen.queryByRole('heading', { name: 'Review agent account' })).toBeNull();
     });

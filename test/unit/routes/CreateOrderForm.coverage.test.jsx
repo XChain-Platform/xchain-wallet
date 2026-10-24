@@ -182,7 +182,7 @@ describe('CreateOrderForm coverage', () => {
         fillBasicOrder();
         fireEvent.change(screen.getByLabelText('Receive at (optional)'), { target: { value: 'bad|address' } });
         fireEvent.click(screen.getByRole('button', { name: 'Place order' }));
-        expect(await screen.findByText('This address has a typo. Check it and try again.')).toBeInTheDocument();
+        expect(await screen.findByText('This is not a valid address.')).toBeInTheDocument();
 
         fireEvent.change(screen.getByLabelText('Receive at (optional)'), { target: { value: '' } });
         fireEvent.click(screen.getByRole('button', { name: 'Advanced options (lists, memo)' }));

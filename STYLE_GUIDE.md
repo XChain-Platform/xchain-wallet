@@ -260,7 +260,7 @@ Use `<AddressCombobox>` from `@xchain-wallet/core/ui`; it ships the autocomplete
     onChange={(e) => setToAddress(e.target.value)}
     onPaste={onAddressPaste}
     suggestions={suggestions}
-    placeholder="Enter or paste an address or name…"
+    placeholder="Enter an address or name…"
 />
 ```
 

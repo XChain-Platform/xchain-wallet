@@ -155,7 +155,7 @@ describe('CoSignerAccountDetail async state', () => {
         fireEvent.click(screen.getByRole('button', { name: 'Edit policy' }));
         fireEvent.click(screen.getByRole('button', { name: 'Save changes' }));
 
-        expect(await screen.findByText('Allowed recipient 1: This address has a typo. Check it and try again.')).toBeTruthy();
+        expect(await screen.findByText('Allowed recipient 1: This is not a valid address.')).toBeTruthy();
         expect(updateCoSignerAccount).not.toHaveBeenCalled();
     });
 

@@ -153,7 +153,7 @@ describe('CoinpayForm shared confirmation', () => {
             name: 'malformed recipient address',
             row: { ...OBLIGATION, payee_address: 'not-an-address' },
             owner: OWNER,
-            message: 'This address has a typo. Check it and try again.',
+            message: 'This is not a valid address.',
         },
         {
             name: 'amount',

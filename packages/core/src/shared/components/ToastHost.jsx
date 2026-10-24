@@ -16,12 +16,32 @@ import { clearToastRoom, placeToastStack } from './toastPlacement.js';
 import { t } from '../../i18n/index.js';
 
 const VISIBLE_LIMIT = 3;
-// One duration for every toast, set here rather than per call: 8 s to read a
-// message, and 12 s when it carries an action (Undo, Review), so the action
-// can still be reached. Callers do not pass durationMs; specs pass 0 to keep a
-// toast until it is dismissed.
+// One duration policy for every toast, set here rather than per call: 8 s for
+// an error or warning, 12 s when it carries an action (Undo, Review) so the
+// action can still be reached, and a short read time for a plain confirmation
+// ("Copied.") that grows with the message. Callers do not pass durationMs;
+// specs pass 0 to keep a toast until it is dismissed.
 const DEFAULT_DURATION_MS = 8000;
 const ACTION_MIN_DURATION_MS = 12000;
+const CONFIRMATION_MIN_DURATION_MS = 2500;
+const CONFIRMATION_BASE_MS = 1500;
+const CONFIRMATION_PER_CHAR_MS = 40;
+// A toast younger than this is treated as part of the navigation that
+// produced it and survives the route change.
+const ROUTE_CHANGE_GRACE_MS = 400;
+
+function confirmationDuration(message) {
+    const length = typeof message === 'string' ? message.length : 0;
+    return Math.min(
+        DEFAULT_DURATION_MS,
+        Math.max(CONFIRMATION_MIN_DURATION_MS, CONFIRMATION_BASE_MS + CONFIRMATION_PER_CHAR_MS * length),
+    );
+}
+
+function isConfirmation(input) {
+    if (input.actionLabel && input.onAction) return false;
+    return !input.variant || input.variant === 'default' || input.variant === 'info' || input.variant === 'success';
+}
 
 /**
  * @typedef {{
@@ -40,6 +60,7 @@ const ACTION_MIN_DURATION_MS = 12000;
  *   announce: (message: string) => void,
  *   dismissToast: (id: string) => void,
  *   clearToasts: () => void,
+ *   dismissStaleToasts: () => void,
  * }} ToastApi
  */
 
@@ -76,11 +97,11 @@ export function ToastHost({ children }) {
         const id = input.id || `toast-${Date.now()}-${Math.floor(Math.random() * 1e6)}`;
         const requestedDuration = Number.isFinite(input.durationMs)
             ? Math.max(0, input.durationMs)
-            : DEFAULT_DURATION_MS;
+            : (isConfirmation(input) ? confirmationDuration(input.message) : DEFAULT_DURATION_MS);
         const duration = requestedDuration > 0 && input.actionLabel && input.onAction
             ? Math.max(requestedDuration, ACTION_MIN_DURATION_MS)
             : requestedDuration;
-        const record = { ...input, id, durationMs: duration };
+        const record = { ...input, id, durationMs: duration, shownAt: Date.now() };
         const existingTimer = timersRef.current.get(id);
         if (existingTimer) {
             clearTimeout(existingTimer);
@@ -104,13 +125,32 @@ export function ToastHost({ children }) {
         setToasts([]);
     }, []);
 
+    // Called on a route change: drops the toasts left over from the screen
+    // being left, except any with an action (Undo, Review) and any shown as
+    // part of the navigation itself.
+    const dismissStaleToasts = useCallback(() => {
+        const cutoff = Date.now() - ROUTE_CHANGE_GRACE_MS;
+        setToasts((prev) => {
+            const next = prev.filter((toast) => (toast.actionLabel && toast.onAction) || toast.shownAt > cutoff);
+            if (next.length === prev.length) return prev;
+            const keep = new Set(next.map((toast) => toast.id));
+            for (const toast of prev) {
+                if (keep.has(toast.id)) continue;
+                const timer = timersRef.current.get(toast.id);
+                if (timer) clearTimeout(timer);
+                timersRef.current.delete(toast.id);
+            }
+            return next;
+        });
+    }, []);
+
     useEffect(() => () => {
         for (const timer of timersRef.current.values()) clearTimeout(timer);
         timersRef.current.clear();
     }, []);
 
-    const api = useMemo(() => ({ showToast, announce, dismissToast, clearToasts }), [
-        showToast, announce, dismissToast, clearToasts,
+    const api = useMemo(() => ({ showToast, announce, dismissToast, clearToasts, dismissStaleToasts }), [
+        showToast, announce, dismissToast, clearToasts, dismissStaleToasts,
     ]);
 
     const visibleToasts = toasts.slice(0, VISIBLE_LIMIT);
@@ -275,5 +315,6 @@ export function useToast() {
         announce: () => {},
         dismissToast: () => {},
         clearToasts: () => {},
+        dismissStaleToasts: () => {},
     });
 }

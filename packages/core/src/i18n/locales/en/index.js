@@ -656,7 +656,7 @@ export const en = {
     'send.source.noAddress': 'No address on this network. Use Receive to generate one first.',
     'send.offline.body': 'Sending needs a network connection. Your cached balance remains available.',
     'send.offline.title': 'Sending needs a network connection',
-    'send.destination.placeholder': 'Enter or paste an address or name…',
+    'send.destination.placeholder': 'Enter an address or name…',
     'send.paste.checkLabel': 'Check pasted recipient',
     'send.paste.checkHint': 'Compare the first and last 6 characters.',
     'send.saveRecipient.open': 'Save recipient',

@@ -887,7 +887,7 @@ describe('Send flow with mocked messaging', () => {
         expect(screen.queryByText(/This address has a typo/i)).toBeNull();
 
         fireEvent.blur(toField);
-        expect(await screen.findByText(/This address has a typo/i)).toBeInTheDocument();
+        expect(await screen.findByText(/This is not a valid address/i)).toBeInTheDocument();
 
         fireEvent.change(toField, { target: { value: TO } });
         expect(screen.queryByText(/This address has a typo/i)).toBeNull();
@@ -902,7 +902,7 @@ describe('Send flow with mocked messaging', () => {
         });
 
         expect(toField).toHaveValue('abc');
-        expect(await screen.findByText(/This address has a typo/i)).toBeInTheDocument();
+        expect(await screen.findByText(/This is not a valid address/i)).toBeInTheDocument();
     });
 
     it('keeps a checksum typo on the form with the shared address copy', async () => {

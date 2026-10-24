@@ -388,14 +388,15 @@ function DocLink({ path, label }) {
     const href = isUrl
         ? path
         : `https://github.com/XChain-Platform/xchain-wallet/blob/main/${path}`;
-    // A row's only value, not a link inside a sentence, so it takes the
-    // shared 24px pointer-target floor.
+    // A plain link in the body font: it wraps inside its own box, left-aligned,
+    // with the arrow set off from the last word by a real space (a flex box
+    // would drop that space and glue the arrow on).
     const style = {
-        color: 'var(--xc-text)',
-        fontFamily: 'var(--xc-font-mono, monospace)',
-        fontSize: 'var(--xc-text-xs)',
-        display: 'inline-flex',
-        alignItems: 'center',
+        color: 'var(--xc-accent, var(--xc-text))',
+        display: 'inline-block',
+        maxWidth: '100%',
+        textAlign: 'start',
+        overflowWrap: 'anywhere',
         minHeight: 'var(--xc-tap-min)',
     };
     return (
@@ -403,9 +404,9 @@ function DocLink({ path, label }) {
             href={href}
             target="_blank"
             rel="noreferrer noopener"
-            style={{ ...style, color: 'var(--xc-accent, var(--xc-text))' }}
+            style={style}
         >
-            {label} <span aria-hidden="true">↗</span>
+            {label}{' '}<span aria-hidden="true">↗</span>
         </a>
     );
 }

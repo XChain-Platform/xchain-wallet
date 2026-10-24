@@ -221,11 +221,22 @@ function chainLabel(coin, network) {
     return `${name} ${network}`;
 }
 
+// The shape of an address a person could have mistyped: a base58 string of
+// address length, or a string under one of the supported bech32 prefixes.
+// Anything else is not an address attempt at all.
+const BASE58_SHAPE_RE = /^[1-9A-HJ-NP-Za-km-z]{25,36}$/;
+const BECH32_SHAPE_RE = /^(?:bc|tb|bcrt|ltc|tltc|rltc)1[a-z0-9]{6,87}$/i;
+
+function looksLikeAddress(address) {
+    return BASE58_SHAPE_RE.test(address) || BECH32_SHAPE_RE.test(address);
+}
+
 const PAYMENT_LINK_RE = /^(?:bitcoin|litecoin|dogecoin|xchain|web\+xchain):/i;
 
 /**
  * Plain-language validation copy for an address field tied to one chain.
- * A checksum failure is presented as a typo. A well-formed address for a
+ * A checksum failure on an address-shaped string is presented as a typo; any
+ * other text is called not a valid address. A well-formed address for a
  * different chain names the network encoded in that address instead.
  *
  * Shared legacy version bytes cannot distinguish Bitcoin, Litecoin, and
@@ -255,7 +266,10 @@ export function addressValidationError(address, descriptor) {
     if (detected && detected.network === null) {
         return `This address belongs to testnet or regtest, not ${target}.`;
     }
-    return 'This address has a typo. Check it and try again.';
+    // A near-miss (address-shaped, bad checksum) is a typo; anything else is
+    // not an address.
+    if (looksLikeAddress(a)) return 'This address has a typo. Check it and try again.';
+    return 'This is not a valid address.';
 }
 
 /**

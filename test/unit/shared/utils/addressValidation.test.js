@@ -236,10 +236,19 @@ describe('addressValidationError', () => {
     it.each([
         ['base58 checksum', `${legacy(0x00).slice(0, -1)}3`],
         ['bech32 checksum', `${segwit('bc').slice(0, -1)}p`],
-        ['plain text', 'not an address'],
     ])('uses plain typo copy for a bad %s', (_name, address) => {
         expect(addressValidationError(address, descriptor('bitcoin', 'mainnet')))
             .toBe('This address has a typo. Check it and try again.');
+    });
+
+    it.each([
+        ['plain text', 'not an address'],
+        ['one word', 'notanaddress'],
+        ['too short', '1abc'],
+        ['punctuation', 'hello, world!'],
+    ])('says text that is not an address (%s) is not a valid address', (_name, address) => {
+        expect(addressValidationError(address, descriptor('bitcoin', 'mainnet')))
+            .toBe('This is not a valid address.');
     });
 });
 

@@ -33,6 +33,7 @@ import { useEffect, useRef } from 'react';
 import { readLastView, writeLastView } from '../utils/lastViewMemory.js';
 import { normalizeRouteParams, RESUMABLE_VIEWS } from '../utils/lastViewMemory.js';
 import { setRouteHistoryManaged } from '../../ui/backStack.js';
+import { useToast } from '../components/ToastHost.jsx';
 
 const PARAM_VIEWS = new Set(['token-detail', 'list-detail', 'dispenser-detail', 'market']);
 const RESUMABLE_SET = new Set(RESUMABLE_VIEWS);
@@ -72,11 +73,18 @@ export function useLastView({
     const historyWallet = useRef(/** @type {string | null} */ (null));
     onResumeRef.current = onResume;
     onResumeParamsRef.current = onResumeParams;
+    const { dismissStaleToasts } = useToast();
     const normalizedParams = normalizeRouteParams(currentView, currentParams);
     const route = { view: currentView, params: normalizedParams };
     const routeKey = JSON.stringify(route);
     const resumableView = RESUMABLE_SET.has(currentView)
         && (!PARAM_VIEWS.has(currentView) || normalizedParams !== null);
+
+    // A toast belongs to the screen it was raised on: leaving that screen
+    // dismisses it, so it never floats over the next screen's fields.
+    useEffect(() => {
+        dismissStaleToasts?.();
+    }, [currentView, routeKey, dismissStaleToasts]);
 
     // Persist current view whenever it changes, but only after the
     // resume effect has run for this walletId. Without that gate, a
