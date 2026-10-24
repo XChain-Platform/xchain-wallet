@@ -41,6 +41,7 @@ export const en = {
     // --- common ---------------------------------------------------
     'common.back': 'Back',
     'common.backToHome': 'Back to home',
+    'common.exitHint': 'Press Back again to exit.',
     'common.cancel': 'Cancel',
     'common.clear': 'Clear',
     'common.copy': 'Copy',
@@ -1581,6 +1582,7 @@ export const en = {
         'A second password that, if entered on the unlock screen, silently arms panic mode (24-hour signing freeze) without giving the observer any visible cue.',
     'settings.duress.set': 'Set',
     'settings.safety.autoLockTimeout': 'Auto-lock timeout',
+    'settings.safety.neverUntilAppCloses': 'Never (until the app closes)',
     'settings.safety.minutesCustom': '{autolockMinutes} minutes (custom)',
     'settings.safety.newRecipientTestSendWarning': 'New-recipient test-send warning (sats)',
     'settings.safety.forNativeCoinSendsAbove':

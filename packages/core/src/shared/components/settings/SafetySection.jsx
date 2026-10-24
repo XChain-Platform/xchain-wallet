@@ -21,6 +21,8 @@
 
 import { useState } from 'react';
 import { useSettings } from '../../hooks/useSettings.js';
+import { isNativeShell } from '../../nativeShell.js';
+import { useMessaging } from '../../useMessaging.js';
 import {
     INPUT,
     ROW,
@@ -48,7 +50,14 @@ const AUTOLOCK_OPTIONS = /** @type {const} */ ([
     { value: 0, label: 'Never (until tab close)' },
 ]);
 
+function autolockOptionLabel(option, shell) {
+    return option.value === 0 && (shell === 'desktop' || isNativeShell())
+        ? t('settings.safety.neverUntilAppCloses')
+        : option.label;
+}
+
 export function SafetySection() {
+    const { shell } = useMessaging();
     const { settings, loading, error, update } = useSettings();
     const [thresholdError, setThresholdError] = useState(/** @type {string | null} */ (null));
 
@@ -78,7 +87,7 @@ export function SafetySection() {
                     style={SELECT}
                 >
                     {AUTOLOCK_OPTIONS.map((o) => (
-                        <option key={o.value} value={String(o.value)}>{o.label}</option>
+                        <option key={o.value} value={String(o.value)}>{autolockOptionLabel(o, shell)}</option>
                     ))}
                     {!AUTOLOCK_OPTIONS.some((o) => o.value === settings.autolockMinutes) ? (
                         <option value={String(settings.autolockMinutes)}>

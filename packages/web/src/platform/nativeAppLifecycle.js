@@ -4,6 +4,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 import { useEffect, useRef, useState } from 'react';
+import { cameraRequests } from '@xchain-wallet/core/ui/cameraRequest.js';
 
 export function canApplyNativeIntent(sessionState, appSuspended) {
     return sessionState === 'unlocked' && !appSuspended;
@@ -27,6 +28,11 @@ function isNativeShell() {
  * Connects Capacitor's authoritative active state to the shared idle timer.
  * Initial and duplicate active notifications are ignored, so one background
  * cycle produces at most one lock check and one unlocked resume refresh.
+ *
+ * A pause while a camera request is waiting is the system permission dialog
+ * opening over the app, so the screen stays as it is (no cover, no
+ * navigation) to show the answer. If the page then turns hidden, the user
+ * left the app from the dialog, and the background runs at that point.
  *
  * @param {object} opts
  * @param {() => boolean} opts.checkAutoLock
@@ -54,18 +60,26 @@ export function useNativeAppLifecycle({
         if (!isNativeShell()) return undefined;
         let disposed = false;
         let inactive = false;
+        // True while a pause is held for the camera permission dialog.
+        let held = false;
+
+        // `held` clears on resume; the page cannot turn hidden twice before it.
+        const background = () => {
+            setSuspended(true);
+            callbacksRef.current.onBackground?.();
+        };
 
         const onStateChange = ({ isActive } = {}) => {
             if (disposed) return;
             if (!isActive) {
                 if (inactive) return;
                 inactive = true;
-                setSuspended(true);
-                callbacksRef.current.onBackground?.();
+                held = cameraRequests.pending > 0;
+                if (!held) background();
                 return;
             }
             if (!inactive) return;
-            inactive = false;
+            inactive = held = false;
             const locking = callbacksRef.current.checkAutoLock?.() === true;
             if (!locking) {
                 callbacksRef.current.onUnlockedResume?.();
@@ -75,8 +89,12 @@ export function useNativeAppLifecycle({
 
         const onPause = () => onStateChange({ isActive: false });
         const onResume = () => onStateChange({ isActive: true });
+        const onVisibilityChange = () => {
+            if (held && document.hidden) background();
+        };
         document.addEventListener('pause', onPause);
         document.addEventListener('resume', onResume);
+        document.addEventListener('visibilitychange', onVisibilityChange);
 
         let handle = null;
         if (plugin) {
@@ -93,6 +111,7 @@ export function useNativeAppLifecycle({
             disposed = true;
             document.removeEventListener('pause', onPause);
             document.removeEventListener('resume', onResume);
+            document.removeEventListener('visibilitychange', onVisibilityChange);
             Promise.resolve(handle)
                 .then((listener) => listener?.remove?.())
                 .catch(() => { /* already removed */ });

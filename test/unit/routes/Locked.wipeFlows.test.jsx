@@ -5,7 +5,7 @@
 
 import React from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 
 const wipeWalletStorage = vi.hoisted(() => vi.fn());
 
@@ -25,6 +25,10 @@ import {
     getDemoWalletId,
     markDemoWallet,
 } from '../../../packages/core/src/flows/index.js';
+import {
+    dismissAllOverlays,
+    resetBackStackForTests,
+} from '../../../packages/core/src/ui/backStack.js';
 
 let reload;
 
@@ -62,6 +66,7 @@ beforeEach(() => {
 
 afterEach(() => {
     cleanup();
+    resetBackStackForTests();
     clearLockoutState();
     globalThis.localStorage?.removeItem(FORGOT_PASSWORD_RESTORE_LANE_KEY);
     globalThis.localStorage?.removeItem(POST_DEMO_INTENT_KEY);
@@ -69,6 +74,20 @@ afterEach(() => {
 });
 
 describe('Locked forgot-password wipe', () => {
+    it('keeps the recovery step and typed confirmation when the native app pauses', () => {
+        mount();
+        const dialog = openForgotDialog();
+        chooseRestorePath('Use recovery phrase');
+        fireEvent.change(screen.getByLabelText('Type WIPE to confirm'), {
+            target: { value: 'WIPE' },
+        });
+
+        act(() => dismissAllOverlays());
+
+        expect(dialog).toBeInTheDocument();
+        expect(screen.getByLabelText('Type WIPE to confirm')).toHaveValue('WIPE');
+    });
+
     it('hides SDK and stack text when unlocking fails', async () => {
         const internal = Object.assign(
             new Error('ERR_UNLOCK_BRIDGE\n    at unlock.js:7:4'),

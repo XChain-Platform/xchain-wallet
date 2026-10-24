@@ -18,6 +18,7 @@ import { generateBip39Mnemonic } from '../../crypto/mnemonic.js';
 import { demoCaptureMnemonic } from '../../flows/demoCapture.js';
 import { getDemoWalletId, markDemoWallet } from '../../flows/demoMode.js';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
+import { useNativeExitRoot } from '../hooks/useNativeExitRoot.js';
 import { demoOwnsVaultPassword, exitDemoWallet } from '../utils/demoGraduation.js';
 import { OnboardingCarousel } from './OnboardingCarousel.jsx';
 import styles from './Onboarding.module.css';
@@ -139,6 +140,9 @@ export function Onboarding({ onCreate, onImport, onImportFromFreeWallet, onPairP
     const { messaging, shell } = useMessaging();
     const variant = screenVariantFor(shell);
     const isFull = variant === 'full';
+    // Welcome on a fresh install is the bottom of the app, so Android Back
+    // leaves it the way Home does. The add-wallet lane has its own Back.
+    useNativeExitRoot(!onBack, true);
     const [demoBusy, setDemoBusy] = useState(false);
     const [demoError, setDemoError] = useState(/** @type {string | null} */ (null));
     // leg 2: adding to a vault the demo created would put a real

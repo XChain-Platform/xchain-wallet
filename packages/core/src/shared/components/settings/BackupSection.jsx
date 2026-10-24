@@ -58,6 +58,7 @@ import {
     StatusMessage,
     Textarea,
 } from '@xchain-wallet/core/ui';
+import { useBackHandler } from '../../../ui/backStack.js';
 import { useMessaging, screenVariantFor } from '../../useMessaging.js';
 import { DiagnosticDetails } from '../DiagnosticDetails.jsx';
 import { ActionConfirmScreen } from '../ActionConfirmScreen.jsx';
@@ -305,6 +306,8 @@ export function BackupSection({ activeWallet }) {
         setRevealStage('idle');
         setRevealError(null);
     }
+
+    useBackHandler(revealStage !== 'idle' ? handleHideMnemonic : undefined);
 
     async function runDryRun({ mnemonic: candidate, format, bip39Passphrase, gapLimit }) {
         if (typeof messaging?.dryRunRestoreRequest !== 'function') {

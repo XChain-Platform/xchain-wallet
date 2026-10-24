@@ -18,12 +18,13 @@ let messaging;
 let nativeBack;
 let capacitorApp;
 let unsupportedFiatCurrency;
+let shell;
 
 vi.mock('../../../packages/core/src/shared/hooks/useSettings.js', () => ({
     useSettings: () => ({ settings, loading: false, error: null, unsupportedFiatCurrency, update }),
 }));
 vi.mock('../../../packages/core/src/shared/useMessaging.js', () => ({
-    useMessaging: () => ({ shell: 'web', messaging }),
+    useMessaging: () => ({ shell, messaging }),
 }));
 vi.mock('../../../packages/core/src/shared/components/settings/BiometricRow.jsx', () => ({ BiometricRow: () => null }));
 vi.mock('../../../packages/core/src/shared/components/settings/PanicModeRow.jsx', () => ({ PanicModeRow: () => null }));
@@ -67,6 +68,7 @@ beforeEach(() => {
     settings = createDefaultSettings();
     update = vi.fn(async () => settings);
     unsupportedFiatCurrency = null;
+    shell = 'web';
     messaging = {
         sendHoldCancel: vi.fn(),
         listContacts: vi.fn(async () => []),
@@ -82,6 +84,17 @@ afterEach(async () => {
 });
 
 describe('settings form validation', () => {
+    it('uses app-close wording for auto-lock Never on desktop', () => {
+        shell = 'desktop';
+        settings = { ...settings, autolockMinutes: 0 };
+        render(<SafetySection />);
+
+        const select = screen.getByLabelText('Auto-lock timeout');
+        const never = Array.from(select.options).find((option) => option.value === '0');
+        expect(never).toHaveTextContent('Never (until the app closes)');
+        expect(never.textContent).not.toMatch(/tab/i);
+    });
+
     it('closes the fiat currency dropdown on Android Back instead of minimizing the app', () => {
         render(<LanguageRegionSection />);
         const picker = screen.getByLabelText('Fiat currency');

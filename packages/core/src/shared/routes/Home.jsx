@@ -51,7 +51,8 @@ import { tickerForCoin } from '../../registry/coinTicker.js';
 import { startVisibleInterval } from '../utils/visibleInterval.js';
 import styles from './Home.module.css';
 import cardStyles from '../../ui/Card.module.css';
-import { useBackHandler, useNativeBackRoot } from '../../ui/backStack.js';
+import { useBackHandler } from '../../ui/backStack.js';
+import { useNativeExitRoot } from '../hooks/useNativeExitRoot.js';
 import {
     hasAvailableChain,
     NO_CHAINS_BODY,
@@ -206,7 +207,7 @@ const { BALANCE_POLL_INTERVAL_MS } = flowsLib;
  * there, not here.
  */
 export function Home({ onLocked, onResumeConfirm, onSend, onReceive, onSwap, onExchange, onCreateToken, onActions, onMarkets, onResumeAirdrop, onResumeCoinpay, onMessaging, onContracts, onStaking, onHistory, onAddresses, onMigrateToBip39, onOpenWalletPicker, onOpenAccountPicker, onSignPsbt, onSignMessage, onVerifySignature, activeWalletId: activeWalletIdProp, activeAccountId: activeAccountIdProp, onSwitchAccount, onSelectToken, onSelectEntry, networkFilter: networkFilterProp, onNetworkFilterChange: onNetworkFilterChangeProp, tokenQuery: tokenQueryProp, onTokenQueryChange: onTokenQueryChangeProp, onCommandPalette, onOpenSettings, onLockWallet, resumeKey = 0 }) {
-    useNativeBackRoot();
+    useNativeExitRoot();
     const { messaging, shell } = useMessaging();
     const variant = screenVariantFor(shell);
     const isFull = variant === 'full';

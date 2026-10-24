@@ -143,7 +143,9 @@ export function CreateWallet({ onBack, onCreated: handleCreated, mode = 'fresh' 
         return () => clearTimeout(id);
     }, [stage]);
 
-    useBackHandler(handleNativeBack, stage === 'persisting' || stage === 'ads-notice');
+    // A flow step, not an overlay: backgrounding the app keeps the stage, so
+    // the phrase being written down is never replaced on resume.
+    useBackHandler(handleNativeBack, stage === 'persisting' || stage === 'ads-notice', 'screen');
 
     function clearEntrySecrets() {
         setPassword('');

@@ -439,7 +439,7 @@ export function History({ walletId, accountId, onBack, onReceive, onSelectEntry,
             item?.querySelector('button[data-history-row]')?.focus();
         });
     }, [selectedKey]);
-    useBackHandler(selectedKey ? closeSelectedRow : undefined);
+    useBackHandler(selectedKey ? closeSelectedRow : undefined, false, 'screen');
 
     useEffect(() => {
         if (typeof messaging.listContacts !== 'function') return undefined;

@@ -9,14 +9,17 @@
 // contact legal@dankest.llc.
 
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { cleanup, render, screen, waitFor } from '@testing-library/react';
+import { act, cleanup, render, screen, waitFor } from '@testing-library/react';
 import { Settings } from '../../../packages/core/src/shared/routes/Settings.jsx';
 import { DisplaySection } from '../../../packages/core/src/shared/components/settings/DisplaySection.jsx';
 import { PrivacySection } from '../../../packages/core/src/shared/components/settings/PrivacySection.jsx';
 import { NetworkSection } from '../../../packages/core/src/shared/components/settings/NetworkSection.jsx';
 import { BackupSection } from '../../../packages/core/src/shared/components/settings/BackupSection.jsx';
 import { MessagingContext } from '../../../packages/core/src/shared/MessagingContext.js';
-import { resetBackStackForTests } from '../../../packages/core/src/ui/backStack.js';
+import {
+    dismissAllOverlays,
+    resetBackStackForTests,
+} from '../../../packages/core/src/ui/backStack.js';
 import { resetShellCapabilities } from '../../../packages/core/src/shared/shellCapabilities.js';
 import { userEvent } from '../../helpers/userEvent.js';
 
@@ -111,6 +114,16 @@ afterEach(() => {
 });
 
 describe('Settings keyboard interaction', () => {
+    it('keeps an open drilldown when the native app pauses', async () => {
+        const messaging = settingsHarness();
+        mount(<Settings onBack={() => {}} initialSubpageId="display" />, messaging);
+        expect(await screen.findByRole('heading', { level: 1, name: 'Display' })).toBeInTheDocument();
+
+        act(() => dismissAllOverlays());
+
+        expect(screen.getByRole('heading', { level: 1, name: 'Display' })).toBeInTheDocument();
+    });
+
     it('tabs through every list control and restores each drilldown opener after Enter and Escape', async () => {
         const messaging = {
             getSettings: () => new Promise(() => {}),

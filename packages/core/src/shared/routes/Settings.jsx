@@ -272,7 +272,7 @@ export function Settings({
 
     // A Settings drilldown is nested UI, so Escape and the system Back action
     // close it before the surrounding route.
-    useBackHandler(subpageId ? closeSubpage : undefined);
+    useBackHandler(subpageId ? closeSubpage : undefined, false, 'screen');
 
     useEffect(() => {
         if (subpageId || !pendingFocusRestore.current) return;

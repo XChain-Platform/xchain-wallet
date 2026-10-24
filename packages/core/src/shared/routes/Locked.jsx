@@ -50,6 +50,7 @@ import {
 import { DemoExitConfirm } from '../components/DemoExitConfirm.jsx';
 import { useFocusTrap } from '../utils/focusTrap.js';
 import { useBackHandler } from '../../ui/backStack.js';
+import { useNativeExitRoot } from '../hooks/useNativeExitRoot.js';
 import styles from './Locked.module.css';
 import { t } from '../../i18n/index.js';
 
@@ -196,7 +197,10 @@ export function Locked({ onUnlocked }) {
         active: forgotOpen,
         restoreFocusRef: forgotTriggerRef,
     });
-    useBackHandler(forgotOpen ? handleForgotPasswordCancel : undefined, wipeBusy);
+    useBackHandler(forgotOpen ? handleForgotPasswordCancel : undefined, wipeBusy, 'screen');
+    // The unlock screen is the bottom of the app, so Android Back leaves it
+    // the way Home does.
+    useNativeExitRoot(true, true);
 
     useEffect(() => {
         inputRef.current?.focus();

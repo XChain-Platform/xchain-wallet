@@ -252,7 +252,10 @@ export function ImportWallet({
         };
     }, []);
 
-    useBackHandler(handleBack, busy || adsNotice);
+    // A flow step, not an overlay: backgrounding the app keeps what was typed.
+    // An open camera makes it an overlay, so a pause runs handleBack, which
+    // closes only the camera and releases it while the form stays.
+    useBackHandler(handleBack, busy || adsNotice, scanning || backupScanning ? 'overlay' : 'screen');
 
     function clearSensitiveState() {
         setMnemonic('');

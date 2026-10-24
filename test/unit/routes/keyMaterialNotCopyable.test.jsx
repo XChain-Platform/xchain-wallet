@@ -28,6 +28,10 @@ import {
     installScreenGuard,
 } from '../../../packages/core/src/shared/utils/screenGuard.js';
 import { ViewPrivateKey } from '../../../packages/core/src/shared/routes/ViewPrivateKey.jsx';
+import {
+    dismissAllOverlays,
+    resetBackStackForTests,
+} from '../../../packages/core/src/ui/backStack.js';
 
 const PRIVATE_KEY = 'test-private-key-material';
 const PASSWORD = 'correct horse battery staple';
@@ -73,6 +77,7 @@ async function confirmPassword() {
 
 afterEach(() => {
     cleanup();
+    resetBackStackForTests();
     __resetScreenGuardForTests();
     clipboard.copyText.mockClear();
     clipboard.clearClipboard.mockClear();
@@ -80,6 +85,20 @@ afterEach(() => {
 });
 
 describe('private-key reveal security', () => {
+    it('clears an exported private key when the native app pauses', async () => {
+        const onBack = vi.fn();
+        draw(makeMessaging(), { onBack });
+        await confirmPassword();
+        fireEvent.click(screen.getByRole('button', { name: /Tap to reveal private key/i }));
+        expect(screen.getByText(PRIVATE_KEY)).toBeTruthy();
+
+        act(() => dismissAllOverlays());
+
+        expect(screen.queryByText(PRIVATE_KEY)).toBeNull();
+        expect(screen.getByText('Before you continue')).toBeTruthy();
+        expect(onBack).not.toHaveBeenCalled();
+    });
+
     it('warns before requesting a password and does not export early', () => {
         const { messaging } = draw();
 
