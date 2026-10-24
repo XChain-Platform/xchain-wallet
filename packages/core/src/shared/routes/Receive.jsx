@@ -24,7 +24,7 @@ import { useWalletMode } from '../hooks/useWalletMode.js';
 import { isDemoWallet } from '../../flows/demoMode.js';
 import { useToast } from '../components/ToastHost.jsx';
 import { copyText } from '../clipboard.js';
-import { shareContent, ShareOutcome } from '../share.js';
+import { shareContent, ShareOutcome, toWebShareData } from '../share.js';
 import { dataUrlToBlob } from '../dataUrl.js';
 import { AmountField } from '../components/AmountField.jsx';
 import { TickerIcon } from '../components/TickerIcon.jsx';
@@ -1010,7 +1010,7 @@ export function Receive({ walletId, accountId, prefill = null, onBack, onChangeA
                     ...shareData,
                     files: [new File([blob], qrFileName, { type: blob.type })],
                 };
-                if (nav.canShare(withFile)) data = withFile;
+                if (nav.canShare(toWebShareData(withFile))) data = withFile;
             } catch { /* text and URL remain shareable without the QR image */ }
         }
 

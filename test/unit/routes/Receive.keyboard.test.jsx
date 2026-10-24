@@ -241,7 +241,7 @@ describe('Receive keyboard operation', () => {
         expect(document.activeElement).toBe(shareButton);
         await user.keyboard('{Enter}');
         await waitFor(() => expect(share).toHaveBeenCalledWith(expect.objectContaining({
-            url: expect.stringContaining('amount=1.25'),
+            text: expect.stringContaining('amount=1.25'),
         })));
     });
 
