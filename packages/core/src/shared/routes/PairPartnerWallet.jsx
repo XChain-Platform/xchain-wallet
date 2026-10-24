@@ -25,6 +25,7 @@ import {
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { formatOrList } from '../../i18n/index.js';
 import { userFacingMessage } from '../utils/userFacingMessage.js';
+import { useDocumentTitleSection } from '../hooks/useDocumentTitle.js';
 
 const MIN_PASSWORD_LENGTH = 8;
 const ACCEPTED_WORD_COUNTS = [12, 15, 18, 21, 24];
@@ -302,6 +303,8 @@ export function PairPartnerWallet({ onBack, onPaired, walletId: existingWalletId
         }
     }
 
+    // The window title names the pairing lane the heading shows.
+    useDocumentTitleSection(lane.title || 'Pair a partner wallet');
     const header = (
         <PageHeader
             onBack={onBack}

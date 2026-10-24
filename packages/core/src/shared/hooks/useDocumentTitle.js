@@ -40,8 +40,23 @@ const KNOWN_ROUTES = new Set([
 
 // Routes whose page heading differs from the words of the route id read as
 // that heading, so the window title names the page the user is looking at.
+// Every other route reads as its id in sentence case, the way headings do.
 const ROUTE_LABELS = {
-    actions: 'Token Actions',
+    'send-picker': 'Send',
+    'receive-picker': 'Receive',
+    actions: 'Token actions',
+    lock: 'Lock token',
+    description: 'Update description',
+    transfer: 'Transfer ownership',
+    'markets-picker': 'Select coin or token',
+    'list-union': 'Create union list',
+    'contract-deploy': 'Publish contract',
+    'stake-new': 'New stake',
+    'link-form': 'Link two actions across networks',
+    'parallel-compose': 'Parallel cross-chain actions',
+    'batch-compose': 'Batch',
+    'multisig-create': 'Create multisig',
+    'pair-signer': 'Pair hardware signer',
     'compose-message': 'New message',
     markets: 'Decentralized exchange',
     market: 'Marketplace',
@@ -72,12 +87,12 @@ const ROUTE_LABELS = {
     'cross-chain-templates': 'Cross-chain templates',
     'wallet-picker': 'Wallets',
     'account-picker': 'Accounts',
-    'migrate-bip39': 'Migrate to BIP39',
-    'sign-psbt': 'Sign PSBT',
-    'multisig-sign': 'Multisig Signing',
-    'cosigner-accounts': 'Co-signer Accounts',
-    'cosigner-provision': 'Add Co-signer Account',
-    'cosigner-detail': 'Co-signer Account',
+    'migrate-bip39': 'Upgrade to a BIP39 recovery phrase',
+    'sign-psbt': 'Sign transaction',
+    'multisig-sign': 'Multisig signing sessions',
+    'cosigner-accounts': 'Agent accounts',
+    'cosigner-provision': 'New agent account',
+    'cosigner-detail': 'Co-signer account',
 };
 
 const ONBOARDING_LABELS = {
@@ -91,10 +106,8 @@ const ONBOARDING_LABELS = {
 function labelForRoute(route) {
     if (!KNOWN_ROUTES.has(route)) return null;
     if (ROUTE_LABELS[route]) return ROUTE_LABELS[route];
-    return route
-        .split('-')
-        .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
-        .join(' ');
+    const words = route.split('-').join(' ');
+    return words.charAt(0).toUpperCase() + words.slice(1);
 }
 
 // A screen with sub-screens of its own (Settings) names the one it is showing
@@ -134,7 +147,12 @@ export function useDocumentTitleSection(label) {
 export function documentTitleFor({ statusState, onboardingStep, unlockedView, section = null }) {
     let label = null;
     if (statusState === 'locked') label = 'Unlock';
-    if (statusState === 'no-wallet') label = ONBOARDING_LABELS[onboardingStep] || 'Welcome';
+    // An onboarding screen with steps of its own names the one it is showing.
+    if (statusState === 'no-wallet') {
+        label = typeof section === 'string' && section
+            ? section
+            : ONBOARDING_LABELS[onboardingStep] || 'Welcome';
+    }
     if (statusState === 'error') label = 'Error';
     if (statusState === 'unlocked') {
         label = SECTIONED_VIEWS.has(unlockedView) && typeof section === 'string' && section

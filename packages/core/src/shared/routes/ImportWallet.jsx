@@ -45,6 +45,7 @@ import {
 import { userFacingMessage } from '../utils/userFacingMessage.js';
 import { takeForgotPasswordRestoreLane } from '../utils/forgotPasswordRecovery.js';
 import { useBackHandler } from '../../ui/backStack.js';
+import { useDocumentTitleSection } from '../hooks/useDocumentTitle.js';
 // The three password fields, their hints, and the copy for every way
 // a restore can fail, all from one place so a message can never name a field
 // this screen does not show.
@@ -887,6 +888,8 @@ export function ImportWallet({
                 : lane === 'wif'
                     ? (isFull ? t('importWallet.wif.fullTitle') : t('importWallet.wif.title'))
                     : (isFull ? t('importWallet.existing.fullTitle') : t('importWallet.title'));
+    // The window title names the lane the heading shows.
+    useDocumentTitleSection(pageTitle);
 
     const form = (
         <FormPage

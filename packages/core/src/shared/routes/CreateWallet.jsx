@@ -22,6 +22,7 @@ import { nextPaint } from '../utils/nextPaint.js';
 import { userFacingMessage } from '../utils/userFacingMessage.js';
 import { writeActiveWallet } from '../utils/activeWalletMemory.js';
 import { useBackHandler } from '../../ui/backStack.js';
+import { useDocumentTitleSection } from '../hooks/useDocumentTitle.js';
 import styles from './CreateWallet.module.css';
 import { t } from '../../i18n/index.js';
 
@@ -338,6 +339,8 @@ export function CreateWallet({ onBack, onCreated: handleCreated, mode = 'fresh' 
                 : stage === 'persisting'
                     ? 'Creating your wallet'
                     : 'Automatic Donation System';
+    // The window title names the step the heading shows.
+    useDocumentTitleSection(headerTitle);
     const screenHeader = (
         <PageHeader
             onBack={stage === 'verify' ? undefined : handleBack}
