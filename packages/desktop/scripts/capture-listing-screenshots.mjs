@@ -177,8 +177,9 @@ async function main() {
 
     const userDataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'xc-desktop-listing-'));
     const app = await electron.launch({
-        args: ['.', `--user-data-dir=${userDataDir}`],
+        args: ['.', `--user-data-dir=${userDataDir}`, '--use-mock-keychain'],
         cwd: DESKTOP_DIR,
+        env: { ...process.env, XCHAIN_TEST_NO_FOCUS: '1', XCHAIN_TEST_MOCK_KEYCHAIN: '1' },
     });
 
     const produced = [];
