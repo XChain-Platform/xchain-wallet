@@ -118,6 +118,9 @@ export function ControllerBindForm({ walletId, chainId: initialChainId, tick, on
     const [submitError, setSubmitError] = useState(/** @type {string | null} */ (null));
     const [result, setResult] = useState(/** @type {any | null} */ (null));
     const passwordRef = useRef(/** @type {HTMLInputElement | null} */ (null));
+    // Set from the press until the confirm page settles, so a second press in
+    // that gap does not start a second compose.
+    const composingRef = useRef(false);
 
     useEffect(() => {
         let cancelled = false;
@@ -283,6 +286,8 @@ export function ControllerBindForm({ walletId, chainId: initialChainId, tick, on
     });
 
     async function openConfirmScreen() {
+        if (composingRef.current) return;
+        composingRef.current = true;
         const from = {
             address: fromAddress.address,
             publicKey: fromAddress.publicKey,
@@ -318,6 +323,8 @@ export function ControllerBindForm({ walletId, chainId: initialChainId, tick, on
             setFormError(submitFailureMessage(err, {
                 chainId, coinTicker, fallback: err?.message || `${unbind ? 'Unbind' : 'Bind'} failed.`,
             }));
+        } finally {
+            composingRef.current = false;
         }
     }
 

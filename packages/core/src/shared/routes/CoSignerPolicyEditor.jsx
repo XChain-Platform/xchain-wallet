@@ -240,7 +240,8 @@ export function buildPolicyDraft(draft) {
         const out = { address };
         if (mv) {
             const n = Number(mv);
-            if (!Number.isFinite(n) || n < 0) return { error: `Allowed-output max value for ${address} must be a non-negative number.` };
+            // Beyond 2^53 the number stored is not the number typed, so refuse it.
+            if (!Number.isSafeInteger(n) || n < 0) return { error: `Allowed-output max value for ${address} must be a whole number no greater than ${Number.MAX_SAFE_INTEGER}.` };
             out.maxValue = n;
         }
         allowedOutputs.push(out);

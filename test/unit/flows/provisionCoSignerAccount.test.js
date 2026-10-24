@@ -92,9 +92,11 @@ describe('provisionCoSignerAccount', () => {
         const stored = await vault.coSignerAccounts.findBy('walletId', 'wallet-1');
         expect(stored.map((a) => a.id)).toEqual([first.id]);
 
-        // The same address on another wallet is a different account.
-        const other = await provisionCoSignerAccount({ ...baseOpts(sdkRegistry), vault, walletId: 'wallet-2' });
-        expect(other.walletId).toBe('wallet-2');
+        // The inbound resolver matches on chain and address alone, so another
+        // wallet holding the same key pair is refused too.
+        await expect(provisionCoSignerAccount({ ...baseOpts(sdkRegistry), vault, walletId: 'wallet-2' }))
+            .rejects.toThrow(/already exists/);
+        expect((await vault.coSignerAccounts.findBy('walletId', 'wallet-2'))).toEqual([]);
     });
 
     it('requires the essential inputs', async () => {

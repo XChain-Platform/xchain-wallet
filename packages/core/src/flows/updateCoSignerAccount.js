@@ -22,6 +22,7 @@
 // unknown (see coSignerAccountQueries.findCoSignerAccountByAddress).
 
 import { validateCoSignerAccount, normalizeStoredPolicy } from '../schemas/coSignerAccount.js';
+import { withAccountLock } from '../cosigner/accountLock.js';
 
 export class CoSignerAccountNotFoundError extends Error {
     constructor(id) {
@@ -53,6 +54,12 @@ export async function updateCoSignerAccount(opts = {}) {
     if (!vault || !vault.coSignerAccounts) throw new Error('updateCoSignerAccount: vault is required');
     if (typeof id !== 'string' || id.length === 0) throw new Error('updateCoSignerAccount: id is required');
 
+    // The read-validate-write below holds the account lock so a co-sign decision
+    // persisting its window entry cannot overwrite the edit, or be overwritten by it.
+    return withAccountLock(id, () => applyUpdate(vault, id, patch));
+}
+
+async function applyUpdate(vault, id, patch) {
     const existing = await vault.coSignerAccounts.get(id);
     if (!existing) throw new CoSignerAccountNotFoundError(id);
 

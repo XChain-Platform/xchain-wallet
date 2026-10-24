@@ -26,6 +26,7 @@
 // later handed to the co-signer. The agreed order is [agent, daemon].
 
 import { createCoSignerAccount } from '../schemas/coSignerAccount.js';
+import { withAccountLock } from '../cosigner/accountLock.js';
 
 /**
  * @typedef {Object} ProvisionCoSignerAccountOpts
@@ -92,15 +93,6 @@ export async function provisionCoSignerAccount(opts = {}) {
         throw new Error('provisionCoSignerAccount: deriveMuSig2P2TR did not return an aggregate address');
     }
 
-    // The aggregate address is fixed by the key pair, so a second account on it
-    // is a second policy for the same funds. The inbound resolver returns the
-    // first enabled match, which makes the stricter or the looser record win by
-    // insertion order alone.
-    const sameAddress = await vault.coSignerAccounts.findBy('aggregateAddress', derived.address);
-    if (sameAddress.some((a) => a.walletId === walletId && a.chainId === chainId)) {
-        throw new Error('An agent account with these two keys already exists in this wallet. Open it to change its policy.');
-    }
-
     const record = createCoSignerAccount({
         walletId,
         chainId,
@@ -114,6 +106,20 @@ export async function provisionCoSignerAccount(opts = {}) {
         allowedOutputs,
     });
 
-    await vault.coSignerAccounts.put(record);
-    return record;
+    // One account per aggregate address: two records for the same key pair would
+    // sign under whichever policy the lookup finds first, and disabling the one
+    // the owner sees would leave the other signing. The inbound resolver matches
+    // on chain and address across every wallet, so the check does too. The check
+    // and the put share a lock keyed by the address so two concurrent creates
+    // cannot both pass it.
+    return withAccountLock(`provision:${record.chainId}:${record.aggregateAddress}`, async () => {
+        const existing = await vault.coSignerAccounts.findBy('aggregateAddress', record.aggregateAddress);
+        if (existing.some((a) => a.chainId === record.chainId)) {
+            throw new Error(
+                'An agent account for this agent key and wallet key already exists. Edit that account instead of creating another.',
+            );
+        }
+        await vault.coSignerAccounts.put(record);
+        return record;
+    });
 }
