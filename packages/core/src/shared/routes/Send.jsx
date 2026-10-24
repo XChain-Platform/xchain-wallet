@@ -251,7 +251,8 @@ import {
     WATCH_ONLY_SIGNING_MESSAGE,
 } from '../addressSelection.js';
 import { pickDefaultChainId, recordLastUsedChain } from '../chainSelection.js';
-import { MAX_MEMO_LENGTH, MEMO_HINT, memoLengthError, utf8ByteLength } from '../utils/memoLimit.js';
+import { MAX_MEMO_LENGTH, MEMO_HINT, memoCharacterError, memoLengthError, utf8ByteLength } from '../utils/memoLimit.js';
+import { publishFeeValidationError } from '../utils/publishingFile.js';
 
 // §30.5 user-initiated cancel detection. HW-device libraries surface a
 // rejection as an Error whose message contains words like "cancelled",
@@ -1615,7 +1616,8 @@ export function Send({ walletId, accountId, onBack, prefill = null, onDone, onCh
         ? `${selectedUtxos.length} selected input${selectedUtxos.length === 1 ? '' : 's'}`
         : 'Automatic input selection';
     const trimmedMemo = memo.trim();
-    const memoTooLong = memoLengthError(trimmedMemo);
+    // The first problem with the memo as sent: its length, then unsafe characters.
+    const memoTooLong = memoLengthError(trimmedMemo) || memoCharacterError(trimmedMemo);
 
     const decoded = useMemo(() => {
         if (stage !== 'review' && stage !== 'submitting') return null;
@@ -2409,7 +2411,23 @@ export function Send({ walletId, accountId, onBack, prefill = null, onDone, onCh
             setFormError('Amount must be a positive number.');
             return;
         }
+        // A native amount past 2^53 base units cannot be carried as a safe integer, so compose
+        // would drop it and the tamper check would report an output the user never approved.
+        if (isNativeSend) {
+            const sats = exactSatsBigIntFromDecimalString(amt, descriptor);
+            if (sats !== null && sats > BigInt(Number.MAX_SAFE_INTEGER)) {
+                setFormError('Amount is too large to send.');
+                return;
+            }
+        }
         if (amountBalanceError) return;
+        // A custom fee the form cannot price (zero, negative, non-numeric, over 8 decimals)
+        // would compose with the encoder's own default fee while the field says otherwise.
+        const customFeeError = publishFeeValidationError(feePick, feeEstimate);
+        if (feePick.mode === 'custom' && (feePerKb === null || customFeeError)) {
+            setFormError(customFeeError || 'Custom fee rate is outside the supported range.');
+            return;
+        }
         // Refuse a below-dust amount BEFORE composing. Enter also submits this
         // form, so the inline warning alone would not be enough (same reasoning as the
         // test-send gate below).

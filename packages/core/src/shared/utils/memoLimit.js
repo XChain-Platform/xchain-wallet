@@ -50,3 +50,22 @@ export function memoLengthError(memo) {
     if (bytes <= MAX_MEMO_LENGTH) return null;
     return `Memo is ${bytes} bytes; the network accepts at most ${MAX_MEMO_LENGTH} bytes.`;
 }
+
+// C0 and C1 control characters (NUL, tab, line breaks, escape and the rest) plus the
+// bidirectional embedding and override marks U+202A-U+202E and U+2066-U+2069.
+// A memo is public text shown on review screens and explorers: controls corrupt the
+// pipe-delimited action line and an override reorders the text printed after it.
+// Joiners, direction marks (U+200E, U+200F) and emoji sequences stay allowed.
+const MEMO_UNSAFE_CHARS = /[\u0000-\u001f\u007f-\u009f‪-‮⁦-⁩]/;
+
+/**
+ * The form error for a memo holding control characters or text-direction
+ * overrides, or null when it is clean. Pass the memo as it goes on the wire.
+ *
+ * @param {string | null | undefined} memo
+ * @returns {string | null}
+ */
+export function memoCharacterError(memo) {
+    if (!MEMO_UNSAFE_CHARS.test(String(memo ?? ''))) return null;
+    return "A memo can't include control characters or text direction overrides.";
+}
