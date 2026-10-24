@@ -40,6 +40,7 @@ import {
     installShellErrorCapture,
 } from '@xchain-wallet/core/flows/diagnosticDump.js';
 import { logConsole } from '@xchain-wallet/core/shared/utils/logConsole.js';
+import { rawTxid } from '@xchain-wallet/core/signers/verifySignedTx.js';
 import { MessageHost } from './MessageHost.js';
 import { registerBridgeHandlers } from '../bridge/handlers.js';
 import {
@@ -4040,11 +4041,18 @@ export function createBackgroundHost(deps) {
             actionSummary: 'Raw signed transaction broadcast via broadcast.signedTx',
             psbtHex: '',
         });
+        // The caller's txid wins; a pasted raw transaction carries none, so it is
+        // derived from the bytes. A record without a txid is invisible to the
+        // History pending list and cannot match a duplicate of itself.
+        let knownTxid = typeof req?.txid === 'string' && req.txid ? req.txid : null;
+        if (!knownTxid) {
+            try { knownTxid = rawTxid(txHex); } catch { knownTxid = null; }
+        }
         pending = {
             ...pending,
             status: 'broadcasting',
             txHex,
-            ...(typeof req?.txid === 'string' && req.txid ? { txid: req.txid } : {}),
+            ...(knownTxid ? { txid: knownTxid } : {}),
         };
         await vault.pendingTxs.put(pending);
 

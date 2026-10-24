@@ -387,6 +387,32 @@ describe('BroadcastForm broadcasts a pasted signed transaction safely', () => {
         expect(broadcastSignedTxRequest).not.toHaveBeenCalled();
     });
 
+    it('sends once when the review form is submitted twice in one event turn', async () => {
+        mountForm();
+        broadcastSignedTxRequest.mockImplementationOnce(() => new Promise(() => {}));
+        await openRawTransaction(LEGACY_TX);
+        await screen.findByText(/spends 1 input/);
+        const form = screen.getByRole('button', { name: 'Broadcast transaction' }).closest('form');
+        act(() => {
+            fireEvent.submit(form);
+            fireEvent.submit(form);
+        });
+        expect(broadcastSignedTxRequest).toHaveBeenCalledTimes(1);
+    });
+
+    it('lists a bounded number of outputs for a transaction with thousands', async () => {
+        mountForm();
+        const output = `40e20100000000001976a914${'44'.repeat(20)}88ac`;
+        const count = 3000;
+        const varint = `fd${(count & 0xff).toString(16).padStart(2, '0')}${(count >> 8).toString(16).padStart(2, '0')}`;
+        const head = LEGACY_TX.slice(0, LEGACY_TX.indexOf('fdffffff') + 8);
+        await openRawTransaction(`${head}${varint}${output.repeat(count)}00000000`);
+
+        expect(await screen.findByText(/creates 3000 outputs/)).toBeTruthy();
+        expect(screen.getAllByText(/BTC to P2PKH script/)).toHaveLength(50);
+        expect(screen.getByText(/2950 further outputs are not listed/)).toBeTruthy();
+    });
+
     it('blocks an output type that the selected coin does not support', async () => {
         mountForm(LTC_CHAIN, LTC_ADDRESSES);
         await openRawTransaction(SEGWIT_TX);

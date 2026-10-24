@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useProtectedScreen } from '../utils/screenGuard.js';
 import { userFacingMessage } from '../utils/userFacingMessage.js';
 import {
@@ -104,6 +104,9 @@ export function MigrateToBip39({ legacyWalletId, onBack, onMigrated, onSweepChai
     );
     const [newAddressError, setNewAddressError] = useState(false);
     const [addressLoadSeq, setAddressLoadSeq] = useState(0);
+    // Two submits in one event turn both read stage 'verify'; each would save a
+    // separate wallet from the same phrase. The ref closes that gap.
+    const savingRef = useRef(false);
 
     // Read the legacy wallet only after the new phrase is verified and its
     // encrypted wallet is saved. Before then every exit path is side-effect free.
@@ -192,7 +195,7 @@ export function MigrateToBip39({ legacyWalletId, onBack, onMigrated, onSweepChai
 
     async function handleSubmitVerify(event) {
         event.preventDefault();
-        if (!mnemonic || stage === 'submitting') return;
+        if (!mnemonic || stage === 'submitting' || savingRef.current) return;
         const words = mnemonic.trim().split(/\s+/);
         for (const position of quizPositions) {
             const answer = (quizAnswers[position] || '').trim().toLowerCase();
@@ -206,6 +209,7 @@ export function MigrateToBip39({ legacyWalletId, onBack, onMigrated, onSweepChai
             }
         }
 
+        savingRef.current = true;
         setStage('submitting');
         setError(null);
         setQuizError(null);
@@ -231,6 +235,8 @@ export function MigrateToBip39({ legacyWalletId, onBack, onMigrated, onSweepChai
             setError(userFacingMessage(err,
                 'Could not create the new wallet. Your recovery phrase is still here, so you can try again.'));
             setStage('verify');
+        } finally {
+            savingRef.current = false;
         }
     }
 

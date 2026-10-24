@@ -377,3 +377,17 @@ describe('livePendingTxs and a confirmed fee bump', () => {
         expect(rows.map((r) => r.id).sort()).toEqual(['bump', 'orig']);
     });
 });
+
+describe('livePendingTxs lists a pasted raw transaction under every address', () => {
+    it('keeps an unknown-sender record that has a txid and drops one without', async () => {
+        const raw = record({ id: 'raw-1', fromAddress: 'unknown', txid: 'abc123', action: 'BROADCAST_SIGNED_TX' });
+        const noId = record({ id: 'raw-2', fromAddress: 'unknown', txid: null, status: 'broadcasting' });
+        const out = await livePendingTxs({
+            vault: vaultOf([raw, noId]),
+            chainRegistry: registry,
+            chainId: CHAIN_ID,
+            address: OURS,
+        });
+        expect(out.map((r) => r.id)).toEqual(['raw-1']);
+    });
+});

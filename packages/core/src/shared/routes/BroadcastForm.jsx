@@ -149,6 +149,9 @@ function BroadcastKindPicker({ value, onChange }) {
     );
 }
 
+// A pasted transaction can hold thousands of outputs; drawing every one freezes the tab.
+const MAX_PREVIEW_OUTPUTS = 50;
+
 function RawTransactionBroadcast({
     walletId, chainId, setChainId, messaging, onKindChange, onBusyChange, onDone, demoGuard,
 }) {
@@ -163,6 +166,8 @@ function RawTransactionBroadcast({
     const mismatch = rawTransactionMismatch(preview?.decoded, descriptor);
     const chainIds = chainRegistry.supportedChains().map((chain) => chain.id);
     const broadcastTime = useLongOperationStatus(state === 'submitting', { timeoutMs: 30_000 });
+    // Two submits in one event turn both read state 'preview'; the ref closes that gap.
+    const sendingRef = useRef(false);
 
     function review(event) {
         event.preventDefault();
@@ -182,7 +187,8 @@ function RawTransactionBroadcast({
 
     async function broadcast(event) {
         event.preventDefault();
-        if (!preview || !chainId || mismatch || state === 'submitting') return;
+        if (!preview || !chainId || mismatch || state === 'submitting' || sendingRef.current) return;
+        sendingRef.current = true;
         setState('submitting');
         onBusyChange(true);
         setError(null);
@@ -198,6 +204,7 @@ function RawTransactionBroadcast({
             setError(rawBroadcastFailure(err));
             setState('preview');
         } finally {
+            sendingRef.current = false;
             onBusyChange(false);
         }
     }
@@ -304,13 +311,19 @@ function RawTransactionBroadcast({
                     {' '}and creates {preview.decoded.outputs.length} output{preview.decoded.outputs.length === 1 ? '' : 's'}.
                 </p>
                 <dl className={styles.detailsList}>
-                    {preview.decoded.outputs.map((output, index) => (
+                    {preview.decoded.outputs.slice(0, MAX_PREVIEW_OUTPUTS).map((output, index) => (
                         <DetailRow
                             key={`${output.scriptPubKeyHex}-${index}`}
                             label={`Output ${index + 1}`}
                             value={`${formatCoinAmount(output.valueSat, descriptor)} to ${scriptType(output.scriptPubKeyHex)} script ${output.scriptPubKeyHex}`}
                         />
                     ))}
+                    {preview.decoded.outputs.length > MAX_PREVIEW_OUTPUTS ? (
+                        <DetailRow
+                            label="More outputs"
+                            value={`${preview.decoded.outputs.length - MAX_PREVIEW_OUTPUTS} further outputs are not listed.`}
+                        />
+                    ) : null}
                     <DetailRow
                         label="Network fee"
                         value="Cannot be calculated from raw transaction data because it does not include the amounts of the spent inputs."

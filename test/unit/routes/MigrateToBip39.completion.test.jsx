@@ -130,6 +130,21 @@ describe('MigrateToBip39 safety and completion', () => {
         ));
     });
 
+    it('saves one wallet when the verify form is submitted twice in one event turn', async () => {
+        const context = renderMigration(makeMessaging({
+            addImportedWallet: vi.fn(() => new Promise(() => {})),
+        }));
+        await reachVerify(context);
+        answerQuiz();
+        const form = screen.getByRole('button', { name: 'Create BIP39 wallet' }).closest('form');
+        await act(async () => {
+            fireEvent.submit(form);
+            fireEvent.submit(form);
+        });
+
+        await waitFor(() => expect(context.messaging.addImportedWallet).toHaveBeenCalledTimes(1));
+    });
+
     it('trims the typed name before saving', async () => {
         const context = renderMigration();
         await reachVerify(context, { name: '  Cold storage  ' });
