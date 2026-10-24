@@ -155,6 +155,7 @@ export async function launchWithQrCamera(text, { launchArgs = [] } = {}) {
     const video = join(dir, 'qr.y4m');
     writeFileSync(video, qrToY4m(text));
     return chromium.launch({
+        channel: 'chromium',
         args: [
             '--disable-web-security',
             '--disable-features=IsolateOrigins,site-per-process',

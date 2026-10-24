@@ -106,6 +106,8 @@ export default defineConfig({
                 // Same host-matched user agent as playwright.config.js, so
                 // ControlOrMeta and the wallet's shortcut gate agree on a Mac host.
                 userAgent: desktopUserAgentForHost(),
+                // New headless: the full browser, which renders like the headed one users run.
+                channel: 'chromium',
                 launchOptions: {
                     args: [
                         '--disable-web-security',

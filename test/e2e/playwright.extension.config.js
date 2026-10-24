@@ -45,6 +45,7 @@ export default defineConfig({
         video: 'retain-on-failure',
         screenshot: 'only-on-failure',
         ...devices['Desktop Chrome'],
+        channel: 'chromium',
     },
     projects: [{ name: 'chromium-extension' }],
 });

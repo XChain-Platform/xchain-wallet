@@ -96,6 +96,14 @@ export default defineConfig({
                 // Playwright derives navigator.platform from this user agent,
                 // keeping ControlOrMeta aligned with the app's host shortcut gate.
                 userAgent: desktopUserAgentForHost(),
+                // New headless: the full browser, which renders like the headed one users run.
+                channel: 'chromium',
+                launchOptions: {
+                    // The dev-mock suite reaches only loopback. Route handlers do not
+                    // cover WebSockets, so the resolver refuses every other host, which
+                    // keeps a spec from reaching a live explorer by any transport.
+                    args: ['--host-resolver-rules=MAP * ~NOTFOUND, EXCLUDE localhost, EXCLUDE 127.0.0.1'],
+                },
             },
         },
     ],
