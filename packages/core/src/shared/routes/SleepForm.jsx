@@ -204,8 +204,16 @@ export function SleepForm({ walletId, onBack, mode, initialChainId, initialTick,
     const [reviewedParams, setReviewedParams] = useState(/** @type {Record<string, string> | null} */ (null));
     const [refreshingHeight, setRefreshingHeight] = useState(false);
     const passwordRef = useRef(/** @type {HTMLInputElement | null} */ (null));
+    const mountedRef = useRef(true);
+    const reviewInFlightRef = useRef(false);
+    const submitInFlightRef = useRef(false);
     const chainIdRef = useRef(chainId);
     chainIdRef.current = chainId;
+
+    useEffect(() => {
+        mountedRef.current = true;
+        return () => { mountedRef.current = false; };
+    }, []);
 
     const { settings } = useSettings();
     const confirmAction = useConfirmAction();
@@ -408,85 +416,97 @@ export function SleepForm({ walletId, onBack, mode, initialChainId, initialTick,
 
     async function handleReview(event) {
         event.preventDefault();
-        const initialError = validationError(currentHeight, { requireHeight: false });
-        if (initialError) { setFormError(initialError); return; }
-        if (isTick && issuerEligibility.pending) {
-            setFormError(`Wait for the wallet to verify the current owner of ${ticker}.`);
-            return;
-        }
-        if (isTick && issuerEligibility.error) {
-            setFormError(issuerEligibility.error);
-            return;
-        }
-        let height = currentHeight;
-        if (resumeMode === 'until') {
-            setRefreshingHeight(true);
-            try {
-                height = await refreshHeight();
-            } catch (err) {
-                setFormError(err.message);
+        if (reviewInFlightRef.current) return;
+        reviewInFlightRef.current = true;
+        try {
+            const initialError = validationError(currentHeight, { requireHeight: false });
+            if (initialError) { setFormError(initialError); return; }
+            if (isTick && issuerEligibility.pending) {
+                setFormError(`Wait for the wallet to verify the current owner of ${ticker}.`);
                 return;
-            } finally {
-                setRefreshingHeight(false);
             }
+            if (isTick && issuerEligibility.error) {
+                setFormError(issuerEligibility.error);
+                return;
+            }
+            let height = currentHeight;
+            if (resumeMode === 'until') {
+                setRefreshingHeight(true);
+                try {
+                    height = await refreshHeight();
+                } catch (err) {
+                    setFormError(err.message);
+                    return;
+                } finally {
+                    setRefreshingHeight(false);
+                }
+            }
+            if (!mountedRef.current) return;
+            const freshError = validationError(height);
+            if (freshError) { setFormError(freshError); return; }
+            const params = resumeMode === 'until'
+                ? { ...actionParams, RESUME_BLOCK: String(resumeBlockFor(height, durationBlockCount)) }
+                : actionParams;
+            setReviewedParams(params);
+            setFormError(null);
+            if (!isTick) setTypedConfirm('');
+            // Address self-lock always uses the legacy review stage so the typed
+            // confirm + irreversibility warning sit in front of the signature.
+            if (!isWatcherMode && isTick) { await openConfirmModal(params); return; }
+            setStage('review');
+        } finally {
+            reviewInFlightRef.current = false;
         }
-        const freshError = validationError(height);
-        if (freshError) { setFormError(freshError); return; }
-        const params = resumeMode === 'until'
-            ? { ...actionParams, RESUME_BLOCK: String(resumeBlockFor(height, durationBlockCount)) }
-            : actionParams;
-        setReviewedParams(params);
-        setFormError(null);
-        if (!isTick) setTypedConfirm('');
-        // Address self-lock always uses the legacy review stage so the typed
-        // confirm + irreversibility warning sit in front of the signature.
-        if (!isWatcherMode && isTick) { openConfirmModal(params); return; }
-        setStage('review');
     }
 
     const hwSignerInfo = useSignerInfo({ walletId, signerId: isHwSource ? fromAddress?.signerId : null });
 
     async function handleSubmit(event) {
         event.preventDefault();
-        if (stage === 'submitting') return;
+        if (stage === 'submitting' || submitInFlightRef.current) return;
         if (!isWatcherMode && !isHwSource && (!signerReady && password.length === 0)) return;
         if (!isWatcherMode && isHwSource && hwStatus !== 'available') return;
         if (!typedConfirmOk) return;
-        setStage('submitting');
-        setSubmitError(null);
-        const params = reviewedParams || actionParams;
-        const staleError = await wakeBlockFreshnessError(params);
-        if (staleError) {
-            setSubmitError(staleError);
-            setStage('review');
-            return;
-        }
+        submitInFlightRef.current = true;
         try {
-            const res = await submit({
-                params,
-                password,
-                extraBase: {
-                    payFeeInNativeCoin: nativeFee.flag,
-                    ...(feePerKb != null ? { feePerKb } : {}),
-                },
-                encoderOpts: {
-                    payFeeInNativeCoin: nativeFee.flag,
-                    ...(feePerKb != null ? { feePerKb } : {}),
-                },
-            });
-            setResult(res);
-            setPassword('');
-            setStage('done');
-        } catch (err) {
-            const isBadPassword = err?.name === 'InvalidPasswordError';
-            setSubmitError(isBadPassword ? 'Incorrect password.' : submitFailureMessage(err, {
-                chainId,
-                coinTicker,
-                mandatory: nativeFee.mandatory,
-                fallback: humanizeError(err, titleNoun.toLowerCase()).message,
-            }));
-            setStage('review');
-            if (!isWatcherMode && !isHwSource) { passwordRef.current?.focus(); passwordRef.current?.select(); }
+            setStage('submitting');
+            setSubmitError(null);
+            const params = reviewedParams || actionParams;
+            const staleError = await wakeBlockFreshnessError(params);
+            if (staleError) {
+                setSubmitError(staleError);
+                setStage('review');
+                return;
+            }
+            try {
+                const res = await submit({
+                    params,
+                    password,
+                    extraBase: {
+                        payFeeInNativeCoin: nativeFee.flag,
+                        ...(feePerKb != null ? { feePerKb } : {}),
+                    },
+                    encoderOpts: {
+                        payFeeInNativeCoin: nativeFee.flag,
+                        ...(feePerKb != null ? { feePerKb } : {}),
+                    },
+                });
+                setResult(res);
+                setPassword('');
+                setStage('done');
+            } catch (err) {
+                const isBadPassword = err?.name === 'InvalidPasswordError';
+                setSubmitError(isBadPassword ? 'Incorrect password.' : submitFailureMessage(err, {
+                    chainId,
+                    coinTicker,
+                    mandatory: nativeFee.mandatory,
+                    fallback: humanizeError(err, titleNoun.toLowerCase()).message,
+                }));
+                setStage('review');
+                if (!isWatcherMode && !isHwSource) { passwordRef.current?.focus(); passwordRef.current?.select(); }
+            }
+        } finally {
+            submitInFlightRef.current = false;
         }
     }
 
