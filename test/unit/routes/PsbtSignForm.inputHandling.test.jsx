@@ -14,6 +14,7 @@ import {
     PsbtSignForm,
     psbtInputError,
     psbtReviewError,
+    psbtSighashError,
 } from '../../../packages/core/src/shared/routes/PsbtSignForm.jsx';
 import { encodeBbqrPsbtFrames } from '../../../packages/core/src/uri/bbqrPsbt.js';
 
@@ -344,5 +345,48 @@ describe('PSBT form input controls', () => {
 
         await waitFor(() => expect(screen.queryByTestId('fake-psbt-scan')).toBe(null));
         expect(screen.getByLabelText(/Unsigned transaction/).value).toBe(PSBT_HEX);
+    });
+});
+
+describe('PSBT signature type review', () => {
+    const OWN = ADDRESSES[BTC][0].address;
+    const inputWith = (sighashType, extra = {}) => ({
+        address: OWN, value: 1_000, prevTxHash: '00'.repeat(32), prevTxIndex: 0, sighashType, ...extra,
+    });
+
+    it.each([2, 3, 0x81, 0x82, 0x83, 0x55])('names a signed input that asks for signature type %i', (type) => {
+        const decomposed = { inputs: [inputWith(1), inputWith(type)], outputs: [] };
+        expect(psbtSighashError(decomposed, OWN)).toMatch(/^Input 2 asks for a signature that leaves part of the transaction open/);
+    });
+
+    it('accepts an unset type and SIGHASH_ALL, and a taproot input on its default type', () => {
+        expect(psbtSighashError({ inputs: [inputWith(null), inputWith(undefined), inputWith(1)] }, OWN)).toBeNull();
+        expect(psbtSighashError({ inputs: [inputWith(0, { scriptType: 'p2tr' })] }, OWN)).toBeNull();
+        expect(psbtSighashError({ inputs: [inputWith(1, { scriptType: 'p2tr' })] }, OWN)).toMatch(/^Input 1 asks/);
+    });
+
+    it('ignores an input the signing address does not own', () => {
+        expect(psbtSighashError({ inputs: [inputWith(2, { address: 'someone-else' })] }, OWN)).toBeNull();
+    });
+
+    it('refuses before the password step and keeps signing disabled', async () => {
+        const messaging = mount(messagingFor({
+            parsePsbtRequest: vi.fn().mockResolvedValue({
+                decomposed: {
+                    inputs: [inputWith(2)],
+                    outputs: [{ address: 'bc1qrecipient', value: 900 }],
+                },
+                action: null,
+                actionDecodeReason: 'NO_OP_RETURN',
+            }),
+        }));
+        await screen.findByRole('button', { name: /Network: Bitcoin/ });
+        fireEvent.change(screen.getByLabelText(/Unsigned transaction/), { target: { value: PSBT_HEX } });
+
+        expect(await screen.findByRole('alert')).toHaveTextContent(
+            'Input 1 asks for a signature that leaves part of the transaction open to change after you sign.',
+        );
+        expect(screen.getByRole('button', { name: 'Sign transaction' })).toBeDisabled();
+        expect(messaging.signPsbtUserInitiated).not.toHaveBeenCalled();
     });
 });
