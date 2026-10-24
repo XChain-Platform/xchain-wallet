@@ -1068,6 +1068,22 @@ export function createBackgroundHost(deps) {
         }
     }
 
+    // A stored confirm whose PSBT a send has just broadcast is spent. The popup
+    // clears its own session after the send returns, but a popup that closes
+    // between Approve and that return never does, and Home would then offer to
+    // finish a payment that has already left the wallet. The host drops it at
+    // the moment of the broadcast, so the clear does not depend on the popup
+    // staying open.
+    async function dropConfirmSessionsForPsbt(psbtHex) {
+        if (!confirmSessionStorage || typeof psbtHex !== 'string' || psbtHex.length === 0) return;
+        try {
+            const stored = await confirmSessionStorage.loadSessions();
+            for (const [id, session] of Object.entries(stored || {})) {
+                if (session?.composed?.psbt === psbtHex) await confirmSessionStorage.removeSession(id);
+            }
+        } catch { /* the popup's own clear still runs when it is open */ }
+    }
+
     async function sendWithHold(req, flowDeps) {
         await assertActiveSendNetwork({ ...req, ...flowDeps });
         const legs = Array.isArray(req?.legs) && req.legs.length > 0
@@ -1103,7 +1119,9 @@ export function createBackgroundHost(deps) {
                 if (holdBeforeBroadcast) await holdBeforeBroadcast(...args);
                 await assertActiveSendNetwork(opts);
             };
-            return await sendToken({ ...opts, beforeBroadcast });
+            const sent = await sendToken({ ...opts, beforeBroadcast });
+            await dropConfirmSessionsForPsbt(opts.prebuiltPsbt?.psbtHex);
+            return sent;
         } finally {
             activeSendIntents.delete(intentKey);
         }

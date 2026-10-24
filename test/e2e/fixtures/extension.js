@@ -75,6 +75,10 @@ export const test = base.extend({
                 // and the regtest explorer sends no CORS headers.
                 '--disable-web-security',
                 '--disable-features=IsolateOrigins,site-per-process',
+                // The platform's public hosts fail to resolve, so a run that has
+                // not yet switched to regtest cannot reach a mainnet service
+                // from the page or the service worker.
+                '--host-resolver-rules=MAP *.xchain.io ~NOTFOUND, MAP *.dankest.io ~NOTFOUND, MAP *.dankest.llc ~NOTFOUND',
             ],
         });
         await use(context);
