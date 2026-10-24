@@ -28,6 +28,8 @@ const messages = {
     'multisig.share.copyPayload': 'Copy cosigner share payload',
     'multisig.share.xpub': 'xpub',
     'multisig.share.account': 'Account {path}',
+    'multisig.overCeilingNotice':
+        "This multisig has more cosigners than its address type supports, so funds sent to it can't be spent.",
     'multisig.share.publicKey': 'Public key',
     'multisig.share.masterFingerprint': 'Master fingerprint',
     'multisig.share.derivationPath': 'Derivation path',

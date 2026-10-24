@@ -52,6 +52,7 @@ import styles from './Receive.module.css';
 import qrStyles from '../../ui/QrDisplay.module.css';
 import { t } from '../../i18n/index.js';
 import '../../i18n/locales/en/history.js';
+import '../../i18n/locales/en/multisig.js';
 import '../../i18n/locales/en/receive.js';
 import '../../i18n/locales/en/verifySignature.js';
 
@@ -645,7 +646,7 @@ export function Receive({ walletId, accountId, prefill = null, onBack, onChangeA
         }
         const descriptor = chainRegistry.get(activeChainId ?? '');
         let cancelled = false;
-        Promise.all(multisigs.map(async (m) => {
+        Promise.all(multisigs.filter((m) => m.address).map(async (m) => {
             try {
                 const uri = descriptor
                     ? uriLib.encodeBip21Uri({ scheme: descriptor.uriScheme, address: m.address })
@@ -1386,7 +1387,11 @@ export function Receive({ walletId, accountId, prefill = null, onBack, onChangeA
                 </>
             ) : null}
 
-            {multisigs.map((multisig) => (
+            {multisigs.map((multisig) => (multisig.overCeiling ? (
+                <FormNotice key={multisig.multisigConfigId} variant="warning" role="alert">
+                    {t('multisig.overCeilingNotice')}
+                </FormNotice>
+            ) : (
                 <section
                     key={multisig.multisigConfigId}
                     role="group"
@@ -1428,7 +1433,7 @@ export function Receive({ walletId, accountId, prefill = null, onBack, onChangeA
                         </p>
                     ) : null}
                 </section>
-            ))}
+            )))}
 
         </>
     );
