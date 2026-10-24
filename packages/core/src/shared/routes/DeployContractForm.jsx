@@ -208,6 +208,10 @@ export function DeployContractForm({ walletId, onBack }) {
         /** @type {{ bytes: number, withinLimit: boolean } | null} */ (null),
     );
     const [suggestedGas, setSuggestedGas] = useState(/** @type {number | null} */ (null));
+    // The one gas value the form checks, plans with and composes: the typed
+    // field with its spaces trimmed, else the suggestion. Validating one string
+    // and sending another let " 250000 " pass review and reach the encoder padded.
+    const effectiveGasLimit = String(gasLimit).trim() || (suggestedGas ? String(suggestedGas) : '');
     const [suggestedRationale, setSuggestedRationale] = useState(/** @type {string | null} */ (null));
     // The contract's own identity, as the SDK reads it out of the pasted
     // source. Null means "no answer" (an SDK or a shell without the check), and
@@ -351,7 +355,7 @@ export function DeployContractForm({ walletId, onBack }) {
             // Bump to v1 when the user opts into contract-staking metadata; otherwise stay on v0.
             VERSION: hasCooldown ? '1' : '0',
             CODE: code,
-            GAS_LIMIT: String(gasLimit || suggestedGas || ''),
+            GAS_LIMIT: effectiveGasLimit,
         };
         // PC-38: CONSTRUCTOR_PARAMS is a REST field on the non-stakeable
         // formats (`...CONSTRUCTOR_PARAMS` on v0/v2), so the wire wants the
@@ -366,13 +370,13 @@ export function DeployContractForm({ walletId, onBack }) {
             p.CONSTRUCTOR_PARAMS = hasCooldown ? ctorParts[0] : ctorParts;
         }
         if (hasCooldown) {
-            p.COOLDOWN_BLOCKS = cooldownBlocks.trim();
+            p.COOLDOWN_BLOCKS = /^\d+$/.test(cooldownBlocks.trim()) ? String(Number(cooldownBlocks.trim())) : cooldownBlocks.trim();
             // Default to BURN if cooldown is set but destination is blank; the indexer
             // applies the same default, but surfacing it here makes review honest.
             p.SLASH_DESTINATION = slashDestination.trim() || 'BURN';
         }
         return p;
-    }, [code, gasLimit, suggestedGas, constructorParams, cooldownBlocks, slashDestination]);
+    }, [code, effectiveGasLimit, constructorParams, cooldownBlocks, slashDestination]);
 
     // PC-38: load the template list + any resumable run once the chain is known.
     useEffect(() => {
@@ -430,7 +434,7 @@ export function DeployContractForm({ walletId, onBack }) {
         messaging.planDeploy({
             chainId,
             code,
-            gasLimit: String(gasLimit || suggestedGas || ''),
+            gasLimit: effectiveGasLimit,
             constructorParams: constructorParams.trim() || undefined,
         })
             .then((p) => { if (!cancelled) setPlan(p); })
@@ -439,7 +443,7 @@ export function DeployContractForm({ walletId, onBack }) {
             // SDK constant as a limit the author can act on.
             .catch((e) => { if (!cancelled) setPlanError(humanizeDeployDiagnostic(e).message || 'Could not size this contract.'); });
         return () => { cancelled = true; };
-    }, [messaging, chainId, code, gasLimit, suggestedGas, constructorParams]);
+    }, [messaging, chainId, code, effectiveGasLimit, constructorParams]);
 
     // Re-read the contract's identity whenever the source changes. Static and
     // host-side (an acorn walk, no network), so it rides the same edit cadence
@@ -662,7 +666,7 @@ export function DeployContractForm({ walletId, onBack }) {
             setFormError('Contract source is required.');
             return;
         }
-        const gas = String(gasLimit).trim() || (suggestedGas ? String(suggestedGas) : '');
+        const gas = effectiveGasLimit;
         if (!/^\d+$/.test(gas) || !/[1-9]/.test(gas)) {
             setFormError('Gas limit must be a positive whole number. Tap "Suggest gas" for a heuristic estimate.');
             return;
@@ -678,8 +682,11 @@ export function DeployContractForm({ walletId, onBack }) {
             return;
         }
         if (cooldownBlocks.trim() !== '') {
-            const cb = Number(cooldownBlocks.trim());
-            if (!Number.isInteger(cb) || cb < 1 || cb > 100000) {
+            const cooldownText = cooldownBlocks.trim();
+            const cb = Number(cooldownText);
+            // Digits only: Number() also reads "1e3", "1.0" and "0x10" as whole
+            // numbers, and the encoder is handed the text as typed.
+            if (!/^\d+$/.test(cooldownText) || !Number.isInteger(cb) || cb < 1 || cb > 100000) {
                 setFormError('Cooldown blocks must be an integer between 1 and 100000.');
                 return;
             }
@@ -839,7 +846,7 @@ export function DeployContractForm({ walletId, onBack }) {
                     chainId,
                     from: base.from,
                     code,
-                    gasLimit: String(gasLimit || suggestedGas || ''),
+                    gasLimit: effectiveGasLimit,
                     // No name is passed: the flow labels the run with the
                     // contract's own `meta.name`, read off the same source.
                     constructorParams: constructorParams.trim() || undefined,

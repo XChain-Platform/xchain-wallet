@@ -440,10 +440,17 @@ export function BetFeedDetail({ walletId, chainId, feedIndex, onOpenOracle, onSe
         }
     }
 
+    // The error leads the page, above the market's terms, so a phone that tapped
+    // Review bet from the bottom of the form is taken to it.
+    useEffect(() => {
+        if (!formError) return;
+        document.querySelector('main [role="alert"]')?.scrollIntoView?.({ block: 'nearest' });
+    }, [formError]);
+
     const header = <PageHeader onBack={onBack} title="Market" />;
-    const wrap = (children) => (
+    const wrap = (children, notices) => (
         <Screen variant={variant} header={header}>
-            <ListPage>{children}</ListPage>
+            <ListPage notices={notices}>{children}</ListPage>
         </Screen>
     );
 
@@ -519,6 +526,18 @@ export function BetFeedDetail({ walletId, chainId, feedIndex, onOpenOracle, onSe
         .some((address) => String(address.address) === String(feed.source));
     const resolveWindowOpen = feed.feed_status === 'closed'
         && Number(feed.expire_at) > Math.floor(Date.now() / 1000);
+
+    // The place-bet form is only on the page for an open market this wallet does
+    // not run. Its demo note and its error lead the page content: the form sits
+    // below the market's terms, and a notice there is easy to miss.
+    const showsBetForm = feed.feed_status === 'open'
+        && !(fromAddress && feed.source === fromAddress.address);
+    const pageNotices = (showsBetForm && demoGuard.blocked) || formError ? (
+        <>
+            {showsBetForm ? demoGuard.note : null}
+            {formError ? <StatusMessage variant="error">{formError}</StatusMessage> : null}
+        </>
+    ) : null;
 
     return wrap(
         <>
@@ -679,7 +698,6 @@ export function BetFeedDetail({ walletId, chainId, feedIndex, onOpenOracle, onSe
                     <>
                         <SectionHeader as="h3" title="Place a bet" />
                         <FormPage
-                            demoGuard={demoGuard}
                             label="Place a bet"
                             onSubmit={(event) => event.preventDefault()}
                             actions={(
@@ -785,7 +803,7 @@ export function BetFeedDetail({ walletId, chainId, feedIndex, onOpenOracle, onSe
                 nothing at all, unable to tell a wallet that refused from a bet that
                 was broadcast and paid for. By this point the money is spent either
                 way, so the txid is owed whatever the market's status has become. */}
-            {formError ? <StatusMessage variant="error">{formError}</StatusMessage> : null}
+            {demoGuard.dialog}
             {result ? (
                 <div className={styles.listCard} data-testid="bet-result">
                     <p className={styles.summary}>
@@ -826,5 +844,6 @@ export function BetFeedDetail({ walletId, chainId, feedIndex, onOpenOracle, onSe
             )}
 
         </>,
+        pageNotices,
     );
 }

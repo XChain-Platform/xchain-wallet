@@ -152,10 +152,13 @@ export const FormPage = forwardRef(function FormPage(
     // state's notice in one place and an all-empty list shows nothing.
     const statusContent = Array.isArray(status) ? Children.toArray(status.filter(Boolean)) : status;
     const hasStatus = Array.isArray(statusContent) ? statusContent.length > 0 : !!statusContent;
-    const statusNode = demoBlocked || hasStatus || controlNoticeList.length > 0
+    // A page that leads with the demo note itself passes the guard without it:
+    // the form is still blocked and still hides its own notices, but draws none.
+    const demoNote = demoBlocked ? demoGuard.note : null;
+    const statusNode = demoNote || (!demoBlocked && (hasStatus || controlNoticeList.length > 0))
         ? (
             <div className={styles.status}>
-                {demoBlocked ? demoGuard.note : (hasStatus ? statusContent : null)}
+                {demoBlocked ? demoNote : (hasStatus ? statusContent : null)}
                 {!demoBlocked ? controlNoticeList.map(([id, entry]) => (
                     <StatusMessage key={id} variant={entry.variant} role={entry.role} lead={entry.lines ? undefined : entry.lead} testId={entry.testId}>
                         {entry.lines ? <NoticeLines lead={entry.lead} lines={entry.lines} /> : entry.text}

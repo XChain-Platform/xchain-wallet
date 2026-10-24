@@ -174,7 +174,7 @@ describe('contract list failure containment', () => {
         )));
 
         await waitFor(() => {
-            expect(screen.getAllByText(/Couldn't load contracts\. Try again\./)).toHaveLength(3);
+            expect(screen.getAllByText(/Couldn't load contracts\. Try again\./)).toHaveLength(1);
         });
     });
 

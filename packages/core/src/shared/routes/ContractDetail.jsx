@@ -102,6 +102,11 @@ export function ContractDetail({
     const [executionsTotal, setExecutionsTotal] = useState(/** @type {number | null} */ (null));
     const [executionsError, setExecutionsError] = useState(/** @type {string | null} */ (null));
     const [executionsLoading, setExecutionsLoading] = useState(true);
+    // The explorer's page size, learnt from the fullest page read for this
+    // contract. The last page is short, so the row count of the page on screen
+    // is not the page size: dividing the total by it invents pages and keeps
+    // Next live on the final one.
+    const [pageSizeSeen, setPageSizeSeen] = useState({ key: '', size: 0 });
     const [executionsCursor, setExecutionsCursor] = useState(() => ({
         chainId,
         contractActionIndex,
@@ -167,7 +172,12 @@ export function ContractDetail({
         messaging.getExecutionsForContract({ chainId, contractActionIndex, opts: { page: executionsPage } })
             .then((resp) => {
                 if (cancelled) return;
-                setExecutions(extractRows(resp));
+                const pageRows = extractRows(resp);
+                setExecutions(pageRows);
+                setPageSizeSeen((prev) => {
+                    const key = `${chainId}:${contractActionIndex}`;
+                    return { key, size: Math.max(prev.key === key ? prev.size : 0, pageRows.length) };
+                });
                 setExecutionsTotal(typeof resp?.total === 'number' ? resp.total : null);
                 setExecutionsLoading(false);
             })
@@ -180,6 +190,7 @@ export function ContractDetail({
         return () => { cancelled = true; };
     }, [chainId, contractActionIndex, executionsPage, messaging]);
 
+    const executionsPageSize = pageSizeSeen.key === `${chainId}:${contractActionIndex}` ? pageSizeSeen.size : 0;
     const owner = contract?.source || contract?.SOURCE || contract?.owner || contract?.OWNER;
     const isOwner = useMemo(
         () => !!owner && walletAddresses.some((a) => a === String(owner)),
@@ -239,9 +250,22 @@ export function ContractDetail({
         );
     }
 
+    // The deployer warning and a failed publication read are about the whole
+    // page, so they lead its content instead of sitting under the identity block.
+    const notices = deployError || ownerWithdraw === true ? (
+        <>
+            <OwnerWithdrawWarning ownerWithdraw={ownerWithdraw} />
+            {deployError ? (
+                <StatusMessage variant="error" className={styles.entryDescription}>
+                    {deployError}
+                </StatusMessage>
+            ) : null}
+        </>
+    ) : null;
+
     return (
         <Screen variant={variant} header={header}>
-            <ListPage>
+            <ListPage notices={notices}>
                 <section>
                     <SectionHeader
                         title={heading}
@@ -276,12 +300,6 @@ export function ContractDetail({
                             <div><strong>Owner withdraw:</strong> {ownerWithdraw ? 'Allowed' : 'Not allowed'}</div>
                         ) : null}
                     </dl>
-                    <OwnerWithdrawWarning ownerWithdraw={ownerWithdraw} />
-                    {deployError ? (
-                        <StatusMessage variant="error" className={styles.entryDescription}>
-                            {deployError}
-                        </StatusMessage>
-                    ) : null}
                 </section>
 
                 <Section
@@ -333,11 +351,20 @@ export function ContractDetail({
                             {executionsError}
                         </StatusMessage>
                     ) : executions.length === 0 ? (
-                        <EmptyState
-                            title="No contract calls yet"
-                            body="Calls recorded against this contract appear here."
-                            titleAs="p"
-                        />
+                        <>
+                            <EmptyState
+                                title="No contract calls yet"
+                                body="Calls recorded against this contract appear here."
+                                titleAs="p"
+                            />
+                            {/* A page past the last one is empty; Prev is the way back. */}
+                            <Pagination
+                                page={executionsPage}
+                                total={executionsTotal}
+                                pageSize={0}
+                                onChange={(page) => setExecutionsCursor({ chainId, contractActionIndex, page })}
+                            />
+                        </>
                     ) : (
                         <>
                             {executions.map((row, i) => (
@@ -357,7 +384,7 @@ export function ContractDetail({
                             <Pagination
                                 page={executionsPage}
                                 total={executionsTotal}
-                                pageSize={executions.length}
+                                pageSize={executionsPageSize || executions.length}
                                 onChange={(page) => setExecutionsCursor({ chainId, contractActionIndex, page })}
                             />
                         </>
@@ -499,9 +526,9 @@ function ExecutionStatusPill({ status }) {
 }
 
 function Pagination({ page, total, pageSize, onChange }) {
-    const hasNext = total === null
+    const hasNext = pageSize > 0 && (total === null
         ? pageSize >= 25  // heuristic when total is absent: a full page implies more
-        : total > page * pageSize;
+        : total > page * pageSize);
     const hasPrev = page > 1;
     if (!hasPrev && !hasNext) return null;
     return (
@@ -513,7 +540,7 @@ function Pagination({ page, total, pageSize, onChange }) {
             >
                 <Icon.BackIcon /> Prev
             </Button>
-            <span className={styles.entryDescription}>Page {page}{total !== null ? ` of ${Math.ceil(total / pageSize)}` : ''}</span>
+            <span className={styles.entryDescription}>Page {page}{total !== null && pageSize > 0 ? ` of ${Math.ceil(total / pageSize)}` : ''}</span>
             <Button
                 variant="ghost"
                 onClick={() => onChange(page + 1)}
