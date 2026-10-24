@@ -12,7 +12,7 @@ on:
   pull_request:
     branches: [master, develop]
 concurrency:
-  # On a PROTECTED branch (master, develop), group per COMMIT. Elsewhere, group
+  # On a PROTECTED branch (master, develop), group per RUN. Elsewhere, group
   # per ref.
   #
   # `cancel-in-progress: false` below is necessary but NOT sufficient, which was
@@ -24,9 +24,9 @@ concurrency:
   # already carried the fix, while the in-progress run on bc58ff47 correctly
   # survived. Half the defect, half the fix.
   #
-  # Per-commit grouping removes the contention rather than arbitrating it: two
-  # master commits are never in the same group, so neither can evict the other
-  # and every commit reaches a verdict the release gate can read. Pull requests
+  # Per-run grouping removes the contention rather than arbitrating it: two
+  # master runs are never in the same group, so neither can evict the other
+  # and every run reaches a verdict the release gate can read. Pull requests
   # keep per-ref grouping, where superseding is the whole point.
   #
   # develop joins master here rather than inheriting the feature-branch shape.
@@ -35,7 +35,7 @@ concurrency:
   # measurement below, and it is the branch a release is frozen FROM: the
   # ceremony requires green CI on the specific develop SHA a release branch is
   # cut at, which a run evicted while queued can never provide.
-  group: ci-${{ github.ref }}-${{ (github.ref == 'refs/heads/master' || github.ref == 'refs/heads/develop') && github.sha || 'ref' }}
+  group: ci-${{ github.ref }}-${{ (github.ref == 'refs/heads/master' || github.ref == 'refs/heads/develop') && github.sha || 'ref' }}-${{ (github.ref == 'refs/heads/master' || github.ref == 'refs/heads/develop') && github.run_id || 'latest' }}
   # Cancel superseded runs on pull requests and feature branches, where only the
   # latest push matters and runner minutes are the only cost. NEVER cancel on a
   # protected branch: the release gate (tools/release/verify-validated-commit.mjs)
@@ -366,7 +366,7 @@ jobs:
             echo "### regtest e2e venue run NOT RUN" >> "$GITHUB_STEP_SUMMARY"
             echo "The regtest venue is not configured for this repository, so the production-build regtest suite did not execute." >> "$GITHUB_STEP_SUMMARY"
           fi
-      - name: Wait for and open the regtest tunnel
+      - name: Open the regtest tunnel
         if: steps.venue.outputs.configured == 'true'
         run: |
           install -m 700 -d ~/.ssh
@@ -391,9 +391,14 @@ jobs:
             attempt=$((attempt + 1))
             sleep 30
           done
-      - name: Run regtest suite shard ${{ steps.shard.outputs.value }}
-        if: steps.venue.outputs.configured == 'true'
-        run: pnpm test:e2e:regtest --shard=${{ steps.shard.outputs.value }}
+
+          gateState="$RUNNER_TEMP/venue-gate-state"
+          printf '%s\n' venue-lock-acquired > "$gateState"
+          until grep -qx venue-lock-acquired "$gateState"; do
+            sleep 1
+          done
+          flock --exclusive "$RUNNER_TEMP/xchain-wallet-regtest.lock" \
+            pnpm test:e2e:regtest --shard=${{ steps.shard.outputs.value }}
         env:
           NODE_OPTIONS: --max-old-space-size=6144
       - name: Upload Playwright report
