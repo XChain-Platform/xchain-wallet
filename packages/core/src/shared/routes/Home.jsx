@@ -1521,6 +1521,12 @@ export function Home({ onLocked, onResumeConfirm, onSend, onReceive, onSwap, onE
                         // Offline already has its own message above; a degraded
                         // check words the empty tabs instead.
                         balancesUnchecked={!offline && reachabilityOverall === 'degraded'}
+                        // Home's own balance notice (offline, a failed or
+                        // running refresh) is the page's one message, so an
+                        // empty tab does not add "Fund your wallet" or a
+                        // second "could not be checked" from balances that
+                        // are only the last good load.
+                        balanceNoticeShown={offline || Boolean(balanceStatusText) || cachedBalancesUpdating}
                         onRecheckBalances={recheckBalances}
                         onCommandPalette={onCommandPalette}
                         // Only shells without a nav surface pass this;

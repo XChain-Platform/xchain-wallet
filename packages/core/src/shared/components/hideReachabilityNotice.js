@@ -30,6 +30,23 @@ export function useHideReachabilityNotice(active) {
 }
 
 /**
+ * Asks for the shell's reachability notice while `active`, on a screen of a
+ * route that otherwise holds only local data (Settings' Network & endpoints
+ * section, where a user fixes reachability).
+ *
+ * @param {boolean} active
+ */
+export function useWantReachabilityNotice(active) {
+    const shellNotices = useContext(ShellNoticesContext);
+    const setWanted = shellNotices?.setReachabilityWanted;
+    useLayoutEffect(() => {
+        if (!active || !setWanted) return undefined;
+        setWanted((count) => count + 1);
+        return () => setWanted((count) => count - 1);
+    }, [active, setWanted]);
+}
+
+/**
  * Component form of useHideReachabilityNotice, for a screen that decides
  * after its early returns, where a hook call is not allowed.
  *
@@ -37,5 +54,15 @@ export function useHideReachabilityNotice(active) {
  */
 export function HideReachabilityNotice({ active = true }) {
     useHideReachabilityNotice(active);
+    return null;
+}
+
+/**
+ * Component form of useWantReachabilityNotice.
+ *
+ * @param {{ active?: boolean }} props
+ */
+export function WantReachabilityNotice({ active = true }) {
+    useWantReachabilityNotice(active);
     return null;
 }

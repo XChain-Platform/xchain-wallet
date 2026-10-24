@@ -19,7 +19,7 @@
 // seen-flag is set.
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { render, screen, fireEvent, cleanup, act, waitFor } from '@testing-library/react';
+import { render, screen, fireEvent, cleanup, act, waitFor, within } from '@testing-library/react';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import React from 'react';
@@ -544,5 +544,57 @@ describe('Onboarding: demo entry', () => {
         expect(importMnemonic.mock.calls[0][0].password).toMatch(/^[0-9a-f]{64}$/);
         expect(globalThis.localStorage.getItem('xc:demoWalletId')).toBe('demo-wallet');
         expect(globalThis.localStorage.getItem('xc:demoWalletPassword')).toBe(importMnemonic.mock.calls[0][0].password);
+    });
+
+    it.each([
+        ['named', Object.assign(new Error('A wallet already exists. Unlock or reset first.'), { name: 'WalletExistsError' })],
+        ['passed across a message boundary', new Error('A wallet already exists. Unlock or reset first.')],
+    ])('offers Unlock when another tab already created a wallet (%s)', async (_label, refusal) => {
+        // A Welcome tab left open while another tab made a real wallet: the
+        // demo cannot start over it, and the lock screen is the way on.
+        stubMatchMedia(false);
+        globalThis.localStorage.setItem('xc:licenseAcceptedAt', new Date().toISOString());
+        globalThis.localStorage.setItem('xc:licenseAcceptedVersion', LICENSE_VERSION);
+        globalThis.localStorage.setItem('xc:onboardingExplainerSeenAt', new Date().toISOString());
+        const importMnemonic = vi.fn(async () => { throw refusal; });
+        const onDemoEntered = vi.fn();
+        const onWalletFound = vi.fn();
+
+        render(
+            <MessagingProvider shell="web" messaging={{ importMnemonic }}>
+                <Onboarding
+                    onCreate={() => {}}
+                    onImport={() => {}}
+                    onDemoEntered={onDemoEntered}
+                    onWalletFound={onWalletFound}
+                />
+            </MessagingProvider>,
+        );
+
+        fireEvent.click(screen.getByRole('button', { name: 'Try in demo mode' }));
+        const alert = await screen.findByRole('alert');
+        expect(alert).toHaveTextContent('This device already has a wallet. Unlock it to continue.');
+        fireEvent.click(within(alert).getByRole('button', { name: 'Unlock' }));
+        expect(onWalletFound).toHaveBeenCalledTimes(1);
+        expect(onDemoEntered).not.toHaveBeenCalled();
+    });
+
+    it('keeps any other demo failure as it was, with no Unlock', async () => {
+        stubMatchMedia(false);
+        globalThis.localStorage.setItem('xc:licenseAcceptedAt', new Date().toISOString());
+        globalThis.localStorage.setItem('xc:licenseAcceptedVersion', LICENSE_VERSION);
+        globalThis.localStorage.setItem('xc:onboardingExplainerSeenAt', new Date().toISOString());
+        const importMnemonic = vi.fn(async () => { throw new Error('Storage is full.'); });
+
+        render(
+            <MessagingProvider shell="web" messaging={{ importMnemonic }}>
+                <Onboarding onCreate={() => {}} onImport={() => {}} onDemoEntered={() => {}} onWalletFound={() => {}} />
+            </MessagingProvider>,
+        );
+
+        fireEvent.click(screen.getByRole('button', { name: 'Try in demo mode' }));
+        const alert = await screen.findByRole('alert');
+        expect(alert).toHaveTextContent('Storage is full.');
+        expect(within(alert).queryByRole('button', { name: 'Unlock' })).toBeNull();
     });
 });

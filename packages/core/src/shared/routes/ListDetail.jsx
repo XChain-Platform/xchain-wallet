@@ -206,6 +206,8 @@ export function ListDetail({ walletId, chainId, actionIndex, onBack, onFork, onS
 
     return wrap(
         <>
+            {/* The ownership warning is the page notice, the first item of the content. */}
+            {readOnlyReason ? <StatusMessage variant="warning">{readOnlyReason}</StatusMessage> : null}
             <dl className={styles.detailsList}>
                 <dt className={styles.detailsLabel}>Network</dt>
                 <dd className={styles.detailsValue}>{descriptor ? <ChainBadge descriptor={descriptor} size="sm" showName={false} /> : 'Selected network'}</dd>
@@ -333,7 +335,6 @@ export function ListDetail({ walletId, chainId, actionIndex, onBack, onFork, onS
             />
 
             <SectionHeader title="Actions" />
-            {readOnlyReason ? <StatusMessage variant="warning">{readOnlyReason}</StatusMessage> : null}
             {canManage ? (
                 <div className={styles.actions}>
                     {onShare ? (
@@ -382,7 +383,12 @@ export function ListDetail({ walletId, chainId, actionIndex, onBack, onFork, onS
 function MemberList({ items, isTick, messaging, chainId }) {
     const [visibleLimit, setVisibleLimit] = useState(MEMBERS_PAGE_SIZE);
     if (items.length === 0) {
-        return <EmptyState title="No list members" body="Addresses added to this list appear here." titleAs="h3" />;
+        // A plain line, not a page message: the page's notice is the ownership warning.
+        return (
+            <p style={{ margin: 0, color: 'var(--xc-text-muted)', fontSize: 'var(--xc-text-sm)' }}>
+                No list members. Addresses added to this list appear here.
+            </p>
+        );
     }
     const visibleItems = items.slice(0, visibleLimit);
     return (

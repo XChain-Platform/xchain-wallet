@@ -34,6 +34,7 @@ import { bucketizeMatches, PERIODS, DEFAULT_PERIOD_ID } from '../../market/bucke
 import { useMessaging } from '../useMessaging.js';
 import { sampleMatchesFor } from '../../market/sampleMarketData.js';
 import { readFailureMessage } from '../utils/readFailureMessage.js';
+import { useReportLoadFailure } from './pageLoadFailures.jsx';
 import { describeChartSeries } from './Sparkline.jsx';
 import { withRequestTimeout } from '../utils/requestTimeout.js';
 import { t } from '../../i18n/index.js';
@@ -60,6 +61,8 @@ export function MarketChart({ chainId, tick1, tick2, demo = false, height = '120
     const [chartReady, setChartReady] = useState(false);
     const [chartUnavailable, setChartUnavailable] = useState(false);
     const [retryKey, setRetryKey] = useState(0);
+    // On a page that shows one load error, the page names this failure.
+    const pageShowsError = useReportLoadFailure('prices', Boolean(loadError));
 
     const period = useMemo(
         () => PERIODS.find((p) => p.id === periodId) ?? PERIODS.find((p) => p.id === DEFAULT_PERIOD_ID),
@@ -291,7 +294,7 @@ export function MarketChart({ chainId, tick1, tick2, demo = false, height = '120
                     <Skeleton.List rows={3} avatar={false} rowHeight={28} />
                 </div>
             ) : null}
-            {loadError ? (
+            {loadError && !pageShowsError ? (
                 <StatusMessage
                     variant="error"
                     recovery={{ label: t('common.tryAgain'), onAction: () => setRetryKey((value) => value + 1) }}

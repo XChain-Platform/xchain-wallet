@@ -28,6 +28,7 @@ import { DisplaySection } from '../components/settings/DisplaySection.jsx';
 import { KeyboardSection } from '../components/settings/KeyboardSection.jsx';
 import { FeesSection } from '../components/settings/FeesSection.jsx';
 import { LanguageRegionSection } from '../components/settings/LanguageRegionSection.jsx';
+import { WantReachabilityNotice } from '../components/hideReachabilityNotice.js';
 import { NetworkEndpointsSection } from '../components/settings/NetworkEndpointsSection.jsx';
 import { NetworkSection } from '../components/settings/NetworkSection.jsx';
 import { normalizeActiveNetwork } from '../utils/activeNetworkSwitch.js';
@@ -600,6 +601,7 @@ export function Settings({
                     scrollKey={section.id}
                     restoreScroll={false}
                 >
+                    <WantReachabilityNotice active={section.id === 'network-endpoints'} />
                     <SettingsPageTemplate view="subpage">
                         <SettingsSearchHighlight target={searchTarget}>
                             <SectionComponent

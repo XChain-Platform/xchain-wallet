@@ -37,8 +37,16 @@ let nativeListener = null;
  */
 let nativeBackRoot = null;
 let homeBackAt = null;
+/** True from the start of a page unload (a reload or a navigation away) until the grace below passes. */
+let unloading = false;
+let unloadTimer = null;
 
 const HOME_BACK_WINDOW_MS = 2000;
+// A `history.back()` issued while a reload is starting supersedes the reload,
+// so the sentinel is left alone for this long after `beforeunload`. A page
+// that stays open (the user kept a form in the leave prompt) syncs again
+// once the grace has passed.
+const UNLOAD_GRACE_MS = 2000;
 
 const hasHistory = () => typeof window !== 'undefined' && Boolean(window.history?.pushState);
 
@@ -99,6 +107,7 @@ function ensureNativeListener() {
 function sync() {
     syncScheduled = false;
     if (!hasHistory()) return;
+    if (unloading) return;
     const want = handlers.some((entry) => entry.kind !== 'route')
         || (!routeHistoryManaged && handlers.length > 0);
     if (want && !armed) {
@@ -112,6 +121,16 @@ function sync() {
         ignoreNextPop = true;
         window.history.back();
     }
+}
+
+function onBeforeUnload() {
+    unloading = true;
+    clearTimeout(unloadTimer);
+    unloadTimer = setTimeout(() => {
+        unloading = false;
+        unloadTimer = null;
+        scheduleSync();
+    }, UNLOAD_GRACE_MS);
 }
 
 /**
@@ -164,6 +183,7 @@ export function registerBackHandler(run, kind = 'overlay') {
     ensureNativeListener();
     if (!listening && typeof window !== 'undefined') {
         window.addEventListener('popstate', onPopState);
+        window.addEventListener('beforeunload', onBeforeUnload);
         window.addEventListener('keydown', onKeyDown, true);
         window.addEventListener('xchain:native-edge-back', onNativeEdgeBack);
         listening = true;
@@ -254,8 +274,12 @@ export function resetBackStackForTests() {
     armed = false;
     ignoreNextPop = false;
     syncScheduled = false;
+    unloading = false;
+    clearTimeout(unloadTimer);
+    unloadTimer = null;
     if (listening && typeof window !== 'undefined') {
         window.removeEventListener('popstate', onPopState);
+        window.removeEventListener('beforeunload', onBeforeUnload);
         window.removeEventListener('keydown', onKeyDown, true);
         window.removeEventListener('xchain:native-edge-back', onNativeEdgeBack);
     }

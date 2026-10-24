@@ -198,6 +198,8 @@ export const en = {
         "Choose Try again. If the wallet still doesn't open, contact support before clearing any wallet data.",
 
     'onboarding.carousel.getStarted': 'Get started',
+    'onboarding.demo.walletExists': 'This device already has a wallet. Unlock it to continue.',
+    'onboarding.demo.unlock': 'Unlock',
     'onboarding.carousel.skip': 'Skip',
     'onboarding.carousel.steps': 'Onboarding steps',
     'onboarding.carousel.stepLabel': 'Step {current} of {count}: {title}',
@@ -2462,6 +2464,9 @@ export const en = {
     'components.networkFilter.searchNetworks': 'Search networks…',
     'components.networkFilter.searchNetworks2': 'Search networks',
     'components.networkFilter.noMatchingNetworks': 'No matching networks.',
+    'components.reachabilityLine.details': 'Details',
+    'components.reachabilityLine.affectedCoins': 'Affected coins',
+    'market.loadFailed': "Couldn't load {list}.",
     'components.queuedBroadcastBanner.waitingToSend': 'Waiting to send (',
     'components.queuedBroadcastBanner.signed': 'signed',
     'components.queuedBroadcastBanner.sendingWasInterruptedSoThis':

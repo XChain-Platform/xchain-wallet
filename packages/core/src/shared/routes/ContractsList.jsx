@@ -575,7 +575,7 @@ function ChainFilterBar({ chains, value, onChange }) {
     );
 }
 
-/** One chain's rows, its loading skeleton, or its retryable error. */
+/** One chain's rows or its loading skeleton. A failed read is the page's notice. */
 function ChainGroup({
     descriptor,
     chainId,

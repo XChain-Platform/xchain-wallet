@@ -626,7 +626,8 @@ export function TokenWizard({ walletId, onBack }) {
     );
     const wrap = (children) => (
         <Screen variant={variant} header={header} restoreScroll={stage !== 'preview'}>
-            {!networkAvailable ? (
+            {/* A load error is the page's one message; the offline note waits. */}
+            {!networkAvailable && !loadError ? (
                 <StatusMessage variant="warning">Creating a token needs a network connection.</StatusMessage>
             ) : null}
             {children}

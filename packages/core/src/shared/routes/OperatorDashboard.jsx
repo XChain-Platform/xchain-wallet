@@ -26,6 +26,7 @@ import dashStyles from './ActionsMenu.module.css';
 import styles from './OperatorDashboard.module.css';
 import { OperatorPublisherMode } from '../components/OperatorPublisherMode.jsx';
 import { neutralizeControlText } from '../utils/textHardening.js';
+import { andList } from '../components/pageLoadFailures.jsx';
 
 const chainRegistry = registryLib.defaultRegistry();
 
@@ -77,6 +78,7 @@ function OperatorDashboardView({ walletId, chainId, address, onBack }) {
     const [latestFeed, setLatestFeed] = useState({ loading: true, value: null, error: null });
     const [refreshing, setRefreshing] = useState(false);
     const refreshRef = useRef(/** @type {() => void} */ (() => {}));
+    const reloadRef = useRef(/** @type {() => void} */ (() => {}));
 
     useEffect(() => {
         let cancelled = false;
@@ -148,6 +150,7 @@ function OperatorDashboardView({ walletId, chainId, address, onBack }) {
         }
 
         refreshRef.current = () => { load(true); };
+        reloadRef.current = () => { load(false); };
         load(false);
         const timer = setInterval(() => load(true), 30_000);
         return () => {
@@ -192,6 +195,15 @@ function OperatorDashboardView({ walletId, chainId, address, onBack }) {
         <PageHeader onBack={onBack} backLabel="Back to staking" title="Operator dashboard" />
     );
 
+    // One page error names every section that could not load; one Try again reloads them all.
+    const failedSections = [
+        ['staking status', stakes],
+        ['delegation chain', delegations],
+        ['validator performance', validators],
+        ['rewards trajectory', rewards.error ? rewards : rewardClaims],
+        ['publishing activity', broadcasts],
+    ].filter(([, section]) => !section.loading && section.error).map(([title]) => title);
+
     const allLoading = stakes.loading || delegations.loading || rewards.loading || rewardClaims.loading
         || broadcasts.loading || validators.loading;
 
@@ -202,6 +214,14 @@ function OperatorDashboardView({ walletId, chainId, address, onBack }) {
                     {refreshing ? 'Refreshing metrics…' : 'Refresh metrics'}
                 </Button>
             )}>
+                {failedSections.length > 0 ? (
+                    <StatusMessage
+                        variant="error"
+                        recovery={{ label: 'Try again', onAction: () => reloadRef.current() }}
+                    >
+                        {`Couldn't load ${andList(failedSections)}.`}
+                    </StatusMessage>
+                ) : null}
                 <header className={styles.identity}>
                     {descriptor ? <ChainBadge descriptor={descriptor} size="md" showName={false} /> : null}
                     <AddressText address={address} />
@@ -342,11 +362,8 @@ function Section({ title, loading, error, showContentOnError = false, children }
                 <p className={dashStyles.entryDescription}>Loading…</p>
             ) : (
                 <>
-                    {error ? (
-                        <StatusMessage variant="error" className={dashStyles.entryDescription}>
-                            {showContentOnError ? "Couldn't refresh this section" : "Couldn't load this section"}: {error}
-                        </StatusMessage>
-                    ) : null}
+                    {/* The page names the failure once; a section with nothing to show says so plainly. */}
+                    {error && !showContentOnError ? <p className={dashStyles.entryDescription}>Not loaded.</p> : null}
                     {!error || showContentOnError ? children : null}
                 </>
             )}

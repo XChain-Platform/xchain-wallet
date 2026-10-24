@@ -27,6 +27,7 @@ export function OfflineEmptyState({ body, onRetry, titleAs }) {
     useHideReachabilityNotice(true);
     return (
         <EmptyState
+            showWhileUnavailable
             titleAs={titleAs}
             icon={<Icon.InfoIcon />}
             title={t('offline.empty.title')}

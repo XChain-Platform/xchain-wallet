@@ -156,7 +156,7 @@ describe('MarketView market state', () => {
 
         await act(async () => request.reject(new Error('network unavailable')));
 
-        expect(await screen.findByRole('alert')).toHaveTextContent("Couldn't load this market.");
+        expect(await screen.findByRole('alert')).toHaveTextContent("Couldn't load market details.");
         expect(screen.queryByRole('status', { name: 'Loading market' })).toBeNull();
     });
 

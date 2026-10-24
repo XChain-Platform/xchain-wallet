@@ -70,6 +70,18 @@ describe('HomeTabs when balances could not be checked', () => {
         expect(props.onReceive).toHaveBeenCalledTimes(1);
     });
 
+    it('stays quiet while Home shows its own balance notice', () => {
+        // A failed refresh after a good load: Home says the balances could
+        // not be refreshed, so the tabs add neither "Fund your wallet" nor a
+        // second "could not be checked".
+        mount({ balanceNoticeShown: true, balancesUnchecked: true, onRecheckBalances: vi.fn() });
+        expect(screen.queryByText('Fund your wallet')).toBeNull();
+        expect(screen.queryByText("Balances couldn't be checked")).toBeNull();
+        fireEvent.click(screen.getByRole('tab', { name: 'Tokens' }));
+        expect(screen.queryByText('No tokens yet')).toBeNull();
+        expect(document.querySelectorAll('[data-empty-state]')).toHaveLength(0);
+    });
+
     it('words the empty Tokens tab the same way, but keeps a search miss as a search miss', () => {
         mount({ balancesUnchecked: true, onRecheckBalances: vi.fn() });
         fireEvent.click(screen.getByRole('tab', { name: 'Tokens' }));

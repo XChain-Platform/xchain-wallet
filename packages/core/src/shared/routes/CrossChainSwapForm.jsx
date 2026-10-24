@@ -116,6 +116,9 @@ export function CrossChainSwapForm({ walletId, onBack }) {
         /** @type {Record<string, { id: string, address: string }>} */ ({}),
     );
     const [loadError, setLoadError] = useState(/** @type {string | null} */ (null));
+    // True when the load found too few networks, a requirement the page states
+    // only while online: offline, the offline note is the page's one message.
+    const [loadErrorIsRequirement, setLoadErrorIsRequirement] = useState(false);
 
     const [giveChainId, setGiveChainId] = useState(/** @type {string | null} */ (null));
     const [getChainId, setGetChainId] = useState(/** @type {string | null} */ (null));
@@ -165,6 +168,7 @@ export function CrossChainSwapForm({ walletId, onBack }) {
                 const chains = Object.entries(byChain || {})
                     .filter(([, addrs]) => Array.isArray(addrs) && addrs.length > 0)
                     .map(([cid]) => cid);
+                if (chains.length < 2) setLoadErrorIsRequirement(true);
                 if (chains.length === 0) {
                     setLoadError(
                         'No addresses on any network yet. Use Receive to generate addresses on at least two networks before composing a cross-chain swap.',
@@ -623,6 +627,7 @@ export function CrossChainSwapForm({ walletId, onBack }) {
         </Screen>
     );
 
+    if (loadError && networkOffline && loadErrorIsRequirement) return wrap(null);
     if (loadError) {
         return wrap(
             <>

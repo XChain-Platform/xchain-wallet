@@ -8,6 +8,9 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
+import { useContext } from 'react';
+import { ShellNoticesContext } from '../shared/components/noticesRoute.js';
+import { useHideReachabilityNotice } from '../shared/components/hideReachabilityNotice.js';
 import styles from './StatusMessage.module.css';
 import { t } from '../i18n/index.js';
 
@@ -50,10 +53,22 @@ import { t } from '../i18n/index.js';
  *
  * Children may be several block elements (one `<p>` per line of a multi-line
  * warning, or a `<ul>`): they stay one box and one announcement.
+ *
+ * An error a screen shows in the unlocked shell ("Couldn't load your
+ * listings. The network is unreachable.") already says what the shell's
+ * "Some balances may be out of date" would, more precisely, so the shell's
+ * notice steps aside while it shows and the page carries one message.
+ * `keepsShellNotice` opts out, for a box that already carries the shell's
+ * sentence (a form's merged notice).
+ *
+ * @param {boolean} [props.keepsShellNotice]
  */
-export function StatusMessage({ variant = 'status', id, children, className, details, recovery, role: roleOverride, testId, lead }) {
-    if (children === null || children === undefined || children === '') return null;
+export function StatusMessage({ variant = 'status', id, children, className, details, recovery, role: roleOverride, testId, lead, keepsShellNotice = false }) {
     const presentation = STATUS_PRESENTATION[variant] || STATUS_PRESENTATION.status;
+    const empty = children === null || children === undefined || children === '';
+    const inShell = Boolean(useContext(ShellNoticesContext));
+    useHideReachabilityNotice(inShell && !empty && !keepsShellNotice && presentation.tone === 'error');
+    if (empty) return null;
     const role = roleOverride === null
         ? undefined
         : ROLE_LIVE[roleOverride] !== undefined
@@ -101,6 +116,76 @@ export function StatusMessage({ variant = 'status', id, children, className, det
                 </button>
             ) : null}
         </div>
+    );
+}
+
+const SEVERITY = { success: 0, status: 1, info: 1, warning: 2, error: 3 };
+
+/**
+ * Several notices of one page in one box: the page carries one message per
+ * state, so a form's caution, its saved draft and the shell's "Some balances
+ * may be out of date" read as one notice with a line each, never a stack of
+ * boxes. The box takes the most severe tone; each line keeps its bold lead-in
+ * and its own action.
+ *
+ * @param {object} props
+ * @param {ReadonlyArray<{
+ *   key: string,
+ *   variant?: string,
+ *   lead?: string,
+ *   children: import('react').ReactNode,
+ *   recovery?: { label: string, onAction: () => void | Promise<void>, ariaLabel?: string, disabled?: boolean },
+ *   details?: string,
+ *   role?: 'alert' | 'status' | 'note' | null,
+ *   testId?: string,
+ *   id?: string,
+ * }>} props.entries
+ */
+export function StatusMessageGroup({ entries }) {
+    if (!entries || entries.length === 0) return null;
+    const variant = entries.reduce((most, entry) => (
+        (SEVERITY[entry.variant || 'status'] ?? 1) > (SEVERITY[most] ?? 1) ? (entry.variant || 'status') : most
+    ), entries[0].variant || 'status');
+    // A box made only of static notes stays out of the live regions; one
+    // holding a note the user must hear at once is announced as an alert.
+    let role;
+    if (entries.every((entry) => entry.role === entries[0].role)) role = entries[0].role;
+    else if (entries.every((entry) => entry.role === null)) role = null;
+    else role = entries.some((entry) => entry.role === 'alert') ? 'alert' : undefined;
+    return (
+        <StatusMessage variant={variant} role={role} className={styles.group} keepsShellNotice>
+            {entries.map((entry) => (
+                <div key={entry.key} id={entry.id} className={styles.entry} data-testid={entry.testId}>
+                    <div className={styles.entryText}>
+                        <div>
+                            {entry.lead ? <><strong>{entry.lead}</strong>{' '}</> : null}
+                            {entry.children}
+                        </div>
+                        {entry.details ? (
+                            <details className={styles.details}>
+                                <summary>{t('pending.detail.technicalDetails')}</summary>
+                                <code>{entry.details}</code>
+                            </details>
+                        ) : null}
+                    </div>
+                    {entry.recovery && entry.recovery.label && typeof entry.recovery.onAction === 'function' ? (
+                        <button
+                            type="button"
+                            className={styles.recovery}
+                            aria-label={entry.recovery.ariaLabel || entry.recovery.label}
+                            disabled={entry.recovery.disabled}
+                            onClick={() => {
+                                Promise.resolve(entry.recovery.onAction()).catch(() => {
+                                    /* swallow; caller surfaces its own follow-up */
+                                });
+                            }}
+                        >
+                            {entry.recovery.label}
+                        </button>
+                    ) : null}
+                </div>
+            ))}
+        </StatusMessage>
     );
 }
 

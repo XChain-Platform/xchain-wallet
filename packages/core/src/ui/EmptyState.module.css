@@ -50,3 +50,39 @@
     justify-content: center;
     gap: var(--xc-space-2);
 }
+
+/* One of several empty states on a page (a list per section, all empty): a
+   plain muted line under its section header, aligned with the section's
+   rows, so the page carries no stack of centred empty states. */
+.sectionLine {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: var(--xc-space-2);
+    width: 100%;
+    min-width: 0;
+    padding-block: var(--xc-space-2);
+    text-align: start;
+}
+
+.sectionTitle {
+    margin: 0;
+    font-size: var(--xc-type-body-size);
+    font-weight: var(--xc-type-body-weight);
+    line-height: 1.4;
+    color: var(--xc-text-muted);
+}
+
+.sectionBody {
+    margin: 0;
+    max-width: var(--xc-prose-max-width);
+    font-size: var(--xc-type-body-size);
+    line-height: 1.4;
+    color: var(--xc-text-muted);
+}
+
+.sectionActions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--xc-space-2);
+}

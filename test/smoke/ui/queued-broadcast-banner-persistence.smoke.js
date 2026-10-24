@@ -57,7 +57,7 @@ assert.ok(
     'FullLayoutWithNav keeps the notices mounted and renders them into the shared host',
 );
 assert.ok(
-    /<div className=\{styles\.mainBody\}>[\s\S]*?<ShellNoticesContext\.Provider value=\{shellNotices\}>\s*\{children\}/.test(navJsx),
+    /<div className=\{styles\.mainBody\}>[\s\S]*?<ShellNoticesContext\.Provider value=\{shellNotices\}>[\s\S]*?\{children\}/.test(navJsx),
     'route body wrapped in .mainBody and handed the notices host for its Screen',
 );
 // The route body also carries the nav-surface context PageHeader reads.

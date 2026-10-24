@@ -21,6 +21,7 @@ export function RouteNotFound({ onHome }) {
         <Screen variant={screenVariantFor(shell)}>
             <ListPage>
                 <EmptyState
+                    showWhileUnavailable
                     title={t('routeNotFound.title')}
                     body={t('routeNotFound.body')}
                     actionLabel={t('routeNotFound.backToHome')}

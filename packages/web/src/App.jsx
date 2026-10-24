@@ -1158,6 +1158,7 @@ function AppInner() {
                     onImportFromFreeWallet={() => setOnboardingStep('import-freewallet')}
                     onPairPartner={() => setOnboardingStep('pair-partner')}
                     onDemoEntered={refresh}
+                    onWalletFound={refresh}
                 />
             );
         case 'locked':

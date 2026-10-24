@@ -40,6 +40,32 @@
     overflow-wrap: anywhere;
 }
 
+/* One notice of several in a StatusMessageGroup: its text, then its own
+   action at the line's end. The lines share the box's single icon. */
+.entry {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--xc-space-2);
+}
+
+.entry + .entry {
+    margin-block-start: var(--xc-space-2);
+}
+
+.entryText {
+    flex: 1 1 8rem;
+    min-width: 0;
+    max-width: var(--xc-prose-max-width);
+    margin-inline-end: auto;
+}
+
+/* A group's text column spans the box, so each line's action sits at the
+   box's end like a lone notice's; each line keeps the prose measure. */
+.group > .text {
+    max-width: none;
+}
+
 .recovery {
     flex: 0 0 auto;
     margin-inline-start: auto;

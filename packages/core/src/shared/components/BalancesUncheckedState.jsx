@@ -41,6 +41,7 @@ export function BalancesUncheckedState({ onRetry, onReceive, plain = true, title
     useHideReachabilityNotice(true);
     return (
         <EmptyState
+            showWhileUnavailable
             plain={plain}
             titleAs={titleAs}
             icon={<Icon.InfoIcon />}
