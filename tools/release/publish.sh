@@ -883,7 +883,14 @@ data = "{\"files\": [$purge_urls]}"
 EOF
     )" || purge_response=''
 
-    if printf '%s' "$purge_response" | grep -q '"success":[[:space:]]*true'; then
+    if node -e '
+        try {
+            const body = require("node:fs").readFileSync(0, "utf8");
+            process.exit(JSON.parse(body).success === true ? 0 : 1);
+        } catch {
+            process.exit(1);
+        }
+    ' <<< "$purge_response"; then
         echo "publish.sh: edge cache purged" >&2
     else
         # Not fatal: the release is published and correct. But it is not
