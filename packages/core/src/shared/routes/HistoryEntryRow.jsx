@@ -13,6 +13,8 @@ import { VerifiedBadge } from '@xchain-wallet/core/ui';
 import { useBalancesHidden } from '../hooks/useBalancesHidden.js';
 import { tickerForCoin, tickerForDescriptor } from '../../registry/coinTicker.js';
 import { t } from '../../i18n/index.js';
+import '../../i18n/locales/en/history.js';
+import '../../i18n/locales/en/pending.js';
 import { actionDisplayLabel } from '../utils/actionDisplayLabel.js';
 import { ActivityRow } from '../components/ActivityRow.jsx';
 import { classifyEntryAction, classifyEntryStatus } from '../utils/historyFilter.js';

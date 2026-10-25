@@ -32,6 +32,7 @@ import { listStatusText } from '../utils/listItemStatusText.js';
 import { neutralizeControlText } from '../utils/textHardening.js';
 import { formatDecimalAmount } from '../utils/amountFormat.js';
 import { t } from '../../i18n/index.js';
+import '../../i18n/locales/en/components.js';
 
 function firstMemberIndex(detail) {
     const first = (currentListItems(detail) || [])[0];

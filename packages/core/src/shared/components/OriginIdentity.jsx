@@ -12,6 +12,8 @@ import { StatusMessage } from '@xchain-wallet/core/ui';
 import { neutralizeControlText } from '../utils/textHardening.js';
 import styles from './OriginIdentity.module.css';
 import { t } from '../../i18n/index.js';
+import '../../i18n/locales/en/components.js';
+import '../../i18n/locales/en/extension.js';
 
 const STRUCTURED_SECOND_LEVEL_SUFFIXES = new Set([
     'ac', 'co', 'com', 'edu', 'go', 'gov', 'mil', 'ne', 'net', 'nom', 'or', 'org',

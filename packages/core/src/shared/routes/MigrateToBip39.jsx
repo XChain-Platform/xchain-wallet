@@ -309,11 +309,15 @@ export function MigrateToBip39({ legacyWalletId, onBack, onMigrated, onSweepChai
         );
     }
 
+    // Each stage keeps its own form element: the Verify button of the backup
+    // stage is a plain button, and a form shared with the quiz would turn that
+    // same click into a submit of the empty quiz.
     // The phrase remains visible until the user starts the word quiz. Returning
     // to setup discards it because no wallet has been persisted yet.
     if (stage === 'backup') {
         return wrap(
             <FormPage
+                key="migrate-backup"
                 label="Back up new recovery phrase"
                 actions={(
                     <>
@@ -346,6 +350,7 @@ export function MigrateToBip39({ legacyWalletId, onBack, onMigrated, onSweepChai
     if (stage === 'verify') {
         return wrap(
             <FormPage
+                key="migrate-verify"
                 label="Verify new recovery phrase"
                 onSubmit={handleSubmitVerify}
                 status={(
@@ -488,6 +493,7 @@ export function MigrateToBip39({ legacyWalletId, onBack, onMigrated, onSweepChai
 
     return wrap(
         <FormPage
+            key="migrate-create"
             label="Set up new BIP39 wallet"
             onSubmit={handleCreate}
             actions={(

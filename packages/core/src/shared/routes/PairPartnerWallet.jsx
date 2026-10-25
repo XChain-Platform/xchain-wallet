@@ -24,6 +24,8 @@ import {
 } from '../../uri/psbtQr.js';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { formatOrList } from '../../i18n/index.js';
+import '../../i18n/locales/en/flows.js';
+import '../../i18n/locales/en/settings.js';
 import { userFacingMessage } from '../utils/userFacingMessage.js';
 import { useDocumentTitleSection } from '../hooks/useDocumentTitle.js';
 

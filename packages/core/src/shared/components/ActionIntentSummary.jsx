@@ -22,6 +22,9 @@ import { AddressText, StatusMessage } from '@xchain-wallet/core/ui';
 import { formatDisplayAmount } from '../utils/amountFormat.js';
 import styles from './ActionIntentSummary.module.css';
 import { t } from '../../i18n/index.js';
+import '../../i18n/locales/en/components.js';
+import '../../i18n/locales/en/execute.js';
+import '../../i18n/locales/en/send.js';
 
 function reviewDetailValue(detail) {
     if (!/^(Amount|Quantity)$/.test(String(detail?.label || ''))) return detail?.value;

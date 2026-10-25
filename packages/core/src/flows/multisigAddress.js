@@ -23,6 +23,8 @@
 // for P2WSH/P2TR; version bytes for P2SH base58check). Multisig is
 // BTC-only at launch per §22 + §10.3.
 
+import { exceedsMultisigCeiling } from "../schemas/multisigConfig.js";
+
 /**
  * @typedef {Object} ReceiveMultisigAddressOpts
  * @property {import('../storage/Vault.js').Vault} vault
@@ -34,7 +36,8 @@
 
 /**
  * @typedef {Object} ReceiveMultisigAddressResult
- * @property {string} address
+ * @property {string | null} address          null when the config holds more cosigners than its scheme supports
+ * @property {boolean} [overCeiling]           true for such a config; no address is derived
  * @property {'p2sh-multisig' | 'p2wsh-multisig' | 'taproot-musig2'} scheme
  * @property {number} threshold
  * @property {number} cosignerCount
@@ -80,6 +83,25 @@ export async function receiveMultisigAddress(opts) {
         throw new Error(
             `receiveMultisigAddress: wallet "${opts.walletId}" has no multisig configuration. Run the §22 coordinator first`,
         );
+    }
+
+    // A config stored before the cosigner ceiling can hold more keys than its
+    // address type spends from. Deriving would yield an unspendable address
+    // (SegWit) or fail (Classic), so no address is offered for it.
+    if (exceedsMultisigCeiling(config.scheme, config.cosigners.length)) {
+        return {
+            multisigConfigId: config.id,
+            address:        null,
+            overCeiling:    true,
+            scheme:         config.scheme,
+            threshold:      config.threshold,
+            cosignerCount:  config.cosigners.length,
+            cosignerNames:  config.cosigners.map((c) => c.name),
+            schemeLabel:    formatSchemeLabel(config),
+            redeemScript:   null,
+            witnessScript:  null,
+            outputPubkey:   null,
+        };
     }
 
     const sdk = opts.sdkRegistry.get(opts.chainId);

@@ -46,6 +46,9 @@ import { MessagingContext } from '../MessagingContext.js';
 import { readActiveWallet } from '../utils/activeWalletMemory.js';
 import styles from './ConfirmActionModal.module.css';
 import { t } from '../../i18n/index.js';
+import '../../i18n/locales/en/components.js';
+import '../../i18n/locales/en/extension.js';
+import '../../i18n/locales/en/send.js';
 
 const OPEN_PHASES = new Set(['preflighting', 'ready', 'signing', 'rechecking', 'done', 'error', 'signed-not-broadcast']);
 const chainRegistry = defaultRegistry();

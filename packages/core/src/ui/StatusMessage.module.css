@@ -140,6 +140,11 @@
     color: var(--xc-on-danger);
     border: 1px solid var(--xc-danger);
     font-weight: 500;
+    /* A secondary Button or link inside the notice reads its text and border
+       from these tokens, which are tuned for a page surface; on the danger
+       fill they take the label colour that fill is paired with. */
+    --xc-accent-text: var(--xc-on-danger);
+    --xc-border-strong: var(--xc-on-danger);
 }
 
 .row.success {

@@ -11,6 +11,7 @@
 import { useEffect, useState } from 'react';
 import { Button, EmptyState, Icon, ListPage, ListRow, PageHeader, Screen, StatusMessage } from '@xchain-wallet/core/ui';
 import { t } from '../../i18n/index.js';
+import '../../i18n/locales/en/accountPicker.js';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { userFacingMessage } from '../utils/userFacingMessage.js';
 import styles from './ActionsMenu.module.css';

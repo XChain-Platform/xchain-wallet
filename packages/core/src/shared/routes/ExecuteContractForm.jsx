@@ -52,6 +52,8 @@ import { coinFromChainId } from '../components/BalanceList.jsx';
 import { useTickBalance } from '../hooks/useTickBalance.js';
 import { compareDecimalStrings, formatWithThousands, tokenAmountPrecisionError } from '../utils/amountFormat.js';
 import { t } from '../../i18n/index.js';
+import '../../i18n/locales/en/execute.js';
+import '../../i18n/locales/en/send.js';
 import { isValidAddressForChain } from '../utils/addressValidation.js';
 import { tickerReferenceError } from '../utils/tickerGrammar.js';
 import { useTokenInfo } from '../hooks/useTokenInfo.js';

@@ -18,6 +18,8 @@ import styles from './FeeSelector.module.css';
 import { InfoTip } from './InfoTip.jsx';
 import { FormNotice } from './FormNotice.jsx';
 import { t } from '../i18n/index.js';
+import '../i18n/locales/en/send.js';
+import '../i18n/locales/en/ui.js';
 
 const TIER_SPEEDS = ['low', 'normal', 'fast'];
 const SPEEDS_WITH_CUSTOM = [...TIER_SPEEDS, 'custom'];

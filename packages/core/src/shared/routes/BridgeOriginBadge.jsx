@@ -10,6 +10,7 @@
 
 import { bridgeDisplayTick, coinDisplay } from './BridgeTick.js';
 import { t } from '../../i18n/index.js';
+import '../../i18n/locales/en/bridgeOrigin.js';
 
 /**
  * A bridged token's name, as a user should read it.

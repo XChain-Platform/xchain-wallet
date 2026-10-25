@@ -39,6 +39,8 @@ import { encodeBbqrPsbtFrames } from '../../uri/bbqrPsbt.js';
 import { useToast } from './ToastHost.jsx';
 import styles from './WatcherResultPanel.module.css';
 import { t } from '../../i18n/index.js';
+import '../../i18n/locales/en/components.js';
+import '../../i18n/locales/en/send.js';
 
 /**
  * @param {object} props

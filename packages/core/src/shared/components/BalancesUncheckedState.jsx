@@ -16,6 +16,7 @@
 
 import { EmptyState, Icon } from '@xchain-wallet/core/ui';
 import { t } from '../../i18n/index.js';
+import '../../i18n/locales/en/balances.js';
 import { useReachability } from '../hooks/useReachability.js';
 import { useHideReachabilityNotice } from './hideReachabilityNotice.js';
 

@@ -32,6 +32,8 @@ import { actionTextSafetyError } from '../utils/actionTextSafety.js';
 import { tokenIssuerEligibility } from '../utils/tokenIssuerEligibility.js';
 import styles from './IssueTokenForm.module.css';
 import { t } from '../../i18n/index.js';
+import '../../i18n/locales/en/gatedPublish.js';
+import '../../i18n/locales/en/send.js';
 
 const chainRegistry = registryLib.defaultRegistry();
 

@@ -12,6 +12,7 @@ import { t } from '../../i18n/index.js';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { AddressField, AddressText, Button, ChainBadge, FeeSelector, FormNotice, FormPage, Input, PageHeader, RadioGroup, Screen, StatusMessage } from '@xchain-wallet/core/ui';
 import { registry as registryLib } from '@xchain-wallet/core';
+import '../../i18n/locales/en/send.js';
 import { isDemoWallet, synthesizeDemoContractMeta } from '@xchain-wallet/core/flows';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { useDemoGuard } from '../hooks/useDemoGuard.jsx';

@@ -30,6 +30,7 @@ import { OwnAddressPickerScreen } from '../components/OwnAddressPickerScreen.jsx
 import { useBetChainIds } from './BetFeedsList.jsx';
 import styles from './IssueTokenForm.module.css';
 import { t } from '../../i18n/index.js';
+import '../../i18n/locales/en/betCreate.js';
 import { QueuedResultPanel } from '../components/QueuedResultPanel.jsx';
 import { WatcherResultPanel } from '../components/WatcherResultPanel.jsx';
 import {

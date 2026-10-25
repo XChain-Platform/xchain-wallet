@@ -16,6 +16,7 @@ import { registry as registryLib } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { useGovernanceChainIds } from '../hooks/useGovernanceAddressesPresent.js';
 import { t } from '../../i18n/index.js';
+import '../../i18n/locales/en/governance.js';
 import { userFacingMessage } from '../utils/userFacingMessage.js';
 import { pollRowForDisplay } from './pollDisplay.js';
 import styles from './IssueTokenForm.module.css';

@@ -24,6 +24,7 @@ import { useOnlineStatus } from '../hooks/useOnlineStatus.js';
 import { formatElapsedTime, formatLocalDateTime } from '../utils/dateTime.js';
 import styles from './StalenessLabel.module.css';
 import { t } from '../../i18n/index.js';
+import '../../i18n/locales/en/components.js';
 
 const TICK_MS = 30_000;
 

@@ -860,7 +860,7 @@ export function MultisigSigningSession({ walletId, onBack }) {
                     <p className={styles.hint}>{isResponseStep ? 'Responded cosigners:' : 'Signed cosigners:'}</p>
                     <ul aria-label={isResponseStep ? 'Responded cosigners' : 'Signed cosigners'}>
                         {contributed.map((pk) => (
-                            <li key={pk}><code>{pk}</code></li>
+                            <li key={pk}><code className={styles.cosignerKey}>{pk}</code></li>
                         ))}
                     </ul>
                 </>
@@ -872,7 +872,7 @@ export function MultisigSigningSession({ walletId, onBack }) {
                     <p className={styles.hint}>{remaining > 0 ? 'Pending cosigners:' : 'Cosigners who have not signed:'}</p>
                     <ul aria-label={remaining > 0 ? 'Pending cosigners' : 'Cosigners who have not signed'}>
                         {unsigned.map((pk) => (
-                            <li key={pk}><code>{pk}</code></li>
+                            <li key={pk}><code className={styles.cosignerKey}>{pk}</code></li>
                         ))}
                     </ul>
                 </>

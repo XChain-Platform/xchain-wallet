@@ -48,6 +48,7 @@ import { actionDisplayLabel } from '../utils/actionDisplayLabel.js';
 import { StalenessLabel } from '../components/StalenessLabel.jsx';
 import { ActivityRow } from '../components/ActivityRow.jsx';
 import { flows as flowsLib } from '@xchain-wallet/core';
+import '../../i18n/locales/en/history.js';
 import {
     applyHistoryFilters,
     classifyEntryStatus,

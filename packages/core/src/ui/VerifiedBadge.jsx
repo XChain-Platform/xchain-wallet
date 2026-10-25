@@ -26,6 +26,7 @@
  */
 import { InfoTip } from './InfoTip.jsx';
 import { t } from '../i18n/index.js';
+import '../i18n/locales/en/ui.js';
 
 /**
  * @param {object} props

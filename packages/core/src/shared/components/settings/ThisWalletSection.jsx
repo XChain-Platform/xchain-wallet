@@ -33,6 +33,10 @@ import { SettingsActionRow, SettingsInlineForm, Status } from './_settingsPrimit
 import cardStyles from '../../../ui/Card.module.css';
 import styles from './ThisWalletSection.module.css';
 import { t } from '../../../i18n/index.js';
+import '../../../i18n/locales/en/history.js';
+import '../../../i18n/locales/en/send.js';
+import '../../../i18n/locales/en/settings.js';
+import '../../../i18n/locales/en/walletDetails.js';
 
 const PUBLIC_EXTENDED_KEY_RE = /^(?:xpub|tpub)[1-9A-HJ-NP-Za-km-z]+$/;
 

@@ -152,6 +152,16 @@ describe('offline route behavior from reachability', () => {
             gatedSendReadiness: vi.fn().mockResolvedValue({ state: 'ungated' }),
         });
 
+        writeBalanceCache(WALLET.id, null, {
+            balances: {
+                [CHAIN]: [{
+                    address: ADDRESS,
+                    balances: { native: { tick: 'BTC', quantity: '100000000', divisibility: 8 }, tokens: [] },
+                }],
+            },
+            activeByChain: {},
+            fetchedAt: Date.now() - 60_000,
+        });
         renderOffline(messaging, <Send walletId={WALLET.id} onBack={() => {}} />);
 
         expect(await screen.findByDisplayValue(ADDRESS)).toBeInTheDocument();
@@ -160,6 +170,49 @@ describe('offline route behavior from reachability', () => {
         expect(send).toBeDisabled();
         expect(send).toHaveAttribute('title', 'Sending needs a network connection');
         expect(screen.getByText(/cached balance remains available/i)).toBeInTheDocument();
+        // Offline already explains why sending is blocked, so the fee source
+        // notice is not a second message for the same state.
+        expect(screen.queryByText(/fee estimate unavailable/i)).not.toBeInTheDocument();
+        fireEvent.submit(document.getElementById('send-form'));
+        expect(messaging.composeForConfirm).not.toHaveBeenCalled();
+    });
+
+    it('says only that sending needs a connection when no balance is saved', async () => {
+        const messaging = messagingWith({
+            getAddressesByChain: vi.fn().mockResolvedValue({
+                [CHAIN]: [{ id: 'address-1', address: ADDRESS, source: 'hd' }],
+            }),
+            getActiveAddresses: vi.fn().mockResolvedValue({
+                [CHAIN]: { id: 'address-1', address: ADDRESS },
+            }),
+            getAddressBalances: vi.fn().mockResolvedValue({
+                native: { tick: 'BTC', quantity: '100000000', divisibility: 8 },
+                tokens: [],
+            }),
+            getSettings: vi.fn().mockResolvedValue({
+                walletMode: 'full',
+                activeNetwork: 'mainnet',
+                grace: { testSendThresholdSats: 0 },
+                privacy: { formDraftTtlMs: 0 },
+            }),
+            signerReady: vi.fn().mockResolvedValue({ ready: false }),
+            getSignerStatus: vi.fn().mockResolvedValue({ unlocked: false }),
+            listContacts: vi.fn().mockResolvedValue([]),
+            getRecentDestinations: vi.fn().mockResolvedValue([]),
+            getAddressHistory: vi.fn().mockResolvedValue([]),
+            gatedSendReadiness: vi.fn().mockResolvedValue({ state: 'ungated' }),
+        });
+
+        renderOffline(messaging, <Send walletId={WALLET.id} onBack={() => {}} />);
+
+        expect(await screen.findByDisplayValue(ADDRESS)).toBeInTheDocument();
+        expectOneOfflineNotice();
+        const send = screen.getByRole('button', { name: 'Send' });
+        expect(send).toBeDisabled();
+        expect(send).toHaveAttribute('title', 'Sending needs a network connection');
+        expect(screen.getByText('Sending needs a network connection.')).toBeInTheDocument();
+        expect(screen.queryByText(/cached balance remains available/i)).not.toBeInTheDocument();
+        expect(screen.getAllByText(/balance unavailable/i).length).toBeGreaterThan(0);
         // Offline already explains why sending is blocked, so the fee source
         // notice is not a second message for the same state.
         expect(screen.queryByText(/fee estimate unavailable/i)).not.toBeInTheDocument();

@@ -40,6 +40,8 @@ import {
     subtractDecimalStrings,
 } from '../utils/amountFormat.js';
 import { t } from '../../i18n/index.js';
+import '../../i18n/locales/en/actionDetail.js';
+import '../../i18n/locales/en/components.js';
 
 const POLL_INTERVAL_MS = 5000;
 const chainRegistry = registryLib.defaultRegistry();

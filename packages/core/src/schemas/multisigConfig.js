@@ -45,6 +45,20 @@ export const MAX_MULTISIG_COSIGNERS = Object.freeze({
     'taproot-musig2': 20,
 });
 
+/**
+ * True when a scheme holds more cosigners than its address type can spend
+ * from. Configs stored before the ceiling can exceed it; their address is
+ * unspendable or underivable.
+ *
+ * @param {string} scheme
+ * @param {number} cosignerCount
+ * @returns {boolean}
+ */
+export function exceedsMultisigCeiling(scheme, cosignerCount) {
+    const max = MAX_MULTISIG_COSIGNERS[scheme];
+    return typeof max === 'number' && cosignerCount > max;
+}
+
 // §22.2: 'local' covers both software accounts and paired hardware
 // signers (the wallet has the signer record locally either way).
 // 'external-xpub' is an xpub copied in from another wallet; we can

@@ -16,6 +16,7 @@ import { getNativeQrScanner } from './nativeQrScanner.js';
 import { beginCameraRequest, CAMERA_START_TIMEOUT_MS, waitForCamera } from './cameraWait.js';
 import styles from './QrScanner.module.css';
 import { t } from '../i18n/index.js';
+import '../i18n/locales/en/ui.js';
 
 export const MAX_SCANNED_QR_CHARS = 8 * 1024;
 

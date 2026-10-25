@@ -74,6 +74,8 @@ import {
     subtractDecimalStrings,
 } from '../utils/amountFormat.js';
 import { t } from '../../i18n/index.js';
+import '../../i18n/locales/en/issue.js';
+import '../../i18n/locales/en/send.js';
 
 const PROTOCOL_COIN_TICKER = { bitcoin: 'BTC', litecoin: 'LTC', dogecoin: 'DOGE' };
 

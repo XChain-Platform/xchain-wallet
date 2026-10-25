@@ -31,6 +31,7 @@ import { platformLinkLabel } from '../platformLinkLabel.js';
 import styles from './PlatformSwitcher.module.css';
 import { useBackHandler } from '../../ui/backStack.js';
 import { t } from '../../i18n/index.js';
+import '../../i18n/locales/en/components.js';
 
 function actionableMenuItems(menu) {
     return Array.from(

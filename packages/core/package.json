@@ -17,6 +17,7 @@
         "./shared/*": "./src/shared/*",
         "./flows": "./src/flows/index.js",
         "./flows/*": "./src/flows/*",
+        "./i18n/locales/en/*": "./src/i18n/locales/en/*",
         "./notifications/*": "./src/notifications/*",
         "./shims/*": "./src/shims/*",
         "./signerFactories": "./src/signerFactories/index.js",

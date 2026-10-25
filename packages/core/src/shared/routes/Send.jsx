@@ -58,6 +58,9 @@ import {
     submitFailureMessage,
 } from '../utils/submitFailureMessage.js';
 import { t } from '../../i18n/index.js';
+import '../../i18n/locales/en/history.js';
+import '../../i18n/locales/en/send.js';
+import '../../i18n/locales/en/transactionStatus.js';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { useSignerReady } from '../hooks/useSignerReady.js';
 import { useDeveloperMode } from '../hooks/useDeveloperMode.js';
@@ -3436,7 +3439,7 @@ export function Send({ walletId, accountId, onBack, prefill = null, onDone, onCh
                             the shell's reachability notice steps aside. */}
                         <HideReachabilityNotice />
                         <StatusMessage variant="warning">
-                            {t('send.offline.body')}
+                            {t(previewBalances.sdkShape ? 'send.offline.body' : 'send.offline.bodyNoCache')}
                         </StatusMessage>
                     </>
                 ) : null, testSendGateBanner]}
@@ -3755,7 +3758,7 @@ export function Send({ walletId, accountId, onBack, prefill = null, onDone, onCh
                         shell's reachability notice steps aside. */}
                     <HideReachabilityNotice />
                     <StatusMessage variant="warning">
-                        {t('send.offline.body')}
+                        {t(previewBalances.sdkShape ? 'send.offline.body' : 'send.offline.bodyNoCache')}
                     </StatusMessage>
                 </>
             ) : null, testSendGateBanner, draftBanner, requestMessage ? (

@@ -33,6 +33,7 @@ import {
     cancelSendAssetSwitch,
 } from '@xchain-wallet/core/shared/utils/sendAssetSwitch.js';
 import { i18n, registry as registryLib } from '@xchain-wallet/core';
+import '@xchain-wallet/core/i18n/locales/en/extension.js';
 import { isDemoWallet } from '@xchain-wallet/core/flows';
 import { deepLinkRoute } from '../../../desktop/renderer/deepLinkRoute.js';
 import { withResolvedIssuer } from '@xchain-wallet/core/shared/utils/tokenDetailIssuer.js';

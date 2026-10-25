@@ -39,6 +39,10 @@ import { userFacingMessage } from '../../utils/userFacingMessage.js';
 import { ROW_HINT, STACK, SettingsLoadError, Status } from './_settingsPrimitives.jsx';
 import styles from './NetworkEndpointsSection.module.css';
 import { t } from '../../../i18n/index.js';
+import '../../../i18n/locales/en/history.js';
+import '../../../i18n/locales/en/send.js';
+import '../../../i18n/locales/en/settings.js';
+import '../../../i18n/locales/en/ui.js';
 
 const chainRegistry = registryLib.defaultRegistry();
 

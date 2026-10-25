@@ -12,6 +12,8 @@ import { registry as registryLib } from '@xchain-wallet/core';
 import { TickerIcon } from './TickerIcon.jsx';
 import styles from './LockedTokenContext.module.css';
 import { t } from '../../i18n/index.js';
+import '../../i18n/locales/en/components.js';
+import '../../i18n/locales/en/send.js';
 
 const chainRegistry = registryLib.defaultRegistry();
 

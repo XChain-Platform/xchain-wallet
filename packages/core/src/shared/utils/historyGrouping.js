@@ -47,6 +47,7 @@
 // renders twice. The batch envelope is the outer container, so it wins.
 
 import { getFormatLocale, t } from '../../i18n/index.js';
+import '../../i18n/locales/en/history.js';
 import { entryTimeMs } from './pendingHistory.js';
 
 /**

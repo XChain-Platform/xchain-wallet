@@ -39,6 +39,7 @@ import { useBackHandler } from '../../ui/backStack.js';
 import { useFocusTrap } from '../utils/focusTrap.js';
 import { formatDecimalAmount } from '../utils/amountFormat.js';
 import { t } from '../../i18n/index.js';
+import '../../i18n/locales/en/components.js';
 
 const MAX_TEXT_CHARS = 200_000;
 const MAX_PREVIEW_BYTES = 5 * 1024 * 1024;

@@ -27,6 +27,16 @@ import { addressTypeLabel } from '../utils/addressTypeLabel.js';
 import { recordLastUsedChain } from '../chainSelection.js';
 import { useBalancesHidden } from '../hooks/useBalancesHidden.js';
 import { t } from '../../i18n/index.js';
+import '../../i18n/locales/en/addressList.js';
+import '../../i18n/locales/en/execute.js';
+import '../../i18n/locales/en/history.js';
+import '../../i18n/locales/en/importWallet.js';
+import '../../i18n/locales/en/multisig.js';
+import '../../i18n/locales/en/receive.js';
+import '../../i18n/locales/en/routes.js';
+import '../../i18n/locales/en/send.js';
+import '../../i18n/locales/en/settings.js';
+import '../../i18n/locales/en/verifySignature.js';
 import { useSignerReady } from '../hooks/useSignerReady.js';
 import { useProtectedScreen } from '../utils/screenGuard.js';
 import { blurNumberInputOnWheel } from '../utils/formInput.js';
@@ -527,7 +537,7 @@ export function AddressList({
                 .then((list) => Array.isArray(list) ? list : [])
             : (typeof messaging.getMultisigReceiveAddress === 'function'
                 ? messaging.getMultisigReceiveAddress({ walletId, chainId: bitcoinChainId })
-                    .then((r) => (r && typeof r.address === 'string' ? [r] : []))
+                    .then((r) => (r && (typeof r.address === 'string' || r.overCeiling === true) ? [r] : []))
                 : Promise.resolve([]));
         fetcher
             .then((list) => {
@@ -656,12 +666,12 @@ export function AddressList({
             for (const m of multisigs) {
                 if (!out.some((r) => (
                     r.chainId === bitcoinChainId
-                    && r.address?.toLowerCase() === m.address.toLowerCase()
+                    && (m.address ? r.address?.toLowerCase() === m.address.toLowerCase() : false)
                 ))) {
                     out.push({
-                        key: `${bitcoinChainId}:${m.address}:synthetic`,
+                        key: `${bitcoinChainId}:${m.address || m.multisigConfigId}:synthetic`,
                         chainId: bitcoinChainId,
-                        address: m.address,
+                        address: m.address || '',
                         label: 'Multisig receive',
                         multisig: m,
                         record: null,
@@ -1108,6 +1118,7 @@ export function AddressList({
             value: selected.address,
             settings,
         });
+        const overCeiling = selected.multisig?.overCeiling === true;
         const saveLabel = async () => {
             if (!selected.record?.id || labelSaving) return;
             const targetId = selected.record.id;
@@ -1258,8 +1269,9 @@ export function AddressList({
         };
         return (
             <Screen variant={variant} header={<PageHeader onBack={() => setSelected(null)} title={t('routes.addressList.viewAddress')} titleIcon={<Icon.ScanIcon />} />}>
-                <ListPage>
+                <ListPage notices={overCeiling ? <StatusMessage variant="warning" role="alert">{t('multisig.overCeilingNotice')}</StatusMessage> : null}>
                     <div className={local.detailTop}>
+                    {overCeiling ? null : (<>
                     <div className={local.detailLabelRow}>
                         <span className={local.detailLabel}>{t('verifySignature.address')}</span>
                         {isActiveRow(selected) ? (
@@ -1279,7 +1291,8 @@ export function AddressList({
                             />
                         </span>
                     </div>
-                    <div className={local.detailLabel} style={{ marginTop: 'var(--xc-space-3)' }}>{t('routes.addressList.label')}</div>
+                    </>)}
+                    <div className={local.detailLabel} style={overCeiling ? undefined : { marginTop: 'var(--xc-space-3)' }}>{t('routes.addressList.label')}</div>
                     {selected.record?.id ? (
                         <div className={local.labelRow}>
                             <Input

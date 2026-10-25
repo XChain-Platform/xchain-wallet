@@ -203,6 +203,28 @@ describe('MigrateToBip39 safety and completion', () => {
         expect(context.onBack).toHaveBeenCalledTimes(1);
     });
 
+    it('opens the word quiz without the Verify click submitting it', async () => {
+        const context = renderMigration();
+        await reachBackup(context);
+        fireEvent.click(screen.getByRole('checkbox'));
+        const verify = screen.getByRole('button', { name: 'Verify recovery phrase' });
+        const backupForm = verify.closest('form');
+        // A native click runs the button's own activation after the handlers,
+        // as a browser does; fireEvent.click inside act defers the re-render
+        // past it. Outside act, React flushes the stage change first.
+        const previous = globalThis.IS_REACT_ACT_ENVIRONMENT;
+        globalThis.IS_REACT_ACT_ENVIRONMENT = false;
+        try {
+            verify.click();
+            await new Promise((resolve) => setTimeout(resolve, 50));
+        } finally {
+            globalThis.IS_REACT_ACT_ENVIRONMENT = previous;
+        }
+        expect(await screen.findByRole('heading', { level: 1, name: 'Verify your written copy' })).toBeTruthy();
+        expect(screen.getByRole('button', { name: 'Create BIP39 wallet' }).closest('form')).not.toBe(backupForm);
+        expect(screen.queryByText('Fill in every requested word.')).toBeNull();
+    });
+
     it('blocks a bad quiz answer and lets every pre-save step unwind safely', async () => {
         const context = renderMigration();
         await reachVerify(context);

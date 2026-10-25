@@ -15,6 +15,7 @@ import { strict as assert } from 'node:assert';
 import { readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { englishDictionarySource } from '../../helpers/englishNamespaces.js';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const wsRoot = join(here, '..', '..', '..');
@@ -23,7 +24,7 @@ const read = (...p) => readFileSync(join(wsRoot, ...p), 'utf8');
 const homeSrc = read('packages', 'core', 'src', 'shared', 'routes', 'Home.jsx');
 const webSrc = read('packages', 'web', 'src', 'App.jsx');
 const popupSrc = read('packages', 'extension', 'src', 'popup', 'App.jsx');
-const enLocaleSrc = read('packages', 'core', 'src', 'i18n', 'locales', 'en', 'index.js');
+const enLocaleSrc = englishDictionarySource();
 const autoWipeSrc = read('packages', 'core', 'src', 'shared', 'hooks', 'useDemoAutoWipe.js');
 
 for (const [label, src] of [['Home', homeSrc], ['web', webSrc], ['extension', popupSrc]]) {

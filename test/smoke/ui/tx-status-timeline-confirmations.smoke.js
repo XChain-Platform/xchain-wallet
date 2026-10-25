@@ -27,7 +27,7 @@ const timelineSrc = read('packages/core/src/shared/components/TxStatusTimeline.j
 const historySrc = ['History', 'HistoryDetailCard', 'HistoryEntryRow', 'HistoryShared']
     .map((n) => read(`packages/core/src/shared/routes/${n}.jsx`))
     .join('\n');
-const enSrc = read('packages/core/src/i18n/locales/en/index.js');
+const enSrc = read('packages/core/src/i18n/locales/en/transactionStatus.js');
 
 // 1. The component declares chainTip + indexerWatermark in its prop list
 //    and JSDoc.

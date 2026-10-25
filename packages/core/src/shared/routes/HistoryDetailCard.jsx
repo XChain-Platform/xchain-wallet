@@ -39,6 +39,8 @@ import { ConfirmModal } from '../components/ConfirmModal.jsx';
 import { useConfirmModal } from '../hooks/useConfirmModal.js';
 import { tickerForCoin, transactionExplorerLinks } from '../../registry/coinTicker.js';
 import { t } from '../../i18n/index.js';
+import '../../i18n/locales/en/history.js';
+import '../../i18n/locales/en/pending.js';
 import { humanizeError } from '../utils/humanizeError.js';
 import { actionDisplayLabel } from '../utils/actionDisplayLabel.js';
 import { TxStatusTimeline } from '../components/TxStatusTimeline.jsx';

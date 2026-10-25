@@ -18,6 +18,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { Button, EmptyState, Icon, ListPage, Screen, PageHeader } from '@xchain-wallet/core/ui';
 import { t } from '../../i18n/index.js';
+import '../../i18n/locales/en/alerts.js';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { alertVersion, readAlertCenter, writeAlertCenter } from '../utils/alertCenterMemory.js';
 import styles from '../components/AlertsOverlay.module.css';

@@ -132,7 +132,7 @@ const VALID_DESCRIPTOR = {
     const broken = { ...VALID_DESCRIPTOR, id: '' };
     await assert.rejects(
         () => addCustomChain({ vault, chainRegistry: registry, descriptor: broken }),
-        /invalid descriptor/i,
+        /can't be added/i,
         'invalid descriptor rejected',
     );
     assert.equal(vault._read().customChains, undefined, 'no persisted record on rejection');

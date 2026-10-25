@@ -39,6 +39,7 @@ import {
 } from '../utils/submitFailureMessage.js';
 import styles from './QueuedResultPanel.module.css';
 import { t } from '../../i18n/index.js';
+import '../../i18n/locales/en/components.js';
 
 /**
  * @param {object} props
