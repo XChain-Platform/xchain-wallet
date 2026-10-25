@@ -59,16 +59,23 @@ const {
     handleWalletCreateWithMnemonic,
     handleWalletImport,
     handleWalletImportBackup,
+    assertFreshVault,
 } = await import('../../../packages/extension/src/background/walletCreate.js');
 
 function makeDeps(over = {}) {
     let blob = null;
+    let meta = null;
     return {
         storageBackend: {
             async load() { return blob; },
             async save(next) { blob = next; },
+            async clear() { blob = null; },
         },
-        metaBackend: { load: async () => null, save: vi.fn(async () => {}) },
+        metaBackend: {
+            load: async () => meta,
+            save: vi.fn(async (next) => { meta = next; }),
+            clear: async () => { meta = null; },
+        },
         sessionBackend: { save: vi.fn(async () => {}) },
         signingSecretBackend: { save: vi.fn(async () => {}) },
         chainRegistry: {},
@@ -138,6 +145,51 @@ describe('pre-host onboarding closes its Vault on every exit', () => {
             expect(deps.metaBackend.save).toHaveBeenCalledTimes(1);
         });
     }
+});
+
+describe('pre-host onboarding leaves no half-written wallet behind', () => {
+    for (const lane of LANES) {
+        it(`${lane.name}: a refused kdfParams save discards the blob so the install is fresh again`, async () => {
+            const deps = makeDeps();
+            deps.metaBackend.save.mockRejectedValue(new Error('metadata could not be persisted'));
+            await expect(lane.call(deps)).rejects.toThrow('metadata could not be persisted');
+            expect(await deps.storageBackend.load()).toBeNull();
+            await expect(assertFreshVault(deps)).resolves.toBeUndefined();
+        });
+
+        it(`${lane.name}: a refused session save discards the blob and the kdfParams`, async () => {
+            const deps = makeDeps();
+            deps.sessionBackend.save.mockRejectedValue(new Error('session store refused'));
+            await expect(lane.call(deps)).rejects.toThrow('session store refused');
+            expect(await deps.storageBackend.load()).toBeNull();
+            expect(await deps.metaBackend.load()).toBeNull();
+        });
+
+        it(`${lane.name}: a flow that throws after its first write discards the blob`, async () => {
+            flowBehaviour[lane.flow] = async () => { throw new Error('storage is full'); };
+            const deps = makeDeps();
+            await deps.storageBackend.save(new Uint8Array(0));
+            deps.storageBackend.load = async () => null;
+            const clear = vi.spyOn(deps.storageBackend, 'clear');
+            await expect(lane.call(deps)).rejects.toThrow('storage is full');
+            expect(clear).toHaveBeenCalledTimes(1);
+        });
+
+        it(`${lane.name}: a clear that also fails still reports the original error`, async () => {
+            const deps = makeDeps();
+            deps.metaBackend.save.mockRejectedValue(new Error('metadata could not be persisted'));
+            deps.storageBackend.clear = async () => { throw new Error('clear refused'); };
+            await expect(lane.call(deps)).rejects.toThrow('metadata could not be persisted');
+        });
+    }
+
+    it('a wallet that already exists is never discarded by the refusal', async () => {
+        const deps = makeDeps();
+        await deps.metaBackend.save({ kdfParams: {} });
+        const clear = vi.spyOn(deps.storageBackend, 'clear');
+        await expect(LANES[0].call(deps)).rejects.toThrow('A wallet already exists');
+        expect(clear).not.toHaveBeenCalled();
+    });
 });
 
 describe('pre-host mnemonic import hands label restore to the unlocked host', () => {

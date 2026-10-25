@@ -14,6 +14,7 @@ import { registry as registryLib } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { userFacingMessage } from '../utils/userFacingMessage.js';
 import { isCompressedPublicKey, validateCosignerXpub } from '../utils/multisigXpub.js';
+import { MAX_MULTISIG_COSIGNERS } from '../../schemas/multisigConfig.js';
 import { MultisigCosignerShare } from './MultisigCosignerShare.jsx';
 import styles from './IssueTokenForm.module.css';
 import cardStyles from '../../ui/Card.module.css';
@@ -25,11 +26,6 @@ const chainRegistry = registryLib.defaultRegistry();
 // gate but via useBtcAddressesPresent; here we filter inline because
 // the multisig flow needs the BTC chainId before any address picker.
 const MULTISIG_COIN = 'bitcoin';
-const MAX_COSIGNERS = {
-    'p2sh-multisig': 15,
-    'p2wsh-multisig': 20,
-    'taproot-musig2': 20,
-};
 
 const SCHEMES = [
     {
@@ -239,7 +235,8 @@ export function MultisigCreate({ walletId, onBack }) {
 
     const composeError = useMemo(() => {
         if (rows.length < 2) return 'Need at least 2 cosigners.';
-        const maxCosigners = MAX_COSIGNERS[scheme];
+        // The host's table, so the form never offers a row count it refuses.
+        const maxCosigners = MAX_MULTISIG_COSIGNERS[scheme];
         if (rows.length > maxCosigners) {
             return `${schemeLabel(scheme)} supports at most ${maxCosigners} cosigners.`;
         }
@@ -523,7 +520,7 @@ export function MultisigCreate({ walletId, onBack }) {
                         type="button"
                         variant="secondary"
                         onClick={addRow}
-                        disabled={rows.length >= MAX_COSIGNERS[scheme]}
+                        disabled={rows.length >= MAX_MULTISIG_COSIGNERS[scheme]}
                     >
                         + Add cosigner
                     </Button>

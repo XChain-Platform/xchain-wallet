@@ -58,8 +58,8 @@ describe('UndoSendToast', () => {
     it('is the host toast: same stack position, card, message and action styles', () => {
         const css = readFileSync('packages/core/src/shared/components/UndoSendToast.module.css', 'utf8');
         expect(css).toMatch(/\.stack\s*\{\s*composes:\s*viewport from '\.\/ToastHost\.module\.css';\s*\}/);
-        expect(css).toMatch(/\.toast\s*\{\s*composes:\s*toast variant_info from '\.\/ToastHost\.module\.css';\s*\}/);
-        expect(css).toMatch(/\.cancelBtn\s*\{\s*composes:\s*actionBtn from '\.\/ToastHost\.module\.css';\s*\}/);
+        expect(css).toMatch(/\.toast\s*\{\s*composes:\s*toast variant_info from '\.\/ToastStack\.module\.css';\s*\}/);
+        expect(css).toMatch(/\.cancelBtn\s*\{\s*composes:\s*actionBtn from '\.\/ToastStack\.module\.css';\s*\}/);
         // Nothing of its own: no second set of positions, colours or motion.
         expect(css).not.toMatch(/position:|background:|animation:|bottom:/);
     });

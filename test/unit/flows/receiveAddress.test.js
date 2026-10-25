@@ -437,3 +437,23 @@ describe('receiveAddress keeps a demo wallet off the explorer', () => {
         expect(sdk.calls.length).toBeGreaterThan(0);
     });
 });
+
+describe('receiveAddress concurrent calls', () => {
+    it('gives two simultaneous calls on one vault two different indexes', async () => {
+        const vault = makeVault({ accounts: [ACCOUNT_A] });
+        const [first, second] = await Promise.all([
+            receiveAddress(base(vault, makeSigner('software'))),
+            receiveAddress(base(vault, makeSigner('software'))),
+        ]);
+        expect(first.address).not.toBe(second.address);
+        const stored = await vault.addresses.list();
+        expect(new Set(stored.map((a) => a.address)).size).toBe(2);
+    });
+
+    it('lets a later call run after an earlier one fails', async () => {
+        const vault = makeVault({ accounts: [ACCOUNT_A] });
+        await expect(receiveAddress(base(vault, makeSigner('software'), { accountId: 'missing' }))).rejects.toThrow();
+        const rec = await receiveAddress(base(vault, makeSigner('software')));
+        expect(rec.derivationPath).toBe("m/84'/0'/0'/0/0");
+    });
+});

@@ -21,6 +21,7 @@
         "./shims/*": "./src/shims/*",
         "./signerFactories": "./src/signerFactories/index.js",
         "./signers": "./src/signers/index.js",
+        "./signers/*": "./src/signers/*",
         "./uri/*": "./src/uri/*",
         "./storage/*": "./src/storage/*"
     },

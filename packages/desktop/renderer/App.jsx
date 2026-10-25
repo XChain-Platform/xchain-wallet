@@ -157,7 +157,7 @@ import { ShortcutHelp } from '@xchain-wallet/core/shared/keyboard/ShortcutHelp.j
 import { BottomTabBar } from '@xchain-wallet/core/shared/components/BottomTabBar.jsx';
 import { QueuedBroadcastBanner } from '@xchain-wallet/core/shared/components/QueuedBroadcastBanner.jsx';
 import { ReachabilityBanner } from '@xchain-wallet/core/shared/components/ReachabilityBanner.jsx';
-import { ToastHost, useToast } from '@xchain-wallet/core/shared/components/ToastHost.jsx';
+import { ToastHost, useClearToastsOnLock, useToast } from '@xchain-wallet/core/shared/components/ToastHost.jsx';
 import { useDemoAutoWipe } from '@xchain-wallet/core/shared/hooks/useDemoAutoWipe.js';
 import { registerSigner as registerLocalSigner, unregisterSigner as unregisterLocalSigner } from './signerBridge.js';
 import { registry as registryLib } from '@xchain-wallet/core';
@@ -255,6 +255,7 @@ function BottomTabBarWithObligations({ badges, ...rest }) {
 function AppInner() {
     const { showToast } = useToast();
     const [status, setStatus] = useState(/** @type {any} */ ({ state: 'loading' }));
+    useClearToastsOnLock(status.state);
     const statusRequest = useRef(0);
     // Keyboard-binding overrides for the palette + shortcuts live in
     // settings; null-safe reads below tolerate the pre-load window.
@@ -2210,6 +2211,7 @@ function AppInner() {
                         mode="unstake"
                         walletId={activeWalletId}
                         chainId={stakingRef.chainId}
+                        initialFromAddress={stakingRef.address || undefined}
                         onBack={() => setUnlockedView('stake-detail')}
                     />
                 );
@@ -2220,6 +2222,7 @@ function AppInner() {
                         mode="claim-rewards"
                         walletId={activeWalletId}
                         chainId={stakingRef.chainId}
+                        initialFromAddress={stakingRef.address || undefined}
                         onBack={() => setUnlockedView('stake-detail')}
                     />
                 );
@@ -2230,6 +2233,7 @@ function AppInner() {
                         mode="delegate"
                         walletId={activeWalletId}
                         chainId={stakingRef.chainId}
+                        initialFromAddress={stakingRef.address || undefined}
                         onBack={() => setUnlockedView('stake-detail')}
                     />
                 );
@@ -2240,6 +2244,7 @@ function AppInner() {
                         mode="revoke"
                         walletId={activeWalletId}
                         chainId={stakingRef.chainId}
+                        initialFromAddress={stakingRef.address || undefined}
                         onBack={() => setUnlockedView('stake-detail')}
                     />
                 );

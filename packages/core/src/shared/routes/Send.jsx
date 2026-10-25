@@ -68,6 +68,7 @@ import { prebuiltPsbtFromComposed } from '../../flows/prebuiltPsbtFromComposed.j
 import { ActionConfirmScreen } from '../components/ActionConfirmScreen.jsx';
 import { UndoSendToast } from '../components/UndoSendToast.jsx';
 import { PanicFreezeNotice, SigningReadyNote } from '../safety/PanicFreezeNotice.jsx';
+import { panicRefusalMessage } from '../safety/panicNotice.js';
 import {
     resolveFeeConfig,
     resolvePreflightPrivacy,
@@ -239,6 +240,7 @@ import {
 } from '../utils/amountFormat.js';
 import { formatFiatAmount } from '../utils/fiatAmountFormat.js';
 import { dustThresholdForCoin } from '../../sdk/nativeFeePreflight.js';
+import { encoderFieldError } from '../../sdk/encoderFieldErrors.js';
 import styles from './Send.module.css';
 import { normalizeHistoryRow } from '../utils/historyRow.js';
 import { pendingTxToEntry } from '../utils/pendingHistory.js';
@@ -601,6 +603,15 @@ export function Send({ walletId, accountId, onBack, prefill = null, onDone, onCh
     const [submitError, setSubmitError] = useState(/** @type {string | null} */ (null));
     // Recognized recovery cause for affordances that must not match display copy.
     const [submitErrorCause, setSubmitErrorCause] = useState(/** @type {string | null} */ (null));
+    // Remounts the freeze notice so it re-reads the freeze at once after a
+    // refusal, instead of on its next tick: the notice is then the one
+    // message for that state, and the submit error stays empty.
+    const [panicNoticeKey, setPanicNoticeKey] = useState(0);
+    // An encoder refusal the person fixes in one field (a fee rate under the
+    // relay minimum, an amount the inputs cannot cover) shows under that field.
+    const [submitFieldError, setSubmitFieldError] = useState(
+        /** @type {{ field: 'fee' | 'amount', message: string } | null} */ (null),
+    );
     const [result, setResult] = useState(/** @type {any | null} */ (null));
     // The done screen follows the sent transaction from broadcast to
     // confirmation (or failure) instead of freezing on "pending".
@@ -2777,11 +2788,34 @@ export function Send({ walletId, accountId, onBack, prefill = null, onDone, onCh
                 setPassword('');
                 return;
             }
+            // A freeze the user armed is stated by the notice at the top of
+            // the form; a second, generic "try again" line under it would
+            // contradict it.
+            if (panicRefusalMessage(err)) {
+                setSubmitError(null);
+                setSubmitErrorCause(null);
+                setPanicNoticeKey((k) => k + 1);
+                haptic.error();
+                return;
+            }
             // Everything else (compose/tamper failure, bad password, broadcast
             // failure) surfaces in the form's existing error banner; the modal
             // has already unmounted (terminal phase leaves CONFIRM_MODAL_PHASES).
             console.error('Send (confirm) failed:', err); // eslint-disable-line no-console
-            setSubmitError(submitFailureMessage(err, { verb: 'send' }));
+            const fieldError = isMultiSend ? null : encoderFieldError(err, {
+                coinTicker: nativeTickerFor(chainId ? chainRegistry.get(chainId) : null) || '',
+                feeUnit: feeTiers?.unit,
+            });
+            if (fieldError) {
+                setSubmitFieldError(fieldError);
+                setSubmitError(null);
+                setSubmitErrorCause(null);
+            } else {
+                setSubmitError(submitFailureMessage(err, {
+                    verb: 'send',
+                    coinTicker: nativeTickerFor(chainId ? chainRegistry.get(chainId) : null) || undefined,
+                }));
+            }
             haptic.error();
         } finally {
             confirmLaunchRef.current = false;
@@ -2791,6 +2825,7 @@ export function Send({ walletId, accountId, onBack, prefill = null, onDone, onCh
         feePerKb, settings, messaging, confirmAction, draft, haptic,
         isNativeSend, isHwSource, isMultiSend, sendLegs, sendTotals, startUndoSend,
         clearUndoHold, resetUndoSend, showToast, changeAddress, coinControlEnabled, selectedUtxos,
+        feeTiers,
     ]);
 
     async function handleSubmit(event) {
@@ -2873,12 +2908,34 @@ export function Send({ walletId, accountId, onBack, prefill = null, onDone, onCh
                 showToast({ message: 'Transaction cancelled.' });
                 return;
             }
+            if (panicRefusalMessage(err)) {
+                setSubmitError(null);
+                setSubmitErrorCause(null);
+                setPanicNoticeKey((k) => k + 1);
+                setPassword('');
+                setStage('form');
+                haptic.error();
+                return;
+            }
             if (isBadPassword) {
                 setSubmitError('Incorrect password.');
                 setSubmitErrorCause(null);
             } else {
                 console.error('Send failed:', err); // eslint-disable-line no-console
-                const message = submitFailureMessage(err, { verb: 'send' });
+                const coinTicker = nativeTickerFor(chainId ? chainRegistry.get(chainId) : null) || '';
+                const fieldError = isMultiSend ? null : encoderFieldError(err, {
+                    coinTicker, feeUnit: feeTiers?.unit,
+                });
+                if (fieldError) {
+                    setSubmitFieldError(fieldError);
+                    setSubmitError(null);
+                    setSubmitErrorCause(null);
+                    setPassword('');
+                    setStage('form');
+                    haptic.error();
+                    return;
+                }
+                const message = submitFailureMessage(err, { verb: 'send', coinTicker: coinTicker || undefined });
                 setSubmitError(message);
                 setSubmitErrorCause(humanizeError(err, 'send').cause);
             }
@@ -3668,6 +3725,7 @@ export function Send({ walletId, accountId, onBack, prefill = null, onDone, onCh
             onChangeCapture={() => {
                 if (formError) setFormError(null);
                 if (submitError) setSubmitError(null);
+                if (submitFieldError) setSubmitFieldError(null);
             }}
             status={[isDemo ? (
                 <StatusMessage
@@ -3726,7 +3784,7 @@ export function Send({ walletId, accountId, onBack, prefill = null, onDone, onCh
               * has already watched the whole transaction get composed.
               * Duress-armed freezes render nothing here, by design.
               */}
-            {!isWatcherMode ? <PanicFreezeNotice surface="send" /> : null}
+            {!isWatcherMode ? <PanicFreezeNotice key={panicNoticeKey} surface="send" /> : null}
             {assetSwitchNotice ? (
                 <FormNotice variant="status">{assetSwitchNotice}</FormNotice>
             ) : null}
@@ -3835,13 +3893,17 @@ export function Send({ walletId, accountId, onBack, prefill = null, onDone, onCh
                 fiatRate={amountFiatRate}
                 fiatCurrency={fiatCurrency}
                 amountInputMode={amountInputMode}
-                error={amountBalanceError || undefined}
+                error={amountBalanceError
+                    || (submitFieldError?.field === 'amount' ? submitFieldError.message : undefined)
+                    || undefined}
                 divisibility={sourceBalance?.divisibility ?? (isNativeSend ? 8 : undefined)}
                 onAmountFieldChange={onAmountFieldChange}
                 toggleAmountInputMode={toggleAmountInputMode}
                 inputRef={amountInputRef}
                 onMax={onMax}
-                maxDisabled={!sourceBalance}
+                // Offline the page already says sending needs a connection and Review is
+                // off, so Max (which quotes a fee over the network) is off with it.
+                maxDisabled={!sourceBalance || networkOffline}
                 maxBusy={maxBusy}
                 balanceText={
                     previewBalances.loading
@@ -4039,6 +4101,7 @@ export function Send({ walletId, accountId, onBack, prefill = null, onDone, onCh
                     value={feePick}
                     onChange={setFeePick}
                     customEstimate={feePick.mode === 'custom' ? feeEstimate : null}
+                    error={submitFieldError?.field === 'fee' ? submitFieldError.message : null}
                     // Offline already says sending is blocked, so a fee-source
                     // notice would be a second message for the same state.
                     showEstimateNotice={!networkOffline}

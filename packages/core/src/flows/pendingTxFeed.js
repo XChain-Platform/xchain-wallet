@@ -159,7 +159,11 @@ export async function livePendingTxs({ vault, chainRegistry, chainId, address, s
         } else if (record.chain !== chainId) {
             continue;
         }
-        if (wanted && String(record.fromAddress || '').toLowerCase() !== wanted) continue;
+        // A pasted raw transaction cannot name its sender, so its record carries
+        // the 'unknown' placeholder. It belongs to the wallet's whole set of
+        // addresses; History merges the repeats by txid.
+        const sender = String(record.fromAddress || '').toLowerCase();
+        if (wanted && sender !== wanted && !(sender === 'unknown' && record.txid)) continue;
         const seen = Boolean(record.txid)
             && seenNow instanceof Set
             && seenNow.has(String(record.txid).toLowerCase());

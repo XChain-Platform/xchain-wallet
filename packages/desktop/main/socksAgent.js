@@ -137,8 +137,7 @@ export function socksConnect({
             socket.removeListener('end', onDisconnect);
             socket.removeListener('close', onDisconnect);
             socket.removeListener('connect', onConnect);
-            socket.removeListener('data', onGreeting);
-            socket.removeListener('data', onReply);
+            socket.removeListener('data', onData);
         };
         const fail = (err) => {
             if (settled) return;
@@ -158,40 +157,63 @@ export function socksConnect({
         const onError = (err) => fail(new SocksError(
             `cannot reach the SOCKS proxy at ${proxyHost}:${proxyPort}: ${err.message}`));
         const onDisconnect = () => fail(new SocksError('SOCKS proxy closed during handshake'));
-        const onReply = (reply) => {
-            if (reply[0] !== SOCKS5) return fail(new SocksError('malformed SOCKS5 reply'));
-            if (reply[1] !== 0x00) {
-                const why = REPLY[reply[1]] ?? `unknown error 0x${reply[1].toString(16)}`;
+        // Proxy bytes arrive in whatever chunks TCP delivers, so both
+        // replies are read from a buffer: a short or split chunk waits for the
+        // rest, and bytes past the reply go back onto the socket for the
+        // tunnelled protocol.
+        let buffered = Buffer.alloc(0);
+        let stage = 'greeting';
+        const replyLength = () => {
+            if (buffered.length < 4) return null;
+            const atyp = buffered[3];
+            if (atyp === 0x01) return 10;
+            if (atyp === 0x04) return 22;
+            if (atyp === 0x03) return buffered.length < 5 ? null : 7 + buffered[4];
+            return -1;
+        };
+        const onData = (chunk) => {
+            buffered = Buffer.concat([buffered, chunk]);
+            if (stage === 'greeting') {
+                if (buffered[0] !== SOCKS5) return fail(new SocksError('not a SOCKS5 proxy'));
+                if (buffered.length < 2) return undefined;
+                if (buffered[1] !== NO_AUTH) {
+                    // Tor's default needs no auth. A proxy demanding it is
+                    // not the one the user thinks they are pointed at, and
+                    // guessing credentials is not a thing to do quietly.
+                    return fail(new SocksError(
+                        'the SOCKS proxy requires authentication, which is not configured'));
+                }
+                buffered = buffered.subarray(2);
+
+                const name = Buffer.from(host, 'utf8');
+                if (name.length > 255) return fail(new SocksError('hostname too long for SOCKS5'));
+                socket.write(Buffer.concat([
+                    Buffer.from([SOCKS5, CMD_CONNECT, 0x00, ATYP_DOMAIN, name.length]),
+                    name,
+                    Buffer.from([(port >> 8) & 0xff, port & 0xff]),
+                ]));
+                stage = 'reply';
+                if (buffered.length === 0) return undefined;
+            }
+            if (buffered[0] !== SOCKS5) return fail(new SocksError('malformed SOCKS5 reply'));
+            if (buffered.length < 2) return undefined;
+            if (buffered[1] !== 0x00) {
+                const why = REPLY[buffered[1]] ?? `unknown error 0x${buffered[1].toString(16)}`;
                 return fail(new SocksError(`SOCKS proxy refused ${host}:${port}: ${why}`));
             }
+            const length = replyLength();
+            if (length === -1) return fail(new SocksError('malformed SOCKS5 reply'));
+            if (length === null || buffered.length < length) return undefined;
+            const rest = buffered.subarray(length);
             done();
-        };
-        const onGreeting = (greeting) => {
-            if (greeting[0] !== SOCKS5) {
-                return fail(new SocksError('not a SOCKS5 proxy'));
-            }
-            if (greeting[1] !== NO_AUTH) {
-                // Tor's default needs no auth. A proxy demanding it is
-                // not the one the user thinks they are pointed at, and
-                // guessing credentials is not a thing to do quietly.
-                return fail(new SocksError(
-                    'the SOCKS proxy requires authentication, which is not configured'));
-            }
-
-            const name = Buffer.from(host, 'utf8');
-            if (name.length > 255) return fail(new SocksError('hostname too long for SOCKS5'));
-            socket.write(Buffer.concat([
-                Buffer.from([SOCKS5, CMD_CONNECT, 0x00, ATYP_DOMAIN, name.length]),
-                name,
-                Buffer.from([(port >> 8) & 0xff, port & 0xff]),
-            ]));
-
-            socket.once('data', onReply);
+            // After the caller has attached its readers.
+            if (rest.length > 0) setImmediate(() => { if (!socket.destroyed) socket.unshift(rest); });
+            return undefined;
         };
         const onConnect = () => {
             // Greeting: version, one method, "no authentication".
             socket.write(Buffer.from([SOCKS5, 0x01, NO_AUTH]));
-            socket.once('data', onGreeting);
+            socket.on('data', onData);
         };
 
         socket.setTimeout(timeoutMs, onTimeout);

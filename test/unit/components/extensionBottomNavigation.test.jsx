@@ -11,16 +11,21 @@
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { useState } from 'react';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { BottomTabBar } from '../../../packages/core/src/shared/components/BottomTabBar.jsx';
+import { preloadOnDemandOverlays } from '../../../packages/core/src/shared/components/onDemandOverlays.js';
+
+// The app loads these on idle after first paint; load them up front here.
+beforeAll(() => preloadOnDemandOverlays());
 
 const popupAppSource = readFileSync(
     join(process.cwd(), 'packages', 'extension', 'src', 'popup', 'App.jsx'),
     'utf8',
 );
-const bottomBarCss = readFileSync(
-    join(process.cwd(), 'packages', 'core', 'src', 'shared', 'components', 'BottomTabBar.module.css'),
+// The More sheet is an OverlaySurface sheet, so its padding lives there.
+const overlayCss = readFileSync(
+    join(process.cwd(), 'packages', 'core', 'src', 'shared', 'components', 'OverlaySurface.module.css'),
     'utf8',
 );
 
@@ -81,8 +86,8 @@ describe('extension bottom navigation', () => {
 
         const sheet = screen.getByRole('dialog', { name: 'More' });
         expect(sheet).toContainElement(screen.getByRole('heading', { name: 'More', level: 2 }));
-        expect(bottomBarCss).toMatch(
-            /calc\(var\(--xc-space-3\) \+ env\(safe-area-inset-bottom, var\(--xc-space-3\)\)\)/,
+        expect(overlayCss).toMatch(
+            /\.sheet \.body\s*\{[^}]*padding-bottom:\s*calc\(var\(--xc-space-4\) \+ env\(safe-area-inset-bottom, 0px\)\)/,
         );
 
         fireEvent.click(screen.getByRole('button', { name: 'Lock wallet' }));

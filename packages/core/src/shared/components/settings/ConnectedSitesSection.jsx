@@ -434,7 +434,7 @@ function BlocklistAuditPanel({ confirm }) {
 // write the documented defaults because the settings patcher deep-merges
 // nested objects and cannot remove an existing nested key.
 function SignThrottlePanel() {
-    const { settings, update } = useSettings();
+    const { settings, update } = useSettings({ reportsOwnError: true });
     const [submitting, setSubmitting] = useState(false);
     const [error, setError] = useState(/** @type {string | null} */ (null));
     const [validationAttempt, setValidationAttempt] = useState(0);

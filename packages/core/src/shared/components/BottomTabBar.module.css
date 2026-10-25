@@ -100,40 +100,6 @@
     word-break: normal;
 }
 
-.sheet {
-    box-sizing: border-box;
-    position: fixed;
-    inset-inline-start: 0;
-    inset-inline-end: 0;
-    bottom: 0;
-    background: var(--xc-surface-raised);
-    color: var(--xc-text);
-    border-top: 1px solid var(--xc-border);
-    border-start-start-radius: var(--xc-radius-lg, 12px);
-    border-start-end-radius: var(--xc-radius-lg, 12px);
-    z-index: var(--xc-z-modal);
-    max-height: 70vh;
-    max-height: min(70vh, var(--xc-viewport-h, 100vh));
-    min-height: 0;
-    overflow: hidden;
-    display: flex;
-    flex-direction: column;
-    padding: var(--xc-space-2)
-        env(safe-area-inset-right, 0px)
-        calc(var(--xc-space-3) + env(safe-area-inset-bottom, var(--xc-space-3)))
-        env(safe-area-inset-left, 0px);
-    box-shadow: var(--xc-shadow-bottom-sheet);
-}
-
-.handle {
-    grid-column: 1 / -1;
-    width: 36px;
-    height: 4px;
-    margin: 0 auto var(--xc-space-1);
-    border-radius: var(--xc-radius-xs);
-    background: var(--xc-border);
-}
-
 .sheetTitle {
     min-width: 0;
     margin: 0;
@@ -246,9 +212,5 @@
         --xc-icon-size: var(--xc-icon-sm);
         width: var(--xc-icon-sm);
         height: var(--xc-icon-sm);
-    }
-
-    .sheet {
-        max-height: calc(100% - 44px - env(safe-area-inset-bottom, 0px));
     }
 }

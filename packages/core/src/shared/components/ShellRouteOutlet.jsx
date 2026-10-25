@@ -23,7 +23,7 @@ export function ShellRouteOutlet({
     return (
         <CurrentRouteContext.Provider value={routeKey}>
             <WalletRouteScope walletId={walletId} routeKey={routeKey}>
-                <RouteErrorBoundary resetKey={resetKey} onHome={onHome}>
+                <RouteErrorBoundary resetKey={resetKey} onHome={onHome} atHome={routeKey === 'home'}>
                     <Suspense fallback={fallback}>
                         {children}
                     </Suspense>

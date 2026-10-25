@@ -40,6 +40,7 @@ import {
     installShellErrorCapture,
 } from '@xchain-wallet/core/flows/diagnosticDump.js';
 import { logConsole } from '@xchain-wallet/core/shared/utils/logConsole.js';
+import { rawTxid } from '@xchain-wallet/core/signers/verifySignedTx.js';
 import { MessageHost } from './MessageHost.js';
 import { registerBridgeHandlers } from '../bridge/handlers.js';
 import {
@@ -1066,16 +1067,21 @@ export function createBackgroundHost(deps) {
     // A send composed on one network must not sign or broadcast after the
     // wallet switched to another: the undo hold and a second window both
     // leave time for a switch between compose and broadcast.
-    async function assertActiveSendNetwork({ chainId, vault, chainRegistry }) {
+    async function assertActiveSendNetwork(
+        { chainId, vault, chainRegistry },
+        reviewAgain = 'Return to Send and review the payment again.',
+    ) {
         const descriptor = chainRegistry?.get?.(chainId);
         if (!descriptor) return;
         const activeNetwork = getActiveNetwork(await vault.settings.get());
         if (descriptor.networkKind !== activeNetwork) {
-            throw new Error(
-                `The active network changed to ${activeNetwork}. Return to Send and review the payment again.`,
-            );
+            throw new Error(`The active network changed to ${activeNetwork}. ${reviewAgain}`);
         }
     }
+
+    // LIST and AIRDROP confirms can be resumed or left open in a second
+    // window, so they take the same network check before signing.
+    const REVIEW_ACTION_AGAIN = 'Go back and review the action again.';
 
     // A stored confirm whose PSBT a send has just broadcast is spent. The popup
     // clears its own session after the send returns, but a popup that closes
@@ -1091,6 +1097,26 @@ export function createBackgroundHost(deps) {
                 if (session?.composed?.psbt === psbtHex) await confirmSessionStorage.removeSession(id);
             }
         } catch { /* the popup's own clear still runs when it is open */ }
+    }
+
+    // LIST and AIRDROP are resumable as well (RESUMABLE_DISPATCH_METHODS), so
+    // a broadcast of either drops its stored confirm the same way a send does.
+    // A queued broadcast (the signed bytes sit in the broadcast queue) and a
+    // permanent refusal (re-signing is forbidden) end the confirm too. Only an
+    // unsaved transient failure keeps it, since it is then the one way back.
+    async function finishStoredConfirm(psbtHex, run) {
+        let result;
+        try {
+            result = await run();
+        } catch (err) {
+            if (err?.name === flows.BROADCAST_FAILED_TRANSIENT_NAME
+                || err?.name === flows.BROADCAST_FAILED_PERMANENT_NAME) {
+                await dropConfirmSessionsForPsbt(psbtHex);
+            }
+            throw err;
+        }
+        await dropConfirmSessionsForPsbt(psbtHex);
+        return result;
     }
 
     async function sendWithHold(req, flowDeps) {
@@ -1128,9 +1154,10 @@ export function createBackgroundHost(deps) {
                 if (holdBeforeBroadcast) await holdBeforeBroadcast(...args);
                 await assertActiveSendNetwork(opts);
             };
-            const sent = await sendToken({ ...opts, beforeBroadcast });
-            await dropConfirmSessionsForPsbt(opts.prebuiltPsbt?.psbtHex);
-            return sent;
+            return await finishStoredConfirm(
+                opts.prebuiltPsbt?.psbtHex,
+                () => sendToken({ ...opts, beforeBroadcast }),
+            );
         } finally {
             activeSendIntents.delete(intentKey);
         }
@@ -3528,6 +3555,10 @@ export function createBackgroundHost(deps) {
         if (typeof signed?.txHex !== 'string' || !signed.txHex || typeof signed?.txid !== 'string' || !signed.txid) {
             throw new Error('tx.replace: signer did not return a complete transaction');
         }
+        // The freeze is checked again once the signer returns: a hardware
+        // prompt can hold the sign open while panic mode is armed elsewhere,
+        // and the replacement must not reach the network or the ledger then.
+        flows.assertSigningAllowed();
 
         let pending = schemas.createPendingTx({
             chain: descriptor.coin,
@@ -4040,11 +4071,18 @@ export function createBackgroundHost(deps) {
             actionSummary: 'Raw signed transaction broadcast via broadcast.signedTx',
             psbtHex: '',
         });
+        // The caller's txid wins; a pasted raw transaction carries none, so it is
+        // derived from the bytes. A record without a txid is invisible to the
+        // History pending list and cannot match a duplicate of itself.
+        let knownTxid = typeof req?.txid === 'string' && req.txid ? req.txid : null;
+        if (!knownTxid) {
+            try { knownTxid = rawTxid(txHex); } catch { knownTxid = null; }
+        }
         pending = {
             ...pending,
             status: 'broadcasting',
             txHex,
-            ...(typeof req?.txid === 'string' && req.txid ? { txid: req.txid } : {}),
+            ...(knownTxid ? { txid: knownTxid } : {}),
         };
         await vault.pendingTxs.put(pending);
 
@@ -4402,8 +4440,14 @@ export function createBackgroundHost(deps) {
     registerHwHandler('action.deployChunked.hw', deployChunkedRun);
     registerHwHandler('action.dispenser.hw', dispenserAction);
     registerHwHandler('action.dividend.hw', dividendAction);
-    registerHwHandler('action.createList.hw', createList);
-    registerHwHandler('action.airdrop.hw', airdropAction);
+    registerHwHandler('action.createList.hw', async (opts) => {
+        await assertActiveSendNetwork(opts, REVIEW_ACTION_AGAIN);
+        return finishStoredConfirm(opts?.prebuiltPsbt?.psbtHex, () => createList(opts));
+    });
+    registerHwHandler('action.airdrop.hw', async (opts) => {
+        await assertActiveSendNetwork(opts, REVIEW_ACTION_AGAIN);
+        return finishStoredConfirm(opts?.prebuiltPsbt?.psbtHex, () => airdropAction(opts));
+    });
     registerHwHandler('action.advanced.hw', advancedAction);
     registerHwHandler('action.order.hw', orderAction);
     registerHwHandler('action.cancelOrder.hw', cancelOrder);
@@ -5382,11 +5426,17 @@ export function createBackgroundHost(deps) {
     // (b) confirm the LIST on the AIRDROP review screen.
 
     host.register('action.createList', async (req, { vault, chainRegistry, sdkRegistry, signerPool }) => {
-        return createList({ ...req, signer: await sessionSigner(req, vault, signerPool), vault, chainRegistry, sdkRegistry, onBroadcastFailure: enqueueOnBroadcastFailure(req?.walletId) });
+        await assertActiveSendNetwork({ ...req, vault, chainRegistry }, REVIEW_ACTION_AGAIN);
+        return finishStoredConfirm(req?.prebuiltPsbt?.psbtHex, async () => {
+            return createList({ ...req, signer: await sessionSigner(req, vault, signerPool), vault, chainRegistry, sdkRegistry, onBroadcastFailure: enqueueOnBroadcastFailure(req?.walletId) });
+        });
     });
 
     host.register('action.airdrop', async (req, { vault, chainRegistry, sdkRegistry, signerPool }) => {
-        const result = await airdropAction({ ...req, signer: await sessionSigner(req, vault, signerPool), vault, chainRegistry, sdkRegistry, onBroadcastFailure: enqueueOnBroadcastFailure(req?.walletId) });
+        await assertActiveSendNetwork({ ...req, vault, chainRegistry }, REVIEW_ACTION_AGAIN);
+        const result = await finishStoredConfirm(req?.prebuiltPsbt?.psbtHex, async () => {
+            return airdropAction({ ...req, signer: await sessionSigner(req, vault, signerPool), vault, chainRegistry, sdkRegistry, onBroadcastFailure: enqueueOnBroadcastFailure(req?.walletId) });
+        });
         return retainReplacementPlan(vault, result, req?.prebuiltPsbt?.psbtHex, req?.rbf, chainRegistry?.get?.(req?.chainId));
     });
 

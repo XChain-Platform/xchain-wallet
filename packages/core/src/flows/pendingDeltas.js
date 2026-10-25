@@ -57,10 +57,18 @@ function isPositiveDecimalString(amount) {
 export function unconfirmedPendingDeltas(pendingTxs, { coin, network, source } = {}) {
     if (!Array.isArray(pendingTxs) || !source) return [];
     const out = [];
+    // One transaction is one spend: an identical payment signed again leaves a
+    // second record with the same txid, and netting both would debit it twice.
+    const seenTxids = new Set();
     for (const p of pendingTxs) {
         if (!p || p.fromAddress !== source) continue;
         if (p.chain !== coin || p.network !== network) continue;
         if (!UNCONFIRMED.has(p.status)) continue;
+        if (typeof p.txid === 'string' && p.txid) {
+            const txid = p.txid.toLowerCase();
+            if (seenTxids.has(txid)) continue;
+            seenTxids.add(txid);
+        }
         // A multi-leg SEND records its debits per leg and no single tick/amount,
         // so the legs are the source whenever the record carries them; a
         // single-leg record has the same debit in both places and counts once.

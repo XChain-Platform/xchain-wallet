@@ -34,6 +34,7 @@ import {
     createMultisigSigningSession,
     pendingCosignerPubkeys,
 } from '../schemas/multisigSigningSession.js';
+import { assertSigningAllowed } from './panicMode.js';
 
 const HEX_RE = /^[0-9a-f]+$/;
 const isHexLength = (v, byteLen) =>
@@ -446,6 +447,10 @@ async function finalizeMultisigSigningSessionLocked({
         if (typeof sdk.encoder?.broadcastTx !== 'function') {
             throw new Error('finalizeMultisigSigningSession: sdk.encoder.broadcastTx is unavailable');
         }
+        // Panic-mode freeze: pushing the finalized bytes is the irreversible
+        // step, so it is refused like every other broadcast route. The session
+        // stays 'finalized' and can be broadcast once the freeze ends.
+        assertSigningAllowed();
         const result = await sdk.encoder.broadcastTx(session.finalizedTxHex);
         const broadcastTxid = typeof result === 'string' ? result : result?.txid;
         if (typeof broadcastTxid !== 'string' || broadcastTxid.length === 0) {

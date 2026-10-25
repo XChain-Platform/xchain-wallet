@@ -140,3 +140,19 @@ describe('broadcast.signedTx transient handoff', () => {
         expect((await h.listQueue()).result).toEqual([]);
     });
 });
+
+describe('broadcast.signedTx with a pasted raw transaction', () => {
+    const INPUT = `${'00'.repeat(32)}0000000000ffffffff`;
+    const RAW = `01000000 01${INPUT}01${'010000000000000000'}00000000`.replace(' ', '');
+
+    it('records the txid derived from the bytes when the caller sends none', async () => {
+        const h = makeHost(vi.fn(async () => { throw new Error('ECONNREFUSED'); }));
+
+        const response = await h.call('broadcast.signedTx', { walletId: WALLET, chainId: CHAIN, txHex: RAW });
+
+        expect(response.ok, JSON.stringify(response.error ?? {})).toBe(true);
+        const [record] = await h.pendingTxs.list();
+        expect(record.txid).toMatch(/^[0-9a-f]{64}$/);
+        expect(record).toMatchObject({ status: 'queued', fromAddress: 'unknown' });
+    });
+});

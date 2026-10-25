@@ -9,7 +9,7 @@
 // contact legal@dankest.llc.
 
 import { Component } from 'react';
-import { Button, FormPage, StatusMessage } from '@xchain-wallet/core/ui';
+import { Button, FormPage, Icon, StatusMessage } from '@xchain-wallet/core/ui';
 import { logConsole } from '../utils/logConsole.js';
 import styles from './RouteErrorBoundary.module.css';
 import { t } from '../../i18n/index.js';
@@ -18,7 +18,9 @@ import { t } from '../../i18n/index.js';
  * Keeps a failed route from replacing the application with a blank screen.
  * The Home action changes only shell navigation state, so providers and the
  * unlocked session stay mounted. A boundary without shell navigation falls
- * back to reloading the application entry point.
+ * back to reloading the application entry point. When the failing route is
+ * Home itself (atHome), the Home action has nowhere to go, so the screen
+ * offers only Try again, which remounts the route.
  */
 export class RouteErrorBoundary extends Component {
     constructor(props) {
@@ -75,9 +77,11 @@ export class RouteErrorBoundary extends Component {
 
         const actions = (
             <>
-                <Button type="button" variant="secondary" onClick={this.goHome}>
-                    {t('components.routeErrorBoundary.goToHome')}
-                </Button>
+                {this.props.atHome ? null : (
+                    <Button type="button" variant="secondary" icon={<Icon.HomeIcon />} onClick={this.goHome}>
+                        {t('components.routeErrorBoundary.goToHome')}
+                    </Button>
+                )}
                 <Button type="button" variant="primary" onClick={this.retry}>
                     {t('common.tryAgain')}
                 </Button>

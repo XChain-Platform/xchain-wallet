@@ -1475,3 +1475,35 @@ describe.each(['ledger', 'trezor'])('%s hardware signing flow', (kind) => {
         expect(screen.queryByRole('heading', { name: 'Broadcast pending' })).not.toBeInTheDocument();
     });
 });
+
+describe('Send refused by a freeze armed during the review', () => {
+    const frozen = () => Object.assign(
+        new Error('Signing is frozen by panic mode (1440 min remaining)'),
+        { name: 'PanicModeActiveError' },
+    );
+
+    it('states a self-armed freeze once, in the form notice, with no generic retry line', async () => {
+        const { activatePanicMode } = await import('../../../packages/core/src/flows/panicMode.js');
+        const messaging = mount({ sendResult: frozen() });
+        await openPasswordConfirm(messaging);
+        activatePanicMode();
+        await approveWithPassword(messaging);
+
+        expect(await screen.findByText('Panic mode is on. This send cannot be signed.')).toBeInTheDocument();
+        expect(screen.queryByText(/Something went wrong/)).not.toBeInTheDocument();
+        expect(screen.queryByText(/Signing is frozen by panic mode/)).not.toBeInTheDocument();
+    });
+
+    it('keeps the generic failure line and names no freeze when it was duress-armed', async () => {
+        const { activatePanicMode, PANIC_ARMED_DURESS } = await import('../../../packages/core/src/flows/panicMode.js');
+        const messaging = mount({ sendResult: frozen() });
+        await openPasswordConfirm(messaging);
+        activatePanicMode({ armedBy: PANIC_ARMED_DURESS });
+        // The form logs an unclassified failure; the screen is what an observer reads.
+        vi.spyOn(console, 'error').mockImplementation(() => {});
+        await approveWithPassword(messaging);
+
+        expect(await screen.findByText(/Couldn't send\. Something went wrong\. Try again\./)).toBeInTheDocument();
+        expect(screen.queryByText(/panic|frozen/i)).not.toBeInTheDocument();
+    });
+});

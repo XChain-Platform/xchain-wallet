@@ -378,6 +378,7 @@ export function AdvancedActionsForm({ walletId, onBack, hasDexSurface = true }) 
         setFields([]);
         setValues({});
         setValidation(null);
+        setFormError(null);
     }
 
     function handleChainChange(nextChainId) {
@@ -785,7 +786,7 @@ export function AdvancedActionsForm({ walletId, onBack, hasDexSurface = true }) 
                     type="submit"
                     variant="primary"
                     loading={actionConfirm.composing}
-                    disabled={actionConfirm.composing}
+                    disabled={actionConfirm.composing || (!!action && formats === null)}
                 >
                     {actionConfirm.composing
                         ? 'Preparing review…'
@@ -863,7 +864,7 @@ export function AdvancedActionsForm({ walletId, onBack, hasDexSurface = true }) 
                 </Select>
             ) : null}
 
-            {action && fields.length === 0 ? (
+            {action && formats !== null && fields.length === 0 ? (
                 <p className={styles.hint}>
                     This action takes no user-provided fields.
                 </p>

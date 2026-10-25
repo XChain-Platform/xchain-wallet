@@ -618,33 +618,45 @@ export async function submitAction({
     // Settle: ensure the final txid and status reach the record even if
     // no wait callback was supplied. Without waitForTxid, status ends at
     // 'broadcast'; with it, it ends at 'indexed'.
+    //
+    // The transaction is already on the network here, so a refused write (a full
+    // disk, a storage backend that went away) must not turn the send into a
+    // failure: the caller would tell the user it failed and invite a second
+    // send. The record the 'broadcasting' phase wrote already carries the txid
+    // for the watchers; the refusal rides on the result for diagnostics.
+    let settleWriteError = null;
     if (pending) {
-        if (!waitForTxid) {
-            await writePending({
-                status: 'broadcast',
-                broadcastAt: new Date().toISOString(),
-                txid: result.txid,
-                txHex: result.signed.txHex ?? null,
-            });
-        } else if (pending.status !== 'indexed') {
-            // Defensive: the lifecycle callback should have advanced to
-            // 'indexed' via the 'confirmed' phase. If for some reason the
-            // progress event was missed, patch the terminal state here.
-            await writePending({
-                status: 'indexed',
-                confirmedAt: pending.confirmedAt ?? new Date().toISOString(),
-                txid: result.txid,
-                txHex: result.signed.txHex ?? null,
-            });
-        } else {
-            // Already 'indexed'; just make sure txHex is stored.
-            await writePending({ txHex: result.signed.txHex ?? null });
+        try {
+            if (!waitForTxid) {
+                await writePending({
+                    status: 'broadcast',
+                    broadcastAt: new Date().toISOString(),
+                    txid: result.txid,
+                    txHex: result.signed.txHex ?? null,
+                });
+            } else if (pending.status !== 'indexed') {
+                // Defensive: the lifecycle callback should have advanced to
+                // 'indexed' via the 'confirmed' phase. If for some reason the
+                // progress event was missed, patch the terminal state here.
+                await writePending({
+                    status: 'indexed',
+                    confirmedAt: pending.confirmedAt ?? new Date().toISOString(),
+                    txid: result.txid,
+                    txHex: result.signed.txHex ?? null,
+                });
+            } else {
+                // Already 'indexed'; just make sure txHex is stored.
+                await writePending({ txHex: result.signed.txHex ?? null });
+            }
+        } catch (writeErr) {
+            settleWriteError = writeErr && writeErr.message ? String(writeErr.message) : String(writeErr);
         }
     }
 
     return {
         ...result,
         pendingTxId: pending?.id ?? null,
+        ...(settleWriteError ? { pendingTxWriteError: settleWriteError } : {}),
         // The address the change actually paid, so a caller can say so
         // (and so a test can assert the rotation rather than infer it).
         changeAddress: encoderOptsForSubmit?.change ?? null,

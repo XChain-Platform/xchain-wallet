@@ -149,6 +149,7 @@ const runtime = vi.hoisted(() => ({
     enforceSystemAutoLock: vi.fn(),
     ensureHost: vi.fn(),
     handleIpcMessage: vi.fn(),
+    installPanicModePersistence: vi.fn(async () => {}),
     tearDownHost: vi.fn(),
     wipeRuntimeStores: vi.fn(),
 }));
@@ -213,7 +214,7 @@ vi.mock('../../../packages/desktop/main/signerBridgeListener.js', () => ({
 vi.mock('../../../packages/desktop/main/updater.js', () => ({
     attachUpdater: updater.attachUpdater,
 }));
-vi.mock('../../../packages/desktop/main/torRouting.js', () => ({ applyTorRouting: vi.fn() }));
+vi.mock('../../../packages/desktop/main/torRouting.js', () => ({ applyTorRouting: vi.fn(), applyProxyToSession: vi.fn(async () => {}) }));
 vi.mock('../../../packages/desktop/main/runtime.js', () => runtime);
 
 const here = dirname(fileURLToPath(import.meta.url));

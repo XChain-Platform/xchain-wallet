@@ -14,7 +14,7 @@
 // filters, or forms.
 
 import { BUNDLED_DESCRIPTORS } from './descriptors/index.js';
-import { validateChainDescriptor } from './validate.js';
+import { customChainReservedIdError, validateChainDescriptor } from './validate.js';
 import { counterwalletDerivationPath } from '../crypto/counterwallet.js';
 
 export class ChainRegistry {
@@ -69,6 +69,10 @@ export class ChainRegistry {
             throw new Error(
                 `ChainRegistry: invalid descriptor "${descriptor?.id}": ${res.errors.join('; ')}`,
             );
+        }
+        const reserved = isUserAdded ? customChainReservedIdError(descriptor) : null;
+        if (reserved) {
+            throw new Error(`ChainRegistry: invalid descriptor "${descriptor?.id}": ${reserved}`);
         }
         if (this._entries.has(descriptor.id)) {
             throw new Error(

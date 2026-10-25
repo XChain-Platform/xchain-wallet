@@ -61,6 +61,7 @@ import { FileMetaBackend, metaPathFor } from './meta.js';
 import { KeychainSessionBackend, sessionKeyPathFor } from './keychain.js';
 import { FileUnlockThrottleStore, unlockThrottlePathFor } from './unlockThrottle.js';
 import { FileAutoLockStore, autoLockStatePathFor } from './autoLockState.js';
+import { FilePanicModeStore, panicModeStatePathFor } from './panicModeState.js';
 import {
     attachRendererCspHeaders,
     allowlistedExternalUrl,
@@ -81,7 +82,7 @@ import {
 } from './protocol.js';
 import { attachSignerBridgeListener } from './signerBridgeListener.js';
 import { attachUpdater } from './updater.js';
-import { applyTorRouting } from './torRouting.js';
+import { applyTorRouting, applyProxyToSession } from './torRouting.js';
 import {
     installProcessErrorHandlers,
     reportMainFailure,
@@ -119,6 +120,7 @@ import {
     enforceSystemAutoLock,
     ensureHost,
     handleIpcMessage,
+    installPanicModePersistence,
     tearDownHost,
     wipeRuntimeStores,
 } from './runtime.js';
@@ -250,6 +252,9 @@ function getTrezorConnectSession() {
     if (!trezorConnectSession) {
         trezorConnectSession = session.fromPartition('trezor-connect-isolated');
         attachHidDenial(trezorConnectSession);
+        // The hosted script fetches from the internet, so it follows the Tor
+        // routing in force instead of connecting directly.
+        void applyProxyToSession(trezorConnectSession).catch((err) => reportMainFailure('trezor session proxy', err));
     }
     return trezorConnectSession;
 }
@@ -531,6 +536,8 @@ function buildRuntime() {
         // enforceLaunchAutoLock below reads it before the boot auto-unlock, so
         // the configured window bounds the cached key.
         autoLockStore: new FileAutoLockStore(autoLockStatePathFor(userData)),
+        // The panic-mode freeze main's signers read (main/panicModeState.js).
+        panicModeStore: new FilePanicModeStore(panicModeStatePathFor(userData)),
         chainRegistry,
         sdkRegistry: new sdkLib.SDKRegistry({
             chainRegistry,
@@ -545,6 +552,7 @@ function buildRuntime() {
                 settings,
                 sdkRegistry,
                 session: session.defaultSession,
+                extraSessions: () => (trezorConnectSession ? [trezorConnectSession] : []),
                 log: (m) => console.info(m),
             });
             // Routing is now in force, so the first hub request may leave.
@@ -1059,6 +1067,9 @@ void runMainTask(async () => {
     windowBoundsStore = new FileWindowBoundsStore(windowBoundsPathFor(app.getPath('userData')));
     rememberedWindowBounds = await windowBoundsStore.load();
     runtime = buildRuntime();
+    // Before any window can send a signing message: main reads the freeze
+    // from its own file, never from renderer storage.
+    await installPanicModePersistence(runtime);
     app.setAboutPanelOptions(DESKTOP_ABOUT_PANEL_OPTIONS);
 
     // Best-effort auto-unlock. Failure here is logged but doesn't block

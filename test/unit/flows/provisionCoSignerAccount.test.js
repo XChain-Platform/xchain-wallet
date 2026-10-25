@@ -80,6 +80,25 @@ describe('provisionCoSignerAccount', () => {
         expect(stored).toEqual(rec);
     });
 
+    it('refuses a second account on the same aggregate address', async () => {
+        const { sdkRegistry } = mkSdkRegistry();
+        const first = await provisionCoSignerAccount({ ...baseOpts(sdkRegistry), vault });
+        await expect(provisionCoSignerAccount({
+            ...baseOpts(sdkRegistry),
+            vault,
+            name: 'Looser copy',
+            policy: { allowedActions: ['SEND', 'DEX'] },
+        })).rejects.toThrow(/already exists/);
+        const stored = await vault.coSignerAccounts.findBy('walletId', 'wallet-1');
+        expect(stored.map((a) => a.id)).toEqual([first.id]);
+
+        // The inbound resolver matches on chain and address alone, so another
+        // wallet holding the same key pair is refused too.
+        await expect(provisionCoSignerAccount({ ...baseOpts(sdkRegistry), vault, walletId: 'wallet-2' }))
+            .rejects.toThrow(/already exists/);
+        expect((await vault.coSignerAccounts.findBy('walletId', 'wallet-2'))).toEqual([]);
+    });
+
     it('requires the essential inputs', async () => {
         const { sdkRegistry } = mkSdkRegistry();
         await expect(provisionCoSignerAccount({ ...baseOpts(sdkRegistry), vault, agentPubkey: '' }))

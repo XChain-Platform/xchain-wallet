@@ -43,7 +43,7 @@ import { t } from '../../../i18n/index.js';
 const chainRegistry = registryLib.defaultRegistry();
 
 export function NetworkEndpointsSection() {
-    const { settings, loading, error, update } = useSettings();
+    const { settings, loading, error, update } = useSettings({ reportsOwnError: true });
     if (loading) return <Status text={t('common.loading')} />;
     if (error) return <SettingsLoadError error={error} />;
     if (!settings) return <Status text={t('common.settingsUnavailable')} tone="error" />;

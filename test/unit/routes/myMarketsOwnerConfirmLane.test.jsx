@@ -222,6 +222,19 @@ describe.each(VIEWS)('$name owner actions sign through the confirm page', (view)
         expect(signCalls(calls)).toHaveLength(0);
     });
 
+    it('keeps a broadcast cancel pending while explorer feeds are stale', async () => {
+        const { utils } = await mount(view);
+        await openAction(utils, 'Cancel');
+        await step(() => fireEvent.click(utils.getByRole('button', { name: `Cancel ${view.noun}` })));
+        await approve(utils);
+        await step(() => fireEvent.click(utils.getByRole('button', { name: 'Done' })));
+
+        const closed = utils.getByRole('list', { name: new RegExp(`Closed ${view.noun}s`, 'i') });
+        const row = within(closed).getByText('#700', { exact: false }).closest('li');
+        expect(within(row).getByText('Cancelling')).toBeTruthy();
+        expect(within(row).queryByRole('button', { name: 'Cancel' })).toBeNull();
+    });
+
     it('edits a hardware owner on the device lane with the same composed bytes', async () => {
         const { utils, calls } = await mount(view, { owner: HW_ADDRESS });
         await openAction(utils, 'Edit');

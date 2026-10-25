@@ -22,6 +22,7 @@ export function RouteNotFound({ onHome }) {
             <ListPage>
                 <EmptyState
                     showWhileUnavailable
+                    titleAs="h1"
                     title={t('routeNotFound.title')}
                     body={t('routeNotFound.body')}
                     actionLabel={t('routeNotFound.backToHome')}

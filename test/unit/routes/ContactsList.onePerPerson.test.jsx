@@ -118,6 +118,20 @@ describe('ContactsList for one person with many addresses', () => {
         expect(messaging.store.size).toBe(1);
     });
 
+    it('keeps right-to-left overrides out of the name field so it reads as it is saved', async () => {
+        const messaging = makeMessaging([]);
+        mount(messaging, {
+            scanPrefill: { address: 'bc1qar0srrr7xfkvy5l643lydnw9re59gtzzwf5mdq', chainId: 'bitcoin-mainnet' },
+            onScanPrefillConsumed: () => {},
+        });
+        await waitFor(() => expect(screen.getByText('New contact')).toBeTruthy());
+        fireEvent.change(screen.getByLabelText('Name'), { target: { value: 'Alice\u202Eevil\u2066x' } });
+        expect(screen.getByLabelText('Name').value).toBe('Aliceevilx');
+        fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+        await waitFor(() => expect(messaging.saveContact).toHaveBeenCalled());
+        expect(messaging.saveContact.mock.calls[0][0].input.name).toBe('Aliceevilx');
+    });
+
     it('offers to merge same-name contacts and leaves one with every address', async () => {
         const messaging = makeMessaging([
             contact('a', 'JDog', '2026-01-01T00:00:00.000Z', [BTC]),

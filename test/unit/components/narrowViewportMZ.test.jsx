@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 import { readFileSync } from 'node:fs';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 import { act, cleanup, fireEvent, render, screen } from '@testing-library/react';
 
 const haptic = vi.hoisted(() => ({
@@ -27,7 +27,7 @@ vi.mock('../../../packages/core/src/shared/hooks/useHaptic.js', async () => {
 import { NetworkFilter } from '../../../packages/core/src/shared/components/NetworkFilter.jsx';
 import { NoticeModal } from '../../../packages/core/src/shared/components/NoticeModal.jsx';
 import { PlatformSwitcher } from '../../../packages/core/src/shared/components/PlatformSwitcher.jsx';
-import { ToastHost, useToast } from '../../../packages/core/src/shared/components/ToastHost.jsx';
+import { ToastHost, preloadToastStack, useToast } from '../../../packages/core/src/shared/components/ToastHost.jsx';
 import { TokenField } from '../../../packages/core/src/shared/components/TokenField.jsx';
 import { WatcherResultPanel } from '../../../packages/core/src/shared/components/WatcherResultPanel.jsx';
 
@@ -50,6 +50,9 @@ afterEach(() => {
 });
 
 describe('shared M to Z components at a 320px viewport', () => {
+    // The app loads the toast cards on idle after first paint; load them up front here.
+    beforeAll(() => preloadToastStack());
+
     it('keeps the searchable NetworkFilter toolbar inside its container', () => {
         const families = ['bitcoin', 'litecoin', 'dogecoin', 'ethereum', 'solana', 'dash', 'cosmos'];
         const chainRegistry = {
@@ -155,7 +158,7 @@ describe('shared M to Z components at a 320px viewport', () => {
         expect(screen.getByText(/notification message remains readable/)).toBeVisible();
         expect(screen.getByRole('button', { name: 'Review this notification action' })).toBeVisible();
 
-        const source = css('ToastHost');
+        const source = css('ToastStack');
         expect(source).toMatch(/\.toast\s*\{[^}]*box-sizing:\s*border-box[^}]*min-width:\s*0/s);
         // One row at every width: the message column shrinks and wraps its
         // own text, and the controls never become a full-width strip that

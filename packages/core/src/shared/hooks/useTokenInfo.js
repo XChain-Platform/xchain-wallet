@@ -49,7 +49,17 @@ export function useTokenInfo({ chainId, tick, skip = false, demo = false }) {
     const { messaging } = useMessaging();
     const baseKey = tokenInfoCacheKey(chainId, tick);
     const key = demo && baseKey ? `demo|${baseKey}` : baseKey;
-    const [info, setInfo] = useState(/** @type {any} */ (readTokenInfoCache(key).value));
+    // The record is stored with the key it was read for, so a hook that moves to
+    // another tick never serves the previous tick's divisibility, bridge list or
+    // owner while the new one loads, or when its read fails.
+    const [held, setHeld] = useState(/** @type {{ key: string | null, value: any }} */ (
+        { key, value: readTokenInfoCache(key).value }
+    ));
+    const info = held.key === key ? held.value : null;
+    const setInfo = (/** @type {any} */ next) => setHeld((prev) => ({
+        key,
+        value: typeof next === 'function' ? next(prev.key === key ? prev.value : null) : next,
+    }));
     // Bumped when this tick is invalidated, purely to re-run the fetch effect
     // on a component that never unmounted (the Manage Token page driving its
     // own MINT / LOCK / TRANSFER is exactly that case).

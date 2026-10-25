@@ -110,6 +110,7 @@ export async function handleWalletCreateWithMnemonic(request, deps) {
         if (pooled) {
             try { deps.signerPool.lockAll(); } catch { /* best-effort */ }
         }
+        await discardPartialWallet(deps);
         throw err;
     } finally {
         masterKey.fill(0);
@@ -194,6 +195,9 @@ export async function handleWalletImport(request, deps) {
         await deps.metaBackend.save({ kdfParams });
         await deps.sessionBackend.save(masterKey);
         await saveSigningSecret(deps.signingSecretBackend, password);
+    } catch (err) {
+        await discardPartialWallet(deps);
+        throw err;
     } finally {
         masterKey.fill(0);
     }
@@ -360,6 +364,7 @@ export async function handleWalletImportBackup(request, deps) {
         if (pooled) {
             try { deps.signerPool.lockAll(); } catch { /* best-effort */ }
         }
+        await discardPartialWallet(deps);
         throw err;
     } finally {
         masterKey.fill(0);
@@ -375,6 +380,27 @@ export async function handleWalletImportBackup(request, deps) {
         skipped: result.skipped,
         rekeyed: result.rekeyed,
     };
+}
+
+/**
+ * Remove what a failed create / import / fresh-restore wrote. The vault
+ * autosaves on every write, so a flow that throws partway, or a kdfParams,
+ * session or signing-secret save that is refused, leaves an encrypted blob the
+ * unlock path cannot open and every onboarding lane refuses to replace. Callers
+ * reach this only after `assertFreshVault` proved the install held nothing, so
+ * it never discards a wallet that was already there. A clear that fails too is
+ * left for the original error to report.
+ *
+ * @param {{ storageBackend: { clear?: () => Promise<void> }, metaBackend: { clear?: () => Promise<void> } }} deps
+ */
+async function discardPartialWallet(deps) {
+    for (const backend of [deps.storageBackend, deps.metaBackend]) {
+        try {
+            if (typeof backend?.clear === 'function') await backend.clear();
+        } catch {
+            // The failure being reported is the first one.
+        }
+    }
 }
 
 /**

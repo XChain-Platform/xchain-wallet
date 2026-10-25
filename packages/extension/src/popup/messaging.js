@@ -224,8 +224,8 @@ export function createAccount(opts) {
  * @param {string} [accountId]   when supplied, restrict to a single BIP44 account; otherwise aggregate across all accounts under the wallet
  * @returns {Promise<Record<string, Array<{ address: string, addressType: string, label: string, balances: unknown | null, error: string | null }>>>}
  */
-export function getWalletBalances(walletId, accountId) {
-    return /** @type {any} */ (sendMessage('balances.wallet', { walletId, accountId }));
+export function getWalletBalances(walletId, accountId, chainId) {
+    return /** @type {any} */ (sendMessage('balances.wallet', chainId ? { walletId, accountId, chainId } : { walletId, accountId }));
 }
 
 /**

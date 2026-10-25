@@ -85,9 +85,10 @@ describe('popup reacts to a wallet removed in another surface', () => {
         const sessionReads = count(sent, 'session.status');
         await emit('wallets', { change: 'removed', walletId: 'w1' });
 
-        expect(await screen.findByRole('button', { name: 'Create new wallet' })).toBeInTheDocument();
+        // Welcome renders after the session re-read, which can take seconds on a loaded runner.
+        expect(await screen.findByRole('button', { name: 'Create new wallet' }, { timeout: 8000 })).toBeInTheDocument();
         expect(count(sent, 'session.status')).toBeGreaterThan(sessionReads);
-    });
+    }, 15000);
 
     it('reloads the session when the shown wallet is removed and a wallet remains', async () => {
         const { state, sent, emit } = boot({

@@ -13,7 +13,7 @@
 // These guards pin the optional settings sections and the compact header's
 // labels, tooltips, source order, and width budget.
 
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { act, render, screen, fireEvent, cleanup, waitFor, within } from '@testing-library/react';
@@ -28,6 +28,10 @@ import PLATFORM_LINKS from '../../../packages/core/src/shared/platform-links.jso
 import { persistActiveNetwork } from '../../../packages/core/src/shared/utils/activeNetworkSwitch.js';
 import { readLastView, writeLastView } from '../../../packages/core/src/shared/utils/lastViewMemory.js';
 import { resetBackStackForTests } from '../../../packages/core/src/ui/backStack.js';
+import { preloadOnDemandOverlays } from '../../../packages/core/src/shared/components/onDemandOverlays.js';
+
+// The app loads these on idle after first paint; load them up front here.
+beforeAll(() => preloadOnDemandOverlays());
 
 let nativeBack;
 let capacitorApp;

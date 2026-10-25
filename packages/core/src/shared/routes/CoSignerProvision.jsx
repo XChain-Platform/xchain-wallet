@@ -159,6 +159,19 @@ export function CoSignerProvision({ walletId, onBack, onDone }) {
     const daemonAddress = chainAddresses.find((a) => a.id === daemonAddressId) || null;
     const descriptor = chainId ? chainRegistry.get(chainId) : null;
 
+    // Compared without the parity byte: 02K and 03K are one key and its negation,
+    // and whoever holds the private key for one holds it for the other.
+    const walletKeyXOnly = useMemo(() => {
+        const keys = new Set();
+        for (const list of Object.values(addressesByChain || {})) {
+            for (const a of Array.isArray(list) ? list : []) {
+                const key = String(a?.publicKey || '').toLowerCase();
+                if (PUBKEY_RE.test(key)) keys.add(key.slice(2));
+            }
+        }
+        return keys;
+    }, [addressesByChain]);
+
     const composeError = useMemo(() => {
         if (!chainId) return 'Pick a Bitcoin network.';
         if (!btcChainIds.includes(chainId) || !descriptor) return 'Pick a supported Bitcoin network.';
@@ -170,8 +183,8 @@ export function CoSignerProvision({ walletId, onBack, onDone }) {
         if (!PUBKEY_RE.test(agentPubkey.trim())) {
             return 'Enter a compressed agent public key starting with 02 or 03, followed by 64 hex characters.';
         }
-        if (agentPubkey.trim().toLowerCase() === String(daemonAddress.publicKey).toLowerCase()) {
-            return 'The agent key must differ from this wallet\'s key.';
+        if (walletKeyXOnly.has(agentPubkey.trim().toLowerCase().slice(2))) {
+            return 'The agent key must differ from every key in this wallet.';
         }
         const sourceAddressError = addressValidationError(daemonAddress.address, descriptor);
         if (sourceAddressError) return `This wallet's address: ${sourceAddressError}`;
@@ -180,7 +193,7 @@ export function CoSignerProvision({ walletId, onBack, onDone }) {
         const addressError = policyAddressError(built, descriptor);
         if (addressError) return addressError;
         return null;
-    }, [chainId, daemonAddress, agentPubkey, policyDraft, btcChainIds, descriptor]);
+    }, [chainId, daemonAddress, agentPubkey, policyDraft, btcChainIds, descriptor, walletKeyXOnly]);
 
     function handleReview(event) {
         event?.preventDefault();

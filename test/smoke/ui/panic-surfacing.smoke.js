@@ -66,7 +66,7 @@ const homeSrc = read('shared', 'routes', 'Home.jsx');
 assert.match(homeSrc, /<PanicFreezeNotice surface="home"/, 'Home mounts the freeze notice');
 
 const sendSrc = read('shared', 'routes', 'Send.jsx');
-assert.match(sendSrc, /<PanicFreezeNotice surface="send"/, 'the Send form mounts the freeze notice');
+assert.match(sendSrc, /<PanicFreezeNotice\b[^>]*\bsurface="send"/, 'the Send form mounts the freeze notice');
 
 // --- no sign screen claims readiness outside the guard ------------------
 
@@ -84,7 +84,8 @@ const SIGN_SURFACES = [
 for (const parts of SIGN_SURFACES) {
     const src = read(...parts);
     const file = parts.join('/');
-    assert.match(src, /No password needed/, `${file} still has the unlocked note`);
+    // The note is the literal sentence or its dictionary key (send.walletUnlocked).
+    assert.match(src, /No password needed|t\('send\.walletUnlocked'\)/, `${file} still has the unlocked note`);
     assert.match(src, /<SigningReadyNote>/, `${file} guards the unlocked note with SigningReadyNote`);
 }
 

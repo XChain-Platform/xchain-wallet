@@ -47,6 +47,60 @@ describe('confirmActionSessionStorage', () => {
         expect((await storage.loadSessions()).req1).toBeUndefined();
     });
 
+    it('keeps a removed session removed when another page persists at the same time', async () => {
+        const store = { 'xchain.confirmAction': { spent: { id: 'spent' } } };
+        globalThis.chrome = {
+            storage: {
+                session: {
+                    get: (key, cb) => queueMicrotask(() => cb({
+                        [key]: store[key] === undefined
+                            ? undefined
+                            : JSON.parse(JSON.stringify(store[key])),
+                    })),
+                    set: (obj, cb) => queueMicrotask(() => {
+                        Object.assign(store, JSON.parse(JSON.stringify(obj)));
+                        cb();
+                    }),
+                },
+            },
+        };
+        const storage = createConfirmActionSessionStorage();
+
+        await Promise.all([
+            storage.removeSession('spent'),
+            storage.putSession('fresh', { id: 'fresh' }),
+        ]);
+
+        expect(Object.keys(await storage.loadSessions())).toEqual(['fresh']);
+    });
+
+    it('keeps both sessions when two confirm pages persist concurrently', async () => {
+        const store = {};
+        globalThis.chrome = {
+            storage: {
+                session: {
+                    get: (key, cb) => queueMicrotask(() => cb({
+                        [key]: store[key] === undefined
+                            ? undefined
+                            : JSON.parse(JSON.stringify(store[key])),
+                    })),
+                    set: (obj, cb) => queueMicrotask(() => {
+                        Object.assign(store, JSON.parse(JSON.stringify(obj)));
+                        cb();
+                    }),
+                },
+            },
+        };
+        const storage = createConfirmActionSessionStorage();
+
+        await Promise.all([
+            storage.putSession('first', { id: 'first' }),
+            storage.putSession('second', { id: 'second' }),
+        ]);
+
+        expect(Object.keys(await storage.loadSessions()).sort()).toEqual(['first', 'second']);
+    });
+
     it('backs the reservation ledger so reservations survive an SW kill', async () => {
         mockChromeSession();
         const storage = createConfirmActionSessionStorage();

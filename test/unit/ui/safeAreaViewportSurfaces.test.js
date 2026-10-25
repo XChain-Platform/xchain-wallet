@@ -4,7 +4,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 import React from 'react';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
@@ -16,6 +16,10 @@ import bottomBarStyles from '../../../packages/core/src/shared/components/Bottom
 import layoutStyles from '../../../packages/core/src/shared/components/LeftNav.module.css';
 import overlayStyles from '../../../packages/core/src/shared/components/OverlaySurface.module.css';
 import toastStyles from '../../../packages/core/src/shared/components/ToastHost.module.css';
+import { preloadOnDemandOverlays } from '../../../packages/core/src/shared/components/onDemandOverlays.js';
+
+// The app loads these on idle after first paint; load them up front here.
+beforeAll(() => preloadOnDemandOverlays());
 
 vi.mock('../../../packages/core/src/shared/hooks/useHaptic.js', () => ({
     useHaptic: () => ({ error: vi.fn(), success: vi.fn(), tap: vi.fn() }),
@@ -155,12 +159,15 @@ describe('viewport surfaces keep content inside device safe areas', () => {
     });
 
     it('keeps the bottom sheet above the home indicator and landscape cutouts', () => {
-        const css = read('packages/core/src/shared/components/BottomTabBar.module.css');
-        const sheet = css.match(/\.sheet\s*\{[^}]*\}/)[0];
+        // The More sheet is an OverlaySurface sheet: its overlay clears the side
+        // cutouts and its scrolling body ends above the home indicator.
+        const css = read('packages/core/src/shared/components/OverlaySurface.module.css');
+        const overlay = css.match(/\.sheetOverlay\s*\{[^}]*\}/)[0];
+        const body = css.match(/\.sheet \.body\s*\{[^}]*\}/)[0];
 
-        expect(sheet).toMatch(new RegExp(inset('right')));
-        expect(sheet).toMatch(/env\(safe-area-inset-bottom,\s*var\(--xc-space-3\)\)/);
-        expect(sheet).toMatch(new RegExp(inset('left')));
+        expect(overlay).toMatch(new RegExp(inset('right')));
+        expect(body).toMatch(new RegExp(inset('bottom')));
+        expect(overlay).toMatch(new RegExp(inset('left')));
     });
 
     it('fits toasts between both landscape safe-area edges', () => {

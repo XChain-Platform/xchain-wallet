@@ -134,6 +134,7 @@ export const en = {
     // --- settings ------------------------------------------------
     'settings.toggle.turnOn': 'Turn on',
     'settings.developerMode.switchAccessibleLabel': 'Turn on developer mode',
+    'settings.saveFailed': "Couldn't save this setting. Try again.",
     'settings.ads.switchAccessibleLabel': 'Turn on Automatic Donation System',
     'settings.network.label': 'Network',
     'settings.network.activeLabel': 'Active network',
@@ -1665,6 +1666,10 @@ export const en = {
     'settings.fees.keepThisOnSoYou':
         'Keep this on so you can raise the fee later to speed up a stuck send on this network.',
     'settings.fees.feeBumpingIsNotSupported': "Fee bumping isn't supported on {displayName}.",
+    'settings.fees.rateGreaterThanZero': 'Enter a custom fee rate greater than zero.',
+    'settings.fees.rateAtLeast': 'Enter a rate of at least {rate} {unit}.',
+    'settings.fees.rateNoHigherThan': 'Enter a rate no higher than {rate} {unit}.',
+    'settings.fees.rateWithinSupportedRange': 'Enter a fee rate within the supported range.',
     'settings.panic.panicModeIsActive': 'Panic mode is active',
     'settings.panic.signingIsFrozenUntilThe': 'Signing is frozen until the timer expires.',
     'settings.panic.remaining': 'remaining.',

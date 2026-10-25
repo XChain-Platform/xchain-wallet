@@ -106,9 +106,11 @@ assert.ok(/\.bar\s*\{[\s\S]*?min-height:\s*3\.5rem/.test(cssSrc),
     '.bar reserves a scalable row');
 assert.ok(/env\(safe-area-inset-bottom/.test(cssSrc),
     '.bar respects the iOS safe-area inset');
-assert.ok(/\.sheet\s*\{[\s\S]*?max-height:\s*70vh/.test(cssSrc),
+// The More sheet is an OverlaySurface sheet, so its cap and padding live there.
+const overlayCss = readFileSync(join(core, 'src', 'shared', 'components', 'OverlaySurface.module.css'), 'utf8');
+assert.ok(/\.sheet\s*\{[\s\S]*?max-height:\s*min\(70vh/.test(overlayCss),
     '.sheet caps at 70vh so the route stays partially visible');
-assert.ok(/calc\(var\(--xc-space-3\) \+ env\(safe-area-inset-bottom, var\(--xc-space-3\)\)\)/.test(cssSrc),
+assert.ok(/\.sheet \.body\s*\{[^}]*padding-bottom:\s*calc\(var\(--xc-space-4\) \+ env\(safe-area-inset-bottom, 0px\)\)/.test(overlayCss),
     '.sheet keeps base bottom padding in addition to the safe-area inset');
 
 // --- 5. FullLayoutWithNav slot + App.jsx wiring -------------------------

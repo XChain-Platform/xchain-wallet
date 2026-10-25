@@ -61,6 +61,18 @@ describe('OperatorDashboard demo wallet staking', () => {
         expect(methods.getStakesForAddress).not.toHaveBeenCalled();
     });
 
+    it('shows the demo delegation and rewards the stake detail shows, without querying the indexer', async () => {
+        const { methods } = mount(DEMO_ID);
+
+        await waitFor(() => expect(screen.getByText(/^Total amount staked:/)).toBeTruthy());
+        expect(screen.queryByText('No delegations yet')).toBeNull();
+        expect(screen.getByText(/Signing key:/)).toBeTruthy();
+        expect(screen.getByText('Unclaimed rewards:').closest('p')).not.toHaveTextContent('Unclaimed rewards: 0 XCHAIN');
+        for (const name of ['getDelegationsForAddress', 'getRewardsForAddress', 'getRewardClaimsForAddress']) {
+            expect(methods[name]).not.toHaveBeenCalled();
+        }
+    });
+
     it('keeps the empty-state copy for a non-demo wallet with no stakes', async () => {
         const { methods } = mount('wallet-1');
         await waitFor(() => expect(screen.getByText(/No active stake/)).toBeTruthy());
@@ -78,11 +90,11 @@ describe('OperatorDashboard demo wallet staking', () => {
             React.createElement(OperatorDashboard, { walletId, chainId, address, onBack() {} }),
         );
         const view = render(renderDashboard('wallet-1', CHAIN, 'bcrt1qfirst'));
-        expect(await screen.findByText('Total amount staked: 99 XCP')).toBeTruthy();
+        expect(await screen.findByText('Total amount staked: 99 XCHAIN')).toBeTruthy();
 
         view.rerender(renderDashboard('wallet-2', 'bitcoin-testnet', 'tb1qsecond'));
 
-        expect(screen.queryByText('Total amount staked: 99 XCP')).toBeNull();
+        expect(screen.queryByText('Total amount staked: 99 XCHAIN')).toBeNull();
         expect(screen.getByText('Loading operator metrics…')).toBeTruthy();
         await waitFor(() => expect(methods.getStakesForAddress).toHaveBeenLastCalledWith({
             chainId: 'bitcoin-testnet', address: 'tb1qsecond',

@@ -38,11 +38,14 @@ afterEach(async () => {
     await Promise.all(servers.splice(0).map((server) => new Promise((resolve) => server.close(resolve))));
 });
 
+// A complete SOCKS5 success reply: version, succeeded, reserved, IPv4, bound address and port.
+const SUCCESS_REPLY = Buffer.from([0x05, 0x00, 0x00, 0x01, 0, 0, 0, 0, 0, 0]);
+
 async function successProxy() {
     return listen((socket) => {
         socket.once('data', () => {
             socket.write(Buffer.from([0x05, 0x00]));
-            socket.once('data', () => socket.write(Buffer.from([0x05, 0x00])));
+            socket.once('data', () => socket.write(SUCCESS_REPLY));
         });
     });
 }
@@ -93,7 +96,7 @@ describe('SOCKS connection branches', () => {
                 socket.write(Buffer.from([0x05, 0x00]));
                 socket.once('data', (data) => {
                     request = data;
-                    socket.write(Buffer.from([0x05, 0x00]));
+                    socket.write(SUCCESS_REPLY);
                 });
             });
         });

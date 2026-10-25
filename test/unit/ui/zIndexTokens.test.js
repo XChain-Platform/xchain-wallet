@@ -24,8 +24,9 @@ describe('shared z-index tokens', () => {
 
     it('uses semantic layers for shared stacking surfaces', () => {
         const cases = [
-            ['shared/components/BottomTabBar.module.css', ['sticky', 'modal']],
-            ['shared/components/HeaderSettingsButton.module.css', ['dropdown']],
+            ['shared/components/BottomTabBar.module.css', ['sticky']],
+            // The More sheet, the header settings popover and the dialogs share OverlaySurface.
+            ['shared/components/OverlaySurface.module.css', ['modal', 'dropdown']],
             ['shared/commandPalette/CommandPalette.module.css', ['overlay']],
             ['shared/components/NoticeModal.module.css', ['modal']],
             ['shared/components/ToastHost.module.css', ['toast']],

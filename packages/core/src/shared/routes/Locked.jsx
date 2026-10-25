@@ -47,7 +47,9 @@ import {
     subscribeActiveWallet,
     writeActiveWallet,
 } from '../utils/activeWalletMemory.js';
-import { DemoExitConfirm } from '../components/DemoExitConfirm.jsx';
+// The demo-exit confirm opens only on a tap, so it and its styles load on demand.
+import { DemoExitConfirmOnDemand as DemoExitConfirm } from '../components/onDemandOverlays.js';
+import { useIdlePreload } from '../utils/onDemandComponent.js';
 import { useFocusTrap } from '../utils/focusTrap.js';
 import { useBackHandler } from '../../ui/backStack.js';
 import { useNativeExitRoot } from '../hooks/useNativeExitRoot.js';
@@ -201,6 +203,7 @@ export function Locked({ onUnlocked }) {
     // The unlock screen is the bottom of the app, so Android Back leaves it
     // the way Home does.
     useNativeExitRoot(true, true);
+    useIdlePreload(DemoExitConfirm);
 
     useEffect(() => {
         inputRef.current?.focus();
@@ -439,6 +442,11 @@ export function Locked({ onUnlocked }) {
                 );
                 haptic.error();
             } else {
+                // Refused before any password check (another tab holds the
+                // vault, a worker throttle): the duress passphrase still arms
+                // the freeze, which every open context's signer reads, and the
+                // message below is the one any password gets here.
+                tripDuressIfMatch(password);
                 // Two failures carry a sentence that says what to do: another
                 // tab holding the vault, and a browser that cannot coordinate
                 // tabs. "Close and reopen the app" would send the user the wrong way.

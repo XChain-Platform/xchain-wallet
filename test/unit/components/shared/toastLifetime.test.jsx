@@ -1,7 +1,7 @@
 // Copyright © 2025-2026 Dankest, LLC
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 import { act, cleanup, render } from '@testing-library/react';
 
 vi.mock('../../../../packages/core/src/shared/hooks/useHaptic.js', () => {
@@ -10,7 +10,7 @@ vi.mock('../../../../packages/core/src/shared/hooks/useHaptic.js', () => {
 });
 
 import { useLastView } from '../../../../packages/core/src/shared/hooks/useLastView.js';
-import { ToastHost, useToast } from '../../../../packages/core/src/shared/components/ToastHost.jsx';
+import { ToastHost, preloadToastStack, useToast } from '../../../../packages/core/src/shared/components/ToastHost.jsx';
 
 let api;
 function Capture() {
@@ -26,6 +26,9 @@ afterEach(() => {
 });
 
 describe('toast lifetime', () => {
+    // The app loads the toast cards on idle after first paint; load them up front here.
+    beforeAll(() => preloadToastStack());
+
     it('drops a short confirmation within 3 s and keeps an error for 8 s', () => {
         vi.useFakeTimers();
         render(<ToastHost><Capture /></ToastHost>);

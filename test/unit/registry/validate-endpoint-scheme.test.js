@@ -20,7 +20,8 @@
 
 import { describe, it, expect } from 'vitest';
 import { validateChainDescriptor } from '../../../packages/core/src/registry/validate.js';
-import { BUNDLED_DESCRIPTORS } from '../../../packages/core/src/registry/index.js';
+import { addCustomChain } from '../../../packages/core/src/flows/customChains.js';
+import { BUNDLED_DESCRIPTORS, ChainRegistry } from '../../../packages/core/src/registry/index.js';
 
 const mainnetBase = BUNDLED_DESCRIPTORS.find((d) => d.id === 'bitcoin-mainnet');
 const regtestBase = BUNDLED_DESCRIPTORS.find((d) => d.id === 'bitcoin-regtest');
@@ -81,5 +82,120 @@ describe('validateChainDescriptor: endpoint scheme allowlist', () => {
             );
             expect(res.ok, host).toBe(true);
         }
+    });
+});
+
+describe('validateChainDescriptor: endpoint credentials, length and icon URLs', () => {
+    const custom = {
+        ...regtestBase,
+        id: 'forkcoin-regtest',
+        coin: 'forkcoin',
+        wifVersionByte: 0xef,
+        derivationPaths: { p2pkh: "m/44'/9'/A'/C/I" },
+        addressTypes: ['p2pkh'],
+        defaultAddressType: 'p2pkh',
+    };
+
+    it('accepts the custom baseline', () => {
+        expect(validateChainDescriptor(custom).ok).toBe(true);
+    });
+
+    it('rejects userinfo in an endpoint URL', () => {
+        const res = validateChainDescriptor(withEndpoint(custom, 'explorer', 'https://user:pw@node.example/'));
+        expect(res.ok).toBe(false);
+        expect(validateChainDescriptor(withEndpoint(custom, 'encoder', 'https://user@node.example/')).ok).toBe(false);
+        expect(validateChainDescriptor(withEndpoint(custom, 'hub', 'http://u:p@localhost:8080/')).ok).toBe(false);
+    });
+
+    it('rejects an endpoint URL over 2048 characters', () => {
+        const long = `https://node.example/${'a'.repeat(2100)}`;
+        expect(validateChainDescriptor(withEndpoint(custom, 'explorer', long)).ok).toBe(false);
+    });
+
+    it('rejects userinfo in a transaction explorer URL', () => {
+        const res = validateChainDescriptor({
+            ...custom,
+            transactionExplorers: [{ id: 'x', label: 'X', url: 'https://u:p@x.example/tx/{txid}' }],
+        });
+        expect(res.ok).toBe(false);
+    });
+
+    it('accepts only an https iconImg on a transaction explorer', () => {
+        const entry = (iconImg) => ({
+            ...custom,
+            transactionExplorers: [{ id: 'x', label: 'X', url: 'https://x.example/tx/{txid}', iconImg }],
+        });
+        expect(validateChainDescriptor(entry('https://x.example/favicon.ico')).ok).toBe(true);
+        expect(validateChainDescriptor(entry('javascript:alert(1)')).ok).toBe(false);
+        expect(validateChainDescriptor(entry('data:image/png;base64,AAAA')).ok).toBe(false);
+        expect(validateChainDescriptor(entry('http://evil.example/p.png')).ok).toBe(false);
+        expect(validateChainDescriptor(entry('file:///etc/passwd')).ok).toBe(false);
+    });
+});
+
+describe('custom chains: known-family mainnet is reserved to its own id', () => {
+    it('the registry rejects a user-added bitcoin mainnet clone under another id', () => {
+        const reg = new ChainRegistry();
+        expect(() => reg.addCustom({ ...mainnetBase, id: 'mybtc-mainnet' })).toThrow(/bitcoin-mainnet/);
+    });
+
+    it('addCustomChain rejects litecoin and dogecoin mainnet clones under another id', async () => {
+        for (const id of ['litecoin-mainnet', 'dogecoin-mainnet']) {
+            const base = BUNDLED_DESCRIPTORS.find((d) => d.id === id);
+            const vault = { settings: { get: async () => ({}), put: async () => {} } };
+            await expect(addCustomChain({
+                vault, chainRegistry: new ChainRegistry(), descriptor: { ...base, id: 'x' + id },
+            })).rejects.toThrow(id);
+        }
+    });
+
+    it('a signed registry descriptor with another id stays valid', () => {
+        expect(validateChainDescriptor({ ...mainnetBase, id: 'bitcoin-mainnet-2' }).ok).toBe(true);
+    });
+});
+
+describe('validateChainDescriptor: identifier and display fields', () => {
+    const custom = {
+        ...regtestBase,
+        id: 'forkcoin-regtest',
+        coin: 'forkcoin',
+        wifVersionByte: 0xef,
+        derivationPaths: { p2pkh: "m/44'/9'/A'/C/I" },
+        addressTypes: ['p2pkh'],
+        defaultAddressType: 'p2pkh',
+        icon: '',
+    };
+    const bad = (patch) => validateChainDescriptor({ ...custom, ...patch }).ok;
+
+    it('accepts the baseline', () => {
+        expect(bad({})).toBe(true);
+    });
+
+    it('rejects ids that are not lowercase slugs or exceed 64 characters', () => {
+        for (const id of ['<script>-regtest', 'a b/../c', 'Fork-regtest', `${'a'.repeat(70)}-regtest`]) {
+            expect(bad({ id }), id).toBe(false);
+        }
+    });
+
+    it('rejects a 1 MB display name and a long ticker', () => {
+        expect(bad({ displayName: 'x'.repeat(1e6) })).toBe(false);
+        expect(bad({ nativeTicker: 'T'.repeat(40) })).toBe(false);
+    });
+
+    it('rejects a color that is not a hex value', () => {
+        expect(bad({ color: 'red;background:url(http://evil.example/x)' })).toBe(false);
+    });
+
+    it('rejects an icon path with separators or traversal', () => {
+        expect(bad({ icon: '../../etc/passwd' })).toBe(false);
+        expect(bad({ icon: 'a/b.png' })).toBe(false);
+        expect(bad({ icon: 'fork-icon.png' })).toBe(true);
+    });
+
+    it('rejects web, script and file URI schemes', () => {
+        for (const uriScheme of ['javascript', 'data', 'file', 'https', 'Bitcoin ']) {
+            expect(bad({ uriScheme }), uriScheme).toBe(false);
+        }
+        expect(bad({ uriScheme: 'forkcoin' })).toBe(true);
     });
 });

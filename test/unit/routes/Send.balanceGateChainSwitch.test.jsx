@@ -81,15 +81,20 @@ function mount() {
         [BTC]: [{ id: 'btc-1', address: BTC_FROM, publicKey: '02ab', derivationPath: "m/84'/0'/0'/0/0", source: 'hd' }],
         [DOGE]: [{ id: 'doge-1', address: DOGE_FROM, publicKey: '02cd', derivationPath: "m/44'/3'/0'/0/0", source: 'hd' }],
     };
-    const getWalletBalances = vi.fn()
+    // The picker reads each chain on its own (a third argument names the
+    // chain); Send reads the whole wallet. Only Send's second read hangs.
+    const sendWalletBalances = vi.fn()
         .mockResolvedValueOnce({
             [BTC]: [{ address: BTC_FROM, balances: btcBalance, error: null }],
-        })
-        .mockResolvedValueOnce({
-            [BTC]: [{ address: BTC_FROM, balances: btcBalance, error: null }],
-            [DOGE]: [{ address: DOGE_FROM, balances: dogeBalance, error: null }],
         })
         .mockImplementation(() => new Promise(() => {}));
+    const getWalletBalances = vi.fn((walletId, accountId, chainId) => {
+        if (!chainId) return sendWalletBalances(walletId, accountId);
+        return Promise.resolve({
+            [BTC]: [{ address: BTC_FROM, balances: btcBalance, error: null }],
+            [DOGE]: [{ address: DOGE_FROM, balances: dogeBalance, error: null }],
+        });
+    });
     const base = {
         getAddressesByChain: vi.fn().mockResolvedValue(addresses),
         getActiveAddresses: vi.fn().mockResolvedValue({
@@ -121,7 +126,7 @@ function mount() {
     });
 
     render(<ChainPickerHarness messaging={messaging} />);
-    return { messaging, finishDogeAddressRead: () => finishDogeAddressRead() };
+    return { messaging, sendWalletBalances, finishDogeAddressRead: () => finishDogeAddressRead() };
 }
 
 afterEach(() => {
@@ -132,7 +137,7 @@ afterEach(() => {
 
 describe('Send balance gate during a chain switch', () => {
     it('keeps the form mounted and never flashes the empty state while the next balance read hangs', async () => {
-        const { messaging, finishDogeAddressRead } = mount();
+        const { messaging, sendWalletBalances, finishDogeAddressRead } = mount();
         const form = await screen.findByRole('form', { name: 'Send' });
         await screen.findByText('1 BTC available');
         emptyStateTitles.length = 0;
@@ -142,7 +147,7 @@ describe('Send balance gate during a chain switch', () => {
         fireEvent.click(await screen.findByRole('button', { name: /^Select Dogecoin\b/ }));
 
         expect(screen.getByRole('form', { name: 'Send' })).toBe(form);
-        await waitFor(() => expect(messaging.getWalletBalances).toHaveBeenCalledTimes(3));
+        await waitFor(() => expect(sendWalletBalances).toHaveBeenCalledTimes(2));
         expect(messaging.getAddressBalances).toHaveBeenCalledWith(DOGE, DOGE_FROM);
         expect(screen.getByRole('form', { name: 'Send' })).toBe(form);
         expect(screen.queryByText(EMPTY_TITLE)).toBeNull();

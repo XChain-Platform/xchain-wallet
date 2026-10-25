@@ -40,7 +40,6 @@ import { useWalletMode } from '@xchain-wallet/core/shared/hooks/useWalletMode.js
 import { useWalletFilters } from '@xchain-wallet/core/shared/hooks/useWalletFilters.js';
 import { Loading } from '@xchain-wallet/core/shared/routes/Loading.jsx';
 import { VaultUnavailable } from '@xchain-wallet/core/shared/routes/VaultUnavailable.jsx';
-import { RouteNotFound } from '@xchain-wallet/core/shared/routes/RouteNotFound.jsx';
 import { Onboarding } from '@xchain-wallet/core/shared/routes/Onboarding.jsx';
 import { vaultErrorKind } from '../../core/src/storage/backend.js';
 import { clearActiveAccount, writeActiveAccount } from '@xchain-wallet/core/shared/utils/activeAccountMemory.js';
@@ -57,7 +56,7 @@ import { CoinpayObligationsProvider, useSharedCoinpayObligations } from '@xchain
 import { useDemoAutoWipe } from '@xchain-wallet/core/shared/hooks/useDemoAutoWipe.js';
 import { Locked } from '@xchain-wallet/core/shared/routes/Locked.jsx';
 import { isDemoWallet } from '../../core/src/flows/demoMode.js';
-import { ToastHost, useToast } from '@xchain-wallet/core/shared/components/ToastHost.jsx';
+import { ToastHost, useClearToastsOnLock, useToast } from '@xchain-wallet/core/shared/components/ToastHost.jsx';
 import { RouteErrorBoundary } from '@xchain-wallet/core/shared/components/RouteErrorBoundary.jsx';
 import { ShellRouteOutlet } from '@xchain-wallet/core/shared/components/ShellRouteOutlet.jsx';
 import {
@@ -71,7 +70,6 @@ import { ReachabilityBanner } from '@xchain-wallet/core/shared/components/Reacha
 // §6 / D4. Renders nothing unless a shell installed a direct-update
 // provider, which only a sideloaded Android APK does; see flows/directUpdate.js.
 import { UpdateNoticeBanner } from '@xchain-wallet/core/shared/components/UpdateNoticeBanner.jsx';
-import { QueuedBroadcastBanner } from '@xchain-wallet/core/shared/components/QueuedBroadcastBanner.jsx';
 import { LeftNav, FullLayoutWithNav } from '@xchain-wallet/core/shared/components/LeftNav.jsx';
 import { AppHeader } from '@xchain-wallet/core/shared/components/AppHeader.jsx';
 import { useCommandPalette } from '@xchain-wallet/core/shared/commandPalette/useCommandPalette.js';
@@ -90,7 +88,9 @@ import { BottomTabBar } from '@xchain-wallet/core/shared/components/BottomTabBar
 // below goes with them: each one is wired only when DEX_SURFACE_ENABLED.
 import { DEX_SURFACE_ENABLED, renderDexRoute } from './surfaces/dex.jsx';
 import { buildWalletAlerts } from '@xchain-wallet/core/shared/walletAlerts.js';
-import { NoticeModal } from '@xchain-wallet/core/shared/components/NoticeModal.jsx';
+// Both notices open after first paint, so the dialog and its styles load on demand.
+import { NoticeModalOnDemand as NoticeModal } from '@xchain-wallet/core/shared/components/onDemandOverlays.js';
+import { onDemandComponent, useIdlePreload } from '@xchain-wallet/core/shared/utils/onDemandComponent.js';
 import { useFocusTrap } from '@xchain-wallet/core/shared/utils/focusTrap.js';
 import { useBtcAddressesPresent } from '@xchain-wallet/core/shared/hooks/useBtcAddressesPresent.js';
 import { useVmAddressesPresent } from '@xchain-wallet/core/shared/hooks/useVmAddressesPresent.js';
@@ -109,6 +109,13 @@ import devShellStyles from './DevVariantShell.module.css';
 
 const lazyRoute = (load, name) => lazy(() => load().then((module) => ({ default: module[name] })));
 
+// The queue is read after unlock and the banner shows only when it holds an
+// entry, so the banner and its styles load on idle instead of at startup.
+const QueuedBroadcastBanner = onDemandComponent(
+    () => import('@xchain-wallet/core/shared/components/QueuedBroadcastBanner.jsx'),
+    'QueuedBroadcastBanner',
+);
+
 // Overlays opened by a key or a developer toggle, never needed for first
 // paint. App mounts each one the first time it opens, then keeps it mounted.
 const loadCommandPaletteHost = () => import('./CommandPaletteHost.jsx');
@@ -116,6 +123,9 @@ const CommandPaletteHost = lazyRoute(loadCommandPaletteHost, 'CommandPaletteHost
 const ShortcutHelp = lazyRoute(() => import('@xchain-wallet/core/shared/keyboard/ShortcutHelp.jsx'), 'ShortcutHelp');
 const DevVariantBadge = lazyRoute(() => import('./DevVariantBadge.jsx'), 'DevVariantBadge');
 
+// An unknown view renders inside the route outlet's Suspense like every other
+// route, so its EmptyState and ListPage styles stay out of the startup CSS.
+const RouteNotFound = lazyRoute(() => import('@xchain-wallet/core/shared/routes/RouteNotFound.jsx'), 'RouteNotFound');
 const AddAccountForm = lazyRoute(() => import('@xchain-wallet/core/shared/routes/AddAccountForm.jsx'), 'AddAccountForm');
 const WalletPicker = lazyRoute(() => import('@xchain-wallet/core/shared/routes/WalletPicker.jsx'), 'WalletPicker');
 const AccountPicker = lazyRoute(() => import('@xchain-wallet/core/shared/routes/AccountPicker.jsx'), 'AccountPicker');
@@ -317,6 +327,7 @@ function AppInner() {
     // the palette hook, the dispatcher, and the help modal below.
     const { settings } = useSettings();
     const [status, setStatus] = useState(/** @type {any} */ ({ state: 'loading' }));
+    useClearToastsOnLock(status.state);
     const statusStateRef = useRef(status.state);
     statusStateRef.current = status.state;
     const nativeSuspendedRef = useRef(false);
@@ -588,6 +599,10 @@ function AppInner() {
         if (!unlockedNow) return undefined;
         return deferNonCriticalWork(() => { loadCommandPaletteHost().catch(() => {}); });
     }, [unlockedNow]);
+    // A notice can open without a click (a deep link the wallet cannot
+    // follow), so its dialog is fetched on idle rather than on first use;
+    // the queued-broadcast banner is fetched then too, ready for unlock.
+    useIdlePreload(NoticeModal, QueuedBroadcastBanner);
     // Which Settings section a palette deep-link should open.
     // Cleared when the user backs out of Settings.
     const [settingsInitialSection, setSettingsInitialSection] = useState(
@@ -2416,6 +2431,7 @@ function AppInner() {
                         mode="unstake"
                         walletId={activeWalletId}
                         chainId={stakingRef.chainId}
+                        initialFromAddress={stakingRef.address || undefined}
                         onBack={() => setUnlockedView('stake-detail')}
                     />
                 );
@@ -2426,6 +2442,7 @@ function AppInner() {
                         mode="claim-rewards"
                         walletId={activeWalletId}
                         chainId={stakingRef.chainId}
+                        initialFromAddress={stakingRef.address || undefined}
                         onBack={() => setUnlockedView('stake-detail')}
                     />
                 );
@@ -2436,6 +2453,7 @@ function AppInner() {
                         mode="delegate"
                         walletId={activeWalletId}
                         chainId={stakingRef.chainId}
+                        initialFromAddress={stakingRef.address || undefined}
                         onBack={() => setUnlockedView('stake-detail')}
                     />
                 );
@@ -2446,6 +2464,7 @@ function AppInner() {
                         mode="revoke"
                         walletId={activeWalletId}
                         chainId={stakingRef.chainId}
+                        initialFromAddress={stakingRef.address || undefined}
                         onBack={() => setUnlockedView('stake-detail')}
                     />
                 );

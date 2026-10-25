@@ -56,6 +56,7 @@ import { humanizeError } from './humanizeError.js';
 import { actionDisplayLabel } from './actionDisplayLabel.js';
 import { CHUNK_LANE_OPENER_RE } from './chunkLaneCopy.js';
 import { isShowableRefusal, protocolRefusalReason, userFacingMessage } from './userFacingMessage.js';
+import { panicRefusalMessage } from '../safety/panicNotice.js';
 
 const NEXT_STEP_RE = /\b(?:add|check|choose|enter|give|reconnect|report|retry(?:ing)?|review|try|update|wait)\b/i;
 const SIGNER_CANCELLED_RE = /\b(?:user (?:cancelled|canceled)|(?:cancelled|canceled) (?:by the user|on (?:the )?device)|user rejected on (?:the )?device)\b/i;
@@ -274,6 +275,11 @@ export function submitFailureMessage(
     const generic = `Couldn't ${verb}. Something went wrong. Try again.`;
     const protocolRefusal = protocolRefusalReason(err);
     if (protocolRefusal) return protocolRefusal;
+    // A freeze refusal says so only when the user armed it; a duress-armed one
+    // keeps the generic line, which is the cover that flow promises.
+    const panicCopy = panicRefusalMessage(err);
+    if (panicCopy) return panicCopy;
+    if (/** @type {any} */ (err)?.name === 'PanicModeActiveError') return generic;
     if (unknownSdkErrorCode(err)) return generic;
     if (isSignerCancellation(err)) {
         return 'Signing was cancelled. Nothing was signed. Review the details and try again when you are ready.';

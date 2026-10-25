@@ -762,6 +762,15 @@ export function createBroadcastQueueEngine({ store: queueStore, importedAddressI
         const stored = twin ?? pushQueueEntry(walletId, entry);
         return { entry: stored, persisted: await persistQueue() };
     }
+    // The live entry that already holds this transaction: same chain and the
+    // same txid, or the same signed bytes where an entry names no txid.
+    function liveEntryForTx(walletId, entry) {
+        const txid = typeof entry?.txid === 'string' ? entry.txid : '';
+        const hex = typeof entry?.signedTxHex === 'string' ? entry.signedTxHex : '';
+        if (!txid && !hex) return null;
+        return getQueue(walletId).find((e) => e.chainId === entry.chainId
+            && ((txid && e.txid === txid) || (hex && e.signedTxHex === hex))) ?? null;
+    }
     // Find the live entry for the same PendingTx and the same signed bytes.
     function liveTwinOf(walletId, entry) {
         const pendingTxId = entry?.pendingTxId;
@@ -797,6 +806,14 @@ export function createBroadcastQueueEngine({ store: queueStore, importedAddressI
      * @returns {import('./broadcastQueueStorage.js').QueueEntry}
      */
     function pushQueueEntry(walletId, entry) {
+        // The same payment signed again after an ambiguous broadcast carries the
+        // same bytes, so the same txid, under a new PendingTx. One transaction
+        // is one row: the first entry keeps the slot and takes the verdict.
+        const sameTx = liveEntryForTx(walletId, entry);
+        if (sameTx) {
+            adoptSnapshotVerdict(sameTx, entry);
+            return sameTx;
+        }
         const id = `q-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
         const adsCommit = entry.adsCommit;
         const stored = {

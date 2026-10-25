@@ -16,6 +16,7 @@
 // and a small factory builds a ready-to-use store for an account.
 
 import { VaultWindowStore } from './vaultWindowStore.js';
+import { withAccountLock } from './accountLock.js';
 
 /**
  * Persistence port reading/writing the `window` field of one CoSignerAccount.
@@ -23,9 +24,11 @@ import { VaultWindowStore } from './vaultWindowStore.js';
  * @param {import('../storage/Vault.js').Vault} vault
  * @param {string} accountId
  * @param {{ walletId?: string, chainId?: string }} [expectedScope]
+ * @param {{ accountLocked?: boolean }} [options]  true when the caller already holds the account lock
+ *        (the co-sign decision does), so write() does not queue behind its own caller
  * @returns {import('./vaultWindowStore.js').WindowPersistence}
  */
-export function createVaultWindowPersistence(vault, accountId, expectedScope = {}) {
+export function createVaultWindowPersistence(vault, accountId, expectedScope = {}, { accountLocked = false } = {}) {
     if (!vault || !vault.coSignerAccounts
         || typeof vault.coSignerAccounts.get !== 'function'
         || typeof vault.coSignerAccounts.put !== 'function') {
@@ -57,12 +60,17 @@ export function createVaultWindowPersistence(vault, accountId, expectedScope = {
             return acct.window ?? null;
         },
         async write(state) {
-            const acct = requireAccountScope(await vault.coSignerAccounts.get(accountId));
-            await vault.coSignerAccounts.put({
-                ...acct,
-                window: state,
-                updatedAt: new Date().toISOString(),
-            });
+            const store = async () => {
+                const acct = requireAccountScope(await vault.coSignerAccounts.get(accountId));
+                await vault.coSignerAccounts.put({
+                    ...acct,
+                    window: state,
+                    updatedAt: new Date().toISOString(),
+                });
+            };
+            // The record is rewritten whole, so a policy edit between the read and the
+            // put would be overwritten with the old policy.
+            await (accountLocked ? store() : withAccountLock(accountId, store));
         },
     };
 }
@@ -76,9 +84,10 @@ export function createVaultWindowPersistence(vault, accountId, expectedScope = {
  * @param {import('../storage/Vault.js').Vault} args.vault
  * @param {import('../schemas/coSignerAccount.js').CoSignerAccount} args.account
  * @param {() => number} [args.now]   injectable clock (ms) for tests
+ * @param {boolean} [args.accountLocked]  true when the caller holds the account lock
  * @returns {VaultWindowStore | null}
  */
-export function buildAccountWindowStore({ vault, account, now }) {
+export function buildAccountWindowStore({ vault, account, now, accountLocked = false }) {
     if (!account || !account.policy) {
         throw new Error('buildAccountWindowStore: account with a policy is required');
     }
@@ -96,7 +105,7 @@ export function buildAccountWindowStore({ vault, account, now }) {
         persistence: createVaultWindowPersistence(vault, account.id, {
             walletId: account.walletId,
             chainId: account.chainId,
-        }),
+        }, { accountLocked }),
         hours: win.hours,
         now,
     });

@@ -116,13 +116,19 @@ function OperatorDashboardView({ walletId, chainId, address, onBack }) {
 
             const tasks = [];
             if (isDemoWallet(walletId)) {
-                setStakes({ loading: false, rows: synthesizeDemoStaking(chainId).stakes, error: null });
+                // The demo story is one set of rows: the stake detail shows the same
+                // delegation and rewards, so this page does too.
+                const demo = synthesizeDemoStaking(chainId);
+                setStakes({ loading: false, rows: demo.stakes, error: null });
+                setDelegations({ loading: false, rows: demo.delegations, error: null });
+                setRewards({ loading: false, rows: demo.rewards, error: null });
+                setRewardClaims({ loading: false, rows: [], error: null });
             } else {
                 tasks.push(bind(setStakes, () => messaging.getStakesForAddress({ chainId, address }), background));
+                tasks.push(bind(setDelegations, () => messaging.getDelegationsForAddress({ chainId, address }), background));
+                tasks.push(bind(setRewards, () => messaging.getRewardsForAddress({ chainId, address }), background));
+                tasks.push(bind(setRewardClaims, () => messaging.getRewardClaimsForAddress({ chainId, address }), background));
             }
-            tasks.push(bind(setDelegations, () => messaging.getDelegationsForAddress({ chainId, address }), background));
-            tasks.push(bind(setRewards, () => messaging.getRewardsForAddress({ chainId, address }), background));
-            tasks.push(bind(setRewardClaims, () => messaging.getRewardClaimsForAddress({ chainId, address }), background));
             tasks.push(bind(setBroadcasts, () => messaging.getBroadcastsForAddress({ chainId, address }), background));
             tasks.push(bind(setValidators, () => messaging.getValidatorsForChain({ chainId }), background));
             if (typeof messaging.getIndexerWatermark === 'function') {
@@ -234,7 +240,7 @@ function OperatorDashboardView({ walletId, chainId, address, onBack }) {
                 <Section title="Staking status" loading={stakes.loading} error={stakes.error} showContentOnError={!!primaryStake}>
                     {primaryStake ? (
                         <ul className={styles.metricList}>
-                            <li>Total amount staked: {totalStake ?? formatAmount(primaryStake)} XCP</li>
+                            <li>Total amount staked: {totalStake ?? formatAmount(primaryStake)} XCHAIN</li>
                             {primaryStake.activation_block || primaryStake.ACTIVATION_BLOCK ? (
                                 <li>Activation block: {metricText(primaryStake.activation_block || primaryStake.ACTIVATION_BLOCK)}</li>
                             ) : null}
@@ -295,13 +301,13 @@ function OperatorDashboardView({ walletId, chainId, address, onBack }) {
                     showContentOnError={rewards.rows.length > 0 || rewardClaims.rows.length > 0}
                 >
                     <p className={dashStyles.entryDescription} style={{ margin: 0 }}>
-                        <strong>Unclaimed rewards:</strong> {pending} XCP; <strong>Total rewards earned:</strong> {lifetime} XCP
+                        <strong>Unclaimed rewards:</strong> {rewardClaims.error ? 'unavailable' : `${pending} XCHAIN`}; <strong>Total rewards earned:</strong> {lifetime} XCHAIN
                     </p>
                     {recentRewards.length > 0 ? (
                         <ul className={styles.metricList}>
                             {recentRewards.map((r, i) => (
                                 <li key={i} className={dashStyles.entryDescription}>
-                                    Reward amount: {formatRewardAmount(r)} XCP; earned at block {metricText(r.block_index)}
+                                    Reward amount: {formatRewardAmount(r)} XCHAIN; earned at block {metricText(r.block_index)}
                                     {r.status ? `; status: ${plainWords(r.status)}` : ''}
                                 </li>
                             ))}

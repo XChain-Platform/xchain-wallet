@@ -138,7 +138,8 @@ describe('StakeNew render', () => {
             getAddressesByChain: vi.fn().mockRejectedValue(new Error('Networks unavailable.')),
         }, props);
 
-        expect(await screen.findByText('Networks unavailable.')).toBeInTheDocument();
+        expect(await screen.findByText(/Couldn.t load your staking networks/)).toBeInTheDocument();
+        expect(screen.getByRole('button', { name: 'Try again' })).toBeInTheDocument();
     });
 });
 

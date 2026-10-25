@@ -83,6 +83,8 @@ afterEach(() => {
 describe('ComposeMessage notices lead the page', () => {
     it('shows the plain-text confirmation above the form and keeps its controls working', async () => {
         vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+        const scrolled = [];
+        Element.prototype.scrollIntoView = function scrollIntoView() { scrolled.push(this); };
         const utils = mount(messagingFor());
         await settle();
         fireEvent.change(screen.getByLabelText('Address'), { target: { value: RECIPIENT } });
@@ -95,6 +97,15 @@ describe('ComposeMessage notices lead the page', () => {
         const notice = accept.closest('[role="alert"]');
         expect(notice.textContent).toMatch(/Send this message as plain text\?/);
         expectLeadsPage(utils.container, notice);
+        // The control shows the pending choice, the confirmation is scrolled
+        // into view, and focus lands on its safe button.
+        expect(screen.getByRole('button', { name: /^Encryption: Plain text/ })).toBeTruthy();
+        expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Keep encrypted' }));
+        // The page's notice box holds the confirmation as one of its entries,
+        // so the scrolled element is that entry inside the box.
+        const confirmation = document.getElementById('compose-plaintext-confirm');
+        expect(notice.contains(confirmation), 'the confirmation sits in the page notice').toBe(true);
+        expect(scrolled).toContain(confirmation);
 
         fireEvent.click(accept);
         expect(screen.queryByRole('button', { name: 'Send as plain text' })).toBeNull();
@@ -112,6 +123,7 @@ describe('ComposeMessage notices lead the page', () => {
         fireEvent.click(screen.getByRole('button', { name: 'Keep encrypted' }));
         expect(screen.queryByRole('button', { name: 'Send as plain text' })).toBeNull();
         expect(screen.queryByRole('button', { name: /^Encryption: Plain text/ })).toBeNull();
+        expect(screen.getByRole('button', { name: /^Encryption: Standard/ })).toBeTruthy();
     });
 
     it('shows the unknown-recipient-key warning above the form with its request button', async () => {

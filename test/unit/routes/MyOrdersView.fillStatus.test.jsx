@@ -228,6 +228,69 @@ describe('MyOrdersView: cancel rows', () => {
         ));
         expect(utils.container).not.toHaveTextContent('/internal/order/700');
     });
+
+    it('refreshes lifecycle before composing when an open row expires', async () => {
+        const expired = detail(740, 'expired', '0');
+        const freshDetail = vi.fn()
+            .mockResolvedValueOnce(detail(740, 'open', '500'))
+            .mockResolvedValueOnce({
+                ...expired,
+                state: { ...expired.state, expiration: String(Math.floor(Date.now() / 1000) - 1) },
+            });
+        const composeForConfirm = vi.fn();
+        const { messaging } = harness({
+            orders: [orderRow(740)],
+            methods: { getOrderDetail: freshDetail, composeForConfirm },
+        });
+        const utils = await open(messaging);
+        const row = rowFor(section(utils, 'Open orders'), 740);
+
+        fireEvent.click(within(row).getByRole('button', { name: 'Cancel' }));
+        fireEvent.click(utils.getByRole('button', { name: 'Cancel order' }));
+
+        expect(await utils.findByRole('alert')).toHaveTextContent(
+            'This order is not open. Refresh My orders and try again.',
+        );
+        expect(freshDetail).toHaveBeenCalledTimes(2);
+        expect(composeForConfirm).not.toHaveBeenCalled();
+    });
+
+    it('refreshes cancellation state before composing from a stale open row', async () => {
+        const cancelReader = vi.fn()
+            .mockResolvedValueOnce({ data: [] })
+            .mockResolvedValueOnce({ data: [cancelRow(760, 741, 'valid')] });
+        const composeForConfirm = vi.fn();
+        const { messaging } = harness({
+            orders: [orderRow(741)],
+            details: { 741: detail(741, 'open', '500') },
+            methods: { getOrderCancelsForAddress: cancelReader, composeForConfirm },
+        });
+        const utils = await open(messaging);
+        const row = rowFor(section(utils, 'Open orders'), 741);
+
+        fireEvent.click(within(row).getByRole('button', { name: 'Cancel' }));
+        fireEvent.click(utils.getByRole('button', { name: 'Cancel order' }));
+
+        expect(await utils.findByRole('alert')).toHaveTextContent(
+            'This order is not open. Refresh My orders and try again.',
+        );
+        expect(cancelReader).toHaveBeenCalledTimes(2);
+        expect(composeForConfirm).not.toHaveBeenCalled();
+    });
+
+    it('keeps valid orders usable when explorer arrays contain malformed rows', async () => {
+        const { messaging } = harness({
+            orders: [null, 17, orderRow(750), orderRow(750)],
+            cancels: [null, 'bad-row'],
+            details: { 750: detail(750, 'open', '500') },
+        });
+        const utils = await open(messaging);
+
+        expect(utils.queryByText('Could not load your orders. Try again.')).toBeNull();
+        const list = section(utils, 'Open orders');
+        expect(list).not.toBeNull();
+        expect(within(list).getAllByText('#750', { exact: false })).toHaveLength(1);
+    });
 });
 
 describe('MyOrdersView: fills', () => {

@@ -9,6 +9,10 @@ import {
     rbfFailureMessage,
     RBF_REPLACEMENT_QUEUED_MESSAGE,
 } from '../../../packages/core/src/shared/utils/rbfFailureMessage.js';
+import {
+    __resetPanicModePersistenceForTests,
+    activatePanicMode,
+} from '../../../packages/core/src/flows/panicMode.js';
 
 const CHAIN = 'bitcoin-regtest';
 const WALLET = 'wallet-1';
@@ -334,5 +338,31 @@ describe('tx.replace background route', () => {
             expect.objectContaining({ txid: REPLACEMENT, status: 'failed' }),
             expect.objectContaining({ txid: ORIGINAL, status: 'broadcast', rbfReplacement: null }),
         ]));
+    });
+});
+
+describe('tx.replace under a freeze armed while the signer waits', () => {
+    it('signs nothing further and broadcasts nothing when panic mode arms during the sign', async () => {
+        localStorage.clear();
+        __resetPanicModePersistenceForTests();
+        try {
+            const h = harness();
+            // A hardware prompt or a slow unlock holds the sign; the user arms
+            // panic mode from another window meanwhile.
+            h.signPsbt.mockImplementationOnce(async () => {
+                activatePanicMode();
+                return { signedPsbtHex: 'signed-replacement', txHex: 'signed-tx', txid: REPLACEMENT };
+            });
+            const response = await call(h.host, {});
+
+            expect(response.ok).toBe(false);
+            expect(response.error.name).toBe('PanicModeActiveError');
+            expect(h.broadcastTx).not.toHaveBeenCalled();
+            expect([...h.rows.values()].some((row) => row.txid === REPLACEMENT)).toBe(false);
+            expect(h.rows.get('pending-aaaa')).toMatchObject({ status: 'broadcast', rbfReplacement: null });
+        } finally {
+            __resetPanicModePersistenceForTests();
+            localStorage.clear();
+        }
     });
 });

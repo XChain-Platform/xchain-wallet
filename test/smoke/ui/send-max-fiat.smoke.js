@@ -108,7 +108,7 @@ assert.match(
     /exactTokenMaxAmount\(sourceBalance\.amount\)/,
     'token Max sweeps the balance at the tick scale, not the 8-dp satoshi grid',
 );
-assert.match(sendSrc, /maxDisabled=\{!sourceBalance\}/, 'Max disabled without balance prop forwarded to AmountField');
+assert.match(sendSrc, /maxDisabled=\{!sourceBalance \|\| networkOffline\}/, 'Max disabled without balance or offline prop forwarded to AmountField');
 
 // --- Available balance ------------------------------------------------
 

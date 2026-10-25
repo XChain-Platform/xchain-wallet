@@ -139,6 +139,7 @@ export function ContractStakeForm({
     const [submitError, setSubmitError] = useState(/** @type {string | null} */ (null));
     const [result, setResult] = useState(/** @type {any | null} */ (null));
     const passwordRef = useRef(/** @type {HTMLInputElement | null} */ (null));
+    const submitInFlightRef = useRef(false);
 
     useEffect(() => {
         let cancelled = false;
@@ -417,6 +418,9 @@ export function ContractStakeForm({
     // Compose + tamper-check + pre-flight all run HOST-side; Approve signs the
     // byte-identical prebuilt PSBT. Reject is a calm no-op back to the form.
     async function openConfirmScreen() {
+        // A second press while the confirm page is still composing is the same request.
+        if (submitInFlightRef.current) return;
+        submitInFlightRef.current = true;
         const wireAction = mode === 'stake' ? 'STAKE' : mode === 'unstake' ? 'UNSTAKE' : 'DELEGATE';
         const wireVersion = mode === 'stake' ? '3' : '1';
         const from = {
@@ -455,6 +459,8 @@ export function ContractStakeForm({
             setFormError(submitFailureMessage(err, {
                 chainId, coinTicker, fallback: err?.message || `${mode} failed.`,
             }));
+        } finally {
+            submitInFlightRef.current = false;
         }
     }
 

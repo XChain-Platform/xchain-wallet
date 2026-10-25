@@ -173,6 +173,8 @@ describe('Send offline start', () => {
         renderSend(offlineMessaging());
 
         expect(await screen.findByText(/1\.5 BTC available/)).toBeInTheDocument();
+        // Sending is off offline, so Max is off beside the saved figure.
+        expect(screen.getByRole('button', { name: 'Use max available amount' })).toBeDisabled();
     });
 
     it('runs the balance check when the connection returns', async () => {

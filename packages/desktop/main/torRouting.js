@@ -67,10 +67,43 @@ export function readTorSettings(settings) {
  * @param {object} params.settings
  * @param {{ setPool: Function }} params.sdkRegistry
  * @param {{ setProxy: Function }} [params.session]  Electron session; omitted in tests
+ * @param {() => Array<{ setProxy: Function }>} [params.extraSessions]  other live Electron sessions that follow the same proxy
  * @param {(msg: string) => void} [params.log]
  * @returns {Promise<{ on: boolean, proxy?: {host:string,port:number}, reachable?: boolean, reason?: string }>}
  */
-export async function applyTorRouting({ settings, sdkRegistry, session, log = () => {} }) {
+export function applyTorRouting(params) {
+    // One apply at a time: the probe awaits the network, so a second toggle
+    // landing mid-probe would otherwise finish first and be overwritten by
+    // the older, slower apply.
+    const run = applyQueue.then(() => applyNow(params));
+    applyQueue = run.catch(() => {});
+    return run;
+}
+
+/** Tail of the apply chain. */
+let applyQueue = Promise.resolve();
+
+/**
+ * Chromium proxy settings for the routing in force, for a session that is
+ * created after the toggle (the isolated Trezor Connect window).
+ *
+ * @returns {{ mode: 'direct' } | { proxyRules: string, proxyBypassRules: string }}
+ */
+export function currentProxyConfig() {
+    if (!applied.on) return { mode: 'direct' };
+    return { proxyRules: `socks5://${applied.host}:${applied.port}`, proxyBypassRules: '<-loopback>' };
+}
+
+/**
+ * Put `session` on the routing in force.
+ *
+ * @param {{ setProxy: Function }} session
+ */
+export async function applyProxyToSession(session) {
+    if (session?.setProxy) await session.setProxy(currentProxyConfig());
+}
+
+async function applyNow({ settings, sdkRegistry, session, extraSessions = () => [], log = () => {} }) {
     const { enabled, proxy } = readTorSettings(settings);
 
     if (!enabled) {
@@ -78,6 +111,7 @@ export async function applyTorRouting({ settings, sdkRegistry, session, log = ()
             // Restore, in the reverse order of application.
             if (originalDispatcher) setGlobalDispatcher(originalDispatcher);
             if (session?.setProxy) await session.setProxy({ mode: 'direct' });
+            for (const extra of extraSessions()) await extra.setProxy({ mode: 'direct' });
             sdkRegistry?.setPool?.(null);
             log('[xchain] Tor routing off: traffic is direct again');
         }
@@ -116,6 +150,7 @@ export async function applyTorRouting({ settings, sdkRegistry, session, log = ()
     }
 
     applied = { on: true, host: proxy.host, port: proxy.port };
+    for (const extra of extraSessions()) await applyProxyToSession(extra);
     log(reach.ok
         ? `[xchain] Tor routing on via ${proxy.host}:${proxy.port}`
         : `[xchain] Tor routing on via ${proxy.host}:${proxy.port}, but the proxy did not answer (${reach.reason}). Requests will fail until it does.`);
@@ -127,4 +162,5 @@ export async function applyTorRouting({ settings, sdkRegistry, session, log = ()
 export function resetTorRoutingState() {
     originalDispatcher = null;
     applied = { on: false, host: null, port: null };
+    applyQueue = Promise.resolve();
 }

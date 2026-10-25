@@ -60,7 +60,7 @@ const PRIVACY_CONTROL_DEFAULTS = Object.freeze({
 });
 
 export function PrivacySection() {
-    const { settings, loading, error, update } = useSettings();
+    const { settings, loading, error, update } = useSettings({ reportsOwnError: true });
     const [saveError, setSaveError] = useState(/** @type {string | null} */ (null));
 
     if (loading) return <Status text={t('common.loading')} />;

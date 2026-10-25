@@ -16,7 +16,7 @@
 // as a startup error rather than silent hang.
 
 import { createRoot } from 'react-dom/client';
-import { registry } from '@xchain-wallet/core';
+import { flows, registry } from '@xchain-wallet/core';
 import { logConsole } from '@xchain-wallet/core/shared/utils/logConsole.js';
 import { installDesktopFiatRateSource } from './fiatRateSource.js';
 import { setShellCapabilities } from '@xchain-wallet/core/shared/shellCapabilities.js';
@@ -24,6 +24,8 @@ import '@xchain-wallet/core/ui/tokens.css';
 import { App } from './App.jsx';
 import { DesktopUpdateBanner } from './DesktopUpdateBanner.jsx';
 import { installShellErrorCapture } from './errorCapture.js';
+import { sendMessage } from './bridgeMessaging.js';
+import { installDesktopPanicModeBridge } from './panicModeBridge.js';
 
 logConsole.attach();
 
@@ -61,14 +63,24 @@ if (!container) {
 // there, because neither can proxy its own traffic.
 setShellCapabilities({ socksProxy: true });
 
-createRoot(container).render(
-    <div style={{ display: 'flex', flexDirection: 'column', height: 'var(--xc-viewport-h, 100vh)' }}>
-        {/* The application menu is available before unlock, so update check
-            results stay mounted above every renderer state. It floats over
-            the page (position: fixed), so it takes no layout space. */}
-        <DesktopUpdateBanner />
-        <div style={{ flex: '1 1 auto', minHeight: 0, '--xc-screen-h': '100%' }}>
-            <App />
-        </div>
-    </div>,
-);
+function renderApp() {
+    createRoot(container).render(
+        <div style={{ display: 'flex', flexDirection: 'column', height: 'var(--xc-viewport-h, 100vh)' }}>
+            {/* The application menu is available before unlock, so update check
+                results stay mounted above every renderer state. It floats over
+                the page (position: fixed), so it takes no layout space. */}
+            <DesktopUpdateBanner />
+            <div style={{ flex: '1 1 auto', minHeight: 0, '--xc-screen-h': '100%' }}>
+                <App />
+            </div>
+        </div>,
+    );
+}
+
+// The freeze lives in main, which signs. Point this realm's freeze at it
+// before the UI mounts, so an arm from the Locked screen (the duress
+// passphrase) reaches main and not only this window's storage. A main that
+// cannot answer still gets the UI: its own signers refuse while unloaded.
+installDesktopPanicModeBridge({ flows, sendMessage, focusTarget: window })
+    .catch((err) => { console.error('desktop: panic-mode bridge failed:', err); })
+    .finally(renderApp);

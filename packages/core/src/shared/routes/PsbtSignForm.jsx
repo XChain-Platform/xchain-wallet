@@ -761,6 +761,11 @@ export function PsbtSignForm({ walletId, onBack, initialPsbt }) {
             return undefined;
         }
         let cancelled = false;
+        // A review always belongs to the bytes that get signed: drop the
+        // previous transaction's review while the new paste or network parses.
+        setDecomposed(null);
+        setParsedAction(null);
+        setParsedActionReason(null);
         setParsing(true);
         setParseError(null);
         messaging.parsePsbtRequest({ chainId, psbtHex })
@@ -914,6 +919,10 @@ export function PsbtSignForm({ walletId, onBack, initialPsbt }) {
                 ...(parsedAction?.actionString
                     ? { preflight: (o) => messaging.preflight({ chainId, ...o }) }
                     : {}),
+                // A pasted PSBT has no known age, so Approve always probes its
+                // inputs; spent ones stop the sign with the shared notice.
+                checkInputs: (hex) => messaging.checkInputLiveness({ chainId, psbtHex: hex }),
+                alwaysCheckInputs: true,
                 onApprove: () => messaging.signPsbtUserInitiated({
                     walletId,
                     addressId,

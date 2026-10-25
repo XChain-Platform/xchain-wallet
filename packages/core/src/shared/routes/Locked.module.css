@@ -28,12 +28,6 @@
     margin-bottom: var(--xc-space-3);
 }
 
-.walletName {
-    font-size: var(--xc-text-lg);
-    font-weight: 600;
-    color: var(--xc-text);
-}
-
 @media (min-width: 600px) {
     .hero {
         margin-bottom: var(--xc-space-5);
@@ -87,14 +81,18 @@
     gap: var(--xc-space-2);
 }
 
-.demoExitNote {
+/* The demo-exit and wipe panels share their note and error rules: this
+   sheet loads at startup, inside the initial CSS budget. */
+.demoExitNote,
+.wipeNote {
     margin: 0;
     font-size: var(--xc-text-xs);
     color: var(--xc-text-muted);
     line-height: 1.4;
 }
 
-.demoExitError {
+.demoExitError,
+.wipeError {
     margin: 0;
     font-size: var(--xc-text-xs);
     color: var(--xc-danger-fg);
@@ -115,19 +113,6 @@
 /* The wipe warning is the shared StatusMessage; the panel gap spaces it. */
 .wipeWarning {
     margin: 0;
-}
-
-.wipeNote {
-    margin: 0;
-    font-size: var(--xc-text-xs);
-    color: var(--xc-text-muted);
-    line-height: 1.4;
-}
-
-.wipeError {
-    margin: 0;
-    font-size: var(--xc-text-xs);
-    color: var(--xc-danger-fg);
 }
 
 .unlockingNote {

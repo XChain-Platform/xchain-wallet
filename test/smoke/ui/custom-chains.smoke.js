@@ -48,7 +48,7 @@ const flowPath = join(wsRoot, 'packages/core/src/flows/customChains.js');
 assert.ok(existsSync(flowPath), 'flows/customChains.js exists');
 const flowSrc = readFileSync(flowPath, 'utf8');
 
-assert.match(flowSrc, /import \{ validateChainDescriptor \}/,
+assert.match(flowSrc, /import \{[^}]*validateChainDescriptor[^}]*\}/,
     'addCustomChain validates via validateChainDescriptor');
 assert.match(flowSrc, /export async function listCustomChains/,
     'listCustomChains exported');

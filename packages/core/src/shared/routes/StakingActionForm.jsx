@@ -112,9 +112,10 @@ function extractRows(resp) {
  * @param {'unstake' | 'claim-rewards'} props.mode
  * @param {string} props.walletId
  * @param {string} props.chainId
+ * @param {string} [props.initialFromAddress]  the staking position's own address; acts from it when it is one of the wallet's on `chainId`
  * @param {() => void} props.onBack
  */
-export function StakingActionForm({ mode, walletId, chainId: initialChainId, onBack }) {
+export function StakingActionForm({ mode, walletId, chainId: initialChainId, initialFromAddress, onBack }) {
     // The launching position seeds the network; the standard Network
     // picker lets the user retarget the action at any Bitcoin chain the
     // wallet holds addresses on (the address + fee sections follow along).
@@ -169,9 +170,14 @@ export function StakingActionForm({ mode, walletId, chainId: initialChainId, onB
             .then(([byChain, active]) => {
                 if (cancelled) return;
                 setAddressesByChain(byChain || {});
-                // Act from the chain's active address (else newest HD
-                // external), matching Send.
-                const sourceId = preferredSourceId(byChain?.[chainId] || [], active?.[chainId]);
+                const onChain = byChain?.[chainId] || [];
+                // The position that opened this form wins when its address is still
+                // one of ours on this chain; otherwise act from the chain's active
+                // address (else newest HD external), matching Send.
+                const seeded = initialFromAddress
+                    ? onChain.find((a) => a.address === initialFromAddress)
+                    : null;
+                const sourceId = seeded?.id || preferredSourceId(onChain, active?.[chainId]);
                 if (!sourceId) {
                     setLoadError('No address on this network. Use Receive to generate one first.');
                     return;
