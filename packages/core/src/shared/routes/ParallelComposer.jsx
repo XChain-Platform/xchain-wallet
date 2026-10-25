@@ -15,6 +15,7 @@ import { AddressText, Button, ChainBadge, Checkbox, FeeSelector, FieldNote, Form
 import { t } from '../../i18n/index.js';
 import { truncateAddress } from '../../ui/AddressText.jsx';
 import { registry as registryLib } from '@xchain-wallet/core';
+import '../../i18n/locales/en/parallelComposer.js';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { useDemoGuard } from '../hooks/useDemoGuard.jsx';
 import { ActionConfirmScreen } from '../components/ActionConfirmScreen.jsx';

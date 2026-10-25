@@ -46,6 +46,7 @@ import {
 } from '../../../packages/core/src/index.js';
 import { IndexedDBStorageBackend } from '../../../packages/web/src/storage/IndexedDBStorageBackend.js';
 import { WebMetaBackend } from '../../../packages/web/src/storage/WebMetaBackend.js';
+import { englishDictionarySource } from '../../helpers/englishNamespaces.js';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const wsRoot = join(here, '..', '..', '..');
@@ -145,7 +146,7 @@ assert.ok(
 );
 assert.ok(
     /t\('extensionBanner\.useExtension'\)/.test(banner)
-        && /'extensionBanner\.useExtension': 'Use extension wallet'/.test(readFileSync(join(wsRoot, 'packages', 'core', 'src', 'i18n', 'locales', 'en', 'index.js'), 'utf8')),
+        && /'extensionBanner\.useExtension': 'Use extension wallet'/.test(englishDictionarySource()),
     'ExtensionBanner offers the "Use extension wallet" accept action',
 );
 

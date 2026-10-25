@@ -39,6 +39,9 @@ import {
 } from '../../../flows/duressPassphrase.js';
 import { ROW, ROW_HINT, SettingsInlineForm } from './_settingsPrimitives.jsx';
 import { t } from '../../../i18n/index.js';
+import '../../../i18n/locales/en/history.js';
+import '../../../i18n/locales/en/settings.js';
+import '../../../i18n/locales/en/verifySignature.js';
 
 export function DuressPassphraseRow() {
     const { messaging } = useMessaging();

@@ -12,6 +12,14 @@
 import { describe, expect, it } from 'vitest';
 
 import { t } from '../../packages/core/src/i18n/index.js';
+// These keys load with the screens that render them; the test reads them
+// without rendering one, so it loads their namespaces itself.
+import '../../packages/core/src/i18n/locales/en/crossChainOrder.js';
+import '../../packages/core/src/i18n/locales/en/crossChainSwap.js';
+import '../../packages/core/src/i18n/locales/en/dispenserExplorer.js';
+import '../../packages/core/src/i18n/locales/en/flows.js';
+import '../../packages/core/src/i18n/locales/en/parallelComposer.js';
+import '../../packages/core/src/i18n/locales/en/send.js';
 
 describe('network wording on the swap, composer and dispenser screens', () => {
     it('names the give and get sides as networks on the swap success screen', () => {

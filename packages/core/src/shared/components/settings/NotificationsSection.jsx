@@ -49,6 +49,8 @@ import {
 } from '../../../notifications/notificationSounds.js';
 import { ROW, ROW_HINT, STACK, SettingsLoadError, Status } from './_settingsPrimitives.jsx';
 import { t } from '../../../i18n/index.js';
+import '../../../i18n/locales/en/send.js';
+import '../../../i18n/locales/en/settings.js';
 
 /**
  * Browser/OS notification-permission affordance. The extension requests and

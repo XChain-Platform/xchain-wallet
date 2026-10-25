@@ -60,6 +60,10 @@ import {
 } from '../../flows/restorePasswordCopy.js';
 import styles from './ImportWallet.module.css';
 import { formatOrList, t } from '../../i18n/index.js';
+import '../../i18n/locales/en/adsNotice.js';
+import '../../i18n/locales/en/importWallet.js';
+import '../../i18n/locales/en/renameWallet.js';
+import '../../i18n/locales/en/send.js';
 
 const MIN_PASSWORD_LENGTH = 8;
 const ACCEPTED_WORD_COUNTS = [12, 15, 18, 21, 24];

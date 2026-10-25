@@ -12,6 +12,8 @@ import { useEffect, useRef, useState } from 'react';
 import { Button, FormPage, Screen, Input, PageHeader } from '@xchain-wallet/core/ui';
 import { t } from '../../i18n/index.js';
 import { NAME_MAX_LENGTH, hasVisibleText, nameKey, nameLength } from '../../util/display_name.js';
+import '../../i18n/locales/en/history.js';
+import '../../i18n/locales/en/renameWallet.js';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 
 /**

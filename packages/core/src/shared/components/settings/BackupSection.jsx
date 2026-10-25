@@ -77,6 +77,11 @@ import { ROW_HINT, STACK, SettingsActionRow, SettingsInlineForm, Status } from '
 import cardStyles from '../../../ui/Card.module.css';
 import styles from './BackupSection.module.css';
 import { t } from '../../../i18n/index.js';
+import '../../../i18n/locales/en/gatedPublish.js';
+import '../../../i18n/locales/en/history.js';
+import '../../../i18n/locales/en/importWallet.js';
+import '../../../i18n/locales/en/send.js';
+import '../../../i18n/locales/en/settings.js';
 
 /** How often the Backup panel asks the background whether a batched publish came due. */
 const AUTO_SYNC_POLL_MS = 15_000;

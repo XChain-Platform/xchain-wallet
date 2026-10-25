@@ -12,6 +12,8 @@ import { useEffect, useRef, useState } from 'react';
 import { Button, EmptyState, Icon, ListPage, ListRow, PageHeader, Screen, StatusMessage } from '@xchain-wallet/core/ui';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { t } from '../../i18n/index.js';
+import '../../i18n/locales/en/walletDetails.js';
+import '../../i18n/locales/en/walletPicker.js';
 import { WalletIdentity } from '../components/WalletIdentity.jsx';
 import { userFacingMessage } from '../utils/userFacingMessage.js';
 import styles from './ActionsMenu.module.css';

@@ -24,6 +24,8 @@ import { actionRowIdentity, explorerPage, uniqueRows } from '../utils/pagedRows.
 import { dispenserStatusLabel } from '../utils/dispenserReopen.js';
 import { userFacingMessage } from '../utils/userFacingMessage.js';
 import { t } from '../../i18n/index.js';
+import '../../i18n/locales/en/dispenserExplorer.js';
+import '../../i18n/locales/en/send.js';
 import styles from './ActionsMenu.module.css';
 import local from './DispenserExplorer.module.css';
 

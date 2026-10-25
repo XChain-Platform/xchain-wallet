@@ -32,6 +32,7 @@
 // (the form already has them) and passes them in.
 
 import { t } from '../i18n/index.js';
+import '../i18n/locales/en/flows.js';
 
 const BIDI_CONTROLS = /[\u061C\u200E\u200F\u202A-\u202E\u2066-\u2069]/u;
 const ZERO_WIDTH = /[\u00AD\u034F\u180E\u200B-\u200D\u2060-\u2064\u206A-\u206F\uFEFF]/u;

@@ -15,6 +15,8 @@ import { AddressText } from './AddressText.jsx';
 import { filterSuggestions } from '../flows/recentDestinations.js';
 import styles from './AddressCombobox.module.css';
 import { t } from '../i18n/index.js';
+import '../i18n/locales/en/ui.js';
+import '../i18n/locales/en/verifySignature.js';
 
 const ICONS = {
     contacts: { Component: UsersIcon, defaultLabel: 'Open address book' },

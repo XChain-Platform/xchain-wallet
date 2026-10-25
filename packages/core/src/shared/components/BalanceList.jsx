@@ -14,6 +14,10 @@ import { AssetMark } from '../../ui/AssetMark.jsx';
 export { tickerColor } from '../../ui/AssetMark.jsx';
 import { useBalancesHidden } from '../hooks/useBalancesHidden.js';
 import { t } from '../../i18n/index.js';
+import '../../i18n/locales/en/balanceList.js';
+import '../../i18n/locales/en/balances.js';
+import '../../i18n/locales/en/pending.js';
+import '../../i18n/locales/en/settings.js';
 import styles from './BalanceList.module.css';
 import { addPlainDecimals } from '../../flows/escrowedTokens.js';
 import {

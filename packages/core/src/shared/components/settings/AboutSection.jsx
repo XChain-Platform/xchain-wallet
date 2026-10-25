@@ -51,6 +51,8 @@ import {
     sanitizeDiagnosticValue,
 } from '../../../flows/diagnosticDump.js';
 import { t } from '../../../i18n/index.js';
+import '../../../i18n/locales/en/history.js';
+import '../../../i18n/locales/en/settings.js';
 
 const ROW_VALUE_MUTED = { color: 'var(--xc-text-muted)', fontStyle: 'italic' };
 const PARAGRAPHS = {

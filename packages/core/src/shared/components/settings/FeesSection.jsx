@@ -47,6 +47,7 @@ import {
     ToggleRow,
 } from './_settingsPrimitives.jsx';
 import { t } from '../../../i18n/index.js';
+import '../../../i18n/locales/en/settings.js';
 
 const chainRegistry = registryLib.defaultRegistry();
 
@@ -116,7 +117,7 @@ export function FeesSection() {
 
     return (
         <div style={STACK}>
-            {chainIds.map((chainId) => {
+            {chainIds.map((chainId, index) => {
                 // §35.10: stored null = follow the release default; render
                 // the resolved preference. Writes may carry concrete
                 // values - updateSettings normalizes a value equal to the
@@ -136,7 +137,7 @@ export function FeesSection() {
 
                         <SettingsFieldRow
                             label={t('settings.fees.feeStrategy')}
-                            hint={t('settings.fees.chooseTheBalanceBetweenConfirmation')}
+                            hint={index === 0 ? t('settings.fees.chooseTheBalanceBetweenConfirmation') : undefined}
                             embedded
                         >
                             <select

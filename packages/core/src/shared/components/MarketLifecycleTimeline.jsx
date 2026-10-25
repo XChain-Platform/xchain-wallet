@@ -27,6 +27,7 @@ import S from './MarketLifecycleTimeline.module.css';
 import { StatusMessage } from '@xchain-wallet/core/ui';
 import { formatDecimalAmount } from '../utils/amountFormat.js';
 import { t } from '../../i18n/index.js';
+import '../../i18n/locales/en/components.js';
 
 const LABEL = {
     created: 'Created',

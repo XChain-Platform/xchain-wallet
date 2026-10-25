@@ -15,6 +15,8 @@ import { useBackHandler } from '../../ui/backStack.js';
 import { ChevronIcon } from '../../ui/ChainPicker.icons.jsx';
 import styles from './NetworkFilter.module.css';
 import { t } from '../../i18n/index.js';
+import '../../i18n/locales/en/components.js';
+import '../../i18n/locales/en/extension.js';
 
 /**
  * Single-select network filter that scales to N chains. Replaces the

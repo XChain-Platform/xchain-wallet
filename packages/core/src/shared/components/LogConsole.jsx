@@ -28,6 +28,8 @@ import { redactDiagnosticText } from '../utils/diagnosticText.js';
 import { useHapticFeedback } from '../hooks/useHaptic.js';
 import { formatDecimalAmount } from '../utils/amountFormat.js';
 import { t } from '../../i18n/index.js';
+import '../../i18n/locales/en/components.js';
+import '../../i18n/locales/en/history.js';
 
 const ALL_LEVELS = /** @type {const} */ (['log', 'info', 'warn', 'error']);
 const MAX_VISIBLE_ENTRIES = 200;

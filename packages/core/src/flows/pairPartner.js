@@ -64,6 +64,8 @@
 
 import { sha256 } from '@noble/hashes/sha2';
 import { t } from '../i18n/index.js';
+import '../i18n/locales/en/flows.js';
+import '../i18n/locales/en/settings.js';
 
 export const PARTNER_PAIRING_VERSION = 1;
 export const PARTNER_PAIRING_KIND = 'xcw-partner-pairing';

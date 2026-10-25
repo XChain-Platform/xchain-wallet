@@ -57,6 +57,9 @@ import { compareDecimalStrings } from '../utils/amountFormat.js';
 import { readFailureMessage } from '../utils/readFailureMessage.js';
 import styles from './HomeTabs.module.css';
 import { t } from '../../i18n/index.js';
+import '../../i18n/locales/en/history.js';
+import '../../i18n/locales/en/receive.js';
+import '../../i18n/locales/en/walletDetails.js';
 
 const TotalBalanceHero = memo(TotalBalanceHeroBase);
 const PortfolioChart = memo(PortfolioChartBase);

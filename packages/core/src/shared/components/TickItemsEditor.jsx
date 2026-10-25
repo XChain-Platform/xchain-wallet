@@ -21,6 +21,7 @@ import {
 } from '../utils/listTickCoin.js';
 import styles from '../routes/IssueTokenForm.module.css';
 import { t } from '../../i18n/index.js';
+import '../../i18n/locales/en/components.js';
 
 const chainRegistry = registryLib.defaultRegistry();
 

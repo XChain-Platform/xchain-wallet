@@ -10,6 +10,7 @@
 
 import { Button, Icon } from '@xchain-wallet/core/ui';
 import { t } from '../../i18n/index.js';
+import '../../i18n/locales/en/adsNotice.js';
 import styles from './AdsNotice.module.css';
 
 /**

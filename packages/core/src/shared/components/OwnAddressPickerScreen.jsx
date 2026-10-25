@@ -11,6 +11,7 @@
 import { AddressList } from '../routes/AddressList.jsx';
 import { coinFromChainId } from './BalanceList.jsx';
 import { t } from '../../i18n/index.js';
+import '../../i18n/locales/en/routes.js';
 
 /**
  * Standard own-address selector: the full change-address screen

@@ -13,6 +13,7 @@ import { flows as flowsLib } from '@xchain-wallet/core';
 import { Button, Icon } from '@xchain-wallet/core/ui';
 import styles from './BackupReminderCard.module.css';
 import { t } from '../../i18n/index.js';
+import '../../i18n/locales/en/backupReminder.js';
 
 /**
  * §19.7 / G034 + G062: progressive backup reminder card on Home.

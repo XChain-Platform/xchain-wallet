@@ -13,6 +13,7 @@ import {
     bpsToPercent,
 } from '../utils/contractConsentLabels.js';
 import { t } from '../../i18n/index.js';
+import '../../i18n/locales/en/components.js';
 
 /**
  * Phase F / PC-39: inline consent disclosure for the review screens of

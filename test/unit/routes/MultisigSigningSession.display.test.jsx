@@ -8,6 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
+import { readFileSync } from 'node:fs';
 import React from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
@@ -98,6 +99,18 @@ afterEach(() => {
 });
 
 describe('MultisigSigningSession contribution display', () => {
+    it('wraps every cosigner public key inside the page', async () => {
+        await mountAndOpen(session({ signatures: [signature(PK_A)] }));
+        const keys = [
+            ...within(screen.getByRole('list', { name: 'Signed cosigners' })).getAllByText(PK_A),
+            ...within(screen.getByRole('list', { name: 'Pending cosigners' })).getAllByText(PK_B),
+        ];
+        expect(keys).toHaveLength(2);
+        for (const key of keys) expect(key.className).toMatch(/cosignerKey/);
+        const css = readFileSync('packages/core/src/shared/routes/IssueTokenForm.module.css', 'utf8');
+        expect(css).toMatch(/\.cosignerKey \{[^}]*overflow-wrap: anywhere/);
+    });
+
     it('starts with the session list without repeating its interaction as lead copy', async () => {
         messaging.listMultisigSigningSessions.mockResolvedValue([session()]);
         render(<MultisigSigningSession walletId="wallet-1" onBack={() => {}} />);

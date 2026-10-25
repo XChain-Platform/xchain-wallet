@@ -23,6 +23,7 @@
 // on the form, from reads the wallet already makes.
 
 import { t } from '../i18n/index.js';
+import '../i18n/locales/en/flows.js';
 
 export const OWNER_ONLY_REFUSAL = 'This address only lets its owner open dispensers.';
 

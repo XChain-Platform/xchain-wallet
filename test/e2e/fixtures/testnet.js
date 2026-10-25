@@ -60,7 +60,6 @@ import { gotoSection, openSettings } from './wallet.js';
 import {
     REGTEST_COIN,
     activeNetworkControl,
-    enableDeveloperMode,
     expectConfirmModal,
     mintXchain,
     unlockAfterReload,
@@ -634,14 +633,13 @@ export function waitForActivationHeight(venue, height, { timeoutMs = 3_600_000 *
 }
 
 /**
- * Flips the wallet onto testnet and waits for it to come back up. The Active
- * network select offers only Mainnet until Developer Mode is on, so that is
- * enabled first; the switch then asks for confirmation, reloads and re-locks
- * the vault.
+ * Flips the wallet onto testnet and waits for it to come back up. Testnet is
+ * listed without Developer Mode (only Regtest is held behind it), so this is
+ * one select on the Settings index; the switch then asks for confirmation,
+ * reloads and re-locks the vault.
  */
 export async function switchToTestnet(page, password) {
     await openSettings(page);
-    await enableDeveloperMode(page); // Developer Mode first
     await activeNetworkControl(page).selectOption('testnet');
     const confirm = page.getByRole('dialog', { name: 'Switch to Testnet?' });
     await confirm.getByRole('button', { name: 'Switch network', exact: true }).click();

@@ -13,6 +13,7 @@ import { EmptyState, ListPage, Screen, PageHeader, StatusMessage, VerifiedBadge 
 import { registry as registryLib, flows as flowsLib } from '@xchain-wallet/core';
 import * as branding from '@xchain-wallet/core/branding/branding.js';
 import { t } from '../../i18n/index.js';
+import '../../i18n/locales/en/actionDetail.js';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { DetailCard, detailTransferDirection } from './History.jsx';
 import { actionDisplayLabel } from '../utils/actionDisplayLabel.js';

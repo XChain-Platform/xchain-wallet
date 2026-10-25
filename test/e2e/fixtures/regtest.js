@@ -1952,8 +1952,8 @@ export function activeNetworkControl(page) {
 
 /**
  * Turns Developer Mode on from the Settings index and returns to it. Without
- * it the Active network select offers only Mainnet. Idempotent: a wallet that
- * already has it on is left alone.
+ * it the Active network select offers Mainnet and Testnet but not Regtest.
+ * Idempotent: a wallet that already has it on is left alone.
  */
 export async function enableDeveloperMode(page) {
     await page.getByRole('button', { name: /^Developer mode/ }).click();
@@ -2002,7 +2002,14 @@ export async function switchToRegtest(page, password) {
     await activeNetworkControl(page).selectOption('regtest');
     // The switch reloads the wallet, so Settings asks first.
     const confirm = page.getByRole('dialog', { name: 'Switch to Regtest?' });
+    // Settings derives the regtest addresses before it reloads, and until the
+    // reload lands the old unlocked page still shows the App header. On a
+    // loaded runner that work outlasts unlockAfterReload's short wait for the
+    // lock screen, so the next step met a page mid-reload with no navigation.
+    // Wait for the reloaded page itself before reading the screen.
+    const reloaded = page.waitForEvent('load', { timeout: kdfStepTimeout() });
     await confirm.getByRole('button', { name: 'Switch network', exact: true }).click();
+    await reloaded;
 
     await unlockAfterReload(page, password);
 }

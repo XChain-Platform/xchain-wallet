@@ -12,6 +12,10 @@ import { useEffect, useRef, useState } from 'react';
 import { AddressText, Checkbox, InfoTip } from '@xchain-wallet/core/ui';
 import styles from './DerivationPathCrossCheck.module.css';
 import { t } from '../../i18n/index.js';
+import '../../i18n/locales/en/components.js';
+import '../../i18n/locales/en/multisig.js';
+import '../../i18n/locales/en/signerSelect.js';
+import '../../i18n/locales/en/verifySignature.js';
 
 /**
  * DerivationPathCrossCheck (§18.5): reusable UI block that sits above

@@ -132,7 +132,7 @@ test.describe('Settings: custom chains', () => {
                 // alone also matches the form's own field-list label AND the
                 // textarea still holding the pasted JSON, so a bare text match
                 // here is a strict-mode violation rather than an assertion.
-                await expect(page.getByText(/invalid descriptor:[^]*wifVersionByte/),
+                await expect(page.getByText(/can't be added[^]*wifVersionByte/),
                     'a descriptor with an out-of-range WIF version byte was not refused by name, so '
                     + 'the user cannot tell WHICH field of a 16-field blob is wrong')
                     .toBeVisible({ timeout: 30_000 });

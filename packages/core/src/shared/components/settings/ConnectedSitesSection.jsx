@@ -52,6 +52,10 @@ import local from './ConnectedSitesSection.module.css';
 import { blurNumberInputOnWheel } from '../../utils/formInput.js';
 import { neutralizeControlText } from '../../utils/textHardening.js';
 import { t } from '../../../i18n/index.js';
+import '../../../i18n/locales/en/accountPicker.js';
+import '../../../i18n/locales/en/extension.js';
+import '../../../i18n/locales/en/send.js';
+import '../../../i18n/locales/en/settings.js';
 
 // A connected site names itself, so its name and origin are hostile input:
 // bidi overrides would reorder the name, and a 240-character host would run

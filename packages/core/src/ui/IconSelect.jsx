@@ -13,6 +13,7 @@ import { ChevronIcon } from './ChainPicker.icons.jsx';
 import { useBackHandler } from './backStack.js';
 import styles from './IconSelect.module.css';
 import { t } from '../i18n/index.js';
+import '../i18n/locales/en/ui.js';
 
 /**
  * Single-select dropdown that can render an icon per option. A native

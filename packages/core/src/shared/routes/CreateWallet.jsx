@@ -25,6 +25,11 @@ import { useBackHandler } from '../../ui/backStack.js';
 import { useDocumentTitleSection } from '../hooks/useDocumentTitle.js';
 import styles from './CreateWallet.module.css';
 import { t } from '../../i18n/index.js';
+import '../../i18n/locales/en/adsNotice.js';
+import '../../i18n/locales/en/createWallet.js';
+import '../../i18n/locales/en/importWallet.js';
+import '../../i18n/locales/en/renameWallet.js';
+import '../../i18n/locales/en/settings.js';
 
 const MIN_PASSWORD_LENGTH = 8;
 

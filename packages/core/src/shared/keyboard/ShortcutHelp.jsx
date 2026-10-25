@@ -21,6 +21,9 @@ import styles from './ShortcutHelp.module.css';
 import { useBackHandler } from '../../ui/backStack.js';
 import { useFocusTrap } from '../utils/focusTrap.js';
 import { t } from '../../i18n/index.js';
+import '../../i18n/locales/en/components.js';
+import '../../i18n/locales/en/keyboard.js';
+import '../../i18n/locales/en/ui.js';
 
 function isMac() {
     if (typeof navigator === 'undefined') return false;

@@ -9,6 +9,7 @@ import {
     formatLocalDateTime,
 } from '../utils/dateTime.js';
 import { t } from '../../i18n/index.js';
+import '../../i18n/locales/en/components.js';
 
 const TICK_MS = 30_000;
 const LONG_PRESS_MS = 500;

@@ -28,6 +28,7 @@ import {
 } from '../utils/amountFormat.js';
 import tableStyles from './DataTable.module.css';
 import { t } from '../../i18n/index.js';
+import '../../i18n/locales/en/components.js';
 
 const MAX_ROWS = 30;
 

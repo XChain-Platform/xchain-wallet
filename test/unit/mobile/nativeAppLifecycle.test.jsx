@@ -4,7 +4,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 import React from 'react';
-import { act, cleanup, render, waitFor } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
 import { ToastHost } from '../../../packages/core/src/shared/components/ToastHost.jsx';
@@ -111,6 +111,28 @@ describe('Capacitor app resume', () => {
         expect(onBackground).toHaveBeenCalledTimes(1);
         expect(onResume).toHaveBeenCalledTimes(1);
         expect(view.getByTestId('private-screen')).toHaveTextContent('balances');
+    });
+
+    it('hides the page in the background without unmounting the screen', () => {
+        function Form() {
+            const [text, setText] = React.useState('');
+            return <input aria-label="Name" value={text} onChange={(e) => setText(e.target.value)} />;
+        }
+        const view = render(provider(
+            makeMessaging(0),
+            <><LifecycleHarness /><Form /></>,
+        ));
+        const input = view.getByLabelText('Name');
+        act(() => { input.focus(); });
+        act(() => { fireEvent.change(input, { target: { value: 'typed text' } }); });
+
+        act(() => document.dispatchEvent(new Event('pause')));
+        expect(document.body.style.visibility).toBe('hidden');
+        act(() => document.dispatchEvent(new Event('resume')));
+
+        expect(document.body.style.visibility).toBe('');
+        expect(view.getByLabelText('Name')).toBe(input);
+        expect(input).toHaveValue('typed text');
     });
 
     it.each([

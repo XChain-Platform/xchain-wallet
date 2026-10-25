@@ -15,6 +15,9 @@ import { isAssetImageSourceAllowed, tickerColor } from './BalanceList.jsx';
 import { useTokenInfo } from '../hooks/useTokenInfo.js';
 import styles from './CollectiblesView.module.css';
 import { t } from '../../i18n/index.js';
+import '../../i18n/locales/en/balances.js';
+import '../../i18n/locales/en/components.js';
+import '../../i18n/locales/en/settings.js';
 
 /**
  * §27.5 / G074: Collectibles view. Renders an NFT-shaped grid (large

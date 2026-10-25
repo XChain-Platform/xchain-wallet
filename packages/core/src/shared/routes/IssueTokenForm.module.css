@@ -482,6 +482,11 @@ select.picker {
     margin: 0 0 var(--xc-space-1);
 }
 
+/* A 66-character public key wraps inside the page instead of running past its edge. */
+.cosignerKey {
+    overflow-wrap: anywhere;
+}
+
 .txid {
     display: block;
     direction: ltr;

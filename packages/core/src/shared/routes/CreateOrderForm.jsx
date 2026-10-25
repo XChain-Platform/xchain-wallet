@@ -51,6 +51,7 @@ import { tokenAmountPrecisionError } from '../utils/amountFormat.js';
 import { addressValidationError } from '../utils/addressValidation.js';
 import { tickerReferenceError } from '../utils/tickerGrammar.js';
 import { t } from '../../i18n/index.js';
+import '../../i18n/locales/en/createOrder.js';
 
 // A classified failure (offline, rejected fee) keeps its own copy; an unclassified one gets plain order copy.
 function orderFailureFallback(err) {

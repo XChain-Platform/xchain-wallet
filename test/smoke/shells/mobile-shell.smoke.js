@@ -49,6 +49,7 @@ import { dirname, join, relative } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 
 import { docsAvailable, readDoc, WALLET_DOCS } from '../_docs-repo.js';
+import { withEnglishCopy } from '../_localized-source.js';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const wsRoot = join(here, '..', '..', '..');
@@ -638,7 +639,11 @@ assert.match(
     /USE_FINGERPRINT"\s*\n?\s*android:maxSdkVersion="27"/,
     'the legacy fingerprint permission is capped at API 27',
 );
-const qrScanner = readFileSync(join(wsRoot, 'packages', 'core', 'src', 'ui', 'QrScanner.jsx'), 'utf8');
+// The rationale copy lives in the English dictionary; reading it in place keeps
+// the check true when the smoke runs without the runner's English-copy loader.
+const qrScanner = withEnglishCopy(
+    readFileSync(join(wsRoot, 'packages', 'core', 'src', 'ui', 'QrScanner.jsx'), 'utf8'),
+);
 assert.match(
     qrScanner,
     /data-testid="qr-scanner-camera-rationale"[\s\S]*?uses the camera only to scan QR codes[\s\S]*?paste the code instead/,

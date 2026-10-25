@@ -120,6 +120,26 @@ describe('Settings field rows', () => {
         expect(phone).toMatch(/\.page \[data-settings-control\]\s*\{\s*flex:\s*1 1 100%/);
     });
 
+    it('wraps a hint-less control one label gap under its label', () => {
+        const { getByLabelText } = render(
+            <>
+                <SettingsFieldRow label="Strategy" embedded>
+                    <select><option>Normal</option></select>
+                </SettingsFieldRow>
+                <SettingsFieldRow label="Theme">
+                    <select><option>System</option></select>
+                </SettingsFieldRow>
+                <SettingsFieldRow label="Format" hint="How numbers show.">
+                    <select><option>Full</option></select>
+                </SettingsFieldRow>
+            </>,
+        );
+        const rowOf = (label) => getByLabelText(label).parentElement.parentElement;
+        expect(rowOf('Strategy').style.rowGap).toBe('var(--xc-label-gap)');
+        expect(rowOf('Theme').style.rowGap).toBe('var(--xc-label-gap)');
+        expect(rowOf('Format').style.rowGap).toBe('');
+    });
+
     it('lets the fiat currency box fill the line on a phone like the dropdowns', () => {
         const src = readFileSync(join(SETTINGS_DIR, 'components/settings/LanguageRegionSection.jsx'), 'utf8');
         expect(src).toMatch(/data-settings-fill="" style=\{CONTROLS\}/);

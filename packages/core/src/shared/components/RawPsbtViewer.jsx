@@ -14,6 +14,7 @@ import styles from './RawPsbtViewer.module.css';
 import { useHapticFeedback } from '../hooks/useHaptic.js';
 import { useToast } from './ToastHost.jsx';
 import { t } from '../../i18n/index.js';
+import '../../i18n/locales/en/components.js';
 
 /**
  * Developer-Mode-gated raw view (§21.3 / §48.4) for sign screens.

@@ -394,6 +394,18 @@ describe('settings form validation', () => {
         });
     });
 
+    it('shows the fee strategy help once across the coin cards', () => {
+        const profile = { strategy: 'normal', customSatsPerKb: null, rbfByDefault: true };
+        settings = {
+            ...createDefaultSettings(),
+            fees: { 'bitcoin-mainnet': profile, 'litecoin-mainnet': profile },
+        };
+        render(<FeesSection />);
+
+        expect(screen.getAllByRole('group').length).toBeGreaterThan(1);
+        expect(screen.getAllByText('Choose the balance between confirmation speed and network cost.')).toHaveLength(1);
+    });
+
     it('does not repeat the active network kind in fee headings', () => {
         settings = {
             ...createDefaultSettings(),

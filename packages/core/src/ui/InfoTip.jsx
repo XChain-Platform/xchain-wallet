@@ -29,6 +29,7 @@
 import { useEffect, useId, useLayoutEffect, useRef, useState } from 'react';
 import styles from './InfoTip.module.css';
 import { t } from '../i18n/index.js';
+import '../i18n/locales/en/ui.js';
 
 const VIEWPORT_MARGIN = 8;
 const BUBBLE_GAP = 6;

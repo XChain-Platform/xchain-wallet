@@ -30,6 +30,8 @@ import { userFacingMessage } from '../utils/userFacingMessage.js';
 import dashStyles from '../routes/ActionsMenu.module.css';
 import formStyles from '../routes/IssueTokenForm.module.css';
 import { t } from '../../i18n/index.js';
+import '../../i18n/locales/en/components.js';
+import '../../i18n/locales/en/send.js';
 
 const chainRegistry = registryLib.defaultRegistry();
 const DECIMAL_NUMBER = /^[+-]?(?:\d+(?:\.\d*)?|\.\d+)$/;
