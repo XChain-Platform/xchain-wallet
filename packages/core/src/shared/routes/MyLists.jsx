@@ -183,9 +183,13 @@ function MyListsScreen({ walletId, activeAccountId, onOpenList, onCreateList, on
         return allRows.filter((row) => {
             if (network !== 'all' && coinFromChainId(row.chainId) !== network) return false;
             if (!q) return true;
+            // The row's own title (name and index) and kind are searchable, so what
+            // the list shows is what the search finds.
+            const kind = String(row.type) === '1' ? 'Token list' : 'Address list';
             return [
                 row.source, row.status, String(row.action_index ?? ''),
                 row.list_action_index != null ? String(row.list_action_index) : '',
+                row.name, listLabel(row.action_index ?? '?', row.name, kind), kind,
             ].some((v) => typeof v === 'string' && v.toLowerCase().includes(q));
         });
     }, [allRows, query, network]);

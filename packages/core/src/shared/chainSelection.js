@@ -65,6 +65,19 @@ export function defaultDexAssetForNetwork(network) {
 }
 
 /**
+ * The chain whose shared-list directory the Shared lists screen reads: the
+ * network of the list the user last opened there, otherwise the selected
+ * network's Bitcoin chain, so a testnet wallet never reads the mainnet directory.
+ *
+ * @param {{ chainId?: string, directoryChainId?: string } | null | undefined} listRef
+ * @param {string | null | undefined} network
+ * @returns {string}
+ */
+export function sharedListDirectoryChainId(listRef, network) {
+    return listRef?.directoryChainId || listRef?.chainId || defaultDexAssetForNetwork(network).chainId;
+}
+
+/**
  * Keep an explicit market asset when it belongs to the selected network,
  * otherwise return that network's native Bitcoin asset.
  *

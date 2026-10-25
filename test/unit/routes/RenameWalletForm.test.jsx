@@ -182,6 +182,29 @@ describe.each([
 });
 
 describe('RenameWalletForm submission', () => {
+    it('updates the stored lock-screen name when the active wallet is renamed', async () => {
+        localStorage.setItem('xc:activeWallet', JSON.stringify({ id: 'wallet-1', name: 'Primary wallet' }));
+        mount({ initialName: 'Spending' });
+        await waitFor(() => expect(screen.getByRole('button', { name: 'Save' }).disabled).toBe(false));
+
+        fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+
+        await waitFor(() => expect(messaging.renameWallet).toHaveBeenCalled());
+        expect(JSON.parse(localStorage.getItem('xc:activeWallet'))).toEqual({ id: 'wallet-1', name: 'Spending' });
+    });
+
+    it('leaves the stored lock-screen name alone when another wallet is renamed', async () => {
+        localStorage.setItem('xc:activeWallet', JSON.stringify({ id: 'wallet-2', name: 'Savings' }));
+        mount({ initialName: 'Spending' });
+        await waitFor(() => expect(screen.getByRole('button', { name: 'Save' }).disabled).toBe(false));
+
+        fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+
+        await waitFor(() => expect(messaging.renameWallet).toHaveBeenCalled());
+        expect(JSON.parse(localStorage.getItem('xc:activeWallet'))).toEqual({ id: 'wallet-2', name: 'Savings' });
+    });
+
+
     it('trims a valid name, renames the wallet, and reports completion', async () => {
         const { props } = mount({ initialName: '  Spending  ' });
         await waitFor(() => expect(screen.getByRole('button', { name: 'Save' }).disabled).toBe(false));

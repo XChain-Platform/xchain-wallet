@@ -15,6 +15,7 @@ import { NAME_MAX_LENGTH, hasVisibleText, nameKey, nameLength } from '../../util
 import '../../i18n/locales/en/history.js';
 import '../../i18n/locales/en/renameWallet.js';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
+import { readActiveWallet, writeActiveWallet } from '../utils/activeWalletMemory.js';
 
 /**
  * RenameWalletForm: change a Wallet record's `name` field. No
@@ -97,7 +98,11 @@ export function RenameWalletForm({ walletId, initialName = '', onBack, onRenamed
         setBusy(true);
         try {
             const result = await messaging.renameWallet({ walletId, name: trimmed });
-            onRenamed(result?.wallet || result);
+            const renamed = result?.wallet || result;
+            // The lock screen names the wallet from this stored selection, so a
+            // renamed active wallet updates it or the lock screen shows the old name.
+            if (readActiveWallet() === walletId) writeActiveWallet(walletId, trimmed);
+            onRenamed(renamed);
         } catch (err) {
             setError(err?.message || 'Failed to rename wallet.');
             setBusy(false);

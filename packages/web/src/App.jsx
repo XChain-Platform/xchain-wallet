@@ -49,7 +49,7 @@ import { readActiveWallet, writeActiveWallet } from '@xchain-wallet/core/shared/
 import { takePostDemoIntent } from '@xchain-wallet/core/shared/utils/demoGraduation.js';
 import { createLaunchRouteState, shouldClearTransientState } from '@xchain-wallet/core/shared/utils/launchRouteState.js';
 import { historyScopeForAsset } from '@xchain-wallet/core/shared/utils/historyEntryScope.js';
-import { defaultDexAssetForNetwork, syncDexAssetToNetwork } from '@xchain-wallet/core/shared/chainSelection.js';
+import { defaultDexAssetForNetwork, sharedListDirectoryChainId, syncDexAssetToNetwork } from '@xchain-wallet/core/shared/chainSelection.js';
 import { lockImmediately } from '@xchain-wallet/core/shared/utils/lockAction.js';
 import { persistActiveNetwork } from '@xchain-wallet/core/shared/utils/activeNetworkSwitch.js';
 import { useMessagingUnread } from '@xchain-wallet/core/shared/hooks/useMessagingUnread.js';
@@ -1654,14 +1654,14 @@ function AppInner() {
                 return (
                     <SharedListDirectory
                         walletId={activeWalletId}
-                        chainId={listRef?.directoryChainId || listRef?.chainId || 'bitcoin-mainnet'}
+                        chainId={sharedListDirectoryChainId(listRef, settings?.activeNetwork)}
                         mode="browse"
                         onOpenList={(chainId, actionIndex) => {
                             setListRef({
                                 chainId,
                                 actionIndex,
                                 origin: 'shared',
-                                directoryChainId: listRef?.directoryChainId || listRef?.chainId || 'bitcoin-mainnet',
+                                directoryChainId: sharedListDirectoryChainId(listRef, settings?.activeNetwork),
                             });
                             setUnlockedView('list-detail');
                         }}
