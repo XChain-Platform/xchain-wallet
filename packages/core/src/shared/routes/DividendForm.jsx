@@ -219,7 +219,9 @@ export function DividendForm({ walletId, onBack, initialChainId, initialTick, in
             setHolders({ loading: false, rows: null, error: null });
             return;
         }
-        setHolders((prev) => ({ ...prev, loading: true, error: null }));
+        // The previous token's holders must not feed the payout total, the
+        // balance gate or Max while this token's holders load.
+        setHolders({ loading: true, rows: null, error: null });
         let cancelled = false;
         const handle = setTimeout(() => {
             messaging.getHoldersForToken({ chainId, tick: trimmed, all: true })

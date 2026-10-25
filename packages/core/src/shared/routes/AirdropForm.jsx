@@ -589,7 +589,7 @@ export function AirdropForm({ walletId, resumeId = null, onBack, initialChainId,
     // its ACTION_INDEX. Pauses when the tab is hidden to avoid burning
     // explorer bandwidth for off-screen windows.
     useEffect(() => {
-        if (stage !== 'wait-index' || !listTxid || !chainId || !pendingId) return undefined;
+        if (stage !== 'wait-index' || !listTxid || !chainId) return undefined;
         let cancelled = false;
         const started = Date.now();
         const tick = async () => {
@@ -605,10 +605,12 @@ export function AirdropForm({ walletId, resumeId = null, onBack, initialChainId,
                 if (idx) {
                     setListActionIndex(idx);
                     try {
-                        await messaging.updatePendingAirdrop({
-                            id: pendingId,
-                            patch: { stage: 'ready-to-airdrop', listActionIndex: idx },
-                        });
+                        if (pendingId) {
+                            await messaging.updatePendingAirdrop({
+                                id: pendingId,
+                                patch: { stage: 'ready-to-airdrop', listActionIndex: idx },
+                            });
+                        }
                     } catch (err) {
                         // Persistence failure is non-fatal here; the in-memory
                         // state still advances, and the user can re-sign.
@@ -1177,8 +1179,15 @@ export function AirdropForm({ walletId, resumeId = null, onBack, initialChainId,
                 memo: memo.trim() || undefined,
                 payFeeInNativeCoin: nativeFee.payFeeInNativeCoin,
             });
-            await messaging.savePendingAirdrop({ record });
-            setPendingId(record.id);
+            // The list is already on the network, so a failed save of the resume
+            // record only costs the resume: the airdrop continues in this window
+            // instead of reporting a failed broadcast that invites a second list.
+            let savedId = null;
+            try {
+                await messaging.savePendingAirdrop({ record });
+                savedId = record.id;
+            } catch { /* continue without a resume record */ }
+            setPendingId(savedId);
             setListTxid(txid);
             setPassword('');
             setStage('wait-index');
@@ -1284,8 +1293,15 @@ export function AirdropForm({ walletId, resumeId = null, onBack, initialChainId,
                 memo: memo.trim() || undefined,
                 payFeeInNativeCoin: nativeFee.payFeeInNativeCoin,
             });
-            await messaging.savePendingAirdrop({ record });
-            setPendingId(record.id);
+            // The list is already on the network, so a failed save of the resume
+            // record only costs the resume: the airdrop continues in this window
+            // instead of reporting a failed broadcast that invites a second list.
+            let savedId = null;
+            try {
+                await messaging.savePendingAirdrop({ record });
+                savedId = record.id;
+            } catch { /* continue without a resume record */ }
+            setPendingId(savedId);
             setListTxid(txid);
             setPassword('');
             setStage('wait-index');

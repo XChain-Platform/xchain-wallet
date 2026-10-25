@@ -22,7 +22,7 @@
 // The per-form part stays in the form: which wire-format actionData to
 // compose, and which messaging method to dispatch on Approve.
 
-import { useCallback } from 'react';
+import { useCallback, useRef } from 'react';
 import { useSettings } from './useSettings.js';
 import { useConfirmAction, isConfirmOpenPhase } from './useConfirmAction.js';
 import {
@@ -106,7 +106,7 @@ export function useActionConfirmFlow({ messaging, walletId, slice = 'actionForms
      * @returns {Promise<any>}   resolves with onApprove's return value; rejects with the
      *   documented reasons from useConfirmAction (`busy`, `user-rejected`).
      */
-    const run = useCallback(({ chainId, from, actionData, encoderOpts, compose, onApprove, resume }) => (
+    const start = useCallback(({ chainId, from, actionData, encoderOpts, compose, onApprove, resume }) => (
         confirmAction.confirm({
             chainId,
             source: from?.address,
@@ -162,6 +162,20 @@ export function useActionConfirmFlow({ messaging, walletId, slice = 'actionForms
             onApprove: (_creds, composed) => onApprove(prebuiltPsbtFromComposed(composed), composed),
         })
     ), [confirmAction, messaging, settings, walletId]);
+
+    // A second submit while the first confirm is still composing or open (a
+    // double click, Enter pressed twice) joins the first run. Starting another
+    // would be refused as busy and surface as a failure of an action that is
+    // proceeding normally.
+    const inFlightRef = useRef(null);
+    const run = useCallback((args) => {
+        if (inFlightRef.current) return inFlightRef.current;
+        const pending = Promise.resolve(start(args)).finally(() => {
+            if (inFlightRef.current === pending) inFlightRef.current = null;
+        });
+        inFlightRef.current = pending;
+        return pending;
+    }, [start]);
 
     return {
         /** slice flag: is the single-encode confirm pipeline on for this surface? */

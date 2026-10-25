@@ -25,6 +25,7 @@ import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { useDemoGuard } from '../hooks/useDemoGuard.jsx';
 import { ActionConfirmScreen } from '../components/ActionConfirmScreen.jsx';
 import { WatcherResultPanel } from '../components/WatcherResultPanel.jsx';
+import { QueuedResultPanel } from '../components/QueuedResultPanel.jsx';
 import { useSignerReady } from '../hooks/useSignerReady.js';
 import { useOwnerActionLane } from '../hooks/useOwnerActionLane.js';
 import { isUserRejection } from '../hooks/useActionConfirmFlow.js';
@@ -245,6 +246,8 @@ function ListTransferFormScreen({ walletId, listRef, onBack, onDone = onBack }) 
     }
 
     if (result) {
+        // Signed but held in the broadcast queue: nothing is on the network yet.
+        if (result.queued) return wrap(<QueuedResultPanel onDone={onDone} what="list transfer" unsaved={result.unsaved} />);
         if (result.psbtHex && !result.txid) {
             return wrap(
                 <WatcherResultPanel

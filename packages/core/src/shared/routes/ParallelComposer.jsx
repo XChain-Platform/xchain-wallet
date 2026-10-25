@@ -441,6 +441,9 @@ export function ParallelComposer({ walletId, onBack, initialRows, hasDexSurface 
             updateRow(activeRowIndex, {
                 status: 'success',
                 txid: result?.txid || null,
+                // A transient broadcast failure resolves as queued: signed, held
+                // in the queued-transactions banner, not on the network.
+                queued: Boolean(result?.queued),
                 error: null,
             });
             // Advance to the next pending row, or wrap up.
@@ -470,7 +473,8 @@ export function ParallelComposer({ walletId, onBack, initialRows, hasDexSurface 
         }
     }
 
-    const allRowsBroadcast = rows.every((r) => r.status === 'success');
+    const queuedRows = rows.filter((r) => r.status === 'success' && r.queued).length;
+    const allRowsBroadcast = rows.every((r) => r.status === 'success') && queuedRows === 0;
 
     const header = (
         <PageHeader
@@ -536,7 +540,7 @@ export function ParallelComposer({ walletId, onBack, initialRows, hasDexSurface 
                 <p className={styles.hint}>
                     {allRowsBroadcast
                         ? 'All rows broadcast. Link them in a follow-up action to thread them together in your History.'
-                        : 'Run finished. Skipped rows were not signed or broadcast.'}
+                        : (queuedRows ? queuedRowsHint(queuedRows) : 'Run finished. Skipped rows were not signed or broadcast.')}
                 </p>
                 <div className={styles.actions}>
                     <Button variant="primary" onClick={onBack}>Done</Button>
@@ -558,7 +562,7 @@ export function ParallelComposer({ walletId, onBack, initialRows, hasDexSurface 
                 </>,
             );
         }
-        const totalSucceeded = rows.filter((r) => r.status === 'success').length;
+        const totalSucceeded = rows.filter((r) => r.status === 'success' && !r.queued).length;
         const totalSkipped = rows.filter((r) => r.status === 'skipped').length;
         const remaining = rows.length - totalSucceeded - totalSkipped;
         const progressText = [
@@ -850,7 +854,7 @@ function SummaryList({ rows, addressesByChain = null, showDetails = false }) {
                                 {' on '}
                                 {d ? d.displayName : r.chainId}
                             </span>
-                            <StatusPill status={r.status} />
+                            <StatusPill status={r.status === 'success' && r.queued ? 'queued' : r.status} />
                         </div>
                         {showDetails && addressesByChain ? (
                             <RowDetail row={r} addressesByChain={addressesByChain} />
@@ -864,11 +868,18 @@ function SummaryList({ rows, addressesByChain = null, showDetails = false }) {
     );
 }
 
+function queuedRowsHint(count) {
+    return count === 1
+        ? '1 signed row is waiting in the queued-transactions banner and only goes out when you broadcast it from there. Do not sign it again.'
+        : `${count} signed rows are waiting in the queued-transactions banner and only go out when you broadcast them from there. Do not sign them again.`;
+}
+
 function statusLabel(status) {
     return {
         pending: 'Pending',
         submitting: 'Signing',
         success: 'Broadcast',
+        queued: 'Signed, not broadcast',
         failed: 'Failed',
         skipped: 'Skipped',
     }[status] || status;

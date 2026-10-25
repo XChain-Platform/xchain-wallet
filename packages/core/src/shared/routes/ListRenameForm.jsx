@@ -25,6 +25,7 @@ import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { useDemoGuard } from '../hooks/useDemoGuard.jsx';
 import { ActionConfirmScreen } from '../components/ActionConfirmScreen.jsx';
 import { WatcherResultPanel } from '../components/WatcherResultPanel.jsx';
+import { QueuedResultPanel } from '../components/QueuedResultPanel.jsx';
 import { NativeFeeToggle } from '../components/NativeFeeToggle.jsx';
 import { useNativeFee } from '../hooks/useNativeFee.js';
 import { useOwnerActionLane } from '../hooks/useOwnerActionLane.js';
@@ -308,6 +309,8 @@ function ListRenameFormScreen({ walletId, listRef, onBack, onDone = onBack }) {
     }
 
     if (result) {
+        // Signed but held in the broadcast queue: nothing is on the network yet.
+        if (result.queued) return wrap(<QueuedResultPanel onDone={onDone} what="list rename" unsaved={result.unsaved} />);
         if (result.psbtHex && !result.txid) {
             return wrap(
                 <WatcherResultPanel

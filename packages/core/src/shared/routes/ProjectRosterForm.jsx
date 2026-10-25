@@ -29,6 +29,7 @@ import { extractActionIndex } from '../utils/actionIndexFromTx.js';
 import { submitFailureMessage } from '../utils/submitFailureMessage.js';
 import { useActionConfirmFlow, useConfirmSubmit, isUserRejection } from '../hooks/useActionConfirmFlow.js';
 import { ActionConfirmScreen } from '../components/ActionConfirmScreen.jsx';
+import { QueuedResultPanel } from '../components/QueuedResultPanel.jsx';
 import { classifyTickItems } from '../utils/listTickItems.js';
 import { memoLengthError, MEMO_HINT } from '../utils/memoLimit.js';
 import { tokenIssuerEligibility } from '../utils/tokenIssuerEligibility.js';
@@ -115,6 +116,7 @@ export function ProjectRosterForm({ walletId, chainId, tick, issuerAddress = nul
     const [listActionIndex, setListActionIndex] = useState(/** @type {string | null} */ (null));
     const [linkTxid, setLinkTxid] = useState(/** @type {string | null} */ (null));
     const [waitElapsed, setWaitElapsed] = useState(0);
+    const [queuedLeg, setQueuedLeg] = useState(/** @type {any | null} */ (null));
     const passwordRef = useRef(/** @type {HTMLInputElement | null} */ (null));
 
     // The active map is best-effort: a host without `getActiveAddresses`, or
@@ -409,6 +411,8 @@ export function ProjectRosterForm({ walletId, chainId, tick, issuerAddress = nul
                     prebuiltPsbt,
                 }),
             });
+            // A transient broadcast failure resolves as queued: signed, not on the network.
+            if (res?.queued) { setQueuedLeg(res); return; }
             const txid = res?.txid || res?.broadcast?.txid;
             if (!txid) throw new Error('List broadcast did not return a transaction ID.');
             setListTxid(txid);
@@ -466,6 +470,7 @@ export function ProjectRosterForm({ walletId, chainId, tick, issuerAddress = nul
                     prebuiltPsbt,
                 }),
             });
+            if (res?.queued) { setQueuedLeg(res); return; }
             const txid = res?.txid || res?.broadcast?.txid;
             if (!txid) throw new Error('Cross-chain link broadcast did not return a transaction ID.');
             setLinkTxid(txid);
@@ -553,6 +558,12 @@ export function ProjectRosterForm({ walletId, chainId, tick, issuerAddress = nul
                 hintClassName={styles.hint}
             />
         );
+    }
+
+    // A leg signed but not broadcast stops the flow: the panel offers no retry,
+    // because signing again while a signed copy is queued double-broadcasts.
+    if (queuedLeg) {
+        return wrap(<QueuedResultPanel onDone={onBack} what="official token list" unsaved={queuedLeg?.unsaved} />);
     }
 
     if (stage === 'done') {
