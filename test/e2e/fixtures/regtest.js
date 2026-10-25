@@ -1952,8 +1952,8 @@ export function activeNetworkControl(page) {
 
 /**
  * Turns Developer Mode on from the Settings index and returns to it. Without
- * it the Active network select offers only Mainnet. Idempotent: a wallet that
- * already has it on is left alone.
+ * it the Active network select offers Mainnet and Testnet but not Regtest.
+ * Idempotent: a wallet that already has it on is left alone.
  */
 export async function enableDeveloperMode(page) {
     await page.getByRole('button', { name: /^Developer mode/ }).click();

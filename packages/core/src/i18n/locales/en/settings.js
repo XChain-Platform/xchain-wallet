@@ -124,7 +124,7 @@ const messages = {
     'settings.developer.developerModeSettings': 'Developer mode settings',
     'settings.developer.developerOptions': 'Developer options',
     'settings.developer.unlocksTestNetworksEndpointOverrides':
-        'Unlocks test networks, endpoint overrides, custom networks, preview tools, local app controls, and diagnostics. Turning it off returns the wallet to Mainnet.',
+        'Unlocks the Regtest network, endpoint overrides, custom networks, preview tools, local app controls, and diagnostics. Turning it off while on Regtest returns the wallet to Mainnet.',
     'settings.developer.learnMode': 'Learn Mode',
     'settings.developer.addsPlainLanguageExplanationsTo':
         'Adds plain-language explanations to confirmation screens.',
@@ -681,9 +681,6 @@ const messages = {
         'View version, license, build verification, release signature, and diagnostic details.',
     'settings.page.networkChooseAll':
         'Choose Mainnet, Testnet, or Regtest to control which networks the wallet queries and displays; changing the network reloads the page.',
-    'settings.page.networkMainnetActive':
-        'Mainnet is active. Turn on Developer mode to choose a test network.',
-    'settings.page.networkActiveLocked': '{network} is active. Turn on Developer mode to switch networks.',
     'settings.page.networkChooseTwo':
         'Choose Mainnet or Testnet to control which networks the wallet queries and displays; changing the network reloads the page.',
     'settings.page.privacyOn': '{on} of {total} on',

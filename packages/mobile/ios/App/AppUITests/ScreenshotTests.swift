@@ -282,8 +282,8 @@ final class ScreenshotTests: XCTestCase {
     /// ordinary user can reach (the accurate-metadata exposure of Apple
     /// 2.3.3). Since xchain-wallet#78 demo mode itself lands on mainnet,
     /// because App Review is sent there first and must see a mainnet
-    /// address, so this step is now a guard: on a mainnet demo the select
-    /// offers only Mainnet and picking it changes nothing. It stays so a
+    /// address, so this step is now a guard: on a mainnet demo picking
+    /// Mainnet changes nothing. It stays so a
     /// regression back to a non-mainnet landing is switched (and confirmed)
     /// before anything is shot, rather than captured.
     ///

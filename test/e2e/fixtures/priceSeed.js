@@ -746,19 +746,22 @@ export function readStateScript(coinPairs) {
  */
 export async function writePriceSeedRows(query, rows, markerFloor = PRICE_SEED_MARKER_FLOOR) {
     const liveRows = await query(
-        `SELECT 1 AS live_oracle FROM price_snapshots
+        `SELECT validator_count, source_action_index FROM price_snapshots
          WHERE status = 'finalized' AND round_number < ?
-           AND created_at >= DATE_SUB(NOW(), INTERVAL 5 MINUTE)
-         LIMIT 1`,
+           AND created_at >= DATE_SUB(NOW(), INTERVAL 5 MINUTE)`,
         [markerFloor],
     );
-    if (liveRows.length) {
+    const foreignLiveRow = liveRows.find((row) => Number(row.validator_count) !== 1
+        || row.source_action_index !== null);
+    if (foreignLiveRow) {
         throw new Error(
-            'REFUSING: the wallet e2e price fixture found a recently finalized price_snapshots '
-            + 'row below its marker range. This hub database has an active oracle, so writing '
-            + 'synthetic finalized rows would corrupt its consensus clamp reference.',
+            'REFUSING: the wallet e2e price fixture found a recently finalized foreign '
+            + 'price_snapshots row below its marker range. This hub database has an active '
+            + 'foreign oracle, so writing synthetic finalized rows would corrupt its consensus '
+            + 'clamp reference.',
         );
     }
+    if (liveRows.length) return 0;
 
     for (const row of rows) {
         await query(
