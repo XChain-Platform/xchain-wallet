@@ -797,7 +797,7 @@ export async function writePriceSeedRows(query, rows, markerFloor = PRICE_SEED_M
  * Runs only when `writePriceSeedRows` stood aside for the venue's own oracle. The
  * indexer takes the HIGHEST round and only then checks its age, so a synthetic
  * round left by an earlier run outranks every live hub round and turns a venue
- * that prices every minute into "no current oracle price" (test01, 2026-10-25:
+ * that prices every minute into "no current oracle price" (wallet CI venue, 2026-10-25:
  * BTC/USD round 888100012 at 100000, ten hours old, above live round 131952).
  * Only rounds in `rounds` (the shared synthetic list) and only rows stamped before
  * `staleBefore` (chain time minus the indexer's price age) are touched, so a real

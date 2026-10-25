@@ -399,7 +399,7 @@ describe('e2e price seed', () => {
                 .toBe(true);
         });
 
-        // test01, 2026-10-25: the hub finalized BTC/USD every minute (round 131952, 61s old)
+        // The wallet CI venue, 2026-10-25: the hub finalized BTC/USD every minute (round 131952, 61s old)
         // while a ten-hour-old synthetic 888100012 outranked it, so the indexer chose the
         // stale row and every run failed setup on "no current oracle price for BTC/USD".
         describe('stale fixture rounds above a live oracle', () => {
