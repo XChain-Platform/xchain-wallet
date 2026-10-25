@@ -336,18 +336,48 @@ describe('e2e price seed', () => {
             expect(script).toContain('ON DUPLICATE KEY UPDATE');
         });
 
-        it('refuses an active oracle database before writing any fixture row', async () => {
+        it('accepts the venue own regtest oracle and skips every fixture row', async () => {
             const calls = [];
             const query = async (sql, params) => {
                 calls.push({ sql, params });
-                return [{ live_oracle: 1 }];
+                return [
+                    { validator_count: 1, source_action_index: null },
+                    { validator_count: 1, source_action_index: null },
+                ];
             };
 
-            await expect(writePriceSeedRows(query, rows)).rejects.toThrow(/active oracle/);
+            await expect(writePriceSeedRows(query, rows)).resolves.toBe(0);
             expect(calls).toHaveLength(1);
             expect(calls[0].sql).toContain("status = 'finalized'");
             expect(calls[0].sql).toContain('INTERVAL 5 MINUTE');
+            expect(calls[0].sql).toContain('validator_count');
+            expect(calls[0].sql).toContain('source_action_index');
             expect(calls[0].params).toEqual([PRICE_SEED_MARKER_FLOOR]);
+        });
+
+        it('still refuses a foreign live oracle before writing any fixture row', async () => {
+            const calls = [];
+            const query = async (sql, params) => {
+                calls.push({ sql, params });
+                return [
+                    { validator_count: 1, source_action_index: null },
+                    { validator_count: 3, source_action_index: null },
+                ];
+            };
+
+            await expect(writePriceSeedRows(query, rows)).rejects.toThrow(/foreign oracle/);
+            expect(calls).toHaveLength(1);
+        });
+
+        it('also refuses a published foreign round with one validator', async () => {
+            const calls = [];
+            const query = async (sql, params) => {
+                calls.push({ sql, params });
+                return [{ validator_count: 1, source_action_index: 42 }];
+            };
+
+            await expect(writePriceSeedRows(query, rows)).rejects.toThrow(/foreign oracle/);
+            expect(calls).toHaveLength(1);
         });
 
         it('keys the live-oracle check below every synthetic round a sibling seed writes', () => {
