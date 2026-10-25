@@ -645,6 +645,11 @@ function AppInner({ canOpenInTab, titleEnabled }) {
     shownWalletIds.current = [activeWalletId, walletDetailsId, walletRenameTarget?.id];
     const shownWalletId = useRef(/** @type {string | null} */ (null));
     shownWalletId.current = activeWalletId;
+    // The wallet list read in flight, or chosen and not yet rendered, is
+    // invisible to the refs above. Removals that name a wallet the list read
+    // has not shown yet wait here for it.
+    const chosenWalletId = useRef(/** @type {string | null} */ (null));
+    const removedBeforeShown = useRef(/** @type {Set<string>} */ (new Set()));
 
     useEffect(() => attachSurfaceStateListener((event) => {
         applySurfaceStateEvent(event, {
@@ -659,10 +664,11 @@ function AppInner({ canOpenInTab, titleEnabled }) {
             // first remaining wallet otherwise, and Welcome when none remain.
             walletRemoved: (walletId) => {
                 if (readActiveWallet() === walletId) clearActiveWallet();
-                if (shownWalletIds.current.includes(walletId)) {
+                if (shownWalletIds.current.includes(walletId) || chosenWalletId.current === walletId) {
                     refresh();
                     return;
                 }
+                if (!shownWalletId.current) removedBeforeShown.current.add(walletId);
                 listWallets()
                     .then((list) => { if (Array.isArray(list) && list.length) setWallets(list); })
                     .catch(() => { /* the next session refresh reloads the list */ });
@@ -743,6 +749,8 @@ function AppInner({ canOpenInTab, titleEnabled }) {
             // A link opened before unlock parks its prefill while the popup
             // loads or sits locked; only leaving an unlocked session wipes it.
             if (shouldClearTransientState(previousState, status.state)) clearTransientActionState();
+            chosenWalletId.current = null;
+            removedBeforeShown.current.clear();
             setActiveWalletId(null);
             setActiveAccountId(null);
             setWallets([]);
@@ -750,8 +758,18 @@ function AppInner({ canOpenInTab, titleEnabled }) {
         }
         let cancelled = false;
         listWallets()
-            .then((list) => {
+            .then((fetched) => {
                 if (cancelled) return;
+                // A wallet removed in another surface while this read was in
+                // flight can still be in the list; the session reload decides
+                // what is left.
+                const gone = removedBeforeShown.current;
+                const list = Array.isArray(fetched) ? fetched.filter((w) => !gone.has(w?.id)) : fetched;
+                if (gone.size > 0 && Array.isArray(fetched) && fetched.length > 0 && list.length === 0) {
+                    gone.clear();
+                    refresh();
+                    return;
+                }
                 if (Array.isArray(list) && list.length > 0) {
                     setWallets(list);
                     // D-34(c): restore the last selected WALLET if it still
@@ -765,14 +783,14 @@ function AppInner({ canOpenInTab, titleEnabled }) {
                     // id is validated against the live list so a removed wallet
                     // or another device falls back to the default.
                     const persisted = readActiveWallet();
-                    setActiveWalletId(
-                        (persisted && list.some((w) => w.id === persisted)) ? persisted : list[0].id,
-                    );
+                    const chosen = (persisted && list.some((w) => w.id === persisted)) ? persisted : list[0].id;
+                    chosenWalletId.current = chosen;
+                    setActiveWalletId(chosen);
                 }
             })
             .catch(() => { /* Home surfaces load errors */ });
         return () => { cancelled = true; };
-    }, [status.state]);
+    }, [status]);
 
     // Resolved from the loaded list rather than tracked as its own state, so
     // `handleSwitchWallet` stays the single writer.

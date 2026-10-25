@@ -27,13 +27,15 @@ afterEach(() => {
     vi.unstubAllGlobals();
 });
 
-function boot({ wallets }) {
+function boot({ wallets, holdWalletList = false }) {
     localStorage.setItem('xc:onboardingExplainerSeenAt', '2026-10-13T00:00:00.000Z');
     localStorage.setItem('xc:licenseAcceptedAt', '2026-10-13T00:00:00.000Z');
     localStorage.setItem('xc:licenseAcceptedVersion', '2');
     const listeners = new Set();
     const state = { wallets: wallets.map((w) => ({ ...w })), session: 'unlocked' };
     const sent = [];
+    let holding = holdWalletList;
+    const heldReplies = [];
     vi.stubGlobal('chrome', {
         runtime: {
             lastError: undefined,
@@ -43,7 +45,9 @@ function boot({ wallets }) {
                 if (message.type === 'session.status') {
                     callback({ ok: true, result: { state: state.session } });
                 } else if (message.type === 'wallet.list') {
-                    callback({ ok: true, result: state.wallets });
+                    const reply = { ok: true, result: state.wallets.map((w) => ({ ...w })) };
+                    if (holding) heldReplies.push(() => callback(reply));
+                    else callback(reply);
                 } else if (message.type === 'account.list') {
                     callback({ ok: true, result: [] });
                 } else {
@@ -60,15 +64,25 @@ function boot({ wallets }) {
             session: { get: (_key, callback) => callback({}) },
         },
     });
-    const emit = (kind, payload) => act(async () => {
+    const deliver = (kind, payload) => {
         for (const listener of listeners) {
             listener({
                 [SURFACE_STATE_STORAGE_KEY]: { newValue: { kind, payload, revision: String(Math.random()) } },
             }, 'session');
         }
+    };
+    const emit = (kind, payload) => act(async () => {
+        deliver(kind, payload);
         await new Promise((resolve) => setTimeout(resolve, 0));
     });
-    return { state, sent, emit };
+    // Answers the held wallet.list read the way the background does, then lets
+    // only the promise handlers run, so React has not rendered the result.
+    const releaseWalletList = async () => {
+        holding = false;
+        for (const answer of heldReplies.splice(0)) answer();
+        for (let i = 0; i < 10; i += 1) await Promise.resolve();
+    };
+    return { state, sent, emit, deliver, releaseWalletList, listHeld: () => heldReplies.length > 0 };
 }
 
 const count = (sent, type) => sent.filter((entry) => entry === type).length;
@@ -85,10 +99,67 @@ describe('popup reacts to a wallet removed in another surface', () => {
         const sessionReads = count(sent, 'session.status');
         await emit('wallets', { change: 'removed', walletId: 'w1' });
 
-        // Welcome renders after the session re-read, which can take seconds on a loaded runner.
-        expect(await screen.findByRole('button', { name: 'Create new wallet' }, { timeout: 8000 })).toBeInTheDocument();
+        expect(await screen.findByRole('button', { name: 'Create new wallet' })).toBeInTheDocument();
         expect(count(sent, 'session.status')).toBeGreaterThan(sessionReads);
-    }, 15000);
+    });
+
+    it('lands on Welcome when the last wallet is removed while the wallet list read is in flight', async () => {
+        const { state, sent, emit, releaseWalletList, listHeld } = boot({
+            wallets: [{ id: 'w1', name: 'Alpha' }],
+            holdWalletList: true,
+        });
+        localStorage.setItem('xchain.activeWallet', 'w1');
+        render(<App />);
+        await waitFor(() => expect(listHeld()).toBe(true));
+
+        // The read was made before the removal, so its reply still names w1.
+        state.wallets = [];
+        state.session = 'no-wallet';
+        await emit('wallets', { change: 'removed', walletId: 'w1' });
+        await act(async () => { await releaseWalletList(); });
+
+        expect(await screen.findByRole('button', { name: 'Create new wallet' })).toBeInTheDocument();
+        expect(count(sent, 'session.status')).toBeGreaterThan(1);
+    });
+
+    it('lands on Welcome when the last wallet is removed before the chosen wallet is rendered', async () => {
+        const { state, sent, deliver, releaseWalletList, listHeld } = boot({
+            wallets: [{ id: 'w1', name: 'Alpha' }],
+            holdWalletList: true,
+        });
+        localStorage.setItem('xchain.activeWallet', 'w1');
+        render(<App />);
+        await waitFor(() => expect(listHeld()).toBe(true));
+
+        // Outside act, React renders the reply on its own schedule, as a loaded runner does.
+        globalThis.IS_REACT_ACT_ENVIRONMENT = false;
+        await releaseWalletList();
+        state.wallets = [];
+        state.session = 'no-wallet';
+        const sessionReads = count(sent, 'session.status');
+        deliver('wallets', { change: 'removed', walletId: 'w1' });
+
+        expect(await screen.findByRole('button', { name: 'Create new wallet' })).toBeInTheDocument();
+        expect(count(sent, 'session.status')).toBeGreaterThan(sessionReads);
+    });
+
+    it('re-reads the wallets when the session answers before React renders the reload', async () => {
+        const { state, sent, deliver } = boot({
+            wallets: [{ id: 'w1', name: 'Alpha' }, { id: 'w2', name: 'Beta' }],
+        });
+        localStorage.setItem('xchain.activeWallet', 'w1');
+        render(<App />);
+        await waitFor(() => expect(count(sent, 'account.list')).toBeGreaterThan(0));
+
+        // Outside act the loading state and the answer land in one render, so the
+        // session state string never changes; the wallet read must still repeat.
+        globalThis.IS_REACT_ACT_ENVIRONMENT = false;
+        state.wallets = [{ id: 'w2', name: 'Beta' }];
+        const listReads = count(sent, 'wallet.list');
+        deliver('wallets', { change: 'removed', walletId: 'w1' });
+
+        await waitFor(() => expect(count(sent, 'wallet.list')).toBeGreaterThan(listReads));
+    });
 
     it('reloads the session when the shown wallet is removed and a wallet remains', async () => {
         const { state, sent, emit } = boot({
