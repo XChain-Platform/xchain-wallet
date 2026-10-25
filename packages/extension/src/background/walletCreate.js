@@ -395,10 +395,10 @@ export async function handleWalletImportBackup(request, deps) {
 }
 
 /**
- * Remove what a failed create / import / fresh-restore wrote. The vault
- * autosaves on every write, so a flow that throws partway, or a kdfParams,
- * session or signing-secret save that is refused, leaves an encrypted blob the
- * unlock path cannot open and every onboarding lane refuses to replace. Callers
+ * Remove what a failed create / import / fresh-restore wrote. These lanes write
+ * the blob once, at their save, so a kdfParams, session or signing-secret save
+ * that is refused after it leaves an encrypted blob the unlock path cannot
+ * open and every onboarding lane refuses to replace. Callers
  * reach this only after `assertFreshVault` proved the install held nothing, so
  * it never discards a wallet that was already there. A clear that fails too is
  * left for the original error to report.
