@@ -716,6 +716,22 @@ export function Home({ onLocked, onResumeConfirm, onSend, onReceive, onSwap, onE
         reportError = false,
     }) => {
         if (!activeNetwork) return;
+        // Confirms the popup closed on. Extension-only in practice (the store
+        // is chrome.storage.session), and the route answers with an empty list
+        // on the shells that have none, so no shell check is needed here. The
+        // read is local, so it starts before the offline gate and before the
+        // balance reads: a slow or unreachable explorer must not hide the card
+        // that finishes or discards a stored transaction. Not awaited, so the
+        // balance load does not wait on it either.
+        if (typeof messaging.listConfirmSessions === 'function') {
+            messaging.listConfirmSessions().then((resp) => {
+                if (isCancelled()) return;
+                setConfirmSessions(confirmSessionsForNetwork(
+                    filterConfirmSessionsForAccount(resp?.sessions, walletId, accountId),
+                    activeNetwork,
+                ));
+            }).catch(() => { /* non-fatal */ });
+        }
         // The saved copy of this pair's balances; only a clean fresh read
         // replaces it. activeForCache starts from the saved active addresses.
         let activeForCache = readBalanceCache(walletId, accountId, activeNetwork)?.activeByChain || {};
@@ -897,21 +913,6 @@ export function Home({ onLocked, onResumeConfirm, onSend, onReceive, onSwap, onE
         // `useCoinpayObligations` already runs for the nav badge. The resume
         // cards read that one scan through `useSharedCoinpayObligations` above.
 
-        // Confirms the popup closed on. Extension-only in
-        // practice (the store is chrome.storage.session), and the route
-        // answers with an empty list on the shells that have none, so no
-        // shell check is needed here.
-        if (typeof messaging.listConfirmSessions === 'function') {
-            try {
-                const resp = await messaging.listConfirmSessions();
-                if (!isCancelled()) {
-                    setConfirmSessions(confirmSessionsForNetwork(
-                        filterConfirmSessionsForAccount(resp?.sessions, walletId, accountId),
-                        activeNetwork,
-                    ));
-                }
-            } catch { /* non-fatal */ }
-        }
     // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [messaging, offline, activeNetwork]);
 
