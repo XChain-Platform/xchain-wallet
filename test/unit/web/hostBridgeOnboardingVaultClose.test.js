@@ -35,11 +35,13 @@ const { populate, flowBehaviour, built, hoisted } = vi.hoisted(() => {
         }
         async open() { /* blank document */ }
         async save() { /* accepted */ }
+        setAutoSave() { /* accepted */ }
         close() { this.closes += 1; this.key.fill(0); }
     }
     const storageClear = vi.fn(async () => {});
     const metaSave = vi.fn(async () => {});
-    return { populate, flowBehaviour: {}, built, hoisted: { FakeSignerPool, InertWatcher, RecordingVault, storageClear, metaSave } };
+    const metaClear = vi.fn(async () => {});
+    return { populate, flowBehaviour: {}, built, hoisted: { FakeSignerPool, InertWatcher, RecordingVault, storageClear, metaSave, metaClear } };
 });
 
 // hostBridge imports these modules directly (not through the core barrel),
@@ -100,7 +102,11 @@ vi.mock('@xchain-wallet/core', async (importOriginal) => {
 
 vi.mock('../../../packages/web/src/storage/backends.js', () => ({
     createStorageBackend: () => ({ load: async () => null, save: async () => {}, clear: (...args) => hoisted.storageClear(...args) }),
-    createMetaBackend: () => ({ load: async () => null, save: (...args) => hoisted.metaSave(...args) }),
+    createMetaBackend: () => ({
+        load: async () => (hoisted.metaLoad ? { kdfParams: { algorithm: 'argon2id' } } : null),
+        save: (...args) => hoisted.metaSave(...args),
+        clear: (...args) => hoisted.metaClear(...args),
+    }),
     installNativeWipeHook: () => {},
     installNativeScreenGuard: () => {},
 }));
@@ -152,6 +158,8 @@ beforeEach(async () => {
     hoisted.storageClear.mockResolvedValue(undefined);
     hoisted.metaSave.mockReset();
     hoisted.metaSave.mockResolvedValue(undefined);
+    hoisted.metaClear.mockReset();
+    hoisted.metaClear.mockResolvedValue(undefined);
     for (const lane of LANES) flowBehaviour[lane.flow] = lane.ok;
     flowBehaviour.restoreLabelSyncAfterImport = async () => null;
 });
@@ -207,6 +215,22 @@ describe('web onboarding leaves no half-written wallet behind', () => {
             expect(hoisted.storageClear).toHaveBeenCalledTimes(1);
         });
 
+        it(`${lane.name}: a kdfParams save that reports failure after landing discards the kdfParams too`, async () => {
+            // A native vault reply can refuse a write that already landed.
+            hoisted.metaSave.mockRejectedValue(new Error('saveMeta was not accepted'));
+            await expect(lane.call()).rejects.toThrow('saveMeta was not accepted');
+            expect(hoisted.storageClear).toHaveBeenCalledTimes(1);
+            expect(hoisted.metaClear).toHaveBeenCalledTimes(1);
+        });
+
+        it(`${lane.name}: a wallet already on the device is never discarded`, async () => {
+            hoisted.metaLoad = true;
+            await expect(lane.call()).rejects.toThrow(/already exists/);
+            hoisted.metaLoad = false;
+            expect(hoisted.storageClear).not.toHaveBeenCalled();
+            expect(hoisted.metaClear).not.toHaveBeenCalled();
+        });
+
         it(`${lane.name}: a blob clear that also fails still reports the original error`, async () => {
             hoisted.metaSave.mockRejectedValue(new Error('metadata could not be persisted'));
             hoisted.storageClear.mockRejectedValue(new Error('clear refused'));
@@ -216,6 +240,7 @@ describe('web onboarding leaves no half-written wallet behind', () => {
         it(`${lane.name}: the success path keeps the blob`, async () => {
             await lane.call();
             expect(hoisted.storageClear).not.toHaveBeenCalled();
+            expect(hoisted.metaClear).not.toHaveBeenCalled();
         });
     }
 });

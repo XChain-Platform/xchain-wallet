@@ -65,6 +65,9 @@ export async function handleWalletCreateWithMnemonic(request, deps) {
         const vault = new storageLib.Vault({
             backend: deps.storageBackend,
             masterKey,
+            // One blob write at `vault.save()`: a service worker that dies
+            // part-way leaves nothing behind instead of an unopenable blob.
+            autoSave: false,
         });
         try {
             await vault.open();
@@ -155,6 +158,9 @@ export async function handleWalletImport(request, deps) {
         const vault = new storageLib.Vault({
             backend: deps.storageBackend,
             masterKey,
+            // One blob write at `vault.save()`: a service worker that dies
+            // part-way leaves nothing behind instead of an unopenable blob.
+            autoSave: false,
         });
         try {
             await vault.open();
@@ -308,6 +314,9 @@ export async function handleWalletImportBackup(request, deps) {
         const vault = new storageLib.Vault({
             backend: deps.storageBackend,
             masterKey,
+            // One blob write at `vault.save()`: a service worker that dies
+            // part-way leaves nothing behind instead of an unopenable blob.
+            autoSave: false,
         });
         try {
             await vault.open();

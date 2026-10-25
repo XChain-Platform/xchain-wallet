@@ -324,6 +324,16 @@ export class Vault {
         }
     }
 
+    /**
+     * Turn per-write persistence on or off. A flow that builds a vault from
+     * nothing opens it with `autoSave: false`, then `save()`s once and turns this
+     * on, so the device never holds a half-built blob.
+     * @param {boolean} enabled
+     */
+    setAutoSave(enabled) {
+        this._autoSave = enabled === true;
+    }
+
     /** Flush the current document to the backend. */
     async save() {
         this._assertOpen();
