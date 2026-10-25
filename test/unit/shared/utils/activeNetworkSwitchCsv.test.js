@@ -36,6 +36,12 @@ describe('active network helpers', () => {
         { options: { current: 'regtest' }, values: ['mainnet', 'testnet', 'regtest'] },
         { options: { developerMode: true }, values: ['mainnet', 'testnet', 'regtest'] },
         { options: { developerMode: false, current: 'リグテスト' }, values: ['mainnet', 'testnet'] },
+        // Testnet never needs Developer Mode; only Regtest is held behind it,
+        // and a persisted Regtest stays listed so the wallet can leave it.
+        { options: { developerMode: false, current: 'mainnet' }, values: ['mainnet', 'testnet'] },
+        { options: { developerMode: false, current: 'testnet' }, values: ['mainnet', 'testnet'] },
+        { options: { developerMode: false, current: 'regtest' }, values: ['mainnet', 'testnet', 'regtest'] },
+        { options: { developerMode: true, current: 'testnet' }, values: ['mainnet', 'testnet', 'regtest'] },
     ])('offers the expected choices for $options', ({ options, values }) => {
         expect(activeNetworkOptions(options).map(({ value }) => value)).toEqual(values);
     });

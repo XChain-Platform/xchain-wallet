@@ -12,8 +12,9 @@
 //
 // Live:
 //   - Developer Mode master toggle (`settings.developerMode`). Gates
-//     non-Mainnet choices, endpoint overrides, local controls, and
-//     diagnostics. Turning it off also returns the wallet to Mainnet.
+//     the Regtest network choice, endpoint overrides, local controls, and
+//     diagnostics. Turning it off while on Regtest returns the wallet to
+//     Mainnet; Testnet is open to everyone and stays selected.
 //   - Learn Mode toggle (`settings.learnMode`). Drives explanatory
 // copy on confirmation screens. a later change gave it its first reader:
 //     DisplayPrefsGate stamps it on <html> and <LearnNote> renders the
@@ -61,6 +62,7 @@ import { useSettings } from '../../hooks/useSettings.js';
 import { LogConsole } from '../LogConsole.jsx';
 import { DiagnosticDetails } from '../DiagnosticDetails.jsx';
 import { SignerSelectForm } from '../../routes/SignerSelectForm.jsx';
+import { normalizeActiveNetwork } from '../../utils/activeNetworkSwitch.js';
 import {
     SettingsFieldRow,
     SettingsInlineForm,
@@ -107,8 +109,10 @@ export function DeveloperModeSection({ activeWallet, activeAccount, onNavigateTo
         }
     };
 
+    // Regtest is the only network that needs Developer Mode, so turning it off
+    // moves the wallet off Regtest and leaves a Mainnet or Testnet choice alone.
     const onDeveloperModeToggle = async (next) => {
-        const returnToMainnet = !next && settings.activeNetwork !== 'mainnet';
+        const returnToMainnet = !next && normalizeActiveNetwork(settings.activeNetwork) === 'regtest';
         if (!returnToMainnet) {
             await onToggle('developerMode', next);
             return;

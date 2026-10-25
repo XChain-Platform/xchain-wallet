@@ -416,13 +416,16 @@ describe('testnet harness: indexed wait budget', () => {
 });
 
 describe('testnet harness: network switch', () => {
-    it('enables Developer Mode before choosing testnet and confirms the switch', async () => {
+    // Testnet is listed without Developer Mode, so the helper picks it
+    // straight from the Settings index and only confirms the switch.
+    it('chooses testnet without turning on Developer Mode and confirms the switch', async () => {
         const { readFileSync } = await import('node:fs');
         const src = readFileSync(new URL('../../e2e/fixtures/testnet.js', import.meta.url), 'utf8');
         const start = src.indexOf('export async function switchToTestnet');
+        expect(start).toBeGreaterThan(-1);
         const body = src.slice(start, src.indexOf('\n}', start));
-        expect(body).toMatch(/enableDeveloperMode/);
-        expect(body.indexOf('enableDeveloperMode')).toBeLessThan(body.indexOf('selectOption'));
-        expect(body).toMatch(/Switch network/);
+        expect(body).not.toMatch(/enableDeveloperMode/);
+        expect(body).toMatch(/selectOption\('testnet'\)/);
+        expect(body.indexOf('selectOption')).toBeLessThan(body.indexOf('Switch network'));
     });
 });

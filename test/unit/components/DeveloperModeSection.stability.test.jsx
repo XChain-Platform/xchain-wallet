@@ -216,21 +216,35 @@ describe('DeveloperModeSection unavailable actions', () => {
         expect(screen.queryByRole('button', { name: /Network & endpoints/ })).toBeNull();
     });
 
-    it.each(['testnet', 'regtest'])(
-        'persists disabling Developer Mode and Mainnet in one write from %s',
+    it('persists disabling Developer Mode and Mainnet in one write from regtest', async () => {
+        const reload = vi.fn();
+        settings = { ...settings, activeNetwork: 'regtest' };
+        render(<DeveloperModeSection reload={reload} />);
+
+        expect(screen.getByText(/Turning it off while on Regtest returns the wallet to Mainnet\./)).toBeVisible();
+        fireEvent.click(screen.getByRole('switch', { name: 'Turn on developer mode' }));
+
+        await waitFor(() => expect(update).toHaveBeenCalledWith({
+            developerMode: false,
+            activeNetwork: 'mainnet',
+        }));
+        expect(reload).toHaveBeenCalledOnce();
+    });
+
+    // Testnet is open without Developer Mode, so turning it off must not
+    // move the wallet or reload it.
+    it.each(['testnet', 'mainnet'])(
+        'disables Developer Mode alone and keeps %s selected',
         async (activeNetwork) => {
             const reload = vi.fn();
             settings = { ...settings, activeNetwork };
             render(<DeveloperModeSection reload={reload} />);
 
-            expect(screen.getByText(/Turning it off returns the wallet to Mainnet\./)).toBeVisible();
             fireEvent.click(screen.getByRole('switch', { name: 'Turn on developer mode' }));
 
-            await waitFor(() => expect(update).toHaveBeenCalledWith({
-                developerMode: false,
-                activeNetwork: 'mainnet',
-            }));
-            expect(reload).toHaveBeenCalledOnce();
+            await waitFor(() => expect(update).toHaveBeenCalledWith({ developerMode: false }));
+            expect(update).toHaveBeenCalledOnce();
+            expect(reload).not.toHaveBeenCalled();
         },
     );
 });
