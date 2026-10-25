@@ -17,11 +17,12 @@
         "@ledgerhq/hw-transport-webhid": "^6.35.0",
         "@xchain-wallet/core": "workspace:*",
         "@xchain-wallet/extension": "workspace:*",
+        "bitcoinjs-lib": "6.1.7",
         "lightweight-charts": "^4.2.0",
         "qrcode": "^1.5.4",
         "react": "^18.3.0",
         "react-dom": "^18.3.0",
-        "xchain-sdk": "npm:@dankest-llc/xchain-sdk@0.23.0"
+        "xchain-sdk": "npm:@dankest-llc/xchain-sdk@0.26.2"
     },
     "devDependencies": {
         "@vitejs/plugin-basic-ssl": "^1.1.0",
