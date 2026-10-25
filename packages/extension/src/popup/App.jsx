@@ -749,11 +749,11 @@ function AppInner({ canOpenInTab, titleEnabled }) {
             // A link opened before unlock parks its prefill while the popup
             // loads or sits locked; only leaving an unlocked session wipes it.
             if (shouldClearTransientState(previousState, status.state)) clearTransientActionState();
-            chosenWalletId.current = null;
-            removedBeforeShown.current.clear();
             setActiveWalletId(null);
             setActiveAccountId(null);
             setWallets([]);
+            chosenWalletId.current = null;
+            removedBeforeShown.current.clear();
             return;
         }
         let cancelled = false;
