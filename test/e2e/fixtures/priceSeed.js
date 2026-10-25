@@ -650,7 +650,7 @@ export async function settlePrice({
  * temporarily unavailable"), so this names the venue, the reason, and what was
  * tried, and it is raised from global setup rather than mid-spec.
  */
-export function unusablePriceMessage({ regtestCoin, reason, seeded, state }) {
+export function unusablePriceMessage({ regtestCoin, reason, seeded, liveOracle = false, cleared = 0, state }) {
     const lines = [
         `Regtest ${regtestCoin} cannot price a fee-bearing action: ${reason}`,
         '',
@@ -658,7 +658,18 @@ export function unusablePriceMessage({ regtestCoin, reason, seeded, state }) {
         'dispenser) is valued against the indexer\'s price_snapshots, and nothing on a',
         'regtest stack publishes those rows - there is no validator federation here.',
     ];
-    if (seeded) {
+    if (liveOracle) {
+        // Checked first: the write ran but stood aside, so "DID write" would be false
+        // and "did NOT write (ssh or seeding off)" would send the reader the wrong way.
+        lines.push(
+            '',
+            'seedPrices() wrote NO rows: this venue\'s own hub finalizes price rounds, so the',
+            `fixture left them to price the run and cleared ${cleared} stale fixture round(s)`,
+            'that outranked them. The venue still refuses, so its newest live round for this',
+            'pair is missing or older than the indexer\'s price age, or a fresh synthetic round',
+            'from another suite outranks it: getLatestPrice takes the HIGHEST round first.',
+        );
+    } else if (seeded) {
         lines.push(
             '',
             'seedPrices() DID write a fresh snapshot and the venue still refuses, so the',
@@ -779,15 +790,47 @@ export async function writePriceSeedRows(query, rows, markerFloor = PRICE_SEED_M
     return rows.length;
 }
 
-export function writeRowsScript(rows) {
+/**
+ * Deletes this fixture family's synthetic rounds for `pairs` that are already too
+ * old to price anything, and returns how many went.
+ *
+ * Runs only when `writePriceSeedRows` stood aside for the venue's own oracle. The
+ * indexer takes the HIGHEST round and only then checks its age, so a synthetic
+ * round left by an earlier run outranks every live hub round and turns a venue
+ * that prices every minute into "no current oracle price" (test01, 2026-10-25:
+ * BTC/USD round 888100012 at 100000, ten hours old, above live round 131952).
+ * Only rounds in `rounds` (the shared synthetic list) and only rows stamped before
+ * `staleBefore` (chain time minus the indexer's price age) are touched, so a real
+ * round, or a sibling suite's seed that still prices, is never removed.
+ */
+export async function clearStaleSeedRows(query, { pairs, rounds, staleBefore }) {
+    if (!pairs.length || !rounds.length || !Number.isFinite(Number(staleBefore))) return 0;
+    const result = await query(
+        'DELETE FROM price_snapshots WHERE coin_pair IN (' + pairs.map(() => '?').join(',') + ')'
+        + ' AND round_number IN (' + rounds.map(() => '?').join(',') + ') AND block_timestamp < ?',
+        [...pairs, ...rounds, Number(staleBefore)],
+    );
+    return Number((result && result.affectedRows) || 0);
+}
+
+export function writeRowsScript(rows, { chainTime } = {}) {
     return containerScript(`
-        const written = await writePriceSeedRows(
-            (sql, params) => priceConn.query(sql, params), ROWS, PRICE_SEED_MARKER_FLOOR);
-        out = { written, network: process.env.INDEXER_NETWORK };
+        const query = (sql, params) => priceConn.query(sql, params);
+        const written = await writePriceSeedRows(query, ROWS, PRICE_SEED_MARKER_FLOOR);
+        // Zero written for planned rows means the venue's own oracle prices it; clear
+        // only the stale fixture rounds that would outrank that oracle's live rows.
+        const cleared = (written === 0 && ROWS.length && STALE_BEFORE !== null)
+            ? await clearStaleSeedRows(query, {
+                pairs: [...new Set(ROWS.map((r) => r.coinPair))], rounds: SYNTHETIC_ROUNDS, staleBefore: STALE_BEFORE,
+            })
+            : 0;
+        out = { written, cleared, network: process.env.INDEXER_NETWORK };
     `, {
         ROWS: rows,
         PRICE_SEED_MARKER_FLOOR,
-    }, [writePriceSeedRows]);
+        SYNTHETIC_ROUNDS,
+        STALE_BEFORE: Number(chainTime) > 0 ? Number(chainTime) - ORACLE_MAX_PRICE_AGE_SECONDS : null,
+    }, [writePriceSeedRows, clearStaleSeedRows]);
 }
 
 /**

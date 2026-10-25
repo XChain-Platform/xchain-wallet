@@ -600,6 +600,8 @@ export async function seedPrices({ attempts = 4 } = {}) {
     // the anchors and the shadowing check both depend on them.
     let state;
     let rows;
+    let written = 0;
+    let cleared = 0;
     try {
         state = await runInIndexer(readStateScript([XCHAIN_PAIR, venue.coinPair]));
         const existingRounds = {};
@@ -612,7 +614,9 @@ export async function seedPrices({ attempts = 4 } = {}) {
             chainTime: state.chainTime,
             wallTime: Math.floor(Date.now() / 1000),
         });
-        await runInIndexer(writeRowsScript(rows));
+        const result = await runInIndexer(writeRowsScript(rows, { chainTime: state.chainTime }));
+        written = Number(result?.written) || 0;
+        cleared = Number(result?.cleared) || 0;
     } catch (err) {
         throw new Error(unusablePriceMessage({
             regtestCoin: REGTEST_COIN,
@@ -647,10 +651,14 @@ export async function seedPrices({ attempts = 4 } = {}) {
         busyReprobes: BUSY_REPROBES,
         busyReprobeMs: BUSY_REPROBE_MS,
     });
+    // Zero written for planned rows means the venue's own oracle prices it (the writer
+    // stood aside), so neither "seeded" nor the planned rows may be reported as written.
+    const liveOracle = written === 0 && rows.length > 0;
     if (after.usable) {
         return {
-            seeded: true,
-            rows: rows.length,
+            seeded: written > 0,
+            rows: written,
+            cleared,
             chainTime: state.chainTime,
             ...after,
         };
@@ -659,11 +667,14 @@ export async function seedPrices({ attempts = 4 } = {}) {
     throw new Error(unusablePriceMessage({
         regtestCoin: REGTEST_COIN,
         reason: after.reason,
-        seeded: true,
+        seeded: written > 0,
+        liveOracle,
+        cleared,
         state: {
             chainTime: state.chainTime,
             tipIndex: state.tipIndex,
-            wrote: rows.map((r) => `${r.coinPair}#${r.roundNumber}@${r.blockTimestamp}`),
+            wrote: liveOracle ? [] : rows.map((r) => `${r.coinPair}#${r.roundNumber}@${r.blockTimestamp}`),
+            cleared,
             found: (state.rows || []).map((r) => `${r.coinPair}#${r.round}@${r.timestamp}`),
         },
     }));
