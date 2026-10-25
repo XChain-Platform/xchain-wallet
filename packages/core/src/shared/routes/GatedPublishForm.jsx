@@ -20,6 +20,7 @@ import { useWalletMode } from '../hooks/useWalletMode.js';
 import {
     estimateNativeSendFeeTiers,
     customFeeEstimate,
+    customFeeRateBoundsError,
     displayRateToSettingsCustom,
 } from '../../flows/feeEstimate.js';
 import { submitFailureMessage } from '../utils/submitFailureMessage.js';
@@ -287,7 +288,10 @@ export function GatedPublishForm({ walletId, chainId, tick, issuerAddress = null
         if (unsafeMetadata) { setFormError(unsafeMetadata); return; }
         const memoError = memoLengthError(memo.trim());
         if (memoError) { setFormError(memoError); return; }
-        const feeError = publishFeeValidationError(feePick, feeCustomEstimate);
+        const feeError = publishFeeValidationError(feePick, feeCustomEstimate)
+            || (feePick.mode === 'custom'
+                ? customFeeRateBoundsError({ rate: Number(feePick.customRate), tiers: feeTiers })
+                : null);
         if (feeError) { setFormError(feeError); return; }
         const thresholdValue = thresholdActive ? gateMinAmount.trim() : '';
         const thresholdError = thresholdValue

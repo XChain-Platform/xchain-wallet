@@ -9,7 +9,7 @@
 // contact legal@dankest.llc.
 
 import { useId, useMemo, useState } from 'react';
-import { isPerKbUnit } from '../flows/feeEstimate.js';
+import { customFeeRateBoundsError, isPerKbUnit } from '../flows/feeEstimate.js';
 import {
     formatWithThousands,
     normalizeLocalizedDecimal,
@@ -275,9 +275,8 @@ export function FeeSelector({
     const fastPresetRate = Number.isFinite(tiers.fast?.rateValue) && tiers.fast.rateValue > 0
         ? tiers.fast.rateValue
         : null;
-    const minimumRate = Number.isFinite(tiers.minimumRate) && tiers.minimumRate > 0
-        ? tiers.minimumRate
-        : null;
+    // An out-of-range rate blocks the enclosing form's submit through the field's own validity.
+    const rangeError = isCustom ? customFeeRateBoundsError({ rate: customRateNumber, tiers }) : null;
     let customFeedback = null;
     let customFeedbackTone = null;
     if (feeDraft !== null && (!Number.isFinite(feeDraftNumber) || feeDraftNumber < 0)) {
@@ -289,10 +288,9 @@ export function FeeSelector({
     } else if (isCustom && (!Number.isFinite(customRateNumber) || customRateNumber <= 0)) {
         customFeedback = 'Custom fee rate must be greater than zero.';
         customFeedbackTone = 'error';
-    } else if (isCustom && minimumRate !== null && customRateNumber < minimumRate) {
-        customFeedback = `This rate is below the network minimum of ${formatWithThousands(minimumRate)} ${tiers.unit}. `
-            + 'It may not relay.';
-        customFeedbackTone = 'warning';
+    } else if (isCustom && rangeError) {
+        customFeedback = rangeError;
+        customFeedbackTone = 'error';
     } else if (isCustom && fastPresetRate !== null
         && customRateNumber > fastPresetRate * HIGH_FEE_MULTIPLIER) {
         customFeedback = 'This rate is more than 10 times the Fast rate. Check it carefully before sending.';
@@ -374,6 +372,7 @@ export function FeeSelector({
                                             min={0}
                                             step="any"
                                             className={`${styles.customInput} ${styles.feeInput}`}
+                                            ref={(el) => el?.setCustomValidity(rangeError || '')}
                                             value={feeDraft}
                                             onChange={(e) => onFeeDraftChange(e.target.value)}
                                             onBlur={() => setFeeDraft(null)}
@@ -422,6 +421,7 @@ export function FeeSelector({
                                         min={0.00000001}
                                         step="any"
                                         className={styles.customInput}
+                                        ref={(el) => el?.setCustomValidity(rangeError || '')}
                                         value={customRateRaw}
                                         onChange={(e) => onCustomRateChange(e.target.value)}
                                         onBlur={() => {

@@ -433,7 +433,7 @@ describe('governance route audit', () => {
 
         fireEvent.change(screen.getByLabelText(/Custom fee rate/), { target: { value: '1001' } });
         fireEvent.click(screen.getByRole('button', { name: 'Delegate votes' }));
-        expect(await screen.findByText("Custom network fee rate is above this network's supported maximum.")).toBeTruthy();
+        expect((await screen.findAllByText('Enter a rate no higher than 1,000 sat/vB.')).length).toBeGreaterThan(0);
         expect(messaging.composeVoteForConfirm).not.toHaveBeenCalled();
     });
 

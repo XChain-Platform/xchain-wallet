@@ -22,6 +22,7 @@ import {
     estimateNativeSendFee,
     estimateNativeSendFeeTiers,
     customFeeEstimate,
+    customFeeRateBoundsError,
     displayRateToSettingsCustom,
 } from '../../flows/feeEstimate.js';
 import styles from './IssueTokenForm.module.css';
@@ -565,6 +566,10 @@ function ListForkFormScreen({ walletId, listRef, onBack, onDone, repointHandlers
                 : 'Custom fee rate must be greater than zero.');
             return;
         }
+        const feeBoundsError = feePick.mode === 'custom'
+            ? customFeeRateBoundsError({ rate: Number(feePick.customRate), tiers: feeTiers })
+            : null;
+        if (feeBoundsError) { setFormError(feeBoundsError); return; }
         if (additions.invalid.length > 0) {
             const noun = isTick
                 ? (additions.invalid.length === 1 ? 'token name' : 'token names')

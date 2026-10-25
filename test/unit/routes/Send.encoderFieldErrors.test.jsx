@@ -79,12 +79,25 @@ describe('Send maps encoder refusals onto the field that fixes them', () => {
         ));
         await approveSend(messaging);
         fireEvent.change(await screen.findByLabelText('Network fee'), { target: { value: '3' } });
-        fireEvent.change(screen.getByLabelText(/Custom fee rate/), { target: { value: '0.5' } });
+        fireEvent.change(screen.getByLabelText(/Custom fee rate/), { target: { value: '1' } });
         await submit(messaging);
 
         const alert = await screen.findByText(/below the network minimum of 1 sat\/vB/);
         expect(alert.textContent).not.toMatch(/feePerKb|base units|relay minimum/);
         expect(screen.getByLabelText(/Custom fee rate/)).toHaveAttribute('aria-invalid', 'true');
+    });
+
+    it('refuses Review for a custom rate above the chain maximum', async () => {
+        vi.spyOn(console, 'error').mockImplementation(() => {});
+        const messaging = mount(rpcError('unused'));
+        await approveSend(messaging);
+        fireEvent.change(await screen.findByLabelText('Network fee'), { target: { value: '3' } });
+        fireEvent.change(screen.getByLabelText(/Custom fee rate/), { target: { value: '99999999' } });
+        fireEvent.click(screen.getByRole('button', { name: /^Send$/ }));
+
+        expect((await screen.findAllByText('Enter a rate no higher than 1,000 sat/vB.')).length).toBeGreaterThan(0);
+        expect(screen.getByLabelText(/Custom fee rate/)).toHaveAttribute('aria-invalid', 'true');
+        expect(messaging.composeForConfirm).not.toHaveBeenCalled();
     });
 
     it('puts the shortfall under the amount field in the coin units', async () => {

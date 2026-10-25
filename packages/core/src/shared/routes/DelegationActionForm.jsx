@@ -27,6 +27,7 @@ import {
     estimateNativeSendFee,
     estimateNativeSendFeeTiers,
     customFeeEstimate,
+    customFeeRateBoundsError,
     displayRateToSettingsCustom,
 } from '../../flows/feeEstimate.js';
 import styles from './IssueTokenForm.module.css';
@@ -301,8 +302,8 @@ export function DelegationActionForm({ mode, walletId, chainId: initialChainId, 
         ? null
         : !Number.isFinite(customFeeRate) || customFeeRate <= 0
             ? 'Enter a custom network fee rate greater than zero.'
-            : Number.isFinite(feeTiers?.maximumRate) && customFeeRate > feeTiers.maximumRate
-                ? 'Custom network fee rate is above this network\'s supported maximum.'
+            : customFeeRateBoundsError({ rate: customFeeRate, tiers: feeTiers })
+                ? customFeeRateBoundsError({ rate: customFeeRate, tiers: feeTiers })
                 : !feeCustomEstimate
                     ? 'Custom network fee rate can have at most 8 decimal places.'
                     : null;

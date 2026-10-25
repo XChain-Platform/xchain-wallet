@@ -202,6 +202,7 @@ export function getUnusualSendWarnings({
 }
 import {
     estimateNativeSendFee,
+    customFeeRateBoundsError,
     estimateNativeSendFeeTiers,
     fetchNativeSendFeeTiers,
     customFeeEstimate,
@@ -2479,7 +2480,10 @@ export function Send({ walletId, accountId, onBack, prefill = null, onDone, onCh
         if (amountBalanceError) return;
         // A custom fee the form cannot price (zero, negative, non-numeric, over 8 decimals)
         // would compose with the encoder's own default fee while the field says otherwise.
-        const customFeeError = publishFeeValidationError(feePick, feeEstimate);
+        const customFeeError = publishFeeValidationError(feePick, feeEstimate)
+            || (feePick.mode === 'custom'
+                ? customFeeRateBoundsError({ rate: Number(feePick.customRate), tiers: feeTiers })
+                : null);
         if (feePick.mode === 'custom' && (feePerKb === null || customFeeError)) {
             setFormError(customFeeError || 'Custom fee rate is outside the supported range.');
             return;

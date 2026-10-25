@@ -35,6 +35,7 @@ import {
     estimateNativeSendFee,
     estimateNativeSendFeeTiers,
     customFeeEstimate,
+    customFeeRateBoundsError,
     displayRateToSettingsCustom,
 } from '../../flows/feeEstimate.js';
 import { useContractManifest } from '../hooks/useContractManifest.js';
@@ -553,6 +554,11 @@ export function ExecuteContractForm({ walletId, chainId, contractActionIndex, in
 
     function handleReview(event) {
         event.preventDefault();
+        // A rate outside the chain bounds is refused here too, so a form that skips native validation still stops.
+        const feeBoundsError = feePick.mode === 'custom'
+            ? customFeeRateBoundsError({ rate: Number(feePick.customRate), tiers: feeTiers })
+            : null;
+        if (feeBoundsError) { setFormError(feeBoundsError); return; }
         // EXECUTE is signed from an address on this chain; without one there is
         // nothing to pay the call's fee from.
         if (!fromAddress) {
