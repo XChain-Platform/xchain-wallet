@@ -19,8 +19,26 @@
 // falls through to this catch-all. WebSockets bypass routes, so they are
 // watched through the page event.
 
+import {
+    classifyRequest,
+    emptyBatchBody,
+    healthyStatusBody,
+    pingBody,
+} from './offlineVenue.js';
+
 const LOCAL_HOSTS = new Set(['localhost', '127.0.0.1', '[::1]', '']);
 const LOCAL_SCHEMES = new Set(['data:', 'blob:', 'about:', 'file:', 'chrome:', 'devtools:']);
+const STATUS_PATH = /^\/([A-Za-z]+)\/api\/status$/;
+
+export const XCHAIN_SERVICE_HOSTS = Object.freeze([
+    'explorer.xchain.io',
+    'hub.xchain.io',
+    'encoder.xchain.io',
+]);
+
+function hostSet(hosts = []) {
+    return hosts instanceof Set ? hosts : new Set(hosts);
+}
 
 /**
  * True when a URL stays on this machine.
@@ -40,24 +58,85 @@ export function isLocalUrl(url) {
 }
 
 /**
+ * True when a URL belongs to one of the explicitly stubbed hosts.
+ *
+ * @param {string} url
+ * @param {Iterable<string>} hosts
+ * @returns {boolean}
+ */
+export function isStubbedUrl(url, hosts = []) {
+    try {
+        return hostSet(hosts).has(new URL(url).hostname);
+    } catch {
+        return false;
+    }
+}
+
+/**
+ * Answers the production service probes needed to reach Home and refuses every
+ * other request to those hosts.
+ *
+ * @param {import('@playwright/test').BrowserContext} context
+ * @param {Iterable<string>} hosts
+ */
+export async function stubOutboundHosts(context, hosts = []) {
+    const stubbedHosts = hostSet(hosts);
+    if (stubbedHosts.size === 0) return;
+
+    await context.route('**/*', async (route) => {
+        const request = route.request();
+        if (!isStubbedUrl(request.url(), stubbedHosts)) {
+            await route.fallback();
+            return;
+        }
+
+        let body = null;
+        try { body = request.postDataJSON(); } catch { /* malformed JSON is refused below */ }
+        const verdict = classifyRequest(request.method(), request.url(), body);
+        if (verdict === 'refuse' || verdict === 'pass') {
+            await route.abort('internetdisconnected');
+            return;
+        }
+
+        const responseBody = {
+            balances: () => emptyBatchBody(body),
+            status: () => healthyStatusBody(new URL(request.url()).pathname.match(STATUS_PATH)[1]),
+            ping: () => pingBody(body),
+        }[verdict]();
+        await route.fulfill({
+            status: 200,
+            contentType: 'application/json',
+            headers: { 'access-control-allow-origin': '*' },
+            body: JSON.stringify(responseBody),
+        });
+    });
+}
+
+/**
  * Starts recording non-local requests and WebSockets of a page.
  *
  * @param {import('@playwright/test').Page} page
+ * @param {{ stubbedHosts?: Iterable<string> }} [options]
  * @returns {{ attempts: string[] }}
  */
-export async function guardOutbound(page) {
+export async function guardOutbound(page, { stubbedHosts = [] } = {}) {
     const attempts = [];
+    const stubbed = hostSet(stubbedHosts);
     await page.context().route('**/*', async (route) => {
         const url = route.request().url();
         if (isLocalUrl(url)) {
             await route.fallback();
             return;
         }
+        if (isStubbedUrl(url, stubbed)) {
+            await route.abort('internetdisconnected');
+            return;
+        }
         attempts.push(`${route.request().method()} ${url}`);
         await route.abort('blockedbyclient');
     });
     page.on('websocket', (ws) => {
-        if (!isLocalUrl(ws.url())) attempts.push(`WS ${ws.url()}`);
+        if (!isLocalUrl(ws.url()) && !isStubbedUrl(ws.url(), stubbed)) attempts.push(`WS ${ws.url()}`);
     });
     return { attempts };
 }
