@@ -19,6 +19,7 @@ import { useActionConfirmFlow, useConfirmSubmit, isUserRejection } from '../hook
 import { useOwnerActionLane } from '../hooks/useOwnerActionLane.js';
 import { ActionConfirmScreen } from '../components/ActionConfirmScreen.jsx';
 import { WatcherResultPanel } from '../components/WatcherResultPanel.jsx';
+import { QueuedResultPanel } from '../components/QueuedResultPanel.jsx';
 import { ContactsPickerScreen } from '../components/ContactsPickerScreen.jsx';
 import { buildDeliveryNetworkOptions } from '../utils/deliveryNetworks.js';
 import { useSignerReady } from '../hooks/useSignerReady.js';
@@ -223,6 +224,8 @@ function ComposeMessageForm({
     const [handshakeBusy, setHandshakeBusy] = useState(false);
     const [handshakeSent, setHandshakeSent] = useState(false);
     const [handshakeResult, setHandshakeResult] = useState(/** @type {any | null} */ (null));
+    // A key request that is signed and held in the broadcast queue.
+    const [handshakeQueued, setHandshakeQueued] = useState(/** @type {any | null} */ (null));
     // The key request's OWN error, deliberately not `submitError`. It used to
     // write into that one, which the form stage renders nowhere (only the
     // review stage and the hardware branch do), so every failure of this button
@@ -846,6 +849,11 @@ function ComposeMessageForm({
                 setHandshakeResult(requestResult);
                 return;
             }
+            // Signed but not broadcast: the request is not out, and a second press would sign a duplicate.
+            if (requestResult?.queued) {
+                setHandshakeQueued(requestResult);
+                return;
+            }
             setHandshakeSent(true);
         } catch (err) {
             if (!isUserRejection(err)) {
@@ -888,6 +896,10 @@ function ComposeMessageForm({
         return wrap(<p className={styles.hint}>Loading wallet…</p>);
     }
 
+    if (handshakeQueued) {
+        return wrap(<QueuedResultPanel onDone={onBack} what="key request" unsaved={handshakeQueued.unsaved} />);
+    }
+
     if (handshakeResult) {
         return wrap(
             <WatcherResultPanel
@@ -899,6 +911,10 @@ function ComposeMessageForm({
     }
 
     if (stage === 'done') {
+        // Signed but held in the broadcast queue: the message has not left the wallet.
+        if (result?.queued) {
+            return wrap(<QueuedResultPanel onDone={onBack} what="message" unsaved={result.unsaved} />);
+        }
         return wrap(
             <>
                 <p style={{ margin: '0 0 0.5rem', fontWeight: 600 }}>Message sent</p>

@@ -112,6 +112,7 @@ const messages = {
     'components.psbtIntentPanel.totalIn': 'Total in',
     'components.psbtIntentPanel.totalOut': 'Total out',
     'components.openOrdersPanel.openOrders': 'Open orders',
+    'components.openOrdersPanel.orderCancellation': 'order cancellation',
     'components.openOrdersPanel.loadingOpenOrders': 'Loading open orders…',
     'components.openOrdersPanel.noOpenOrdersOnThis': 'No open orders on this market.',
     'components.openOrdersPanel.size': 'Size (',

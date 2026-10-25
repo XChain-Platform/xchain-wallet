@@ -315,6 +315,25 @@ describe('OpenOrdersPanel cancellation confirmation', () => {
         });
     });
 
+    it('ends a signed-but-queued cancel on the queued panel and keeps the order listed', async () => {
+        const messaging = mountPanel();
+        fireEvent.click(await screen.findByRole('button', { name: 'Cancel' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Cancel order' }));
+        await screen.findByLabelText('Confirm Cancel order (#17)');
+
+        lane.open = false;
+        await act(async () => lane.resolve({ queued: true, broadcast: 'queued', unsaved: false }));
+
+        expect(await screen.findByText('Signed. Not broadcast yet.')).toBeTruthy();
+        expect(screen.queryByText('No open orders on this market.')).toBeNull();
+        expect(screen.queryByRole('button', { name: 'Cancel order' })).toBeNull();
+        expect(lane.run).toHaveBeenCalledTimes(1);
+        expect(messaging.cancelOrder).not.toHaveBeenCalled();
+
+        fireEvent.click(screen.getByRole('button', { name: 'Done' }));
+        expect(await screen.findByRole('button', { name: 'Cancel' })).toBeTruthy();
+    });
+
     it('keeps the cancel action busy while composition is pending', async () => {
         lane.openOnRun = false;
         mountPanel();

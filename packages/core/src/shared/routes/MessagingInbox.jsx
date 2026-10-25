@@ -17,10 +17,11 @@ import { useDemoGuard } from '../hooks/useDemoGuard.jsx';
 import { useSignerReady } from '../hooks/useSignerReady.js';
 import { useOwnerActionLane } from '../hooks/useOwnerActionLane.js';
 import { isUserRejection } from '../hooks/useActionConfirmFlow.js';
-import { submitFailureMessage } from '../utils/submitFailureMessage.js';
+import { submitFailureMessage, SIGNED_NOT_BROADCAST_MESSAGE } from '../utils/submitFailureMessage.js';
 import { userFacingMessage } from '../utils/userFacingMessage.js';
 import { ActionConfirmScreen } from '../components/ActionConfirmScreen.jsx';
 import { WatcherResultPanel } from '../components/WatcherResultPanel.jsx';
+import { QueuedResultPanel } from '../components/QueuedResultPanel.jsx';
 import { ListToolbar } from '../components/ListToolbar.jsx';
 import { NetworkFilterDropdown } from '../components/NetworkFilterDropdown.jsx';
 import { OfflineEmptyState } from '../components/OfflineEmptyState.jsx';
@@ -381,7 +382,7 @@ export function MessagingInbox({ walletId, activeAccountId, onCompose, onBack, i
         /** @type {{ request: { id: string, from: string, ownerAddress: string }, record: any } | null} */ (null),
     );
     const [shareStates, setShareStates] = useState(
-        /** @type {Record<string, { stage?: 'idle' | 'sending' | 'sent', error?: string | null, watcherResult?: any }>} */ ({}),
+        /** @type {Record<string, { stage?: 'idle' | 'sending' | 'sent' | 'queued' | 'queued-seen', error?: string | null, watcherResult?: any, unsaved?: boolean }>} */ ({}),
     );
     const shareLane = useOwnerActionLane({
         messaging,
@@ -415,6 +416,7 @@ export function MessagingInbox({ walletId, activeAccountId, onCompose, onBack, i
                     submitExtra: { destination: request.from, version: 1 },
                 });
                 if (shareLaneRef.current.isWatcherMode) update({ stage: 'idle', watcherResult: result });
+                else if (result?.queued) update({ stage: 'queued', unsaved: result.unsaved === true });
                 else update({ stage: 'sent' });
             } catch (err) {
                 if (isUserRejection(err)) {
@@ -891,6 +893,10 @@ export function MessagingInbox({ walletId, activeAccountId, onCompose, onBack, i
                                         ...prev,
                                         [r.id]: { ...(prev[r.id] || {}), watcherResult: null },
                                     }))}
+                                    onQueuedSeen={() => setShareStates((prev) => ({
+                                        ...prev,
+                                        [r.id]: { ...(prev[r.id] || {}), stage: 'queued-seen' },
+                                    }))}
                                     onDecline={() => handleRequestDeclined(r.id)}
                                     onMessage={onCompose ? () => onCompose({
                                         chainId: record.chainId,
@@ -1081,7 +1087,7 @@ function ThreadComposer({ value, onChange, onSubmit }) {
  * @param {{ id: string, from: string, ownerAddress: string }} props.request
  * @param {string} props.walletId
  * @param {string} [props.contactName]
- * @param {{ stage?: 'idle' | 'sending' | 'sent', error?: string | null, watcherResult?: any } | null} props.shareState
+ * @param {{ stage?: 'idle' | 'sending' | 'sent' | 'queued' | 'queued-seen', error?: string | null, watcherResult?: any, unsaved?: boolean } | null} props.shareState
  * @param {boolean} props.shareBusy            a share (this one or another) is running
  * @param {() => void} props.onShare
  * @param {() => void} props.onClearWatcherResult
@@ -1096,6 +1102,7 @@ function SessionRequestRow({
     shareBusy,
     onShare,
     onClearWatcherResult,
+    onQueuedSeen,
     onDecline,
     onMessage,
 }) {
@@ -1116,12 +1123,24 @@ function SessionRequestRow({
         );
     }
 
+    // Signed but held in the broadcast queue: the key has not gone out, and the
+    // share button stays gone so a second press cannot sign a duplicate.
+    if (stage === 'queued') {
+        return (
+            <li className={local.requestRow}>
+                <QueuedResultPanel onDone={onQueuedSeen} what="key share" unsaved={shareState?.unsaved} />
+            </li>
+        );
+    }
+
     return (
         <li className={local.requestRow}>
             <div className={local.requestWho}>
                 {contactName || <AddressText address={displayAddress(request.from)} truncate={false} />}
             </div>
-            {stage === 'sent' ? (
+            {stage === 'queued-seen' ? (
+                <StatusMessage variant="warning">{SIGNED_NOT_BROADCAST_MESSAGE}</StatusMessage>
+            ) : stage === 'sent' ? (
                 <StatusMessage variant="success">
                     Key shared. They can now send you encrypted messages.
                 </StatusMessage>
