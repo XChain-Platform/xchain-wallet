@@ -75,7 +75,9 @@ function normalizePhraseEntry(value) {
     return normalizeRecoveryPhrase(value);
 }
 
-function phraseFormat(value) {
+// `preferCounterwallet` is the FreeWallet lane: a phrase both lists accept belongs to FreeWallet there.
+function phraseFormat(value, preferCounterwallet = false) {
+    if (preferCounterwallet && isValidCounterwalletMnemonic(value)) return 'counterwallet';
     if (isValidBip39Mnemonic(value)) return 'bip39';
     if (isValidCounterwalletMnemonic(value)) return 'counterwallet';
     return null;
@@ -589,7 +591,7 @@ export function ImportWallet({
             }));
             return;
         }
-        if (!phraseFormat(trimmed)) {
+        if (!phraseFormat(trimmed, isFreeWallet)) {
             setError(phraseValidationMessage(trimmed));
             return;
         }
@@ -616,14 +618,19 @@ export function ImportWallet({
             const passphraseArg = !isFreeWallet && showPassphrase
                 ? bip39Passphrase
                 : '';
+            // About 1 in 30,000 FreeWallet phrases also passes the BIP39 checksum, and
+            // auto-detection would derive other keys for it.
+            const formatArg = phraseFormat(trimmed, isFreeWallet) === 'counterwallet' && isFreeWallet
+                ? { format: 'counterwallet-legacy' }
+                : {};
             let result;
             if (mode === 'add') {
                 if (typeof messaging.addImportedWallet !== 'function') {
                     throw new Error('messaging.addImportedWallet is not available in this shell.');
                 }
-                result = await messaging.addImportedWallet({ password, mnemonic: trimmed, name: walletName, bip39Passphrase: passphraseArg });
+                result = await messaging.addImportedWallet({ password, mnemonic: trimmed, name: walletName, bip39Passphrase: passphraseArg, ...formatArg });
             } else {
-                result = await messaging.importMnemonic({ password, mnemonic: trimmed, name: walletName, bip39Passphrase: passphraseArg });
+                result = await messaging.importMnemonic({ password, mnemonic: trimmed, name: walletName, bip39Passphrase: passphraseArg, ...formatArg });
             }
             finishWalletImport(result);
             const showRestoredLabels = (labelSync) => {
@@ -731,7 +738,7 @@ export function ImportWallet({
     const mnemonicWordCount = normalizedMnemonic.length === 0
         ? 0
         : normalizedMnemonic.split(' ').length;
-    const detectedPhraseFormat = phraseFormat(normalizedMnemonic);
+    const detectedPhraseFormat = phraseFormat(normalizedMnemonic, isFreeWallet);
     const phraseHint = isFreeWallet
         ? (isFull
             ? t('importWallet.freeWallet.fullSubtitle')

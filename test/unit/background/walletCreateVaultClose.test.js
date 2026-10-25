@@ -192,6 +192,22 @@ describe('pre-host onboarding leaves no half-written wallet behind', () => {
     });
 });
 
+describe('pre-host mnemonic import honours a pinned format', () => {
+    it('hands the caller\'s format to the flow', async () => {
+        const seen = [];
+        flowBehaviour.importMnemonic = async (opts) => {
+            seen.push(opts.format);
+            return { format: opts.format, wallet: { id: 'w1', name: 'FreeWallet' } };
+        };
+        const result = await handleWalletImport(
+            { password: 'pw', mnemonic: 'abandon about', format: 'counterwallet-legacy' },
+            makeDeps(),
+        );
+        expect(seen).toEqual(['counterwallet-legacy']);
+        expect(result.format).toBe('counterwallet-legacy');
+    });
+});
+
 describe('pre-host mnemonic import hands label restore to the unlocked host', () => {
     it('returns before restore finishes and keeps the result available', async () => {
         let finishRestore;

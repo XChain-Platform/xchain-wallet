@@ -21,6 +21,7 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import {
     clearRemovedWalletStorage,
+    subscribeVaultWipe,
     wipeWalletStorage,
 } from '../../../packages/core/src/shared/utils/wipeWalletStorage.js';
 import { WALLET_LOCAL_KEYS } from '../../../packages/extension/src/background/wipeExtensionStorage.js';
@@ -192,6 +193,34 @@ describe('wipeWalletStorage on renderer-backed shells', () => {
 
     // One ledger key per walletId, so it is swept by prefix; a freshly loaded
     // Locked page never built the queue store whose seal would erase it.
+    it('removes the diagnostic log that names the wiped wallet ids', async () => {
+        stubIndexedDB();
+        localStorage.setItem('xchain.logConsole', JSON.stringify({ entries: [{ message: 'unlock id=w-1' }] }));
+        await wipeWalletStorage();
+        expect(localStorage.getItem('xchain.logConsole')).toBeNull();
+    });
+
+    it('removes the tab-session History view state of every wallet', async () => {
+        stubIndexedDB();
+        sessionStorage.setItem('xc:historyViewState:w-1:a-1', '{"initialSearchQuery":""}');
+        sessionStorage.setItem('xc:historyViewState:w-2:all', '{}');
+        sessionStorage.setItem('xc:other', 'keep');
+        await wipeWalletStorage();
+        expect(sessionStorage.getItem('xc:historyViewState:w-1:a-1')).toBeNull();
+        expect(sessionStorage.getItem('xc:historyViewState:w-2:all')).toBeNull();
+        expect(sessionStorage.getItem('xc:other')).toBe('keep');
+        sessionStorage.clear();
+    });
+
+    it('removes only the removed wallet\'s History view state', () => {
+        sessionStorage.setItem('xc:historyViewState:w-1:a-1', '{}');
+        sessionStorage.setItem('xc:historyViewState:w-2:all', '{}');
+        clearRemovedWalletStorage('w-1');
+        expect(sessionStorage.getItem('xc:historyViewState:w-1:a-1')).toBeNull();
+        expect(sessionStorage.getItem('xc:historyViewState:w-2:all')).toBe('{}');
+        sessionStorage.clear();
+    });
+
     it('sweeps the queue\'s pruned-wallet ledger keys and nothing else', async () => {
         globalThis.localStorage.setItem(`${PRUNED_PREFIX}w-a`, '1');
         globalThis.localStorage.setItem(`${PRUNED_PREFIX}w-b`, '1');
@@ -325,5 +354,35 @@ describe('wipeWalletStorage on a shell that owns its own store (desktop)', () =>
         globalThis.xchainWalletBridge = { wipeStorage: async () => undefined };
 
         await expect(wipeWalletStorage()).rejects.toThrow(/did not say why/);
+    });
+});
+
+describe('subscribeVaultWipe', () => {
+    function storageEvent(key, newValue) {
+        window.dispatchEvent(new StorageEvent('storage', { key, newValue, oldValue: newValue === null ? '{}' : null }));
+    }
+
+    it('fires when another tab removes the vault meta record', () => {
+        const onWipe = vi.fn();
+        const stop = subscribeVaultWipe(onWipe);
+        storageEvent(META_KEY, null);
+        expect(onWipe).toHaveBeenCalledOnce();
+        stop();
+    });
+
+    it('ignores a meta rewrite and unrelated keys', () => {
+        const onWipe = vi.fn();
+        const stop = subscribeVaultWipe(onWipe);
+        storageEvent(META_KEY, '{"kdf":1}');
+        storageEvent('xc:displayPrefs', null);
+        expect(onWipe).not.toHaveBeenCalled();
+        stop();
+    });
+
+    it('stops firing after unsubscribe', () => {
+        const onWipe = vi.fn();
+        subscribeVaultWipe(onWipe)();
+        storageEvent(META_KEY, null);
+        expect(onWipe).not.toHaveBeenCalled();
     });
 });

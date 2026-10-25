@@ -1511,6 +1511,7 @@ export async function importMnemonicLocal(req) {
         bip39Passphrase = '',
         activeChainIds = DEFAULT_ACTIVE_CHAIN_IDS,
         origin,
+        format,
         chainId,
         activeNetwork,
     } = req;
@@ -1573,6 +1574,8 @@ export async function importMnemonicLocal(req) {
                 name,
                 bip39Passphrase,
                 origin,
+                // The caller's pin, so a phrase both wordlists accept is not read as the other format.
+                format,
                 kdfParams,
                 // Same password, same params: the wallet seal reuses the vault
                 // key instead of paying a second Argon2id round.

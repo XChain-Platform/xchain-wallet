@@ -34,6 +34,7 @@ import { useSupportedChains } from '@xchain-wallet/core/shared/hooks/useSupporte
 import { useAutoLockPolicy } from '@xchain-wallet/core/shared/hooks/useAutoLockPolicy.js';
 import { useLastView } from '@xchain-wallet/core/shared/hooks/useLastView.js';
 import { useDocumentTitle } from '@xchain-wallet/core/shared/hooks/useDocumentTitle.js';
+import { subscribeVaultWipe } from '@xchain-wallet/core/shared/utils/wipeWalletStorage.js';
 import { MessagingProvider } from '@xchain-wallet/core/shared/MessagingProvider.jsx';
 import { useSettings } from '@xchain-wallet/core/shared/hooks/useSettings.js';
 import { useWalletMode } from '@xchain-wallet/core/shared/hooks/useWalletMode.js';
@@ -328,6 +329,8 @@ function AppInner() {
     const { settings } = useSettings();
     const [status, setStatus] = useState(/** @type {any} */ ({ state: 'loading' }));
     useClearToastsOnLock(status.state);
+    // A wipe in another tab leaves this one holding a session for a vault that is gone.
+    useEffect(() => subscribeVaultWipe(() => window.location.reload()), []);
     const statusStateRef = useRef(status.state);
     statusStateRef.current = status.state;
     const nativeSuspendedRef = useRef(false);

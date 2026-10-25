@@ -299,17 +299,29 @@ export function PairPartnerWallet({ onBack, onPaired, walletId: existingWalletId
             setVerification(res?.verification || null);
             setStage('done');
         } catch (err) {
-            setError(err?.message || 'The two wallets could not be paired.');
+            // The flow prefixes its refusals with its own name; the reason after it is the copy.
+            setError(String(err?.message || '').replace(/^pairPartner:\s*/, '') || 'The two wallets could not be paired.');
         } finally {
             setBusy(false);
         }
+    }
+
+    // Once the shared phrase is imported here the vault exists, so leaving by the
+    // welcome screen would offer create and import against it and fail at the last
+    // step. The completion callback re-reads shell state and lands on unlock.
+    function handleBack() {
+        if (!existingWalletId && walletId && typeof onPaired === 'function') {
+            onPaired();
+            return;
+        }
+        onBack?.();
     }
 
     // The window title names the pairing lane the heading shows.
     useDocumentTitleSection(lane.title || 'Pair a partner wallet');
     const header = (
         <PageHeader
-            onBack={onBack}
+            onBack={handleBack}
             backDisabled={busy}
             title={lane.title || 'Pair a partner wallet'}
         />

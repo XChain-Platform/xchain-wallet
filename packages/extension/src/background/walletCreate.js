@@ -138,6 +138,7 @@ export async function handleWalletImport(request, deps) {
         bip39Passphrase = '',
         activeChainIds = DEFAULT_ACTIVE_CHAIN_IDS,
         origin,
+        format,
         chainId,
         activeNetwork,
     } = /** @type {any} */ (request);
@@ -147,7 +148,7 @@ export async function handleWalletImport(request, deps) {
 
     const kdfParams = cryptoLib.makeFreshKdfParams();
     const masterKey = cryptoLib.deriveMasterKey(password, kdfParams);
-    let format;
+    let importedFormat;
     let walletId;
     let labelSyncToken = null;
     try {
@@ -178,6 +179,8 @@ export async function handleWalletImport(request, deps) {
                     name,
                     bip39Passphrase,
                     origin,
+                    // The caller's pin, so a phrase both wordlists accept is not read as the other format.
+                    format,
                     kdfParams,
                     // The network the caller asked to land on (demo mode asks
                     // for mainnet). Undefined keeps the flow's own inference
@@ -185,7 +188,7 @@ export async function handleWalletImport(request, deps) {
                     activeNetwork,
                 });
             await vault.save();
-            format = result.format ?? result.wallet.format;
+            importedFormat = result.format ?? result.wallet.format;
             walletId = result.wallet.id;
         } finally {
             // Vault kept its own copy of the key; close zeros that copy.
@@ -221,7 +224,7 @@ export async function handleWalletImport(request, deps) {
     // imports the shared phrase here and then asks the host for that wallet's
     // pairing payload, addressed BY id; without it the lane dead-ended after
     // the wallet already existed.
-    return { format, walletName: name, walletId, labelSyncToken };
+    return { format: importedFormat, walletName: name, walletId, labelSyncToken };
 }
 
 /**

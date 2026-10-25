@@ -374,6 +374,37 @@ describe('PairPartnerWallet: exchange stage', () => {
         expect(screen.getByRole('button', { name: 'Pair a signer' })).toBeInTheDocument();
     });
 
+    it('shows a refusal without the flow name in front of it', async () => {
+        const messaging = mkMessaging({
+            pairPartnerRequest: vi.fn(async () => {
+                throw new Error('pairPartner: These two wallets were made from different recovery phrases');
+            }),
+        });
+        await reachExchange(messaging);
+        fill(/Paste the other wallet's code/i, PARTNER_CODE);
+        await act(async () => {
+            fireEvent.click(screen.getByRole('button', { name: 'Pair a signer' }));
+        });
+        expect(screen.getByRole('alert')).not.toHaveTextContent(/pairPartner:/);
+    });
+
+    it('lands through onPaired when Back leaves after the phrase was imported', async () => {
+        const messaging = mkMessaging();
+        const onBack = vi.fn();
+        const onPaired = vi.fn();
+        mount(messaging, { onBack, onPaired });
+        fireEvent.click(screen.getByRole('button', { name: /pair a signer/i }));
+        fill(/Shared recovery phrase/i, PHRASE);
+        fill(/^Password for this device$/i, PASSWORD);
+        fill(/Confirm password/i, PASSWORD);
+        await act(async () => {
+            fireEvent.click(screen.getByRole('button', { name: /Continue/i }));
+        });
+        fireEvent.click(screen.getByRole('button', { name: /back/i }));
+        expect(onPaired).toHaveBeenCalledOnce();
+        expect(onBack).not.toHaveBeenCalled();
+    });
+
     it('fires onPaired from the confirmation screen', async () => {
         const messaging = mkMessaging();
         const onPaired = vi.fn();

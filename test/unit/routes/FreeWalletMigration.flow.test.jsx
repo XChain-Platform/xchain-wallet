@@ -90,10 +90,45 @@ describe('FreeWallet onboarding migration flow', () => {
             mnemonic: FREEWALLET_PHRASE,
             name: 'FreeWallet',
             bip39Passphrase: '',
+            format: 'counterwallet-legacy',
         }));
         fireEvent.click(screen.getByRole('button', { name: 'Continue' }));
 
         expect(await screen.findByRole('heading', { name: 'Imported FreeWallet' }))
             .toBeInTheDocument();
+    });
+});
+
+describe('FreeWallet lane format pin', () => {
+    const BOTH_LISTS_PHRASE = 'idea wall voice bar arrow today burden party course pretty glove shove';
+    const BIP39_ONLY_PHRASE = 'abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about';
+
+    async function submit(phrase) {
+        const messaging = { importMnemonic: vi.fn().mockResolvedValue({ walletId: 'w-1' }) };
+        render(
+            <MessagingProvider shell="web" messaging={messaging}>
+                <ImportWallet variant="freewallet" mode="fresh" onBack={() => {}} onImported={() => {}} />
+            </MessagingProvider>,
+        );
+        fireEvent.change(screen.getByLabelText('Recovery phrase'), { target: { value: phrase } });
+        fireEvent.change(screen.getByLabelText('Password'), { target: { value: PASSWORD } });
+        fireEvent.change(screen.getByLabelText('Confirm password'), { target: { value: PASSWORD } });
+        const detected = screen.queryByText('Counterwallet/FreeWallet recovery phrase detected') !== null;
+        fireEvent.click(screen.getByRole('button', { name: 'Import' }));
+        await waitFor(() => expect(messaging.importMnemonic).toHaveBeenCalled());
+        return { messaging, detected };
+    }
+
+    it('pins the legacy format for a phrase both wordlists accept', async () => {
+        const { messaging, detected } = await submit(BOTH_LISTS_PHRASE);
+        expect(detected).toBe(true);
+        expect(messaging.importMnemonic).toHaveBeenCalledWith(
+            expect.objectContaining({ format: 'counterwallet-legacy' }),
+        );
+    });
+
+    it('leaves a BIP39-only phrase to auto-detection', async () => {
+        const { messaging } = await submit(BIP39_ONLY_PHRASE);
+        expect(messaging.importMnemonic.mock.calls[0][0]).not.toHaveProperty('format');
     });
 });
