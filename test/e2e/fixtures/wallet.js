@@ -31,7 +31,7 @@ import { LICENSE_VERSION } from '../../../packages/core/src/buildInfo.js';
 import { kdfStepTimeout } from '../timeout-budget.js';
 import { stubPriceFeed } from './priceStub.js';
 import { stubHubRegistry } from './hubStub.js';
-import { guardOutbound } from './outboundGuard.js';
+import { guardOutbound, stubOutboundHosts } from './outboundGuard.js';
 
 // Every wait below that pays a real Argon2id derivation shares ONE budget,
 // scaled for the machine the run landed on. These were two hand-written
@@ -49,10 +49,14 @@ export const test = base.extend({
     // Set `test.use({ acceptLicense: false })` in a spec that wants to
     // drive the license gate itself.
     acceptLicense: [true, { option: true }],
+    outboundStubHosts: [[], { option: true }],
 
-    page: async ({ page, acceptLicense }, use) => {
+    page: async ({ page, acceptLicense, outboundStubHosts }, use) => {
         // Registered first so it runs last: only a request no stub answered reaches it.
-        const outbound = await guardOutbound(page);
+        const outbound = await guardOutbound(page, { stubbedHosts: outboundStubHosts });
+        // Regtest starts on the production network before each spec switches it.
+        // Answer only the probes needed to render Home and refuse every other call.
+        await stubOutboundHosts(page.context(), outboundStubHosts);
         // No spec reaches the live price service; see priceStub.js.
         await stubPriceFeed(page.context());
         // Nor the mainnet hub registry the app syncs at boot; see hubStub.js.
