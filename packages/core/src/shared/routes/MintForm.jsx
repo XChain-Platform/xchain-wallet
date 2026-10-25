@@ -31,7 +31,10 @@ import { useTokenInfo } from '../hooks/useTokenInfo.js';
 import {
     mintHeadroom, exceedsHeadroom, mintWindowState, mintWindowMessage, mintLockMessage,
 } from '../utils/mintHeadroom.js';
-import { formatWithThousands, tokenAmountPrecisionError } from '../utils/amountFormat.js';
+import { amountEntryProblem, formatWithThousands, tokenAmountPrecisionError } from '../utils/amountFormat.js';
+import {
+    TOKEN_RECORD_GATE_KEYS, tokenRecordChangedMessage, tokenRecordChangedSince,
+} from '../utils/tokenRecordDrift.js';
 import { LockedTokenContext } from '../components/LockedTokenContext.jsx';
 import { SignCredentials } from '../components/SignCredentials.jsx';
 import { WatcherResultPanel } from '../components/WatcherResultPanel.jsx';
@@ -248,6 +251,7 @@ export function MintForm({ walletId, onBack, initialChainId, initialTick, initia
     const [submitError, setSubmitError] = useState(/** @type {string | null} */ (null));
     const [result, setResult] = useState(/** @type {any | null} */ (null));
     const passwordRef = useRef(/** @type {HTMLInputElement | null} */ (null));
+    const reviewInFlightRef = useRef(false);
 
     // §5.6 slice 2 (actionForms): mints go through the single-encode
     // confirm page (compose + tamper + sdk.preflight all host-side), hardware
@@ -368,8 +372,9 @@ export function MintForm({ walletId, onBack, initialChainId, initialTick, initia
         }
     }
 
-    function handleReview(event) {
+    async function handleReview(event) {
         event.preventDefault();
+        if (reviewInFlightRef.current) return;
         if (!chainId || !fromAddress) {
             setFormError('Pick a source address first.');
             return;
@@ -384,7 +389,13 @@ export function MintForm({ walletId, onBack, initialChainId, initialTick, initia
             return;
         }
         const amt = String(amount).trim();
-        if (!amt || Number(amt) <= 0) {
+        // Digits, not a float: Number('.') is NaN and slips past a <= 0 test.
+        const amountProblem = amountEntryProblem(amt);
+        if (amountProblem === 'shape') {
+            setFormError('Write the amount with digits on both sides of the decimal point, such as 0.5.');
+            return;
+        }
+        if (amountProblem) {
             setFormError('Amount must be a positive number.');
             return;
         }
@@ -423,6 +434,24 @@ export function MintForm({ walletId, onBack, initialChainId, initialTick, initia
                 ? `Only ${formatWithThousands(headroom)} ${TICK} can still be minted.`
                 : `${TICK} is at its supply cap - no more can be minted.`);
             return;
+        }
+        // The gates above ran on the record read when the form opened. A lock,
+        // a closed window or a smaller headroom that landed since would send
+        // the user to a confirm page for an action the network refuses.
+        reviewInFlightRef.current = true;
+        try {
+            if (await tokenRecordChangedSince({
+                messaging,
+                chainId,
+                tick: ticker.trim(),
+                current: tokenInfo,
+                keys: [...TOKEN_RECORD_GATE_KEYS, 'totalSupply'],
+            })) {
+                setFormError(tokenRecordChangedMessage(ticker.trim()));
+                return;
+            }
+        } finally {
+            reviewInFlightRef.current = false;
         }
         setFormError(null);
         // slice 2: with the flag on, mints go straight to the

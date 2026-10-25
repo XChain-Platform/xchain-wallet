@@ -595,6 +595,22 @@ export function decimalFromBaseUnits(value, decimals = 8) {
 }
 
 /**
+ * Classify a typed token amount without going through a float. The amount
+ * field lets a user type a lone '.', '.5' or '5.', and Number('.') is NaN,
+ * which slips past a `Number(x) <= 0` guard; this check works on the digits.
+ *
+ * @param {unknown} value
+ * @returns {'empty' | 'shape' | 'zero' | null}  null when the amount is a positive plain decimal
+ */
+export function amountEntryProblem(value) {
+    const text = String(value ?? '').trim();
+    if (text === '') return 'empty';
+    if (!/^\d+(?:\.\d+)?$/.test(text)) return 'shape';
+    if (!/[1-9]/.test(text)) return 'zero';
+    return null;
+}
+
+/**
  * Explain when a token amount carries more decimal places than the token supports.
  * Syntax and positivity stay with the calling form so this helper can be added
  * without changing the action parameters that form signs.

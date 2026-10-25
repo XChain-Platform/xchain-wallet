@@ -49,6 +49,9 @@ import { isValidAddressForChain } from '../utils/addressValidation.js';
 import { memoLengthError } from '../utils/memoLimit.js';
 import { tickerReferenceError } from '../utils/tickerGrammar.js';
 import { tokenIssuerEligibility } from '../utils/tokenIssuerEligibility.js';
+import {
+    TOKEN_RECORD_GATE_KEYS, tokenRecordChangedMessage, tokenRecordChangedSince,
+} from '../utils/tokenRecordDrift.js';
 
 const chainRegistry = registryLib.defaultRegistry();
 
@@ -167,14 +170,20 @@ export function SleepForm({ walletId, onBack, mode, initialChainId, initialTick,
     // Current pause state of the target (tick name, or the signing address).
     const stateQuery = isTick ? ticker : fromAddress?.address;
     const [sleepRow, setSleepRow] = useState(/** @type {any | null} */ (null));
+    // 'loading' until the read answers, 'failed' when it does not. Without it a
+    // slow or failed read renders as "active (not paused)", which tells the user
+    // a paused token is running.
+    const [sleepRead, setSleepRead] = useState(/** @type {'loading' | 'ready' | 'failed'} */ ('ready'));
     useEffect(() => {
-        if (!chainId || !stateQuery) { setSleepRow(null); return undefined; }
+        if (!chainId || !stateQuery) { setSleepRow(null); setSleepRead('ready'); return undefined; }
         if (flowsLib.isDemoWallet(walletId)) return undefined;
         if (typeof messaging?.sleepState !== 'function') return undefined;
         let cancelled = false;
+        setSleepRow(null);
+        setSleepRead('loading');
         messaging.sleepState({ chainId, query: stateQuery, type: isTick ? 'token' : 'address' })
-            .then((s) => { if (!cancelled) setSleepRow(s || null); })
-            .catch(() => { if (!cancelled) setSleepRow(null); });
+            .then((s) => { if (!cancelled) { setSleepRow(s || null); setSleepRead('ready'); } })
+            .catch(() => { if (!cancelled) { setSleepRow(null); setSleepRead('failed'); } });
         return () => { cancelled = true; };
     }, [chainId, stateQuery, isTick, messaging, walletId]);
     const currentState = useMemo(
@@ -429,6 +438,13 @@ export function SleepForm({ walletId, onBack, mode, initialChainId, initialTick,
                 setFormError(issuerEligibility.error);
                 return;
             }
+            // Owner and LOCK_SLEEP came from the record read when the form opened.
+            if (isTick && await tokenRecordChangedSince({
+                messaging, chainId, tick: ticker, current: assetInfo, keys: TOKEN_RECORD_GATE_KEYS,
+            })) {
+                setFormError(tokenRecordChangedMessage(ticker));
+                return;
+            }
             let height = currentHeight;
             if (resumeMode === 'until') {
                 setRefreshingHeight(true);
@@ -565,7 +581,7 @@ export function SleepForm({ walletId, onBack, mode, initialChainId, initialTick,
         );
     }
 
-    const stateLine = (
+    const stateLine = sleepRead === 'ready' ? (
         <p className={styles.hint}>
             {isTick ? `${ticker} is currently ` : 'This address is currently '}
             {currentState.paused
@@ -573,6 +589,12 @@ export function SleepForm({ walletId, onBack, mode, initialChainId, initialTick,
                     ? 'PAUSED indefinitely.'
                     : `PAUSED${currentState.resumeBlock ? ` until block ${currentState.resumeBlock.toLocaleString('en-US')}` : ''}.`)
                 : 'active (not paused).'}
+        </p>
+    ) : (
+        <p className={styles.hint}>
+            {sleepRead === 'loading'
+                ? 'Checking the current pause state.'
+                : 'The current pause state could not be read.'}
         </p>
     );
 

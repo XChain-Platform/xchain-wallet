@@ -29,7 +29,7 @@ import { humanizeError } from '../utils/humanizeError.js';
 import { AmountField } from '../components/AmountField.jsx';
 import { useTickBalance } from '../hooks/useTickBalance.js';
 import { useTokenInfo } from '../hooks/useTokenInfo.js';
-import { formatWithThousands, tokenAmountPrecisionError } from '../utils/amountFormat.js';
+import { amountEntryProblem, formatWithThousands, tokenAmountPrecisionError } from '../utils/amountFormat.js';
 import { exceedsBalance } from '../utils/dividendPerUnit.js';
 import { LockedTokenContext } from '../components/LockedTokenContext.jsx';
 import { TokenField } from '../components/TokenField.jsx';
@@ -305,7 +305,13 @@ export function DestroyForm({ walletId, onBack, initialChainId, initialTick, ini
             return;
         }
         const amt = String(amount).trim();
-        if (!amt || Number(amt) <= 0) {
+        // Digits, not a float: Number('.') is NaN and slips past a <= 0 test.
+        const amountProblem = amountEntryProblem(amt);
+        if (amountProblem === 'shape') {
+            setFormError('Write the amount with digits on both sides of the decimal point, such as 0.5.');
+            return;
+        }
+        if (amountProblem) {
             setFormError('Amount must be a positive number.');
             return;
         }

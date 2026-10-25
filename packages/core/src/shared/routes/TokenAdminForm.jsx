@@ -66,6 +66,10 @@ import { sharedBlockPickState } from '../utils/sharedBlockPick.js';
 import { listLabel } from '../utils/listLabel.js';
 import { tokenIssuerEligibility } from '../utils/tokenIssuerEligibility.js';
 import { actionTextSafetyError } from '../utils/actionTextSafety.js';
+import {
+    TOKEN_RECORD_GATE_KEYS, tokenRecordChangedMessage, tokenRecordChangedSince,
+} from '../utils/tokenRecordDrift.js';
+import { boundListIndex, listInBothSlots, listInBothSlotsMessage } from '../../flows/accessListSlots.js';
 
 const chainRegistry = registryLib.defaultRegistry();
 
@@ -252,6 +256,7 @@ export function TokenAdminForm({ walletId, mode, onBack, initialChainId, initial
     const [result, setResult] = useState(/** @type {any | null} */ (null));
     const passwordRef = useRef(/** @type {HTMLInputElement | null} */ (null));
     const submitPendingRef = useRef(false);
+    const reviewInFlightRef = useRef(false);
 
     // The active map and the settings read are best-effort: a host without
     // `getActiveAddresses` / `getSettings`, or one whose call fails, still
@@ -668,8 +673,9 @@ export function TokenAdminForm({ walletId, mode, onBack, initialChainId, initial
         });
     }, [stage, actionParams, chainId]);
 
-    function handleReview(event) {
+    async function handleReview(event) {
         event.preventDefault();
+        if (reviewInFlightRef.current) return;
         if (!chainId || !fromAddress) {
             setFormError('Pick a source address first.');
             return;
@@ -872,6 +878,12 @@ export function TokenAdminForm({ walletId, mode, onBack, initialChainId, initial
                 setFormError('Pick a different allow-list or block-list to apply. Leaving both unchanged does nothing.');
                 return;
             }
+            // One list in both slots admits nobody: every address the allow-list
+            // accepts the block-list refuses. Dispensers refuse the same pairing.
+            if (listInBothSlots({ allowList: allowListIdx, blockList: blockListIdx })) {
+                setFormError(listInBothSlotsMessage(boundListIndex(allowListIdx)));
+                return;
+            }
         }
         if (mode === 'bridge-settings') {
             if (bridgeFrozen) {
@@ -891,6 +903,23 @@ export function TokenAdminForm({ walletId, mode, onBack, initialChainId, initial
                 setFormError('Change a destination network, the minimum confirmations, or the freeze before applying.');
                 return;
             }
+        }
+        // The gates and prefilled values above came from the record read when
+        // the form opened; a lock, transfer or settings edit since then makes
+        // them stale. Mint settings also bounds a mint-now amount by supply.
+        reviewInFlightRef.current = true;
+        try {
+            const watched = mode === 'mint-settings' && mintSupply
+                ? [...TOKEN_RECORD_GATE_KEYS, 'totalSupply']
+                : TOKEN_RECORD_GATE_KEYS;
+            if (await tokenRecordChangedSince({
+                messaging, chainId, tick: ticker.trim(), current: currentAssetInfo, keys: watched,
+            })) {
+                setFormError(tokenRecordChangedMessage(ticker.trim()));
+                return;
+            }
+        } finally {
+            reviewInFlightRef.current = false;
         }
         setFormError(null);
         if (singleEncode) { openConfirmScreen(); return; }

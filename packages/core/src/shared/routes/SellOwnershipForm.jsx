@@ -38,6 +38,9 @@ import { useActionConfirmFlow, useConfirmSubmit, isUserRejection } from '../hook
 import { ActionConfirmScreen } from '../components/ActionConfirmScreen.jsx';
 import { QueuedResultPanel } from '../components/QueuedResultPanel.jsx';
 import { tokenAmountPrecisionError } from '../utils/amountFormat.js';
+import {
+    TOKEN_RECORD_GATE_KEYS, tokenRecordChangedMessage, tokenRecordChangedSince,
+} from '../utils/tokenRecordDrift.js';
 import { tickerReferenceError } from '../utils/tickerGrammar.js';
 import { memoLengthError } from '../utils/memoLimit.js';
 import { tokenIssuerEligibility } from '../utils/tokenIssuerEligibility.js';
@@ -359,8 +362,9 @@ export function SellOwnershipForm({ walletId, onBack, chainId: initialChainId, t
 
     // Validate form fields and advance to the review stage; real signing
     // happens only after the user confirms on the review screen.
-    function handleReview(event) {
+    async function handleReview(event) {
         event.preventDefault();
+        if (submitPendingRef.current) return;
         if (!fromAddress || !chainId) {
             setFormError('Pick a source address first.');
             return;
@@ -392,13 +396,29 @@ export function SellOwnershipForm({ walletId, onBack, chainId: initialChainId, t
             setFormError(precisionError);
             return;
         }
+        // The owner check came from the record read when the form opened; a
+        // sale or transfer of the name since then makes it stale. The pending
+        // flag also holds a second press while the record is re-read.
+        submitPendingRef.current = true;
+        let moved = false;
+        try {
+            moved = await tokenRecordChangedSince({
+                messaging, chainId, tick: tokenTick, current: ownershipTokenInfo, keys: TOKEN_RECORD_GATE_KEYS,
+            });
+        } catch {
+            moved = false;
+        }
+        if (moved) {
+            submitPendingRef.current = false;
+            setFormError(tokenRecordChangedMessage(tokenTick));
+            return;
+        }
         setFormError(null);
         if (singleEncode) {
-            if (submitPendingRef.current) return;
-            submitPendingRef.current = true;
             void openConfirmScreen();
             return;
         }
+        submitPendingRef.current = false;
         setStage('review');
     }
 
