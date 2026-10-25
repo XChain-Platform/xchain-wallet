@@ -59,6 +59,7 @@ import {
 } from '../utils/submitFailureMessage.js';
 import { t } from '../../i18n/index.js';
 import '../../i18n/locales/en/history.js';
+import '../../i18n/locales/en/scan.js';
 import '../../i18n/locales/en/send.js';
 import '../../i18n/locales/en/transactionStatus.js';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
@@ -352,6 +353,30 @@ function destinationAddressError(address, descriptor) {
 
 function normalizePastedRecipient(value) {
     return String(value || '').replace(ZERO_WIDTH, '').trim();
+}
+
+const PASTED_SECRET_TYPES = new Set(['wif', 'mnemonic-bip39', 'mnemonic-counterwallet']);
+
+// The kind of secret a paste carries: 'wif', 'mnemonic', or null. A payment
+// link can hide one in its address slot, bare or percent-encoded, so the
+// slot is classified as well as the whole text. The To field autosaves to a
+// plaintext draft, so a secret must never be written into it.
+function pastedSecretKind(text, detected, chainRegistry) {
+    const kindOf = (type) => {
+        if (!PASTED_SECRET_TYPES.has(type)) return null;
+        return type === 'wif' ? 'wif' : 'mnemonic';
+    };
+    const direct = kindOf(detected.type);
+    if (direct) return direct;
+    if (detected.type !== 'bip21') return null;
+    const slot = String(detected.address || '');
+    let decoded = slot;
+    try { decoded = decodeURIComponent(slot); } catch { /* raw slot only */ }
+    for (const candidate of new Set([slot, decoded])) {
+        const found = kindOf(uriLib.detectQrContent(candidate, { chainRegistry }).type);
+        if (found) return found;
+    }
+    return null;
 }
 
 /**
@@ -965,11 +990,33 @@ export function Send({ walletId, accountId, onBack, prefill = null, onDone, onCh
             const targetDescriptor = targetChainId ? chainRegistry.get(targetChainId) : null;
             setToError(destinationAddressError(recipient, targetDescriptor));
         };
-        if (detected.type === 'bip21') {
+        const secretKind = pastedSecretKind(trimmed, detected, chainRegistry);
+        if (secretKind) {
+            e.preventDefault();
+            setPastedRecipient(null);
+            setPasteHint(secretKind === 'wif'
+                ? 'That looks like a private key, not a payment address. To import it, open Settings and choose Import private key.'
+                : t('scan.error.mnemonic'));
+        } else if (detected.type === 'bip21') {
             e.preventDefault();
             const parts = detected.parts;
             const chainParam = parts.params?.chain;
-            const requestChainId = uriLib.safeChainIdParam(chainParam);
+            // A link with no `chain` still names its coin through the scheme,
+            // and its amount is written in that coin. When the open chain is
+            // another coin, the link moves Send to the scheme's coin on the
+            // open network: testnet and regtest addresses of different coins
+            // share version bytes, so the address cannot say which coin the
+            // amount belongs to.
+            const openDescriptor = chainId ? chainRegistry.get(chainId) : null;
+            const schemeChainId = chainParam === undefined && openDescriptor
+                && String(openDescriptor.uriScheme || '').toLowerCase() !== detected.scheme
+                ? chainRegistry.supportedChains().find((candidate) => (
+                    String(candidate.uriScheme || '').toLowerCase() === detected.scheme
+                    && candidate.networkKind === openDescriptor.networkKind
+                    && addressesByChain?.[candidate.id]?.length > 0
+                ))?.id
+                : undefined;
+            const requestChainId = uriLib.safeChainIdParam(chainParam) || schemeChainId;
             const requestDescriptor = requestChainId ? chainRegistry.get(requestChainId) : null;
             const requestError = parts.required.length > 0
                 ? 'This payment request requires a feature this wallet does not support.'
@@ -1083,12 +1130,6 @@ export function Send({ walletId, accountId, onBack, prefill = null, onDone, onCh
                 setChainId(intent.chainId);
             }
             setPasteHint('Payment details filled from the pasted payment link.');
-        } else if (detected.type === 'wif') {
-            e.preventDefault();
-            setPastedRecipient(null);
-            setPasteHint(
-                'That looks like a private key, not a payment address. To import it, open Settings and choose Import private key.',
-            );
         } else {
             e.preventDefault();
             setRequestMessage('');

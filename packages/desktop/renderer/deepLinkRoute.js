@@ -30,6 +30,11 @@ const ROUTABLE_XCHAIN_ACTIONS = new Set(['send', 'receive', 'execute']);
 
 export const INVALID_DEEP_LINK_MESSAGE = 'This link is invalid or unsupported.';
 
+function descriptorAcceptsAddress(descriptor, address) {
+    if (!COIN_SCHEMES[descriptor.coin]) return true;
+    return isValidAddressForChain(address, descriptor.coin, descriptor.networkKind);
+}
+
 function invalidRoute() {
     return { view: 'deep-link-error', message: INVALID_DEEP_LINK_MESSAGE };
 }
@@ -110,6 +115,16 @@ export function deepLinkRoute(raw, chainRegistry) {
     // URI tooling. External links accept only screens that require an explicit
     // review action, so a typo or future privileged action fails closed here.
     if (intent?.action && !ROUTABLE_XCHAIN_ACTIONS.has(intent.action)) return invalidRoute();
+    // A path-style link names its chain in the path. That chain must be one
+    // the registry holds, and a destination must be an address on it, the bar
+    // the coin-code form already meets.
+    if (intent?.chainId && typeof chainRegistry?.get === 'function') {
+        const descriptor = chainRegistry.get(intent.chainId);
+        if (!descriptor) return invalidRoute();
+        if (intent.kind === 'send' && intent.address && !descriptorAcceptsAddress(descriptor, intent.address)) {
+            return invalidRoute();
+        }
+    }
     if (intent?.kind === 'send') {
         if (intent.tick && tickerReferenceError(intent.tick, { allowRef: true })) {
             return invalidRoute();
