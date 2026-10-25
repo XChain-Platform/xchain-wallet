@@ -17,6 +17,23 @@ describe('Sign message refusal wording', () => {
         expect(messageRefusalReason('line one\nline two\n')).toBeNull();
     });
 
+    it.each([
+        ['a null', 'a\u0000b'],
+        ['an escape', 'x\u001b[2Jy'],
+        ['a carriage return', 'line\rover'],
+        ['a backspace', 'a\bb'],
+        ['a delete', 'a\u007fb'],
+        ['a C1 control', 'a\u009bb'],
+        ['an unpaired high surrogate', 'a\ud800b'],
+        ['an unpaired low surrogate', 'a\udc00b'],
+    ])('names %s as a control character problem', (_name, text) => {
+        expect(messageRefusalReason(text)).toMatch(/control characters/);
+    });
+
+    it('keeps tabs, line feeds and paired surrogates', () => {
+        expect(messageRefusalReason('a\tb\nc 🚀')).toBeNull();
+    });
+
     it('names the reserved sign-in prefix', () => {
         expect(messageRefusalReason('XChain Sign-In v2 challenge')).toMatch(/reserved for site sign-in/);
     });

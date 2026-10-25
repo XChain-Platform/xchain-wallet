@@ -44,7 +44,7 @@ import {
 } from '../addressSelection.js';
 import { pickDefaultChainId } from '../chainSelection.js';
 import { readFailureMessage } from '../utils/readFailureMessage.js';
-import { assertNoDeceptiveCharacters } from '../../flows/signRiskClassifier.js';
+import { assertNoDeceptiveCharacters, hasHiddenControls } from '../../flows/signRiskClassifier.js';
 import { SIGN_IN_CHALLENGE_PREFIX } from '../../flows/signFlows.js';
 
 const chainRegistry = registryLib.defaultRegistry();
@@ -60,6 +60,9 @@ const chainRegistry = registryLib.defaultRegistry();
 export function messageRefusalReason(message) {
     if (message.startsWith(SIGN_IN_CHALLENGE_PREFIX)) {
         return `Messages that start with "${SIGN_IN_CHALLENGE_PREFIX}" are reserved for site sign-in and cannot be signed here.`;
+    }
+    if (hasHiddenControls(message)) {
+        return "This message has control characters that the review page can't show. Remove them and try again.";
     }
     try {
         assertNoDeceptiveCharacters({ message }, 'message');
@@ -153,11 +156,20 @@ export function SignMessageForm({ walletId, onBack }) {
         ])
             .then(([byChain, active, chainSettings]) => {
                 if (cancelled) return;
-                const signingByChain = signingAddressesByChain(byChain);
+                // The signing host holds software keys only: a hardware
+                // address would take a password and then fail to sign.
+                const signingByChain = Object.fromEntries(
+                    Object.entries(signingAddressesByChain(byChain))
+                        .map(([id, list]) => [id, list.filter((a) => a?.source !== 'trezor' && a?.source !== 'ledger')])
+                        .filter(([, list]) => list.length > 0),
+                );
                 setAddressesByChain(signingByChain);
                 setActiveByChain(active || {});
                 if (Object.keys(signingByChain).length === 0) {
-                    setLoadError(hasAnyAddress(byChain)
+                    const hardwareOnly = Object.values(signingAddressesByChain(byChain)).some((list) => list.length > 0);
+                    setLoadError(hardwareOnly
+                        ? "Trezor and Ledger addresses can't sign messages here yet. Use a software address to sign a message."
+                        : hasAnyAddress(byChain)
                         ? WATCH_ONLY_SIGNING_MESSAGE
                         : 'No addresses on any network yet. Use Receive to generate one before signing.');
                     return;

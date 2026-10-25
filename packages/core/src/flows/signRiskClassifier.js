@@ -62,6 +62,23 @@ function containsDeceptiveCharacters(value, seen = new Set()) {
     return Object.values(value).some((part) => containsDeceptiveCharacters(part, seen));
 }
 
+// C0 controls other than tab and line feed, DEL, the C1 block and unpaired
+// surrogates. A review page draws none of them, and an unpaired surrogate is
+// signed as U+FFFD, so the signed bytes differ from the characters on screen.
+const HIDDEN_CONTROLS = /[\u0000-\u0008\u000B-\u001F\u007F-\u009F]|[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?<![\uD800-\uDBFF])[\uDC00-\uDFFF]/;
+
+/** Whether the text holds a control or unpaired surrogate that a review page cannot show. */
+export function hasHiddenControls(value) {
+    return typeof value === 'string' && HIDDEN_CONTROLS.test(value);
+}
+
+/** Refuse a message holding characters its review page cannot draw. */
+export function assertNoHiddenControls(value, surface = 'signing request') {
+    if (hasHiddenControls(value)) {
+        throw new Error(`${surface}: control characters are not allowed`);
+    }
+}
+
 /** Refuse text whose displayed characters can disagree with its signed bytes. */
 export function assertNoDeceptiveCharacters(value, surface = 'signing request') {
     if (containsDeceptiveCharacters(value)) {

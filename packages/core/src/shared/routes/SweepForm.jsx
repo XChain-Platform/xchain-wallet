@@ -522,8 +522,10 @@ export function SweepForm({
             setFormError('Destination address is required.');
             return;
         }
+        // The destination field already shows this error; a second copy in the
+        // form status would say the same thing twice.
         if (destFormatError) {
-            setFormError(destFormatError);
+            setFormError(null);
             return;
         }
         if (destTrimmed === fromAddress.address) {

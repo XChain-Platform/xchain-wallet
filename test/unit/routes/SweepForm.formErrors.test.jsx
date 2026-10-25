@@ -227,6 +227,17 @@ describe('SweepForm form-level errors (D-58)', () => {
         expect(q.container).not.toHaveTextContent(/regtest|testnet|Not mainnet/i);
     });
 
+    it('says a malformed destination once, under the field only', async () => {
+        const q = await mountSweep();
+
+        fireEvent.change(q.destination(), { target: { value: 'not-an-address' } });
+        fireEvent.click(q.submit());
+
+        await waitFor(() => expect(q.alerts()).toMatch(/not a valid Bitcoin address/i));
+        const copies = q.container.textContent.split('is not a valid Bitcoin address').length - 1;
+        expect(copies).toBe(1);
+    });
+
     it('an empty destination errors with the reason instead of a dead button', async () => {
         const q = await mountSweep();
 
