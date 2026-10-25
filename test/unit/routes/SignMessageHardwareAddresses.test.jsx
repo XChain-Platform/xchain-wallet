@@ -11,7 +11,7 @@
 // password and then fail.
 
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { cleanup, render, screen } from '@testing-library/react';
+import { cleanup, render, screen, waitFor } from '@testing-library/react';
 import React from 'react';
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
 import { SignMessageForm } from '../../../packages/core/src/shared/routes/SignMessageForm.jsx';
@@ -58,7 +58,8 @@ describe('Sign message address list', () => {
         const values = Array.from(select.querySelectorAll('option')).map((o) => o.value);
         expect(values).toContain(SOFT.id);
         expect(values).not.toContain(HW.id);
-        expect(select).toHaveValue(SOFT.id);
+        // The default address is chosen in an effect after the options render.
+        await waitFor(() => expect(select).toHaveValue(SOFT.id));
     });
 
     it("says hardware addresses can't sign when they are the only ones", async () => {
