@@ -150,6 +150,14 @@ const musigBaseCrypto = createRequire(
     createRequire(import.meta.url).resolve('xchain-sdk/package.json'),
 ).resolve('@brandonblack/musig/base_crypto');
 
+// The SDK's bitcoinjs-lib patch assigns onto `require('uint8array-tools')`,
+// and a browser build would hand it the getter-only ESM namespace, so the
+// SDK import rejects (see the web config). Pin the CommonJS build, resolved
+// from bitcoinjs-lib's own context, so both share one mutable exports object.
+const uint8ArrayToolsCjs = createRequire(
+    createRequire(createRequire(import.meta.url).resolve('xchain-sdk/package.json')).resolve('bitcoinjs-lib'),
+).resolve('uint8array-tools');
+
 /**
  * Emit `build-profile.txt` into the extension bundle.
  *
@@ -298,6 +306,8 @@ export default defineConfig({
             zlib: zlibBrowserShim,
             // Point the bare musig subpath at its real file (see note above).
             '@brandonblack/musig/base_crypto': musigBaseCrypto,
+            // One writable uint8array-tools for the SDK patch (see note above).
+            'uint8array-tools': uint8ArrayToolsCjs,
         },
     },
     build: {

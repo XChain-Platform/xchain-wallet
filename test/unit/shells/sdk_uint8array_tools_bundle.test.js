@@ -14,15 +14,28 @@
 // assigns onto `require('uint8array-tools')`. In a browser build that
 // package's exports map selects its ESM entry, whose CommonJS interop object
 // is getter-only, so the assignment threw at SDK load and the web shell never
-// got past "Verify your recovery phrase". This builds an entry that
-// does what the SDK does through the web config and evaluates it.
+// got past "Verify your recovery phrase". The extension bundles the same SDK
+// for its background and popup. This builds an entry that does what the SDK
+// does through each shell's config and evaluates it.
 
 import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { pathToFileURL } from 'node:url';
 import { join } from 'node:path';
 import { build } from 'vite';
 import { afterEach, expect, it } from 'vitest';
+import extensionConfig from '../../../packages/extension/vite.config.js';
 import webConfig from '../../../packages/web/vite.config.js';
+
+const shells = [['web', webConfig], ['extension', extensionConfig]];
+
+// The web config lists aliases as find/replacement entries, the extension's
+// as a plain map; both forms are what vite accepts.
+function uint8ArrayToolsAlias(config) {
+    const { alias } = config.resolve;
+    if (!Array.isArray(alias)) return alias['uint8array-tools'];
+    const entry = alias.find((item) => item.find instanceof RegExp && item.find.test('uint8array-tools'));
+    return entry && entry.replacement;
+}
 
 const fixtures = [];
 
@@ -31,7 +44,7 @@ afterEach(async () => {
     delete globalThis.__xcUint8ToolsPatched;
 });
 
-async function buildFixture() {
+async function buildFixture(config) {
     const scratch = join(process.cwd(), 'tmp');
     await mkdir(scratch, { recursive: true });
     // The directory name carries "xchain-sdk" so the entry falls inside the
@@ -48,13 +61,13 @@ async function buildFixture() {
         'globalThis.__xcUint8ToolsPatched = uint8Tools.writeInt64 === uint8Tools.writeUInt64;',
     ].join('\n'));
     await build({
-        ...webConfig,
+        ...config,
         configFile: false,
         root,
         logLevel: 'silent',
         plugins: [],
         build: {
-            ...webConfig.build,
+            ...config.build,
             outDir,
             sourcemap: false,
             lib: { entry, formats: ['es'], fileName: () => 'bundle.js' },
@@ -64,16 +77,14 @@ async function buildFixture() {
     return join(outDir, 'bundle.js');
 }
 
-it('pins uint8array-tools to its CommonJS build for the browser bundle', () => {
-    const alias = webConfig.resolve.alias.find(
-        (entry) => entry.find instanceof RegExp && entry.find.test('uint8array-tools'),
-    );
-    expect(alias, 'vite.config.js has no uint8array-tools alias').toBeTruthy();
-    expect(alias.replacement.replace(/\\/g, '/')).toMatch(/\/uint8array-tools\/src\/cjs\/index\.cjs$/);
+it.each(shells)('pins uint8array-tools to its CommonJS build for the %s bundle', (_name, config) => {
+    const replacement = uint8ArrayToolsAlias(config);
+    expect(replacement, 'vite.config.js has no uint8array-tools alias').toBeTruthy();
+    expect(replacement.replace(/\\/g, '/')).toMatch(/\/uint8array-tools\/src\/cjs\/index\.cjs$/);
 });
 
-it('lets the SDK patch assign onto uint8array-tools in a browser bundle', async () => {
-    const bundlePath = await buildFixture();
+it.each(shells)('lets the SDK patch assign onto uint8array-tools in the %s bundle', async (_name, config) => {
+    const bundlePath = await buildFixture(config);
     await expect(import(pathToFileURL(bundlePath).href)).resolves.toBeTruthy();
     expect(globalThis.__xcUint8ToolsPatched).toBe(true);
 });
