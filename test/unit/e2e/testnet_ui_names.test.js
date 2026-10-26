@@ -99,6 +99,26 @@ export function invalidUiNames(files, sources, composed = COMPOSED) {
 }
 
 describe('testnet e2e UI name literals', () => {
+    it('lets only the live testnet wallets unlock without mainnet balances', () => {
+        const fixture = fs.readFileSync(path.join(E2E, 'fixtures/wallet.js'), 'utf8');
+        const expectedOptOuts = [
+            'tests/staking/partial-claim.testnet.spec.js',
+            'tests/staking/stake-unstake.testnet.spec.js',
+        ];
+        const optOuts = walk(path.join(E2E, 'tests'))
+            .filter((file) => file.endsWith('.spec.js'))
+            .filter((file) => fs.readFileSync(file, 'utf8').match(
+                /createWallet\(page,\s*\{[^}]*waitForBalances:\s*false/s,
+            ))
+            .map((file) => path.relative(E2E, file))
+            .sort();
+
+        expect(fixture).toContain('bip39Passphrase = null, waitForBalances = true,');
+        expect(fixture).toContain('waitForBalances ? unlockedShell(page) : unlockedAnyScreen(page)');
+        expect(fixture).toContain('acknowledgeDonationNotice(page, ads, { waitForBalances })');
+        expect(optOuts).toEqual(expectedOptOuts);
+    });
+
     it('reports unknown and incomplete composed names while skipping non-literals', () => {
         const sample = [
             "page.getByRole('button', { name: 'known role' });",
