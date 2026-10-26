@@ -2,6 +2,11 @@
 // Based on XChain Platform by Dankest, LLC – https://dankest.llc
 //
 // SPDX-License-Identifier: AGPL-3.0-or-later
+//
+// This file is part of XChain Platform. Licensed under the GNU Affero
+// General Public License v3.0 or later; see LICENSE.md. A commercial
+// license (without AGPL source-disclosure terms) is available -
+// contact legal@dankest.llc.
 
 // @vitest-environment node
 
@@ -44,6 +49,12 @@ describe('testnet run-input key preflight', () => {
         expect(() => preflightRunInputKeys({ ...treasury, claimant }, { wallet })).not.toThrow();
     });
 
+    it('also accepts a matching p2wpkh claimant', () => {
+        const { wallet, treasury } = fixture();
+
+        expect(() => preflightRunInputKeys({ ...treasury, claimant: treasury }, { wallet })).not.toThrow();
+    });
+
     it('refuses a treasury address derived from another key without exposing input', () => {
         const { wallet, treasury, claimant, stranger } = fixture();
         const input = { ...treasury, address: stranger.address, claimant };
@@ -82,5 +93,21 @@ describe('testnet run-input key preflight', () => {
         const { wallet, treasury } = fixture();
 
         expect(() => preflightRunInputKeys(treasury, { wallet })).not.toThrow();
+    });
+
+    it('proves both present keys through the supplied wallet', () => {
+        const { wallet, treasury, claimant } = fixture();
+        const imported = [];
+        const spy = {
+            importWIF: (wif) => {
+                imported.push(wif);
+                return wallet.importWIF(wif);
+            },
+            deriveAddress: (publicKey, options) => wallet.deriveAddress(publicKey, options),
+        };
+
+        preflightRunInputKeys({ ...treasury, claimant }, { wallet: spy });
+
+        expect(imported).toEqual([treasury.wif, claimant.wif]);
     });
 });

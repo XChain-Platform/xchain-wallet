@@ -56,8 +56,8 @@ export class PriceAlertWatcher {
      *   read live Settings each tick so toggling a flag off takes effect immediately
      * @param {(n: { kind: string, title: string, body: string, data?: object }) => (void | boolean | Promise<void | boolean>)} deps.notify
      *   the shell-specific delivery adapter (shared with NotificationService); false means delivery was unavailable
-     * @param {(id: string) => (void | Promise<void>)} deps.markTriggered
-     *   disarm an alert after it fires (one-shot)
+     * @param {(id: string, terms?: string) => (void | Promise<void>)} deps.markTriggered
+     *   disarm an alert after it fires (one-shot); `terms` is the alertTerms() key it fired under, so an edited alert stays armed
      * @param {() => Promise<string[] | Set<string>>} [deps.loadFired]
      *   restore delivered alerts whose triggered-state write still needs retrying
      * @param {(ids: string[]) => (void | Promise<void>)} [deps.saveFired]
@@ -100,9 +100,14 @@ export class PriceAlertWatcher {
         this._fired = new Set();
         /** @type {Set<string>} delivered ids whose triggered-state write has not completed */
         this._pendingTriggered = new Set();
+        /** @type {Map<string, string>} terms each delivered alert fired under */
+        this._firedTerms = new Map();
+        /** @type {Map<string, number>} when each delivered alert's triggered write landed */
+        this._settledAt = new Map();
         this._firedLoaded = false;
         this._firedDirty = false;
         this._ticking = false;
+        this._generation = 0;
     }
 
     /** Begin polling. Fires an immediate tick, then every intervalMs. Idempotent. */
@@ -120,12 +125,16 @@ export class PriceAlertWatcher {
 
     /** Stop polling and clear session state. */
     stop() {
+        // A poll still awaiting the vault or the oracle must not deliver after a lock.
+        this._generation += 1;
         if (this._timer) {
             clearInterval(this._timer);
             this._timer = null;
         }
         this._fired.clear();
         this._pendingTriggered.clear();
+        this._firedTerms.clear();
+        this._settledAt.clear();
         this._firedLoaded = false;
         this._firedDirty = false;
     }
@@ -137,6 +146,7 @@ export class PriceAlertWatcher {
     async pollOnce() {
         if (this._ticking) return; // never overlap ticks
         this._ticking = true;
+        const generation = this._generation;
         try {
             let settings;
             try {
@@ -158,6 +168,7 @@ export class PriceAlertWatcher {
                 this._log.error('PriceAlertWatcher: listArmedAlerts failed', e);
                 return;
             }
+            if (generation !== this._generation) return;
             armed = armed.filter((a) => a && a.status === 'armed');
             await this._restoreFired();
             const armedIds = new Set(armed.map((a) => a.id));
@@ -170,14 +181,33 @@ export class PriceAlertWatcher {
             // Drops the in-memory guard only once the store shows the alert left
             // 'armed', so a re-armed alert with the same id can fire again while
             // a store that lags cannot deliver it twice.
+            // A store that still lists the alert as armed half a poll interval after
+            // the triggered write has been re-armed, so it can fire again.
             for (const id of this._fired) {
-                if (!armedIds.has(id) && !this._pendingTriggered.has(id)) this._fired.delete(id);
+                if (this._pendingTriggered.has(id)) continue;
+                const settledAt = this._settledAt.get(id);
+                const reArmed = settledAt !== undefined && this._now() - settledAt >= this._intervalMs / 2;
+                if (!armedIds.has(id) || reArmed) {
+                    this._fired.delete(id);
+                    this._firedTerms.delete(id);
+                    this._settledAt.delete(id);
+                }
             }
             armed = armed.filter((a) => isOnActiveNetwork(a.chainId, settings?.activeNetwork));
             for (const alert of armed) {
                 if (!this._pendingTriggered.has(alert.id)) continue;
-                if (await this._persistTriggered(alert.id)) {
+                const firedTerms = this._firedTerms.get(alert.id);
+                if (firedTerms !== undefined && firedTerms !== alertTerms(alert)) {
+                    // Edited after delivery: the edit re-armed it under new terms.
                     this._pendingTriggered.delete(alert.id);
+                    this._fired.delete(alert.id);
+                    this._firedTerms.delete(alert.id);
+                    this._firedDirty = true;
+                    continue;
+                }
+                if (await this._persistTriggered(alert.id, firedTerms)) {
+                    this._pendingTriggered.delete(alert.id);
+                    this._settle(alert.id);
                     this._firedDirty = true;
                 }
             }
@@ -203,9 +233,16 @@ export class PriceAlertWatcher {
                     this._log.error('PriceAlertWatcher: getNativePrices failed', e);
                     continue;
                 }
+                if (generation !== this._generation) return;
                 if (!result || result.disabled || result.error || !result.prices) continue;
 
+                // The price fetch can outlast an edit, so only alerts whose terms
+                // still match the store are judged against the fetched price.
+                const current = await this._currentTerms();
+                if (!current || generation !== this._generation) return;
+
                 for (const alert of alerts) {
+                    if (current.get(alert.id) !== alertTerms(alert)) continue;
                     const entry = result.prices[alert.chainId];
                     const price = this._isFreshPrice(entry)
                         ? entry.priceFiat
@@ -220,15 +257,31 @@ export class PriceAlertWatcher {
         }
     }
 
+    /** @returns {Promise<Map<string, string> | null>} id → terms of every alert still armed */
+    async _currentTerms() {
+        try {
+            const rows = (await this._listArmedAlerts()) || [];
+            return new Map(rows.filter((a) => a && a.status === 'armed').map((a) => [a.id, alertTerms(a)]));
+        } catch (e) {
+            this._log.error('PriceAlertWatcher: listArmedAlerts failed', e);
+            return null;
+        }
+    }
+
     /** @param {import('../schemas/priceAlert.js').PriceAlert} alert @param {number} price */
     _isSatisfied(alert, price) {
+        // A record whose threshold is not a positive number is corrupt: "above 0"
+        // or "below Infinity" would fire on any price, so it never fires.
+        if (typeof alert.targetFiat !== 'number' || !Number.isFinite(alert.targetFiat) || alert.targetFiat <= 0) {
+            return false;
+        }
         if (alert.direction === 'above') return price >= alert.targetFiat;
         if (alert.direction === 'below') return price <= alert.targetFiat;
         return false;
     }
 
     _isFreshPrice(entry) {
-        if (!entry || typeof entry.priceFiat !== 'number' || !Number.isFinite(entry.priceFiat)) return false;
+        if (!entry || typeof entry.priceFiat !== 'number' || !Number.isFinite(entry.priceFiat) || entry.priceFiat <= 0) return false;
         if (entry.fetchedAt === undefined) return true;
         if (typeof entry.fetchedAt !== 'number' || !Number.isFinite(entry.fetchedAt)) return false;
         const ageMs = this._now() - entry.fetchedAt;
@@ -278,16 +331,23 @@ export class PriceAlertWatcher {
         this._pendingTriggered.add(alert.id);
         this._firedDirty = true;
         await this._persistFired();
-        if (await this._persistTriggered(alert.id)) {
+        this._firedTerms.set(alert.id, alertTerms(alert));
+        if (await this._persistTriggered(alert.id, alertTerms(alert))) {
             this._pendingTriggered.delete(alert.id);
+            this._settle(alert.id);
             this._firedDirty = true;
             await this._persistFired();
         }
     }
 
-    async _persistTriggered(alertId) {
+    /** The triggered write landed: the id keeps its fired guard for half a poll interval. */
+    _settle(id) {
+        this._settledAt.set(id, this._now());
+    }
+
+    async _persistTriggered(alertId, terms) {
         try {
-            await this._markTriggered(alertId);
+            await this._markTriggered(alertId, terms);
             return true;
         } catch (e) {
             this._log.warn('PriceAlertWatcher: markTriggered failed', e);
@@ -324,6 +384,12 @@ export class PriceAlertWatcher {
             this._log.warn('PriceAlertWatcher: saveFired failed', e);
         }
     }
+}
+
+/** Identity of an alert's threshold terms; an edit changes it. */
+export function alertTerms(alert) {
+    const fiat = String(alert.fiatCurrency || 'usd').toLowerCase();
+    return `${alert.chainId}::${alert.direction}::${alert.targetFiat}::${fiat}`;
 }
 
 /** 'bitcoin-mainnet' → 'Bitcoin'. Falls back to the raw chainId. */

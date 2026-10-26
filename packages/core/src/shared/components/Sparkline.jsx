@@ -11,6 +11,7 @@
 import { useMemo } from 'react';
 import { percentChangeDisplay } from '../utils/percentFormat.js';
 import { t } from '../../i18n/index.js';
+import '../../i18n/locales/en/components.js';
 
 /**
  * Pure-SVG sparkline. Renders finite samples as a polyline inside a

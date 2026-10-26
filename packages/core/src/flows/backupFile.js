@@ -72,6 +72,12 @@ import {
     migrateConnectedSite,
     migratePendingTx,
 } from '../schemas/migrations.js';
+import { validateAccount } from '../schemas/account.js';
+import { validateAddress } from '../schemas/address.js';
+import { validateContact } from '../schemas/contact.js';
+import { validateConnectedSite } from '../schemas/connectedSite.js';
+import { validatePendingTx } from '../schemas/pendingTx.js';
+import { validateSettings } from '../schemas/settings.js';
 import { parseBackupPointer } from '../uri/backupPointer.js';
 import { WalletNotFoundError } from './unlockWallet.js';
 import {
@@ -896,6 +902,27 @@ function prepareDecodedPayload(decoded) {
             permissions: { ...site.permissions, accounts: scopedAccounts },
         }];
     });
+
+    // The vault validates each record on put and saves after every put, so a
+    // record it refuses late in the list would leave the earlier collections
+    // written. Run the same validators here, before the first write.
+    assertRecordsValid('accounts', decoded.accounts, validateAccount);
+    assertRecordsValid('addresses', decoded.addresses, validateAddress);
+    assertRecordsValid('contacts', decoded.contacts, validateContact);
+    assertRecordsValid('connectedSites', decoded.connectedSites, validateConnectedSite);
+    assertRecordsValid('pendingTxs', decoded.pendingTxs, validatePendingTx);
+    if (decoded.settings != null) assertRecordsValid('settings', [decoded.settings], validateSettings);
+}
+
+function assertRecordsValid(name, records, validate) {
+    for (const [index, record] of records.entries()) {
+        const outcome = validate(record);
+        if (!outcome.ok) {
+            throw new Error(
+                `importBackupFile: payload ${name}[${index}] is invalid (${outcome.errors.join('; ')})`,
+            );
+        }
+    }
 }
 
 function migratePayloadRecords(records, name, migrateRecord) {

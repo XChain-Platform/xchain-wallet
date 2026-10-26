@@ -78,7 +78,7 @@ function runtimeTransportError(message, code) {
  * @param {{ timeoutMs?: number }} [options]
  * @returns {Promise<unknown>}
  */
-export function sendMessage(type, request, { timeoutMs = defaultTimeoutMs(type) } = {}) {
+function sendMessageOnce(type, request, timeoutMs) {
     return new Promise((resolve, reject) => {
         const runtime = globalThis.chrome?.runtime;
         if (!runtime?.sendMessage) {
@@ -157,4 +157,49 @@ export function sendMessage(type, request, { timeoutMs = defaultTimeoutMs(type) 
             );
         }
     });
+}
+
+// Reads that change nothing, so repeating one after a dropped port is safe. A
+// worker that woke for the popup's first requests has no listener until its
+// host finishes building, and Chrome answers those requests with a closed
+// port; the same happens while a host is torn down and rebuilt. A write is
+// never repeated here: the worker may have finished it before the port closed.
+const REPEATABLE_READS = new Set([
+    'account.list',
+    'addresses.byChain',
+    'balances.wallet',
+    'broadcast.queue.list',
+    'contacts.list',
+    'reachability.check',
+    'session.autolock',
+    'settings.get',
+    'sites.list',
+    'wallet.list',
+]);
+
+export const READ_RETRY_DELAYS_MS = Object.freeze([150, 400, 900]);
+
+/**
+ * @param {string} type
+ * @param {unknown} [request]
+ * @param {{ timeoutMs?: number, retryDelays?: readonly number[] }} [options]
+ * @returns {Promise<unknown>}
+ */
+export function sendMessage(type, request, {
+    timeoutMs = defaultTimeoutMs(type),
+    retryDelays = READ_RETRY_DELAYS_MS,
+} = {}) {
+    return sendWithRepeats(type, request, timeoutMs, REPEATABLE_READS.has(type) ? retryDelays : []);
+}
+
+async function sendWithRepeats(type, request, timeoutMs, delays) {
+    for (let attempt = 0; ; attempt += 1) {
+        try {
+            return await sendMessageOnce(type, request, timeoutMs);
+        } catch (error) {
+            const dropped = INTERRUPTED_CODES.has(/** @type {any} */ (error)?.code);
+            if (!dropped || attempt >= delays.length) throw error;
+            await new Promise((resolve) => setTimeout(resolve, delays[attempt]));
+        }
+    }
 }

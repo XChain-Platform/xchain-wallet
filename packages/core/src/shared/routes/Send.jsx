@@ -58,15 +58,21 @@ import {
     submitFailureMessage,
 } from '../utils/submitFailureMessage.js';
 import { t } from '../../i18n/index.js';
+import '../../i18n/locales/en/history.js';
+import '../../i18n/locales/en/scan.js';
+import '../../i18n/locales/en/send.js';
+import '../../i18n/locales/en/transactionStatus.js';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { useSignerReady } from '../hooks/useSignerReady.js';
 import { useDeveloperMode } from '../hooks/useDeveloperMode.js';
 import { useSettings } from '../hooks/useSettings.js';
+import { getActiveNetwork } from '../../flows/effectiveNetwork.js';
 import { useConfirmAction } from '../hooks/useConfirmAction.js';
 import { prebuiltPsbtFromComposed } from '../../flows/prebuiltPsbtFromComposed.js';
 import { ActionConfirmScreen } from '../components/ActionConfirmScreen.jsx';
 import { UndoSendToast } from '../components/UndoSendToast.jsx';
 import { PanicFreezeNotice, SigningReadyNote } from '../safety/PanicFreezeNotice.jsx';
+import { panicRefusalMessage } from '../safety/panicNotice.js';
 import {
     resolveFeeConfig,
     resolvePreflightPrivacy,
@@ -197,6 +203,7 @@ export function getUnusualSendWarnings({
 }
 import {
     estimateNativeSendFee,
+    customFeeRateBoundsError,
     estimateNativeSendFeeTiers,
     fetchNativeSendFeeTiers,
     customFeeEstimate,
@@ -238,6 +245,7 @@ import {
 } from '../utils/amountFormat.js';
 import { formatFiatAmount } from '../utils/fiatAmountFormat.js';
 import { dustThresholdForCoin } from '../../sdk/nativeFeePreflight.js';
+import { encoderFieldError } from '../../sdk/encoderFieldErrors.js';
 import styles from './Send.module.css';
 import { normalizeHistoryRow } from '../utils/historyRow.js';
 import { pendingTxToEntry } from '../utils/pendingHistory.js';
@@ -251,7 +259,8 @@ import {
     WATCH_ONLY_SIGNING_MESSAGE,
 } from '../addressSelection.js';
 import { pickDefaultChainId, recordLastUsedChain } from '../chainSelection.js';
-import { MAX_MEMO_LENGTH, MEMO_HINT, memoLengthError, utf8ByteLength } from '../utils/memoLimit.js';
+import { MAX_MEMO_LENGTH, MEMO_HINT, memoCharacterError, memoLengthError, utf8ByteLength } from '../utils/memoLimit.js';
+import { publishFeeValidationError } from '../utils/publishingFile.js';
 
 // §30.5 user-initiated cancel detection. HW-device libraries surface a
 // rejection as an Error whose message contains words like "cancelled",
@@ -344,6 +353,30 @@ function destinationAddressError(address, descriptor) {
 
 function normalizePastedRecipient(value) {
     return String(value || '').replace(ZERO_WIDTH, '').trim();
+}
+
+const PASTED_SECRET_TYPES = new Set(['wif', 'mnemonic-bip39', 'mnemonic-counterwallet']);
+
+// The kind of secret a paste carries: 'wif', 'mnemonic', or null. A payment
+// link can hide one in its address slot, bare or percent-encoded, so the
+// slot is classified as well as the whole text. The To field autosaves to a
+// plaintext draft, so a secret must never be written into it.
+function pastedSecretKind(text, detected, chainRegistry) {
+    const kindOf = (type) => {
+        if (!PASTED_SECRET_TYPES.has(type)) return null;
+        return type === 'wif' ? 'wif' : 'mnemonic';
+    };
+    const direct = kindOf(detected.type);
+    if (direct) return direct;
+    if (detected.type !== 'bip21') return null;
+    const slot = String(detected.address || '');
+    let decoded = slot;
+    try { decoded = decodeURIComponent(slot); } catch { /* raw slot only */ }
+    for (const candidate of new Set([slot, decoded])) {
+        const found = kindOf(uriLib.detectQrContent(candidate, { chainRegistry }).type);
+        if (found) return found;
+    }
+    return null;
 }
 
 /**
@@ -464,16 +497,25 @@ export function Send({ walletId, accountId, onBack, prefill = null, onDone, onCh
             });
         };
         try {
-            Promise.resolve(messaging.sendHoldCancel(holdId)).catch(reportFailure);
+            Promise.resolve(messaging.sendHoldCancel(holdId)).then((outcome) => {
+                // The host holds nothing for this id once its window has run out, or when
+                // this cancel beat the hold. The countdown's "Send cancelled" is then
+                // unconfirmed until the send's own outcome arrives.
+                if (outcome && outcome.cancelled === false) {
+                    clearUndoHold();
+                    showToast({ message: 'Checking whether the send was stopped.' });
+                }
+            }).catch(reportFailure);
         } catch (err) {
             reportFailure(err);
         }
-    }, [messaging, showToast]);
+    }, [messaging, showToast, clearUndoHold]);
     const {
         status: undoSendStatus,
         remaining: undoSendRemaining,
         start: startUndoSend,
         cancel: cancelUndoSend,
+        reset: resetUndoSend,
     } = useUndoSend({
         onElapsed: clearUndoHold,
         onCancelHold: cancelUndoHold,
@@ -590,6 +632,15 @@ export function Send({ walletId, accountId, onBack, prefill = null, onDone, onCh
     const [submitError, setSubmitError] = useState(/** @type {string | null} */ (null));
     // Recognized recovery cause for affordances that must not match display copy.
     const [submitErrorCause, setSubmitErrorCause] = useState(/** @type {string | null} */ (null));
+    // Remounts the freeze notice so it re-reads the freeze at once after a
+    // refusal, instead of on its next tick: the notice is then the one
+    // message for that state, and the submit error stays empty.
+    const [panicNoticeKey, setPanicNoticeKey] = useState(0);
+    // An encoder refusal the person fixes in one field (a fee rate under the
+    // relay minimum, an amount the inputs cannot cover) shows under that field.
+    const [submitFieldError, setSubmitFieldError] = useState(
+        /** @type {{ field: 'fee' | 'amount', message: string } | null} */ (null),
+    );
     const [result, setResult] = useState(/** @type {any | null} */ (null));
     // The done screen follows the sent transaction from broadcast to
     // confirmation (or failure) instead of freezing on "pending".
@@ -614,12 +665,18 @@ export function Send({ walletId, accountId, onBack, prefill = null, onDone, onCh
     const formDraftTtlMs = Number.isFinite(settings?.privacy?.formDraftTtlMs)
         ? Number(settings.privacy.formDraftTtlMs)
         : undefined;
-    const draft = useFormDraft({ view: 'send', walletId, ttlMs: formDraftTtlMs });
+    const draftNetwork = settings ? getActiveNetwork(settings) : null;
+    const draft = useFormDraft({ view: 'send', walletId, network: draftNetwork, ttlMs: formDraftTtlMs });
     // A stored draft waits for an explicit Restore. A fresh form starts
     // saving immediately so an auto-lock unmount cannot erase typed values.
     const [draftPending, setDraftPending] = useState(
         () => !hasMeaningfulSendDraft(draft.load()),
     );
+    // Settings resolve after the first render; once the network is known a draft
+    // from another network reads as absent, so the form saves from then on.
+    useEffect(() => {
+        if (draftNetwork && !hasMeaningfulSendDraft(draft.load())) setDraftPending(true);
+    }, [draftNetwork]); // eslint-disable-line react-hooks/exhaustive-deps
     // A confirmed "Discard and leave" drops the saved draft and stops the
     // autosave, so no render between the confirm and the unmount can write
     // the discarded values back.
@@ -642,6 +699,7 @@ export function Send({ walletId, accountId, onBack, prefill = null, onDone, onCh
             memo,
             amountInputMode,
             fiatAmount,
+            fiatCurrency: settings?.fiatCurrency || 'USD',
             extraLegs,
             perRecipientToken,
         };
@@ -650,11 +708,11 @@ export function Send({ walletId, accountId, onBack, prefill = null, onDone, onCh
     }, [
         stage, draftPending, draft, chainId, fromAddressId, pickedSourceChain,
         toAddress, tick, amount, memo, amountInputMode, fiatAmount, extraLegs,
-        perRecipientToken,
+        perRecipientToken, settings?.fiatCurrency,
     ]);
     const restoreDraft = useCallback(() => {
         const v = draft.load();
-        if (!v) { setDraftPending(false); return; }
+        if (!v) { setDraftPending(true); return; }
         cancelMax();
         if (typeof v.chainId === 'string') setChainId(v.chainId);
         if (typeof v.toAddress === 'string') setToAddress(v.toAddress);
@@ -663,10 +721,13 @@ export function Send({ walletId, accountId, onBack, prefill = null, onDone, onCh
         if (typeof v.memo === 'string') setMemo(v.memo);
         if (typeof v.fromAddressId === 'string') setFromAddressId(v.fromAddressId);
         if (typeof v.pickedSourceChain === 'string') setPickedSourceChain(v.pickedSourceChain);
-        if (v.amountInputMode === 'coin' || v.amountInputMode === 'fiat') {
+        // Typed fiat text belongs to the currency it was typed in. Under a
+        // different display currency the coin amount is the value to keep.
+        const sameFiat = !v.fiatCurrency || v.fiatCurrency === (settings?.fiatCurrency || 'USD');
+        if (v.amountInputMode === 'coin' || (v.amountInputMode === 'fiat' && sameFiat)) {
             setAmountInputMode(v.amountInputMode);
         }
-        if (typeof v.fiatAmount === 'string') setFiatAmount(v.fiatAmount);
+        if (typeof v.fiatAmount === 'string' && sameFiat) setFiatAmount(v.fiatAmount);
         if (Array.isArray(v.extraLegs)) {
             setExtraLegs(v.extraLegs.slice(0, MAX_SEND_LEGS - 1).flatMap((leg) => (
                 leg && typeof leg.id === 'string'
@@ -681,7 +742,7 @@ export function Send({ walletId, accountId, onBack, prefill = null, onDone, onCh
         }
         if (typeof v.perRecipientToken === 'boolean') setPerRecipientToken(v.perRecipientToken);
         setDraftPending(true);
-    }, [draft, cancelMax]);
+    }, [draft, cancelMax, settings?.fiatCurrency]);
     const dismissDraft = useCallback(() => {
         draft.clear();
         setDraftPending(true);
@@ -929,11 +990,33 @@ export function Send({ walletId, accountId, onBack, prefill = null, onDone, onCh
             const targetDescriptor = targetChainId ? chainRegistry.get(targetChainId) : null;
             setToError(destinationAddressError(recipient, targetDescriptor));
         };
-        if (detected.type === 'bip21') {
+        const secretKind = pastedSecretKind(trimmed, detected, chainRegistry);
+        if (secretKind) {
+            e.preventDefault();
+            setPastedRecipient(null);
+            setPasteHint(secretKind === 'wif'
+                ? 'That looks like a private key, not a payment address. To import it, open Settings and choose Import private key.'
+                : t('scan.error.mnemonic'));
+        } else if (detected.type === 'bip21') {
             e.preventDefault();
             const parts = detected.parts;
             const chainParam = parts.params?.chain;
-            const requestChainId = uriLib.safeChainIdParam(chainParam);
+            // A link with no `chain` still names its coin through the scheme,
+            // and its amount is written in that coin. When the open chain is
+            // another coin, the link moves Send to the scheme's coin on the
+            // open network: testnet and regtest addresses of different coins
+            // share version bytes, so the address cannot say which coin the
+            // amount belongs to.
+            const openDescriptor = chainId ? chainRegistry.get(chainId) : null;
+            const schemeChainId = chainParam === undefined && openDescriptor
+                && String(openDescriptor.uriScheme || '').toLowerCase() !== detected.scheme
+                ? chainRegistry.supportedChains().find((candidate) => (
+                    String(candidate.uriScheme || '').toLowerCase() === detected.scheme
+                    && candidate.networkKind === openDescriptor.networkKind
+                    && addressesByChain?.[candidate.id]?.length > 0
+                ))?.id
+                : undefined;
+            const requestChainId = uriLib.safeChainIdParam(chainParam) || schemeChainId;
             const requestDescriptor = requestChainId ? chainRegistry.get(requestChainId) : null;
             const requestError = parts.required.length > 0
                 ? 'This payment request requires a feature this wallet does not support.'
@@ -948,8 +1031,11 @@ export function Send({ walletId, accountId, onBack, prefill = null, onDone, onCh
             if (requestError) {
                 setPastedRecipient(null);
                 setPasteHint(null);
-                setToError(requestError);
-                setPasteWarning(null);
+                // A field error is recomputed from the (unchanged) address on the
+                // next blur and would erase this, so the refusal is a note that
+                // stays until the user types.
+                setToError(null);
+                setPasteWarning(requestError);
                 return;
             }
             const tickParam = parts.params?.tick;
@@ -977,9 +1063,11 @@ export function Send({ walletId, accountId, onBack, prefill = null, onDone, onCh
                 } else if (!perRecipientToken) {
                     setExtraLegs((rows) => rows.map((row) => ({ ...row, amount: '' })));
                 }
-                setAssetSwitchNotice(chainChanged
+                // A link that carries its own amount keeps it, so a notice saying
+                // the amount was cleared would contradict the field.
+                setAssetSwitchNotice(parts.amount ? null : (chainChanged
                     ? 'Network changed. The amount and network fee were reset because they may not be valid on the new network.'
-                    : 'Token changed. The amount was cleared because the new token may use different decimal places.');
+                    : 'Token changed. The amount was cleared because the new token may use different decimal places.'));
             }
             if (nextTick !== tick) {
                 // Pasted text is the same untrusted-URI class as
@@ -992,6 +1080,7 @@ export function Send({ walletId, accountId, onBack, prefill = null, onDone, onCh
             const safeMessage = memoParam ? neutralizeControlText(memoParam) : '';
             setRequestMessage(safeMessage);
             if (safeMessage) setMemo(safeMessage);
+            else if (memo === requestMessage) setMemo('');
             if (chainChanged) {
                 setChainId(requestChainId);
             }
@@ -1027,23 +1116,20 @@ export function Send({ walletId, accountId, onBack, prefill = null, onDone, onCh
                 } else if (!perRecipientToken) {
                     setExtraLegs((rows) => rows.map((row) => ({ ...row, amount: '' })));
                 }
-                setAssetSwitchNotice(chainChanged
+                // A link that carries its own amount keeps it, so a notice saying
+                // the amount was cleared would contradict the field.
+                setAssetSwitchNotice(intent.amount ? null : (chainChanged
                     ? 'Network changed. The amount and network fee were reset because they may not be valid on the new network.'
-                    : 'Token changed. The amount was cleared because the new token may use different decimal places.');
+                    : 'Token changed. The amount was cleared because the new token may use different decimal places.'));
             }
             const safeMessage = intent.message ?? intent.label ?? intent.memo ?? '';
             setRequestMessage(safeMessage);
             if (intent.memo) setMemo(intent.memo);
+            else if (memo === requestMessage) setMemo('');
             if (intent.chainId && intent.chainId !== chainId) {
                 setChainId(intent.chainId);
             }
             setPasteHint('Payment details filled from the pasted payment link.');
-        } else if (detected.type === 'wif') {
-            e.preventDefault();
-            setPastedRecipient(null);
-            setPasteHint(
-                'That looks like a private key, not a payment address. To import it, open Settings and choose Import private key.',
-            );
         } else {
             e.preventDefault();
             setRequestMessage('');
@@ -1062,7 +1148,7 @@ export function Send({ walletId, accountId, onBack, prefill = null, onDone, onCh
                 if (!res.ok) setPasteWarning(res.reason || 'The clipboard changed after you pasted. Check the address before sending.');
             })
             .catch(() => { /* silent */ });
-    }, [addressesByChain, chainId, perRecipientToken, tick, cancelMax]);
+    }, [addressesByChain, chainId, perRecipientToken, tick, cancelMax, memo, requestMessage]);
 
     // §21.4 test-send protection. Session-scoped acknowledgement set;
     // marking an address tested suppresses the gate for the rest of
@@ -1606,7 +1692,8 @@ export function Send({ walletId, accountId, onBack, prefill = null, onDone, onCh
         ? `${selectedUtxos.length} selected input${selectedUtxos.length === 1 ? '' : 's'}`
         : 'Automatic input selection';
     const trimmedMemo = memo.trim();
-    const memoTooLong = memoLengthError(trimmedMemo);
+    // The first problem with the memo as sent: its length, then unsafe characters.
+    const memoTooLong = memoLengthError(trimmedMemo) || memoCharacterError(trimmedMemo);
 
     const decoded = useMemo(() => {
         if (stage !== 'review' && stage !== 'submitting') return null;
@@ -1733,9 +1820,11 @@ export function Send({ walletId, accountId, onBack, prefill = null, onDone, onCh
                 if (cancelled) return;
                 const entries = byChain?.[chainId];
                 const addressCount = (addressesByChain[chainId] || []).length;
-                // An incomplete or failed aggregate cannot prove the chain is empty.
+                // An incomplete or failed aggregate, or one whose coin balance could not be
+                // read, cannot prove the chain is empty.
                 if (!Array.isArray(entries) || entries.length < addressCount
-                    || entries.some((entry) => entry?.error || !entry?.balances)) {
+                    || entries.some((entry) => entry?.error || !entry?.balances
+                        || (Array.isArray(entry.balances.unavailable) && entry.balances.unavailable.includes('native')))) {
                     setChainBalanceState({ chainId, status: 'unknown' });
                     return;
                 }
@@ -2054,7 +2143,7 @@ export function Send({ walletId, accountId, onBack, prefill = null, onDone, onCh
         };
     }, [previewBalances.sdkShape, tick]);
 
-    const amountBalanceError = useMemo(() => {
+    const firstAmountBalanceError = useMemo(() => {
         if (!sourceBalance || balancesUnchecked || balancesHidden) return null;
         const divisibility = sourceBalance.divisibility
             ?? (isNativeSend ? nativeDecimalsFor(descriptor) : null);
@@ -2069,6 +2158,26 @@ export function Send({ walletId, accountId, onBack, prefill = null, onDone, onCh
         }
         return 'Amount exceeds the available balance.';
     }, [amount, balancesHidden, balancesUnchecked, descriptor, isNativeSend, sourceBalance]);
+
+    // A multi-recipient send spends the SUM of its legs, and each leg can sit
+    // under the balance while the total does not (500 + 500.00000001 against
+    // 1,000). The first-row check above only sees its own amount, so the form
+    // composed, previewed and offered to sign an action the chain rejects after
+    // the network fee is spent. Totals are exact decimal sums per token.
+    const legTotalsBalanceError = useMemo(() => {
+        if (!isMultiSend || nativeMultiSendBlock || balancesUnchecked || balancesHidden) return null;
+        if (!previewBalances.sdkShape) return null;
+        const held = decoderLib.balancesFromSdk(previewBalances.sdkShape);
+        for (const total of sendTotals) {
+            const balance = held.find((entry) => entry.tick === total.tick);
+            if (!balance) continue;
+            if (compareDecimalStrings(total.amount, String(balance.amount ?? '0').trim()) === 1) {
+                return `The total ${total.tick} across all recipients exceeds the available balance.`;
+            }
+        }
+        return null;
+    }, [isMultiSend, nativeMultiSendBlock, balancesUnchecked, balancesHidden, previewBalances.sdkShape, sendTotals]);
+    const amountBalanceError = firstAmountBalanceError || legTotalsBalanceError;
 
     const unusualSendWarnings = useMemo(() => {
         const exactFeeSats = confirmAction.composed?.networkFeeSats;
@@ -2400,7 +2509,26 @@ export function Send({ walletId, accountId, onBack, prefill = null, onDone, onCh
             setFormError('Amount must be a positive number.');
             return;
         }
+        // A native amount past 2^53 base units cannot be carried as a safe integer, so compose
+        // would drop it and the tamper check would report an output the user never approved.
+        if (isNativeSend) {
+            const sats = exactSatsBigIntFromDecimalString(amt, descriptor);
+            if (sats !== null && sats > BigInt(Number.MAX_SAFE_INTEGER)) {
+                setFormError('Amount is too large to send.');
+                return;
+            }
+        }
         if (amountBalanceError) return;
+        // A custom fee the form cannot price (zero, negative, non-numeric, over 8 decimals)
+        // would compose with the encoder's own default fee while the field says otherwise.
+        const customFeeError = publishFeeValidationError(feePick, feeEstimate)
+            || (feePick.mode === 'custom'
+                ? customFeeRateBoundsError({ rate: Number(feePick.customRate), tiers: feeTiers })
+                : null);
+        if (feePick.mode === 'custom' && (feePerKb === null || customFeeError)) {
+            setFormError(customFeeError || 'Custom fee rate is outside the supported range.');
+            return;
+        }
         // Refuse a below-dust amount BEFORE composing. Enter also submits this
         // form, so the inline warning alone would not be enough (same reasoning as the
         // test-send gate below).
@@ -2645,21 +2773,40 @@ export function Send({ walletId, accountId, onBack, prefill = null, onDone, onCh
                 // The HW route runs the SAME send flow with a remote
                 // signer, so it signs the prebuilt PSBT byte-identically.
                 onApprove: (_creds, composed) => {
+                    // Approve is the point of no return: the payment lives in the
+                    // pending-activity record, not in the form draft. A draft left behind
+                    // would tell a user who locked or reloaded mid-send that nothing was
+                    // sent and offer to restore and send it a second time.
+                    draftDiscardedRef.current = true;
+                    draft.clear();
                     // The shared mapping: a multi-recipient send takes the chunk
                     // lane, so its deferred outputs and any envelope must ride along.
                     const prebuiltPsbt = prebuiltPsbtFromComposed(composed);
-                    if (sendBase.holdId && sendBase.undoSeconds) {
+                    const holding = Boolean(sendBase.holdId && sendBase.undoSeconds);
+                    if (holding) {
                         undoHoldIdRef.current = sendBase.holdId;
                         setUndoHoldActive(true);
                         startUndoSend(sendBase.undoSeconds);
                     }
-                    return isHwSource
+                    const dispatched = isHwSource
                         ? messaging.sendAssetHw({
                             ...sendBase, signerId: fromAddress.signerId, prebuiltPsbt,
                         })
                         : messaging.sendToken({
                             ...sendBase, password: passwordValueRef.current, prebuiltPsbt,
                         });
+                    // A rejected attempt (wrong password, device retry) leaves the confirm
+                    // open for another Approve. Its countdown ends here, or the retry
+                    // would start a second one while the first still counts.
+                    return holding
+                        ? Promise.resolve(dispatched).catch((err) => {
+                            if (!isUndoSendCancellation(err)) {
+                                resetUndoSend();
+                                clearUndoHold();
+                            }
+                            throw err;
+                        })
+                        : dispatched;
                 },
             });
             recordLastUsedChain(messaging, chainId);
@@ -2673,6 +2820,8 @@ export function Send({ walletId, accountId, onBack, prefill = null, onDone, onCh
             setDraftPending(false);
         } catch (err) {
             if (!mountedRef.current) return;
+            // A send that stays on this form resumes saving the next edit.
+            draftDiscardedRef.current = false;
             if (isUndoSendCancellation(err)) {
                 clearUndoHold();
                 setFormError(null);
@@ -2687,11 +2836,34 @@ export function Send({ walletId, accountId, onBack, prefill = null, onDone, onCh
                 setPassword('');
                 return;
             }
+            // A freeze the user armed is stated by the notice at the top of
+            // the form; a second, generic "try again" line under it would
+            // contradict it.
+            if (panicRefusalMessage(err)) {
+                setSubmitError(null);
+                setSubmitErrorCause(null);
+                setPanicNoticeKey((k) => k + 1);
+                haptic.error();
+                return;
+            }
             // Everything else (compose/tamper failure, bad password, broadcast
             // failure) surfaces in the form's existing error banner; the modal
             // has already unmounted (terminal phase leaves CONFIRM_MODAL_PHASES).
             console.error('Send (confirm) failed:', err); // eslint-disable-line no-console
-            setSubmitError(submitFailureMessage(err, { verb: 'send' }));
+            const fieldError = isMultiSend ? null : encoderFieldError(err, {
+                coinTicker: nativeTickerFor(chainId ? chainRegistry.get(chainId) : null) || '',
+                feeUnit: feeTiers?.unit,
+            });
+            if (fieldError) {
+                setSubmitFieldError(fieldError);
+                setSubmitError(null);
+                setSubmitErrorCause(null);
+            } else {
+                setSubmitError(submitFailureMessage(err, {
+                    verb: 'send',
+                    coinTicker: nativeTickerFor(chainId ? chainRegistry.get(chainId) : null) || undefined,
+                }));
+            }
             haptic.error();
         } finally {
             confirmLaunchRef.current = false;
@@ -2700,7 +2872,8 @@ export function Send({ walletId, accountId, onBack, prefill = null, onDone, onCh
         chainId, fromAddress, walletId, toAddress, tick, amount, memo, rbfForSend,
         feePerKb, settings, messaging, confirmAction, draft, haptic,
         isNativeSend, isHwSource, isMultiSend, sendLegs, sendTotals, startUndoSend,
-        clearUndoHold, showToast, changeAddress, coinControlEnabled, selectedUtxos,
+        clearUndoHold, resetUndoSend, showToast, changeAddress, coinControlEnabled, selectedUtxos,
+        feeTiers,
     ]);
 
     async function handleSubmit(event) {
@@ -2783,12 +2956,34 @@ export function Send({ walletId, accountId, onBack, prefill = null, onDone, onCh
                 showToast({ message: 'Transaction cancelled.' });
                 return;
             }
+            if (panicRefusalMessage(err)) {
+                setSubmitError(null);
+                setSubmitErrorCause(null);
+                setPanicNoticeKey((k) => k + 1);
+                setPassword('');
+                setStage('form');
+                haptic.error();
+                return;
+            }
             if (isBadPassword) {
                 setSubmitError('Incorrect password.');
                 setSubmitErrorCause(null);
             } else {
                 console.error('Send failed:', err); // eslint-disable-line no-console
-                const message = submitFailureMessage(err, { verb: 'send' });
+                const coinTicker = nativeTickerFor(chainId ? chainRegistry.get(chainId) : null) || '';
+                const fieldError = isMultiSend ? null : encoderFieldError(err, {
+                    coinTicker, feeUnit: feeTiers?.unit,
+                });
+                if (fieldError) {
+                    setSubmitFieldError(fieldError);
+                    setSubmitError(null);
+                    setSubmitErrorCause(null);
+                    setPassword('');
+                    setStage('form');
+                    haptic.error();
+                    return;
+                }
+                const message = submitFailureMessage(err, { verb: 'send', coinTicker: coinTicker || undefined });
                 setSubmitError(message);
                 setSubmitErrorCause(humanizeError(err, 'send').cause);
             }
@@ -3289,7 +3484,7 @@ export function Send({ walletId, accountId, onBack, prefill = null, onDone, onCh
                             the shell's reachability notice steps aside. */}
                         <HideReachabilityNotice />
                         <StatusMessage variant="warning">
-                            {t('send.offline.body')}
+                            {t(previewBalances.sdkShape ? 'send.offline.body' : 'send.offline.bodyNoCache')}
                         </StatusMessage>
                     </>
                 ) : null, testSendGateBanner]}
@@ -3578,6 +3773,7 @@ export function Send({ walletId, accountId, onBack, prefill = null, onDone, onCh
             onChangeCapture={() => {
                 if (formError) setFormError(null);
                 if (submitError) setSubmitError(null);
+                if (submitFieldError) setSubmitFieldError(null);
             }}
             status={[isDemo ? (
                 <StatusMessage
@@ -3607,7 +3803,7 @@ export function Send({ walletId, accountId, onBack, prefill = null, onDone, onCh
                         shell's reachability notice steps aside. */}
                     <HideReachabilityNotice />
                     <StatusMessage variant="warning">
-                        {t('send.offline.body')}
+                        {t(previewBalances.sdkShape ? 'send.offline.body' : 'send.offline.bodyNoCache')}
                     </StatusMessage>
                 </>
             ) : null, testSendGateBanner, draftBanner, requestMessage ? (
@@ -3636,7 +3832,7 @@ export function Send({ walletId, accountId, onBack, prefill = null, onDone, onCh
               * has already watched the whole transaction get composed.
               * Duress-armed freezes render nothing here, by design.
               */}
-            {!isWatcherMode ? <PanicFreezeNotice surface="send" /> : null}
+            {!isWatcherMode ? <PanicFreezeNotice key={panicNoticeKey} surface="send" /> : null}
             {assetSwitchNotice ? (
                 <FormNotice variant="status">{assetSwitchNotice}</FormNotice>
             ) : null}
@@ -3745,13 +3941,17 @@ export function Send({ walletId, accountId, onBack, prefill = null, onDone, onCh
                 fiatRate={amountFiatRate}
                 fiatCurrency={fiatCurrency}
                 amountInputMode={amountInputMode}
-                error={amountBalanceError || undefined}
+                error={amountBalanceError
+                    || (submitFieldError?.field === 'amount' ? submitFieldError.message : undefined)
+                    || undefined}
                 divisibility={sourceBalance?.divisibility ?? (isNativeSend ? 8 : undefined)}
                 onAmountFieldChange={onAmountFieldChange}
                 toggleAmountInputMode={toggleAmountInputMode}
                 inputRef={amountInputRef}
                 onMax={onMax}
-                maxDisabled={!sourceBalance}
+                // Offline the page already says sending needs a connection and Review is
+                // off, so Max (which quotes a fee over the network) is off with it.
+                maxDisabled={!sourceBalance || networkOffline}
                 maxBusy={maxBusy}
                 balanceText={
                     previewBalances.loading
@@ -3949,6 +4149,7 @@ export function Send({ walletId, accountId, onBack, prefill = null, onDone, onCh
                     value={feePick}
                     onChange={setFeePick}
                     customEstimate={feePick.mode === 'custom' ? feeEstimate : null}
+                    error={submitFieldError?.field === 'fee' ? submitFieldError.message : null}
                     // Offline already says sending is blocked, so a fee-source
                     // notice would be a second message for the same state.
                     showEstimateNotice={!networkOffline}

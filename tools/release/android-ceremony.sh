@@ -423,14 +423,12 @@ node "$REPO_ROOT/tools/release/verify-apk-signer.mjs" "$WORK_DIR/$APK_NAME" \
     || die "the APK is not signed by the pinned K10 certificate (check XCHAIN_K10_KEYSTORE and XCHAIN_K10_ALIAS); nothing was staged"
 
 # ---------------------------------------------------------------------
-# 3a. Publish the signed store pair into the staging directory
+# 3a. Record, then publish the signed store pair into the staging directory
 # ---------------------------------------------------------------------
 #
 # Staged BEFORE the optional full leg below, not after it. WORK_DIR is removed
 # on every exit, so a full-leg failure used to delete a signed pair that no
 # re-run can reproduce byte for byte; staged here, a failure there costs nothing.
-mv "$WORK_DIR/$AAB_NAME" "$OUTPUT_DIR/$AAB_NAME"
-mv "$WORK_DIR/$APK_NAME" "$OUTPUT_DIR/$APK_NAME"
 
 # Say, next to the bytes, exactly what they were built from. Without this a
 # rehearsal artifact and a release artifact are indistinguishable on disk, and
@@ -475,6 +473,13 @@ if [ "$REHEARSAL" -eq 1 ]; then
     echo "REHEARSAL ARTIFACTS. Do not upload to Play, do not publish, delete when done." \
         > "$RECORDS_DIR/DO-NOT-PUBLISH.txt"
 fi
+
+# The signed pair moves in only now, AFTER the records above: the pair must never
+# sit in OUTPUT_DIR without its provenance and, for a rehearsal, its
+# do-not-publish note, so a failure between the two steps cannot leave
+# unmarked signed bytes on disk.
+mv "$WORK_DIR/$AAB_NAME" "$OUTPUT_DIR/$AAB_NAME"
+mv "$WORK_DIR/$APK_NAME" "$OUTPUT_DIR/$APK_NAME"
 
 # ---------------------------------------------------------------------
 # 3b. OPTIONAL: the second, FULL-feature direct APK

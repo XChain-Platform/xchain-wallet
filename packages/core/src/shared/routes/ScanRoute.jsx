@@ -38,8 +38,9 @@ import { detectQrContent } from '../../uri/detectQrContent.js';
 import { parseXchainUri, hardenUriIntentText, safeChainIdParam } from '../../uri/xchainUri.js';
 import { neutralizeControlText } from '../utils/textHardening.js';
 import { isValidAddressAnyNetwork, isValidAddressForChain } from '../utils/addressValidation.js';
+import { tickerReferenceError } from '../utils/tickerGrammar.js';
 import { t } from '../../i18n/index.js';
-import { ClipboardPasteButton } from '../../ui/ClipboardPasteButton.jsx';
+import '../../i18n/locales/en/scan.js';
 import { defaultRegistry } from '../../registry/index.js';
 
 const DEFAULT_CHAIN_REGISTRY = defaultRegistry();
@@ -129,6 +130,11 @@ export function ScanRoute({ onClassified, onBack, chainRegistry, embedded = fals
                 return;
             }
             if (intent.kind === 'send') {
+                // The same token-name grammar the deep-link route applies.
+                if (intent.tick && tickerReferenceError(intent.tick, { allowRef: true })) {
+                    setStatus(t('scan.error.paymentRequest'));
+                    return;
+                }
                 let resolvedChainId = intent.chainId;
                 if (intent.address) {
                     const resolved = resolvePaymentChain({
@@ -170,6 +176,12 @@ export function ScanRoute({ onClassified, onBack, chainRegistry, embedded = fals
             const chainId = safeChainIdParam(chainParam);
             if (detected.parts.required.length > 0
                 || (chainParam !== undefined && chainId === undefined)) {
+                setStatus(t('scan.error.paymentRequest'));
+                return;
+            }
+            const requestedTick = detected.parts.params?.tick;
+            if (typeof requestedTick === 'string' && requestedTick.length > 0
+                && tickerReferenceError(neutralizeControlText(requestedTick).toUpperCase(), { allowRef: true })) {
                 setStatus(t('scan.error.paymentRequest'));
                 return;
             }
@@ -334,15 +346,6 @@ export function ScanRoute({ onClassified, onBack, chainRegistry, embedded = fals
                     spellCheck={false}
                     autoComplete="off"
                     autoCorrect="off"
-                    actions={(
-                        <ClipboardPasteButton
-                            disabled={stopped}
-                            onPaste={(text) => { setPaste(text); setStatus(''); }}
-                            // Inside the box a clipboard failure has no room of its
-                            // own, so it becomes the screen's status line.
-                            onMessage={(message) => { if (message) setStatus(message); }}
-                        />
-                    )}
                 />
             </FormPage>
         </Screen>

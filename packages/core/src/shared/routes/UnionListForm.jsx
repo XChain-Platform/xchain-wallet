@@ -30,6 +30,7 @@ import { preferredSourceId } from '../addressSelection.js';
 import { pickDefaultChainId } from '../chainSelection.js';
 import { ActionConfirmScreen } from '../components/ActionConfirmScreen.jsx';
 import { WatcherResultPanel } from '../components/WatcherResultPanel.jsx';
+import { QueuedResultPanel } from '../components/QueuedResultPanel.jsx';
 import { useOwnerActionLane } from '../hooks/useOwnerActionLane.js';
 import { isUserRejection } from '../hooks/useActionConfirmFlow.js';
 import { useSignerReady } from '../hooks/useSignerReady.js';
@@ -315,6 +316,8 @@ export function UnionListForm({ walletId, chainId: initialChainId, activeAccount
         return wrap(<p className={styles.hint}>Loading...</p>);
     }
     if (result) {
+        // Signed but held in the broadcast queue: nothing is on the network yet.
+        if (result.queued) return wrap(<QueuedResultPanel onDone={onDone} what="union list" unsaved={result.unsaved} />);
         if (result.psbtHex && !result.txid) {
             return wrap(
                 <WatcherResultPanel

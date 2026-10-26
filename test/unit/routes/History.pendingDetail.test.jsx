@@ -18,11 +18,15 @@
 // a healthy send and for one that never reached a node.
 
 import { describe, it, expect, vi, afterEach } from 'vitest';
-import { render, screen, waitFor, cleanup, fireEvent, within } from '@testing-library/react';
+import { act, render, screen, waitFor, cleanup, fireEvent, within } from '@testing-library/react';
 import React from 'react';
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
 import { History, detailActionLabel } from '../../../packages/core/src/shared/routes/History.jsx';
 import { BALANCE_POLL_INTERVAL_MS } from '../../../packages/core/src/flows/balances.js';
+import {
+    dismissAllOverlays,
+    resetBackStackForTests,
+} from '../../../packages/core/src/ui/backStack.js';
 
 const CHAIN = 'litecoin-regtest';
 const OURS = 'mtkx2FQ7QhPPZmVyLKVWMkfmYmvQRUXCmi';
@@ -132,7 +136,11 @@ function panelIn(region) {
     return within(region).getByRole('region', { name: 'Pending transaction' });
 }
 
-afterEach(() => { cleanup(); vi.useRealTimers(); });
+afterEach(() => {
+    cleanup();
+    resetBackStackForTests();
+    vi.useRealTimers();
+});
 
 
 /**
@@ -187,6 +195,15 @@ describe('History row labels a pending transaction by state', () => {
 });
 
 describe('History pending detail branch', () => {
+    it('keeps the selected transaction open when the native app pauses', async () => {
+        const { view } = mountHistory({ mempool: [mempoolRow()] });
+        await openRow(view, 'seen');
+
+        act(() => dismissAllOverlays());
+
+        expect(screen.getByRole('region', { name: 'Transaction details' })).toBeInTheDocument();
+    });
+
     it('says the indexer has not validated the action', async () => {
         const { view } = mountHistory({ mempool: [mempoolRow()] });
         const region = await openRow(view, 'seen');

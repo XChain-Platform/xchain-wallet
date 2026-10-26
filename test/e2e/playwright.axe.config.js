@@ -23,6 +23,8 @@ const BASE_URL = `http://localhost:${PORT}`;
 
 const phone = (browserName, width, height, deviceScaleFactor) => ({
     browserName,
+    // New headless for Chromium: the full browser, which renders like the headed one.
+    channel: browserName === 'chromium' ? 'chromium' : undefined,
     viewport: { width, height },
     deviceScaleFactor,
     isMobile: browserName === 'chromium' ? true : undefined,

@@ -259,7 +259,7 @@ describe('dispenser owner actions sign through the confirm page', () => {
         await step(() => fireEvent.click(utils.getByRole('button', { name: 'Close' })));
         await step(() => fireEvent.click(utils.getByRole('button', { name: 'Close dispenser' })));
 
-        expect(utils.getByText('This dispenser is cancelling and cannot accept another close.')).toBeInTheDocument();
+        expect(utils.getByText('This dispenser is already closing.')).toBeInTheDocument();
         expect(calls.some((c) => c.method === 'composeForConfirm')).toBe(false);
         expect(signCalls(calls)).toHaveLength(0);
     });

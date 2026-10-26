@@ -57,12 +57,13 @@ const isCanonicalActionIndex = (value, { allowZero = false } = {}) => (
 ).test(String(value ?? '').trim());
 
 function extractRows(resp) {
-    if (!resp) return [];
-    if (Array.isArray(resp)) return resp;
-    if (Array.isArray(resp.data)) return resp.data;
-    if (Array.isArray(resp.rows)) return resp.rows;
-    if (Array.isArray(resp.orders)) return resp.orders;
-    return [];
+    let rows = [];
+    if (Array.isArray(resp)) rows = resp;
+    else if (Array.isArray(resp?.data)) rows = resp.data;
+    else if (Array.isArray(resp?.rows)) rows = resp.rows;
+    else if (Array.isArray(resp?.orders)) rows = resp.orders;
+    // A null or scalar entry from the explorer would throw while reading a row field.
+    return rows.filter((row) => row !== null && typeof row === 'object' && !Array.isArray(row));
 }
 
 // A side's human label: ownership, a token amount, or a native-coin amount
@@ -596,6 +597,50 @@ function OrderActionPanel({
             ? { VERSION: '1', ORDER_ACTION_INDEX: orderActionIndex }
             : { VERSION: '2', ORDER_ACTION_INDEX: orderActionIndex, ...editParams };
         try {
+            // The list can be minutes old: re-read cancels and fill state so an
+            // order that expired, filled or was cancelled since is not signed again.
+            let freshCancelledKeys = item.cancelledKeys || new Set();
+            if (typeof messaging.getOrderCancelsForAddress === 'function') {
+                let response;
+                try {
+                    response = await messaging.getOrderCancelsForAddress({ chainId, address: owner.address });
+                } catch {
+                    setError('Could not refresh this order. Try again.');
+                    return;
+                }
+                freshCancelledKeys = new Set();
+                for (const cancel of extractRows(response)) {
+                    if (String(cancel.source) === owner.address
+                        && String(cancel.status || 'valid') === 'valid') {
+                        freshCancelledKeys.add(`${chainId}:${cancel.order_action_index}`);
+                    }
+                }
+            }
+            if (typeof messaging.getOrderDetail === 'function') {
+                let freshDetail;
+                try {
+                    freshDetail = await messaging.getOrderDetail({ chainId, actionIndex: orderActionIndex });
+                } catch {
+                    setError('Could not refresh this order. Try again.');
+                    return;
+                }
+                const freshFill = fillStateOf(freshDetail);
+                if (freshFill) {
+                    const status = deriveStatus(
+                        { ...item, fill: freshFill },
+                        freshCancelledKeys,
+                        Math.floor(Date.now() / 1000),
+                    );
+                    if (status !== 'open') {
+                        setError('This order is not open. Refresh My orders and try again.');
+                        return;
+                    }
+                }
+            }
+            if (freshCancelledKeys.has(item.key)) {
+                setError('This order is not open. Refresh My orders and try again.');
+                return;
+            }
             const res = await lane.run({
                 actionData: { action: 'ORDER', params },
                 encoderOpts: nativeFee.flag ? { payFeeInNativeCoin: true } : {},

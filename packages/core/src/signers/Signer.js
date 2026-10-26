@@ -70,7 +70,7 @@ export function hardwareSigningError(signerId, vendor, cause) {
         kind = 'cancelled';
     } else if (/firmware.*(?:too old|outdated|unsupported)|(?:too old|unsupported).*firmware|Failure_FirmwareError/i.test(detail)) {
         kind = 'firmware';
-    } else if (/wrong[- ]app|app.*(?:not|isn't).*open|0x6a82|0x6e00|cla_not_supported/i.test(detail)) {
+    } else if (/wrong[- ]app|app.*(?:not|isn't).*open|0x6a82|0x6e00|0x6d00|0x6511|cla_not_supported|ins_not_supported/i.test(detail)) {
         kind = 'wrong-app';
     } else if (/SignerLockedError|LockedDevice|Device_Locked|device (?:is )?locked|pin locked|0x5515/i.test(detail)) {
         kind = 'locked';

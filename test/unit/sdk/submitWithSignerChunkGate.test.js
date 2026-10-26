@@ -102,6 +102,9 @@ describe('submitWithSigner chunk-lane capability gate', () => {
         expect(isWatcherChunkLane(err)).toBe(true);
         expect(submitFailureMessage(err, { fallback: 'Deploy failed.' })).toBe(err.message);
         expect(err.message).toMatch(/A Ledger cannot sign that second transaction/);
+        // Both transactions are signed before the first goes out, so the copy says so.
+        expect(err.message).toMatch(/both must be signed before the first is broadcast/);
+        expect(err.message).not.toMatch(/signed after the first/);
         expect(err.message).toMatch(/^This Publish contract action is too large for one transaction/);
         expect(err.message).not.toMatch(/DEPLOY|P2SH/);
     });

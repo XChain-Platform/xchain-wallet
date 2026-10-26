@@ -17,10 +17,11 @@ import { useDemoGuard } from '../hooks/useDemoGuard.jsx';
 import { useSignerReady } from '../hooks/useSignerReady.js';
 import { useOwnerActionLane } from '../hooks/useOwnerActionLane.js';
 import { isUserRejection } from '../hooks/useActionConfirmFlow.js';
-import { submitFailureMessage } from '../utils/submitFailureMessage.js';
+import { submitFailureMessage, SIGNED_NOT_BROADCAST_MESSAGE } from '../utils/submitFailureMessage.js';
 import { userFacingMessage } from '../utils/userFacingMessage.js';
 import { ActionConfirmScreen } from '../components/ActionConfirmScreen.jsx';
 import { WatcherResultPanel } from '../components/WatcherResultPanel.jsx';
+import { QueuedResultPanel } from '../components/QueuedResultPanel.jsx';
 import { ListToolbar } from '../components/ListToolbar.jsx';
 import { NetworkFilterDropdown } from '../components/NetworkFilterDropdown.jsx';
 import { OfflineEmptyState } from '../components/OfflineEmptyState.jsx';
@@ -35,6 +36,8 @@ import {
     writeMsgUnread,
 } from '../utils/msgReadMemory.js';
 import { parseMessageContent } from '../utils/messageContent.js';
+import { neutralizeControlText } from '../utils/textHardening.js';
+import { messageTextForDisplay } from '../utils/messageTextSafety.js';
 import styles from './IssueTokenForm.module.css';
 import local from './MessagingInbox.module.css';
 
@@ -270,7 +273,9 @@ export function MessagingInbox({ walletId, activeAccountId, onCompose, onBack, i
                 ...(pw ? { password: pw } : {}),
             });
             if (requestId !== inboxRequestRef.current) return;
-            setMessages(Array.isArray(result?.messages) ? result.messages : []);
+            setMessages(Array.isArray(result?.messages)
+                ? result.messages.filter(isRenderableMessage)
+                : []);
             const failedAddresses = Array.isArray(result?.errors) ? result.errors.length : 0;
             setInboxWarning(failedAddresses > 0
                 ? `Messages could not be loaded from ${failedAddresses} ${failedAddresses === 1 ? 'address' : 'addresses'} because the network service did not answer. Try again.`
@@ -377,7 +382,7 @@ export function MessagingInbox({ walletId, activeAccountId, onCompose, onBack, i
         /** @type {{ request: { id: string, from: string, ownerAddress: string }, record: any } | null} */ (null),
     );
     const [shareStates, setShareStates] = useState(
-        /** @type {Record<string, { stage?: 'idle' | 'sending' | 'sent', error?: string | null, watcherResult?: any }>} */ ({}),
+        /** @type {Record<string, { stage?: 'idle' | 'sending' | 'sent' | 'queued' | 'queued-seen', error?: string | null, watcherResult?: any, unsaved?: boolean }>} */ ({}),
     );
     const shareLane = useOwnerActionLane({
         messaging,
@@ -411,6 +416,7 @@ export function MessagingInbox({ walletId, activeAccountId, onCompose, onBack, i
                     submitExtra: { destination: request.from, version: 1 },
                 });
                 if (shareLaneRef.current.isWatcherMode) update({ stage: 'idle', watcherResult: result });
+                else if (result?.queued) update({ stage: 'queued', unsaved: result.unsaved === true });
                 else update({ stage: 'sent' });
             } catch (err) {
                 if (isUserRejection(err)) {
@@ -734,7 +740,7 @@ export function MessagingInbox({ walletId, activeAccountId, onCompose, onBack, i
         // their own address as if it were someone else's.
         const cpName = ownerSet.has(selectedCounterparty)
             ? 'You'
-            : contactsByAddress[selectedCounterparty];
+            : neutralizeControlText(contactsByAddress[selectedCounterparty], { maxLength: 255 });
         const replyRecord = replyContext ? recordByAddress[replyContext.fromAddress] : null;
         const threadBody = (
             thread.length === 0 ? (
@@ -785,7 +791,7 @@ export function MessagingInbox({ walletId, activeAccountId, onCompose, onBack, i
                                             color: isOutgoing ? 'var(--xc-on-accent)' : 'var(--xc-text)',
                                         }}
                                     >
-                                        {content ? <MessageContent content={content} /> : encryptedPlaceholder()}
+                                        {content ? <MessageContent content={content} /> : encryptedPlaceholder(m.method)}
                                     </div>
                                     <div className={local.messageMeta}>
                                         {m.timestamp ? (
@@ -841,7 +847,7 @@ export function MessagingInbox({ walletId, activeAccountId, onCompose, onBack, i
                     <PageHeader
                         nested
                         onBack={() => setSelectedCounterparty(null)}
-                        title={cpName || <AddressText address={selectedCounterparty} />}
+                        title={cpName || <AddressText address={displayAddress(selectedCounterparty)} />}
                         titleIcon={<Icon.MessageIcon />}
                     />
                 )}
@@ -879,13 +885,17 @@ export function MessagingInbox({ walletId, activeAccountId, onCompose, onBack, i
                                     key={r.from}
                                     request={r}
                                     walletId={walletId}
-                                    contactName={contactsByAddress[r.from]}
+                                    contactName={neutralizeControlText(contactsByAddress[r.from], { maxLength: 255 })}
                                     shareState={shareStates[r.id] || null}
                                     shareBusy={Boolean(shareTarget)}
                                     onShare={() => setShareTarget({ request: r, record })}
                                     onClearWatcherResult={() => setShareStates((prev) => ({
                                         ...prev,
                                         [r.id]: { ...(prev[r.id] || {}), watcherResult: null },
+                                    }))}
+                                    onQueuedSeen={() => setShareStates((prev) => ({
+                                        ...prev,
+                                        [r.id]: { ...(prev[r.id] || {}), stage: 'queued-seen' },
                                     }))}
                                     onDecline={() => handleRequestDeclined(r.id)}
                                     onMessage={onCompose ? () => onCompose({
@@ -942,11 +952,11 @@ export function MessagingInbox({ walletId, activeAccountId, onCompose, onBack, i
                                                         // hold more than one such conversation.
                                                         <Fragment>
                                                             You&nbsp;·&nbsp;
-                                                            <AddressText address={c.counterparty} />
+                                                            <AddressText address={displayAddress(c.counterparty)} />
                                                         </Fragment>
                                                     ) : contactsByAddress[c.counterparty]
-                                                        ? contactsByAddress[c.counterparty]
-                                                        : <AddressText address={c.counterparty} truncate={false} />}
+                                                        ? neutralizeControlText(contactsByAddress[c.counterparty], { maxLength: 255 })
+                                                        : <AddressText address={displayAddress(c.counterparty)} />}
                                                 </span>
                                             </span>
                                             <span className={local.convTime}>
@@ -976,10 +986,11 @@ export function MessagingInbox({ walletId, activeAccountId, onCompose, onBack, i
  * @param {{ content: { text: string, attachment: { name: string, type: string, dataUrl: string, size: number } | null } }} props
  */
 function MessageContent({ content }) {
-    const parts = content.text.split(/(https?:\/\/[^\s<>"']+)/gi);
+    const displayText = messageTextForDisplay(content.text);
+    const parts = displayText.split(/(https?:\/\/[^\s<>"']+)/gi);
     return (
         <>
-            {content.text ? (
+            {displayText ? (
                 <span>
                     {parts.map((part, index) => /^https?:\/\//i.test(part) ? (
                         <a
@@ -1002,7 +1013,7 @@ function MessageContent({ content }) {
                 >
                     <Icon.DownloadIcon />
                     <span>
-                        {content.attachment.name} ({content.attachment.size.toLocaleString()} bytes)
+                        {messageTextForDisplay(content.attachment.name)} ({content.attachment.size.toLocaleString()} bytes)
                     </span>
                 </a>
             ) : null}
@@ -1076,7 +1087,7 @@ function ThreadComposer({ value, onChange, onSubmit }) {
  * @param {{ id: string, from: string, ownerAddress: string }} props.request
  * @param {string} props.walletId
  * @param {string} [props.contactName]
- * @param {{ stage?: 'idle' | 'sending' | 'sent', error?: string | null, watcherResult?: any } | null} props.shareState
+ * @param {{ stage?: 'idle' | 'sending' | 'sent' | 'queued' | 'queued-seen', error?: string | null, watcherResult?: any, unsaved?: boolean } | null} props.shareState
  * @param {boolean} props.shareBusy            a share (this one or another) is running
  * @param {() => void} props.onShare
  * @param {() => void} props.onClearWatcherResult
@@ -1091,6 +1102,7 @@ function SessionRequestRow({
     shareBusy,
     onShare,
     onClearWatcherResult,
+    onQueuedSeen,
     onDecline,
     onMessage,
 }) {
@@ -1111,12 +1123,24 @@ function SessionRequestRow({
         );
     }
 
+    // Signed but held in the broadcast queue: the key has not gone out, and the
+    // share button stays gone so a second press cannot sign a duplicate.
+    if (stage === 'queued') {
+        return (
+            <li className={local.requestRow}>
+                <QueuedResultPanel onDone={onQueuedSeen} what="key share" unsaved={shareState?.unsaved} />
+            </li>
+        );
+    }
+
     return (
         <li className={local.requestRow}>
             <div className={local.requestWho}>
-                {contactName || <AddressText address={request.from} truncate={false} />}
+                {contactName || <AddressText address={displayAddress(request.from)} truncate={false} />}
             </div>
-            {stage === 'sent' ? (
+            {stage === 'queued-seen' ? (
+                <StatusMessage variant="warning">{SIGNED_NOT_BROADCAST_MESSAGE}</StatusMessage>
+            ) : stage === 'sent' ? (
                 <StatusMessage variant="success">
                     Key shared. They can now send you encrypted messages.
                 </StatusMessage>
@@ -1145,6 +1169,25 @@ function SessionRequestRow({
 function requestId(message) {
     if (typeof message?.txid === 'string' && message.txid) return message.txid;
     return [message?.chainId || message?.chain || '', message?.from || '', message?.to || '', message?.timestamp || ''].join(':');
+}
+
+function displayAddress(value) {
+    return neutralizeControlText(value, { maxLength: 255 });
+}
+
+function isRenderableMessage(message) {
+    if (!message || typeof message !== 'object' || Array.isArray(message)) return false;
+    if (typeof message.from !== 'string' || !message.from) return false;
+    if (typeof message.to !== 'string' || !message.to) return false;
+    if (message.text !== null && message.text !== undefined && typeof message.text !== 'string') return false;
+    if (message.txid !== null && message.txid !== undefined && typeof message.txid !== 'string') return false;
+    try {
+        if (message.timestamp !== null && message.timestamp !== undefined
+            && !Number.isFinite(Number(message.timestamp))) return false;
+    } catch {
+        return false;
+    }
+    return true;
 }
 
 // The conversation key for a message: whichever endpoint is not ours.
@@ -1230,8 +1273,14 @@ function methodLabel(method) {
 // ECDH (2) decrypt automatically from the wallet's keys, so a remaining locked
 // body is an AES (3) pre-shared-key message (no key-entry surface) or one not
 // addressed to a key we hold.
-function encryptedPlaceholder() {
-    return '🔒 Encrypted with a shared key this wallet does not have, so it can\'t be read here.';
+function encryptedPlaceholder(method) {
+    if (method === 3) {
+        return '🔒 Encrypted with a shared key this wallet does not have, so it can\'t be read here.';
+    }
+    if (method === 1 || method === 2) {
+        return '🔒 This encrypted message could not be decrypted. It may be damaged or addressed to another key.';
+    }
+    return '🔒 This encrypted message cannot be read here.';
 }
 
 // Local calendar-day key (Y-M-D) used to detect when a thread crosses midnight
@@ -1288,8 +1337,8 @@ function buildThreadItems(thread) {
 function previewFor(text) {
     if (typeof text === 'string' && text.trim()) {
         const content = parseMessageContent(text);
-        if (content.text.trim()) return content.text;
-        if (content.attachment) return `Attachment: ${content.attachment.name}`;
+        if (content.text.trim()) return messageTextForDisplay(content.text);
+        if (content.attachment) return `Attachment: ${messageTextForDisplay(content.attachment.name)}`;
     }
     return '🔒 Encrypted message';
 }

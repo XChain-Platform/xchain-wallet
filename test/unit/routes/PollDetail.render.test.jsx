@@ -120,4 +120,72 @@ describe('PollDetail rendering', () => {
         expect(screen.getAllByText('33%')).toHaveLength(2);
         expect(messaging.governancePollResults).toHaveBeenCalledWith({ chainId: CHAIN, pollIndex: 8 });
     });
+
+    it('refuses a poll definition whose action index does not match the requested poll', async () => {
+        const messaging = {
+            governancePoll: vi.fn().mockResolvedValue({
+                action_index: 99,
+                tick: 'VOTE',
+                question: 'Wrong poll',
+                options: ['Yes', 'No'],
+                tally_mode: 'approval',
+                poll_status: 'open',
+            }),
+            getIndexerWatermark: vi.fn().mockResolvedValue({ watermark: 100 }),
+            getAddressesByChain: vi.fn().mockResolvedValue({ [CHAIN]: [ADDRESS] }),
+            getActiveAddresses: vi.fn().mockResolvedValue({ [CHAIN]: { id: ADDRESS.id } }),
+            governanceVotes: vi.fn().mockResolvedValue([]),
+            getSettings: vi.fn().mockResolvedValue({ walletMode: 'full' }),
+            signerReady: vi.fn().mockResolvedValue({ ready: true }),
+        };
+
+        render(
+            <MessagingProvider shell="web" messaging={messaging}>
+                <PollDetail walletId="wallet-1" chainId={CHAIN} pollIndex={7} onBack={vi.fn()} />
+            </MessagingProvider>,
+        );
+
+        expect(await screen.findByText('Poll not found.')).toBeInTheDocument();
+        expect(screen.queryByText('Wrong poll')).toBeNull();
+        expect(screen.queryByRole('button', { name: 'Vote' })).toBeNull();
+    });
+
+    it('neutralizes and bounds hostile poll text while tolerating structured fields', async () => {
+        const rlo = String.fromCharCode(0x202e);
+        const questionPrefix = `Approve ${rlo}hidden`;
+        const messaging = {
+            governancePoll: vi.fn().mockResolvedValue({
+                action_index: 7,
+                tick: 'VOTE',
+                question: `${questionPrefix}${'Q'.repeat(100_000)}`,
+                options: ['<img src=x onerror=alert(1)>', { malformed: true }],
+                tally_mode: 'approval',
+                weight_mode: { malformed: true },
+                max_selections: 1,
+                end_block: 120,
+                poll_status: 'open',
+            }),
+            getIndexerWatermark: vi.fn().mockResolvedValue({ watermark: 100 }),
+            getAddressesByChain: vi.fn().mockResolvedValue({ [CHAIN]: [ADDRESS] }),
+            getActiveAddresses: vi.fn().mockResolvedValue({ [CHAIN]: { id: ADDRESS.id } }),
+            governanceVotes: vi.fn().mockResolvedValue([]),
+            getSettings: vi.fn().mockResolvedValue({ walletMode: 'full' }),
+            signerReady: vi.fn().mockResolvedValue({ ready: true }),
+        };
+
+        const view = render(
+            <MessagingProvider shell="web" messaging={messaging}>
+                <PollDetail walletId="wallet-1" chainId={CHAIN} pollIndex={7} onBack={vi.fn()} />
+            </MessagingProvider>,
+        );
+
+        const question = await screen.findByText((text) => text.startsWith('Approve '));
+        expect(question.textContent).not.toContain(rlo);
+        expect(question.textContent).toContain('\u2426');
+        expect(question.textContent.length).toBeLessThanOrEqual(1_024);
+        expect(screen.getByLabelText('0: <img src=x onerror=alert(1)>')).toBeInTheDocument();
+        expect(screen.getByLabelText('1: Unavailable option')).toBeInTheDocument();
+        expect(view.container.querySelector('img[onerror]')).toBeNull();
+        expect(screen.getByText('approval / unavailable')).toBeInTheDocument();
+    });
 });

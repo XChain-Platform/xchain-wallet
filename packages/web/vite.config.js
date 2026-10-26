@@ -23,6 +23,7 @@
 // host wiring to a lower-level package once a third shell appears.
 
 import { createRequire } from 'node:module';
+import { resolve as resolvePath } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { defineConfig } from 'vite';
 import { colorMixFallback } from './cssFallbacks.js';
@@ -39,6 +40,8 @@ import { SURFACE_MODULES, hiddenSurfacesFor } from './src/surfaces/registry.js';
 // `fullnode.regtest.json` literal beside it) out of a `store` bundle. Inert in
 // every other profile; fails the build shut if a marker survives.
 import { regtestSidecarPlugin } from './regtestSidecar.js';
+// Lets an unused module drop its English namespace import; see i18nNamespaces.js.
+import { i18nNamespacePlugin } from './i18nNamespaces.js';
 import {
     WEB_INITIAL_CSS_SIZE_LIMIT,
     WEB_INITIAL_JS_SIZE_LIMIT,
@@ -123,6 +126,8 @@ const devAllowedHost = process.env.VITE_DEV_ALLOWED_HOST || null;
 const initialBundleSizePlugin = {
     name: 'xchain-web-initial-bundle-size',
     generateBundle(_options, bundle) {
+        // The budget is the wallet's initial load; the style-guide pass has none.
+        if (STYLE_GUIDE_PASS) return;
         const { jsBytes, cssBytes } = initialBundleSizes(bundle);
         if (jsBytes > WEB_INITIAL_JS_SIZE_LIMIT) {
             this.error(
@@ -137,11 +142,40 @@ const initialBundleSizePlugin = {
     },
 };
 
-// Dev-only convenience: rewrite a bare `/style-guide` to `/style-guide/`
+// The style guide ships as its own build into dist/style-guide/, so the hosted
+// wallet serves it at wallet.xchain.io/style-guide/. It is a second Rollup pass
+// rather than a second input: one pass with both pages shares chunks between
+// them, which hoisted lazy route code into the wallet's initial bundle and moved
+// every wallet asset hash. Store builds leave it out: packages/mobile copies dist
+// verbatim into the app bundle, and a component catalog has no place there.
+const STYLE_GUIDE_PASS = process.env.XCHAIN_WEB_STYLE_GUIDE_PASS === '1';
+
+let mainOutDir = null;
+const styleGuideBuildPlugin = {
+    name: 'xchain-style-guide-build',
+    apply: 'build',
+    configResolved(config) { mainOutDir = resolvePath(config.root, config.build.outDir); },
+    async closeBundle() {
+        if (STYLE_GUIDE_PASS || BUILD_PROFILE === 'store') return;
+        const { build } = await import('vite');
+        process.env.XCHAIN_WEB_STYLE_GUIDE_PASS = '1';
+        try {
+            await build({
+                configFile: fileURLToPath(import.meta.url),
+                root: fileURLToPath(new URL('.', import.meta.url)),
+                build: { outDir: mainOutDir },
+            });
+        } finally {
+            delete process.env.XCHAIN_WEB_STYLE_GUIDE_PASS;
+        }
+    },
+};
+
+// Dev convenience: rewrite a bare `/style-guide` to `/style-guide/`
 // so Vite picks up the multi-page entry at packages/web/style-guide/
 // index.html. Without the trailing slash, Vite's static-asset middleware
-// returns 404. Attached to both dev + preview servers; production builds
-// don't include this rewrite (the style-guide page is dev-time only).
+// returns 404. The hosted site's web server does the same redirect for the
+// built page.
 function styleGuideRewrite() {
     return (req, res, next) => {
         if (req.url === '/style-guide') {
@@ -288,6 +322,22 @@ const musigBaseCrypto = createRequire(
     createRequire(import.meta.url).resolve('xchain-sdk/package.json'),
 ).resolve('@brandonblack/musig/base_crypto');
 
+// xchain-sdk's bitcoinjs-lib 7 patch (src/utils/apply_bufferutils_patch/v7.js)
+// assigns `uint8Tools.writeInt64 = ...` on `require('uint8array-tools')`.
+// That package's exports map offers `require` only under the `node`
+// condition, so a browser build picks the ESM `src/mjs/browser.js`, and the
+// CommonJS interop hands the SDK a getter-only namespace: the assignment
+// throws "Cannot set property writeInt64 ... which has only a getter", the
+// SDK import rejects, and every SDK call hits the not-loaded placeholder.
+// Pin the CJS build (the one Node loads), resolved from bitcoinjs-lib's own
+// context, so the SDK and bitcoinjs-lib share one mutable exports object
+// exactly as they do under Node. Buffer comes from the polyfill globals.
+const sdkRequire = createRequire(
+    createRequire(import.meta.url).resolve('xchain-sdk/package.json'),
+);
+const uint8ArrayToolsCjs = createRequire(sdkRequire.resolve('bitcoinjs-lib'))
+    .resolve('uint8array-tools');
+
 export default defineConfig({
     define: {
         'require.main': 'undefined',
@@ -328,6 +378,7 @@ export default defineConfig({
             { find: 'zlib', replacement: zlibBrowserShim },
             // Point the bare musig subpath at its real file (see note above).
             { find: '@brandonblack/musig/base_crypto', replacement: musigBaseCrypto },
+            { find: /^uint8array-tools$/, replacement: uint8ArrayToolsCjs },
         ],
     },
     // xchain-sdk is a `link:` dependency, so it resolves OUTSIDE this project
@@ -384,7 +435,10 @@ export default defineConfig({
     },
     build: {
         outDir: 'dist',
-        emptyOutDir: true,
+        // The style-guide pass writes beside the wallet build it follows, keeping
+        // its chunks under style-guide/assets so the two never share a file.
+        emptyOutDir: !STYLE_GUIDE_PASS,
+        ...(STYLE_GUIDE_PASS ? { assetsDir: 'style-guide/assets', copyPublicDir: false } : {}),
         target: 'es2022',
         // Sourcemaps are for the HOSTED web shell, where they cost a lazy
         // fetch nobody makes unless DevTools is open. A store build pays for
@@ -401,6 +455,9 @@ export default defineConfig({
         // the outlier by bundling its output rather than by deciding anything.
         sourcemap: BUILD_PROFILE !== 'store',
         rollupOptions: {
+            ...(STYLE_GUIDE_PASS
+                ? { input: fileURLToPath(new URL('./style-guide/index.html', import.meta.url)) }
+                : {}),
             treeshake: {
                 // QR consumers are route-lazy, and the encoder performs no
                 // top-level work when UI barrels re-export those consumers.
@@ -453,6 +510,7 @@ export default defineConfig({
     },
     plugins: [
         polyfillShimResolver,
+        i18nNamespacePlugin,
         initialBundleSizePlugin,
         react(),
         ...(httpsEnabled ? [basicSsl()] : []),
@@ -462,6 +520,7 @@ export default defineConfig({
             protocolImports: true,
         }),
         styleGuidePlugin,
+        styleGuideBuildPlugin,
         surfaceGuardPlugin,
         regtestSidecarPlugin(BUILD_PROFILE),
         cspPlugin,

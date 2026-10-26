@@ -61,8 +61,11 @@ function baseUnits(decimalAmount, divisibility = 8) {
  * @param {string} [opts.balance]       XCHAIN the source address holds
  * @param {number} [opts.divisibility]  divisibility of the dropped token
  * @param {number} [opts.holderCount]   holder rows returned for the token-list mode
+ * @param {{ allow?: string[], block?: string[], allowType?: string, allowStatus?: string, failRead?: boolean }} [opts.access]
+ *   members of the dropped token's allow and block lists, the allow list's LIST type and status, or a failing list read
  */
-function mountAirdrop({ balance = '4999', divisibility = 8, holderCount = 4 } = {}) {
+function mountAirdrop({ balance = '4999', divisibility = 8, holderCount = 4, access = {} } = {}) {
+    const accessRows = { 9001: access.allow, 9002: access.block };
     const messaging = {
         getAddressesByChain: vi.fn().mockResolvedValue(ADDRESSES),
         getActiveAddresses: vi.fn().mockResolvedValue({}),
@@ -71,7 +74,16 @@ function mountAirdrop({ balance = '4999', divisibility = 8, holderCount = 4 } = 
         getSignerStatus: vi.fn().mockResolvedValue({ status: 'unlocked' }),
         getTokenInfo: vi.fn().mockResolvedValue({
             chainId: CHAIN, tick: 'XCHAIN', divisibility, locks: {},
+            allowList: access.allow ? '9001' : null,
+            blockList: access.block ? '9002' : null,
         }),
+        getListByActionIndex: vi.fn(({ actionIndex }) => (access.failRead
+            ? Promise.reject(new Error('explorer unreachable'))
+            : Promise.resolve({
+                type: String(actionIndex) === '9001' ? (access.allowType ?? '2') : '2',
+                status: String(actionIndex) === '9001' ? (access.allowStatus ?? 'valid') : 'valid',
+                list: accessRows[actionIndex] || [],
+            }))),
         getHoldersForToken: vi.fn().mockResolvedValue({
             tick: 'S19MINT',
             total: holderCount,
@@ -366,6 +378,97 @@ describe('AirdropForm Max fills a per-recipient share, not the balance', () => {
     });
 });
 
+describe('AirdropForm counts only the recipients the token pays', () => {
+    it('drops an address missing from the token allow list', async () => {
+        mountAirdrop({ access: { allow: [RECIPIENTS[0]] } });
+        await pasteRecipients();
+        fireEvent.change(amountField(), { target: { value: '1' } });
+        await expectText(/total ~1 XCHAIN/);
+        expect(document.body.textContent).not.toMatch(/total ~2 XCHAIN/);
+    });
+
+    it('drops an address on the token block list', async () => {
+        mountAirdrop({ access: { block: [RECIPIENTS[1]] } });
+        await pasteRecipients();
+        await maxReady();
+        fireEvent.change(amountField(), { target: { value: '4999' } });
+        await expectText(/total ~4,999 XCHAIN/);
+        expect(document.body.textContent).not.toMatch(/total ~9,998/);
+    });
+
+    it('matches an uppercase bech32 allow-list member', async () => {
+        mountAirdrop({ access: { allow: [RECIPIENTS[0].toUpperCase()] } });
+        await pasteRecipients();
+        fireEvent.change(amountField(), { target: { value: '1' } });
+        await expectText(/total ~1 XCHAIN/);
+    });
+
+    it('sizes Max and the balance check on every listed address', async () => {
+        // The allow list can widen before the airdrop confirms, so funding never leans on it.
+        const messaging = mountAirdrop({ access: { allow: [RECIPIENTS[0]] } });
+        await pasteRecipients();
+        await expectText(/4,999 XCHAIN available · up to 2,499\.5 each/);
+        fireEvent.change(amountField(), { target: { value: '4999' } });
+        fireEvent.click(submitButton());
+        expect(screen.getByRole('alert')).toHaveTextContent(
+            'Paying every listed address takes ~9,998 XCHAIN in total, more than the 4,999 XCHAIN this address holds.',
+        );
+        expect(messaging.composeForConfirm).not.toHaveBeenCalled();
+    });
+
+    it('pays nobody when the allow list is empty', async () => {
+        mountAirdrop({ access: { allow: [] } });
+        await pasteRecipients();
+        fireEvent.change(amountField(), { target: { value: '1' } });
+        fireEvent.click(submitButton());
+        await expectText(/Review address list/);
+        expect(document.body.textContent).toContain('As the lists stand now, this airdrop pays 0.');
+    });
+
+    it('names the excluded address on the review screen', async () => {
+        mountAirdrop({ access: { allow: [RECIPIENTS[0]] } });
+        await pasteRecipients();
+        fireEvent.change(amountField(), { target: { value: '1' } });
+        fireEvent.click(submitButton());
+        await expectText(/Review address list/);
+        expect(document.body.textContent).toContain(
+            'excludes 1 of these addresses, and the network pays it nothing. As the lists stand now, '
+                + 'this airdrop pays 1. The lists can change before the airdrop confirms, so Max and the '
+                + `balance check still cover all 2 listed addresses. The excluded address: ${RECIPIENTS[1]}.`,
+        );
+    });
+
+    it('keeps the full count when the access lists cannot be read', async () => {
+        mountAirdrop({ access: { allow: [RECIPIENTS[0]], failRead: true } });
+        await pasteRecipients();
+        fireEvent.change(amountField(), { target: { value: '1' } });
+        await expectText(/total ~2 XCHAIN/);
+    });
+
+    it('keeps the full count when the allow list is a union of lists', async () => {
+        // A union row lists no members of its own, so it must not read as an empty allow list.
+        mountAirdrop({ access: { allow: [], allowType: '3' } });
+        await pasteRecipients();
+        fireEvent.change(amountField(), { target: { value: '1' } });
+        await expectText(/total ~2 XCHAIN/);
+        fireEvent.click(submitButton());
+        await expectText(/Review address list/);
+        expect(document.body.textContent).toContain(
+            'It combines other lists, which this wallet cannot count. This token has an allow or block list, '
+                + 'so the network may pay fewer addresses than shown here.',
+        );
+        expect(document.body.textContent).not.toMatch(/airdrop pays 0/i);
+    });
+
+    it('keeps the full count when the allow list names an invalid LIST', async () => {
+        // The network applies no allow list it cannot validate, so neither does the count.
+        mountAirdrop({ access: { allow: [], allowStatus: 'invalid: bad list' } });
+        await pasteRecipients();
+        fireEvent.change(amountField(), { target: { value: '1' } });
+        await expectText(/total ~2 XCHAIN/);
+    });
+});
+
 describe('AirdropForm CSV upload control', () => {
     it('opens the hidden file input from an outlined button', async () => {
         mountAirdrop();
@@ -375,5 +478,30 @@ describe('AirdropForm CSV upload control', () => {
         const click = vi.spyOn(input, 'click');
         fireEvent.click(screen.getByRole('button', { name: 'Upload a CSV or text file' }));
         expect(click).toHaveBeenCalledTimes(1);
+    });
+
+    it('refuses a picked file over the size cap instead of loading it', async () => {
+        mountAirdrop();
+        await flushTimers();
+        const input = screen.getByLabelText('Upload CSV of addresses');
+        const big = new File(['x'.repeat(3 * 1024 * 1024)], 'recipients.csv', { type: 'text/csv' });
+        await act(async () => {
+            fireEvent.change(input, { target: { files: [big] } });
+        });
+        await flushTimers();
+        expect(document.body.textContent).toMatch(/File is too large/);
+        expect(screen.getByLabelText('Recipients').value).toBe('');
+    });
+
+    it('refuses a picked file of the wrong type', async () => {
+        mountAirdrop();
+        await flushTimers();
+        const input = screen.getByLabelText('Upload CSV of addresses');
+        const wrong = new File(['PK'], 'recipients.zip', { type: 'application/zip' });
+        await act(async () => {
+            fireEvent.change(input, { target: { files: [wrong] } });
+        });
+        await flushTimers();
+        expect(document.body.textContent).toMatch(/File type not accepted/);
     });
 });

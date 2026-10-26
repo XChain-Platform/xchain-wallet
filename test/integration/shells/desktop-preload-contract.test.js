@@ -582,11 +582,11 @@ describe('desktop renderer: deep-link routing', () => {
     });
 
     it('routes a send link to a hardened Send prefill', () => {
-        expect(deepLinkRoute('xchain://bitcoin-mainnet/BTC?amount=1&to=bc1q123&memo=hi%E2%80%AEx', reg))
+        expect(deepLinkRoute('xchain://bitcoin-mainnet/BTC?amount=1&to=bc1qw508d6qejxtdg4y5r3zarvary0c5xw7kv8f3t4&memo=hi%E2%80%AEx', reg))
             .toEqual({
                 view: 'send',
                 sendPrefill: {
-                    address: 'bc1q123', amount: '1', tick: 'BTC', chainId: 'bitcoin-mainnet', memo: 'hi␦x',
+                    address: 'bc1qw508d6qejxtdg4y5r3zarvary0c5xw7kv8f3t4', amount: '1', tick: 'BTC', chainId: 'bitcoin-mainnet', memo: 'hi␦x',
                 },
             });
     });
@@ -639,7 +639,7 @@ const flush = () => act(async () => { await new Promise((r) => setTimeout(r, 0))
 
 describe('desktop renderer: deep-link claim and apply', () => {
     const reg = registryLib.defaultRegistry();
-    const SEND = { raw: 'xchain://bitcoin-mainnet/BTC?amount=1&to=bc1q123' };
+    const SEND = { raw: 'xchain://bitcoin-mainnet/BTC?amount=1&to=bc1qw508d6qejxtdg4y5r3zarvary0c5xw7kv8f3t4' };
     afterEach(cleanup);
 
     it('claims the parked link on attach and again on every nudge', async () => {
@@ -692,7 +692,7 @@ describe('desktop renderer: deep-link claim and apply', () => {
         await flush();
 
         expect(apply).toHaveBeenCalledTimes(1);
-        expect(apply.mock.calls[0][0]).toMatchObject({ view: 'send', sendPrefill: { address: 'bc1q123', amount: '1' } });
+        expect(apply.mock.calls[0][0]).toMatchObject({ view: 'send', sendPrefill: { address: 'bc1qw508d6qejxtdg4y5r3zarvary0c5xw7kv8f3t4', amount: '1' } });
     });
 
     it('routes a nudge that arrives while unlocked straight to apply', async () => {

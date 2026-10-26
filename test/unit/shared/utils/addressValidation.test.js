@@ -236,10 +236,19 @@ describe('addressValidationError', () => {
     it.each([
         ['base58 checksum', `${legacy(0x00).slice(0, -1)}3`],
         ['bech32 checksum', `${segwit('bc').slice(0, -1)}p`],
-        ['plain text', 'not an address'],
     ])('uses plain typo copy for a bad %s', (_name, address) => {
         expect(addressValidationError(address, descriptor('bitcoin', 'mainnet')))
             .toBe('This address has a typo. Check it and try again.');
+    });
+
+    it.each([
+        ['plain text', 'not an address'],
+        ['one word', 'notanaddress'],
+        ['too short', '1abc'],
+        ['punctuation', 'hello, world!'],
+    ])('says text that is not an address (%s) is not a valid address', (_name, address) => {
+        expect(addressValidationError(address, descriptor('bitcoin', 'mainnet')))
+            .toBe('This is not a valid address.');
     });
 });
 
@@ -312,5 +321,49 @@ describe('detectAddressCoin', () => {
     it('still returns null for the genuinely shared testnet bytes', () => {
         expect(detectAddressCoin(legacy(0x6f))).toBeNull();
         expect(detectAddressCoin(legacy(0xc4))).toBeNull();
+    });
+});
+
+describe('addressValidationError for a payment link in an address field', () => {
+    const btc = { coin: 'bitcoin', networkKind: 'mainnet' };
+
+    it('names a payment link instead of calling it a typo', () => {
+        for (const text of [
+            'bitcoin:bc1qar0srrr7xfkvy5l643lydnw9re59gtzzwf5mdq?amount=1',
+            'BITCOIN:bc1qar0srrr7xfkvy5l643lydnw9re59gtzzwf5mdq',
+            'xchain:BTC/send?to=bc1qar0srrr7xfkvy5l643lydnw9re59gtzzwf5mdq',
+            'web+xchain:BTC/send',
+        ]) {
+            expect(addressValidationError(text, btc), text).toMatch(/payment link, not an address/);
+        }
+    });
+
+    it('keeps the typo copy for other invalid text', () => {
+        expect(addressValidationError('bc1qnotanaddress', btc)).toMatch(/typo/);
+    });
+});
+
+// Base58 decoding is quadratic in its input, so a pasted blob of tens of
+// thousands of characters would take minutes to refuse; every validator turns
+// a string longer than any address encoding away before it decodes anything.
+describe('strings far longer than any address', () => {
+    const blob = 'x'.repeat(30_000);
+
+    it('are refused without decoding them', () => {
+        const started = performance.now();
+        expect(isValidAddressForChain(blob, 'bitcoin', 'mainnet')).toBe(false);
+        expect(isValidAddressAnyNetwork(blob)).toBe(false);
+        expect(detectAddressChain(blob)).toBeNull();
+        expect(detectAddressCoin(blob)).toBeNull();
+        expect(addressValidationError(blob, { coin: 'bitcoin', networkKind: 'mainnet' }))
+            .toBe('This is not a valid address.');
+        expect(performance.now() - started).toBeLessThan(1000);
+    });
+
+    it('keep accepting the longest real address', () => {
+        const words = bech32.toWords(new Uint8Array(32));
+        const taproot = bech32.encode('bc', [0, ...words], 90);
+        expect(taproot.length).toBeLessThanOrEqual(90);
+        expect(isValidAddressForChain(taproot, 'bitcoin', 'mainnet')).toBe(true);
     });
 });

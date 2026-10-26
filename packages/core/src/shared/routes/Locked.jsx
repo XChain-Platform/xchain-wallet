@@ -17,6 +17,7 @@ import * as branding from '@xchain-wallet/core/branding/branding.js';
 import {
     getLockoutState,
     getRemainingMs,
+    LOCKOUT_STORAGE_KEY,
     recordFailure as recordLockoutFailure,
     recordSuccess as recordLockoutSuccess,
 } from '../../flows/lockoutTracking.js';
@@ -30,6 +31,7 @@ import {
     getDemoWalletId,
     getDemoWalletPassword,
     isDemoWalletExpired,
+    isDemoLockHeld,
     clearDemoWalletId,
 } from '../../flows/demoMode.js';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
@@ -45,9 +47,12 @@ import {
     subscribeActiveWallet,
     writeActiveWallet,
 } from '../utils/activeWalletMemory.js';
-import { DemoExitConfirm } from '../components/DemoExitConfirm.jsx';
+// The demo-exit confirm opens only on a tap, so it and its styles load on demand.
+import { DemoExitConfirmOnDemand as DemoExitConfirm } from '../components/onDemandOverlays.js';
+import { useIdlePreload } from '../utils/onDemandComponent.js';
 import { useFocusTrap } from '../utils/focusTrap.js';
 import { useBackHandler } from '../../ui/backStack.js';
+import { useNativeExitRoot } from '../hooks/useNativeExitRoot.js';
 import styles from './Locked.module.css';
 import { t } from '../../i18n/index.js';
 
@@ -194,7 +199,11 @@ export function Locked({ onUnlocked }) {
         active: forgotOpen,
         restoreFocusRef: forgotTriggerRef,
     });
-    useBackHandler(forgotOpen ? handleForgotPasswordCancel : undefined, wipeBusy);
+    useBackHandler(forgotOpen ? handleForgotPasswordCancel : undefined, wipeBusy, 'screen');
+    // The unlock screen is the bottom of the app, so Android Back leaves it
+    // the way Home does.
+    useNativeExitRoot(true, true);
+    useIdlePreload(DemoExitConfirm);
 
     useEffect(() => {
         inputRef.current?.focus();
@@ -267,12 +276,14 @@ export function Locked({ onUnlocked }) {
     // Demo wallets persist their auto-generated password (a throwaway
     // wallet holding only synthetic data), so a reload can silently
     // re-unlock instead of stranding the user on a password screen for a
-    // key they never typed. Try it once on mount; on any failure fall
+    // key they never typed. Try it once on mount, unless the user locked it; on any failure fall
     // through to the normal unlock UI.
     const demoAutoUnlockTriedRef = useRef(false);
     useEffect(() => {
         if (demoAutoUnlockTriedRef.current) return undefined;
         if (!demoWalletId || isDemoWalletExpired()) return undefined;
+        // The user pressed Lock: stay on this screen instead of undoing it.
+        if (isDemoLockHeld()) return undefined;
         if (typeof messaging?.unlockWallet !== 'function') return undefined;
         const pw = getDemoWalletPassword();
         if (!pw) return undefined;
@@ -299,6 +310,26 @@ export function Locked({ onUnlocked }) {
     }, [clearUnlockingNoteTimer, demoWalletId, messaging, onUnlocked]);
 
     const isLockedOut = remainingMs > 0;
+
+    // The counter lives in storage the whole origin shares, so another tab can
+    // start a wait this screen never saw. Every attempt re-reads it first, and
+    // a storage event brings the banner in without a failed guess of its own.
+    const refreshLockout = useCallback(() => {
+        const state = getLockoutState();
+        const ms = getRemainingMs(state);
+        setLockout(state);
+        setRemainingMs(ms);
+        return ms;
+    }, []);
+
+    useEffect(() => {
+        const onStorage = (event) => {
+            if (event.key !== null && event.key !== LOCKOUT_STORAGE_KEY) return;
+            refreshLockout();
+        };
+        window.addEventListener('storage', onStorage);
+        return () => window.removeEventListener('storage', onStorage);
+    }, [refreshLockout]);
 
     const captureWallet = captureQueue[captureIndex] || null;
     const inCaptureStep = captureWallet !== null;
@@ -382,6 +413,7 @@ export function Locked({ onUnlocked }) {
     async function handleSubmit(event) {
         event.preventDefault();
         if (unlockInFlightRef.current || busy || password.length === 0 || isLockedOut) return;
+        if (refreshLockout() > 0) return;
         unlockInFlightRef.current = true;
         setBusy(true);
         setError(null);
@@ -410,7 +442,17 @@ export function Locked({ onUnlocked }) {
                 );
                 haptic.error();
             } else {
+                // Refused before any password check (another tab holds the
+                // vault, a worker throttle): the duress passphrase still arms
+                // the freeze, which every open context's signer reads, and the
+                // message below is the one any password gets here.
+                tripDuressIfMatch(password);
+                // Two failures carry a sentence that says what to do: another
+                // tab holding the vault, and a browser that cannot coordinate
+                // tabs. "Close and reopen the app" would send the user the wrong way.
                 setError(err?.message === 'Could not prepare unlock'
+                    || err?.name === 'VaultInUseError'
+                    || err?.name === 'VaultCoordinationUnavailableError'
                     ? err.message
                     : 'Could not unlock the wallet. Close and reopen the app, then try again.');
                 haptic.error();
@@ -423,6 +465,7 @@ export function Locked({ onUnlocked }) {
 
     async function handleBiometric() {
         if (unlockInFlightRef.current || busy || isLockedOut) return;
+        if (refreshLockout() > 0) return;
         unlockInFlightRef.current = true;
         setBusy(true);
         setError(null);

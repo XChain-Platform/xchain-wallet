@@ -170,6 +170,10 @@ describe('testnet global setup ordering', () => {
         expect(mocks.preflightRunInputKeys).toHaveBeenCalledOnce();
         expect(mocks.preflightRunInputKeys).toHaveBeenCalledWith(mocks.input);
         expect(mocks.cleanup).toHaveBeenCalledTimes(1);
+        expect(mocks.readRunInput.mock.invocationCallOrder[0])
+            .toBeLessThan(mocks.preflightRunInputKeys.mock.invocationCallOrder[0]);
+        expect(mocks.preflightRunInputKeys.mock.invocationCallOrder[0])
+            .toBeLessThan(mocks.cleanup.mock.invocationCallOrder[0]);
         expect(mocks.preflightRunInput).not.toHaveBeenCalled();
         expect(mocks.preflightClaimantReward).not.toHaveBeenCalled();
         expect(process.env[RUN_INPUT_ENV]).toBeUndefined();
@@ -206,6 +210,8 @@ describe('testnet global setup ordering', () => {
             explorerUrl: ENDPOINTS.explorerUrl,
             coin: 'TBTC',
         });
+        expect(mocks.readRunInput.mock.invocationCallOrder[0])
+            .toBeLessThan(mocks.preflightRunInputKeys.mock.invocationCallOrder[0]);
         expect(mocks.preflightRunInputKeys.mock.invocationCallOrder[0])
             .toBeLessThan(mocks.preflightRunInput.mock.invocationCallOrder[0]);
         expect(mocks.preflightRunInput.mock.invocationCallOrder[0])

@@ -110,6 +110,29 @@ describe('NetworkSection', () => {
         expect(setActiveNetworkSpy).not.toHaveBeenCalled();
     });
 
+    it.each(['mainnet', 'testnet'])(
+        'offers Mainnet and Testnet but not Regtest on %s with developer mode off',
+        (activeNetwork) => {
+            settingsRecord = { activeNetwork, developerMode: false };
+            render(<NetworkSection activeWallet={{ id: 'wallet-1' }} reload={() => {}} />);
+            const select = screen.getByLabelText('Active network');
+            expect(select).toHaveValue(activeNetwork);
+            expect(Array.from(select.options, (option) => option.value)).toEqual(['mainnet', 'testnet']);
+        },
+    );
+
+    it('switches to Testnet with developer mode off after confirmation', async () => {
+        const reload = vi.fn();
+        settingsRecord = { activeNetwork: 'mainnet', developerMode: false };
+        setActiveNetworkSpy.mockResolvedValueOnce({ settings: { activeNetwork: 'testnet' } });
+        render(<NetworkSection activeWallet={{ id: 'wallet-1' }} reload={reload} />);
+        fireEvent.change(screen.getByLabelText('Active network'), { target: { value: 'testnet' } });
+        fireEvent.click(screen.getByRole('button', { name: 'Switch network' }));
+
+        await waitFor(() => expect(reload).toHaveBeenCalledOnce());
+        expect(setActiveNetworkSpy).toHaveBeenCalledWith({ walletId: 'wallet-1', network: 'testnet' });
+    });
+
     it('keeps Regtest listed when it is the persisted network even with developer mode off', () => {
         settingsRecord = { activeNetwork: 'regtest', developerMode: false };
         render(<NetworkSection activeWallet={{ id: 'wallet-1' }} reload={() => {}} />);

@@ -301,3 +301,21 @@ describe('discovery control validation', () => {
         }
     });
 });
+
+describe('importWif keeps a rename that lands during the import', () => {
+    it('does not restore the old wallet name when the key is appended', async () => {
+        const realGet = vault.addresses.get;
+        // The address collision check runs after the key derivation and before
+        // the wallet is written, so a rename here lands in the import window.
+        vault.addresses.get = async (id) => {
+            const wallet = await vault.wallets.get('w1');
+            await vault.wallets.put({ ...wallet, name: 'Renamed meanwhile' });
+            return realGet(id);
+        };
+        const res = await doImport();
+        const stored = await vault.wallets.get('w1');
+        expect(stored.name).toBe('Renamed meanwhile');
+        expect(stored.importedKeys).toHaveLength(1);
+        expect(res.wallet.name).toBe('Renamed meanwhile');
+    });
+});

@@ -2,10 +2,10 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 import { readFileSync } from 'node:fs';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 import { act, cleanup, render, screen } from '@testing-library/react';
 import statusStyles from '../../../packages/core/src/ui/StatusMessage.module.css';
-import toastStyles from '../../../packages/core/src/shared/components/ToastHost.module.css';
+import toastStyles from '../../../packages/core/src/shared/components/ToastStack.module.css';
 import timelineStyles from '../../../packages/core/src/shared/components/TxStatusTimeline.module.css';
 
 const haptic = vi.hoisted(() => ({
@@ -20,7 +20,7 @@ vi.mock('../../../packages/core/src/shared/hooks/useHaptic.js', () => ({
     HapticProvider: ({ children }) => children,
 }));
 
-import { ToastHost, useToast } from '../../../packages/core/src/shared/components/ToastHost.jsx';
+import { ToastHost, preloadToastStack, useToast } from '../../../packages/core/src/shared/components/ToastHost.jsx';
 import { TxStatusTimeline } from '../../../packages/core/src/shared/components/TxStatusTimeline.jsx';
 import { StatusMessage } from '../../../packages/core/src/ui/StatusMessage.jsx';
 
@@ -37,6 +37,9 @@ afterEach(() => {
 });
 
 describe('semantic status presentation', () => {
+    // The app loads the toast cards on idle after first paint; load them up front here.
+    beforeAll(() => preloadToastStack());
+
     it.each([
         ['info', 'ℹ', statusStyles.info],
         ['warning', '⚠', statusStyles.warning],
@@ -92,7 +95,7 @@ describe('semantic status presentation', () => {
 
     it('uses theme-aware semantic tokens for status surfaces and inline error focus', () => {
         const statusCss = readFileSync('packages/core/src/ui/StatusMessage.module.css', 'utf8');
-        const toastCss = readFileSync('packages/core/src/shared/components/ToastHost.module.css', 'utf8');
+        const toastCss = readFileSync('packages/core/src/shared/components/ToastStack.module.css', 'utf8');
         const timelineCss = readFileSync('packages/core/src/shared/components/TxStatusTimeline.module.css', 'utf8');
         const inputCss = readFileSync('packages/core/src/ui/Input.module.css', 'utf8');
 

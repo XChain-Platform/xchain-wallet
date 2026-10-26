@@ -46,7 +46,8 @@ function fakeCredential(idBytes, prfFirst) {
     return {
         rawId: idBytes.buffer.slice(idBytes.byteOffset, idBytes.byteOffset + idBytes.byteLength),
         getClientExtensionResults() {
-            return prfFirst ? { prf: { results: { first: prfFirst.buffer } } } : {};
+            // Fresh buffer per ceremony: the flow zeroes the one it was given.
+            return prfFirst ? { prf: { results: { first: prfFirst.slice().buffer } } } : {};
         },
     };
 }

@@ -183,6 +183,27 @@ describe('web startup imports', () => {
         expect(appSource).not.toMatch(/from '\.\/DevVariantBadge\.jsx'/);
     });
 
+    it('loads the action catalogue together with the Actions menu', () => {
+        // Every action's label and description is copy only that menu shows.
+        expect(appSource).not.toMatch(/from '@xchain-wallet\/core\/shared\/actionEntries\.js'/);
+        expect(appSource).toContain("import('@xchain-wallet/core/shared/routes/ActionsMenu.jsx')");
+        expect(appSource).toContain("import('@xchain-wallet/core/shared/actionEntries.js')");
+        expect(appSource).toContain('const ActionsMenu = lazy(loadActionsMenu);');
+        expect(appSource).toContain('entries={(buildActionEntries) => buildActionEntries({');
+    });
+
+    it('loads the signed chain-registry sync after first paint', () => {
+        // The sync's Ed25519 verifier would otherwise ride the first screen,
+        // both from main.jsx and through the registry module first-paint code reads.
+        expect(webMainSource).toContain("import('../../core/src/registry/remote.js')");
+        expect(webMainSource).not.toMatch(/from '\.\.\/\.\.\/core\/src\/registry\/remote\.js'/);
+        const registryIndexSource = readFileSync(
+            resolve(process.cwd(), 'packages/core/src/registry/index.js'),
+            'utf8',
+        );
+        expect(registryIndexSource).not.toMatch(/from '\.\/remote\.js'/);
+    });
+
     it('loads the header chain filter with the settings popover', () => {
         const headerSettingsSource = readFileSync(
             resolve(process.cwd(), 'packages/core/src/shared/components/HeaderSettingsButton.jsx'),

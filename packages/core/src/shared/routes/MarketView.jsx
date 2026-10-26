@@ -12,6 +12,7 @@ import { useEffect, useId, useMemo, useState } from 'react';
 import { Button, EmptyState, Icon, ListPage, PageHeader, Screen, Skeleton, StatusMessage } from '@xchain-wallet/core/ui';
 import { flows as flowsLib } from '@xchain-wallet/core';
 import { t } from '../../i18n/index.js';
+import '../../i18n/locales/en/market.js';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { MarketChart } from '../components/MarketChart.jsx';
 import { OrderbookPanel } from '../components/OrderbookPanel.jsx';
@@ -21,6 +22,7 @@ import { OpenOrdersPanel } from '../components/OpenOrdersPanel.jsx';
 import { TradeHistoryPanel } from '../components/TradeHistoryPanel.jsx';
 import { TickerIcon } from '../components/TickerIcon.jsx';
 import { RouteErrorBoundary } from '../components/RouteErrorBoundary.jsx';
+import { PageLoadFailureScope, andList, usePageLoadFailures } from '../components/pageLoadFailures.jsx';
 import { sampleMatchesFor } from '../../market/sampleMarketData.js';
 import { normalizeMarketHistoryRowExact } from '../../market/history_rows.js';
 import { readFailureMessage } from '../utils/readFailureMessage.js';
@@ -80,6 +82,9 @@ export function MarketView({ walletId, chainId, tick1, tick2, onBack, onSwap }) 
     const [marketMissing, setMarketMissing] = useState(false);
     const [prefillPrice, setPrefillPrice] = useState(/** @type {string | null} */ (null));
     const [tab, setTab] = useState(/** @type {'book' | 'trades' | 'place' | 'orders' | 'history'} */ ('book'));
+    // The market, price and order-book loads share one page error and one reload.
+    const loadFailures = usePageLoadFailures();
+    const [reloadKey, setReloadKey] = useState(0);
 
     useEffect(() => {
         let cancelled = false;
@@ -100,7 +105,7 @@ export function MarketView({ walletId, chainId, tick1, tick2, onBack, onSwap }) 
                 }
             });
         return () => { cancelled = true; };
-    }, [messaging, chainId, tick1, tick2]);
+    }, [messaging, chainId, tick1, tick2, reloadKey]);
 
     useEffect(() => {
         setPrefillPrice(null);
@@ -130,7 +135,7 @@ export function MarketView({ walletId, chainId, tick1, tick2, onBack, onSwap }) 
                 }
             });
         return () => { cancelled = true; };
-    }, [messaging, chainId, tick1, tick2, demo, historyRetryKey]);
+    }, [messaging, chainId, tick1, tick2, demo, historyRetryKey, reloadKey]);
     const stats = useMemo(() => derive24hStats(historyRows, tick1, tick2), [historyRows, tick1, tick2]);
     const lastPrice = stats.lastPrice;
     const priceIsStale = stats.lastTimestamp !== null
@@ -141,6 +146,13 @@ export function MarketView({ walletId, chainId, tick1, tick2, onBack, onSwap }) 
         ? 'var(--xc-success)'
         : changeDisplay?.direction === 'negative' ? 'var(--xc-danger-fg)' : 'var(--xc-text-muted)';
     const marketKey = `${chainId}:${tick1}:${tick2}`;
+    const panelKey = `${marketKey}:${reloadKey}`;
+    const { report: reportFailure } = loadFailures;
+    useEffect(() => {
+        reportFailure('market details', Boolean(summaryError));
+        reportFailure('prices', Boolean(historyError));
+    }, [reportFailure, summaryError, historyError]);
+    const failedLoads = LOAD_ORDER.filter((label) => loadFailures.failed.includes(label));
 
     const header = (
         <PageHeader
@@ -150,7 +162,17 @@ export function MarketView({ walletId, chainId, tick1, tick2, onBack, onSwap }) 
     );
     const wrap = (children) => (
         <Screen variant={variant} header={header}>
-            <ListPage>{children}</ListPage>
+            <ListPage>
+                {failedLoads.length > 0 ? (
+                    <StatusMessage
+                        variant="error"
+                        recovery={{ label: t('common.tryAgain'), onAction: () => setReloadKey((key) => key + 1) }}
+                    >
+                        {t('market.loadFailed', { list: andList(failedLoads) })}
+                    </StatusMessage>
+                ) : null}
+                <PageLoadFailureScope report={reportFailure}>{children}</PageLoadFailureScope>
+            </ListPage>
         </Screen>
     );
 
@@ -261,23 +283,10 @@ export function MarketView({ walletId, chainId, tick1, tick2, onBack, onSwap }) 
                     </div>
                 ) : (
                     <>
-                        {summaryError ? (
-                            <StatusMessage variant="error">{summaryError}</StatusMessage>
-                        ) : null}
                         <RouteErrorBoundary variant="compact" resetKey={`${marketKey}:ticker`}>
                             {headerCard}
                         </RouteErrorBoundary>
-                        {historyError ? (
-                            <StatusMessage
-                                variant="error"
-                                recovery={{
-                                    label: t('common.tryAgain'),
-                                    onAction: () => setHistoryRetryKey((key) => key + 1),
-                                }}
-                            >
-                                {historyError}
-                            </StatusMessage>
-                        ) : priceIsStale ? (
+                        {failedLoads.length === 0 && priceIsStale ? (
                             <StatusMessage
                                 recovery={{
                                     label: t('market.refreshPrices'),
@@ -293,7 +302,7 @@ export function MarketView({ walletId, chainId, tick1, tick2, onBack, onSwap }) 
 
             <div>
                 <RouteErrorBoundary variant="compact" resetKey={`${marketKey}:chart`}>
-                    <MarketChart key={marketKey} chainId={chainId} tick1={tick1} tick2={tick2} demo={demo} />
+                    <MarketChart key={panelKey} chainId={chainId} tick1={tick1} tick2={tick2} demo={demo} />
                 </RouteErrorBoundary>
             </div>
 
@@ -339,7 +348,7 @@ export function MarketView({ walletId, chainId, tick1, tick2, onBack, onSwap }) 
                 <RouteErrorBoundary variant="compact" resetKey={`${marketKey}:${tab}`}>
                     {tab === 'book' ? (
                         <OrderbookPanel
-                            key={marketKey}
+                            key={panelKey}
                             chainId={chainId}
                             tick1={tick1}
                             tick2={tick2}
@@ -348,7 +357,7 @@ export function MarketView({ walletId, chainId, tick1, tick2, onBack, onSwap }) 
                         />
                     ) : null}
                     {tab === 'trades' ? (
-                        <RecentTradesPanel key={marketKey} chainId={chainId} tick1={tick1} tick2={tick2} demo={demo} />
+                        <RecentTradesPanel key={panelKey} chainId={chainId} tick1={tick1} tick2={tick2} demo={demo} />
                     ) : null}
                     {tab === 'place' ? (
                         <PlaceOrderPanel
@@ -383,6 +392,9 @@ export function MarketView({ walletId, chainId, tick1, tick2, onBack, onSwap }) 
         </>,
     );
 }
+
+// The order the page error names what could not load.
+const LOAD_ORDER = ['market details', 'prices', 'order book', 'recent trades'];
 
 /** Normalize the explorer's getMarketHistory response into a row array. */
 function extractHistoryRows(resp) {

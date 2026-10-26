@@ -36,6 +36,7 @@ import {
 } from '../../keyboard/shortcuts.js';
 import { ROW, ROW_LABEL, STACK, SettingsLoadError, Status } from './_settingsPrimitives.jsx';
 import { t } from '../../../i18n/index.js';
+import '../../../i18n/locales/en/settings.js';
 
 const GROUP_HEADER = {
     fontSize: 'var(--xc-type-section-title-size)',
@@ -107,7 +108,7 @@ function bindingFromEvent(e, kind) {
 }
 
 export function KeyboardSection() {
-    const { settings, update, loading, error } = useSettings();
+    const { settings, update, loading, error } = useSettings({ reportsOwnError: true });
     const overrides = settings?.keyboard?.bindings || {};
     const shortcuts = useMemo(() => resolveBindings(overrides), [overrides]);
     const mac = isMac();

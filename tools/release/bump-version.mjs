@@ -110,6 +110,33 @@ function fail(msg, ...detail) {
     process.exit(1);
 }
 
+function deriveManifestVersion(walletVersion) {
+    const release = /^(\d+)\.(\d+)\.(\d+)(?:-(rc|beta|respin)\.(\d+))?$/.exec(walletVersion);
+    if (!release) {
+        fail(`"${walletVersion}" cannot be represented as a Chrome extension version`,
+            'Expected M.m.p, M.m.p-rc.N, M.m.p-beta.N or M.m.p-respin.N.');
+    }
+    const [, major, minor, patch, lane, laneNumberText] = release;
+    const base = [Number(major), Number(minor), Number(patch)];
+    const labels = ['major', 'minor', 'patch'];
+    for (let i = 0; i < base.length; i += 1) {
+        if (!Number.isInteger(base[i]) || base[i] < 0 || base[i] > 65535) {
+            fail(`"${walletVersion}" cannot be represented as a Chrome extension version`,
+                `${labels[i]} must be an integer from 0 through 65535.`);
+        }
+    }
+    if (!lane) return base.join('.');
+
+    const laneNumber = Number(laneNumberText);
+    if (!Number.isInteger(laneNumber) || laneNumber < 1 || laneNumber > 65535) {
+        fail(`"${walletVersion}" cannot be represented as a Chrome extension version`,
+            `${lane} number must be an integer from 1 through 65535.`);
+    }
+    return lane === 'respin'
+        ? [...base, laneNumber].join('.')
+        : [0, base[0], base[1], laneNumber].join('.');
+}
+
 if (!target) fail('no version given', 'usage: bump-version.mjs <version>');
 if (!SEMVER.test(target)) {
     fail(`"${target}" is not a semver version`,
@@ -135,6 +162,7 @@ function escapeRegExp(s) {
 }
 
 const current = JSON.parse(read('package.json')).version;
+const manifestTarget = deriveManifestVersion(target);
 if (current === target) {
     fail(`the tree already declares ${target}`,
         'Nothing to do. If a previous bump was interrupted, run',
@@ -175,8 +203,8 @@ for (const rel of packageFiles) {
     const text = read(rel);
     const found = text.match(/^(\s*)"version":\s*"([^"]+)"/m);
     if (!found) fail(`${rel} has no "version" field in the expected shape`);
-    let next = text.replace(/^(\s*)"version":\s*"([^"]+)"/m, `$1"version": "${target}"`);
-    stage(rel, next, 'manifest version (the one the store publishes)', found[2], target);
+    let next = text.replace(/^(\s*)"version":\s*"([^"]+)"/m, `$1"version": "${manifestTarget}"`);
+    stage(rel, next, 'manifest version (the one the store publishes)', found[2], manifestTarget);
 
     const named = next.match(/^(\s*)"version_name":\s*"([^"]+)"/m);
     if (named) {

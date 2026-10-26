@@ -5,6 +5,14 @@
 
 import { describe, expect, it, vi } from 'vitest';
 import { createBackgroundHost } from '../../../packages/extension/src/background/createBackgroundHost.js';
+import {
+    rbfFailureMessage,
+    RBF_REPLACEMENT_QUEUED_MESSAGE,
+} from '../../../packages/core/src/shared/utils/rbfFailureMessage.js';
+import {
+    __resetPanicModePersistenceForTests,
+    activatePanicMode,
+} from '../../../packages/core/src/flows/panicMode.js';
 
 const CHAIN = 'bitcoin-regtest';
 const WALLET = 'wallet-1';
@@ -95,7 +103,7 @@ function harness(initial = [pending(ORIGINAL, 'original-psbt')]) {
             derivationPath: "m/84'/1'/0'/0/0",
             source: 'hd',
         }]) },
-        pendingTxs: { list: vi.fn(async () => [...rows.values()]), put },
+        pendingTxs: { list: vi.fn(async () => [...rows.values()]), get: vi.fn(async (id) => rows.get(id) ?? null), put },
         settings: { get: vi.fn(async () => ({})) },
     };
     const descriptor = {
@@ -122,6 +130,8 @@ function harness(initial = [pending(ORIGINAL, 'original-psbt')]) {
 const call = (host, request) => host.handle({ type: 'tx.replace', request: {
     chainId: CHAIN, walletId: WALLET, originalTxHash: ORIGINAL, strategy: 'speedup', ...request,
 } });
+
+const queueOf = async (host) => (await host.handle({ type: 'broadcast.queue.list', request: { walletId: WALLET } })).result;
 
 describe('tx.replace background route', () => {
     it('plans, signs, audits, and broadcasts a speedup', async () => {
@@ -238,16 +248,51 @@ describe('tx.replace background route', () => {
         expect(h.broadcastTx).not.toHaveBeenCalled();
     });
 
-    it('records a signed replacement as failed when broadcast rejects', async () => {
+    it('queues a signed replacement whose broadcast failed transiently, leaving the original live', async () => {
         const h = harness();
         h.broadcastTx.mockRejectedValueOnce(new Error('mempool conflict'));
         const response = await call(h.host, {});
 
         expect(response.ok).toBe(false);
+        expect(response.error.name).toBe('BroadcastFailedTransientError');
+        expect(rbfFailureMessage(response.error, 'fallback')).toBe(RBF_REPLACEMENT_QUEUED_MESSAGE);
         expect([...h.rows.values()]).toEqual(expect.arrayContaining([
-            expect.objectContaining({ txid: REPLACEMENT, status: 'failed', error: 'mempool conflict' }),
+            expect.objectContaining({ txid: REPLACEMENT, status: 'queued', error: 'mempool conflict' }),
             expect.objectContaining({ txid: ORIGINAL, status: 'broadcast', rbfReplacement: null }),
         ]));
+        const queue = await queueOf(h.host);
+        expect(queue).toEqual([expect.objectContaining({
+            signedTxHex: 'signed-tx', txid: REPLACEMENT, rbfReplacesPendingTxId: 'pending-aaaa',
+        })]);
+    });
+
+    it('retires the original once the queued replacement lands', async () => {
+        const h = harness();
+        h.broadcastTx.mockRejectedValueOnce(new Error('ETIMEDOUT'));
+        await call(h.host, {});
+        const [entry] = await queueOf(h.host);
+
+        const sent = await h.host.handle({ type: 'broadcast.queue.broadcast', request: { walletId: WALLET, id: entry.id } });
+        expect(sent.ok, JSON.stringify(sent.error)).toBe(true);
+        expect([...h.rows.values()]).toEqual(expect.arrayContaining([
+            expect.objectContaining({ txid: REPLACEMENT, status: 'broadcast' }),
+            expect.objectContaining({ txid: ORIGINAL, status: 'rbf-replaced', rbfReplacement: REPLACEMENT }),
+        ]));
+        expect(await queueOf(h.host)).toEqual([]);
+    });
+
+    it('refuses to sign a second replacement while one is queued', async () => {
+        const h = harness();
+        h.broadcastTx.mockRejectedValueOnce(new Error('ETIMEDOUT'));
+        await call(h.host, {});
+        const again = await call(h.host, {});
+
+        expect(again.ok).toBe(false);
+        expect(again.error.message).toMatch(/already waiting in the queued-transactions banner/);
+        // The History card shows the refusal as written, not its generic fallback.
+        expect(rbfFailureMessage(again.error, 'fallback')).toBe(again.error.message);
+        expect(h.signPsbt).toHaveBeenCalledTimes(1);
+        expect(h.broadcastTx).toHaveBeenCalledTimes(1);
     });
 
     it('settles a speedup the node already holds as delivered', async () => {
@@ -287,9 +332,37 @@ describe('tx.replace background route', () => {
         const response = await call(h.host, {});
 
         expect(response.ok).toBe(false);
+        expect(response.error.name).toBe('BroadcastFailedPermanentError');
+        expect(await queueOf(h.host)).toEqual([]);
         expect([...h.rows.values()]).toEqual(expect.arrayContaining([
             expect.objectContaining({ txid: REPLACEMENT, status: 'failed' }),
             expect.objectContaining({ txid: ORIGINAL, status: 'broadcast', rbfReplacement: null }),
         ]));
+    });
+});
+
+describe('tx.replace under a freeze armed while the signer waits', () => {
+    it('signs nothing further and broadcasts nothing when panic mode arms during the sign', async () => {
+        localStorage.clear();
+        __resetPanicModePersistenceForTests();
+        try {
+            const h = harness();
+            // A hardware prompt or a slow unlock holds the sign; the user arms
+            // panic mode from another window meanwhile.
+            h.signPsbt.mockImplementationOnce(async () => {
+                activatePanicMode();
+                return { signedPsbtHex: 'signed-replacement', txHex: 'signed-tx', txid: REPLACEMENT };
+            });
+            const response = await call(h.host, {});
+
+            expect(response.ok).toBe(false);
+            expect(response.error.name).toBe('PanicModeActiveError');
+            expect(h.broadcastTx).not.toHaveBeenCalled();
+            expect([...h.rows.values()].some((row) => row.txid === REPLACEMENT)).toBe(false);
+            expect(h.rows.get('pending-aaaa')).toMatchObject({ status: 'broadcast', rbfReplacement: null });
+        } finally {
+            __resetPanicModePersistenceForTests();
+            localStorage.clear();
+        }
     });
 });

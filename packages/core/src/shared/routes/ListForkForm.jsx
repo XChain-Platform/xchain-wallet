@@ -22,6 +22,7 @@ import {
     estimateNativeSendFee,
     estimateNativeSendFeeTiers,
     customFeeEstimate,
+    customFeeRateBoundsError,
     displayRateToSettingsCustom,
 } from '../../flows/feeEstimate.js';
 import styles from './IssueTokenForm.module.css';
@@ -166,6 +167,7 @@ function ListForkFormScreen({ walletId, listRef, onBack, onDone, repointHandlers
     const [owner, setOwner] = useState(/** @type {string | null | undefined} */ (undefined));
     const [listName, setListName] = useState(/** @type {string | null} */ (null));
     const [tickCoinSupported, setTickCoinSupported] = useState(false);
+    const [anyCoins, setAnyCoins] = useState(/** @type {string[]} */ ([]));
 
     // Prefer the explorer's current owner, then walk to the root create for
     // older explorers that do not report one.
@@ -274,6 +276,24 @@ function ListForkFormScreen({ walletId, listRef, onBack, onDone, repointHandlers
         return () => { cancelled = true; };
     }, [chainId, isTick, messaging]);
 
+    // Once token-policy inheritance is active the indexer takes an address item
+    // for any configured coin on this network; the explorer's flag says when, so
+    // the form never offers an item the chain would drop into list_items_invalid.
+    useEffect(() => {
+        let cancelled = false;
+        setAnyCoins([]);
+        if (isTick || !chainId || !descriptor?.coin || !descriptor?.networkKind) return () => { cancelled = true; };
+        Promise.resolve()
+            .then(() => (typeof messaging.listAnyCoinItems === 'function'
+                ? messaging.listAnyCoinItems({
+                    chainId, coin: descriptor?.coin, networkKind: descriptor?.networkKind,
+                })
+                : []))
+            .then((coins) => { if (!cancelled) setAnyCoins(Array.isArray(coins) ? coins : []); })
+            .catch(() => { if (!cancelled) setAnyCoins([]); });
+        return () => { cancelled = true; };
+    }, [chainId, isTick, descriptor?.coin, descriptor?.networkKind, messaging]);
+
     const fromAddress = useMemo(() => {
         if (!fromAddressId || !addressesByChain) return null;
         return (addressesByChain[chainId] || []).find((a) => a.id === fromAddressId) || null;
@@ -349,15 +369,14 @@ function ListForkFormScreen({ walletId, listRef, onBack, onDone, repointHandlers
         return airdropLib.classifyRecipients(parts, {
             coin: descriptor?.coin || null,
             network: descriptor?.networkKind || null,
-        });
-    }, [addText, isTick, tickCoinSupported, descriptor?.coin, descriptor?.networkKind]);
+        }, { anyCoins });
+    }, [addText, isTick, tickCoinSupported, descriptor?.coin, descriptor?.networkKind, anyCoins]);
 
     const itemIdentity = useCallback((item) => {
         const value = String(item);
         if (isTick) return value.toLowerCase();
-        const bech32 = /^(?:bc1|tb1|bcrt1|ltc1|tltc1)/i.test(value)
-            && (value === value.toLowerCase() || value === value.toUpperCase());
-        return bech32 ? value.toLowerCase() : value;
+        // Match address case variants with the same rule the recipient parser uses.
+        return airdropLib.bech32IdentityKey(value);
     }, [isTick]);
 
     const currentItemKeys = useMemo(
@@ -411,19 +430,19 @@ function ListForkFormScreen({ walletId, listRef, onBack, onDone, repointHandlers
         ITEM: toRemove,
     }), [intermediateIndex, toRemove, trimmedMemo]);
     const firstActionSize = useMemo(
-        () => listActionSize(firstParams, descriptor, isWatcherMode ? null : fromAddress),
-        [firstParams, descriptor, isWatcherMode, fromAddress],
+        () => listActionSize(firstParams),
+        [firstParams],
     );
     const secondActionSize = useMemo(
-        () => listActionSize(secondParams, descriptor, isWatcherMode ? null : fromAddress),
-        [secondParams, descriptor, isWatcherMode, fromAddress],
+        () => listActionSize(secondParams),
+        [secondParams],
     );
     const secondReviewActionSize = useMemo(() => listActionSize({
         ...secondParams,
         // The first leg's index does not exist yet. Reserve a full uint64-width
         // decimal index so the add leg cannot strand an oversized remove leg.
         LIST_ACTION_INDEX: '9'.repeat(20),
-    }, descriptor, isWatcherMode ? null : fromAddress), [secondParams, descriptor, isWatcherMode, fromAddress]);
+    }), [secondParams]);
     const resultingCount = currentItems.length - toRemove.length + toAdd.length;
 
     const firstDecoded = useMemo(() => (
@@ -547,6 +566,10 @@ function ListForkFormScreen({ walletId, listRef, onBack, onDone, repointHandlers
                 : 'Custom fee rate must be greater than zero.');
             return;
         }
+        const feeBoundsError = feePick.mode === 'custom'
+            ? customFeeRateBoundsError({ rate: Number(feePick.customRate), tiers: feeTiers })
+            : null;
+        if (feeBoundsError) { setFormError(feeBoundsError); return; }
         if (additions.invalid.length > 0) {
             const noun = isTick
                 ? (additions.invalid.length === 1 ? 'token name' : 'token names')

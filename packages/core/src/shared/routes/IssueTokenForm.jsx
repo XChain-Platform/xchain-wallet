@@ -40,6 +40,7 @@ import { WatcherResultPanel } from '../components/WatcherResultPanel.jsx';
 import { useWalletMode } from '../hooks/useWalletMode.js';
 import { useFormDraft } from '../hooks/useFormDraft.js';
 import { useSettings } from '../hooks/useSettings.js';
+import { getActiveNetwork } from '../../flows/effectiveNetwork.js';
 import { OwnAddressPickerScreen } from '../components/OwnAddressPickerScreen.jsx';
 import { ContactsPickerScreen } from '../components/ContactsPickerScreen.jsx';
 import {
@@ -53,6 +54,12 @@ import { NativeFeeToggle } from '../components/NativeFeeToggle.jsx';
 import { NATIVE_FEE_WARNING } from '../../sdk/nativeFeePreflight.js';
 import { submitFailureMessage } from '../utils/submitFailureMessage.js';
 import { TICKER_HINT, tickerGrammarError } from '../utils/tickerGrammar.js';
+import {
+    MAX_ISSUE_TEXT_LENGTH,
+    issueDescriptionError,
+    issueSupplyLimitError,
+} from '../utils/issueFieldValidation.js';
+import { actionTextSafetyError } from '../utils/actionTextSafety.js';
 import { isValidAddressForChain } from '../utils/addressValidation.js';
 import { tickLookupVerdict } from '../utils/listTickItems.js';
 import { useNativeFee } from '../hooks/useNativeFee.js';
@@ -67,6 +74,8 @@ import {
     subtractDecimalStrings,
 } from '../utils/amountFormat.js';
 import { t } from '../../i18n/index.js';
+import '../../i18n/locales/en/issue.js';
+import '../../i18n/locales/en/send.js';
 
 const PROTOCOL_COIN_TICKER = { bitcoin: 'BTC', litecoin: 'LTC', dogecoin: 'DOGE' };
 
@@ -184,10 +193,16 @@ export function IssueTokenForm({ walletId, onBack }) {
     const formDraftTtlMs = Number.isFinite(settings?.privacy?.formDraftTtlMs)
         ? Number(settings.privacy.formDraftTtlMs)
         : undefined;
-    const draft = useFormDraft({ view: 'issue-token', walletId, ttlMs: formDraftTtlMs });
+    const draftNetwork = settings ? getActiveNetwork(settings) : null;
+    const draft = useFormDraft({ view: 'issue-token', walletId, network: draftNetwork, ttlMs: formDraftTtlMs });
     // A stored draft waits for an explicit Restore. A fresh form starts
     // saving immediately so an auto-lock unmount cannot erase typed values.
     const [draftPending, setDraftPending] = useState(() => !draft.hasDraft());
+    // Settings resolve after the first render; once the network is known a draft
+    // from another network reads as absent, so the form saves from then on.
+    useEffect(() => {
+        if (draftNetwork && !draft.hasDraft()) setDraftPending(true);
+    }, [draftNetwork]); // eslint-disable-line react-hooks/exhaustive-deps
     // A confirmed "Discard and leave" drops the saved draft and stops the
     // autosave, so no render between the confirm and the unmount can write
     // the discarded values back.
@@ -209,7 +224,7 @@ export function IssueTokenForm({ walletId, onBack }) {
     ]);
     const restoreDraft = useCallback(() => {
         const v = draft.load();
-        if (!v) { setDraftPending(false); return; }
+        if (!v) { setDraftPending(true); return; }
         if (typeof v.chainId === 'string') setChainId(v.chainId);
         if (typeof v.fromAddressId === 'string') setFromAddressId(v.fromAddressId);
         if (typeof v.ticker === 'string') setTicker(v.ticker);
@@ -439,6 +454,10 @@ export function IssueTokenForm({ walletId, onBack }) {
         if (lockSupply) {
             p.LOCK_MAX_SUPPLY = '1';
             p.LOCK_MINT = '1';
+            // The issuer's own MINT_SUPPLY is a third inflation path that
+            // LOCK_MINT does not close; the wizard's meme and collectible
+            // templates write it for the same reason.
+            p.LOCK_MINT_SUPPLY = '1';
         }
         if (transferTo.trim()) p.TRANSFER = transferTo.trim();
         // Only meaningful beside a MINT_SUPPLY: with nothing minted at issuance
@@ -485,6 +504,12 @@ export function IssueTokenForm({ walletId, onBack }) {
             setFormError(tickerError);
             return;
         }
+        const descriptionError = actionTextSafetyError(description, 'Description')
+            || issueDescriptionError(description);
+        if (descriptionError) {
+            setFormError(descriptionError);
+            return;
+        }
         const checkedTicker = ticker.trim();
         if (tickerLookupSupported
             && (tickerCheck.ticker !== checkedTicker || tickerCheck.status === 'checking')) {
@@ -507,6 +532,11 @@ export function IssueTokenForm({ walletId, onBack }) {
             setFormError(divisible
                 ? 'Supply can have at most 8 decimal places.'
                 : 'Supply must be a whole number for an indivisible token.');
+            return;
+        }
+        const supplyLimitError = issueSupplyLimitError(supply);
+        if (supplyLimitError) {
+            setFormError(supplyLimitError);
             return;
         }
         // An initial mint above the cap is rejected outright by the
@@ -1050,7 +1080,7 @@ export function IssueTokenForm({ walletId, onBack }) {
                 value={description}
                 onChange={(e) => setDescription(e.target.value)}
                 autoComplete="off"
-                maxLength={250}
+                maxLength={MAX_ISSUE_TEXT_LENGTH}
             />
             <Switch
                 label={t('issue.lockSupply')}

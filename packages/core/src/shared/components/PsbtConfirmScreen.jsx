@@ -30,6 +30,8 @@ import { PsbtIntentPanel } from './PsbtIntentPanel.jsx';
 import { SigningReadyNote } from '../safety/PanicFreezeNotice.jsx';
 import { isUnreadableActionReason } from './psbtDecodeReasons.js';
 import { t } from '../../i18n/index.js';
+import '../../i18n/locales/en/components.js';
+import '../../i18n/locales/en/send.js';
 
 /**
  * The §5.5 fail-closed rule, as a pure predicate so it can be unit-tested

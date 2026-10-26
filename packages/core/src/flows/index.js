@@ -217,7 +217,7 @@ export {
     filterSuggestions,
 } from './recentDestinations.js';
 export { checkRecipientNovelty } from './recipientNovelty.js';
-export { classifySignRisk } from './signRiskClassifier.js';
+export { classifySignRisk, assertNoDeceptiveCharacters } from './signRiskClassifier.js';
 export {
     estimateNativeSendFee,
     estimateNativeSendFeeTiers,
@@ -717,6 +717,9 @@ export {
     getDemoWalletPassword,
     getDemoWalletExpiry,
     clearDemoWalletId,
+    holdDemoLock,
+    isDemoLockHeld,
+    releaseDemoLock,
     isDemoWallet,
     isDemoWalletExpired,
     DEMO_DEFAULT_TTL_MS,

@@ -236,6 +236,7 @@
 /* Line 1: name/address at the start + relative timestamp at the end. */
 .convTop {
     display: flex;
+    flex-wrap: wrap;
     align-items: baseline;
     justify-content: space-between;
     gap: var(--xc-space-2);
@@ -249,7 +250,9 @@
     align-items: baseline;
     gap: var(--xc-space-2);
     flex: 1 1 auto;
-    min-width: 50%;
+    /* Room for the unread dot and the whole first6…last6 address; the
+       timestamp wraps below the name before the address loses its tail. */
+    min-width: min(100%, 10em);
     overflow: hidden;
 }
 

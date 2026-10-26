@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 import { describe, expect, it } from 'vitest';
-import { createLaunchRouteState } from '../../../packages/core/src/shared/utils/launchRouteState.js';
+import { createLaunchRouteState, shouldClearTransientState } from '../../../packages/core/src/shared/utils/launchRouteState.js';
 
 describe('createLaunchRouteState', () => {
     it('holds an incoming view until the session is unlocked', () => {
@@ -44,5 +44,24 @@ describe('createLaunchRouteState', () => {
 
         expect(routes.takeForSession({ state: 'unlocked' })).toBeNull();
         expect(routes.shouldSkipLastViewResume()).toBe(false);
+    });
+});
+
+describe('shouldClearTransientState', () => {
+    it('keeps a link parked while the shell loads or sits locked', () => {
+        expect(shouldClearTransientState(undefined, 'loading')).toBe(false);
+        expect(shouldClearTransientState('loading', 'locked')).toBe(false);
+        expect(shouldClearTransientState('locked', 'locked')).toBe(false);
+    });
+
+    it('wipes when an unlocked session ends or the wallet is gone', () => {
+        expect(shouldClearTransientState('unlocked', 'locked')).toBe(true);
+        expect(shouldClearTransientState('unlocked', 'loading')).toBe(true);
+        expect(shouldClearTransientState('locked', 'no-wallet')).toBe(true);
+        expect(shouldClearTransientState('loading', 'error')).toBe(true);
+    });
+
+    it('never wipes on the way into an unlocked session', () => {
+        expect(shouldClearTransientState('locked', 'unlocked')).toBe(false);
     });
 });

@@ -153,7 +153,7 @@ describe('TokenDetail collectible media', () => {
         } });
 
         fireEvent.click(screen.getByRole('tab', { name: 'About' }));
-        expect(await screen.findByRole('link', { name: 'Website' }))
+        expect(await screen.findByRole('link', { name: 'Website · issuer.example' }))
             .toHaveAttribute('href', 'https://issuer.example/');
         expect(screen.getByRole('link', { name: /safe\.example/ }))
             .toHaveAttribute('href', 'http://safe.example/profile');

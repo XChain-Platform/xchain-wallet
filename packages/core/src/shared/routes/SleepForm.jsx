@@ -48,6 +48,10 @@ import { QueuedResultPanel } from '../components/QueuedResultPanel.jsx';
 import { isValidAddressForChain } from '../utils/addressValidation.js';
 import { memoLengthError } from '../utils/memoLimit.js';
 import { tickerReferenceError } from '../utils/tickerGrammar.js';
+import { tokenIssuerEligibility } from '../utils/tokenIssuerEligibility.js';
+import {
+    TOKEN_RECORD_GATE_KEYS, tokenRecordChangedMessage, tokenRecordChangedSince,
+} from '../utils/tokenRecordDrift.js';
 
 const chainRegistry = registryLib.defaultRegistry();
 
@@ -119,7 +123,7 @@ export function SleepForm({ walletId, onBack, mode, initialChainId, initialTick,
             'No addresses on any network yet. Use Receive to generate one first.',
     });
 
-    const ticker = isTick ? (initialTick || '').toUpperCase() : '';
+    const ticker = isTick ? (initialTick || '') : '';
     // Pause target: the tick (v1) or the signing address itself (v0).
     const [resumeMode, setResumeMode] = useState(
         /** @type {'until' | 'indefinite' | 'resume'} */ ('until'),
@@ -140,6 +144,13 @@ export function SleepForm({ walletId, onBack, mode, initialChainId, initialTick,
 
     // Tick record: LOCK_SLEEP gate (tick mode only).
     const assetInfo = useTokenInfo({ chainId, tick: ticker, skip: !isTick || !ticker });
+    const issuerEligibility = tokenIssuerEligibility({
+        tokenInfo: isTick ? assetInfo : { creator: fromAddress?.address },
+        addressesByChain,
+        chainId,
+        tick: ticker,
+        sourceAddress: fromAddress?.address,
+    });
     const sleepLocked = isTick && !!assetInfo?.locks?.sleep;
 
     // Current chain height (future-block validation + date estimate + state).
@@ -159,14 +170,20 @@ export function SleepForm({ walletId, onBack, mode, initialChainId, initialTick,
     // Current pause state of the target (tick name, or the signing address).
     const stateQuery = isTick ? ticker : fromAddress?.address;
     const [sleepRow, setSleepRow] = useState(/** @type {any | null} */ (null));
+    // 'loading' until the read answers, 'failed' when it does not. Without it a
+    // slow or failed read renders as "active (not paused)", which tells the user
+    // a paused token is running.
+    const [sleepRead, setSleepRead] = useState(/** @type {'loading' | 'ready' | 'failed'} */ ('ready'));
     useEffect(() => {
-        if (!chainId || !stateQuery) { setSleepRow(null); return undefined; }
+        if (!chainId || !stateQuery) { setSleepRow(null); setSleepRead('ready'); return undefined; }
         if (flowsLib.isDemoWallet(walletId)) return undefined;
         if (typeof messaging?.sleepState !== 'function') return undefined;
         let cancelled = false;
+        setSleepRow(null);
+        setSleepRead('loading');
         messaging.sleepState({ chainId, query: stateQuery, type: isTick ? 'token' : 'address' })
-            .then((s) => { if (!cancelled) setSleepRow(s || null); })
-            .catch(() => { if (!cancelled) setSleepRow(null); });
+            .then((s) => { if (!cancelled) { setSleepRow(s || null); setSleepRead('ready'); } })
+            .catch(() => { if (!cancelled) { setSleepRow(null); setSleepRead('failed'); } });
         return () => { cancelled = true; };
     }, [chainId, stateQuery, isTick, messaging, walletId]);
     const currentState = useMemo(
@@ -196,8 +213,16 @@ export function SleepForm({ walletId, onBack, mode, initialChainId, initialTick,
     const [reviewedParams, setReviewedParams] = useState(/** @type {Record<string, string> | null} */ (null));
     const [refreshingHeight, setRefreshingHeight] = useState(false);
     const passwordRef = useRef(/** @type {HTMLInputElement | null} */ (null));
+    const mountedRef = useRef(true);
+    const reviewInFlightRef = useRef(false);
+    const submitInFlightRef = useRef(false);
     const chainIdRef = useRef(chainId);
     chainIdRef.current = chainId;
+
+    useEffect(() => {
+        mountedRef.current = true;
+        return () => { mountedRef.current = false; };
+    }, []);
 
     const { settings } = useSettings();
     const confirmAction = useConfirmAction();
@@ -400,77 +425,104 @@ export function SleepForm({ walletId, onBack, mode, initialChainId, initialTick,
 
     async function handleReview(event) {
         event.preventDefault();
-        const initialError = validationError(currentHeight, { requireHeight: false });
-        if (initialError) { setFormError(initialError); return; }
-        let height = currentHeight;
-        if (resumeMode === 'until') {
-            setRefreshingHeight(true);
-            try {
-                height = await refreshHeight();
-            } catch (err) {
-                setFormError(err.message);
+        if (reviewInFlightRef.current) return;
+        reviewInFlightRef.current = true;
+        try {
+            const initialError = validationError(currentHeight, { requireHeight: false });
+            if (initialError) { setFormError(initialError); return; }
+            if (isTick && issuerEligibility.pending) {
+                setFormError(`Wait for the wallet to verify the current owner of ${ticker}.`);
                 return;
-            } finally {
-                setRefreshingHeight(false);
             }
+            if (isTick && issuerEligibility.error) {
+                setFormError(issuerEligibility.error);
+                return;
+            }
+            // Owner and LOCK_SLEEP came from the record read when the form opened.
+            if (isTick && await tokenRecordChangedSince({
+                messaging, chainId, tick: ticker, current: assetInfo, keys: TOKEN_RECORD_GATE_KEYS,
+            })) {
+                setFormError(tokenRecordChangedMessage(ticker));
+                return;
+            }
+            let height = currentHeight;
+            if (resumeMode === 'until') {
+                setRefreshingHeight(true);
+                try {
+                    height = await refreshHeight();
+                } catch (err) {
+                    setFormError(err.message);
+                    return;
+                } finally {
+                    setRefreshingHeight(false);
+                }
+            }
+            if (!mountedRef.current) return;
+            const freshError = validationError(height);
+            if (freshError) { setFormError(freshError); return; }
+            const params = resumeMode === 'until'
+                ? { ...actionParams, RESUME_BLOCK: String(resumeBlockFor(height, durationBlockCount)) }
+                : actionParams;
+            setReviewedParams(params);
+            setFormError(null);
+            if (!isTick) setTypedConfirm('');
+            // Address self-lock always uses the legacy review stage so the typed
+            // confirm + irreversibility warning sit in front of the signature.
+            if (!isWatcherMode && isTick) { await openConfirmModal(params); return; }
+            setStage('review');
+        } finally {
+            reviewInFlightRef.current = false;
         }
-        const freshError = validationError(height);
-        if (freshError) { setFormError(freshError); return; }
-        const params = resumeMode === 'until'
-            ? { ...actionParams, RESUME_BLOCK: String(resumeBlockFor(height, durationBlockCount)) }
-            : actionParams;
-        setReviewedParams(params);
-        setFormError(null);
-        if (!isTick) setTypedConfirm('');
-        // Address self-lock always uses the legacy review stage so the typed
-        // confirm + irreversibility warning sit in front of the signature.
-        if (!isWatcherMode && isTick) { openConfirmModal(params); return; }
-        setStage('review');
     }
 
     const hwSignerInfo = useSignerInfo({ walletId, signerId: isHwSource ? fromAddress?.signerId : null });
 
     async function handleSubmit(event) {
         event.preventDefault();
-        if (stage === 'submitting') return;
+        if (stage === 'submitting' || submitInFlightRef.current) return;
         if (!isWatcherMode && !isHwSource && (!signerReady && password.length === 0)) return;
         if (!isWatcherMode && isHwSource && hwStatus !== 'available') return;
         if (!typedConfirmOk) return;
-        setStage('submitting');
-        setSubmitError(null);
-        const params = reviewedParams || actionParams;
-        const staleError = await wakeBlockFreshnessError(params);
-        if (staleError) {
-            setSubmitError(staleError);
-            setStage('review');
-            return;
-        }
+        submitInFlightRef.current = true;
         try {
-            const res = await submit({
-                params,
-                password,
-                extraBase: {
-                    payFeeInNativeCoin: nativeFee.flag,
-                    ...(feePerKb != null ? { feePerKb } : {}),
-                },
-                encoderOpts: {
-                    payFeeInNativeCoin: nativeFee.flag,
-                    ...(feePerKb != null ? { feePerKb } : {}),
-                },
-            });
-            setResult(res);
-            setPassword('');
-            setStage('done');
-        } catch (err) {
-            const isBadPassword = err?.name === 'InvalidPasswordError';
-            setSubmitError(isBadPassword ? 'Incorrect password.' : submitFailureMessage(err, {
-                chainId,
-                coinTicker,
-                mandatory: nativeFee.mandatory,
-                fallback: humanizeError(err, titleNoun.toLowerCase()).message,
-            }));
-            setStage('review');
-            if (!isWatcherMode && !isHwSource) { passwordRef.current?.focus(); passwordRef.current?.select(); }
+            setStage('submitting');
+            setSubmitError(null);
+            const params = reviewedParams || actionParams;
+            const staleError = await wakeBlockFreshnessError(params);
+            if (staleError) {
+                setSubmitError(staleError);
+                setStage('review');
+                return;
+            }
+            try {
+                const res = await submit({
+                    params,
+                    password,
+                    extraBase: {
+                        payFeeInNativeCoin: nativeFee.flag,
+                        ...(feePerKb != null ? { feePerKb } : {}),
+                    },
+                    encoderOpts: {
+                        payFeeInNativeCoin: nativeFee.flag,
+                        ...(feePerKb != null ? { feePerKb } : {}),
+                    },
+                });
+                setResult(res);
+                setPassword('');
+                setStage('done');
+            } catch (err) {
+                const isBadPassword = err?.name === 'InvalidPasswordError';
+                setSubmitError(isBadPassword ? 'Incorrect password.' : submitFailureMessage(err, {
+                    chainId,
+                    coinTicker,
+                    mandatory: nativeFee.mandatory,
+                    fallback: humanizeError(err, titleNoun.toLowerCase()).message,
+                }));
+                setStage('review');
+                if (!isWatcherMode && !isHwSource) { passwordRef.current?.focus(); passwordRef.current?.select(); }
+            }
+        } finally {
+            submitInFlightRef.current = false;
         }
     }
 
@@ -529,7 +581,7 @@ export function SleepForm({ walletId, onBack, mode, initialChainId, initialTick,
         );
     }
 
-    const stateLine = (
+    const stateLine = sleepRead === 'ready' ? (
         <p className={styles.hint}>
             {isTick ? `${ticker} is currently ` : 'This address is currently '}
             {currentState.paused
@@ -537,6 +589,12 @@ export function SleepForm({ walletId, onBack, mode, initialChainId, initialTick,
                     ? 'PAUSED indefinitely.'
                     : `PAUSED${currentState.resumeBlock ? ` until block ${currentState.resumeBlock.toLocaleString('en-US')}` : ''}.`)
                 : 'active (not paused).'}
+        </p>
+    ) : (
+        <p className={styles.hint}>
+            {sleepRead === 'loading'
+                ? 'Checking the current pause state.'
+                : 'The current pause state could not be read.'}
         </p>
     );
 
@@ -692,15 +750,17 @@ export function SleepForm({ walletId, onBack, mode, initialChainId, initialTick,
             demoGuard={demoGuard}
             label={titleNoun}
             onSubmit={handleReview}
-            status={formError ? (
-                <StatusMessage variant="error">{formError}</StatusMessage>
+            status={formError || (isTick && issuerEligibility.error) ? (
+                <StatusMessage variant="error">{formError || issuerEligibility.error}</StatusMessage>
             ) : null}
             actions={(
                 <Button
                     type="submit"
                     variant="primary"
                     loading={refreshingHeight || confirmAction.composing}
-                    disabled={!fromAddress || (isTick && sleepLocked) || refreshingHeight || confirmAction.composing}
+                    disabled={!fromAddress || (isTick && (
+                        sleepLocked || !!issuerEligibility.error
+                    )) || refreshingHeight || confirmAction.composing}
                 >
                     {(!isWatcherMode && isTick) ? titleNoun : 'Preview'}
                 </Button>

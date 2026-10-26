@@ -1328,11 +1328,11 @@ assert.ok(/git show[^\n]*store-version-monitor[^\n]*sha256sum/.test(identityWind
 // halves of the Phase 4 blocker turned out to be already satisfied.
 //
 // So the page may no longer assert either state. It is held to
-// docs/release-key-pin.json, which verify-release-key.sh writes only after
+// tools/release/pins/release-key-pin.json, which verify-release-key.sh writes only after
 // signing a manifest for real, and the EMPTY state is checked as strictly as
 // the filled one - a guard that starts working only after the event it
 // guards is not a guard.
-const keyPinPath = join(walletRoot, 'docs', 'release-key-pin.json');
+const keyPinPath = join(walletRoot, 'tools', 'release', 'pins', 'release-key-pin.json');
 const phase4 = ceremony.slice(ceremony.indexOf('### Phase 4'),
     ceremony.indexOf('### Phase 5'));
 assert.ok(phase4.length > 0,

@@ -77,6 +77,20 @@ afterEach(() => {
 });
 
 describe('publish forms replace file state safely', () => {
+    it('refuses gated publishing before review when the issuer is unknown', async () => {
+        const client = messaging();
+        mount(
+            <GatedPublishForm walletId="w" chainId={CHAIN} tick="GATE" issuerAddress={null} onBack={() => {}} />,
+            client,
+        );
+
+        expect(await screen.findByRole('alert')).toHaveTextContent(
+            "The token's issuer could not be confirmed, so this action is not available. Try again when the explorer answers.",
+        );
+        expect(screen.getByRole('button', { name: 'Review' })).toBeDisabled();
+        expect(client.buildActionPsbtRequest).not.toHaveBeenCalled();
+    });
+
     it('exposes gated metadata through the shared field roles and counters', async () => {
         mount(<GatedPublishForm walletId="w" chainId={CHAIN} tick="GATE" issuerAddress={SOURCE.address} onBack={() => {}} />);
 
@@ -91,6 +105,24 @@ describe('publish forms replace file state safely', () => {
         expect(file).toHaveAccessibleDescription(/Publish a file that only holders of GATE can read/);
         expect(screen.getByText('12 / 120')).toBeInTheDocument();
         expect(screen.getByText('7 / 120')).toBeInTheDocument();
+    });
+
+    it('refuses hostile gated metadata before review', async () => {
+        mount(<GatedPublishForm walletId="w" chainId={CHAIN} tick="GATE" issuerAddress={SOURCE.address} onBack={() => {}} />);
+        fireEvent.change(await screen.findByLabelText('File to publish'), {
+            target: { files: [new File(['ok'], 'member.txt', { type: 'text/plain' })] },
+        });
+        await act(async () => readers[0].succeed());
+        await waitFor(() => expect(document.body.textContent).toContain('member.txt'));
+        fireEvent.change(screen.getByRole('textbox', { name: 'Title' }), {
+            target: { value: 'safe\u202eunsafe' },
+        });
+
+        fireEvent.click(screen.getByRole('button', { name: 'Review' }));
+
+        expect(await screen.findByRole('alert'))
+            .toHaveTextContent('Title cannot contain text-direction control characters.');
+        expect(screen.queryByRole('form', { name: 'Review gated publish' })).toBeNull();
     });
 
     it('keeps the public network picker free of network-kind text', async () => {
@@ -140,6 +172,22 @@ describe('publish forms replace file state safely', () => {
 
         await waitFor(() => expect(screen.getByRole('alert')).toHaveTextContent('That file is empty.'));
         expect(readers).toHaveLength(0);
+    });
+
+    it.each([
+        ['public publish', () => mount(<PublishFileForm walletId="w" onBack={() => {}} />), 'Choose file to publish'],
+        ['gated publish', () => mount(<GatedPublishForm walletId="w" chainId={CHAIN} tick="GATE" issuerAddress={SOURCE.address} onBack={() => {}} />), 'File to publish'],
+        ['artwork attachment', () => mount(<AttachContentForm walletId="w" chainId={CHAIN} tick="ART" issuerAddress={SOURCE.address} onBack={() => {}} />), 'Choose file to attach'],
+    ])('refuses a hostile file name before reading or rendering it in %s', async (_name, mountRoute, inputLabel) => {
+        mountRoute();
+        fireEvent.change(await screen.findByLabelText(inputLabel), {
+            target: { files: [new File(['bad'], 'safe\u202eunsafe.txt', { type: 'text/plain' })] },
+        });
+
+        expect(await screen.findByRole('alert'))
+            .toHaveTextContent('File name cannot contain text-direction control characters.');
+        expect(readers).toHaveLength(0);
+        expect(document.body.textContent).not.toContain('safe\u202eunsafe.txt');
     });
 
     it.each([

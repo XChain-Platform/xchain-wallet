@@ -56,6 +56,30 @@ afterEach(() => {
 });
 
 describe('TokenWizard guided flow', () => {
+    async function reachDetails(templateName) {
+        fireEvent.click(await screen.findByText(templateName));
+        await screen.findByLabelText('Fee paid by');
+        fireEvent.submit(screen.getByRole('form', { name: 'Choose token network' }));
+    }
+
+    it('refuses a hostile description before the review step', async () => {
+        const messaging = mountWizard();
+        await reachDetails('Meme token');
+        fireEvent.change(screen.getByLabelText('Token name (ticker)'), {
+            target: { value: 'SAFE' },
+        });
+        fireEvent.change(screen.getByLabelText('Supply'), { target: { value: '1' } });
+        fireEvent.change(screen.getByLabelText('Description (optional)'), {
+            target: { value: 'safe\u0000unsafe' },
+        });
+
+        fireEvent.submit(screen.getByRole('form', { name: 'Token details' }));
+
+        expect(await screen.findByRole('alert')).toHaveTextContent('Description cannot contain control characters.');
+        expect(screen.getByRole('form', { name: 'Token details' })).toBeTruthy();
+        expect(messaging.composeForConfirm).not.toHaveBeenCalled();
+    });
+
     it('blocks token composition with one plain reason while the device is offline', async () => {
         Object.defineProperty(navigator, 'onLine', { configurable: true, value: false });
         const composeForConfirm = vi.fn();
@@ -191,6 +215,90 @@ describe('TokenWizard guided flow', () => {
         expect(messaging.composeForConfirm).not.toHaveBeenCalled();
     });
 
+    it('accepts the protocol supply maximum and values past 2^63', async () => {
+        mountWizard();
+        await reachDetails('Custom');
+        fireEvent.change(screen.getByLabelText('Token name (ticker)'), {
+            target: { value: 'SUPPLYMAX' },
+        });
+        fireEvent.change(screen.getByLabelText('Supply'), {
+            target: { value: '1000000000000000000000' },
+        });
+        fireEvent.submit(screen.getByRole('form', { name: 'Token details' }));
+
+        expect(await screen.findByText('Step 4 of 4: Review')).toBeTruthy();
+    });
+
+    it('rejects a supply above the protocol maximum before review', async () => {
+        const messaging = mountWizard();
+        await reachDetails('Custom');
+        fireEvent.change(screen.getByLabelText('Token name (ticker)'), {
+            target: { value: 'TOOMUCH' },
+        });
+        fireEvent.change(screen.getByLabelText('Supply'), {
+            target: { value: '1000000000000000000000.00000001' },
+        });
+        fireEvent.click(screen.getByLabelText('Divisible (8 decimal places)'));
+        fireEvent.submit(screen.getByRole('form', { name: 'Token details' }));
+
+        expect(await screen.findByRole('alert'))
+            .toHaveTextContent('Supply cannot be more than 1,000,000,000,000,000,000,000.');
+        expect(screen.queryByText('Step 4 of 4: Review')).toBeNull();
+        expect(messaging.composeForConfirm).not.toHaveBeenCalled();
+    });
+
+    it('rejects an overlong description even if input limits are bypassed', async () => {
+        const messaging = mountWizard();
+        await reachDetails('Custom');
+        fireEvent.change(screen.getByLabelText('Token name (ticker)'), {
+            target: { value: 'LONGDESC' },
+        });
+        fireEvent.change(screen.getByLabelText('Supply'), { target: { value: '1' } });
+        fireEvent.change(screen.getByLabelText('Description (optional)'), {
+            target: { value: '<b>markup</b>'.repeat(700) },
+        });
+        fireEvent.submit(screen.getByRole('form', { name: 'Token details' }));
+
+        expect(await screen.findByRole('alert'))
+            .toHaveTextContent('Description cannot be longer than 249 characters.');
+        expect(messaging.composeForConfirm).not.toHaveBeenCalled();
+    });
+
+    it('refuses a bidi override in the description before review', async () => {
+        const messaging = mountWizard();
+        await reachDetails('Custom');
+        fireEvent.change(screen.getByLabelText('Token name (ticker)'), {
+            target: { value: 'SAFETEXT' },
+        });
+        fireEvent.change(screen.getByLabelText('Supply'), { target: { value: '1' } });
+        fireEvent.change(screen.getByLabelText('Description (optional)'), {
+            target: { value: 'safe \u202eTXT' },
+        });
+        fireEvent.submit(screen.getByRole('form', { name: 'Token details' }));
+
+        expect(await screen.findByRole('alert'))
+            .toHaveTextContent('Description cannot contain text-direction control characters.');
+        expect(messaging.composeForConfirm).not.toHaveBeenCalled();
+    });
+
+    it('renders markup as inert description text', async () => {
+        mountWizard();
+        await reachDetails('Custom');
+        const hostile = '<img src=x onerror=alert(1)> TXT';
+        fireEvent.change(screen.getByLabelText('Token name (ticker)'), {
+            target: { value: 'SAFETEXT' },
+        });
+        fireEvent.change(screen.getByLabelText('Supply'), { target: { value: '1' } });
+        fireEvent.change(screen.getByLabelText('Description (optional)'), {
+            target: { value: hostile },
+        });
+        fireEvent.submit(screen.getByRole('form', { name: 'Token details' }));
+
+        expect(await screen.findByText('Step 4 of 4: Review')).toBeTruthy();
+        expect(document.body.textContent).toContain(hostile);
+        expect(document.querySelector('img[src="x"]')).toBeNull();
+    });
+
     it.each(['Collectible', 'Limited edition'])(
         'requires the Image URL before reviewing the %s template',
         async (templateName) => {
@@ -209,6 +317,26 @@ describe('TokenWizard guided flow', () => {
             fireEvent.submit(screen.getByRole('form', { name: 'Token details' }));
             expect(await screen.findByRole('alert'))
                 .toHaveTextContent('Image URL is required for this template.');
+            expect(messaging.composeForConfirm).not.toHaveBeenCalled();
+        },
+    );
+
+    it.each([
+        ['javascript:alert(1)', 'Image URL must use http, https, ipfs, or ar.'],
+        ['data:image/svg+xml,<svg></svg>', 'Image URL must use http, https, ipfs, or ar.'],
+        [`https://example.test/${'x'.repeat(300)}`, 'Image URL cannot be longer than 249 characters.'],
+    ])(
+        'rejects an unsafe or oversized collectible image URL: %s',
+        async (url, message) => {
+            const messaging = mountWizard();
+            await reachDetails('Collectible');
+            fireEvent.change(screen.getByLabelText('Token name (ticker)'), {
+                target: { value: 'BADIMAGE' },
+            });
+            fireEvent.change(screen.getByLabelText('Image URL'), { target: { value: url } });
+            fireEvent.submit(screen.getByRole('form', { name: 'Token details' }));
+
+            expect(await screen.findByText(message)).toBeTruthy();
             expect(messaging.composeForConfirm).not.toHaveBeenCalled();
         },
     );

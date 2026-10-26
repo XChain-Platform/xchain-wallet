@@ -101,7 +101,7 @@ const DISPOSABLE_LOCAL_KEYS = new Set([
 ]);
 const DISPOSABLE_LOCAL_PREFIXES = [
     'xc:balanceCache:',
-    'xc:historyCache:v1:',
+    'xc:historyCache:',
 ];
 const DISPOSABLE_CHROME_KEYS = ['xchain.logConsole'];
 
@@ -322,6 +322,16 @@ export class Vault {
         } finally {
             this._opening = null;
         }
+    }
+
+    /**
+     * Turn per-write persistence on or off. A flow that builds a vault from
+     * nothing opens it with `autoSave: false`, then `save()`s once and turns this
+     * on, so the device never holds a half-built blob.
+     * @param {boolean} enabled
+     */
+    setAutoSave(enabled) {
+        this._autoSave = enabled === true;
     }
 
     /** Flush the current document to the backend. */

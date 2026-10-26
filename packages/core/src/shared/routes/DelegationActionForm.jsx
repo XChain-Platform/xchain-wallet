@@ -27,6 +27,7 @@ import {
     estimateNativeSendFee,
     estimateNativeSendFeeTiers,
     customFeeEstimate,
+    customFeeRateBoundsError,
     displayRateToSettingsCustom,
 } from '../../flows/feeEstimate.js';
 import styles from './IssueTokenForm.module.css';
@@ -66,9 +67,10 @@ const PROTOCOL_COIN_TICKER = {
  * @param {'delegate' | 'revoke'} props.mode
  * @param {string} props.walletId
  * @param {string} props.chainId
+ * @param {string} [props.initialFromAddress]  the staking position's own address; acts from it when it is one of the wallet's on `chainId`
  * @param {() => void} props.onBack
  */
-export function DelegationActionForm({ mode, walletId, chainId: initialChainId, onBack }) {
+export function DelegationActionForm({ mode, walletId, chainId: initialChainId, initialFromAddress, onBack }) {
     // Seeded from the launching context; the Network field lets the user retarget.
     const [chainId, setChainId] = useState(initialChainId);
     const { messaging, shell } = useMessaging();
@@ -85,6 +87,10 @@ export function DelegationActionForm({ mode, walletId, chainId: initialChainId, 
 
     const [fromAddressId, setFromAddressId] = useState(/** @type {string | null} */ (null));
     const [pubkey, setPubkey] = useState('');
+    // True while the key field holds the pre-filled delegation, not something the user typed.
+    const pubkeyPrefilledRef = useRef(false);
+    const pubkeyRef = useRef('');
+    pubkeyRef.current = pubkey;
     const [password, setPassword] = useState('');
     const [sourcePickerOpen, setSourcePickerOpen] = useState(false);
 
@@ -96,6 +102,7 @@ export function DelegationActionForm({ mode, walletId, chainId: initialChainId, 
     const [submitError, setSubmitError] = useState(/** @type {string | null} */ (null));
     const [result, setResult] = useState(/** @type {any | null} */ (null));
     const passwordRef = useRef(/** @type {HTMLInputElement | null} */ (null));
+    const submitInFlightRef = useRef(false);
 
     useEffect(() => {
         let cancelled = false;
@@ -108,9 +115,14 @@ export function DelegationActionForm({ mode, walletId, chainId: initialChainId, 
             .then(([byChain, active]) => {
                 if (cancelled) return;
                 setAddressesByChain(byChain || {});
-                // Act from the chain's active address (else newest HD
-                // external), matching Send.
-                const sourceId = preferredSourceId(byChain?.[chainId] || [], active?.[chainId]);
+                const onChain = byChain?.[chainId] || [];
+                // The position that opened this form wins when its address is still
+                // one of ours on this chain; otherwise act from the chain's active
+                // address (else newest HD external), matching Send.
+                const seeded = initialFromAddress
+                    ? onChain.find((a) => a.address === initialFromAddress)
+                    : null;
+                const sourceId = seeded?.id || preferredSourceId(onChain, active?.[chainId]);
                 if (!sourceId) {
                     setLoadError('No address on this network. Use Receive to generate one first.');
                     return;
@@ -136,6 +148,12 @@ export function DelegationActionForm({ mode, walletId, chainId: initialChainId, 
         if (!addr) return;
         let cancelled = false;
         setPrefillError(null);
+        // A key pre-filled for another address or network is not this one's.
+        if (pubkeyPrefilledRef.current) {
+            pubkeyPrefilledRef.current = false;
+            setPubkey('');
+            pubkeyRef.current = '';
+        }
         Promise.all([
             messaging.getDelegationsForAddress({ chainId, address: addr.address }),
             typeof messaging.getIndexerWatermark === 'function'
@@ -159,7 +177,10 @@ export function DelegationActionForm({ mode, walletId, chainId: initialChainId, 
                 const latest = latestEffectiveStakingRow(rows, height);
                 const pk = latest?.signing_pubkey || latest?.SIGNING_PUBKEY;
                 if (pk && typeof pk === 'string' && /^[0-9a-fA-F]{64}$/.test(pk)) {
-                    setPubkey((current) => current.trim() ? current : pk.toLowerCase());
+                    if (!pubkeyRef.current.trim()) {
+                        pubkeyPrefilledRef.current = true;
+                        setPubkey(pk.toLowerCase());
+                    }
                 }
             })
             .catch((err) => {
@@ -210,6 +231,9 @@ export function DelegationActionForm({ mode, walletId, chainId: initialChainId, 
     // Compose + tamper-check + pre-flight all run HOST-side; Approve signs the
     // byte-identical prebuilt PSBT. Reject is a calm no-op back to the form.
     async function openConfirmScreen() {
+        // A second press while the confirm page is still composing is the same request.
+        if (submitInFlightRef.current) return;
+        submitInFlightRef.current = true;
         const from = {
             address: fromAddress.address,
             publicKey: fromAddress.publicKey,
@@ -244,6 +268,8 @@ export function DelegationActionForm({ mode, walletId, chainId: initialChainId, 
             setFormError(submitFailureMessage(err, {
                 chainId, coinTicker, fallback: err?.message || (verb + ' failed.'),
             }));
+        } finally {
+            submitInFlightRef.current = false;
         }
     }
 
@@ -276,8 +302,8 @@ export function DelegationActionForm({ mode, walletId, chainId: initialChainId, 
         ? null
         : !Number.isFinite(customFeeRate) || customFeeRate <= 0
             ? 'Enter a custom network fee rate greater than zero.'
-            : Number.isFinite(feeTiers?.maximumRate) && customFeeRate > feeTiers.maximumRate
-                ? 'Custom network fee rate is above this network\'s supported maximum.'
+            : customFeeRateBoundsError({ rate: customFeeRate, tiers: feeTiers })
+                ? customFeeRateBoundsError({ rate: customFeeRate, tiers: feeTiers })
                 : !feeCustomEstimate
                     ? 'Custom network fee rate can have at most 8 decimal places.'
                     : null;
@@ -621,6 +647,7 @@ export function DelegationActionForm({ mode, walletId, chainId: initialChainId, 
                     : '64-character hex-encoded Ed25519 public key. Pre-filled with your most recent active delegation; change it to revoke a specific older key.'}
                 value={pubkey}
                 onChange={(e) => {
+                    pubkeyPrefilledRef.current = false;
                     setPubkey(e.target.value);
                     setFormError(null);
                     setPrefillError(null);

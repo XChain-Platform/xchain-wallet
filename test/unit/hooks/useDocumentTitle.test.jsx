@@ -28,7 +28,47 @@ it('maps session and route state to stable page titles', () => {
     expect(documentTitleFor({
         statusState: 'unlocked',
         unlockedView: 'sign-psbt',
-    })).toBe('XChain Wallet - Sign PSBT');
+    })).toBe('XChain Wallet - Sign transaction');
+});
+
+it('titles a route with its heading in sentence case', () => {
+    const titleOf = (unlockedView) => documentTitleFor({ statusState: 'unlocked', unlockedView });
+    expect(titleOf('my-bets')).toBe('XChain Wallet - My bets');
+    expect(titleOf('my-tokens')).toBe('XChain Wallet - My tokens');
+    expect(titleOf('mint-settings')).toBe('XChain Wallet - Mint settings');
+    expect(titleOf('pause-token')).toBe('XChain Wallet - Pause token');
+    expect(titleOf('send-picker')).toBe('XChain Wallet - Send');
+    expect(titleOf('actions')).toBe('XChain Wallet - Token actions');
+    expect(titleOf('cosigner-accounts')).toBe('XChain Wallet - Agent accounts');
+    expect(titleOf('governance-polls')).toBe('XChain Wallet - Governance');
+    expect(titleOf('bet-markets')).toBe('XChain Wallet - Betting');
+});
+
+it('titles an onboarding step with the heading the step shows', () => {
+    expect(documentTitleFor({ statusState: 'no-wallet', onboardingStep: 'create' }))
+        .toBe('XChain Wallet - Create Wallet');
+    expect(documentTitleFor({
+        statusState: 'no-wallet',
+        onboardingStep: 'create',
+        section: 'Write down your recovery phrase',
+    })).toBe('XChain Wallet - Write down your recovery phrase');
+    expect(documentTitleFor({ statusState: 'no-wallet', onboardingStep: 'welcome' }))
+        .toBe('XChain Wallet - Welcome');
+
+    const title = renderHook(() => useDocumentTitle({
+        statusState: 'no-wallet',
+        onboardingStep: 'create',
+        unlockedView: 'home',
+    }));
+    const section = renderHook(({ label }) => useDocumentTitleSection(label), {
+        initialProps: { label: 'Create a new wallet' },
+    });
+    expect(document.title).toBe('XChain Wallet - Create a new wallet');
+    section.rerender({ label: 'Verify your recovery phrase' });
+    expect(document.title).toBe('XChain Wallet - Verify your recovery phrase');
+    act(() => { section.unmount(); });
+    expect(document.title).toBe('XChain Wallet - Create Wallet');
+    title.unmount();
 });
 
 it('updates the document when the route changes', () => {

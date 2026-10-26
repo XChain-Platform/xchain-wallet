@@ -36,9 +36,11 @@
 //     menuHeader, emptyTitle, emptyBody, confirmLabel, cancelLabel,
 //     copyLabel, balanceText, submitLabel, what, prefix, noun, summary,
 //     error, recovery, feeText, emptyActionLabel, warningNoun, message,
-//     description, lead, legend, closeLabel (the USER_FACING_ATTRS set below
-//     is the authority; keep this list in step with it). The last thirty-five
-//     are component props rather than DOM attributes: shipping components
+//     description, lead, legend, closeLabel, searchLabel, subtitle,
+//     chainLabel, accessibleLabel, visibleLabel, labelPrefix (the
+//     USER_FACING_ATTRS set below is the authority; keep this list in step
+//     with it). The last forty-one are component
+//     props rather than DOM attributes: shipping components
 //     render copy through them, so a DOM-only set left that copy out of the
 //     translator index.
 //   - Destructured prop defaults  function C({ label = 'Copy' })  → flagged
@@ -295,6 +297,27 @@ const USER_FACING_ATTRS = new Set([
     // OverlaySurface forwards `closeLabel` straight into its close button's DOM
     // aria-label, the same one-hop shape as `ariaLabel`, `iconLabel` and `aria`.
     'closeLabel',
+    // ListToolbar forwards `searchLabel` straight into its search box's DOM
+    // aria-label, the same one-hop shape as `closeLabel`. Every JSX `searchLabel=`
+    // in packages/*/src is copy (the list routes' "Search …" names).
+    'searchLabel',
+    // ListRow renders `subtitle` verbatim as the line under its title. Every JSX
+    // `subtitle=` in packages/*/src is copy (routes and the style guide), a JSX
+    // element or a runtime value, and no gate reports the last two.
+    'subtitle',
+    // TickItemsEditor interpolates `chainLabel` into its "Not found on …" warning.
+    // Every JSX `chainLabel=` but one literal is a runtime display name, a
+    // ChainBadge or null, which no gate reports (the same argument as `message`).
+    'chainLabel',
+    // The settings ToggleRow forwards `accessibleLabel` straight into its switch's
+    // DOM aria-label, the same one-hop shape as `closeLabel`. Every JSX `accessibleLabel=` is copy.
+    'accessibleLabel',
+    // HistoryCopyButton forwards `visibleLabel` to CopyButton's `label`, its visible
+    // text. Every JSX `visibleLabel=` is copy, and its only default is another prop.
+    'visibleLabel',
+    // ParallelComposer's StatusPill prefixes its aria-label with `labelPrefix`, as a
+    // prop default and from its row call site; both are copy.
+    'labelPrefix',
 ]);
 
 // There is deliberately no technical-attribute deny-list here. Both
@@ -673,7 +696,7 @@ export function findViolations(node, options = {}) {
             if (!isTrivialString(n.value, allow, minLength)) {
                 out.push({
                     node: n,
-                    message: `Inline JSX text "${truncate(n.value)}" should be moved to i18n/locales/<lang>/index.js and accessed via t('key').`,
+                    message: `Inline JSX text "${truncate(n.value)}" should be moved to the i18n/locales/<lang>/ dictionary and accessed via t('key').`,
                 });
             }
         } else if (n.type === 'JSXAttribute') {

@@ -37,6 +37,7 @@
 import { useEffect, useState } from 'react';
 import { FormPage, FormSection, InfoTip, RadioGroup, StatusMessage } from '@xchain-wallet/core/ui';
 import { t } from '../../i18n/index.js';
+import '../../i18n/locales/en/signerSelect.js';
 import { useMessaging } from '../useMessaging.js';
 import { useWalletMode } from '../hooks/useWalletMode.js';
 

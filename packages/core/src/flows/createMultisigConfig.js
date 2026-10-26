@@ -21,7 +21,7 @@
 // surface-wide badging (Step 22) all build on the persisted
 // MultisigConfig this flow writes.
 
-import { buildMultisigConfig } from '../schemas/multisigConfig.js';
+import { buildMultisigConfig, MAX_MULTISIG_COSIGNERS } from '../schemas/multisigConfig.js';
 import { defaultRegistry } from '../registry/index.js';
 import { isCompressedPublicKey, validateCosignerXpub } from '../shared/utils/multisigXpub.js';
 
@@ -70,6 +70,14 @@ export async function createMultisigConfig(opts) {
     }
     if (opts.threshold > opts.cosigners.length) {
         throw new Error('createMultisigConfig: threshold must be ≤ cosigners.length');
+    }
+    // Past the scheme's ceiling the derived address is unspendable (P2WSH) or
+    // underivable (P2SH), so refuse before anything reaches the wallet record.
+    const maxCosigners = MAX_MULTISIG_COSIGNERS[opts.scheme];
+    if (maxCosigners !== undefined && opts.cosigners.length > maxCosigners) {
+        throw new Error(
+            `createMultisigConfig: ${opts.scheme} supports at most ${maxCosigners} cosigners (got ${opts.cosigners.length})`,
+        );
     }
     // MuSig2 is n-of-n by construction: the single aggregated Schnorr signature
     // requires a nonce + partial sig from EVERY cosigner whose key is in the

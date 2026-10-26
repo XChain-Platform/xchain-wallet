@@ -81,7 +81,10 @@ test.describe('STAKE and partial UNSTAKE on Bitcoin testnet', () => {
         let stake;
 
         await test.step('fund a new wallet and mint XCHAIN', async () => {
-            const phrase = await createWallet(page, { password: WALLET_UNLOCK });
+            const phrase = await createWallet(page, {
+                password: WALLET_UNLOCK,
+                waitForBalances: false,
+            });
             await switchToTestnet(page, WALLET_UNLOCK);
             address = await readTestnetReceiveAddress(page);
             fundedAddress = address;
@@ -94,7 +97,16 @@ test.describe('STAKE and partial UNSTAKE on Bitcoin testnet', () => {
             test.info().annotations.push({ type: 'txid', description: `funding ${fundingTxid}` });
             await page.reload();
             await unlockAfterReload(page, WALLET_UNLOCK);
-            await mintTestnetXchain(page, MINT_AMOUNT, { explorerUrl, coin: TESTNET_COIN });
+            const mintTxid = await mintTestnetXchain(page, MINT_AMOUNT, {
+                explorerUrl,
+                coin: TESTNET_COIN,
+            });
+            test.info().annotations.push({ type: 'txid', description: `mint ${mintTxid}` });
+            const mint = await waitForValidAction(venue, mintTxid, {
+                timeoutMs: INCLUSION_TIMEOUT,
+            });
+            expect(mint.action).toBe('MINT');
+            expect(mint.source).toBe(address);
             await waitForTokenBalance(venue, address, GAS_TICK, MINT_AMOUNT, {
                 timeoutMs: INCLUSION_TIMEOUT,
             });

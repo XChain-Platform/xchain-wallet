@@ -204,4 +204,11 @@
     .footer {
         flex-direction: column;
     }
+
+    /* In a column the shared 1 1 0 basis collapses each button to its
+       min-height, so a wrapped label spills over the next button. Size
+       each button by its content here. */
+    .footer > * {
+        flex: 0 0 auto;
+    }
 }

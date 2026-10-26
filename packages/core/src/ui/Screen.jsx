@@ -16,6 +16,7 @@ import {
     useLayoutEffect,
     useMemo,
     useRef,
+    useState,
 } from 'react';
 import { NoticesClaimedContext, ShellNoticesContext } from '../shared/components/noticesRoute.js';
 import { describeFocusTarget, restoreScrollView } from './scrollRestore.js';
@@ -24,6 +25,26 @@ import styles from './Screen.module.css';
 const MAIN_ID = 'xc-main';
 const FOCUS_REVEAL_MARGIN_PX = 12;
 const ScrollRestorationContext = createContext(null);
+
+/**
+ * Counts the empty states on one page. A page shows at most one empty state:
+ * with two or more (a list per section, all empty), each is drawn as a plain
+ * line under its section instead of a page message.
+ *
+ * `register()` is stable and returns the release; `EmptyStateCountContext`
+ * carries the current count.
+ */
+export const EmptyStateRegistryContext = createContext(
+    /** @type {null | (() => () => void)} */ (null),
+);
+export const EmptyStateCountContext = createContext(0);
+
+/**
+ * True inside the body of a submitted form: an empty list there (no reusable packs, no usable
+ * lists) is about one field's choices, so it is a plain line among the
+ * fields, never the page's message, and the form's notice keeps that place.
+ */
+export const EmptyStateAsLineContext = createContext(false);
 
 /**
  * Keeps route scroll offsets, and the control the user last used on each
@@ -113,6 +134,11 @@ export function Screen({
     const noticesClaimed = useContext(NoticesClaimedContext);
     const ownsNotices = Boolean(shellNotices) && !noticesClaimed;
     const noticesSlotRef = useRef(null);
+    const [emptyStates, setEmptyStates] = useState(0);
+    const registerEmptyState = useCallback(() => {
+        setEmptyStates((count) => count + 1);
+        return () => setEmptyStates((count) => count - 1);
+    }, []);
     const routeKey = restoration?.routeKey;
     const positions = restoration?.positions;
     const positionKey = scrollKey == null ? routeKey : JSON.stringify([routeKey, scrollKey]);
@@ -246,7 +272,11 @@ export function Screen({
     // here. Always wrapped, so a change of owner never remounts the route.
     return (
         <NoticesClaimedContext.Provider value={noticesClaimed || Boolean(shellNotices)}>
-            {screen}
+            <EmptyStateRegistryContext.Provider value={registerEmptyState}>
+                <EmptyStateCountContext.Provider value={emptyStates}>
+                    {screen}
+                </EmptyStateCountContext.Provider>
+            </EmptyStateRegistryContext.Provider>
         </NoticesClaimedContext.Provider>
     );
 }

@@ -12,6 +12,7 @@ import { useLayoutEffect, useRef } from 'react';
 import styles from './UndoSendToast.module.css';
 import { restingPlacement } from './toastPlacement.js';
 import { t } from '../../i18n/index.js';
+import '../../i18n/locales/en/undoSend.js';
 
 /**
  * Props-only countdown toast for a held send. Owns no timer or state: the

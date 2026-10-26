@@ -42,9 +42,9 @@ describe('ChromeMetaBackend', () => {
 
     it('rejects non-string and malformed stored metadata', async () => {
         await expect(new ChromeMetaBackend({ chromeStorage: storageWith({}) }).load())
-            .rejects.toThrow('unexpected value type "object"');
+            .rejects.toMatchObject({ name: 'VaultCorruptError', message: expect.stringContaining('unexpected value type "object"') });
         await expect(new ChromeMetaBackend({ chromeStorage: storageWith('{broken') }).load())
-            .rejects.toBeInstanceOf(SyntaxError);
+            .rejects.toMatchObject({ name: 'VaultCorruptError' });
     });
 
     it('serializes writes and clears only its configured key', async () => {

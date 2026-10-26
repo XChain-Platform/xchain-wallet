@@ -43,10 +43,20 @@ const ACTIVITY_PAGE_SIZE = 50;
 // other coin/token via the shared picker.
 const FEATURED_MARKET = { tick: 'XCHAIN', displayName: 'XChain', chainId: null, imageUrl: null };
 
+// A feed row that is not an object cannot be read, so it is dropped here
+// instead of failing every section below.
 function extractRows(resp) {
-    if (Array.isArray(resp)) return resp;
-    if (Array.isArray(resp?.data)) return resp.data;
-    return [];
+    const rows = Array.isArray(resp) ? resp : Array.isArray(resp?.data) ? resp.data : [];
+    return rows.filter((row) => row !== null && typeof row === 'object');
+}
+
+// The first ticker-like value among a row's alias fields, always a string.
+function tickText(...values) {
+    for (const value of values) {
+        if (typeof value === 'string' && value !== '') return value;
+        if (typeof value === 'number' && Number.isFinite(value)) return String(value);
+    }
+    return '';
 }
 
 const byTimeDesc = (a, b) => {
@@ -391,8 +401,8 @@ export function MarketActivity({ walletId, accountId, onBack, onOpenDispenser })
                             /* Safari needs an explicit list role because this class removes list styling. */
                             <ul className={styles.list} role="list">
                                 {dexOrders.slice(0, visibleCounts.orders).map(({ chainId, row }, i) => {
-                                    const giveTick = row.give_tick || row.give_coin || row.giveTick || row.giveCoin || '';
-                                    const getTick = row.get_tick || row.get_coin || row.getTick || row.getCoin || '';
+                                    const giveTick = tickText(row.give_tick, row.give_coin, row.giveTick, row.giveCoin);
+                                    const getTick = tickText(row.get_tick, row.get_coin, row.getTick, row.getCoin);
                                     const { give: giveQty, get: getQty } = offerAmounts(row);
                                     const isSell = giveTick.toUpperCase() === tick;
                                     const title = isSell
@@ -442,8 +452,8 @@ export function MarketActivity({ walletId, accountId, onBack, onOpenDispenser })
                                     // A dispense row's GET_AMOUNT is what the buyer actually
                                     // paid, so it is right even for a fiat-priced dispenser.
                                     const give = row.give_amount;
-                                    const soldTick = row.give_tick || tick;
-                                    const payAsset = row.get_tick || row.get_coin || '';
+                                    const soldTick = tickText(row.give_tick) || tick;
+                                    const payAsset = tickText(row.get_tick, row.get_coin);
                                     const get = row.get_amount;
                                     const timestamp = row.timestamp || row.block_time;
                                     return (
@@ -489,8 +499,8 @@ export function MarketActivity({ walletId, accountId, onBack, onOpenDispenser })
                             /* Safari needs an explicit list role because this class removes list styling. */
                             <ul className={styles.list} role="list">
                                 {dexSwaps.slice(0, visibleCounts.swaps).map(({ chainId, row }, i) => {
-                                    const giveTick = row.give_tick || row.give_coin || row.giveTick || row.giveCoin || '';
-                                    const getTick = row.get_tick || row.get_coin || row.getTick || row.getCoin || '';
+                                    const giveTick = tickText(row.give_tick, row.give_coin, row.giveTick, row.giveCoin);
+                                    const getTick = tickText(row.get_tick, row.get_coin, row.getTick, row.getCoin);
                                     const giveQty = row.give_amount ?? row.giveAmount ?? null;
                                     const getQty = row.get_amount ?? row.getAmount ?? null;
                                     const timestamp = row.timestamp || row.block_time;

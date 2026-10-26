@@ -60,6 +60,7 @@ import {
     loadSigningCredentials,
 } from './background/signingSecretSession.js';
 import { initPanicModePersistence } from './background/panicModeStorage.js';
+import { attachBridgeBootGate, WALLET_LOCKED_ENVELOPE } from './background/bridgeBootGate.js';
 import { createBroadcastQueueStorage } from './background/broadcastQueueStorage.js';
 import { createBroadcastQueueStore, sealBroadcastQueueStore } from './background/broadcastQueueStore.js';
 import {
@@ -457,7 +458,7 @@ async function buildHost() {
             listArmedAlerts: () => vault.priceAlerts.list(),
             getSettings: () => flowsLib.getSettings(vault),
             notify: chromeNotify,
-            markTriggered: (id) => flowsLib.markAlertTriggered({ vault, id }),
+            markTriggered: (id, terms) => flowsLib.markAlertTriggered({ vault, id, terms }),
             loadFired: () => priceAlertFiredStore.load(),
             saveFired: (ids) => priceAlertFiredStore.save(ids),
             logger: console,
@@ -812,6 +813,16 @@ if (typeof chrome !== 'undefined' && chrome.alarms) {
         void keepaliveTick();
     });
 }
+
+// A dApp call that finds no host (locked, or a restarted worker still
+// rebuilding) is answered here instead of reaching no listener at all.
+attachBridgeBootGate({
+    hasHost: () => Boolean(host),
+    ensureHost,
+    dispatch: (message, sender, sendResponse) => (detachHost?.listener
+        ? detachHost.listener(message, sender, sendResponse)
+        : sendResponse(WALLET_LOCKED_ENVELOPE)),
+});
 
 ensureHost().catch((err) => {
     console.error('[xchain] background init failed:', err);

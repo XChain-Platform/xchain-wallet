@@ -39,6 +39,8 @@ import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { useSettings } from '../hooks/useSettings.js';
 import { blurNumberInputOnWheel } from '../utils/formInput.js';
 import { userFacingMessage } from '../utils/userFacingMessage.js';
+import { offeredAddressType } from '../utils/supportedAddressTypes.js';
+import { useSupportedAddressTypes } from '../hooks/useSupportedAddressTypes.js';
 import styles from './AddAddressModal.module.css';
 
 const chainRegistry = registryLib.defaultRegistry();
@@ -135,7 +137,13 @@ export function AddAddressModal({ walletId, accountId, chainIds, onClose, onGene
     const [addressType, setAddressType] = useState('');
     // Same late-arrival guard as the coin: an untouched type field follows the
     // selected chain's default rather than staying empty.
-    const effectiveAddressType = addressType || selected?.defaultAddressType || '';
+    // Only the types the installed SDK can generate; a stale pick falls back to the default.
+    const offeredTypes = useSupportedAddressTypes(selected ? chainRegistry.get(selected.chainId) : null);
+    const effectiveAddressType = offeredAddressType(
+        addressType || selected?.defaultAddressType,
+        offeredTypes,
+        selected?.defaultAddressType,
+    );
     const [purpose, setPurpose] = useState(/** @type {'receive' | 'dispenser'} */ ('receive'));
     const [count, setCount] = useState('1');
     const [busy, setBusy] = useState(false);
@@ -258,7 +266,7 @@ export function AddAddressModal({ walletId, accountId, chainIds, onClose, onGene
                                 onChange={(e) => { setAddressType(e.target.value); setError(null); }}
                                 disabled={busy || !selected}
                             >
-                                {(selected?.addressTypes || []).map((t) => {
+                                {offeredTypes.map((t) => {
                                     const hint = addressTypeHint(selected, t);
                                     return (
                                         <option key={t} value={t}>

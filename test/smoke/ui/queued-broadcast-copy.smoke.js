@@ -36,6 +36,7 @@ import { strict as assert } from 'node:assert';
 import { existsSync, readFileSync, readdirSync, statSync } from 'node:fs';
 import { dirname, join, relative } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { englishDictionarySource } from '../../helpers/englishNamespaces.js';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const wsRoot = join(here, '..', '..', '..');
@@ -151,7 +152,7 @@ for (const [rel, dontRepeat] of QUEUED_SURFACES) {
             'Send routes its queued result copy through i18n');
     }
     const localizedSrc = rel === 'routes/Send.jsx'
-        ? `${routeSrc} ${readFileSync(join(core, 'src', 'i18n', 'locales', 'en', 'index.js'), 'utf8')}`
+        ? `${routeSrc} ${englishDictionarySource()}`
         : routeSrc;
     const src = localizedSrc
         .replace(/&apos;/g, "'")

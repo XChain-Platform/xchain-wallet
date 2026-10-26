@@ -59,6 +59,35 @@ describe('signer port protocol edge failures', () => {
         });
     });
 
+    it.each(['', Object.assign(new Error(''), { name: '' })])(
+        'never sends an empty error name or message, which a strict bridge would drop (%#)',
+        async (failure) => {
+            const port = portWithoutDisconnect();
+            bindRendererPortBridge(port, {
+                getSigner: () => ({ getStatus: async () => { throw failure; } }),
+            });
+            await port.onMessage.emit({
+                kind: 'request', reqId: 6, op: 'status', payload: { signerId: 'signer-a' },
+            });
+            const [[frame]] = port.postMessage.mock.calls;
+            expect(frame.ok).toBe(false);
+            expect(frame.error.name).toMatch(/\S/);
+            expect(frame.error.message).toMatch(/\S/);
+        },
+    );
+
+    it('answers with an error when the success frame itself is refused', async () => {
+        const port = portWithoutDisconnect();
+        port.postMessage.mockImplementationOnce(() => { throw new TypeError('frame refused'); });
+        bindRendererPortBridge(port, { getSigner: () => ({ getStatus: async () => 'available' }) });
+        await port.onMessage.emit({
+            kind: 'request', reqId: 7, op: 'status', payload: { signerId: 'signer-a' },
+        });
+        expect(port.postMessage).toHaveBeenLastCalledWith({
+            kind: 'response', reqId: 7, ok: false, error: { name: 'TypeError', message: 'frame refused' },
+        });
+    });
+
     it('swallows a closed port while sending an error response', async () => {
         const port = portWithoutDisconnect();
         port.postMessage.mockImplementation(() => { throw new Error('closed'); });

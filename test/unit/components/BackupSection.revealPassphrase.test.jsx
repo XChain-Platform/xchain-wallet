@@ -24,9 +24,14 @@ import {
     __resetScreenGuardForTests,
     installScreenGuard,
 } from '../../../packages/core/src/shared/utils/screenGuard.js';
+import {
+    dismissAllOverlays,
+    resetBackStackForTests,
+} from '../../../packages/core/src/ui/backStack.js';
 
 afterEach(() => {
     cleanup();
+    resetBackStackForTests();
     __resetScreenGuardForTests();
 });
 
@@ -50,6 +55,22 @@ async function revealSeed() {
 }
 
 describe('BackupSection reveal: stored 25th-word passphrase', () => {
+    it('clears the recovery phrase when the native app pauses', async () => {
+        const revealMnemonicRequest = vi.fn(async () => ({
+            mnemonic: 'abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about',
+            format: 'bip39',
+            passphraseEnabled: false,
+            bip39Passphrase: null,
+        }));
+        mount(revealMnemonicRequest);
+        await revealSeed();
+
+        act(() => dismissAllOverlays());
+
+        expect(document.body.textContent).not.toContain('abandon abandon');
+        expect(screen.getByRole('button', { name: 'Show…' })).toBeInTheDocument();
+    });
+
     it('blocks selection and copy while protecting the screen until the phrase leaves the DOM', async () => {
         const guard = vi.fn();
         installScreenGuard(guard);

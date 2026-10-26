@@ -47,14 +47,26 @@
 // Fallback: missing keys fall back to English. Missing English keys
 // return the key itself (so dev sees the missing-string token
 // visually). No exception thrown.
+//
+// English loads by namespace (see locales/en/index.js). This module
+// loads the startup namespaces the first screens render; every other
+// namespace file registers itself into the shared store when a module
+// that renders its keys imports it, so a lazy route's copy arrives with
+// the route's chunk.
 
 import { IntlMessageFormat } from 'intl-messageformat';
 
-import { en } from './locales/en/index.js';
+import { DICTIONARIES } from './store.js';
+import './locales/en/common.js';
+import './locales/en/errors.js';
+import './locales/en/firstPaint.js';
+import './locales/en/home.js';
+import './locales/en/locked.js';
+import './locales/en/onboarding.js';
+import './locales/en/shell.js';
 
-/** @typedef {Record<string, string>} Dictionary */
+/** @typedef {import('./store.js').Dictionary} Dictionary */
 
-const DICTIONARIES = /** @type {Record<string, Dictionary>} */ ({ en });
 let currentLocale = 'en';
 let localeRequestId = 0;
 const subscribers = new Set();
@@ -562,5 +574,3 @@ function formatCase(template, argName, valueStr, vars, locale) {
     const expanded = template.replace(/#/g, valueStr);
     return legacyFormat(expanded, vars, locale ?? 'en');
 }
-
-export { en } from './locales/en/index.js';

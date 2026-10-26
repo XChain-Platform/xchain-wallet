@@ -79,7 +79,7 @@ assert.ok(
 assert.ok(/claimedDeepLinkRoute\(raw,\s*APP_CHAIN_REGISTRY\)/.test(webApp),
     'web App passes the raw URI to claimedDeepLinkRoute WITH the chain registry (coin-code URIs need it to resolve chainId)');
 assert.ok(
-    /route\.view === 'send'\) setSendPrefill\(route\.sendPrefill\)/.test(webApp),
+    /route\.view === 'send'\) \{\s*setSendPrefill\(route\.sendPrefill\)/.test(webApp),
     'web App seeds the Send prefill from a send route',
 );
 assert.ok(

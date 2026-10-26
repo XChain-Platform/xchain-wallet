@@ -11,10 +11,7 @@
 import { describe, expect, it } from 'vitest';
 import { LITECOIN_ACTIONS } from '../../../packages/core/src/registry/actions.js';
 import { litecoinDescriptors } from '../../../packages/core/src/registry/descriptors/litecoin.js';
-import {
-    ADS_DONATION_ADDRESS_PLACEHOLDER,
-    validateChainDescriptor,
-} from '../../../packages/core/src/registry/validate.js';
+import { validateChainDescriptor } from '../../../packages/core/src/registry/validate.js';
 
 describe('litecoinDescriptors', () => {
     it('defines exactly one descriptor for each supported network', () => {
@@ -25,7 +22,7 @@ describe('litecoinDescriptors', () => {
         ]);
     });
 
-    it('shares the Litecoin address, fee, action, and donation contracts', () => {
+    it('shares the Litecoin address, fee, action, and donation-default contracts', () => {
         for (const descriptor of litecoinDescriptors) {
             expect(descriptor).toMatchObject({
                 coin: 'litecoin',
@@ -45,7 +42,6 @@ describe('litecoinDescriptors', () => {
                     rbfSupported: true,
                 },
                 uriScheme: 'litecoin',
-                adsDonationAddress: ADS_DONATION_ADDRESS_PLACEHOLDER,
                 adsDefaults: {
                     perTxAmountSats: 100_000,
                     triggerAmountSats: 2_500_000,
@@ -83,6 +79,45 @@ describe('litecoinDescriptors', () => {
                 explorer: { defaultUrl: 'http://localhost', defaultPort: 18080 },
                 encoder: { defaultUrl: 'http://localhost', defaultPort: 3223 },
                 hub: { defaultUrl: 'http://localhost', defaultPort: 10000 },
+            },
+        ]);
+    });
+
+    // Donation addresses are per network, never shared: a testnet or regtest
+    // wallet must not route a donation to a mainnet address. The literals are
+    // xchain-indexer src/coins/LTC.js DONATE1, DONATE2 and EXPLORER per network.
+    it('carries per-network donation addresses, with DONATE1 as the default', () => {
+        expect(litecoinDescriptors.map(({ id, adsDonationAddress, adsDonationAddresses }) => ({
+            id,
+            adsDonationAddress,
+            adsDonationAddresses,
+        }))).toEqual([
+            {
+                id: 'litecoin-mainnet',
+                adsDonationAddress: 'Ldonate18tNZcVThKm5MX33EjvhaanJ6Mg',
+                adsDonationAddresses: {
+                    DONATE1: 'Ldonate18tNZcVThKm5MX33EjvhaanJ6Mg',
+                    DONATE2: 'Ldonate2io846q2e7q8dUArh3TNnaq9ENb',
+                    EXPLORER: 'Ldonate3FfyqbYQAYxo3qjFLcu28oUdAfn',
+                },
+            },
+            {
+                id: 'litecoin-testnet',
+                adsDonationAddress: 'mybp5CceJvVV5tNCCiF7oBiZWko2fNkmnT',
+                adsDonationAddresses: {
+                    DONATE1: 'mybp5CceJvVV5tNCCiF7oBiZWko2fNkmnT',
+                    DONATE2: 'muKEjejjXQvLY7Lp7Ecpn29gM2TCb5BLTF',
+                    EXPLORER: 'mzCXcxcECbY5aNSXsfWjzKQN1YwoefEcG8',
+                },
+            },
+            {
+                id: 'litecoin-regtest',
+                adsDonationAddress: 'mgNY2ZXbnNEkRT5ZRF8yGamivrSX2QH97h',
+                adsDonationAddresses: {
+                    DONATE1: 'mgNY2ZXbnNEkRT5ZRF8yGamivrSX2QH97h',
+                    DONATE2: 'n2DLJPppXUi8jC6fLiSkthZi2sc9UKiZHd',
+                    EXPLORER: 'myL7sZGPEG3LhFXn7RFCZ321r8bxgmgDBz',
+                },
             },
         ]);
     });

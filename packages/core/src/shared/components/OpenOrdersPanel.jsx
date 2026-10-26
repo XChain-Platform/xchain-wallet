@@ -27,6 +27,7 @@ import { useDemoGuard } from '../hooks/useDemoGuard.jsx';
 import { useBalancesHidden } from '../hooks/useBalancesHidden.js';
 import { ActionConfirmScreen } from './ActionConfirmScreen.jsx';
 import { WatcherResultPanel } from './WatcherResultPanel.jsx';
+import { QueuedResultPanel } from './QueuedResultPanel.jsx';
 import { useOwnerActionLane } from '../hooks/useOwnerActionLane.js';
 import { useSignerReady } from '../hooks/useSignerReady.js';
 import { useNativeFee } from '../hooks/useNativeFee.js';
@@ -40,6 +41,8 @@ import {
     subtractDecimalStrings,
 } from '../utils/amountFormat.js';
 import { t } from '../../i18n/index.js';
+import '../../i18n/locales/en/actionDetail.js';
+import '../../i18n/locales/en/components.js';
 
 const POLL_INTERVAL_MS = 5000;
 const chainRegistry = registryLib.defaultRegistry();
@@ -74,6 +77,7 @@ export function OpenOrdersPanel({ walletId, chainId, tick1, tick2 }) {
     const [submitting, setSubmitting] = useState(false);
     const [submitError, setSubmitError] = useState(/** @type {string | null} */ (null));
     const [watcherResult, setWatcherResult] = useState(/** @type {any | null} */ (null));
+    const [queuedResult, setQueuedResult] = useState(/** @type {any | null} */ (null));
     const mountedRef = useRef(false);
     const autopayRequestRef = useRef(0);
     const panelVersionRef = useRef(0);
@@ -249,6 +253,12 @@ export function OpenOrdersPanel({ walletId, chainId, tick1, tick2 }) {
                 setWatcherResult(result);
                 return;
             }
+            // Signed but held in the broadcast queue: the order is still open on
+            // the network, and a second cancel would sign a duplicate.
+            if (result?.queued) {
+                setQueuedResult(result);
+                return;
+            }
             setConfirmOrder(null);
             setOrders((prev) => prev.filter((o) => o.action_index !== confirmOrder.action_index));
         } catch (err) {
@@ -277,6 +287,19 @@ export function OpenOrdersPanel({ walletId, chainId, tick1, tick2 }) {
                 screenVariant={variant}
                 chainLabel={descriptor?.displayName || chainId}
                 signerReady={signerReady}
+            />
+        );
+    }
+
+    if (queuedResult) {
+        return (
+            <QueuedResultPanel
+                what={t('components.openOrdersPanel.orderCancellation')}
+                unsaved={queuedResult.unsaved}
+                onDone={() => {
+                    setQueuedResult(null);
+                    setConfirmOrder(null);
+                }}
             />
         );
     }

@@ -14,6 +14,8 @@ import { registry as registryLib } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { useChainIdsWithAction } from '../hooks/useSupportedChains.js';
 import { userFacingMessage } from '../utils/userFacingMessage.js';
+import { safeOutcomeLabel } from '../utils/betOutcomeLabels.js';
+import { neutralizeControlText } from '../utils/textHardening.js';
 import styles from './IssueTokenForm.module.css';
 import local from './BetFeedsList.module.css';
 import rowStyles from './ActionsMenu.module.css';
@@ -267,9 +269,10 @@ export function BetFeedsList({ walletId, onOpenMarket, onCreate, onMyBets, onMyM
                 <ul className={local.marketList}>
                     {rows.map((m) => {
                         const id = m.action_index;
-                        // The market LABEL is on-chain text written by whoever created the
-                        // market. React escapes it on render; it is never injected as markup.
-                        const label = m.label || '(untitled market)';
+                        // Market text is attacker-authored on-chain data. React
+                        // escapes markup, and the display pass also exposes bidi
+                        // controls instead of letting them reorder this row.
+                        const label = neutralizeControlText(m.label, { maxLength: 100 }) || '(untitled market)';
                         const outcomes = typeof m.outcomes === 'string' ? m.outcomes.split(',') : [];
                         return (
                             <li key={String(id)}>
@@ -283,9 +286,12 @@ export function BetFeedsList({ walletId, onOpenMarket, onCreate, onMyBets, onMyM
                                             <strong>#{String(id)} · {m.tick || 'n/a'}</strong>
                                             <StatusPill status={m.feed_status} />
                                         </span>
-                                        <span className={`${local.marketDetail} ${styles.betLongText}`}>{String(label).slice(0, 100)}</span>
+                                        <span className={`${local.marketDetail} ${styles.betLongText}`}>{label}</span>
                                         {outcomes.length ? (
-                                            <span className={`${local.marketDetail} ${styles.betLongText}`}>{outcomes.slice(0, 4).join(' / ')}{outcomes.length > 4 ? ' …' : ''}</span>
+                                            <span className={`${local.marketDetail} ${styles.betLongText}`}>
+                                                {outcomes.slice(0, 4).map((outcome) => safeOutcomeLabel(outcome) || '?').join(' / ')}
+                                                {outcomes.length > 4 ? ' …' : ''}
+                                            </span>
                                         ) : null}
                                     </span>
                                 </Button>

@@ -41,21 +41,27 @@ const chainRegistry = {
 };
 
 /** An SDK whose two balance endpoints fail independently, on demand. */
-function sdkWith({ tokensFail = false, nativeFail = false, pending = null } = {}) {
+function sdkWith({
+    tokensFail = false,
+    nativeFail = false,
+    pending = null,
+    confirmed = '1.50000000',
+    tokenRows = [{ tick: 'XCHAIN', amount: '2000', decimals: 0 }],
+} = {}) {
     return {
         get: () => ({
             getAddress: async () => {
                 if (nativeFail) throw new Error('address endpoint 503');
                 return {
                     balances: {
-                        confirmed: '1.50000000',
+                        confirmed,
                         ...(pending == null ? {} : { pending }),
                     },
                 };
             },
             getBalances: async () => {
                 if (tokensFail) throw new Error('balances endpoint 503');
-                return { data: [{ tick: 'XCHAIN', amount: '2000', decimals: 0 }] };
+                return { data: tokenRows };
             },
         }),
     };
@@ -144,5 +150,25 @@ describe('D-152: a half-failed balance read must not read as an empty wallet', (
         const entry = (res['bitcoin-regtest'] || []).find((e) => e.address === 'n2XDwu');
         expect(entry, 'the address was not fetched at all').toBeTruthy();
         expect(entry.balances.unavailable).toContain('tokens');
+    });
+
+    it.each(['NaN', 'Infinity', '-1', '1e3'])('marks malformed confirmed amount %s unavailable', async (confirmed) => {
+        const shape = await read(sdkWith({ confirmed }));
+        expect(shape.native).toBeNull();
+        expect(shape.unavailable).toContain('native');
+        expect(shape.unavailableReason).toBe('balance service unavailable');
+    });
+
+    it('keeps valid token rows but marks the token result unavailable when any row is malformed', async () => {
+        const shape = await read(sdkWith({
+            tokenRows: [
+                { tick: 'GOOD', amount: '2', decimals: 0 },
+                { tick: 'BAD', amount: 'NaN', decimals: 0 },
+            ],
+        }));
+
+        expect(shape.tokens.map((row) => row.tick)).toEqual(['GOOD']);
+        expect(shape.unavailable).toContain('tokens');
+        expect(shape.unavailableReason).toBe('balance service returned invalid token data');
     });
 });

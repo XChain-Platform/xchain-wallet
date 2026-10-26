@@ -26,6 +26,8 @@ import { crypto as coreCrypto, decoder, flows, registry, schemas } from '@xchain
 import { WALLET_VERSION } from '@xchain-wallet/core/buildInfo.js';
 import { sharedListDirectory } from '@xchain-wallet/core/flows/sharedLists.js';
 import { listTickCoinSupport } from '@xchain-wallet/core/flows/listTickCoinSupport.js';
+import { listAnyCoinItemsSupport } from '@xchain-wallet/core/flows/listAnyCoinItemsSupport.js';
+import { sdkSupportedAddressTypes } from '@xchain-wallet/core/flows/sdkAddressTypes.js';
 import { supplyHistoryFor } from '@xchain-wallet/core/flows/supplyHistory.js';
 import { capRbfToDescriptor } from '@xchain-wallet/core/flows/rbfCap.js';
 import {
@@ -38,6 +40,7 @@ import {
     installShellErrorCapture,
 } from '@xchain-wallet/core/flows/diagnosticDump.js';
 import { logConsole } from '@xchain-wallet/core/shared/utils/logConsole.js';
+import { rawTxid } from '@xchain-wallet/core/signers/verifySignedTx.js';
 import { MessageHost } from './MessageHost.js';
 import { registerBridgeHandlers } from '../bridge/handlers.js';
 import {
@@ -874,6 +877,8 @@ function assertReplacementPsbt({ replacement, plan, actionString, decodeActionSt
     }
 }
 
+const NETWORK_SWITCH_CANCEL_REASON = 'Network changed, request cancelled';
+
 async function cancelMatchingApprovals(approvals, matches) {
     if (typeof approvals?.cancelOriginsMatching !== 'function') return 0;
     return approvals.cancelOriginsMatching(matches);
@@ -906,8 +911,14 @@ async function announceWalletSwitch(req, vault, bridgeEvents) {
     return { ok: true };
 }
 
-async function announceNetworkChange(previous, next, vault, chainRegistry, bridgeEvents) {
+async function announceNetworkChange(previous, next, vault, chainRegistry, bridgeEvents, approvals) {
     if (getActiveNetwork(previous) === getActiveNetwork(next)) return;
+    // An open approval was composed for the network it was requested on, so a
+    // switch rejects every one of them (the dApp sees USER_REJECTED) and closes
+    // the windows before the new network is announced.
+    if (typeof approvals?.cancelAll === 'function') {
+        await approvals.cancelAll(NETWORK_SWITCH_CANCEL_REASON);
+    }
     if (typeof bridgeEvents?.chainChanged !== 'function') return;
     const activeChainIds = filterChainIdsByActiveNetwork(
         Object.keys(next?.fees ?? {}),
@@ -993,7 +1004,7 @@ function toSafeWallet(w) {
  * @param {import('./MessageHost.js').MessageHostDeps & {
  *   approvals?: import('../bridge/Approvals.js').Approvals,
  *   getDiagnosticContext?: DiagnosticContext,
- *   surfaceStateEvents?: { publish: (kind: 'wallet' | 'network', payload: Record<string, unknown>) => Promise<unknown> | unknown },
+ *   surfaceStateEvents?: { publish: (kind: 'wallet' | 'wallets' | 'accounts' | 'network', payload: Record<string, unknown>) => Promise<unknown> | unknown },
  * }} deps
  * @returns {MessageHost}
  */
@@ -1056,15 +1067,56 @@ export function createBackgroundHost(deps) {
     // A send composed on one network must not sign or broadcast after the
     // wallet switched to another: the undo hold and a second window both
     // leave time for a switch between compose and broadcast.
-    async function assertActiveSendNetwork({ chainId, vault, chainRegistry }) {
+    async function assertActiveSendNetwork(
+        { chainId, vault, chainRegistry },
+        reviewAgain = 'Return to Send and review the payment again.',
+    ) {
         const descriptor = chainRegistry?.get?.(chainId);
         if (!descriptor) return;
         const activeNetwork = getActiveNetwork(await vault.settings.get());
         if (descriptor.networkKind !== activeNetwork) {
-            throw new Error(
-                `The active network changed to ${activeNetwork}. Return to Send and review the payment again.`,
-            );
+            throw new Error(`The active network changed to ${activeNetwork}. ${reviewAgain}`);
         }
+    }
+
+    // LIST and AIRDROP confirms can be resumed or left open in a second
+    // window, so they take the same network check before signing.
+    const REVIEW_ACTION_AGAIN = 'Go back and review the action again.';
+
+    // A stored confirm whose PSBT a send has just broadcast is spent. The popup
+    // clears its own session after the send returns, but a popup that closes
+    // between Approve and that return never does, and Home would then offer to
+    // finish a payment that has already left the wallet. The host drops it at
+    // the moment of the broadcast, so the clear does not depend on the popup
+    // staying open.
+    async function dropConfirmSessionsForPsbt(psbtHex) {
+        if (!confirmSessionStorage || typeof psbtHex !== 'string' || psbtHex.length === 0) return;
+        try {
+            const stored = await confirmSessionStorage.loadSessions();
+            for (const [id, session] of Object.entries(stored || {})) {
+                if (session?.composed?.psbt === psbtHex) await confirmSessionStorage.removeSession(id);
+            }
+        } catch { /* the popup's own clear still runs when it is open */ }
+    }
+
+    // LIST and AIRDROP are resumable as well (RESUMABLE_DISPATCH_METHODS), so
+    // a broadcast of either drops its stored confirm the same way a send does.
+    // A queued broadcast (the signed bytes sit in the broadcast queue) and a
+    // permanent refusal (re-signing is forbidden) end the confirm too. Only an
+    // unsaved transient failure keeps it, since it is then the one way back.
+    async function finishStoredConfirm(psbtHex, run) {
+        let result;
+        try {
+            result = await run();
+        } catch (err) {
+            if (err?.name === flows.BROADCAST_FAILED_TRANSIENT_NAME
+                || err?.name === flows.BROADCAST_FAILED_PERMANENT_NAME) {
+                await dropConfirmSessionsForPsbt(psbtHex);
+            }
+            throw err;
+        }
+        await dropConfirmSessionsForPsbt(psbtHex);
+        return result;
     }
 
     async function sendWithHold(req, flowDeps) {
@@ -1102,7 +1154,10 @@ export function createBackgroundHost(deps) {
                 if (holdBeforeBroadcast) await holdBeforeBroadcast(...args);
                 await assertActiveSendNetwork(opts);
             };
-            return await sendToken({ ...opts, beforeBroadcast });
+            return await finishStoredConfirm(
+                opts.prebuiltPsbt?.psbtHex,
+                () => sendToken({ ...opts, beforeBroadcast }),
+            );
         } finally {
             activeSendIntents.delete(intentKey);
         }
@@ -1449,6 +1504,7 @@ export function createBackgroundHost(deps) {
 
     host.register('wallet.rename', async (req, { vault }) => {
         const updated = await renameWallet({ ...req, vault });
+        await publishSurfaceState('wallets', { change: 'renamed', walletId: updated.id });
         return { wallet: toSafeWallet(updated) };
     });
 
@@ -1458,6 +1514,11 @@ export function createBackgroundHost(deps) {
         if (previous?.name !== updated.name) {
             await announceAccountChange(vault, bridgeEvents, [updated.id]);
         }
+        await publishSurfaceState('accounts', {
+            change: 'renamed',
+            walletId: updated.walletId,
+            accountId: updated.id,
+        });
         return { account: updated };
     });
 
@@ -1503,6 +1564,11 @@ export function createBackgroundHost(deps) {
             sdkRegistry,
         });
         await announceAccountChange(vault, bridgeEvents, [r.account.id]);
+        await publishSurfaceState('accounts', {
+            change: 'added',
+            walletId: r.account.walletId,
+            accountId: r.account.id,
+        });
         return { account: r.account, addresses: r.addresses };
     });
 
@@ -1639,6 +1705,7 @@ export function createBackgroundHost(deps) {
             vault,
             chainRegistry,
             bridgeEvents,
+            approvals,
         );
         await publishSurfaceState('network', { settings });
         return { settings, addresses };
@@ -1692,6 +1759,7 @@ export function createBackgroundHost(deps) {
                 vault,
                 chainRegistry,
                 bridgeEvents,
+                approvals,
             );
             await publishSurfaceState('network', { settings: result });
         }
@@ -2179,6 +2247,7 @@ export function createBackgroundHost(deps) {
         // blob and rehydrate into every later boot, and no route can list them
         // again because the banner only ever asks for the active wallet.
         await pruneWalletFromQueue(walletId);
+        await publishSurfaceState('wallets', { change: 'removed', walletId });
         const removedAccountIds = new Set(removedAccounts.map((account) => account.id));
         const affectedOrigins = new Set(sitesBefore
             .filter((site) => {
@@ -2259,8 +2328,15 @@ export function createBackgroundHost(deps) {
         if (isOriginBlocked(settings?.blockedOrigins, site.origin)) {
             throw new Error('sites.restore: origin is blocked');
         }
+        // The site may have reconnected after the disconnect. Its new grant is
+        // the one the user last chose, and a second record for the origin would
+        // leave two grants with the bridge reading whichever comes back first.
+        const existing = await vault.connectedSites.findBy('origin', site.origin);
+        if (existing.some((candidate) => candidate.id !== site.id)) {
+            return { ok: true, restored: false };
+        }
         await vault.connectedSites.put(site);
-        return { ok: true };
+        return { ok: true, restored: true };
     });
 
     // §12 / G009: origin blocklist. listBlockedOrigins reads from
@@ -2418,7 +2494,7 @@ export function createBackgroundHost(deps) {
     // rest of the session.
     host.register('chainRegistry.addCustomChain', async (req, { vault, chainRegistry, sdkRegistry }) => {
         if (!req || typeof req !== 'object' || !req.descriptor) {
-            throw new Error('chainRegistry.addCustomChain: descriptor required');
+            throw new Error('A network description is required.');
         }
         return addCustomChain({ vault, chainRegistry, sdkRegistry, descriptor: req.descriptor });
     });
@@ -2525,14 +2601,28 @@ export function createBackgroundHost(deps) {
         return newestAddress(req, { vault, chainRegistry });
     });
 
+    // Which of the chain's registry address types the installed SDK can generate,
+    // so no picker offers one that generation then refuses. `supported` is null
+    // when the SDK cannot be asked yet; the caller then keeps the registry list.
+    host.register('sdk.addressTypes', async (req, { chainRegistry, sdkRegistry }) => {
+        const descriptor = chainRegistry.get(req?.chainId);
+        if (!descriptor) throw new Error(`sdk.addressTypes: unknown chain "${req?.chainId}"`);
+        let sdk;
+        try {
+            sdk = sdkRegistry.get(descriptor.id);
+        } catch {
+            return { supported: null };
+        }
+        return { supported: sdkSupportedAddressTypes(sdk, descriptor.addressTypes) };
+    });
+
     // Rename an address: set its user-facing label by record id.
     host.register('addresses.setLabel', async (req, { vault }) => {
         const id = req?.id;
         if (!id) throw new Error('addresses.setLabel: id is required');
         const rec = await vault.addresses.get(id);
         if (!rec) throw new Error('addresses.setLabel: address not found');
-        const requestedLabel = typeof req?.label === 'string' ? req.label.trim() : '';
-        const label = requestedLabel || schemas.address.defaultAddressLabel(rec);
+        const label = schemas.address.normalizeAddressLabel(req?.label, rec);
         await vault.addresses.put({ ...rec, label });
         // §19.5.2 auto-sync: the label just changed on disk, so the
         // on-chain copy is stale. The scheduler batches this with every
@@ -3146,6 +3236,14 @@ export function createBackgroundHost(deps) {
         if (!sdk?.auth?.verifyMessage) {
             throw new Error(`auth.verifyMessage: SDK for "${chainId}" lacks auth.verifyMessage`);
         }
+        // Message verification recovers a key hash and ignores the address version
+        // byte, so an address of another network (testnet while mainnet is chosen)
+        // would verify. Refuse any address the chosen network does not accept.
+        if (typeof sdk.wallet?.validateAddress === 'function') {
+            let addressVerdict = null;
+            try { addressVerdict = sdk.wallet.validateAddress(address); } catch (_err) { addressVerdict = { valid: false }; }
+            if (addressVerdict && addressVerdict.valid === false) return { valid: false };
+        }
         let valid = false;
         try {
             // Read the SDK's { valid, error } answer by its field; the demo stubs answer a bare boolean
@@ -3388,6 +3486,13 @@ export function createBackgroundHost(deps) {
             feeIncrease: coinAmount(plan.feeIncreaseSats),
         };
         if (req?.preview === true) return feeQuote;
+        // Refuse to sign a second replacement while one waits in the queue: re-signing beside a queued signed copy is forbidden.
+        // The refusal is a plain sentence because the History card shows it as written.
+        await ensureQueueLoaded();
+        if (getQueue(walletId).some((e) => e?.rbfReplacesPendingTxId === conflictRecord.id)) {
+            throw new Error('A replacement for this transaction is already waiting in the queued-transactions banner. '
+                + 'Send it or remove it there before you speed up or cancel again.');
+        }
 
         let actionString = null;
         if (strategy !== 'cancel') {
@@ -3450,6 +3555,10 @@ export function createBackgroundHost(deps) {
         if (typeof signed?.txHex !== 'string' || !signed.txHex || typeof signed?.txid !== 'string' || !signed.txid) {
             throw new Error('tx.replace: signer did not return a complete transaction');
         }
+        // The freeze is checked again once the signer returns: a hardware
+        // prompt can hold the sign open while panic mode is armed elsewhere,
+        // and the replacement must not reach the network or the ledger then.
+        flows.assertSigningAllowed();
 
         let pending = schemas.createPendingTx({
             chain: descriptor.coin,
@@ -3478,11 +3587,37 @@ export function createBackgroundHost(deps) {
             // An already-on-network answer means these exact bytes reached a node, so the
             // replacement is live and the original evicted: settle it as delivered, as every broadcast lane does.
             if (!flows.isAlreadyOnNetworkRejection(err)) {
-                await vault.pendingTxs.put({
-                    ...pending,
-                    status: 'failed',
-                    error: err?.message ? String(err.message) : String(err),
+                const failure = err?.message ? String(err.message) : String(err);
+                // Retire only bytes that can never confirm; the same split broadcast.signedTx applies.
+                if (flows.classifyBroadcastFailure(err) === 'permanent') {
+                    const failedPatch = { status: 'failed', error: failure };
+                    if (await settleQueuedPendingTx(vault, { pendingTxId: pending.id }, failedPatch) === 'unreachable') {
+                        recordOwedSettlement(walletId, pending.id, 'patch', failedPatch);
+                    }
+                    if (err && typeof err === 'object') {
+                        try { err.name = flows.BROADCAST_FAILED_PERMANENT_NAME; } catch { /* keep immutable error */ }
+                    }
+                    throw err;
+                }
+                // A transient failure may still have reached a node, so keep the record live and queue
+                // the same signed bytes for a re-send; the entry names the original so a later
+                // delivery retires it. The original stays 'broadcast' until then.
+                const queuedPatch = { status: 'queued', error: failure };
+                if (await settleQueuedPendingTx(vault, { pendingTxId: pending.id }, queuedPatch) === 'unreachable') {
+                    recordOwedSettlement(walletId, pending.id, 'patch', queuedPatch);
+                }
+                await enqueueSignedBroadcast(walletId, {
+                    chainId,
+                    signedTxHex: signed.txHex,
+                    summary: pending.actionSummary,
+                    txid: signed.txid,
+                    pendingTxId: pending.id,
+                    rbfReplacesPendingTxId: conflictRecord.id,
                 });
+                await flushOwedSettlements(vault);
+                if (err && typeof err === 'object') {
+                    try { err.name = flows.BROADCAST_FAILED_TRANSIENT_NAME; } catch { /* keep immutable error */ }
+                }
                 throw err;
             }
             broadcast = signed.txid;
@@ -3534,6 +3669,49 @@ export function createBackgroundHost(deps) {
     function saysAlreadyOnNetwork(err) {
         return flows.isAlreadyOnNetworkRejection(err);
     }
+    // Retire the original a queued fee-bump replacement evicted, the write tx.replace makes when its own send lands.
+    // Best effort: a refused write leaves the original live, which nets its spend but never re-sends it.
+    async function settleReplacedOriginal(vault, entry, replacementTxHash) {
+        const originalId = entry?.rbfReplacesPendingTxId;
+        if (typeof originalId !== 'string' || !originalId) return;
+        if (typeof replacementTxHash !== 'string' || !replacementTxHash) return;
+        try {
+            const original = await vault?.pendingTxs?.get(originalId);
+            if (!original || original.chainConfirmed === true) return;
+            if (original.status !== 'broadcast' && original.status !== 'broadcasting') return;
+            await vault.pendingTxs.put({ ...original, status: 'rbf-replaced', rbfReplacement: replacementTxHash });
+        } catch (_e) { /* the original stays live */ }
+    }
+    // Rewrite a two-phase entry and its PendingTx as the reveal once the commit
+    // is on the network, marked commit-landed, before the reveal goes out. A
+    // crash from here resumes with the reveal alone, and a refused reveal keeps
+    // its record 'broadcast' on the commit's txid (permanentReleasePatch).
+    // Neither write can stop the reveal: the commit is already out.
+    async function advanceToReveal(vault, walletId, q, entry, reveal) {
+        const { revealTxHex: _sentHex, revealTxid: _sentTxid, ...rest } = entry;
+        const advanced = {
+            ...rest,
+            signedTxHex: reveal.txHex,
+            ...(reveal.txid ? { txid: reveal.txid } : {}),
+            commitLanded: true,
+            ...(entry.txid ? { commitTxid: entry.txid } : {}),
+        };
+        const cur = q.findIndex((e) => e.id === entry.id);
+        if (cur >= 0) q[cur] = advanced;
+        await persistQueue();
+        const patch = {
+            status: 'broadcasting',
+            txHex: reveal.txHex,
+            txid: advanced.txid ?? null,
+            commitLanded: true,
+            commitTxid: entry.txid ?? null,
+            error: null,
+        };
+        if (await settleQueuedPendingTx(vault, advanced, patch) === 'unreachable') {
+            recordOwedSettlement(walletId, advanced.pendingTxId, 'patch', patch);
+        }
+        return advanced;
+    }
     // In-flight claims for broadcast.queue.broadcast, keyed walletId:id.
     // `broadcastTx` is an irreversible effector, so a second call for the same
     // entry (double-click, popup and expanded tab racing) must fail before it
@@ -3557,7 +3735,9 @@ export function createBackgroundHost(deps) {
             const q = getQueue(walletId);
             const idx = q.findIndex((entry) => entry.id === id);
             if (idx < 0) throw new Error(`broadcast.queue: no queued entry "${id}"`);
-            const entry = q[idx];
+            // Reassigned once a two-phase entry's commit lands: from then on the
+            // entry is its reveal, and every settlement below describes that.
+            let entry = q[idx];
             const retryAfterMs = Number.isFinite(entry.nextRetryAt)
                 ? Math.ceil(entry.nextRetryAt - Date.now())
                 : 0;
@@ -3623,6 +3803,21 @@ export function createBackgroundHost(deps) {
             // would delete a different, still-valid signed transaction.
             let result;
             try {
+                // A two-phase entry carries its signed reveal: the commit goes
+                // first, and the reveal follows in this same call, so the commit
+                // is never sent alone. A refused commit falls to the catch below
+                // with the entry unchanged, so it is settled as the pair it is.
+                const reveal = schemas.pendingTx.queuedRevealOf(entry);
+                if (reveal) {
+                    try {
+                        await sdk.encoder.broadcastTx(entry.signedTxHex);
+                    } catch (commitErr) {
+                        // "Already known" is the commit delivered by an attempt
+                        // interrupted before its reveal: the reveal still goes out.
+                        if (!saysAlreadyOnNetwork(commitErr)) throw commitErr;
+                    }
+                    entry = await advanceToReveal(vault, walletId, q, entry, reveal);
+                }
                 result = await sdk.encoder.broadcastTx(entry.signedTxHex);
             } catch (err) {
                 // The same permanence split the core queue applies,
@@ -3647,6 +3842,7 @@ export function createBackgroundHost(deps) {
                     if (await settleQueuedPendingTx(vault, entry, deliveredPatch) === 'unreachable') {
                         recordOwedSettlement(walletId, entry.pendingTxId, 'patch', deliveredPatch);
                     }
+                    await settleReplacedOriginal(vault, entry, entry.txid);
                     const landed = q.findIndex((e) => e.id === id);
                     if (landed >= 0) q.splice(landed, 1);
                     await persistQueue();
@@ -3737,6 +3933,7 @@ export function createBackgroundHost(deps) {
             if (await settleQueuedPendingTx(vault, entry, landedPatch) === 'unreachable') {
                 recordOwedSettlement(walletId, entry.pendingTxId, 'patch', landedPatch);
             }
+            await settleReplacedOriginal(vault, entry, landedPatch.txid);
             const cur = q.findIndex((e) => e.id === id);
             if (cur >= 0) q.splice(cur, 1);
             await persistQueue();
@@ -3874,11 +4071,18 @@ export function createBackgroundHost(deps) {
             actionSummary: 'Raw signed transaction broadcast via broadcast.signedTx',
             psbtHex: '',
         });
+        // The caller's txid wins; a pasted raw transaction carries none, so it is
+        // derived from the bytes. A record without a txid is invisible to the
+        // History pending list and cannot match a duplicate of itself.
+        let knownTxid = typeof req?.txid === 'string' && req.txid ? req.txid : null;
+        if (!knownTxid) {
+            try { knownTxid = rawTxid(txHex); } catch { knownTxid = null; }
+        }
         pending = {
             ...pending,
             status: 'broadcasting',
             txHex,
-            ...(typeof req?.txid === 'string' && req.txid ? { txid: req.txid } : {}),
+            ...(knownTxid ? { txid: knownTxid } : {}),
         };
         await vault.pendingTxs.put(pending);
 
@@ -4236,8 +4440,14 @@ export function createBackgroundHost(deps) {
     registerHwHandler('action.deployChunked.hw', deployChunkedRun);
     registerHwHandler('action.dispenser.hw', dispenserAction);
     registerHwHandler('action.dividend.hw', dividendAction);
-    registerHwHandler('action.createList.hw', createList);
-    registerHwHandler('action.airdrop.hw', airdropAction);
+    registerHwHandler('action.createList.hw', async (opts) => {
+        await assertActiveSendNetwork(opts, REVIEW_ACTION_AGAIN);
+        return finishStoredConfirm(opts?.prebuiltPsbt?.psbtHex, () => createList(opts));
+    });
+    registerHwHandler('action.airdrop.hw', async (opts) => {
+        await assertActiveSendNetwork(opts, REVIEW_ACTION_AGAIN);
+        return finishStoredConfirm(opts?.prebuiltPsbt?.psbtHex, () => airdropAction(opts));
+    });
     registerHwHandler('action.advanced.hw', advancedAction);
     registerHwHandler('action.order.hw', orderAction);
     registerHwHandler('action.cancelOrder.hw', cancelOrder);
@@ -5216,11 +5426,17 @@ export function createBackgroundHost(deps) {
     // (b) confirm the LIST on the AIRDROP review screen.
 
     host.register('action.createList', async (req, { vault, chainRegistry, sdkRegistry, signerPool }) => {
-        return createList({ ...req, signer: await sessionSigner(req, vault, signerPool), vault, chainRegistry, sdkRegistry, onBroadcastFailure: enqueueOnBroadcastFailure(req?.walletId) });
+        await assertActiveSendNetwork({ ...req, vault, chainRegistry }, REVIEW_ACTION_AGAIN);
+        return finishStoredConfirm(req?.prebuiltPsbt?.psbtHex, async () => {
+            return createList({ ...req, signer: await sessionSigner(req, vault, signerPool), vault, chainRegistry, sdkRegistry, onBroadcastFailure: enqueueOnBroadcastFailure(req?.walletId) });
+        });
     });
 
     host.register('action.airdrop', async (req, { vault, chainRegistry, sdkRegistry, signerPool }) => {
-        const result = await airdropAction({ ...req, signer: await sessionSigner(req, vault, signerPool), vault, chainRegistry, sdkRegistry, onBroadcastFailure: enqueueOnBroadcastFailure(req?.walletId) });
+        await assertActiveSendNetwork({ ...req, vault, chainRegistry }, REVIEW_ACTION_AGAIN);
+        const result = await finishStoredConfirm(req?.prebuiltPsbt?.psbtHex, async () => {
+            return airdropAction({ ...req, signer: await sessionSigner(req, vault, signerPool), vault, chainRegistry, sdkRegistry, onBroadcastFailure: enqueueOnBroadcastFailure(req?.walletId) });
+        });
         return retainReplacementPlan(vault, result, req?.prebuiltPsbt?.psbtHex, req?.rbf, chainRegistry?.get?.(req?.chainId));
     });
 
@@ -5383,6 +5599,15 @@ export function createBackgroundHost(deps) {
     // answers false for a missing SDK method, a throw or an unknown chain.
     host.register('sdk.isListTickCoinActive', async (req, { sdkRegistry }) => {
         return listTickCoinSupport({ sdkRegistry, chainId: req?.chainId });
+    });
+
+    // The address-list item gate the list create and fork forms read: the coins
+    // whose addresses a LIST on this chain accepts, its own included. The flow
+    // answers [] for a missing explorer, a throw or a flag that is not true.
+    host.register('sdk.listAnyCoinItems', async (req, { sdkRegistry }) => {
+        return listAnyCoinItemsSupport({
+            sdkRegistry, chainId: req?.chainId, coin: req?.coin, networkKind: req?.networkKind,
+        });
     });
 
     host.register('sdk.getActionFields', async (req, { sdkRegistry }) => {

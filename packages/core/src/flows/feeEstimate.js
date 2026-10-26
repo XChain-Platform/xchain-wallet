@@ -26,7 +26,9 @@
 // number so the user understands what they're looking at.
 
 import { tickerForCoin } from '../registry/coinTicker.js';
-import { decimalToBaseUnits } from '../shared/utils/amountFormat.js';
+import { decimalToBaseUnits, formatWithThousands } from '../shared/utils/amountFormat.js';
+import { t } from '../i18n/index.js';
+import '../i18n/locales/en/settings.js';
 
 // Display unit for a per-vbyte chain. Per-kB chains render as
 // `${ticker}/kB` (DOGE/kB for dogecoin), see resolveFeeUnit.
@@ -192,6 +194,31 @@ export function estimateNativeSendFeeTiers({ chainId, chainRegistry } = {}) {
         minimumRate: perByteRateToDisplay(unit, table.minimumRate),
         maximumRate: perByteRateToDisplay(unit, table.maximumRate),
     };
+}
+
+/**
+ * Refusal copy for a custom rate outside the chain bounds, or null when the
+ * rate is in range or unjudged. Settings and every compose form's fee control
+ * share these messages and bounds.
+ *
+ * @param {{ rate: number, tiers: { unit?: string, minimumRate?: number, maximumRate?: number } | null | undefined }} opts
+ * @returns {string | null}
+ */
+export function customFeeRateBoundsError({ rate, tiers } = {}) {
+    if (!tiers || !Number.isFinite(rate) || rate <= 0) return null;
+    if (Number.isFinite(tiers.minimumRate) && tiers.minimumRate > 0 && rate < tiers.minimumRate) {
+        return t('settings.fees.rateAtLeast', {
+            rate: formatWithThousands(tiers.minimumRate),
+            unit: tiers.unit,
+        });
+    }
+    if (Number.isFinite(tiers.maximumRate) && tiers.maximumRate > 0 && rate > tiers.maximumRate) {
+        return t('settings.fees.rateNoHigherThan', {
+            rate: formatWithThousands(tiers.maximumRate),
+            unit: tiers.unit,
+        });
+    }
+    return null;
 }
 
 /**
@@ -390,6 +417,7 @@ export async function fetchNativeSendFeeTiers({
                     fast: shapeSdkTier({ table, sdk: sdk.fast, unit, fallback: table.tiers.fast, speed: 'fast', minimumRate }),
                     unit,
                     minimumRate: perByteRateToDisplay(unit, minimumRate),
+                    maximumRate: perByteRateToDisplay(unit, table.maximumRate),
                 };
             }
         } catch {

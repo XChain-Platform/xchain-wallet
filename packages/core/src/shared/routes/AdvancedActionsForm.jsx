@@ -18,11 +18,13 @@ import {
     registry as registryLib,
     decoder as decoderLib,
 } from '@xchain-wallet/core';
+import '../../i18n/locales/en/send.js';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { useDemoGuard } from '../hooks/useDemoGuard.jsx';
 import { useGatedTickNotice } from '../hooks/useGatedTickNotice.js';
 import { useActionConfirmFlow, useConfirmSubmit, isUserRejection } from '../hooks/useActionConfirmFlow.js';
 import { ActionConfirmScreen } from '../components/ActionConfirmScreen.jsx';
+import { irreversibleConfirmWord } from '../utils/irreversibleActionGate.js';
 import { SignCredentials } from '../components/SignCredentials.jsx';
 import { useSignerReady } from '../hooks/useSignerReady.js';
 import { WatcherResultPanel } from '../components/WatcherResultPanel.jsx';
@@ -350,6 +352,12 @@ export function AdvancedActionsForm({ walletId, onBack, hasDexSurface = true }) 
         [fields, values, version],
     );
 
+    // Destroy, a lock and an address lock cannot be undone: the confirm page asks for the typed word the
+    // dedicated forms ask for, and opening the confirm page starts the typing over.
+    const confirmWord = irreversibleConfirmWord(action, actionParams);
+    const [typedConfirm, setTypedConfirm] = useState('');
+    const typedConfirmOk = !confirmWord || typedConfirm.trim().toUpperCase() === confirmWord;
+
     const decoded = useMemo(() => {
         if (stage !== 'review' && stage !== 'submitting') return null;
         return decoderLib.decodeAction({
@@ -371,6 +379,7 @@ export function AdvancedActionsForm({ walletId, onBack, hasDexSurface = true }) 
         setFields([]);
         setValues({});
         setValidation(null);
+        setFormError(null);
     }
 
     function handleChainChange(nextChainId) {
@@ -444,6 +453,7 @@ export function AdvancedActionsForm({ walletId, onBack, hasDexSurface = true }) 
             signerId: fromAddress.signerId,
         };
         setSubmitError(null);
+        setTypedConfirm('');
         try {
             const res = await actionConfirm.run({
                 chainId,
@@ -731,6 +741,18 @@ export function AdvancedActionsForm({ walletId, onBack, hasDexSurface = true }) 
                 onHwStatusChange={onHwStatusChange}
                 chainId={chainId}
                 getSignerStatus={messaging.getSignerStatus}
+                credentialsReady={(isHwSource
+                    ? hwStatus === 'available'
+                    : (signerReady || password.length > 0)) && typedConfirmOk}
+                extraCredentials={confirmWord ? (
+                    <Input
+                        label={`Type "${confirmWord}" to confirm`}
+                        hint="This cannot be undone."
+                        value={typedConfirm}
+                        onChange={(e) => setTypedConfirm(e.target.value)}
+                        autoComplete="off"
+                    />
+                ) : null}
             />
         );
     }
@@ -765,7 +787,7 @@ export function AdvancedActionsForm({ walletId, onBack, hasDexSurface = true }) 
                     type="submit"
                     variant="primary"
                     loading={actionConfirm.composing}
-                    disabled={actionConfirm.composing}
+                    disabled={actionConfirm.composing || (!!action && formats === null)}
                 >
                     {actionConfirm.composing
                         ? 'Preparing review…'
@@ -843,7 +865,7 @@ export function AdvancedActionsForm({ walletId, onBack, hasDexSurface = true }) 
                 </Select>
             ) : null}
 
-            {action && fields.length === 0 ? (
+            {action && formats !== null && fields.length === 0 ? (
                 <p className={styles.hint}>
                     This action takes no user-provided fields.
                 </p>

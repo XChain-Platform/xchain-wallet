@@ -182,8 +182,9 @@ assert.ok(
 );
 assert.ok(
     /p\.LOCK_MAX_SUPPLY\s*=\s*'1'/.test(src)
-        && /p\.LOCK_MINT\s*=\s*'1'/.test(src),
-    'composer sets LOCK_MAX_SUPPLY + LOCK_MINT when lockSupply is true',
+        && /p\.LOCK_MINT\s*=\s*'1'/.test(src)
+        && /p\.LOCK_MINT_SUPPLY\s*=\s*'1'/.test(src),
+    'composer sets LOCK_MAX_SUPPLY + LOCK_MINT + LOCK_MINT_SUPPLY when lockSupply is true',
 );
 assert.ok(
     /p\.TRANSFER\s*=\s*transferTo/.test(src),

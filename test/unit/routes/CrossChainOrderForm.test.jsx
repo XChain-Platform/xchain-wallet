@@ -417,7 +417,7 @@ describe('CrossChainOrderForm', () => {
             setValue(utils, 'Receive at', 'not an address');
             await drainMicrotasks();
         });
-        expect(utils.container.textContent).toContain('This address has a typo. Check it and try again.');
+        expect(utils.container.textContent).toContain('This is not a valid address.');
 
         await domAct(async () => {
             setValue(utils, 'Receive at', BTC_ADDRESS.address);

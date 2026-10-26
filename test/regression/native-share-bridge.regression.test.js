@@ -88,7 +88,7 @@ describe('native share bridge regression', () => {
 
         await waitFor(() => expect(share).toHaveBeenCalledWith(expect.objectContaining({
             title: 'Receive BTC with XChain',
-            url: 'bitcoin:bcrt1qnativeshare?chain=bitcoin-regtest',
+            text: expect.stringContaining('bitcoin:bcrt1qnativeshare?chain=bitcoin-regtest'),
         })));
         expect(copyText).not.toHaveBeenCalled();
     });

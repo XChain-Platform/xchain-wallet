@@ -29,6 +29,7 @@ import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { useSignerReady } from '../hooks/useSignerReady.js';
 import { useFormDraft } from '../hooks/useFormDraft.js';
 import { useSettings } from '../hooks/useSettings.js';
+import { getActiveNetwork } from '../../flows/effectiveNetwork.js';
 import { useWalletMode } from '../hooks/useWalletMode.js';
 import { useConfirmAction, isConfirmOpenPhase } from '../hooks/useConfirmAction.js';
 import { isUserRejection } from '../hooks/useActionConfirmFlow.js';
@@ -43,8 +44,33 @@ import {
 } from '../addressSelection.js';
 import { pickDefaultChainId } from '../chainSelection.js';
 import { readFailureMessage } from '../utils/readFailureMessage.js';
+import { assertNoDeceptiveCharacters, hasHiddenControls } from '../../flows/signRiskClassifier.js';
+import { SIGN_IN_CHALLENGE_PREFIX } from '../../flows/signFlows.js';
 
 const chainRegistry = registryLib.defaultRegistry();
+
+/**
+ * Why a message cannot be signed, worded for the person typing it, or null
+ * when it can. The signing flow refuses the same texts; naming the reason here
+ * keeps the refusal from reading as a generic failure after the review page.
+ *
+ * @param {string} message
+ * @returns {string | null}
+ */
+export function messageRefusalReason(message) {
+    if (message.startsWith(SIGN_IN_CHALLENGE_PREFIX)) {
+        return `Messages that start with "${SIGN_IN_CHALLENGE_PREFIX}" are reserved for site sign-in and cannot be signed here.`;
+    }
+    if (hasHiddenControls(message)) {
+        return "This message has control characters that the review page can't show. Remove them and try again.";
+    }
+    try {
+        assertNoDeceptiveCharacters({ message }, 'message');
+    } catch {
+        return 'This message has invisible, look-alike or direction-control characters, which can hide what is signed. Remove them and try again.';
+    }
+    return null;
+}
 
 /**
  * @param {object} props
@@ -84,15 +110,23 @@ export function SignMessageForm({ walletId, onBack }) {
     const formDraftTtlMs = Number.isFinite(settings?.privacy?.formDraftTtlMs)
         ? Number(settings.privacy.formDraftTtlMs)
         : undefined;
-    const draft = useFormDraft({ view: 'sign-message', walletId, ttlMs: formDraftTtlMs });
-    const [draftPending, setDraftPending] = useState(() => draft.hasDraft());
+    const draftNetwork = settings ? getActiveNetwork(settings) : null;
+    const draft = useFormDraft({ view: 'sign-message', walletId, network: draftNetwork, ttlMs: formDraftTtlMs });
+    // draftPending is true once the form may autosave: a fresh form saves at
+    // once, a stored draft waits for an explicit Restore or Discard.
+    const [draftPending, setDraftPending] = useState(() => !draft.hasDraft());
+    // Settings resolve after the first render; once the network is known a draft
+    // from another network reads as absent, so the form saves from then on.
+    useEffect(() => {
+        if (draftNetwork && !draft.hasDraft()) setDraftPending(true);
+    }, [draftNetwork]); // eslint-disable-line react-hooks/exhaustive-deps
     useEffect(() => {
         if (signedResult || !draftPending) return;
         draft.save({ chainId, addressId, message });
     }, [signedResult, draftPending, draft, chainId, addressId, message]);
     const restoreDraft = useCallback(() => {
         const v = draft.load();
-        if (!v) { setDraftPending(false); return; }
+        if (!v) { setDraftPending(true); return; }
         if (typeof v.chainId === 'string') setChainId(v.chainId);
         if (typeof v.addressId === 'string') setAddressId(v.addressId);
         if (typeof v.message === 'string') setMessage(v.message);
@@ -100,7 +134,7 @@ export function SignMessageForm({ walletId, onBack }) {
     }, [draft]);
     const dismissDraft = useCallback(() => {
         draft.clear();
-        setDraftPending(false);
+        setDraftPending(true);
     }, [draft]);
 
     // The active map and the settings read are best-effort: a host without
@@ -122,11 +156,20 @@ export function SignMessageForm({ walletId, onBack }) {
         ])
             .then(([byChain, active, chainSettings]) => {
                 if (cancelled) return;
-                const signingByChain = signingAddressesByChain(byChain);
+                // The signing host holds software keys only: a hardware
+                // address would take a password and then fail to sign.
+                const signingByChain = Object.fromEntries(
+                    Object.entries(signingAddressesByChain(byChain))
+                        .map(([id, list]) => [id, list.filter((a) => a?.source !== 'trezor' && a?.source !== 'ledger')])
+                        .filter(([, list]) => list.length > 0),
+                );
                 setAddressesByChain(signingByChain);
                 setActiveByChain(active || {});
                 if (Object.keys(signingByChain).length === 0) {
-                    setLoadError(hasAnyAddress(byChain)
+                    const hardwareOnly = Object.values(signingAddressesByChain(byChain)).some((list) => list.length > 0);
+                    setLoadError(hardwareOnly
+                        ? "Trezor and Ledger addresses can't sign messages here yet. Use a software address to sign a message."
+                        : hasAnyAddress(byChain)
                         ? WATCH_ONLY_SIGNING_MESSAGE
                         : 'No addresses on any network yet. Use Receive to generate one before signing.');
                     return;
@@ -241,6 +284,8 @@ export function SignMessageForm({ walletId, onBack }) {
         if (!chainId) { setError('Pick a network.'); return; }
         if (!addressId || !selectedAddress) { setError('Pick an address.'); return; }
         if (message.length === 0) { setError('Type a message to sign.'); return; }
+        const refusal = messageRefusalReason(message);
+        if (refusal) { setError(refusal); return; }
         if (typeof messaging.signMessageRequest !== 'function') {
             setError('Message signing is not available in this app.');
             return;
@@ -305,7 +350,7 @@ export function SignMessageForm({ walletId, onBack }) {
                     <div style={{ color: 'var(--xc-text-muted)', fontSize: 'var(--xc-text-sm)', marginBottom: 4 }}>
                         Message
                     </div>
-                    <pre style={{
+                    <pre dir="auto" style={{
                         background: 'var(--xc-surface)',
                         border: '1px solid var(--xc-border)',
                         borderRadius: 'var(--xc-radius-md)',
@@ -327,7 +372,7 @@ export function SignMessageForm({ walletId, onBack }) {
                         </span>
                         <CopyButton value={signedResult.signature} label="Copy signature" />
                     </div>
-                    <pre style={{
+                    <pre dir="ltr" style={{
                         background: 'var(--xc-surface)',
                         border: '1px solid var(--xc-border)',
                         borderRadius: 'var(--xc-radius-md)',

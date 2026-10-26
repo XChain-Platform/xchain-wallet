@@ -28,16 +28,18 @@ import { DisplaySection } from '../components/settings/DisplaySection.jsx';
 import { KeyboardSection } from '../components/settings/KeyboardSection.jsx';
 import { FeesSection } from '../components/settings/FeesSection.jsx';
 import { LanguageRegionSection } from '../components/settings/LanguageRegionSection.jsx';
+import { WantReachabilityNotice } from '../components/hideReachabilityNotice.js';
 import { NetworkEndpointsSection } from '../components/settings/NetworkEndpointsSection.jsx';
 import { NetworkSection } from '../components/settings/NetworkSection.jsx';
 import { normalizeActiveNetwork } from '../utils/activeNetworkSwitch.js';
+import '../../i18n/locales/en/accountPicker.js';
+import '../../i18n/locales/en/desktopUpdate.js';
+import '../../i18n/locales/en/importWallet.js';
+import '../../i18n/locales/en/routes.js';
+import '../../i18n/locales/en/send.js';
+import '../../i18n/locales/en/settings.js';
+import '../../i18n/locales/en/ui.js';
 
-// Names the network the wallet is actually on, so the Network row never claims
-// Mainnet while a test network is active.
-function activeNetworkLabel(value) {
-    const id = normalizeActiveNetwork(value);
-    return id.charAt(0).toUpperCase() + id.slice(1);
-}
 import { NotificationsSection } from '../components/settings/NotificationsSection.jsx';
 import { PrivacySection } from '../components/settings/PrivacySection.jsx';
 import { SafetySection } from '../components/settings/SafetySection.jsx';
@@ -272,7 +274,7 @@ export function Settings({
 
     // A Settings drilldown is nested UI, so Escape and the system Back action
     // close it before the surrounding route.
-    useBackHandler(subpageId ? closeSubpage : undefined);
+    useBackHandler(subpageId ? closeSubpage : undefined, false, 'screen');
 
     useEffect(() => {
         if (subpageId || !pendingFocusRestore.current) return;
@@ -330,6 +332,11 @@ export function Settings({
     const walletLabel = activeWallet?.name || t('shell.settingsButton.noWallet');
     const accountLabel = activeAccount?.name
         || (Number.isInteger(activeAccount?.index) ? t('accountPicker.defaultName', { number: activeAccount.index + 1 }) : t('accountPicker.defaultName', { number: 1 }));
+
+    // Same rule as activeNetworkOptions, so the Network row describes the
+    // choices its select actually offers.
+    const regtestListed = settings?.developerMode === true
+        || normalizeActiveNetwork(settings?.activeNetwork) === 'regtest';
 
     const sections = useMemo(() => /** @type {SectionDef[]} */ ([
         {
@@ -441,18 +448,14 @@ export function Settings({
             title: t('settings.network.label'),
             // Optional-chained: settings is null until the async read lands,
             // and the section list renders during that window.
-            description: settings?.developerMode === true
+            // Mainnet and Testnet are always offered; Regtest only with
+            // Developer Mode on or while it is the persisted network.
+            description: regtestListed
                 ? t('settings.page.networkChooseAll')
-                : settings?.developerMode === false
-                    ? (normalizeActiveNetwork(settings.activeNetwork) === 'mainnet'
-                        ? t('settings.page.networkMainnetActive')
-                        : t('settings.page.networkActiveLocked', { network: activeNetworkLabel(settings.activeNetwork) }))
-                    : t('settings.page.networkChooseTwo'),
-            keywords: settings?.developerMode === true
+                : t('settings.page.networkChooseTwo'),
+            keywords: regtestListed
                 ? 'network active mainnet testnet regtest filter network switch mode dev'
-                : settings?.developerMode === false
-                    ? 'network active mainnet developer mode'
-                    : 'network active mainnet testnet filter network switch mode',
+                : 'network active mainnet testnet filter network switch mode',
             kind: 'panel',
             Component: NetworkSection,
             // The section needs the wallet so the switch can derive
@@ -600,6 +603,7 @@ export function Settings({
                     scrollKey={section.id}
                     restoreScroll={false}
                 >
+                    <WantReachabilityNotice active={section.id === 'network-endpoints'} />
                     <SettingsPageTemplate view="subpage">
                         <SettingsSearchHighlight target={searchTarget}>
                             <SectionComponent

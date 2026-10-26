@@ -17,6 +17,7 @@ import {
     StatusMessage,
 } from '@xchain-wallet/core/ui';
 import { t } from '../../i18n/index.js';
+import '../../i18n/locales/en/multisig.js';
 import { KeyQR } from '../components/KeyQR.jsx';
 import { useMessaging } from '../useMessaging.js';
 import { userFacingMessage } from '../utils/userFacingMessage.js';

@@ -4,7 +4,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { act, cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import React from 'react';
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
 import { DestroyForm } from '../../../packages/core/src/shared/routes/DestroyForm.jsx';
@@ -19,8 +19,8 @@ const SOURCE = {
     source: 'hd',
 };
 
-function mountDestroy({ balance = '2', divisibility = 0 } = {}) {
-    const composeForConfirm = vi.fn();
+function mountDestroy({ balance = '2', divisibility = 0, initialTick = 'ART' } = {}) {
+    const composeForConfirm = vi.fn(() => new Promise(() => {}));
     const messaging = {
         getAddressesByChain: vi.fn().mockResolvedValue({ [CHAIN]: [SOURCE] }),
         getActiveAddresses: vi.fn().mockResolvedValue({ [CHAIN]: SOURCE }),
@@ -29,7 +29,7 @@ function mountDestroy({ balance = '2', divisibility = 0 } = {}) {
         getSignerStatus: vi.fn().mockResolvedValue({ status: 'unlocked' }),
         getTokenInfo: vi.fn().mockResolvedValue({
             chainId: CHAIN,
-            tick: 'ART',
+            tick: initialTick,
             divisibility,
             locks: {},
         }),
@@ -38,7 +38,7 @@ function mountDestroy({ balance = '2', divisibility = 0 } = {}) {
                 address: SOURCE.address,
                 balances: {
                     native: { tick: 'BTC', quantity: '100000000', divisibility: 8 },
-                    tokens: [{ tick: 'ART', quantity: balance, divisibility }],
+                    tokens: [{ tick: initialTick, quantity: balance, divisibility }],
                 },
             }],
         }),
@@ -50,7 +50,7 @@ function mountDestroy({ balance = '2', divisibility = 0 } = {}) {
             <DestroyForm
                 walletId="w"
                 initialChainId={CHAIN}
-                initialTick="ART"
+                initialTick={initialTick}
                 initialFromAddress={SOURCE.address}
                 onBack={() => {}}
             />
@@ -70,6 +70,16 @@ async function advanceBalanceLookup(ms) {
 }
 
 describe('DestroyForm amount validation', () => {
+    it('keeps a lowercase managed ticker exact in the destroy action', async () => {
+        const composeForConfirm = mountDestroy({ initialTick: 'caseSensitive' });
+        fireEvent.change(await screen.findByLabelText(/^Amount/), { target: { value: '1' } });
+        fireEvent.click(screen.getByRole('button', { name: /^Destroy$/ }));
+
+        await waitFor(() => expect(composeForConfirm).toHaveBeenCalled());
+        const params = composeForConfirm.mock.calls[0][0].actionData.params;
+        expect(params.TICK).toBe('caseSensitive');
+    });
+
     it('rejects decimals for an indivisible token before review', async () => {
         const composeForConfirm = mountDestroy();
         fireEvent.change(await screen.findByLabelText(/^Amount/), { target: { value: '1.5' } });

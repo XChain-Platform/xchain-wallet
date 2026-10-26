@@ -174,8 +174,6 @@ describe('encoderErrorMessage', () => {
         'Payload too large: compiled size 9000 bytes exceeds maximum 8192 bytes (compiled on-chain ACTION push)',
         'Transaction would burn significant satoshis as fees. Please provide a change address.',
         'Node did not report a positive relayfee; transaction fee safety cannot be verified',
-        'fee 19 is below the node relay minimum 20 base units for a ~190-byte transaction',
-        'feePerKb 100 base units/kB produces fee 19, below the node relay minimum 20 base units for a ~190-byte transaction',
         'fee 90000 exceeds the maximum allowed 20000 satoshis for a ~200-byte transaction (fee-rate cap)',
         'fee 90000 exceeds 100x the estimated fair fee (800 satoshis) for a ~200-byte transaction',
         'selected input count (701) exceeds the maximum (700) inputs for a single transaction',

@@ -85,7 +85,7 @@ describe('DispenserExplorer result price for an oracle-priced dispenser', () => 
         await searchFor('MGRTEST');
         expect(await screen.findAllByText(/0\.05 USD \(oracle ndDEAA/))
             .not.toHaveLength(0);
-        expect(screen.getAllByText('open')).not.toHaveLength(0);
+        expect(screen.getAllByText('Open')).not.toHaveLength(0);
         expect(screen.queryAllByText('valid')).toHaveLength(0);
         expect(document.body.textContent).not.toMatch(/per 0 DOGE/);
         expect(messaging.oracleFeeds).toHaveBeenCalledWith(expect.objectContaining({ address: ORACLE }));
@@ -139,7 +139,7 @@ describe('DispenserExplorer result price for an oracle-priced dispenser', () => 
         expect(screen.getAllByTestId('dispenser-result-facts').some(
             (facts) => facts.closest('button')?.textContent?.includes('#open'),
         )).toBe(true);
-        expect(screen.getAllByText('open')).not.toHaveLength(0);
+        expect(screen.getAllByText('Open')).not.toHaveLength(0);
         expect(screen.queryByText(/#closed/)).toBeNull();
         expect(screen.queryByText(/#empty/)).toBeNull();
     });
@@ -160,7 +160,7 @@ describe('DispenserExplorer result price for an oracle-priced dispenser', () => 
         expect(within(facts).getByText('Price per fill')).toBeInTheDocument();
         expect(within(facts).getByText(/0\.05 USD/)).toBeInTheDocument();
         expect(within(facts).getByText('Status')).toBeInTheDocument();
-        expect(within(facts).getByText('open')).toBeInTheDocument();
+        expect(within(facts).getByText('Open')).toBeInTheDocument();
         expect(facts.closest('button')?.className).toMatch(/resultRow/);
     });
 

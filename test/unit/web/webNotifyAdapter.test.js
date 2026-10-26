@@ -204,6 +204,26 @@ describe('webNotifyAdapter', () => {
         expect(createWebNotifyAdapter({ now: () => 1001 })(alert)).toBe(false);
     });
 
+    it('delivers a re-armed or edited price alert once its claim has lapsed', () => {
+        stubVisibility('visible');
+        const alert = {
+            kind: 'price-alert',
+            title: 'Price alert',
+            body: 'Bitcoin rose above $100,000.',
+            data: { chainId: 'bitcoin-mainnet', alertId: 'alert-1', direction: 'above', targetFiat: 100000, fiatCurrency: 'usd' },
+        };
+
+        expect(createWebNotifyAdapter({ now: () => 1000 })(alert)).toBe(true);
+        // The same alert id edited to another target is a different crossing.
+        expect(createWebNotifyAdapter({ now: () => 1001 })({
+            ...alert,
+            data: { ...alert.data, targetFiat: 110000 },
+        })).toBe(true);
+        // Re-armed with the same terms, it is delivered after the poll window.
+        expect(createWebNotifyAdapter({ now: () => 1002 })(alert)).toBe(false);
+        expect(createWebNotifyAdapter({ now: () => 1000 + 11 * 60_000 })(alert)).toBe(true);
+    });
+
     it('serializes simultaneous tab claims before choosing one surface', async () => {
         stubVisibility('visible');
         const tails = new Map();

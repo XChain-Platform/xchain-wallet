@@ -12,15 +12,17 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { AddressField, AddressText, Button, ChainBadge, ChainPicker, Checkbox, CopyButton, FeeSelector, FormPage, FormSection, Icon, Input, PageHeader, RadioGroup, Screen, SectionHeader, StatusMessage } from '@xchain-wallet/core/ui';
 import { registry as registryLib } from '@xchain-wallet/core';
 import { actionDisplayLabel } from '../utils/actionDisplayLabel.js';
-import { formatLocalDateTime } from '../utils/dateTime.js';
+import { formatUnixSecondsLocal } from '../utils/dateTime.js';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { useDemoGuard } from '../hooks/useDemoGuard.jsx';
 import { AmountField } from '../components/AmountField.jsx';
 import { t } from '../../i18n/index.js';
+import '../../i18n/locales/en/crossChainSwap.js';
 import { useTickBalance } from '../hooks/useTickBalance.js';
 import { useNativeFee } from '../hooks/useNativeFee.js';
 import { NativeFeeToggle } from '../components/NativeFeeToggle.jsx';
 import { submitFailureMessage } from '../utils/submitFailureMessage.js';
+import { memoCharacterError, memoLengthError } from '../utils/memoLimit.js';
 import { compareDecimalStrings, divideDecimalStrings, formatWithThousands, tokenAmountPrecisionError } from '../utils/amountFormat.js';
 import { addressValidationError } from '../utils/addressValidation.js';
 import { tickerReferenceError } from '../utils/tickerGrammar.js';
@@ -115,6 +117,9 @@ export function CrossChainSwapForm({ walletId, onBack }) {
         /** @type {Record<string, { id: string, address: string }>} */ ({}),
     );
     const [loadError, setLoadError] = useState(/** @type {string | null} */ (null));
+    // True when the load found too few networks, a requirement the page states
+    // only while online: offline, the offline note is the page's one message.
+    const [loadErrorIsRequirement, setLoadErrorIsRequirement] = useState(false);
 
     const [giveChainId, setGiveChainId] = useState(/** @type {string | null} */ (null));
     const [getChainId, setGetChainId] = useState(/** @type {string | null} */ (null));
@@ -164,6 +169,7 @@ export function CrossChainSwapForm({ walletId, onBack }) {
                 const chains = Object.entries(byChain || {})
                     .filter(([, addrs]) => Array.isArray(addrs) && addrs.length > 0)
                     .map(([cid]) => cid);
+                if (chains.length < 2) setLoadErrorIsRequirement(true);
                 if (chains.length === 0) {
                     setLoadError(
                         'No addresses on any network yet. Use Receive to generate addresses on at least two networks before composing a cross-chain swap.',
@@ -317,6 +323,8 @@ export function CrossChainSwapForm({ walletId, onBack }) {
             if (addressError) return addressError;
         }
         if (memo.includes('|') || memo.includes(';')) return 'Memo cannot contain "|" or ";".';
+        const memoError = memoLengthError(memo.trim()) || memoCharacterError(memo.trim());
+        if (memoError) return memoError;
         const expirationError = expirationValidationError(expMode, expInput);
         if (expirationError) return expirationError;
         return null;
@@ -496,6 +504,11 @@ export function CrossChainSwapForm({ walletId, onBack }) {
             return;
         }
         if (validationError || feeError) return;
+        // The memoized check keeps the clock of the last edit, so ask again now.
+        if (expirationValidationError(expMode, expInput)) {
+            setFormError('Expiration must be a future date and time.');
+            return;
+        }
         setFormError(null);
         if (singleEncode) { void openConfirmScreen(); return; }
         setStage('review');
@@ -620,6 +633,7 @@ export function CrossChainSwapForm({ walletId, onBack }) {
         </Screen>
     );
 
+    if (loadError && networkOffline && loadErrorIsRequirement) return wrap(null);
     if (loadError) {
         return wrap(
             <>
@@ -757,7 +771,7 @@ export function CrossChainSwapForm({ walletId, onBack }) {
                     <DetailRow
                         label="Expiration"
                         value={swapParams.EXPIRATION
-                            ? formatLocalDateTime(Number(swapParams.EXPIRATION))
+                            ? formatUnixSecondsLocal(swapParams.EXPIRATION)
                             : 'Default window'}
                     />
                     {giveOwnership || getOwnership ? (

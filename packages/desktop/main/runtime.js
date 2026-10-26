@@ -73,6 +73,7 @@ import { createVaultKeyring } from '@xchain-wallet/extension/src/background/vaul
 
 import { createDesktopMessageHost } from './messageHost.js';
 import { applyAutoLockReport, hasEnforceableWindow, stampAutoLockActivity } from './autoLockState.js';
+import { handlePanicStateMessage, PANIC_STATE_MESSAGE_TYPES } from './panicModeState.js';
 
 /**
  * Renderer-sent type that arms/disarms the auto-lock backstop. The SAME
@@ -91,6 +92,9 @@ export const AUTO_LOCK_REPORT_TYPE = 'session.autolock';
  *        §26: restart-surviving auto-lock record (main/autoLockState.js).
  *        Without it the launch gate is inert and a quit-then-relaunch
  *        auto-unlocks with no regard for `autolockMinutes`.
+ * @property {{ load: () => Promise<unknown | null>, save: (s: unknown) => Promise<void>, clear: () => Promise<void> }} [panicModeStore]
+ *        Panic-mode freeze record (main/panicModeState.js). Without it main
+ *        reads no freeze and signs while the renderer shows one.
  * @property {import('@xchain-wallet/core').registry.ChainRegistry} chainRegistry
  * @property {import('@xchain-wallet/core').sdk.SDKRegistry} sdkRegistry
  * @property {() => Promise<{env?: object, build?: object}>} [getDiagnosticContext]
@@ -144,6 +148,10 @@ export function createRuntime(deps) {
         // runtimes without one); when absent, enforceLaunchAutoLock is a
         // no-op and the shell behaves exactly as it did before.
         autoLockStore: deps.autoLockStore || null,
+        // Panic-mode freeze record (main/panicModeState.js). Optional for the
+        // same reason as the two stores above; `installPanicModePersistence`
+        // wires it into core's freeze before the first window opens.
+        panicModeStore: deps.panicModeStore || null,
         chainRegistry: deps.chainRegistry,
         sdkRegistry: deps.sdkRegistry,
         getDiagnosticContext: deps.getDiagnosticContext,
@@ -177,6 +185,19 @@ export function createRuntime(deps) {
         // and only a wipe seals and renews it.
         broadcastQueueStore: newBroadcastQueueStore(),
     };
+}
+
+/**
+ * Make main's freeze the file-backed one and load it. Await before the first
+ * window opens: until the load resolves, core refuses every signature, which
+ * is the safe answer while a freeze from the last run may still be unread.
+ *
+ * @param {DesktopRuntime} runtime
+ * @returns {Promise<void>}
+ */
+export async function installPanicModePersistence(runtime) {
+    if (!runtime?.panicModeStore) return;
+    await flowsLib.configurePanicModePersistence(runtime.panicModeStore);
 }
 
 /** Build a queue store over the same default storage a host would pick itself. */
@@ -482,7 +503,7 @@ export async function ensureHost(runtime) {
                 listArmedAlerts: () => vault.priceAlerts.list(),
                 getSettings: () => flowsLib.getSettings(vault),
                 notify: runtime.notify,
-                markTriggered: (id) => flowsLib.markAlertTriggered({ vault, id }),
+                markTriggered: (id, terms) => flowsLib.markAlertTriggered({ vault, id, terms }),
                 logger: console,
             });
             runtime.priceAlertWatcher.start();
@@ -698,7 +719,11 @@ export async function wipeRuntimeStores(runtime) {
         // after a wipe; carrying it into the next wallet would hand that
         // wallet somebody else's idle clock.
         ['autoLock', runtime.autoLockStore],
+        // The renderer's reset clears its view of the freeze; main's copy
+        // and its file go with it, as every other shell's reset does.
+        ['panicMode', runtime.panicModeStore],
     ];
+    if (runtime.panicModeStore) flowsLib.applyExternalPanicModeState(null);
     for (const [name, backend] of targets) {
         if (!backend || typeof backend.clear !== 'function') continue;
         try {
@@ -740,6 +765,17 @@ export async function handleIpcMessage(runtime, message) {
         if (message.type === AUTO_LOCK_REPORT_TYPE) {
             await applyAutoLockReport(runtime.autoLockStore, message.request, Date.now());
             return { ok: true, result: { armed: message.request?.armed === true } };
+        }
+        // Panic-mode freeze, also ahead of both lanes: the duress passphrase
+        // arms it from the Locked screen, so it has to land while the vault
+        // is closed, and main is the process whose signers it must stop.
+        if (PANIC_STATE_MESSAGE_TYPES.has(message.type)) {
+            const result = await handlePanicStateMessage(
+                { flows: flowsLib, store: runtime.panicModeStore },
+                message.type,
+                message.request,
+            );
+            return { ok: true, result };
         }
         const preHostMessage = PRE_HOST_MESSAGE_TYPES.has(message.type);
         if (!preHostMessage && runtime.autoLockCleanupPending) {
@@ -792,6 +828,12 @@ export async function handleIpcMessage(runtime, message) {
                     }
                 },
             });
+            // A locked wallet whose KDF metadata cannot be read can never unlock:
+            // reading it here sends the renderer to the damaged-vault screen
+            // (VaultCorruptError) instead of a password prompt that always fails.
+            if (message.type === 'session.status' && result.hasWallet && !result.hasSession) {
+                await runtime.metaBackend.load();
+            }
             if (message.type === 'session.status' && runtime.autoLockCleanupPending) {
                 return {
                     ok: true,

@@ -18,6 +18,7 @@ import { generateBip39Mnemonic } from '../../crypto/mnemonic.js';
 import { demoCaptureMnemonic } from '../../flows/demoCapture.js';
 import { getDemoWalletId, markDemoWallet } from '../../flows/demoMode.js';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
+import { useNativeExitRoot } from '../hooks/useNativeExitRoot.js';
 import { demoOwnsVaultPassword, exitDemoWallet } from '../utils/demoGraduation.js';
 import { OnboardingCarousel } from './OnboardingCarousel.jsx';
 import styles from './Onboarding.module.css';
@@ -132,15 +133,29 @@ function markAccepted() {
  * @param {() => void} [props.onImportFromFreeWallet]
  * @param {() => void} [props.onPairPartner] §20.5: enters the watcher/signer pairing lane (shared recovery phrase across two devices)
  * @param {() => void} [props.onDemoEntered]          fires after the demo wallet persists; caller refreshes App state into the unlocked tree
+ * @param {() => void} [props.onWalletFound]          re-reads App state when this tab finds a wallet another tab created, which opens the lock screen; without it the page reloads
  * @param {() => void} [props.onBack]                 rendered as a Cancel button when present (used by the unlocked-state "Add Wallet" entry point)
  * @param {'fresh' | 'add'} [props.mode]              'fresh' = no wallet on the device; 'add' = adds to an already-open vault. Defaults to 'fresh'.
  */
-export function Onboarding({ onCreate, onImport, onImportFromFreeWallet, onPairPartner, onDemoEntered, onBack, mode = 'fresh' }) {
+// The vault refuses a new wallet over an existing one with a named error
+// (assertFreshVault); a shell that passes errors across a message boundary
+// keeps only the message, so that is read too.
+function isWalletExistsError(err) {
+    return err?.name === 'WalletExistsError' || /^A wallet already exists\b/.test(String(err?.message || ''));
+}
+
+export function Onboarding({ onCreate, onImport, onImportFromFreeWallet, onPairPartner, onDemoEntered, onWalletFound, onBack, mode = 'fresh' }) {
     const { messaging, shell } = useMessaging();
     const variant = screenVariantFor(shell);
     const isFull = variant === 'full';
+    // Welcome on a fresh install is the bottom of the app, so Android Back
+    // leaves it the way Home does. The add-wallet lane has its own Back.
+    useNativeExitRoot(!onBack, true);
     const [demoBusy, setDemoBusy] = useState(false);
     const [demoError, setDemoError] = useState(/** @type {string | null} */ (null));
+    // A Welcome tab left open while another tab created a wallet: the demo
+    // cannot start over it, and the way forward is that wallet's lock screen.
+    const [walletFound, setWalletFound] = useState(false);
     // leg 2: adding to a vault the demo created would put a real
     // wallet behind the demo's throwaway password. Graduate out first.
     const [graduated, setGraduated] = useState(false);
@@ -245,6 +260,7 @@ export function Onboarding({ onCreate, onImport, onImportFromFreeWallet, onPairP
         }
         setDemoBusy(true);
         setDemoError(null);
+        setWalletFound(false);
         try {
             // 32-byte hex auto-password kept in the session cache; the
             // user never sees it. Mnemonic generated locally per the
@@ -324,7 +340,12 @@ export function Onboarding({ onCreate, onImport, onImportFromFreeWallet, onPairP
             }
             if (typeof onDemoEntered === 'function') onDemoEntered();
         } catch (err) {
-            setDemoError(err?.message || 'Could not start demo mode.');
+            if (isWalletExistsError(err)) {
+                setWalletFound(true);
+                setDemoError(t('onboarding.demo.walletExists'));
+            } else {
+                setDemoError(err?.message || 'Could not start demo mode.');
+            }
         } finally {
             setDemoBusy(false);
         }
@@ -577,7 +598,16 @@ export function Onboarding({ onCreate, onImport, onImportFromFreeWallet, onPairP
                     />
                 )}
                 status={demoError ? (
-                    <StatusMessage variant="error" className={styles.demoError}>{demoError}</StatusMessage>
+                    <StatusMessage
+                        variant="error"
+                        className={styles.demoError}
+                        recovery={walletFound ? {
+                            label: t('onboarding.demo.unlock'),
+                            onAction: onWalletFound ?? (() => globalThis.location?.reload()),
+                        } : undefined}
+                    >
+                        {demoError}
+                    </StatusMessage>
                 ) : null}
                 actions={(
                     <>

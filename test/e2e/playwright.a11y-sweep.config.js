@@ -30,7 +30,7 @@ export default defineConfig({
     timeout: 30 * 60 * 1000,
     reporter: 'list',
     use: { baseURL: BASE_URL, trace: 'off', video: 'off', screenshot: 'off' },
-    projects: [{ name: 'chromium', use: { browserName: 'chromium' } }],
+    projects: [{ name: 'chromium', use: { browserName: 'chromium', channel: 'chromium' } }],
     webServer: {
         command: `pnpm -C ../../packages/web dev --port ${PORT} --strictPort`,
         url: BASE_URL,

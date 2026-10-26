@@ -56,11 +56,11 @@ describe('FileMetaBackend', () => {
         expect(await backend.load()).toBe(null);
     });
 
-    it('surfaces malformed JSON rather than treating it as missing metadata', async () => {
+    it.each(['{broken', '', 'null', '42', '"text"', '[]', '{"kdfParams":'])('reports unreadable metadata %j as a damaged vault, not missing metadata', async (text) => {
         const path = metaPathFor(dir);
-        writeFileSync(path, '{broken', 'utf8');
+        writeFileSync(path, text, 'utf8');
 
-        await expect(new FileMetaBackend(path).load()).rejects.toBeInstanceOf(SyntaxError);
+        await expect(new FileMetaBackend(path).load()).rejects.toMatchObject({ name: 'VaultCorruptError' });
     });
 
     it.each([undefined, null, '', 0, {}])('rejects an invalid backend path %j', (path) => {

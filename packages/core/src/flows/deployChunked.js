@@ -50,10 +50,13 @@
 // before skipping them.
 
 import { submitAction } from './submitAction.js';
+import { composeActionForConfirm } from './composeActionForConfirm.js';
+import { prebuiltPsbtFromComposed } from './prebuiltPsbtFromComposed.js';
 import { normalizeSource } from './sendToken.js';
 import { createPendingDeploy } from '../schemas/pendingDeploy.js';
 import { preflightContractMeta, metaNameOf } from './contractMetaPreflight.js';
 import { waitForLegIndexed, legMayBeOnChain } from './deployLegWait.js';
+import { DEPLOY_ARGUMENT_WORDS, deployActionFit, variadicSizeMessage } from './variadicActionSize.js';
 
 /**
  * Plan a deploy: does this source fit one inline DEPLOY, or does it need
@@ -62,7 +65,7 @@ import { waitForLegIndexed, legMayBeOnChain } from './deployLegWait.js';
  * @param {{ sdkRegistry: any, chainId: string, code: string, gasLimit?: string|number, constructorParams?: string|string[] }} args
  * @returns {{ codeHash: string, single: boolean, parts: string[] | null, totalChunks: number }}
  */
-export function planChunkedDeploy({ sdkRegistry, chainId, code, gasLimit, constructorParams }) {
+export function planChunkedDeploy({ sdkRegistry, chainId, code, gasLimit, constructorParams, cooldownBlocks }) {
     if (!sdkRegistry) throw new Error('planChunkedDeploy: sdkRegistry is required');
     if (!chainId) throw new Error('planChunkedDeploy: chainId is required');
     if (typeof code !== 'string' || code.length === 0) {
@@ -72,7 +75,19 @@ export function planChunkedDeploy({ sdkRegistry, chainId, code, gasLimit, constr
     if (typeof sdk.planDeploy !== 'function') {
         throw new Error('planChunkedDeploy: this SDK build has no planDeploy (needs the PC-38 SDK leg)');
     }
-    return sdk.planDeploy(code, { gasLimit, constructorParams });
+    const plan = sdk.planDeploy(code, { gasLimit, constructorParams });
+    // The assembling DEPLOY v2 ends in a repeating CONSTRUCTOR_PARAMS field. Over
+    // 8192 compiled bytes it rides a Taproot envelope the wallet cannot verify,
+    // and every chunk before it would already be paid for. Refuse before any leg.
+    const staking = cooldownBlocks !== undefined && cooldownBlocks !== null && String(cooldownBlocks).trim() !== '';
+    if (!plan.single && !staking) {
+        const tooLarge = variadicSizeMessage(
+            deployActionFit({ code, gasLimit, constructorParams: normalizeConstructorParams(constructorParams) }),
+            DEPLOY_ARGUMENT_WORDS,
+        );
+        if (tooLarge) throw new Error(tooLarge);
+    }
+    return plan;
 }
 
 /** DEPLOY v4 carrier params for one ordered slice. */
@@ -460,6 +475,7 @@ export async function deployChunkedRun(opts) {
         code: opts.code,
         gasLimit: opts.gasLimit,
         constructorParams: opts.constructorParams,
+        cooldownBlocks: opts.cooldownBlocks,
     });
     if (plan.single) {
         throw new Error('deployChunkedRun: this source fits a single DEPLOY; use deployAction instead');
@@ -678,17 +694,9 @@ export async function deployChunkedRun(opts) {
         await opts.vault.pendingDeploys.put(record);
     };
 
-    const submitLeg = async (params, label, chunkIndex = null) => submitAction({
-        vault: opts.vault,
-        walletId: opts.walletId,
-        password: opts.password,
-        signer: opts.signer,
-        bip39Passphrase: opts.bip39Passphrase,
-        chainRegistry: opts.chainRegistry,
-        sdkRegistry: opts.sdkRegistry,
-        chainId: opts.chainId,
-        actionData: { action: 'DEPLOY', params },
-        encoderOpts: {
+    const submitLeg = async (params, label, chunkIndex = null) => {
+        const actionData = { action: 'DEPLOY', params };
+        const encoderOpts = {
             pubkey: source.publicKey,
             // Fund by address and return change to the spender: every leg
             // spends the previous leg's confirmed change from this same
@@ -702,32 +710,59 @@ export async function deployChunkedRun(opts) {
             // separate DEPLOY the chain prices and checks on its own, so a flag
             // applied to only some of them buys N paid chunks and no contract.
             ...(opts.payFeeInNativeCoin !== undefined && { payFeeInNativeCoin: opts.payFeeInNativeCoin }),
-        },
-        signingPaths: [source.derivationPath
-            ? { inputIndex: 0, path: source.derivationPath }
-            : { inputIndex: 0, addressId: source.addressId }],
-        pendingTxMeta: {
-            fromAddress: source.address,
-            toAddress: null,
-            actionSummary: label,
-        },
-        // Patient across rounds; the record's txid stamp below lands first.
-        waitForTxid: legWait(chunkIndex),
-        waitOpts: opts.waitOpts,
-        onProgress: (phase, data) => {
-            // 'waiting' is fired with the final txid right after broadcast and
-            // before the indexer wait, which is exactly the window this closes.
-            // Fire-and-forget: a failed vault write must not abort a leg that is
-            // already on the wire, and the next persist covers it.
-            if ((phase === 'waiting' || phase === 'broadcasting') && data && data.txid) {
-                const stamp = chunkIndex === null
-                    ? stampDeployTxid(data.txid)
-                    : stampChunkTxid(chunkIndex, data.txid);
-                stamp.catch(() => {});
-            }
-        },
-        onBroadcastFailure: opts.onBroadcastFailure,
-    });
+        };
+        const composed = await composeActionForConfirm({
+            vault: opts.vault,
+            chainRegistry: opts.chainRegistry,
+            sdkRegistry: opts.sdkRegistry,
+            chainId: opts.chainId,
+            actionData,
+            encoderOpts,
+            source: source.address,
+            ownAddresses: [source.address],
+            signer: opts.from,
+        });
+        return submitAction({
+            vault: opts.vault,
+            walletId: opts.walletId,
+            password: opts.password,
+            signer: opts.signer,
+            bip39Passphrase: opts.bip39Passphrase,
+            chainRegistry: opts.chainRegistry,
+            sdkRegistry: opts.sdkRegistry,
+            chainId: opts.chainId,
+            actionData,
+            encoderOpts,
+            prebuiltPsbt: prebuiltPsbtFromComposed(composed),
+            signingPaths: [source.derivationPath
+                ? { inputIndex: 0, path: source.derivationPath }
+                : { inputIndex: 0, addressId: source.addressId }],
+            pendingTxMeta: {
+                fromAddress: source.address,
+                toAddress: null,
+                actionSummary: label,
+            },
+            // Patient across rounds; the record's txid stamp below lands first.
+            waitForTxid: legWait(chunkIndex),
+            waitOpts: opts.waitOpts,
+            onProgress: (phase, data) => {
+                // 'waiting' is fired with the final txid right after broadcast and
+                // before the indexer wait, which is exactly the window this closes.
+                // Fire-and-forget: a failed vault write must not abort a leg that is
+                // already on the wire, and the next persist covers it.
+                if ((phase === 'waiting' || phase === 'broadcasting') && data && data.txid) {
+                    const stamp = chunkIndex === null
+                        ? stampDeployTxid(data.txid)
+                        : stampChunkTxid(chunkIndex, data.txid);
+                    stamp.catch(() => {});
+                }
+            },
+            onBroadcastFailure: opts.onBroadcastFailure,
+            // Check each leg's PSBT against this action before signing: the user
+            // approved a summary of the run before any leg's bytes existed.
+            verifyBuiltTx: true,
+        });
+    };
 
     // Phase 1: carriers, in order, each indexed before the next.
     for (let i = 0; i < plan.totalChunks; i++) {

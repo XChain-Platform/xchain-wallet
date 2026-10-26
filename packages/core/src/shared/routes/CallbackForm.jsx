@@ -16,6 +16,7 @@ import {
     decoder as decoderLib,
     flows as flowsLib,
 } from '@xchain-wallet/core';
+import '../../i18n/locales/en/send.js';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { useDemoGuard } from '../hooks/useDemoGuard.jsx';
 import { useSettings } from '../hooks/useSettings.js';
@@ -48,6 +49,7 @@ import { QueuedResultPanel } from '../components/QueuedResultPanel.jsx';
 import { MAX_MEMO_LENGTH, memoLengthError, utf8ByteLength } from '../utils/memoLimit.js';
 import { isValidAddressForChain } from '../utils/addressValidation.js';
 import { tickerReferenceError } from '../utils/tickerGrammar.js';
+import { tokenIssuerEligibility } from '../utils/tokenIssuerEligibility.js';
 import { compareDecimalStrings, tokenAmountPrecisionError } from '../utils/amountFormat.js';
 
 const chainRegistry = registryLib.defaultRegistry();
@@ -106,8 +108,8 @@ export function callbackFeeError(feePick, feeEstimate) {
 }
 
 function sameCallbackTerms(left, right) {
-    return String(left?.callbackTick || '').trim().toUpperCase()
-            === String(right?.callbackTick || '').trim().toUpperCase()
+    return String(left?.callbackTick || '').trim()
+            === String(right?.callbackTick || '').trim()
         && compareDecimalStrings(left?.callbackAmount, right?.callbackAmount) === 0
         && String(BigInt(String(left?.callbackBlock || '0')))
             === String(BigInt(String(right?.callbackBlock || '0')))
@@ -121,7 +123,7 @@ function tokenBalanceAt(byChain, chainId, address, tick) {
     if (!entry || entry.balances?.unavailable?.includes('tokens')) return null;
     const balances = decoderLib.balancesFromSdk(entry.balances) || [];
     const match = balances.find((balance) => (
-        String(balance?.tick || '').toUpperCase() === String(tick || '').toUpperCase()
+        String(balance?.tick || '') === String(tick || '')
     ));
     if (match?.unknown || (match && compareDecimalStrings(match.amount, '0') == null)) return null;
     return match ? String(match.amount) : '0';
@@ -176,7 +178,7 @@ export function CallbackForm({ walletId, onBack, initialChainId, initialTick, in
             'No addresses on any network yet. Use Receive to generate one before a callback.',
     });
 
-    const ticker = (initialTick || '').toUpperCase();
+    const ticker = initialTick || '';
     const [memo, setMemo] = useState('');
     const trimmedMemo = memo.trim();
     const memoTooLong = memoLengthError(trimmedMemo);
@@ -206,6 +208,13 @@ export function CallbackForm({ walletId, onBack, initialChainId, initialTick, in
         ? Number(cbBlockText)
         : null;
     const owner = assetInfo?.creator || null;
+    const issuerEligibility = tokenIssuerEligibility({
+        tokenInfo: assetInfo,
+        addressesByChain,
+        chainId,
+        tick: ticker,
+        sourceAddress: fromAddress?.address,
+    });
     const payoutInfo = useTokenInfo({ chainId, tick: cbTick, skip: !cbTick });
     const payoutDivisibility = payoutInfo == null
         ? null
@@ -463,6 +472,14 @@ export function CallbackForm({ walletId, onBack, initialChainId, initialTick, in
         const tickerError = tickerReferenceError(ticker, { noun: 'Token ticker' });
         if (tickerError) {
             setFormError(tickerError);
+            return false;
+        }
+        if (issuerEligibility.pending) {
+            setFormError(`Wait for the wallet to verify the current owner of ${ticker}.`);
+            return false;
+        }
+        if (issuerEligibility.error) {
+            setFormError(issuerEligibility.error);
             return false;
         }
         if (!configComplete) {
@@ -865,8 +882,8 @@ export function CallbackForm({ walletId, onBack, initialChainId, initialTick, in
             demoGuard={demoGuard}
             label="Execute callback"
             onSubmit={handleReview}
-            status={formError ? (
-                <StatusMessage variant="error">{formError}</StatusMessage>
+            status={formError || issuerEligibility.error ? (
+                <StatusMessage variant="error">{formError || issuerEligibility.error}</StatusMessage>
             ) : null}
             actions={(
                 <Button
@@ -874,6 +891,8 @@ export function CallbackForm({ walletId, onBack, initialChainId, initialTick, in
                     variant="primary"
                     loading={refreshing || confirmAction.composing}
                     disabled={!fromAddress
+                        || issuerEligibility.pending
+                        || !!issuerEligibility.error
                         || !configComplete
                         || !!memoTooLong
                         || refreshing

@@ -8,6 +8,8 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
+import { actionTextSafetyError } from '../shared/utils/actionTextSafety.js';
+
 export const LIST_META_NAME_MAX_BYTES = 64;
 export const LIST_META_DESCRIPTION_MAX_BYTES = 512;
 
@@ -20,13 +22,14 @@ export function utf8ByteLength(value) {
  * @param {'name' | 'description'} field
  * @param {unknown} value
  * @param {{ isCreate: boolean }} options
- * @returns {'pipe' | 'semicolon' | 'length' | 'format' | null}
+ * @returns {'pipe' | 'semicolon' | 'unsafe' | 'length' | 'format' | null}
  */
 export function listMetaInputError(field, value, { isCreate } = { isCreate: false }) {
     const text = value == null ? '' : String(value);
     if (text === '') return null;
     if (text.includes('|')) return 'pipe';
     if (text.includes(';')) return 'semicolon';
+    if (actionTextSafetyError(text, field === 'description' ? 'Description' : 'Name')) return 'unsafe';
     const maxBytes = field === 'description'
         ? LIST_META_DESCRIPTION_MAX_BYTES
         : LIST_META_NAME_MAX_BYTES;

@@ -389,6 +389,7 @@
 
 .metaTable {
     width: 100%;
+    table-layout: fixed;
     border-collapse: collapse;
     font-size: var(--xc-text-sm);
 }
@@ -415,6 +416,7 @@
 }
 
 .metaRow th {
+    overflow-wrap: anywhere;
     text-align: start;
     width: var(--xc-table-label-width);
     font-weight: 500;
@@ -427,6 +429,7 @@
 .metaRow td {
     text-align: end;
     color: var(--xc-text);
+    overflow-wrap: anywhere;
     word-break: break-word;
     font-variant-numeric: tabular-nums;
 }
@@ -688,6 +691,9 @@
 }
 
 .socialChip {
+    max-width: 100%;
+    min-width: 0;
+    overflow-wrap: anywhere;
     display: inline-flex;
     align-items: center;
     min-height: var(--xc-tap-min);
@@ -844,6 +850,18 @@
     overflow-wrap: anywhere;
     direction: ltr;
     unicode-bidi: isolate;
+}
+
+/* The balance keeps its full width and drops under the address when the
+   two do not fit side by side, so large text never overlaps them. */
+.holdersRow {
+    flex-wrap: wrap;
+}
+
+.holdersTrailing {
+    flex-shrink: 0;
+    max-width: none;
+    margin-inline-start: auto;
 }
 
 .holdersQty {

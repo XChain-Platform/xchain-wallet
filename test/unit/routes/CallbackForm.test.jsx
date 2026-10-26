@@ -100,6 +100,22 @@ afterEach(() => {
 });
 
 describe('callback field validation', () => {
+    it('refuses before review when the issuer is unknown', async () => {
+        const buildActionPsbtRequest = vi.fn();
+        mount({
+            getTokenInfo: vi.fn(async ({ tick }) => (
+                tick === 'CALLABLE' ? { ...TERMS, creator: null } : { tick: 'PAY', divisibility: 2 }
+            )),
+            buildActionPsbtRequest,
+        });
+
+        expect(await screen.findByRole('alert')).toHaveTextContent(
+            "The token's issuer could not be confirmed, so this action is not available. Try again when the explorer answers.",
+        );
+        expect(screen.getByRole('button', { name: 'Preview' })).toBeDisabled();
+        expect(buildActionPsbtRequest).not.toHaveBeenCalled();
+    });
+
     it.each([
         [{ ...TERMS, callbackTick: '' }, 'complete callback configuration'],
         [{ ...TERMS, callbackTick: 'BAD|TICK' }, 'Callback token can only use'],
@@ -139,6 +155,9 @@ describe('CallbackForm review safety', () => {
         const messaging = mount({
             getAddressesByChain: vi.fn().mockResolvedValue({ [CHAIN]: [badSource] }),
             getActiveAddresses: vi.fn().mockResolvedValue({ [CHAIN]: { id: badSource.id } }),
+            getTokenInfo: vi.fn(async ({ tick }) => (
+                tick === 'CALLABLE' ? { ...TERMS, creator: badSource.address } : { tick: 'PAY', divisibility: 2 }
+            )),
         }, { initialFromAddress: badSource.address });
 
         fireEvent.click(await readySubmit());

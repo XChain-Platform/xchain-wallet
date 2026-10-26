@@ -16,7 +16,8 @@ const traverse = _traverse.default || _traverse;
 const sources = import.meta.glob(
     [
         '../../packages/core/src/shared/**/*.{js,jsx}',
-        '../../packages/core/src/i18n/locales/en/index.js',
+        '../../packages/core/src/i18n/locales/en/*.js',
+        '!../../packages/core/src/i18n/locales/en/index.js',
     ],
     { query: '?raw', import: 'default', eager: true },
 );

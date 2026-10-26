@@ -56,6 +56,7 @@ const chainRegistry = registryLib.defaultRegistry();
 const META_ERROR_TEXT = {
     pipe: 'Cannot contain the | character.',
     semicolon: 'Cannot contain the ; character.',
+    unsafe: 'Cannot contain control, text-direction, or zero-width characters.',
     length: 'Too long.',
     format: 'A single - is not allowed.',
 };
@@ -128,6 +129,7 @@ export function ListCreateForm({ walletId, chainId: initialChainId, initialType,
         /** @type {Record<string, 'found' | 'missing' | null>} */ ({}),
     );
     const [tickCoinSupported, setTickCoinSupported] = useState(false);
+    const [anyCoins, setAnyCoins] = useState(/** @type {string[]} */ ([]));
     const [memo, setMemo] = useState('');
     const [metaSupported, setMetaSupported] = useState(false);
     const [listName, setListName] = useState('');
@@ -200,6 +202,22 @@ export function ListCreateForm({ walletId, chainId: initialChainId, initialType,
         return () => { cancelled = true; };
     }, [chainId, messaging]);
 
+    // Once token-policy inheritance is active the indexer takes an address item
+    // for any configured coin on this network; the explorer's flag says when, so
+    // the form never offers an item the chain would drop into list_items_invalid.
+    useEffect(() => {
+        let cancelled = false;
+        setAnyCoins([]);
+        if (!chainId || !recipientCoin || !recipientNetwork) return () => { cancelled = true; };
+        Promise.resolve()
+            .then(() => (typeof messaging.listAnyCoinItems === 'function'
+                ? messaging.listAnyCoinItems({ chainId, coin: recipientCoin, networkKind: recipientNetwork })
+                : []))
+            .then((coins) => { if (!cancelled) setAnyCoins(Array.isArray(coins) ? coins : []); })
+            .catch(() => { if (!cancelled) setAnyCoins([]); });
+        return () => { cancelled = true; };
+    }, [chainId, recipientCoin, recipientNetwork, messaging]);
+
     useEffect(() => {
         let cancelled = false;
         setMetaSupported(false);
@@ -221,8 +239,9 @@ export function ListCreateForm({ walletId, chainId: initialChainId, initialType,
         setRecipients(airdropLib.classifyRecipients(
             parts,
             { coin: recipientCoin, network: recipientNetwork },
+            { anyCoins },
         ));
-    }, [pasteText, listType, recipientCoin, recipientNetwork]);
+    }, [pasteText, listType, recipientCoin, recipientNetwork, anyCoins]);
 
     const fromAddress = useMemo(() => {
         if (!fromAddressId || !addressesByChain || !chainId) return null;
@@ -307,8 +326,8 @@ export function ListCreateForm({ walletId, chainId: initialChainId, initialType,
         ITEM: items,
     }), [withMeta, listType, items, trimmedMemo, trimmedName, trimmedDescription]);
     const actionSize = useMemo(
-        () => listActionSize(wireParams, descriptor, isWatcherMode ? null : fromAddress),
-        [wireParams, descriptor, isWatcherMode, fromAddress],
+        () => listActionSize(wireParams),
+        [wireParams],
     );
 
     const recipientsDrop = useDropZone({
@@ -811,7 +830,7 @@ export function ListCreateForm({ walletId, chainId: initialChainId, initialType,
                         <p className={styles.hint}>
                             {recipients.valid.length} valid address{recipients.valid.length === 1 ? '' : 'es'}
                             {recipients.duplicates > 0 ? ` · ${recipients.duplicates} duplicate${recipients.duplicates === 1 ? '' : 's'} removed` : ''}
-                            {recipients.invalid.length > 0 ? ` · ${recipients.invalid.length} invalid skipped` : ''}
+                            {recipients.invalid.length > 0 ? ` · ${recipients.invalid.length} invalid` : ''}
                         </p>
                     ) : null}
                     {recipients.invalid.length > 0 ? (
@@ -831,8 +850,8 @@ export function ListCreateForm({ walletId, chainId: initialChainId, initialType,
                             <p>
                                 {recipients.wrongNetwork.length} address
                                 {recipients.wrongNetwork.length === 1 ? ' is' : 'es are'} for another
-                                network and {recipients.wrongNetwork.length === 1 ? 'was' : 'were'} skipped.
-                                This list is published on the selected network.
+                                network. This list is published on the selected network, so remove
+                                {recipients.wrongNetwork.length === 1 ? ' it' : ' them'} to continue.
                             </p>
                             <DiagnosticDetails
                                 summary={`Skipped addresses (${recipients.wrongNetwork.length})`}

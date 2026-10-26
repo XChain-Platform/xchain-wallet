@@ -153,12 +153,12 @@ test.describe('real wallet', () => {
         const toggle = message.locator('xpath=..').getByRole('button', { name: 'Details' });
         await toggle.click();
         await expect(toggle).toHaveAttribute('aria-expanded', 'true');
-        // Settings, not History: an empty History in a wallet whose balances
-        // could not be checked says so itself and the shell notice steps
-        // aside there (one message per state), so it is not a route the
-        // notice shows on.
-        await gotoSection(page, 'Settings');
-        // Settings holds no balance, so the same notice drops the word
+        // Receive, not History or Settings: an empty History in a wallet whose
+        // balances could not be checked says so itself, and Settings holds only
+        // device data, so the shell notice steps aside on both (one message per
+        // state).
+        await gotoSection(page, 'Receive');
+        // Receive holds no balance, so the same notice drops the word
         // balances.
         const settingsMessage = page.getByRole('status').filter({ hasText: 'Some information may be out of date' });
         await expect(settingsMessage).toBeVisible();
@@ -166,7 +166,7 @@ test.describe('real wallet', () => {
             .toHaveAttribute('aria-expanded', 'false');
         // On a route with a page header the notice opens the scrolling
         // content below that header, never between the two toolbars.
-        // Settings loads lazily; until its Screen mounts, the notice waits in
+        // Receive loads lazily; until its Screen mounts, the notice waits in
         // the route area's fallback slot, so poll for the settled placement.
         const placement = () => settingsMessage.evaluate((node) => {
             const main = node.closest('main');

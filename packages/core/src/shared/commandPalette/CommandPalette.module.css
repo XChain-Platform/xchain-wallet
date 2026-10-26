@@ -219,6 +219,8 @@
 .empty {
     padding: var(--xc-space-5) var(--xc-space-4);
     text-align: center;
+    /* The query is echoed back; one long unbroken word must wrap, not spill past the panel. */
+    overflow-wrap: anywhere;
     color: var(--xc-text-muted);
     font-size: var(--xc-text-sm);
 }

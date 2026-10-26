@@ -65,6 +65,9 @@ export async function handleWalletCreateWithMnemonic(request, deps) {
         const vault = new storageLib.Vault({
             backend: deps.storageBackend,
             masterKey,
+            // One blob write at `vault.save()`: a service worker that dies
+            // part-way leaves nothing behind instead of an unopenable blob.
+            autoSave: false,
         });
         try {
             await vault.open();
@@ -110,6 +113,7 @@ export async function handleWalletCreateWithMnemonic(request, deps) {
         if (pooled) {
             try { deps.signerPool.lockAll(); } catch { /* best-effort */ }
         }
+        await discardPartialWallet(deps);
         throw err;
     } finally {
         masterKey.fill(0);
@@ -137,6 +141,7 @@ export async function handleWalletImport(request, deps) {
         bip39Passphrase = '',
         activeChainIds = DEFAULT_ACTIVE_CHAIN_IDS,
         origin,
+        format,
         chainId,
         activeNetwork,
     } = /** @type {any} */ (request);
@@ -146,13 +151,16 @@ export async function handleWalletImport(request, deps) {
 
     const kdfParams = cryptoLib.makeFreshKdfParams();
     const masterKey = cryptoLib.deriveMasterKey(password, kdfParams);
-    let format;
+    let importedFormat;
     let walletId;
     let labelSyncToken = null;
     try {
         const vault = new storageLib.Vault({
             backend: deps.storageBackend,
             masterKey,
+            // One blob write at `vault.save()`: a service worker that dies
+            // part-way leaves nothing behind instead of an unopenable blob.
+            autoSave: false,
         });
         try {
             await vault.open();
@@ -177,6 +185,8 @@ export async function handleWalletImport(request, deps) {
                     name,
                     bip39Passphrase,
                     origin,
+                    // The caller's pin, so a phrase both wordlists accept is not read as the other format.
+                    format,
                     kdfParams,
                     // The network the caller asked to land on (demo mode asks
                     // for mainnet). Undefined keeps the flow's own inference
@@ -184,7 +194,7 @@ export async function handleWalletImport(request, deps) {
                     activeNetwork,
                 });
             await vault.save();
-            format = result.format ?? result.wallet.format;
+            importedFormat = result.format ?? result.wallet.format;
             walletId = result.wallet.id;
         } finally {
             // Vault kept its own copy of the key; close zeros that copy.
@@ -194,6 +204,9 @@ export async function handleWalletImport(request, deps) {
         await deps.metaBackend.save({ kdfParams });
         await deps.sessionBackend.save(masterKey);
         await saveSigningSecret(deps.signingSecretBackend, password);
+    } catch (err) {
+        await discardPartialWallet(deps);
+        throw err;
     } finally {
         masterKey.fill(0);
     }
@@ -217,7 +230,7 @@ export async function handleWalletImport(request, deps) {
     // imports the shared phrase here and then asks the host for that wallet's
     // pairing payload, addressed BY id; without it the lane dead-ended after
     // the wallet already existed.
-    return { format, walletName: name, walletId, labelSyncToken };
+    return { format: importedFormat, walletName: name, walletId, labelSyncToken };
 }
 
 /**
@@ -301,6 +314,9 @@ export async function handleWalletImportBackup(request, deps) {
         const vault = new storageLib.Vault({
             backend: deps.storageBackend,
             masterKey,
+            // One blob write at `vault.save()`: a service worker that dies
+            // part-way leaves nothing behind instead of an unopenable blob.
+            autoSave: false,
         });
         try {
             await vault.open();
@@ -360,6 +376,7 @@ export async function handleWalletImportBackup(request, deps) {
         if (pooled) {
             try { deps.signerPool.lockAll(); } catch { /* best-effort */ }
         }
+        await discardPartialWallet(deps);
         throw err;
     } finally {
         masterKey.fill(0);
@@ -375,6 +392,27 @@ export async function handleWalletImportBackup(request, deps) {
         skipped: result.skipped,
         rekeyed: result.rekeyed,
     };
+}
+
+/**
+ * Remove what a failed create / import / fresh-restore wrote. These lanes write
+ * the blob once, at their save, so a kdfParams, session or signing-secret save
+ * that is refused after it leaves an encrypted blob the unlock path cannot
+ * open and every onboarding lane refuses to replace. Callers
+ * reach this only after `assertFreshVault` proved the install held nothing, so
+ * it never discards a wallet that was already there. A clear that fails too is
+ * left for the original error to report.
+ *
+ * @param {{ storageBackend: { clear?: () => Promise<void> }, metaBackend: { clear?: () => Promise<void> } }} deps
+ */
+async function discardPartialWallet(deps) {
+    for (const backend of [deps.storageBackend, deps.metaBackend]) {
+        try {
+            if (typeof backend?.clear === 'function') await backend.clear();
+        } catch {
+            // The failure being reported is the first one.
+        }
+    }
 }
 
 /**

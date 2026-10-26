@@ -40,6 +40,7 @@ import {
     WrongPasswordError,
 } from '../../../packages/core/src/flows/exportPrivateKey.js';
 import { WalletNotFoundError } from '../../../packages/core/src/flows/unlockWallet.js';
+import { AeadAuthError } from '../../../packages/core/src/crypto/aead.js';
 
 const chainRegistry = { chainIdFor: vi.fn(() => 'bitcoin-regtest') };
 
@@ -311,7 +312,7 @@ describe('exportPrivateKey refusal and cleanup edges', () => {
             wallet: { format, encryptedSeed: format === 'bip39' ? 'seed' : '' },
         });
         mocks.deriveMasterKeyAsync.mockResolvedValue(masterKey);
-        mocks.decrypt.mockRejectedValue(new Error('bad tag'));
+        mocks.decrypt.mockRejectedValue(new AeadAuthError(new Error('bad tag')));
 
         await expect(exportPrivateKey({
             vault: fixture.vault,

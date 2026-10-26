@@ -15,6 +15,7 @@ import {
     registry as registryLib,
     decoder as decoderLib,
 } from '@xchain-wallet/core';
+import '../../i18n/locales/en/send.js';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { useDemoGuard } from '../hooks/useDemoGuard.jsx';
 import { useSettings } from '../hooks/useSettings.js';
@@ -45,6 +46,7 @@ import { OwnAddressPickerScreen } from '../components/OwnAddressPickerScreen.jsx
 import styles from './IssueTokenForm.module.css';
 import { submitFailureMessage } from '../utils/submitFailureMessage.js';
 import { QueuedResultPanel } from '../components/QueuedResultPanel.jsx';
+import { memoLengthError } from '../utils/memoLimit.js';
 
 const chainRegistry = registryLib.defaultRegistry();
 
@@ -68,6 +70,21 @@ function destinationAddressError(address, descriptor) {
         return `This looks like a ${COIN_DISPLAY[detected] || detected} address, not a ${chainName} address.`;
     }
     return `This is not a valid ${chainName} address. Check it for typos.`;
+}
+
+// Bech32 is case-insensitive and a QR code carries it in capitals, but its
+// canonical form is lowercase, which is the form the wallet derives and
+// compares. Left as typed, the capitalised copy of the source address slipped
+// past the same-as-source guard, was announced as a third party's address, and
+// went into the action string in a spelling nothing else uses. An address that
+// is only valid as its lowercase form is canonicalised; anything else, base58
+// included, is left exactly as entered.
+function canonicalDestination(address, descriptor) {
+    const a = (address || '').trim();
+    const lower = a.toLowerCase();
+    if (a === lower || a !== a.toUpperCase()) return a;
+    if (!descriptor?.coin || !descriptor?.networkKind) return a;
+    return isValidAddressForChain(lower, descriptor.coin, descriptor.networkKind) ? lower : a;
 }
 
 const CATEGORY_META = [
@@ -347,7 +364,7 @@ export function SweepForm({
     }
 
     // ---- Destination rails ----
-    const destTrimmed = destination.trim();
+    const destTrimmed = canonicalDestination(destination, descriptor);
     const destFormatError = destinationAddressError(destTrimmed, descriptor);
     const destinationIsOwn = useMemo(() => {
         if (!destTrimmed || !chainId || !addressesByChain) return false;
@@ -505,8 +522,10 @@ export function SweepForm({
             setFormError('Destination address is required.');
             return;
         }
+        // The destination field already shows this error; a second copy in the
+        // form status would say the same thing twice.
         if (destFormatError) {
-            setFormError(destFormatError);
+            setFormError(null);
             return;
         }
         if (destTrimmed === fromAddress.address) {
@@ -522,6 +541,8 @@ export function SweepForm({
             setFormError('Memo cannot contain "|" or ";".');
             return;
         }
+        const memoError = memoLengthError(m);
+        if (memoError) { setFormError(memoError); return; }
         if (!gateSatisfied) {
             setFormError(`Unlock keys for ${gateMissingTicks.join(', ')} are not in the vault yet. Recover them below, or acknowledge sweeping without them.`);
             return;

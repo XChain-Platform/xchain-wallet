@@ -40,6 +40,10 @@ export const SOUND_DIR = 'sounds/';
 
 const DELIVERY_CLAIM_PREFIX = 'xc:notification-delivery:';
 const DELIVERY_CLAIM_TTL_MS = 60 * 60_000;
+// A price alert is armed again by Re-arm or an edit under the same id, and its
+// next crossing must reach the user. Its claim only has to outlast the poll
+// that raised it, so it expires after two poll intervals.
+const DELIVERY_CLAIM_TTL_BY_KIND = { 'price-alert': 10 * 60_000 };
 
 function stableDeliveryIdentity(kind, data) {
     if (!data || typeof data !== 'object') return null;
@@ -55,6 +59,9 @@ function stableDeliveryIdentity(kind, data) {
         data.actionIndex,
         data.orderMatchActionIndex,
         data.reason,
+        data.direction,
+        data.targetFiat,
+        data.fiatCurrency,
     ];
     if (parts.slice(2).every((value) => value == null)) return null;
     return parts.map((value) => value == null ? '' : String(value)).join(':');
@@ -79,7 +86,7 @@ function claimDelivery(kind, data, now) {
         const timestamp = now();
         const expiresAt = Number(storage.getItem(key));
         if (Number.isFinite(expiresAt) && expiresAt > timestamp) return false;
-        storage.setItem(key, String(timestamp + DELIVERY_CLAIM_TTL_MS));
+        storage.setItem(key, String(timestamp + (DELIVERY_CLAIM_TTL_BY_KIND[kind] ?? DELIVERY_CLAIM_TTL_MS)));
         return key;
     } catch {
         return null;

@@ -181,8 +181,8 @@ export function createAccount(opts) {
 }
 
 /** @param {string} walletId @param {string} [accountId] */
-export function getWalletBalances(walletId, accountId) {
-    return /** @type {any} */ (sendMessage('balances.wallet', { walletId, accountId }));
+export function getWalletBalances(walletId, accountId, chainId) {
+    return /** @type {any} */ (sendMessage('balances.wallet', chainId ? { walletId, accountId, chainId } : { walletId, accountId }));
 }
 
 /** @param {string} walletId @param {string} [accountId] */
@@ -193,6 +193,11 @@ export function getAddressesByChain(walletId, accountId) {
 /** @param {string} walletId @param {string} chainId @param {string} [accountId] */
 export function getNewestAddress(walletId, chainId, accountId) {
     return /** @type {any} */ (sendMessage('addresses.newest', { walletId, chainId, accountId }));
+}
+
+/** Which registry address types the installed SDK can generate on a chain. @param {string} chainId */
+export function getSupportedAddressTypes(chainId) {
+    return /** @type {any} */ (sendMessage('sdk.addressTypes', { chainId }));
 }
 
 /** Rename an address (set its label). @param {string} id @param {string} label */
@@ -1647,6 +1652,17 @@ export function buildBatchCommand(req) {
 /** @param {object} req */
 export function getActionFormats(req) {
     return /** @type {any} */ (sendMessage('sdk.getActionFormats', req));
+}
+
+/**
+ * The coins whose addresses an address LIST on the chain accepts once
+ * token-policy inheritance is active, read from the explorer's gate flag.
+ * Answers [] when the gate is off or on any failure.
+ *
+ * @param {{ chainId: string, coin: string, networkKind: string }} req
+ */
+export function listAnyCoinItems(req) {
+    return /** @type {any} */ (sendMessage('sdk.listAnyCoinItems', req));
 }
 
 /**

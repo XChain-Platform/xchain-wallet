@@ -126,4 +126,15 @@ describe('MySwapsView: cancel row status', () => {
         expect(utils.getByText('This swap has an invalid action ID and cannot be changed.')).toBeTruthy();
         expect(utils.getByRole('button', { name: 'Cancel swap' }).disabled).toBe(true);
     });
+
+    it('keeps valid swaps usable when explorer arrays contain malformed rows', async () => {
+        const utils = await open(
+            [null, 17, swapRow(750), swapRow(750)],
+            [null, 'bad-row'],
+        );
+
+        expect(utils.queryByText('Could not load your swaps. Try again.')).toBeNull();
+        const list = utils.getByRole('list', { name: 'Open swaps' });
+        expect(within(list).getAllByText('#750', { exact: false })).toHaveLength(1);
+    });
 });

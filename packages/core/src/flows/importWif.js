@@ -166,8 +166,11 @@ export async function importWif({
         let seedBytes;
         try {
             seedBytes = await decrypt(masterKey, base64ToBytes(walletRecord.encryptedSeed));
-        } catch {
-            throw new WrongPasswordError();
+        } catch (err) {
+            // Only a GCM tag mismatch is a wrong password (crypto/aead.js); a
+            // damaged seal or a malformed session key propagates as itself.
+            if (/** @type {any} */ (err)?.name === 'AeadAuthError') throw new WrongPasswordError();
+            throw err;
         } finally {
             if (seedBytes) seedBytes.fill(0);
         }
@@ -200,11 +203,14 @@ export async function importWif({
         throw new Error(`importWif: address id collision "${addressRecord.id}"`);
     }
 
-    // Append to Wallet.importedKeys.
+    // Append to Wallet.importedKeys. The record is read again here: the key
+    // derivation above takes seconds, and a rename or another key import that
+    // landed meanwhile would be overwritten by the copy read before it.
+    const currentWallet = (await vault.wallets.get(walletRecord.id)) ?? walletRecord;
     const updatedWallet = {
-        ...walletRecord,
+        ...currentWallet,
         importedKeys: [
-            ...walletRecord.importedKeys,
+            ...currentWallet.importedKeys,
             {
                 addressId: addressRecord.id,
                 encryptedWif,
@@ -222,7 +228,7 @@ export async function importWif({
     } catch (error) {
         const rollbackErrors = [];
         if (walletPutAttempted) {
-            try { await vault.wallets.put(walletRecord); } catch (e) { rollbackErrors.push(e); }
+            try { await vault.wallets.put(currentWallet); } catch (e) { rollbackErrors.push(e); }
         }
         if (addressPutAttempted) {
             try { await vault.addresses.delete(addressRecord.id); } catch (e) { rollbackErrors.push(e); }

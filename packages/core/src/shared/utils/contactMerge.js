@@ -16,7 +16,9 @@
 // They stay out of `flows/contacts.js` on purpose: its `saveContact({input})`
 // always creates, and a merge belongs where the screen can say it happened.
 
-const nameKey = (name) => String(name || '').trim().toLowerCase();
+import { cleanContactName } from '../../schemas/contact.js';
+
+const nameKey = (name) => cleanContactName(name).toLowerCase();
 
 // Same address on the same chain, compared the way findContactByAddress does
 // (trimmed, case-insensitive: bech32 is case-insensitive by spec).

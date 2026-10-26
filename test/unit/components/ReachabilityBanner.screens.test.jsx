@@ -5,7 +5,8 @@
 
 // The reachability notice names balances only on a screen that can show one.
 // Screens without balances get copy about the screen's information in
-// general, and every screen still carries exactly one notice.
+// general, and every screen still carries exactly one notice. A screen of
+// data held on this device carries none.
 
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, render, screen } from '@testing-library/react';
@@ -16,6 +17,7 @@ vi.mock('../../../packages/core/src/shared/hooks/useReachability.js', () => ({ u
 import { ReachabilityBanner } from '../../../packages/core/src/shared/components/ReachabilityBanner.jsx';
 import {
     NoticesRouteContext,
+    routeHoldsNetworkData,
     routeMayShowBalances,
 } from '../../../packages/core/src/shared/components/noticesRoute.js';
 
@@ -34,9 +36,9 @@ afterEach(() => { cleanup(); useReachability.mockReset(); });
 
 describe('ReachabilityBanner copy by screen', () => {
     it.each([
-        'receive', 'contacts', 'obligations', 'settings', 'scan', 'markets',
+        'receive', 'obligations', 'markets',
         'add-wallet', 'add-account', 'wallet-rename', 'account-rename', 'sign-message',
-        'verify-signature', 'view-private-key', 'migrate-bip39', 'pair-signer',
+        'view-private-key', 'migrate-bip39', 'pair-signer',
         'dispenser-explorer', 'market-activity',
     ])(
         'says the screen may be out of date, not its balances, on %s while offline',
@@ -50,7 +52,7 @@ describe('ReachabilityBanner copy by screen', () => {
     );
 
     it('drops the offline claim when only some services are down', () => {
-        mount('degraded', 'contacts:1');
+        mount('degraded', 'receive:1');
         expect(screen.getByRole('status')).toHaveTextContent('Some information may be out of date');
         expect(screen.queryByText(/offline/i)).toBeNull();
     });
@@ -63,9 +65,19 @@ describe('ReachabilityBanner copy by screen', () => {
         },
     );
 
+    it.each(['contacts', 'connected-sites', 'alerts', 'cosigner-accounts', 'scan', 'verify-signature', 'settings'])(
+        'shows no notice on %s, whose data is held on this device',
+        (view) => {
+            mount('offline', `${view}:1`);
+            expect(screen.queryByRole('status')).toBeNull();
+            expect(routeHoldsNetworkData(`${view}:1`)).toBe(false);
+        },
+    );
+
     it('treats a missing route key as a balance screen', () => {
         mount('offline', null);
         expect(screen.getByRole('status')).toHaveTextContent('Some balances may be out of date');
         expect(routeMayShowBalances(undefined)).toBe(true);
+        expect(routeHoldsNetworkData(undefined)).toBe(true);
     });
 });

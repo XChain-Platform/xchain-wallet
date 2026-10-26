@@ -24,17 +24,18 @@
         "@xchain-wallet/extension": "workspace:*",
         "@xchain-wallet/signers-ledger": "workspace:*",
         "@xchain-wallet/signers-trezor": "workspace:*",
+        "bitcoinjs-lib": "6.1.7",
         "electron-updater": "^6.8.9",
         "lightweight-charts": "^4.2.0",
         "openpgp": "^6.3.1",
         "react": "^18.3.0",
         "react-dom": "^18.3.0",
         "undici": "^8.10.2",
-        "xchain-sdk": "npm:@dankest-llc/xchain-sdk@0.23.0"
+        "xchain-sdk": "npm:@dankest-llc/xchain-sdk@0.26.2"
     },
     "devDependencies": {
         "@vitejs/plugin-react": "^4.3.0",
-        "electron": "^44.9.0",
+        "electron": "^44.9.3",
         "electron-builder": "^26.15.7",
         "electron-builder-squirrel-windows": "^26.15.7",
         "vite": "^6.4.3",

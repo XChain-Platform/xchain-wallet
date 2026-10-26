@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useProtectedScreen } from '../utils/screenGuard.js';
 import { userFacingMessage } from '../utils/userFacingMessage.js';
 import {
@@ -47,6 +47,7 @@ import { nextPaint } from '../utils/nextPaint.js';
 
 const chainRegistry = registryLib.defaultRegistry();
 const MIN_PASSWORD_LENGTH = 8;
+const DEFAULT_WALLET_NAME = 'XChain BIP39 Wallet';
 
 /**
  * Migrate-to-BIP39 wizard (§40.13).
@@ -82,7 +83,7 @@ export function MigrateToBip39({ legacyWalletId, onBack, onMigrated, onSweepChai
     const [stage, setStage] = useState(
         /** @type {'explain' | 'create' | 'backup' | 'verify' | 'submitting' | 'done'} */ ('explain'),
     );
-    const [name, setName] = useState('XChain BIP39 Wallet');
+    const [name, setName] = useState(DEFAULT_WALLET_NAME);
     const [password, setPassword] = useState('');
     const [confirm, setConfirm] = useState('');
     const [error, setError] = useState(/** @type {string | null} */ (null));
@@ -103,6 +104,9 @@ export function MigrateToBip39({ legacyWalletId, onBack, onMigrated, onSweepChai
     );
     const [newAddressError, setNewAddressError] = useState(false);
     const [addressLoadSeq, setAddressLoadSeq] = useState(0);
+    // Two submits in one event turn both read stage 'verify'; each would save a
+    // separate wallet from the same phrase. The ref closes that gap.
+    const savingRef = useRef(false);
 
     // Read the legacy wallet only after the new phrase is verified and its
     // encrypted wallet is saved. Before then every exit path is side-effect free.
@@ -191,7 +195,7 @@ export function MigrateToBip39({ legacyWalletId, onBack, onMigrated, onSweepChai
 
     async function handleSubmitVerify(event) {
         event.preventDefault();
-        if (!mnemonic || stage === 'submitting') return;
+        if (!mnemonic || stage === 'submitting' || savingRef.current) return;
         const words = mnemonic.trim().split(/\s+/);
         for (const position of quizPositions) {
             const answer = (quizAnswers[position] || '').trim().toLowerCase();
@@ -205,6 +209,7 @@ export function MigrateToBip39({ legacyWalletId, onBack, onMigrated, onSweepChai
             }
         }
 
+        savingRef.current = true;
         setStage('submitting');
         setError(null);
         setQuizError(null);
@@ -215,7 +220,7 @@ export function MigrateToBip39({ legacyWalletId, onBack, onMigrated, onSweepChai
             if (typeof messaging.addImportedWallet !== 'function') {
                 throw new Error('Adding a second wallet is not supported in this version of the app.');
             }
-            const result = await messaging.addImportedWallet({ password, mnemonic, name, origin: 'created' });
+            const result = await messaging.addImportedWallet({ password, mnemonic, name: name.trim() || DEFAULT_WALLET_NAME, origin: 'created' });
             const id = result?.walletId || result?.id || result?.wallet?.id;
             // Warn against a blind retry: the save may have stored the wallet even without returning its id
             if (!id) throw new Error('The new wallet could not be confirmed. Check your wallet list before trying again.');
@@ -230,6 +235,8 @@ export function MigrateToBip39({ legacyWalletId, onBack, onMigrated, onSweepChai
             setError(userFacingMessage(err,
                 'Could not create the new wallet. Your recovery phrase is still here, so you can try again.'));
             setStage('verify');
+        } finally {
+            savingRef.current = false;
         }
     }
 
@@ -302,11 +309,15 @@ export function MigrateToBip39({ legacyWalletId, onBack, onMigrated, onSweepChai
         );
     }
 
+    // Each stage keeps its own form element: the Verify button of the backup
+    // stage is a plain button, and a form shared with the quiz would turn that
+    // same click into a submit of the empty quiz.
     // The phrase remains visible until the user starts the word quiz. Returning
     // to setup discards it because no wallet has been persisted yet.
     if (stage === 'backup') {
         return wrap(
             <FormPage
+                key="migrate-backup"
                 label="Back up new recovery phrase"
                 actions={(
                     <>
@@ -339,6 +350,7 @@ export function MigrateToBip39({ legacyWalletId, onBack, onMigrated, onSweepChai
     if (stage === 'verify') {
         return wrap(
             <FormPage
+                key="migrate-verify"
                 label="Verify new recovery phrase"
                 onSubmit={handleSubmitVerify}
                 status={(
@@ -481,6 +493,7 @@ export function MigrateToBip39({ legacyWalletId, onBack, onMigrated, onSweepChai
 
     return wrap(
         <FormPage
+            key="migrate-create"
             label="Set up new BIP39 wallet"
             onSubmit={handleCreate}
             actions={(

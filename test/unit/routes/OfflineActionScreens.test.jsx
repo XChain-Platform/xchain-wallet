@@ -177,6 +177,17 @@ describe.each([
     });
 });
 
+describe('TokenWizard load failure offline', () => {
+    it('shows the load error as the one message, without the offline note', async () => {
+        renderScreen(messagingWith({
+            getAddressesByChain: vi.fn().mockRejectedValue(new Error('Could not read your addresses.')),
+        }), <TokenWizard walletId={WALLET_ID} onBack={() => {}} />);
+        await screen.findByText('Could not read your addresses.');
+        expect(screen.queryByText('Creating a token needs a network connection.')).toBeNull();
+        expect(screen.queryByText(BANNER)).toBeNull();
+    });
+});
+
 describe('TokenDetail', () => {
     function detail() {
         return (

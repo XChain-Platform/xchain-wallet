@@ -77,6 +77,9 @@ function popupMessaging(overrides = {}) {
         signerReady: vi.fn().mockResolvedValue({ ready: false }),
         getSignerStatus: vi.fn().mockResolvedValue({ unlocked: false }),
         gatedSendReadiness: vi.fn().mockResolvedValue({ state: 'ungated' }),
+        // The address types the installed SDK generates; Receive waits for this
+        // answer before it opens on an address.
+        getSupportedAddressTypes: vi.fn().mockResolvedValue({ supported: ['p2pkh', 'p2sh-p2wpkh', 'p2wpkh'] }),
         ...overrides,
     };
     return new Proxy(base, {

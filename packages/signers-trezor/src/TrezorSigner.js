@@ -123,10 +123,13 @@ export class TrezorSigner extends Signer {
      *   - `'available'`: device reachable + same physical device we paired
      *   - `'locked'`: Connect reports that the device needs to be unlocked
      *   - `'disconnected'`: Connect rejects or the device identifier doesn't match
+     *   - `'unsupported-network'`: a chainId was passed that CHAIN_ID_TO_TREZOR_COIN
+     *     does not map, so every sign or derive on it would fail
      *
+     * @param {{ chainId?: string }} [opts]   Chain the caller is about to use; omitted accepts any
      * @returns {Promise<import('../../core/src/signers/Signer.js').SignerStatus>}
      */
-    async getStatus() {
+    async getStatus(opts = {}) {
         let res;
         try {
             res = await this._connect.getFeatures();
@@ -158,6 +161,11 @@ export class TrezorSigner extends Signer {
         // device binding this check exists to enforce.
         if (!observedId || observedId !== this._deviceIdentifier) {
             return 'disconnected';
+        }
+        // Report a chain chainIdToTrezorCoin refuses here, as LedgerSigner does,
+        // rather than 'available' followed by a sign that cannot succeed.
+        if (opts?.chainId && !Object.prototype.hasOwnProperty.call(CHAIN_ID_TO_TREZOR_COIN, opts.chainId)) {
+            return 'unsupported-network';
         }
         return 'available';
     }

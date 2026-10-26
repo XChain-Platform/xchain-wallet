@@ -28,6 +28,7 @@ import {
 } from '../../flows/feeEstimate.js';
 import { actionDisplayLabel } from '../utils/actionDisplayLabel.js';
 import { humanizeError } from '../utils/humanizeError.js';
+import { explorerErrorCode } from '../../sdk/explorerErrors.js';
 import styles from './IssueTokenForm.module.css';
 import { preferredSourceId } from '../addressSelection.js';
 import { pickDefaultChainId } from '../chainSelection.js';
@@ -35,6 +36,7 @@ import { submitFailureMessage } from '../utils/submitFailureMessage.js';
 import { useActionConfirmFlow, useConfirmSubmit, isUserRejection } from '../hooks/useActionConfirmFlow.js';
 import { ActionConfirmScreen } from '../components/ActionConfirmScreen.jsx';
 import { MAX_MEMO_LENGTH, memoLengthError, utf8ByteLength } from '../utils/memoLimit.js';
+import cardStyles from '../../ui/Card.module.css';
 
 const chainRegistry = registryLib.defaultRegistry();
 
@@ -212,7 +214,10 @@ export function LinkForm({ walletId, onBack }) {
                 })
                 .catch((err) => {
                     if (!mountedRef.current) return;
-                    setPreviewCache((p) => ({ ...p, [key]: { loading: false, action: null, error: err?.message || String(err) } }));
+                    // The explorer answers 404 for a number no action holds: that is a
+                    // missing action, not a failed lookup.
+                    const missing = explorerErrorCode(err) === 'EXPLORER_HTTP_404';
+                    setPreviewCache((p) => ({ ...p, [key]: { loading: false, action: null, error: missing ? null : (err?.message || String(err)) } }));
                 });
         }, 350);
         return () => clearTimeout(t);
@@ -231,7 +236,10 @@ export function LinkForm({ walletId, onBack }) {
                 })
                 .catch((err) => {
                     if (!mountedRef.current) return;
-                    setPreviewCache((p) => ({ ...p, [key]: { loading: false, action: null, error: err?.message || String(err) } }));
+                    // The explorer answers 404 for a number no action holds: that is a
+                    // missing action, not a failed lookup.
+                    const missing = explorerErrorCode(err) === 'EXPLORER_HTTP_404';
+                    setPreviewCache((p) => ({ ...p, [key]: { loading: false, action: null, error: missing ? null : (err?.message || String(err)) } }));
                 });
         }, 350);
         return () => clearTimeout(t);
@@ -400,10 +408,9 @@ export function LinkForm({ walletId, onBack }) {
             setFormError('Pick a source address first.');
             return;
         }
-        if (validationError) {
-            setFormError(validationError);
-            return;
-        }
+        // The live banner above the form already states this problem; copying it
+        // into formError printed the same sentence twice.
+        if (validationError) return;
         if (previewPending) {
             setFormError('Wait for both action previews to finish loading.');
             return;
@@ -646,7 +653,7 @@ export function LinkForm({ walletId, onBack }) {
                     <dd className={styles.detailsValue}>
                         Action #{actionIndex1} {'↔'} action #{actionIndex2}
                     </dd>
-                    <dt className={styles.detailsLabel}>Side A decoded</dt>
+                    <dt className={styles.detailsLabel}>First action</dt>
                     <dd className={styles.detailsValue} style={{ fontSize: 'var(--xc-text-xs)', color: 'var(--xc-text-muted)' }}>
                         {preview1?.loading
                             ? 'Loading…'
@@ -656,7 +663,7 @@ export function LinkForm({ walletId, onBack }) {
                                     ? decodePreview(preview1.action)
                                     : '(preview not loaded)'}
                     </dd>
-                    <dt className={styles.detailsLabel}>Side B decoded</dt>
+                    <dt className={styles.detailsLabel}>Second action</dt>
                     <dd className={styles.detailsValue} style={{ fontSize: 'var(--xc-text-xs)', color: 'var(--xc-text-muted)' }}>
                         {preview2?.loading
                             ? 'Loading…'
@@ -835,13 +842,7 @@ function SidePanel({ title, chainIds, chainId, onChainChange, actionIndex, onAct
     const preview = previewKey ? previewCache[previewKey] : null;
 
     return (
-        <fieldset style={{
-            border: 'var(--xc-card-border)',
-            borderRadius: 'var(--xc-card-radius)',
-            padding: 'var(--xc-card-pad)',
-            margin: 0,
-            background: 'var(--xc-card-bg)',
-        }}>
+        <fieldset className={cardStyles.card} style={{ margin: 0 }}>
             <legend style={{ fontWeight: 600, padding: '0 var(--xc-space-2)' }}>
                 {title}
             </legend>
@@ -878,9 +879,11 @@ function SidePanel({ title, chainIds, chainId, onChainChange, actionIndex, onAct
                             ? humanizeError(preview.error, 'load that action').message
                             : preview?.action
                                 ? `Preview: ${decodePreview(preview.action)}`
-                                : descriptor && actionIndex
-                                    ? 'Enter the action number from the explorer to see a preview…'
-                                    : ''}
+                                : preview
+                                    ? 'No action was found at that number.'
+                                    : descriptor && actionIndex
+                                        ? 'Enter the action number from the explorer to see a preview…'
+                                        : ''}
             </div>
         </fieldset>
     );
@@ -889,7 +892,8 @@ function SidePanel({ title, chainIds, chainId, onChainChange, actionIndex, onAct
 function decodePreview(action) {
     if (!action) return '(empty)';
     const a = action.action || action.ACTION;
-    if (!a) return JSON.stringify(action).slice(0, 80);
+    // Never show raw row JSON to a person; a row with no action name says so plainly.
+    if (!a) return 'Action details unavailable';
     // Show the humanized action label, never the raw all-caps opcode.
     const label = actionDisplayLabel(a);
     if (a === 'ISSUE') {

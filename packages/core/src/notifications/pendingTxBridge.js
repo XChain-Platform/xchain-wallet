@@ -67,8 +67,42 @@ export async function markPendingTxIndexed(vault, txid, opts = {}) {
             } : {}),
         });
         changed = true;
+        await failSupersededReplacements(vault, rec);
     }
     return changed;
+}
+
+const REPLACEMENT_LOST_ERROR = 'The original transaction confirmed before this replacement did.';
+
+/**
+ * A confirmed record that was fee-bumped or cancelled settles the race the
+ * other way: the replacement spends the same inputs, so it can never confirm.
+ * Left live it would keep subtracting its spend from the balance and from every
+ * later pre-flight, on top of the original's confirmed spend. Each replacement
+ * in the chain (a bump of a bump) is retired as failed, which History lists
+ * with its reason.
+ *
+ * @param {import('../storage/Vault.js').Vault} vault
+ * @param {{ rbfReplacement?: string | null }} confirmed
+ */
+async function failSupersededReplacements(vault, confirmed) {
+    if (typeof vault.pendingTxs.list !== 'function') return;
+    const lower = (v) => String(v || '').trim().toLowerCase();
+    const seen = new Set();
+    let next = lower(confirmed.rbfReplacement);
+    while (next && !seen.has(next)) {
+        seen.add(next);
+        const all = await vault.pendingTxs.list();
+        const dead = (Array.isArray(all) ? all : []).filter((r) => (
+            r && lower(r.txid) === next
+            && r.status !== 'indexed' && r.status !== 'failed'
+        ));
+        next = '';
+        for (const r of dead) {
+            await vault.pendingTxs.put({ ...r, status: 'failed', error: REPLACEMENT_LOST_ERROR });
+            if (!next) next = lower(r.rbfReplacement);
+        }
+    }
 }
 
 /**

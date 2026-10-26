@@ -11,10 +11,11 @@
 import { useEffect, useRef, useState } from 'react';
 import { Button, FormPage, Screen, Input, PageHeader } from '@xchain-wallet/core/ui';
 import { t } from '../../i18n/index.js';
+import '../../i18n/locales/en/accountPicker.js';
+import '../../i18n/locales/en/history.js';
+import '../../i18n/locales/en/renameAccount.js';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
-
-const NAME_MAX_LENGTH = 64;
-const nameLength = (value) => Array.from(value).length;
+import { NAME_MAX_LENGTH, hasVisibleText, nameKey, nameLength } from '../../util/display_name.js';
 
 /**
  * RenameAccountForm: change an Account record's `name` field. No
@@ -65,7 +66,7 @@ export function RenameAccountForm({ accountId, walletId, initialName = '', onBac
         if (event && typeof event.preventDefault === 'function') event.preventDefault();
         if (busy) return;
         const trimmed = name.trim();
-        if (trimmed.length === 0) {
+        if (!hasVisibleText(trimmed)) {
             setError('Account name is required.');
             return;
         }
@@ -74,7 +75,7 @@ export function RenameAccountForm({ accountId, walletId, initialName = '', onBac
             return;
         }
         if (accounts.some((account) => account?.id !== accountId
-            && account?.name?.trim().toLocaleLowerCase() === trimmed.toLocaleLowerCase())) {
+            && nameKey(account?.name) === nameKey(trimmed))) {
             setError(`An account named "${trimmed}" already exists.`);
             return;
         }
@@ -93,7 +94,7 @@ export function RenameAccountForm({ accountId, walletId, initialName = '', onBac
         }
     }
 
-    const saveDisabled = busy || name.trim().length === 0
+    const saveDisabled = busy || !hasVisibleText(name)
         || nameLength(name.trim()) > NAME_MAX_LENGTH;
 
     const header = (

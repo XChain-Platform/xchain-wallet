@@ -127,7 +127,7 @@ describe('ReachabilityBanner', () => {
         expect(screen.getByRole('button', { name: 'Details' })).toHaveAttribute('aria-expanded', 'true');
 
         view.rerender(
-            <NoticesRouteContext.Provider value="settings"><ReachabilityBanner /></NoticesRouteContext.Provider>,
+            <NoticesRouteContext.Provider value="history"><ReachabilityBanner /></NoticesRouteContext.Provider>,
         );
         expect(screen.getByRole('button', { name: 'Details' })).toHaveAttribute('aria-expanded', 'false');
         expect(screen.queryByRole('list', { name: 'Affected coins' })).toBeNull();

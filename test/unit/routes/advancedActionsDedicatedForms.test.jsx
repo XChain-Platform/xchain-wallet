@@ -38,6 +38,12 @@ const FROM = {
     source: 'hd',
 };
 
+function deferred() {
+    let resolve;
+    const promise = new Promise((next) => { resolve = next; });
+    return { promise, resolve };
+}
+
 afterEach(() => cleanup());
 
 describe('dedicatedFormActions', () => {
@@ -158,5 +164,104 @@ describe('AdvancedActionsForm action picker label', () => {
 
         expect(await screen.findByText(/Advanced action is unavailable/)).toBeTruthy();
         expect(screen.queryByRole('combobox', { name: 'Action' })).toBeNull();
+    });
+
+    it('keeps submit disabled until a slow action schema is fully loaded', async () => {
+        const formats = deferred();
+        const fields = deferred();
+        const target = {
+            getAddressesByChain: vi.fn().mockResolvedValue({ [BTC]: [FROM] }),
+            getActiveAddresses: vi.fn().mockResolvedValue({ [BTC]: FROM }),
+            getSettings: vi.fn().mockResolvedValue({ walletMode: 'full', activeNetwork: 'mainnet' }),
+            signerReady: vi.fn().mockResolvedValue({ ready: true }),
+            listActions: vi.fn().mockResolvedValue(['SDKONLY']),
+            getActionFormats: vi.fn(() => formats.promise),
+            getActionFields: vi.fn(() => fields.promise),
+            composeForConfirm: vi.fn(),
+        };
+        const messaging = new Proxy(target, {
+            get: (t, prop) => (prop in t ? t[prop] : () => Promise.resolve({ rows: [] })),
+            has: (t, prop) => prop in t,
+        });
+        render(
+            <MessagingProvider shell="web" messaging={messaging}>
+                <AdvancedActionsForm walletId="w" onBack={() => {}} />
+            </MessagingProvider>,
+        );
+
+        const actionPicker = await screen.findByRole('combobox', { name: 'Action' });
+        await screen.findByRole('option', { name: /SDKONLY/ });
+        fireEvent.change(actionPicker, { target: { value: 'SDKONLY' } });
+
+        expect(screen.getByRole('button', { name: 'Sign action' })).toBeDisabled();
+        expect(screen.queryByText('This action takes no user-provided fields.')).toBeNull();
+        expect(target.composeForConfirm).not.toHaveBeenCalled();
+
+        formats.resolve({ 0: 'VERSION|VALUE' });
+        fields.resolve(['VERSION', 'VALUE']);
+        expect(await screen.findByLabelText('VALUE')).toBeInTheDocument();
+        expect(screen.getByRole('button', { name: 'Sign action' })).toBeEnabled();
+    });
+
+    it('keeps submit disabled when an action schema fails to load', async () => {
+        const target = {
+            getAddressesByChain: vi.fn().mockResolvedValue({ [BTC]: [FROM] }),
+            getActiveAddresses: vi.fn().mockResolvedValue({ [BTC]: FROM }),
+            getSettings: vi.fn().mockResolvedValue({ walletMode: 'full', activeNetwork: 'mainnet' }),
+            signerReady: vi.fn().mockResolvedValue({ ready: true }),
+            listActions: vi.fn().mockResolvedValue(['SDKONLY']),
+            getActionFormats: vi.fn().mockRejectedValue(new Error('schema unavailable')),
+            getActionFields: vi.fn().mockResolvedValue(['VERSION', 'VALUE']),
+            composeForConfirm: vi.fn(),
+        };
+        const messaging = new Proxy(target, {
+            get: (t, prop) => (prop in t ? t[prop] : () => Promise.resolve({ rows: [] })),
+            has: (t, prop) => prop in t,
+        });
+        render(
+            <MessagingProvider shell="web" messaging={messaging}>
+                <AdvancedActionsForm walletId="w" onBack={() => {}} />
+            </MessagingProvider>,
+        );
+
+        const actionPicker = await screen.findByRole('combobox', { name: 'Action' });
+        await screen.findByRole('option', { name: /SDKONLY/ });
+        fireEvent.change(actionPicker, { target: { value: 'SDKONLY' } });
+
+        expect(await screen.findByText('schema unavailable')).toBeInTheDocument();
+        expect(screen.getByRole('button', { name: 'Sign action' })).toBeDisabled();
+        expect(target.composeForConfirm).not.toHaveBeenCalled();
+    });
+
+    it('clears a schema load error when another action is picked', async () => {
+        const target = {
+            getAddressesByChain: vi.fn().mockResolvedValue({ [BTC]: [FROM] }),
+            getActiveAddresses: vi.fn().mockResolvedValue({ [BTC]: FROM }),
+            getSettings: vi.fn().mockResolvedValue({ walletMode: 'full', activeNetwork: 'mainnet' }),
+            signerReady: vi.fn().mockResolvedValue({ ready: true }),
+            listActions: vi.fn().mockResolvedValue(['BADONE', 'GOODONE']),
+            getActionFormats: vi.fn(({ action }) => (action === 'BADONE'
+                ? Promise.reject(new Error('schema unavailable'))
+                : Promise.resolve({ 0: 'VERSION|VALUE' }))),
+            getActionFields: vi.fn().mockResolvedValue(['VERSION', 'VALUE']),
+            composeForConfirm: vi.fn(),
+        };
+        const messaging = new Proxy(target, {
+            get: (t, prop) => (prop in t ? t[prop] : () => Promise.resolve({ rows: [] })),
+            has: (t, prop) => prop in t,
+        });
+        render(
+            <MessagingProvider shell="web" messaging={messaging}>
+                <AdvancedActionsForm walletId="w" onBack={() => {}} />
+            </MessagingProvider>,
+        );
+
+        const actionPicker = await screen.findByRole('combobox', { name: 'Action' });
+        await screen.findByRole('option', { name: /GOODONE/ });
+        fireEvent.change(actionPicker, { target: { value: 'BADONE' } });
+        expect(await screen.findByText('schema unavailable')).toBeInTheDocument();
+        fireEvent.change(actionPicker, { target: { value: 'GOODONE' } });
+        expect(await screen.findByLabelText('VALUE')).toBeInTheDocument();
+        expect(screen.queryByText('schema unavailable')).toBeNull();
     });
 });

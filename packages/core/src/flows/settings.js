@@ -63,6 +63,35 @@ export async function updateSettings(vault, patch) {
     if (patch === null || typeof patch !== 'object') {
         throw new Error('updateSettings: patch must be an object');
     }
+    // A patch is read, merged and written back. Two patches in flight would
+    // both read the same record and the later write would drop the earlier
+    // one's keys, so each vault takes its patches one at a time.
+    return serializeSettingsWrites(vault, () => applyPatch(vault, patch));
+}
+
+/** Tail of each vault's settings write queue; a failed write never blocks the next. */
+const writeQueues = new WeakMap();
+
+/**
+ * Run a read-modify-write of the Settings record after every earlier one on
+ * the same vault has finished. Any flow that reads the record and puts it
+ * back goes through here, or its write can erase a patch made in between.
+ * The task must not start another serialized write: it would wait on itself.
+ *
+ * @template T
+ * @param {object} vault
+ * @param {() => Promise<T>} task
+ * @returns {Promise<T>}
+ */
+export function serializeSettingsWrites(vault, task) {
+    if (vault === null || typeof vault !== 'object') return task();
+    const previous = writeQueues.get(vault) ?? Promise.resolve();
+    const run = previous.then(task);
+    writeQueues.set(vault, run.catch(() => {}));
+    return run;
+}
+
+async function applyPatch(vault, patch) {
     const current = await getSettings(vault);
     const merged = normalizeChainScopedDefaults(deepMerge(current, patch));
     const validation = validateSettings(merged);

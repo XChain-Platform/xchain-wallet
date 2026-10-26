@@ -45,6 +45,8 @@ import {
 } from './_settingsPrimitives.jsx';
 import { blurNumberInputOnWheel } from '../../utils/formInput.js';
 import { t } from '../../../i18n/index.js';
+import '../../../i18n/locales/en/history.js';
+import '../../../i18n/locales/en/settings.js';
 
 const PRIVACY_CONTROL_DEFAULTS = Object.freeze({
     torRouting: false,
@@ -60,7 +62,7 @@ const PRIVACY_CONTROL_DEFAULTS = Object.freeze({
 });
 
 export function PrivacySection() {
-    const { settings, loading, error, update } = useSettings();
+    const { settings, loading, error, update } = useSettings({ reportsOwnError: true });
     const [saveError, setSaveError] = useState(/** @type {string | null} */ (null));
 
     if (loading) return <Status text={t('common.loading')} />;
@@ -191,11 +193,16 @@ function PrivacySaveError({ visible }) {
 function ClipboardAutoClearRow({ settings, update }) {
     const [saveError, setSaveError] = useState(false);
     const [inputError, setInputError] = useState(false);
+    // What the user has typed while the field has focus. A controlled value
+    // alone refuses every keystroke that is not a valid number yet (an empty
+    // field, a lone minus), so the field could never be cleared and retyped.
+    const [typed, setTyped] = useState(/** @type {string | null} */ (null));
     const stored = settings?.privacy?.clipboardAutoClearSeconds;
     const current = Number.isInteger(stored) ? stored : CLIPBOARD_AUTO_CLEAR_DEFAULT;
     const onChange = async (event) => {
         const raw = event.target.value.trim();
         const next = Number(raw);
+        setTyped(event.target.value);
         if (raw === ''
             || !Number.isInteger(next)
             || next < CLIPBOARD_AUTO_CLEAR_MIN
@@ -231,8 +238,9 @@ function ClipboardAutoClearRow({ settings, update }) {
                 min={CLIPBOARD_AUTO_CLEAR_MIN}
                 max={CLIPBOARD_AUTO_CLEAR_MAX}
                 step="1"
-                value={current}
+                value={typed ?? current}
                 onChange={onChange}
+                onBlur={() => { setTyped(null); setInputError(false); }}
                 onWheel={blurNumberInputOnWheel}
                 aria-label={t('settings.privacy.clipboardAutoClearSeconds')}
                 style={{ ...INPUT, width: '6rem' }}

@@ -121,6 +121,16 @@ function replyMismatchMessage(envelope, session) {
     if (envelope.kind !== expectedKind) {
         return 'This cosigner reply is for a different signing step. Import the reply requested by the step shown on this session.';
     }
+    // The host refuses both of these too, but with a developer message the
+    // screen reduces to a generic failure and a retry that cannot succeed.
+    const pubkey = String(envelope.contribution?.pubkey || '').toLowerCase();
+    if (!(session.cosignerPubkeys || []).includes(pubkey)) {
+        return 'This reply is signed by a key that is not one of this multisig\'s cosigners. Ask a listed cosigner for their reply.';
+    }
+    const { contributed } = contributionProgress(session);
+    if (contributed.includes(pubkey)) {
+        return 'This cosigner\'s reply is already applied to this step. Import a reply from a pending cosigner.';
+    }
     return null;
 }
 
@@ -850,7 +860,7 @@ export function MultisigSigningSession({ walletId, onBack }) {
                     <p className={styles.hint}>{isResponseStep ? 'Responded cosigners:' : 'Signed cosigners:'}</p>
                     <ul aria-label={isResponseStep ? 'Responded cosigners' : 'Signed cosigners'}>
                         {contributed.map((pk) => (
-                            <li key={pk}><code>{pk}</code></li>
+                            <li key={pk}><code className={styles.cosignerKey}>{pk}</code></li>
                         ))}
                     </ul>
                 </>
@@ -862,7 +872,7 @@ export function MultisigSigningSession({ walletId, onBack }) {
                     <p className={styles.hint}>{remaining > 0 ? 'Pending cosigners:' : 'Cosigners who have not signed:'}</p>
                     <ul aria-label={remaining > 0 ? 'Pending cosigners' : 'Cosigners who have not signed'}>
                         {unsigned.map((pk) => (
-                            <li key={pk}><code>{pk}</code></li>
+                            <li key={pk}><code className={styles.cosignerKey}>{pk}</code></li>
                         ))}
                     </ul>
                 </>

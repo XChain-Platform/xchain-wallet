@@ -92,7 +92,7 @@ test.describe('partial validator reward claim on Bitcoin testnet', () => {
         await preflightClaimantUtxo(venue, claimant.address);
 
         await test.step('import and activate the validator claimant', async () => {
-            await createWallet(page, { password: WALLET_UNLOCK });
+            await createWallet(page, { password: WALLET_UNLOCK, waitForBalances: false });
             await switchToTestnet(page, WALLET_UNLOCK);
             await importClaimant(page, claimant);
         });

@@ -6,6 +6,7 @@
 import { redactDiagnosticText } from '../utils/diagnosticText.js';
 import { formatDecimalAmount } from '../utils/amountFormat.js';
 import { t } from '../../i18n/index.js';
+import '../../i18n/locales/en/components.js';
 
 const MAX_VISIBLE_ITEMS = 200;
 

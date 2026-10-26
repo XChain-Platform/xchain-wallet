@@ -80,8 +80,8 @@ test('Send field actions stay apart and inside their fields at 100, 130 and 150 
         for (const scale of SCALES) {
             const where = `${viewport.width}px at ${Math.round(scale * 100)}%`;
             await setFontScale(page, scale);
-            expect(await fieldActionFaults(to, ['Open address book', 'Paste from clipboard']), `${where}: To`).toEqual([]);
-            expect(await fieldActionFaults(amount, ['Paste from clipboard', 'Use max available amount']), `${where}: Amount`).toEqual([]);
+            expect(await fieldActionFaults(to, ['Open address book']), `${where}: To`).toEqual([]);
+            expect(await fieldActionFaults(amount, ['Use max available amount']), `${where}: Amount`).toEqual([]);
         }
     }
 });

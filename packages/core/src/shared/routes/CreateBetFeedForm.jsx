@@ -30,12 +30,15 @@ import { OwnAddressPickerScreen } from '../components/OwnAddressPickerScreen.jsx
 import { useBetChainIds } from './BetFeedsList.jsx';
 import styles from './IssueTokenForm.module.css';
 import { t } from '../../i18n/index.js';
+import '../../i18n/locales/en/betCreate.js';
 import { QueuedResultPanel } from '../components/QueuedResultPanel.jsx';
 import { WatcherResultPanel } from '../components/WatcherResultPanel.jsx';
 import {
     formatWithThousands,
     normalizeLocalizedDecimal,
 } from '../utils/amountFormat.js';
+import { actionTextSafetyError } from '../utils/actionTextSafety.js';
+import { memoLengthError } from '../utils/memoLimit.js';
 
 const chainRegistry = registryLib.defaultRegistry();
 
@@ -388,6 +391,15 @@ export function CreateBetFeedForm({
     function validate() {
         if (!fromAddress) return 'No address on this network to create a market from.';
         if (!label.trim()) return 'Give the market a question or title.';
+        const textSafetyError = actionTextSafetyError(label, 'Title')
+            || cleanOutcomes.map((outcome) => actionTextSafetyError(outcome, 'Outcome')).find(Boolean)
+            || actionTextSafetyError(description, 'Description')
+            || actionTextSafetyError(resolutionCriteria, 'Settlement rule')
+            || actionTextSafetyError(source, 'Result source')
+            || actionTextSafetyError(category, 'Category')
+            || outcomeNotes.map((note) => actionTextSafetyError(note, 'Outcome note')).find(Boolean)
+            || memoLengthError(memo.trim());
+        if (textSafetyError) return textSafetyError;
         if (label.trim().length > MAX_LABEL) return `The title is ${label.trim().length} characters; the limit is ${MAX_LABEL}.`;
         if (!tick.trim()) return 'Choose the token bets are placed in. Betting is token-only: the network coin cannot be wagered.';
         if (cleanOutcomes.length !== outcomes.length) return 'Fill in every outcome, or remove the empty one.';
@@ -407,8 +419,12 @@ export function CreateBetFeedForm({
             if (!/^\d+(\.\d{1,2})?$/.test(feePct.trim())) return 'Your fee must be a number with at most two decimal places, as a percent of the pot.';
             if (Number(feePct.trim()) > MAX_FEE_PCT) return `Your fee cannot exceed ${MAX_FEE_PCT}% of the pot.`;
         }
-        if (minAmount.trim() && !(/^\d+(\.\d+)?$/.test(minAmount.trim()) && Number(minAmount.trim()) > 0)) {
-            return 'The minimum bet must be a positive amount.';
+        if (minAmount.trim()) {
+            const min = /^(\d+)(?:\.(\d+))?$/.exec(minAmount.trim());
+            if (!min) return 'The minimum bet must be a positive amount.';
+            if ((min[2] || '').length > 18) return 'The minimum bet can have at most 18 decimal places.';
+            if ((min[1].replace(/^0+/, '').length || 1) > 47) return 'The minimum bet is too large.';
+            if (!/[1-9]/.test(`${min[1]}${min[2] || ''}`)) return 'The minimum bet must be a positive amount.';
         }
         if (allowList.trim() && !/^\d+$/.test(allowList.trim())) return 'The allowed-addresses list must be a list number.';
         if (blockList.trim() && !/^\d+$/.test(blockList.trim())) return 'The blocked-addresses list must be a list number.';

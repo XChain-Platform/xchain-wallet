@@ -16,7 +16,7 @@
 // persistent navigation at all. The invariant below is the fix stated
 // positively: at EVERY width, exactly one nav surface is mounted.
 
-import { describe, it, expect, afterEach } from 'vitest';
+import { afterEach, beforeAll, describe, expect, it } from 'vitest';
 import { render, screen, cleanup, waitFor, fireEvent } from '@testing-library/react';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
@@ -33,6 +33,10 @@ import { AppHeader } from '../../../packages/core/src/shared/components/AppHeade
 import { HeaderSettingsButton } from '../../../packages/core/src/shared/components/HeaderSettingsButton.jsx';
 import { Screen } from '../../../packages/core/src/ui/Screen.jsx';
 import layoutStyles from '../../../packages/core/src/shared/components/LeftNav.module.css';
+import { preloadOnDemandOverlays } from '../../../packages/core/src/shared/components/onDemandOverlays.js';
+
+// The app loads these on idle after first paint; load them up front here.
+beforeAll(() => preloadOnDemandOverlays());
 
 describe('layout tiers', () => {
     describe('tierForWidth()', () => {

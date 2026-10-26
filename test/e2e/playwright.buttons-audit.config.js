@@ -27,9 +27,9 @@ export default defineConfig({
     projects: [
         {
             name: 'phone-360',
-            use: { browserName: 'chromium', viewport: { width: 360, height: 800 }, deviceScaleFactor: 2, isMobile: true, hasTouch: true },
+            use: { browserName: 'chromium', channel: 'chromium', viewport: { width: 360, height: 800 }, deviceScaleFactor: 2, isMobile: true, hasTouch: true },
         },
-        { name: 'desktop-1440', use: { ...devices['Desktop Chrome'], viewport: { width: 1440, height: 900 } } },
+        { name: 'desktop-1440', use: { ...devices['Desktop Chrome'], channel: 'chromium', viewport: { width: 1440, height: 900 } } },
     ],
     webServer: {
         command: `pnpm -C ../../packages/web dev --port ${PORT} --strictPort`,

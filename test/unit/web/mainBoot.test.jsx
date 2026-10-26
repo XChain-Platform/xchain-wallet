@@ -106,7 +106,10 @@ describe('web application boot', () => {
         expect(boot.idleCallbacks).toHaveLength(1);
         boot.idleCallbacks[0]();
 
-        expect(boot.syncRegistry).toHaveBeenCalledWith({ registry: { kind: 'registry' } });
+        // The sync module loads on demand, so the call lands once that import settles.
+        await vi.waitFor(() => {
+            expect(boot.syncRegistry).toHaveBeenCalledWith({ registry: { kind: 'registry' } });
+        });
         const shell = boot.render.mock.calls[0][0];
         expect(shell.props.children[1].type.name).toBe('NativeShellReady');
     });

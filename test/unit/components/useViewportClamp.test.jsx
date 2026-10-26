@@ -12,7 +12,7 @@
 // edge. These guards cover direct trigger placement and the shared fallback
 // clamp used by the scan menu.
 
-import { describe, it, expect, afterEach, vi } from 'vitest';
+import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 import { render, screen, fireEvent, cleanup } from '@testing-library/react';
 import {
     anchoredPopoverPlacement,
@@ -20,6 +20,10 @@ import {
     VIEWPORT_CLAMP_MARGIN,
 } from '../../../packages/core/src/shared/hooks/useViewportClamp.js';
 import { HeaderSettingsButton } from '../../../packages/core/src/shared/components/HeaderSettingsButton.jsx';
+import { preloadOnDemandOverlays } from '../../../packages/core/src/shared/components/onDemandOverlays.js';
+
+// The app loads these on idle after first paint; load them up front here.
+beforeAll(() => preloadOnDemandOverlays());
 
 afterEach(() => {
     cleanup();

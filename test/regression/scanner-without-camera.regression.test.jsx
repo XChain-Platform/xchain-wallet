@@ -73,9 +73,11 @@ describe('regression/scanner-without-camera', () => {
         expect(within(page).getByRole('textbox', { name: 'Or paste it here' })).toBeInTheDocument();
 
         const cameraState = errorName
-            ? await within(page).findByRole('alert')
+            ? await screen.findByRole('alert')
             : within(page).getByTestId('qr-scanner-unsupported');
         expect(cameraState).toHaveTextContent(message);
+        // A camera failure is a page notice above the form, never a box among its fields.
+        if (errorName) expect(page).not.toContainElement(cameraState);
         expect(screen.queryByRole('form', { name: 'This screen couldn\'t be shown' })).toBeNull();
         expect(onBoundaryError).not.toHaveBeenCalled();
         if (getUserMedia) expect(getUserMedia).toHaveBeenCalledOnce();

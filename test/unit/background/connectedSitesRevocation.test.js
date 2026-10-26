@@ -145,6 +145,33 @@ describe('connected-site revocation', () => {
         );
     });
 
+    it('keeps the new grant when Undo restores a site that has since reconnected', async () => {
+        const stale = { id: 'site-old', origin: 'https://one.test', permissions: { accounts: ['a1', 'a2'] } };
+        const current = { id: 'site-new', origin: 'https://one.test', permissions: { accounts: ['a1'] } };
+        const harness = makeHarness([current]);
+
+        const undo = await harness.host.handle({
+            type: 'sites.restore',
+            request: { site: stale },
+        });
+
+        expect(undo).toEqual({ ok: true, result: { ok: true, restored: false } });
+        expect(harness.records).toEqual([current]);
+    });
+
+    it('restores a disconnected site when nothing else holds its origin', async () => {
+        const site = { id: 'site-one', origin: 'https://one.test', permissions: {} };
+        const harness = makeHarness([]);
+
+        const undo = await harness.host.handle({
+            type: 'sites.restore',
+            request: { site },
+        });
+
+        expect(undo).toEqual({ ok: true, result: { ok: true, restored: true } });
+        expect(harness.records).toEqual([site]);
+    });
+
     it('invalidates every matching pending approval when a wildcard is blocked', async () => {
         const site = { id: 'site-app', origin: 'https://app.example.com', permissions: {} };
         const harness = makeHarness([site]);

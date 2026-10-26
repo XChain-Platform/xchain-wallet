@@ -8,10 +8,14 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-import { Children, cloneElement, forwardRef, isValidElement, useCallback, useMemo, useState } from 'react';
+import { Children, cloneElement, forwardRef, Fragment, isValidElement, useContext, useMemo, useRef, useState } from 'react';
+import { ShellReachabilityNoticeContext } from '../shared/components/noticesRoute.js';
+import { useHideReachabilityNotice } from '../shared/components/hideReachabilityNotice.js';
+import { ReachabilityLine } from '../shared/components/ReachabilityLine.jsx';
 import { FormNotices } from './formNoticeSlot.js';
+import { EmptyStateAsLineContext } from './Screen.jsx';
 import { NoticeLines } from './FormNotice.jsx';
-import { StatusMessage } from './StatusMessage.jsx';
+import { StatusMessage, StatusMessageGroup } from './StatusMessage.jsx';
 import { submitOnlyFromLastField } from './formEnter.js';
 import styles from './FormPage.module.css';
 
@@ -31,6 +35,17 @@ function disableSubmits(node) {
 }
 
 /**
+ * The props of a StatusMessage element as one line of a StatusMessageGroup,
+ * or null for any other node (an error summary), which keeps its own place.
+ */
+function noticeEntry(node, key) {
+    if (!isValidElement(node) || node.type !== StatusMessage) return null;
+    const { children, variant, lead, recovery, details, role, testId, id } = node.props;
+    if (children === null || children === undefined || children === '') return null;
+    return { key, id, children, variant, lead, recovery, details, role, testId };
+}
+
+/**
  * Page template for every screen whose job is a form the user fills in and
  * submits. One rule on every platform, decided by viewport width alone
  * (FormPage.module.css, breakpoint 600px):
@@ -42,7 +57,10 @@ function disableSubmits(node) {
  * that content box without adding its own top margin.
  *
  * Notices (`status`, the demo-wallet note and any FormNotice raised from the
- * body) lead the page content. A plain form draws them just above itself, so
+ * body) lead the page content, as one box with a line per notice: a page
+ * carries one message per state. When the shell says balances may be out of
+ * date and the form has a notice of its own, the shell's sentence and its
+ * Try again join that box as its first line instead of a second box above. A plain form draws them just above itself, so
  * on a wide screen they sit above the card at the full content width instead
  * of a box inside it, and on a narrow screen, where the form is bare, they
  * lead the fields exactly as before. A form that owns its title puts them
@@ -112,7 +130,7 @@ export const FormPage = forwardRef(function FormPage(
         sectioned ? styles.sectioned : null,
         fill ? styles.fill : null,
         fullWidth ? styles.fullWidth : null,
-        fullWidth && sectioned ? styles.cardlessSections : null,
+        fullWidth ? styles.cardlessSections : null,
         className,
     ].filter(Boolean).join(' ');
     const demoBlocked = !!demoGuard?.blocked;
@@ -152,15 +170,76 @@ export const FormPage = forwardRef(function FormPage(
     // state's notice in one place and an all-empty list shows nothing.
     const statusContent = Array.isArray(status) ? Children.toArray(status.filter(Boolean)) : status;
     const hasStatus = Array.isArray(statusContent) ? statusContent.length > 0 : !!statusContent;
-    const statusNode = demoBlocked || hasStatus || controlNoticeList.length > 0
+    // Every notice the form shows, in order: its own status (or the demo
+    // note), then the ones raised from inside the body. StatusMessages merge
+    // into one box; any other node (an error summary) keeps its own place.
+    // A page that leads with the demo note itself passes the guard without it:
+    // the form is still blocked and still hides its own notices, but draws none.
+    const ownNodes = demoBlocked
+        ? (demoGuard.note ? [demoGuard.note] : [])
+        : (hasStatus ? (Array.isArray(statusContent) ? statusContent : [statusContent]) : []);
+    const otherNodes = [];
+    const entries = [];
+    // A fragment (a notice beside the hook that hides the shell's) is read
+    // through, so its notice still joins the box.
+    const collect = (node, key) => {
+        if (isValidElement(node) && node.type === Fragment) {
+            Children.toArray(node.props.children).forEach((child, i) => collect(child, `${key}.${child?.key ?? i}`));
+            return;
+        }
+        const entry = noticeEntry(node, key);
+        if (entry) entries.push(entry);
+        else if (node) otherNodes.push(isValidElement(node) && node.key == null && ownNodes.length > 1 ? cloneElement(node, { key }) : node);
+    };
+    ownNodes.forEach((node, index) => collect(node, `status-${node?.key ?? index}`));
+    if (!demoBlocked) {
+        for (const [id, entry] of controlNoticeList) {
+            entries.push({
+                key: id,
+                variant: entry.variant,
+                role: entry.role,
+                lead: entry.lines ? undefined : entry.lead,
+                testId: entry.testId,
+                children: entry.lines ? <NoticeLines lead={entry.lead} lines={entry.lines} /> : entry.text,
+            });
+        }
+    }
+    // The shell's reachability sentence joins a form that has a notice of its
+    // own, and the shell's notice steps aside, so the page shows one box.
+    // A screen that already states the outage hides the shell's notice
+    // itself; its sentence is then not repeated here. The count includes
+    // this form's own hide, so that one is taken off.
+    const shellNotice = useContext(ShellReachabilityNoticeContext);
+    const carriedRef = useRef(false);
+    const hiddenElsewhere = (shellNotice?.hiddenCount ?? 0) - (carriedRef.current ? 1 : 0) > 0;
+    const carriesShellNotice = Root === 'form' && Boolean(shellNotice) && !hiddenElsewhere && entries.length > 0;
+    carriedRef.current = carriesShellNotice;
+    useHideReachabilityNotice(carriesShellNotice);
+    if (carriesShellNotice) {
+        entries.unshift({
+            key: 'shell-reachability',
+            variant: shellNotice.variant,
+            role: null,
+            // The same Details control the shell's notice carries.
+            children: (
+                <ReachabilityLine
+                    text={shellNotice.text}
+                    coins={shellNotice.coins ?? []}
+                    lastChecked={shellNotice.lastChecked ?? null}
+                />
+            ),
+            recovery: { label: shellNotice.retryLabel, onAction: shellNotice.retry, disabled: shellNotice.retrying },
+        });
+    }
+    // Always the same box, so a notice that arrives later (a fee note) or
+    // leaves (a restored draft) never remounts the others or their buttons.
+    const noticeBox = entries.length > 0 ? <StatusMessageGroup entries={entries} /> : null;
+    const statusNode = otherNodes.length > 0 || noticeBox
         ? (
             <div className={styles.status}>
-                {demoBlocked ? demoGuard.note : (hasStatus ? statusContent : null)}
-                {!demoBlocked ? controlNoticeList.map(([id, entry]) => (
-                    <StatusMessage key={id} variant={entry.variant} role={entry.role} lead={entry.lines ? undefined : entry.lead} testId={entry.testId}>
-                        {entry.lines ? <NoticeLines lead={entry.lead} lines={entry.lines} /> : entry.text}
-                    </StatusMessage>
-                )) : null}
+                {/* A lone node keeps its place unkeyed, as it was passed. */}
+                {otherNodes.length === 1 ? otherNodes[0] : otherNodes}
+                {noticeBox}
             </div>
         )
         : null;
@@ -207,7 +286,9 @@ export const FormPage = forwardRef(function FormPage(
                 class (an action row, a notice) can drop its own margin inside it. */}
             {children != null ? (
                 <FormNotices.Provider value={noticeApi}>
-                    <div className={styles.body} data-form-stack="">{children}</div>
+                    <EmptyStateAsLineContext.Provider value={Root === 'form'}>
+                        <div className={styles.body} data-form-stack="">{children}</div>
+                    </EmptyStateAsLineContext.Provider>
                 </FormNotices.Provider>
             ) : null}
             {actions ? <div className={actionClassName}>{demoBlocked ? disableSubmits(actions) : actions}</div> : null}

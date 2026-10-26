@@ -58,6 +58,8 @@ async function mountTransfer() {
         getSignerStatus: () => Promise.resolve({ status: 'unlocked' }),
         getWalletBalances: () => Promise.resolve({ [CHAIN]: [] }),
         listContacts: () => Promise.resolve([]),
+        // Owner-only actions refuse until the issuer is confirmed; SOURCE owns it.
+        getTokenInfo: ({ tick }) => Promise.resolve({ chainId: CHAIN, tick, creator: SOURCE.address, locks: {} }),
     };
     const messaging = new Proxy(target, {
         get(t, prop) {
@@ -126,6 +128,17 @@ describe('Transfer ownership address validation (D-81)', () => {
         });
         // Still on the form: nothing was composed, nothing to sign.
         expect(q.newOwner()).toBeTruthy();
+    });
+
+    it('says the invalid-address reason once and names the field in the banner', async () => {
+        const q = await mountTransfer();
+
+        fireEvent.change(q.newOwner(), { target: { value: MAINNET_VECTOR } });
+        fireEvent.click(q.submit());
+
+        await waitFor(() => expect(q.alerts()).toMatch(/Fix the New owner address below/));
+        const reason = q.container.textContent.match(/not a valid Bitcoin address/gi) || [];
+        expect(reason).toHaveLength(1);
     });
 
     it('names the coin when the address belongs to a different chain', async () => {

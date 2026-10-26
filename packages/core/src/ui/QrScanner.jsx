@@ -10,10 +10,13 @@
 
 import { useEffect, useRef, useState } from 'react';
 import { Button } from './Button.jsx';
+import { FormNotice } from './FormNotice.jsx';
 import { StatusMessage } from './StatusMessage.jsx';
 import { getNativeQrScanner } from './nativeQrScanner.js';
+import { beginCameraRequest, CAMERA_START_TIMEOUT_MS, waitForCamera } from './cameraWait.js';
 import styles from './QrScanner.module.css';
 import { t } from '../i18n/index.js';
+import '../i18n/locales/en/ui.js';
 
 export const MAX_SCANNED_QR_CHARS = 8 * 1024;
 
@@ -114,6 +117,9 @@ function deliverFrame(text, onFrame, setError) {
  *     `detector.detect(video)` on each frame.
  *   - a denied or absent camera stays remembered for the browsing session,
  *     so returning to a scanner shows the paste guidance without prompting.
+ *   - in the Android app, a camera still not started after 10 s in front
+ *     shows the could-not-start text; that is not remembered, so the next
+ *     scanner asks again.
  *   - an ended camera track stops the loop and becomes the same plain error.
  *   - on unmount: stop every track + cancel the RAF loop.
  *
@@ -293,7 +299,7 @@ function NativeCameraScan({ scanner, onFrame, alt }) {
                 {t('ui.qrScanner.scanWithCamera')}
             </Button>
             {error ? (
-                <StatusMessage variant="error">{error}</StatusMessage>
+                <FormNotice variant="error">{error}</FormNotice>
             ) : (
                 <p style={{ margin: 0, fontSize: 'var(--xc-text-xs)', color: 'var(--xc-text-muted)' }}>
                     {phase === 'open'
@@ -356,6 +362,7 @@ export function QrScanner({
         let rafId = null;
         /** @type {any} */
         let detector = null;
+        let endCameraRequest = () => {};
 
         function stopBrowserCamera() {
             if (rafId !== null) {
@@ -375,8 +382,12 @@ export function QrScanner({
         }
 
         function showCameraFailure(e) {
+            // Remember a denial even when the scanner has gone, so the next
+            // scanner shows the denied message instead of asking a WebView
+            // that may leave the request unanswered.
+            const terminal = rememberCameraFailure(e);
             if (cancelled) return;
-            terminalFailureRef.current = rememberCameraFailure(e);
+            terminalFailureRef.current = terminal;
             stopBrowserCamera();
             setError(cameraErrorText(e));
         }
@@ -416,11 +427,25 @@ export function QrScanner({
                     if (!cancelled) setError(cameraErrorText({ name: 'NotAllowedError' }));
                     return;
                 }
-                stream = await navigator.mediaDevices.getUserMedia({
+                endCameraRequest = beginCameraRequest();
+                const request = navigator.mediaDevices.getUserMedia({
                     video: { facingMode: 'environment' },
                 });
+                // The Android WebView can leave a later request unanswered
+                // after a denial, so the app bounds the wait; a browser's
+                // permission bubble does not pause the page, so it waits.
+                stream = await (isNativeApp()
+                    ? waitForCamera(request, CAMERA_START_TIMEOUT_MS)
+                    : request);
             } catch (e) {
                 showCameraFailure(e);
+                return;
+            } finally {
+                endCameraRequest();
+            }
+            if (cancelled) {
+                stream.getTracks().forEach((track) => track.stop());
+                stream = null;
                 return;
             }
 
@@ -476,6 +501,7 @@ export function QrScanner({
 
         return () => {
             cancelled = true;
+            endCameraRequest();
             stopBrowserCamera();
         };
     }, [supported, autoStart, previewState, cameraRationaleAccepted]);
@@ -581,7 +607,7 @@ export function QrScanner({
                 }}
             />
             {error ? (
-                <StatusMessage variant="error">{error}</StatusMessage>
+                <FormNotice variant="error">{error}</FormNotice>
             ) : (
                 <p style={{ margin: 0, fontSize: 'var(--xc-text-xs)', color: 'var(--xc-text-muted)' }}>
                     {running ? t('ui.qrScanner.scanningPointTheCameraAt') : t('ui.qrScanner.startingCamera')}

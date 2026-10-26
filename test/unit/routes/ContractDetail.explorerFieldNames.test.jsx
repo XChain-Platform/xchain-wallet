@@ -157,6 +157,48 @@ describe('State table reads the explorer\'s real field names', () => {
         const cells = Array.from(utils.container.querySelectorAll('td'));
         expect(cells.some((td) => td.textContent === 'onlykey')).toBe(true);
     });
+
+    it('ignores malformed state rows and renders the valid sibling', async () => {
+        const { messaging } = harness({
+            getContractState: () => Promise.resolve({
+                data: [null, 'bad', ['also bad'], { state_key: 'safe', state_value: '"value"' }],
+                total: 4,
+            }),
+        });
+        let utils;
+        await domAct(async () => {
+            utils = mount(messaging);
+            await drain();
+        });
+        await domAct(async () => {
+            expandState(utils);
+            await drain();
+        });
+        expect(utils.container.textContent).toContain('safe');
+        expect(utils.container.textContent).toContain('value');
+        expect(utils.container.textContent).not.toContain('also bad');
+    });
+
+    it('renders a bare explorer state array', async () => {
+        const { messaging } = harness({
+            getContractState: () => Promise.resolve([
+                { state_key: '<state-key>', state_value: '"<b>plain text</b>"' },
+            ]),
+        });
+        let utils;
+        await domAct(async () => {
+            utils = mount(messaging);
+            await drain();
+        });
+        expect(utils.container.textContent).toContain('1 state key(s)');
+        await domAct(async () => {
+            expandState(utils);
+            await drain();
+        });
+        expect(utils.container.textContent).toContain('<state-key>');
+        expect(utils.container.textContent).toContain('<b>plain text</b>');
+        expect(utils.container.querySelector('b')).toBeNull();
+    });
 });
 
 describe('Execution history reads the explorer\'s real field names', () => {
@@ -268,6 +310,24 @@ describe('Execution history reads the explorer\'s real field names', () => {
         });
         expect(utils.container.textContent).not.toContain('(method)');
     });
+
+    it('ignores malformed execution rows and renders the valid sibling', async () => {
+        const { messaging } = harness({
+            getExecutionsForContract: () => Promise.resolve({
+                data: [null, false, 'bad', ['also bad'], {
+                    action_index: '202', method_name: 'safeMethod', status: 'valid', block_index: '9',
+                }],
+                total: 5,
+            }),
+        });
+        let utils;
+        await domAct(async () => {
+            utils = mount(messaging);
+            await drain();
+        });
+        expect(utils.container.textContent).toContain('safeMethod #202');
+        expect(utils.container.textContent).not.toContain('also bad');
+    });
 });
 
 describe('A failed contract read is shown in plain words', () => {
@@ -312,5 +372,59 @@ describe('A failed contract read is shown in plain words', () => {
         }
         expect(shown).not.toContain('/RBTC/api');
         expect(shown).not.toMatch(/Couldn't load [a-z ]+: Couldn't/);
+    });
+});
+
+describe('State table shows what the contract stored', () => {
+    const RLO = String.fromCharCode(0x202E);
+    const ZWSP = String.fromCharCode(0x200B);
+
+    async function renderState(rows) {
+        const { messaging } = harness({
+            getContractState: () => Promise.resolve({ data: rows, total: rows.length }),
+        });
+        let utils;
+        await domAct(async () => {
+            utils = mount(messaging);
+            await drain();
+        });
+        await domAct(async () => {
+            expandState(utils);
+            await drain();
+        });
+        return utils;
+    }
+
+    it.each([
+        ['12345678901234567890'],
+        ['1.50'],
+        ['-0'],
+        ['1e21'],
+        ['{"big":12345678901234567890,"amount":1.50}'],
+    ])('shows the stored text %s unchanged', async (stored) => {
+        const utils = await renderState([{ state_key: 'k', state_value: stored }]);
+        const cells = Array.from(utils.container.querySelectorAll('td')).map((td) => td.textContent);
+        expect(cells).toContain(stored);
+    });
+
+    it('still unquotes a stored JSON string', async () => {
+        const utils = await renderState([{ state_key: 'k', state_value: '"1.50"' }]);
+        const cells = Array.from(utils.container.querySelectorAll('td')).map((td) => td.textContent);
+        expect(cells).toContain('1.50');
+    });
+
+    it('spells out a bidi override and a zero-width character in a key and a value', async () => {
+        const utils = await renderState([
+            { state_key: `ke${ZWSP}y`, state_value: JSON.stringify(`abc${RLO}def`) },
+        ]);
+        const cells = Array.from(utils.container.querySelectorAll('td')).map((td) => td.textContent);
+        expect(cells).toContain('ke[U+200B]y');
+        expect(cells).toContain('abc[U+202E]def');
+    });
+
+    it('keeps the line breaks of a stored multi-line string', async () => {
+        const utils = await renderState([{ state_key: 'k', state_value: JSON.stringify('a\nb') }]);
+        const cells = Array.from(utils.container.querySelectorAll('td')).map((td) => td.textContent);
+        expect(cells).toContain('a\nb');
     });
 });

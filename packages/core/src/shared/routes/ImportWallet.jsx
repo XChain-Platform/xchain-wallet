@@ -44,8 +44,8 @@ import {
 // EMPTY message, so those reached the recovery screen verbatim.
 import { userFacingMessage } from '../utils/userFacingMessage.js';
 import { takeForgotPasswordRestoreLane } from '../utils/forgotPasswordRecovery.js';
-import { ClipboardPasteButton } from '../../ui/ClipboardPasteButton.jsx';
 import { useBackHandler } from '../../ui/backStack.js';
+import { useDocumentTitleSection } from '../hooks/useDocumentTitle.js';
 // The three password fields, their hints, and the copy for every way
 // a restore can fail, all from one place so a message can never name a field
 // this screen does not show.
@@ -60,6 +60,10 @@ import {
 } from '../../flows/restorePasswordCopy.js';
 import styles from './ImportWallet.module.css';
 import { formatOrList, t } from '../../i18n/index.js';
+import '../../i18n/locales/en/adsNotice.js';
+import '../../i18n/locales/en/importWallet.js';
+import '../../i18n/locales/en/renameWallet.js';
+import '../../i18n/locales/en/send.js';
 
 const MIN_PASSWORD_LENGTH = 8;
 const ACCEPTED_WORD_COUNTS = [12, 15, 18, 21, 24];
@@ -71,7 +75,9 @@ function normalizePhraseEntry(value) {
     return normalizeRecoveryPhrase(value);
 }
 
-function phraseFormat(value) {
+// `preferCounterwallet` is the FreeWallet lane: a phrase both lists accept belongs to FreeWallet there.
+function phraseFormat(value, preferCounterwallet = false) {
+    if (preferCounterwallet && isValidCounterwalletMnemonic(value)) return 'counterwallet';
     if (isValidBip39Mnemonic(value)) return 'bip39';
     if (isValidCounterwalletMnemonic(value)) return 'counterwallet';
     return null;
@@ -176,7 +182,10 @@ export function ImportWallet({
                 : 'mnemonic'
         ),
     );
-    const [name, setName] = useState(isFreeWallet ? 'FreeWallet' : 'Imported Wallet');
+    const defaultWalletName = isFreeWallet ? 'FreeWallet' : 'Imported Wallet';
+    const [name, setName] = useState(defaultWalletName);
+    // A cleared or blank name field names the wallet by its default; the vault refuses an empty name.
+    const walletName = name.trim() || defaultWalletName;
     const [mnemonic, setMnemonic] = useState('');
     const [mnemonicCursor, setMnemonicCursor] = useState(0);
     const [wif, setWif] = useState('');
@@ -249,7 +258,10 @@ export function ImportWallet({
         };
     }, []);
 
-    useBackHandler(handleBack, busy || adsNotice);
+    // A flow step, not an overlay: backgrounding the app keeps what was typed.
+    // An open camera makes it an overlay, so a pause runs handleBack, which
+    // closes only the camera and releases it while the form stays.
+    useBackHandler(handleBack, busy || adsNotice, scanning || backupScanning ? 'overlay' : 'screen');
 
     function clearSensitiveState() {
         setMnemonic('');
@@ -579,7 +591,7 @@ export function ImportWallet({
             }));
             return;
         }
-        if (!phraseFormat(trimmed)) {
+        if (!phraseFormat(trimmed, isFreeWallet)) {
             setError(phraseValidationMessage(trimmed));
             return;
         }
@@ -606,14 +618,19 @@ export function ImportWallet({
             const passphraseArg = !isFreeWallet && showPassphrase
                 ? bip39Passphrase
                 : '';
+            // About 1 in 30,000 FreeWallet phrases also passes the BIP39 checksum, and
+            // auto-detection would derive other keys for it.
+            const formatArg = phraseFormat(trimmed, isFreeWallet) === 'counterwallet' && isFreeWallet
+                ? { format: 'counterwallet-legacy' }
+                : {};
             let result;
             if (mode === 'add') {
                 if (typeof messaging.addImportedWallet !== 'function') {
                     throw new Error('messaging.addImportedWallet is not available in this shell.');
                 }
-                result = await messaging.addImportedWallet({ password, mnemonic: trimmed, name, bip39Passphrase: passphraseArg });
+                result = await messaging.addImportedWallet({ password, mnemonic: trimmed, name: walletName, bip39Passphrase: passphraseArg, ...formatArg });
             } else {
-                result = await messaging.importMnemonic({ password, mnemonic: trimmed, name, bip39Passphrase: passphraseArg });
+                result = await messaging.importMnemonic({ password, mnemonic: trimmed, name: walletName, bip39Passphrase: passphraseArg, ...formatArg });
             }
             finishWalletImport(result);
             const showRestoredLabels = (labelSync) => {
@@ -644,7 +661,7 @@ export function ImportWallet({
     function finishWalletImport(result) {
         const walletId = result?.wallet?.id || result?.walletId || null;
         importedWalletRef.current = mode === 'add' && walletId
-            ? { id: walletId, name: result?.wallet?.name || result?.walletName || name }
+            ? { id: walletId, name: result?.wallet?.name || result?.walletName || walletName }
             : null;
         invalidatePendingInput();
         clearSensitiveState();
@@ -698,7 +715,7 @@ export function ImportWallet({
                 password,
                 wif: trimmedWif,
                 chainId: wifChainId,
-                name,
+                name: walletName,
             });
             finishWalletImport(result);
         } catch (err) {
@@ -721,7 +738,7 @@ export function ImportWallet({
     const mnemonicWordCount = normalizedMnemonic.length === 0
         ? 0
         : normalizedMnemonic.split(' ').length;
-    const detectedPhraseFormat = phraseFormat(normalizedMnemonic);
+    const detectedPhraseFormat = phraseFormat(normalizedMnemonic, isFreeWallet);
     const phraseHint = isFreeWallet
         ? (isFull
             ? t('importWallet.freeWallet.fullSubtitle')
@@ -885,6 +902,8 @@ export function ImportWallet({
                 : lane === 'wif'
                     ? (isFull ? t('importWallet.wif.fullTitle') : t('importWallet.wif.title'))
                     : (isFull ? t('importWallet.existing.fullTitle') : t('importWallet.title'));
+    // The window title names the lane the heading shows.
+    useDocumentTitleSection(pageTitle);
 
     const form = (
         <FormPage
@@ -1101,21 +1120,6 @@ export function ImportWallet({
                     aria-describedby="xc-mnemonic-status"
                     actions={(
                         <>
-                            <ClipboardPasteButton
-                                disabled={busy}
-                                label={t('importWallet.pastePhrase')}
-                                onPaste={(text) => {
-                                    if (inputGeneration !== inputGenerationRef.current || activeLaneRef.current !== 'mnemonic') return;
-                                    const normalized = normalizePhraseEntry(text);
-                                    setMnemonic(normalized);
-                                    setMnemonicCursor(normalized.length);
-                                    if (error) setError(null);
-                                }}
-                                // Inside the box there is no room for its own
-                                // notice, so a clipboard failure becomes the
-                                // form's error instead.
-                                onMessage={(message) => { if (message) setError(message); }}
-                            />
                             <Button
                                 type="button"
                                 variant="ghost"

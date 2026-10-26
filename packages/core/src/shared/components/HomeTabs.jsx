@@ -57,6 +57,9 @@ import { compareDecimalStrings } from '../utils/amountFormat.js';
 import { readFailureMessage } from '../utils/readFailureMessage.js';
 import styles from './HomeTabs.module.css';
 import { t } from '../../i18n/index.js';
+import '../../i18n/locales/en/history.js';
+import '../../i18n/locales/en/receive.js';
+import '../../i18n/locales/en/walletDetails.js';
 
 const TotalBalanceHero = memo(TotalBalanceHeroBase);
 const PortfolioChart = memo(PortfolioChartBase);
@@ -178,8 +181,9 @@ export function sortBalanceRows(rows, sortBy, nativePriceMap = {}) {
  * @param {boolean} [props.refreshing]      whether a manual portfolio refresh is running
  * @param {boolean} [props.balancesUnchecked] balances could not be checked: an empty tab says that instead of "nothing yet"
  * @param {() => void} [props.onRecheckBalances] rechecks reachability and balances from that state
+ * @param {boolean} [props.balanceNoticeShown] Home shows its own balance notice, so an empty tab shows no empty state
  */
-export const HomeTabs = memo(function HomeTabs({ chainRegistry, balances, activeByChain = null, balancesFetchedAt, walletId, networkFilter, tokenQuery = '', coinFamilies, onNetworkFilterChange, onTokenQueryChange, multisig, multisigChainId, actions, onReceive, onBuy, hasAddresses = true, onAddAddress, onHistory, onSelectToken, onSelectEntry, pinnedKeys, onTogglePin, hiddenKeys, onToggleHide, verifyProofsEnabled = false, hideSmallBalances = false, onRefresh, refreshing = false, onCommandPalette, onOpenSettings, onLockWallet, balancesUnchecked = false, onRecheckBalances }) {
+export const HomeTabs = memo(function HomeTabs({ chainRegistry, balances, activeByChain = null, balancesFetchedAt, walletId, networkFilter, tokenQuery = '', coinFamilies, onNetworkFilterChange, onTokenQueryChange, multisig, multisigChainId, actions, onReceive, onBuy, hasAddresses = true, onAddAddress, onHistory, onSelectToken, onSelectEntry, pinnedKeys, onTogglePin, hiddenKeys, onToggleHide, verifyProofsEnabled = false, hideSmallBalances = false, onRefresh, refreshing = false, onCommandPalette, onOpenSettings, onLockWallet, balancesUnchecked = false, onRecheckBalances, balanceNoticeShown = false }) {
     const tabsId = useId();
     const [active, setActive] = useState('coins');
     const [sortBy, setSortBy] = useState(() => readBalanceSort(walletId));
@@ -416,7 +420,10 @@ export const HomeTabs = memo(function HomeTabs({ chainRegistry, balances, active
     const showFirstFunding = networkFilter === 'all' && !tokenQueryTrim && !hasHoldings;
     // An empty tab while balances could not be checked proves nothing, so it
     // says that once (and the shell's stale-balances notice steps aside).
-    const showUnchecked = balancesUnchecked && !isDemo && typeof onRecheckBalances === 'function';
+    // While Home's own balance notice is up, that notice is the one message
+    // and an empty tab stays quiet.
+    const quietEmpty = Boolean(balanceNoticeShown) && !isDemo;
+    const showUnchecked = !quietEmpty && balancesUnchecked && !isDemo && typeof onRecheckBalances === 'function';
     const uncheckedState = showUnchecked ? (
         <BalancesUncheckedState
             plain={false}
@@ -550,7 +557,8 @@ export const HomeTabs = memo(function HomeTabs({ chainRegistry, balances, active
                 aria-labelledby={`${tabsId}-tab-${active}`}
             >
                 {active === 'coins' && showUnchecked && (showFirstFunding || coins.length === 0) ? uncheckedState : null}
-                {active === 'coins' && !(showUnchecked && (showFirstFunding || coins.length === 0)) ? (
+                {active === 'coins' && !(showUnchecked && (showFirstFunding || coins.length === 0))
+                    && !(quietEmpty && (showFirstFunding || coins.length === 0)) ? (
                     showFirstFunding ? (
                         <EmptyState
                             title={t('home.tabs.fundYourWallet')}
@@ -593,7 +601,7 @@ export const HomeTabs = memo(function HomeTabs({ chainRegistry, balances, active
                 {active === 'tokens' ? (
                     <>
                     {filteredTokens.length === 0 && showUnchecked && !tokenQueryTrim ? uncheckedState : null}
-                    {filteredTokens.length === 0 && !(showUnchecked && !tokenQueryTrim) ? (
+                    {filteredTokens.length === 0 && !(showUnchecked && !tokenQueryTrim) && !(quietEmpty && !tokenQueryTrim) ? (
                         <BalanceList
                             rows={[]}
                             emptyTitle={tokenQueryTrim

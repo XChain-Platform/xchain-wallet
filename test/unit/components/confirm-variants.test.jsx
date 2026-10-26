@@ -405,7 +405,15 @@ describe('§5.2.5 exact fee beats the caller estimate', () => {
             ...screenProps({ networkFeeSats: null, chainId: 'bitcoin-mainnet' }),
             feeText: 'Network fee: 0.00042 BTC',
         }));
-        expect(utils.getByTestId('confirm-fee').textContent).toBe('Network fee: 0.00042 BTC');
+        expect(utils.getByTestId('confirm-fee').textContent).toBe('Network fee: 0.00042 BTC (estimate)');
+    });
+
+    it('does not label the caller fee as an estimate twice', () => {
+        const utils = render(React.createElement(ActionConfirmScreen, {
+            ...screenProps({ networkFeeSats: null, chainId: 'bitcoin-mainnet' }),
+            feeText: 'Network fee: 0.00042 BTC (estimate)',
+        }));
+        expect(utils.getByTestId('confirm-fee').textContent).toBe('Network fee: 0.00042 BTC (estimate)');
     });
 
     // §1.1 / §5.2.2: the intent states what was COMPOSED. The caller's

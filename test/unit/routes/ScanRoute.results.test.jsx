@@ -149,7 +149,7 @@ const EXPLANATION_CASES = [
     {
         name: 'xchain payment whose address contradicts its network',
         input: `xchain:LTC/send?to=${BTC}&amount=1`,
-        message: /payment request.*supported network or valid address.*check the request.*paste the address instead/i,
+        message: /XChain link isn't supported.*check the link and try again/i,
     },
     {
         name: 'unsupported required BIP21 parameter',

@@ -25,6 +25,7 @@ import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { useDemoGuard } from '../hooks/useDemoGuard.jsx';
 import { ActionConfirmScreen } from '../components/ActionConfirmScreen.jsx';
 import { WatcherResultPanel } from '../components/WatcherResultPanel.jsx';
+import { QueuedResultPanel } from '../components/QueuedResultPanel.jsx';
 import { NativeFeeToggle } from '../components/NativeFeeToggle.jsx';
 import { useNativeFee } from '../hooks/useNativeFee.js';
 import { useOwnerActionLane } from '../hooks/useOwnerActionLane.js';
@@ -51,6 +52,7 @@ const TICKER_BY_COIN = { bitcoin: 'BTC', litecoin: 'LTC', dogecoin: 'DOGE' };
 const META_ERROR_TEXT = {
     pipe: 'Cannot contain the | character.',
     semicolon: 'Cannot contain the ; character.',
+    unsafe: 'Cannot contain control, text-direction, or zero-width characters.',
     length: 'Too long.',
     format: 'Invalid format.',
 };
@@ -307,6 +309,8 @@ function ListRenameFormScreen({ walletId, listRef, onBack, onDone = onBack }) {
     }
 
     if (result) {
+        // Signed but held in the broadcast queue: nothing is on the network yet.
+        if (result.queued) return wrap(<QueuedResultPanel onDone={onDone} what="list rename" unsaved={result.unsaved} />);
         if (result.psbtHex && !result.txid) {
             return wrap(
                 <WatcherResultPanel

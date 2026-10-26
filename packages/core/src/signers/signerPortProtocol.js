@@ -122,23 +122,22 @@ export function bindRendererPortBridge(port, { getSigner }) {
             const result = await dispatch(getSigner, op, payload);
             try {
                 port.postMessage({ kind: 'response', reqId, ok: true, result });
-            } catch {
-                // Port likely disconnected. Nothing more to do.
+            } catch (err) {
+                // A refused frame still settles the request; a closed port throws again below.
+                postError(reqId, err);
             }
         } catch (err) {
-            try {
-                port.postMessage({
-                    kind: 'response', reqId, ok: false,
-                    error: {
-                        name: (err && err.name) || 'Error',
-                        message: (err && err.message) || String(err),
-                    },
-                });
-            } catch {
-                // Swallow.
-            }
+            postError(reqId, err);
         }
     };
+
+    function postError(reqId, err) {
+        try {
+            port.postMessage({ kind: 'response', reqId, ok: false, error: errorFields(err) });
+        } catch {
+            // Port likely disconnected. Nothing more to do.
+        }
+    }
     port.onMessage.addListener(listener);
 
     function announce(signerIds) {
@@ -155,6 +154,26 @@ export function bindRendererPortBridge(port, { getSigner }) {
     }
 
     return { announce, dispose };
+}
+
+/**
+ * Name and message for an error frame, both non-empty strings: a bridge that
+ * validates frames (the desktop preload and main) drops an empty one with no reply.
+ *
+ * @param {unknown} err
+ * @returns {{ name: string, message: string }}
+ */
+function errorFields(err) {
+    const e = /** @type {any} */ (err);
+    let name = 'Error';
+    let message = '';
+    try {
+        if (e && typeof e.name === 'string' && e.name) name = e.name;
+        message = (e && typeof e.message === 'string' && e.message) || String(err);
+    } catch {
+        // An unprintable thrown value keeps the fallback below.
+    }
+    return { name, message: message || 'The signer failed without a message.' };
 }
 
 async function dispatch(getSigner, op, payload) {

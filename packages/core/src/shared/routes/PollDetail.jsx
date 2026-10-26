@@ -48,7 +48,12 @@ import { userFacingMessage } from '../utils/userFacingMessage.js';
 import { memoLengthError, MEMO_HINT } from '../utils/memoLimit.js';
 import { useTickBalance } from '../hooks/useTickBalance.js';
 import { compareDecimalStrings } from '../utils/amountFormat.js';
-import { latestBallotRows, pollResultPercentages } from './pollDisplay.js';
+import {
+    latestBallotRows,
+    pollResultPercentages,
+    pollRowForDisplay,
+    samePollIndex,
+} from './pollDisplay.js';
 
 const chainRegistry = registryLib.defaultRegistry();
 
@@ -155,9 +160,12 @@ export function PollDetail({ walletId, chainId, pollIndex, onBack }) {
                         : Promise.resolve(null),
                 ]);
                 if (cancelled) return;
-                const loadedPoll = extractPoll(p);
-                if (!loadedPoll) {
-                    if (firstLoad) setLoadError('Poll not found.');
+                const loadedPoll = pollRowForDisplay(extractPoll(p));
+                if (!loadedPoll || !samePollIndex(loadedPoll.action_index, pollIndex)) {
+                    setPoll(null);
+                    setResults(null);
+                    setCurrentHeight(null);
+                    setLoadError('Poll not found.');
                     return;
                 }
                 const height = heightResponse?.watermark == null || heightResponse.watermark === ''
@@ -175,7 +183,11 @@ export function PollDetail({ walletId, chainId, pollIndex, onBack }) {
                 const closeReached = Number.isFinite(endBlock) && usableHeight !== null && usableHeight > endBlock;
                 if (terminal || closeReached) {
                     const r = await messaging.governancePollResults({ chainId, pollIndex }).catch(() => null);
-                    if (!cancelled) setResults(extractRows(r));
+                    if (!cancelled) {
+                        setResults(extractRows(r).filter((row) => (
+                            row && typeof row === 'object' && !Array.isArray(row)
+                        )));
+                    }
                 } else {
                     setResults(null);
                 }
@@ -488,6 +500,13 @@ export function PollDetail({ walletId, chainId, pollIndex, onBack }) {
         }
     }
 
+    // The ballot error leads the page, above the poll's terms, so a phone that
+    // tapped Vote from the bottom of the form is taken to it.
+    useEffect(() => {
+        if (!formError) return;
+        document.querySelector('main [role="alert"]')?.scrollIntoView?.({ block: 'nearest' });
+    }, [formError]);
+
     const header = <PageHeader onBack={onBack} title={`Poll #${String(pollIndex)}`} />;
     const wrap = (children) => (
         <Screen
@@ -727,18 +746,28 @@ export function PollDetail({ walletId, chainId, pollIndex, onBack }) {
         );
     }
 
+    // The ballot form sits below the poll's terms and results. Its demo note and
+    // its error lead the page content instead of the form.
+    // The form stays blocked and keeps its dialog, but the page draws the note.
+    const ballotFormGuard = { ...demoGuard, note: null };
+    const pageNotices = (isOpen && demoGuard.blocked) || formError ? (
+        <>
+            {isOpen ? demoGuard.note : null}
+            {formError ? <StatusMessage variant="error">{formError}</StatusMessage> : null}
+        </>
+    ) : null;
+
     return wrap(
-        <ListPage>
+        <ListPage notices={pageNotices}>
             {pollInfo}
             {voteReceipt}
             {resultsBlock}
             {isOpen ? (
                 <FormPage
-                    demoGuard={demoGuard}
+                    demoGuard={ballotFormGuard}
                     className={detailStyles.ballotForm}
                     label={sourceBallot.length ? 'Change vote' : 'Vote'}
                     onSubmit={handleReview}
-                    status={formError ? <StatusMessage variant="error">{formError}</StatusMessage> : null}
                     actions={<Button type="submit" variant="primary" disabled={!fromAddress || options.length === 0}>{sourceBallot.length ? 'Change vote' : 'Vote'}</Button>}
                 >
                     <span className={styles.fromLabel}>{isSplit ? 'Split your weight across options' : `Choose up to ${maxSel} option${maxSel > 1 ? 's' : ''}`}</span>

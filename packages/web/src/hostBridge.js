@@ -951,9 +951,9 @@ function startNotificationsNow() {
                 return flowsNs.getSettings(vault);
             },
             notify,
-            markTriggered: async (id) => {
+            markTriggered: async (id, terms) => {
                 const flowsNs = await getFlows();
-                return flowsNs.markAlertTriggered({ vault, id });
+                return flowsNs.markAlertTriggered({ vault, id, terms });
             },
             logger: console,
         });
@@ -1371,6 +1371,33 @@ function tearDownFailedOnboarding({ openedVault, ownPool, ownHost }) {
 }
 
 /**
+ * Remove the encrypted blob and kdfParams a failed create / import / restore
+ * left behind. These lanes write the blob once, at their commit, and the
+ * kdfParams right after it; a refused kdfParams save (or any failure once the
+ * blob is down) leaves a blob with no kdfParams, and a native save that
+ * reports failure after landing leaves kdfParams with no blob. Either way
+ * unlock answers "no wallet" and every onboarding lane answers "a wallet
+ * already exists", so the half-written wallet could neither be opened nor
+ * replaced. The caller passes the backends only after `assertFreshVault`
+ * proved the device held neither, so this never discards a wallet that was
+ * there before. A clear that fails too is left for the original error to
+ * report.
+ *
+ * @param {{ clear: () => Promise<void> } | null} ownStorage
+ * @param {{ clear?: () => Promise<void> }} meta
+ */
+async function discardPartialVault(ownStorage, meta) {
+    if (!ownStorage) return;
+    for (const backend of [ownStorage, meta]) {
+        try {
+            if (typeof backend?.clear === 'function') await backend.clear();
+        } catch (_clearErr) {
+            // The failure being reported is the first one.
+        }
+    }
+}
+
+/**
  * Create a fresh BIP39 wallet. Generates kdfParams, derives the master
  * key from `password`, opens a blank Vault, runs the core `createWallet`
  * flow, persists kdfParams to the meta slot, and leaves the host live
@@ -1399,12 +1426,18 @@ export async function createWalletLocal(req) {
     let openedVault = null;
     let ownPool = null;
     let ownHost = null;
+    // The blob backend this call may have written to; set once the vault is known empty.
+    let ownStorage = null;
     try {
         await assertFreshVault({ metaBackend: meta, storageBackend: createStorageBackend() });
         const kdfParams = makeFreshKdfParams();
         masterKey = await deriveMasterKeyAsync(password, kdfParams);
         const storage = createStorageBackend();
-        const v = new Vault({ backend: storage, masterKey });
+        ownStorage = storage;
+        // Writes stay in memory until the commit below: a reload, crash or closed
+        // tab part-way through leaves nothing on the device instead of a blob
+        // with no kdf params that no screen can open or replace.
+        const v = new Vault({ backend: storage, masterKey, autoSave: false });
         openedVault = v;
         await v.open();  // blank document
         const flowsNs = await getFlows();
@@ -1422,7 +1455,6 @@ export async function createWalletLocal(req) {
             // key instead of paying a second Argon2id round.
             masterKey,
         });
-        await v.save();
         vault = v;
         await sdkBound();
         signerPool = new SignerPool();
@@ -1447,11 +1479,17 @@ export async function createWalletLocal(req) {
         });
         ownHost = host;
         startNotifications();
-        sessionStarted = true;
+        // Commit: one blob write, then the kdf params that make it openable.
+        await v.save();
+        v.setAutoSave(true);
         await meta.save({ kdfParams });
+        sessionStarted = true;
         return { mnemonic: result.mnemonic, walletName: result.wallet.name };
     } catch (err) {
-        if (!sessionStarted) tearDownFailedOnboarding({ openedVault, ownPool, ownHost });
+        if (!sessionStarted) {
+            tearDownFailedOnboarding({ openedVault, ownPool, ownHost });
+            await discardPartialVault(ownStorage, meta);
+        }
         throw err;
     } finally {
         if (masterKey) masterKey.fill(0);
@@ -1483,6 +1521,7 @@ export async function importMnemonicLocal(req) {
         bip39Passphrase = '',
         activeChainIds = DEFAULT_ACTIVE_CHAIN_IDS,
         origin,
+        format,
         chainId,
         activeNetwork,
     } = req;
@@ -1512,12 +1551,18 @@ export async function importMnemonicLocal(req) {
     let openedVault = null;
     let ownPool = null;
     let ownHost = null;
+    // The blob backend this call may have written to; set once the vault is known empty.
+    let ownStorage = null;
     try {
         await assertFreshVault({ metaBackend: meta, storageBackend: createStorageBackend() });
         const kdfParams = makeFreshKdfParams();
         masterKey = await deriveMasterKeyAsync(password, kdfParams);
         const storage = createStorageBackend();
-        const v = new Vault({ backend: storage, masterKey });
+        ownStorage = storage;
+        // Writes stay in memory until the commit below: a reload, crash or closed
+        // tab part-way through leaves nothing on the device instead of a blob
+        // with no kdf params that no screen can open or replace.
+        const v = new Vault({ backend: storage, masterKey, autoSave: false });
         openedVault = v;
         await v.open();
         await sdkBound();
@@ -1542,6 +1587,8 @@ export async function importMnemonicLocal(req) {
                 name,
                 bip39Passphrase,
                 origin,
+                // The caller's pin, so a phrase both wordlists accept is not read as the other format.
+                format,
                 kdfParams,
                 // Same password, same params: the wallet seal reuses the vault
                 // key instead of paying a second Argon2id round.
@@ -1551,7 +1598,6 @@ export async function importMnemonicLocal(req) {
                 // first chain id.
                 activeNetwork,
             });
-        await v.save();
         vault = v;
         await sdkBound();
         signerPool = new SignerPool();
@@ -1576,8 +1622,11 @@ export async function importMnemonicLocal(req) {
         });
         ownHost = host;
         startNotifications();
-        sessionStarted = true;
+        // Commit: one blob write, then the kdf params that make it openable.
+        await v.save();
+        v.setAutoSave(true);
         await meta.save({ kdfParams });
+        sessionStarted = true;
         // §19.5.2 restore half: bring back the labels + contacts this seed
         // published earlier. Runs after sdkBound() so the explorer endpoints
         // are resolved, and after the wallet is fully persisted so a dead
@@ -1610,7 +1659,10 @@ export async function importMnemonicLocal(req) {
             labelSyncToken,
         };
     } catch (err) {
-        if (!sessionStarted) tearDownFailedOnboarding({ openedVault, ownPool, ownHost });
+        if (!sessionStarted) {
+            tearDownFailedOnboarding({ openedVault, ownPool, ownHost });
+            await discardPartialVault(ownStorage, meta);
+        }
         throw err;
     } finally {
         if (masterKey) masterKey.fill(0);
@@ -1700,13 +1752,19 @@ export async function importBackupLocal(req) {
     let openedVault = null;
     let ownPool = null;
     let ownHost = null;
+    // The blob backend this call may have written to; set once the vault is known empty.
+    let ownStorage = null;
     try {
         await assertFreshVault({ metaBackend: meta, storageBackend: createStorageBackend() });
         const flowsNs = await getFlows();
         const kdfParams = makeFreshKdfParams();
         masterKey = await deriveMasterKeyAsync(password, kdfParams);
         const storage = createStorageBackend();
-        const v = new Vault({ backend: storage, masterKey });
+        ownStorage = storage;
+        // Writes stay in memory until the commit below: a reload, crash or closed
+        // tab part-way through leaves nothing on the device instead of a blob
+        // with no kdf params that no screen can open or replace.
+        const v = new Vault({ backend: storage, masterKey, autoSave: false });
         openedVault = v;
         await v.open();
         const common = {
@@ -1733,7 +1791,6 @@ export async function importBackupLocal(req) {
                 resolveBackupContent: resolveBackupPointerContent,
             })
             : await flowsNs.importBackupFile({ ...common, fileContent: req.fileContent });
-        await v.save();
         vault = v;
         await sdkBound();
         signerPool = new SignerPool();
@@ -1763,8 +1820,11 @@ export async function importBackupLocal(req) {
         });
         ownHost = host;
         startNotifications();
-        sessionStarted = true;
+        // Commit: one blob write, then the kdf params that make it openable.
+        await v.save();
+        v.setAutoSave(true);
         await meta.save({ kdfParams });
+        sessionStarted = true;
         return {
             walletId: result.walletId,
             walletName: result.payload?.wallet?.name,
@@ -1773,7 +1833,10 @@ export async function importBackupLocal(req) {
             rekeyed: result.rekeyed,
         };
     } catch (err) {
-        if (!sessionStarted) tearDownFailedOnboarding({ openedVault, ownPool, ownHost });
+        if (!sessionStarted) {
+            tearDownFailedOnboarding({ openedVault, ownPool, ownHost });
+            await discardPartialVault(ownStorage, meta);
+        }
         throw err;
     } finally {
         if (masterKey) masterKey.fill(0);

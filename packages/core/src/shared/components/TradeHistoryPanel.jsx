@@ -30,6 +30,8 @@ import { readFailureMessage } from '../utils/readFailureMessage.js';
 import { RelativeTime } from './RelativeTime.jsx';
 import tableStyles from './DataTable.module.css';
 import { t } from '../../i18n/index.js';
+import '../../i18n/locales/en/components.js';
+import '../../i18n/locales/en/verifySignature.js';
 
 /**
  * @param {object} props

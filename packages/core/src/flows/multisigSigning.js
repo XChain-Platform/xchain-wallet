@@ -34,6 +34,7 @@ import {
     createMultisigSigningSession,
     pendingCosignerPubkeys,
 } from '../schemas/multisigSigningSession.js';
+import { assertSigningAllowed } from './panicMode.js';
 
 const HEX_RE = /^[0-9a-f]+$/;
 const isHexLength = (v, byteLen) =>
@@ -80,6 +81,31 @@ function hexToBytes(hex) {
 
 function bytesToHex(bytes) {
     return Array.from(bytes, (b) => b.toString(16).padStart(2, '0')).join('');
+}
+
+// Every change to a session reads the record, edits it and writes it back
+// through an asynchronous vault. Two changes in flight on one session (two
+// windows, two quick replies, a double click) would each write over the other,
+// dropping a signature, reviving a cancelled session or broadcasting twice.
+// Changes to one session therefore run one at a time: in this context through a
+// promise chain, and across tabs through the Web Locks API where it exists.
+const sessionTails = new Map();
+
+function withSessionLock(sessionId, work) {
+    const key = String(sessionId);
+    const previous = sessionTails.get(key) || Promise.resolve();
+    const run = previous.then(() => {
+        const locks = typeof navigator !== 'undefined' ? navigator.locks : undefined;
+        return locks && typeof locks.request === 'function'
+            ? locks.request(`xchain-multisig-session:${key}`, work)
+            : work();
+    });
+    const tail = run.then(() => undefined, () => undefined);
+    sessionTails.set(key, tail);
+    tail.then(() => {
+        if (sessionTails.get(key) === tail) sessionTails.delete(key);
+    });
+    return run;
 }
 
 async function persist(vault, session) {
@@ -178,7 +204,7 @@ export async function listMultisigSigningSessions({ vault, walletId }) {
  *
  * @param {{ vault: any, sessionId: string }} opts
  */
-export async function cancelMultisigSigningSession({ vault, sessionId }) {
+async function cancelMultisigSigningSessionLocked({ vault, sessionId }) {
     const session = ensureSession(
         await vault.multisigSigningSessions.get(sessionId),
         sessionId,
@@ -200,7 +226,7 @@ export async function cancelMultisigSigningSession({ vault, sessionId }) {
  * @param {string} opts.pubkey            66-char compressed pubkey hex
  * @param {string} opts.publicNonceHex    132-char (66-byte) hex
  */
-export async function contributeMultisigNonce({ vault, sessionId, pubkey, publicNonceHex }) {
+async function contributeMultisigNonceLocked({ vault, sessionId, pubkey, publicNonceHex }) {
     if (!vault) throw new Error('contributeMultisigNonce: vault is required');
     if (typeof sessionId !== 'string') throw new Error('contributeMultisigNonce: sessionId is required');
     if (!isHexLength(publicNonceHex, 66)) {
@@ -241,7 +267,7 @@ export async function contributeMultisigNonce({ vault, sessionId, pubkey, public
  * @param {string} opts.pubkey
  * @param {string} opts.signatureHex      DER-encoded ECDSA hex (P2SH/P2WSH) or 32-byte hex (MuSig2 partial)
  */
-export async function contributeMultisigSignature({ vault, sessionId, pubkey, signatureHex }) {
+async function contributeMultisigSignatureLocked({ vault, sessionId, pubkey, signatureHex }) {
     if (!vault) throw new Error('contributeMultisigSignature: vault is required');
     if (typeof sessionId !== 'string') throw new Error('contributeMultisigSignature: sessionId is required');
     if (typeof signatureHex !== 'string' || signatureHex.length === 0
@@ -323,7 +349,7 @@ export async function contributeMultisigSignature({ vault, sessionId, pubkey, si
  * @param {import('../sdk/SDKRegistry.js').SDKRegistry} opts.sdkRegistry
  * @param {string} opts.sessionId
  */
-export async function aggregateMultisigSession({ vault, sdkRegistry, sessionId }) {
+async function aggregateMultisigSessionLocked({ vault, sdkRegistry, sessionId }) {
     if (!vault) throw new Error('aggregateMultisigSession: vault is required');
     if (!sdkRegistry) throw new Error('aggregateMultisigSession: sdkRegistry is required');
     if (typeof sessionId !== 'string') throw new Error('aggregateMultisigSession: sessionId is required');
@@ -396,7 +422,7 @@ export async function aggregateMultisigSession({ vault, sdkRegistry, sessionId }
  * @param {string} [opts.txid]
  * @param {boolean} [opts.broadcast]
  */
-export async function finalizeMultisigSigningSession({
+async function finalizeMultisigSigningSessionLocked({
     vault,
     sdkRegistry,
     sessionId,
@@ -421,6 +447,10 @@ export async function finalizeMultisigSigningSession({
         if (typeof sdk.encoder?.broadcastTx !== 'function') {
             throw new Error('finalizeMultisigSigningSession: sdk.encoder.broadcastTx is unavailable');
         }
+        // Panic-mode freeze: pushing the finalized bytes is the irreversible
+        // step, so it is refused like every other broadcast route. The session
+        // stays 'finalized' and can be broadcast once the freeze ends.
+        assertSigningAllowed();
         const result = await sdk.encoder.broadcastTx(session.finalizedTxHex);
         const broadcastTxid = typeof result === 'string' ? result : result?.txid;
         if (typeof broadcastTxid !== 'string' || broadcastTxid.length === 0) {
@@ -464,6 +494,32 @@ export async function finalizeMultisigSigningSession({
             : session.txid,
         status: 'finalized',
     });
+}
+
+// Public entry points: each change to one session waits for the one before it.
+/** @param {any} opts */
+export function cancelMultisigSigningSession(opts) {
+    return withSessionLock(opts?.sessionId, () => cancelMultisigSigningSessionLocked(opts));
+}
+
+/** @param {any} opts */
+export function contributeMultisigNonce(opts) {
+    return withSessionLock(opts?.sessionId, () => contributeMultisigNonceLocked(opts));
+}
+
+/** @param {any} opts */
+export function contributeMultisigSignature(opts) {
+    return withSessionLock(opts?.sessionId, () => contributeMultisigSignatureLocked(opts));
+}
+
+/** @param {any} opts */
+export function aggregateMultisigSession(opts) {
+    return withSessionLock(opts?.sessionId, () => aggregateMultisigSessionLocked(opts));
+}
+
+/** @param {any} opts */
+export function finalizeMultisigSigningSession(opts) {
+    return withSessionLock(opts?.sessionId, () => finalizeMultisigSigningSessionLocked(opts));
 }
 
 // Surface the helper from the schema layer so UI callers don't have

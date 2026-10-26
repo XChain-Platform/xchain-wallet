@@ -19,6 +19,8 @@ import {
 import { registry as registryLib } from '@xchain-wallet/core';
 import * as branding from '../../branding/branding.js';
 import { t } from '../../i18n/index.js';
+import { readFailureMessage } from '../utils/readFailureMessage.js';
+import '../../i18n/locales/en/stakeNew.js';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import styles from './ActionsMenu.module.css';
 import local from './StakeNew.module.css';
@@ -58,6 +60,7 @@ export function StakeNew({ walletId, onPickValidator, onPickContract, onBack }) 
         /** @type {Record<string, any[]> | null} */ (null),
     );
     const [loadError, setLoadError] = useState(/** @type {string | null} */ (null));
+    const [reload, setReload] = useState(0);
     // 'options' shows the two cards; 'chain' is the inline network
     // step for the validator arm when >1 Bitcoin chain qualifies.
     const [step, setStep] = useState(/** @type {'options' | 'chain'} */ ('options'));
@@ -70,11 +73,10 @@ export function StakeNew({ walletId, onPickValidator, onPickContract, onBack }) 
             .then((byChain) => { if (!cancelled) setAddressesByChain(byChain || {}); })
             .catch((err) => {
                 if (cancelled) return;
-                setLoadError(err?.message || 'Failed to load staking networks.');
-                setAddressesByChain({});
+                setLoadError(readFailureMessage(err, 'load your staking networks'));
             });
         return () => { cancelled = true; };
-    }, [walletId, messaging]);
+    }, [walletId, messaging, reload]);
 
     const stakingChains = useMemo(() => {
         if (!addressesByChain) return [];
@@ -100,7 +102,14 @@ export function StakeNew({ walletId, onPickValidator, onPickContract, onBack }) 
     );
 
     if (loadError) {
-        return wrap(<StatusMessage variant="error">{loadError}</StatusMessage>);
+        return wrap(
+            <StatusMessage
+                variant="error"
+                recovery={{ label: t('common.tryAgain'), onAction: () => setReload((value) => value + 1) }}
+            >
+                {loadError}
+            </StatusMessage>,
+        );
     }
 
     if (!addressesByChain) {

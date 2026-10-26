@@ -51,7 +51,6 @@ const physicalProperties = new Set([
 // LTR edge, and number inputs stay LTR in every locale.
 const allowedPhysicalDeclarations = new Set([
     'packages/core/src/shared/components/AlertsOverlay.module.css|.overlay|padding|env(safe-area-inset-top, 0) env(safe-area-inset-right, 0) env(safe-area-inset-bottom, 0) env(safe-area-inset-left, 0)',
-    'packages/core/src/shared/components/BottomTabBar.module.css|.sheet|padding|var(--xc-space-2) env(safe-area-inset-right, 0px) calc(var(--xc-space-3) + env(safe-area-inset-bottom, var(--xc-space-3))) env(safe-area-inset-left, 0px)',
     'packages/core/src/shared/components/GatedFileViewer.module.css|.overlay|padding|calc(var(--xc-space-4) + env(safe-area-inset-top, 0)) calc(var(--xc-space-4) + env(safe-area-inset-right, 0)) calc(var(--xc-space-4) + env(safe-area-inset-bottom, 0)) calc(var(--xc-space-4) + env(safe-area-inset-left, 0))',
     "packages/core/src/shared/components/LeftNav.module.css|.layout[data-xc-tier='compact'] > .main > .header|padding|env(safe-area-inset-top, 0px) env(safe-area-inset-right, 0px) 0 env(safe-area-inset-left, 0px)",
     'packages/core/src/shared/components/NoticeModal.module.css|.overlay|padding|calc(var(--xc-page-top) + env(safe-area-inset-top, 0)) calc(var(--xc-space-4) + env(safe-area-inset-right, 0)) calc(var(--xc-page-top) + env(safe-area-inset-bottom, 0)) calc(var(--xc-space-4) + env(safe-area-inset-left, 0))',

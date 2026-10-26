@@ -23,7 +23,10 @@ import { NavSurfaceContext } from './navSurface.js';
 import {
     NoticesRouteContext,
     ReachabilityNoticeHiddenContext,
+    ReachabilityNoticeWantedContext,
+    ReachabilityNoticeReportContext,
     ShellNoticesContext,
+    ShellReachabilityNoticeContext,
 } from './noticesRoute.js';
 import styles from './LeftNav.module.css';
 import { t } from '../../i18n/index.js';
@@ -346,7 +349,14 @@ export function FullLayoutWithNav({ nav, bottomBar, header, notices, children })
     const noticesFallbackRef = useRef(/** @type {HTMLDivElement | null} */ (null));
     const noticeSlotsRef = useRef(/** @type {HTMLElement[]} */ ([]));
     const [reachabilityHidden, setReachabilityHidden] = useState(0);
+    const [reachabilityWanted, setReachabilityWanted] = useState(0);
+    // What the reachability notice says, handed to the route so its page
+    // carries the message once.
+    const [reachabilityNotice, setReachabilityNotice] = useState(/** @type {any} */ (null));
     const hasNotices = Boolean(notices);
+    const routeReachabilityNotice = useMemo(() => (
+        hasNotices && reachabilityNotice ? { ...reachabilityNotice, hiddenCount: reachabilityHidden } : null
+    ), [hasNotices, reachabilityNotice, reachabilityHidden]);
     // The newest claiming Screen shows the notices; with none, the fallback slot.
     const placeNotices = () => {
         (noticeSlotsRef.current.at(-1) ?? noticesFallbackRef.current)?.appendChild(noticesHost);
@@ -361,6 +371,7 @@ export function FullLayoutWithNav({ nav, bottomBar, header, notices, children })
             };
         },
         setReachabilityHidden,
+        setReachabilityWanted,
     } : null), [hasNotices]);
 
     // Child Screens claim the host in their own layout effects, which run
@@ -409,7 +420,11 @@ export function FullLayoutWithNav({ nav, bottomBar, header, notices, children })
                 {hasNotices ? createPortal(
                     <NoticesRouteContext.Provider value={routeKey ?? null}>
                         <ReachabilityNoticeHiddenContext.Provider value={reachabilityHidden > 0}>
-                            {notices}
+                            <ReachabilityNoticeWantedContext.Provider value={reachabilityWanted > 0}>
+                                <ReachabilityNoticeReportContext.Provider value={setReachabilityNotice}>
+                                    {notices}
+                                </ReachabilityNoticeReportContext.Provider>
+                            </ReachabilityNoticeWantedContext.Provider>
                         </ReachabilityNoticeHiddenContext.Provider>
                     </NoticesRouteContext.Provider>,
                     noticesHost,
@@ -418,7 +433,9 @@ export function FullLayoutWithNav({ nav, bottomBar, header, notices, children })
                     {hasNotices ? <div ref={noticesFallbackRef} className={screenStyles.noticesFallback} /> : null}
                     <NavSurfaceContext.Provider value={navSurface}>
                         <ShellNoticesContext.Provider value={shellNotices}>
-                            {children}
+                            <ShellReachabilityNoticeContext.Provider value={routeReachabilityNotice}>
+                                {children}
+                            </ShellReachabilityNoticeContext.Provider>
                         </ShellNoticesContext.Provider>
                     </NavSurfaceContext.Provider>
                 </div>

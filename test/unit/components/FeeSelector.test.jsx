@@ -114,8 +114,8 @@ describe('FeeSelector', () => {
         const input = screen.getByLabelText('Custom fee rate (sat/vB)');
 
         fireEvent.change(input, { target: { value: '0.5' } });
-        expect(input.getAttribute('aria-invalid')).toBeNull();
-        expect(screen.getByRole('alert').textContent).toMatch(/below the network minimum of 1 sat\/vB/);
+        expect(input.getAttribute('aria-invalid')).toBe('true');
+        expect(screen.getByRole('alert').textContent).toBe('Enter a rate of at least 1 sat/vB.');
         expect(onChange).toHaveBeenLastCalledWith({ mode: 'custom', customRate: 0.5 });
 
         fireEvent.change(input, { target: { value: '2.75' } });
@@ -130,6 +130,47 @@ describe('FeeSelector', () => {
         expect(input.getAttribute('aria-invalid')).toBeNull();
         expect(screen.getByRole('alert').textContent).toMatch(/more than 10 times the Fast rate/);
         expect(onChange).toHaveBeenLastCalledWith({ mode: 'custom', customRate: 121 });
+    });
+
+    it('refuses a custom rate above the chain maximum and blocks the form submit', () => {
+        const onSubmit = vi.fn((event) => event.preventDefault());
+        const bounded = { ...tiers, maximumRate: 1000 };
+        const { container } = render(
+            <form onSubmit={onSubmit}>
+                <FeeSelector
+                    tiers={bounded}
+                    value={{ mode: 'custom', customRate: 99999999 }}
+                    onChange={() => {}}
+                />
+                <button type="submit">Review</button>
+            </form>,
+        );
+        const input = screen.getByLabelText('Custom fee rate (sat/vB)');
+        expect(input.getAttribute('aria-invalid')).toBe('true');
+        expect(screen.getByRole('alert').textContent).toBe('Enter a rate no higher than 1,000 sat/vB.');
+        expect(input.validationMessage).toBe('Enter a rate no higher than 1,000 sat/vB.');
+        container.querySelector('form').requestSubmit();
+        expect(onSubmit).not.toHaveBeenCalled();
+    });
+
+    it('lets an in-range rate submit and keeps the over-10x warning below the maximum', () => {
+        const onSubmit = vi.fn((event) => event.preventDefault());
+        const bounded = { ...tiers, maximumRate: 1000 };
+        const { container } = render(
+            <form onSubmit={onSubmit}>
+                <FeeSelector
+                    tiers={bounded}
+                    value={{ mode: 'custom', customRate: 500 }}
+                    onChange={() => {}}
+                />
+                <button type="submit">Review</button>
+            </form>,
+        );
+        const input = screen.getByLabelText('Custom fee rate (sat/vB)');
+        expect(input.validationMessage).toBe('');
+        expect(screen.getByRole('alert').textContent).toMatch(/more than 10 times the Fast rate/);
+        container.querySelector('form').requestSubmit();
+        expect(onSubmit).toHaveBeenCalledTimes(1);
     });
 
     it('names the chain-specific unit in the network minimum warning', () => {

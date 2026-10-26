@@ -25,6 +25,7 @@ const TOKEN_INFO = {
     tick: 'MINTABLE',
     divisibility: 0,
     locks: {},
+    creator: SOURCE.address,
 };
 
 // tokenInfo, when given, is the promise getTokenInfo returns, so a case can
@@ -132,6 +133,19 @@ describe('TokenAdminForm mint setting validation', () => {
         expect(composeForConfirm).not.toHaveBeenCalled();
     });
 
+    it('refuses a mint-now amount above the supply left under the cap', async () => {
+        const composeForConfirm = mountMintSettings(Promise.resolve({
+            ...TOKEN_INFO, maxSupply: '1000', totalSupply: '400',
+        }));
+        fireEvent.change(await screen.findByLabelText('Mint supply now (optional)'), {
+            target: { value: '700' },
+        });
+        await submitWhenEnabled();
+
+        expect(await screen.findByRole('alert')).toHaveTextContent('Only 600 MINTABLE can still be minted.');
+        expect(composeForConfirm).not.toHaveBeenCalled();
+    });
+
     it('checks the new-supply destination against the selected chain', async () => {
         const composeForConfirm = mountMintSettings();
         fireEvent.change(await screen.findByLabelText('Mint supply now (optional)'), {
@@ -144,5 +158,107 @@ describe('TokenAdminForm mint setting validation', () => {
 
         await waitFor(() => expect(screen.getByRole('alert')).toHaveTextContent(/not valid for Bitcoin/i));
         expect(composeForConfirm).not.toHaveBeenCalled();
+    });
+});
+
+describe('TokenAdminForm mint supply against the supply cap', () => {
+    const CAPPED = { ...TOKEN_INFO, totalSupply: '400', maxSupply: '1000' };
+
+    it('refuses a mint supply that takes supply past the cap before composing', async () => {
+        const composeForConfirm = mountMintSettings(Promise.resolve(CAPPED));
+        fireEvent.change(await screen.findByLabelText('Mint supply now (optional)'), { target: { value: '601' } });
+        await submitWhenEnabled();
+
+        expect(await screen.findByRole('alert')).toHaveTextContent(
+            'Only 600 MINTABLE can still be minted.',
+        );
+        expect(composeForConfirm).not.toHaveBeenCalled();
+    });
+
+    it('composes a mint supply that lands exactly on the cap', async () => {
+        const composeForConfirm = mountMintSettings(Promise.resolve(CAPPED));
+        fireEvent.change(await screen.findByLabelText('Mint supply now (optional)'), { target: { value: '600' } });
+        await submitWhenEnabled();
+
+        await waitFor(() => expect(composeForConfirm).toHaveBeenCalled());
+    });
+
+    it('composes any mint supply for an uncapped token', async () => {
+        const composeForConfirm = mountMintSettings(Promise.resolve({ ...TOKEN_INFO, totalSupply: '400', maxSupply: null }));
+        fireEvent.change(await screen.findByLabelText('Mint supply now (optional)'), { target: { value: '99999' } });
+        await submitWhenEnabled();
+
+        await waitFor(() => expect(composeForConfirm).toHaveBeenCalled());
+    });
+});
+
+describe('TokenAdminForm callback payout token', () => {
+    function mountCallbackSettings(payoutInfo) {
+        const composeForConfirm = vi.fn();
+        const target = {
+            getAddressesByChain: vi.fn().mockResolvedValue({ [CHAIN]: [SOURCE] }),
+            getActiveAddresses: vi.fn().mockResolvedValue({ [CHAIN]: SOURCE }),
+            getSettings: vi.fn().mockResolvedValue({ walletMode: 'full' }),
+            signerReady: vi.fn().mockResolvedValue({ ready: true }),
+            getSignerStatus: vi.fn().mockResolvedValue({ status: 'unlocked' }),
+            getTokenInfo: vi.fn().mockImplementation(({ tick }) => Promise.resolve(
+                tick === 'MINTABLE' ? { ...TOKEN_INFO, creator: SOURCE.address, totalSupply: '0' } : payoutInfo(tick),
+            )),
+            getIndexerWatermark: vi.fn().mockResolvedValue({ watermark: 900000 }),
+            getHoldersForToken: vi.fn().mockResolvedValue([]),
+            composeForConfirm,
+        };
+        const messaging = new Proxy(target, {
+            get(object, property) {
+                if (property in object) return object[property];
+                return vi.fn().mockResolvedValue([]);
+            },
+        });
+        render(
+            <MessagingProvider shell="web" messaging={messaging}>
+                <TokenAdminForm
+                    walletId="w"
+                    mode="callback-settings"
+                    initialChainId={CHAIN}
+                    initialTick="MINTABLE"
+                    initialFromAddress={SOURCE.address}
+                    onBack={() => {}}
+                />
+            </MessagingProvider>,
+        );
+        return composeForConfirm;
+    }
+
+    async function fillCallback(tick) {
+        fireEvent.change(await screen.findByLabelText('Callback token'), { target: { value: tick } });
+        fireEvent.change(screen.getByLabelText('Payout per unit'), { target: { value: '1' } });
+        fireEvent.change(screen.getByLabelText('Callback allowed from block'), { target: { value: '950000' } });
+        await waitFor(() => expect(screen.getByRole('button', { name: /update token/i })).toBeEnabled());
+        // Let the payout token lookup settle before submitting.
+        await act(async () => { await new Promise((resolve) => setTimeout(resolve, 50)); });
+        fireEvent.click(screen.getByRole('button', { name: /update token/i }));
+    }
+
+    it('refuses the chain coin as the payout token', async () => {
+        const composeForConfirm = mountCallbackSettings((tick) => ({ chainId: CHAIN, tick, divisibility: 0, locks: {}, creator: 'x', totalSupply: '1' }));
+        await fillCallback('BTC');
+
+        expect(await screen.findByRole('alert')).toHaveTextContent('BTC is Bitcoin itself, not an XChain token.');
+        expect(composeForConfirm).not.toHaveBeenCalled();
+    });
+
+    it('refuses a payout token that does not exist', async () => {
+        const composeForConfirm = mountCallbackSettings((tick) => ({ chainId: CHAIN, tick, divisibility: null, locks: {}, creator: null, totalSupply: null, canonicalTick: null }));
+        await fillCallback('NOPE');
+
+        expect(await screen.findByRole('alert')).toHaveTextContent('No token named NOPE exists on');
+        expect(composeForConfirm).not.toHaveBeenCalled();
+    });
+
+    it('composes a callback that pays in an existing token', async () => {
+        const composeForConfirm = mountCallbackSettings((tick) => ({ chainId: CHAIN, tick, divisibility: 0, locks: {}, creator: 'bc1qpayoutissuer', totalSupply: '1000' }));
+        await fillCallback('PAYTOK');
+
+        await waitFor(() => expect(composeForConfirm).toHaveBeenCalled());
     });
 });

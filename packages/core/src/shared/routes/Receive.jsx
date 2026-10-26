@@ -24,7 +24,7 @@ import { useWalletMode } from '../hooks/useWalletMode.js';
 import { isDemoWallet } from '../../flows/demoMode.js';
 import { useToast } from '../components/ToastHost.jsx';
 import { copyText } from '../clipboard.js';
-import { shareContent, ShareOutcome } from '../share.js';
+import { shareContent, ShareOutcome, toWebShareData } from '../share.js';
 import { dataUrlToBlob } from '../dataUrl.js';
 import { AmountField } from '../components/AmountField.jsx';
 import { TickerIcon } from '../components/TickerIcon.jsx';
@@ -39,6 +39,9 @@ import {
 import { pickDefaultChainId } from '../chainSelection.js';
 import { addressTypeLabel } from '../utils/addressTypeLabel.js';
 import { explorerPageUrl } from '../utils/explorerLinks.js';
+import { unsupportedAddressTypeMessage } from '../utils/userFacingMessage.js';
+import { loadSupportedAddressTypes, offeredAddressType } from '../utils/supportedAddressTypes.js';
+import { useSupportedAddressTypes } from '../hooks/useSupportedAddressTypes.js';
 import { Settings } from './Settings.jsx';
 import {
     hasAvailableChain,
@@ -48,11 +51,38 @@ import {
 import styles from './Receive.module.css';
 import qrStyles from '../../ui/QrDisplay.module.css';
 import { t } from '../../i18n/index.js';
+import '../../i18n/locales/en/history.js';
+import '../../i18n/locales/en/multisig.js';
+import '../../i18n/locales/en/receive.js';
+import '../../i18n/locales/en/verifySignature.js';
 
 const chainRegistry = registryLib.defaultRegistry();
 const NATIVE_COIN_DECIMALS = 8;
 const TOKEN_AMOUNT_MAX_DECIMALS = 18;
 const QR_FALLBACK_PIXEL_SIZE = 512;
+// The label a request carries is bounded by the limit the parser applies to a
+// scanned link, so a long label never becomes a code this wallet's own Send
+// screen refuses.
+const REQUEST_LABEL_MAX = uriLib.URI_PARAMETER_LIMITS.label;
+
+/** A leading decimal mark is a zero whole part (".5" is 0.5), never a dropped key that leaves the "5" to read as five coins. */
+export function withLeadingZero(typed) {
+    return typed.startsWith('.') ? `0${typed}` : typed;
+}
+
+/**
+ * The address label as it travels in a payment request: control characters
+ * replaced and the text cut, on a whole character, to the URI label limit.
+ */
+export function requestLabelFor(label) {
+    const clean = String(label || '').replace(/[\u0000-\u001f\u007f-\u009f]/g, ' ').trim();
+    let out = '';
+    for (const character of clean) {
+        if (out.length + character.length > REQUEST_LABEL_MAX) break;
+        out += character;
+    }
+    return out.trim();
+}
 
 export function qrPixelSizeFor(cssWidth, devicePixelRatio) {
     const width = Number(cssWidth);
@@ -359,16 +389,28 @@ export function Receive({ walletId, accountId, prefill = null, onBack, onChangeA
                     activeChainId,
                     accountId,
                 );
+                const nextDescriptor = chainRegistry.get(activeChainId);
+                const offered = await loadSupportedAddressTypes(messaging, nextDescriptor);
+                // A newest address of a type the SDK cannot generate (stored by an
+                // older build or imported) keeps its record; the screen opens on the
+                // chain default instead, on that type's own address when one exists.
+                const nextType = offeredAddressType(
+                    newest?.addressType,
+                    offered,
+                    nextDescriptor?.defaultAddressType,
+                );
+                const typeSwapped = Boolean(newest?.addressType) && nextType !== newest.addressType;
+                const swappedAddresses = typeSwapped
+                    ? ((await messaging.getAddressesByChain(walletId, accountId))?.[activeChainId] || [])
+                    : null;
                 if (!cancelled) {
                     setAddressContextKey(receiveContextKey);
-                    const nextDescriptor = chainRegistry.get(activeChainId);
-                    const nextType = newest?.addressType || nextDescriptor?.defaultAddressType || '';
                     addressTypeRef.current = nextType;
-                    const chainAddresses = chainsByWalletRef.current?.[activeChainId] || [];
+                    const chainAddresses = swappedAddresses || chainsByWalletRef.current?.[activeChainId] || [];
                     const includesNewest = newest && chainAddresses.some((candidate) => (
                         candidate?.id === newest.id
                     ));
-                    const preferred = includesNewest
+                    const preferred = (includesNewest || typeSwapped)
                         ? preferredAddressOfType(
                             chainAddresses,
                             nextType,
@@ -376,7 +418,7 @@ export function Receive({ walletId, accountId, prefill = null, onBack, onChangeA
                             addressUsageRef.current,
                         )
                         : null;
-                    setAddress(preferred || newest);
+                    setAddress(preferred || (typeSwapped ? null : newest));
                     setAddressType(nextType);
                 }
             } catch {
@@ -604,7 +646,7 @@ export function Receive({ walletId, accountId, prefill = null, onBack, onChangeA
         }
         const descriptor = chainRegistry.get(activeChainId ?? '');
         let cancelled = false;
-        Promise.all(multisigs.map(async (m) => {
+        Promise.all(multisigs.filter((m) => m.address).map(async (m) => {
             try {
                 const uri = descriptor
                     ? uriLib.encodeBip21Uri({ scheme: descriptor.uriScheme, address: m.address })
@@ -632,6 +674,7 @@ export function Receive({ walletId, accountId, prefill = null, onBack, onChangeA
     // address + active chain + the optional amount/tick customization.
 
     const descriptor = activeChainId ? chainRegistry.get(activeChainId) : null;
+    const offeredTypes = useSupportedAddressTypes(descriptor);
     const addressExplorerUrl = explorerPageUrl({
         chainId: activeChainId,
         kind: 'address',
@@ -700,7 +743,8 @@ export function Receive({ walletId, accountId, prefill = null, onBack, onChangeA
     });
 
     const onAmountFieldChange = useCallback((rawValue, cursorPos) => {
-        const stripped = String(rawValue).replace(/,/g, '');
+        const typedValue = String(rawValue).replace(/,/g, '');
+        const stripped = withLeadingZero(typedValue);
         const validDecimal = /^\d+(?:\.\d*)?$/.test(stripped);
         const fraction = stripped.includes('.') ? stripped.split('.')[1] : '';
         const exceedsCoinPrecision = amountInputMode === 'coin'
@@ -725,7 +769,8 @@ export function Receive({ walletId, accountId, prefill = null, onBack, onChangeA
         }
         if (typeof cursorPos === 'number' && amountInputRef.current) {
             const formattedNew = formatWithThousands(stripped);
-            const nonCommaBefore = countNonCommaBefore(String(rawValue), cursorPos);
+            const addedZero = stripped.length - typedValue.length;
+            const nonCommaBefore = countNonCommaBefore(String(rawValue), cursorPos) + addedZero;
             const nextCursor = indexAfterNonCommaCount(formattedNew, nonCommaBefore);
             const el = amountInputRef.current;
             requestAnimationFrame(() => {
@@ -773,7 +818,7 @@ export function Receive({ walletId, accountId, prefill = null, onBack, onChangeA
             scheme: descriptor.uriScheme,
             address: address.address,
             amount,
-            label: address.label || undefined,
+            label: requestLabelFor(address.label) || undefined,
             params: {
                 chain: activeChainId,
                 ...(tick ? { tick } : {}),
@@ -850,9 +895,12 @@ export function Receive({ walletId, accountId, prefill = null, onBack, onChangeA
                     [chainId]: [...withoutDuplicate, generated],
                 };
             });
-        } catch {
+        } catch (err) {
             if (generateRequestRef.current !== request || receiveContextRef.current !== contextKey) return;
-            setGenerateError('Could not create a new receive address. Check your connection and try again.');
+            setGenerateError(
+                unsupportedAddressTypeMessage(err)
+                || 'Could not create a new receive address. Check your connection and try again.',
+            );
         } finally {
             if (generateRequestRef.current === request) {
                 generateBusyRef.current = false;
@@ -985,7 +1033,7 @@ export function Receive({ walletId, accountId, prefill = null, onBack, onChangeA
                     ...shareData,
                     files: [new File([blob], qrFileName, { type: blob.type })],
                 };
-                if (nav.canShare(withFile)) data = withFile;
+                if (nav.canShare(toWebShareData(withFile))) data = withFile;
             } catch { /* text and URL remain shareable without the QR image */ }
         }
 
@@ -1169,7 +1217,7 @@ export function Receive({ walletId, accountId, prefill = null, onBack, onChangeA
                 />
             ) : null}
 
-            {descriptor?.addressTypes?.length > 1 ? (
+            {offeredTypes.length > 1 ? (
                 <Select
                     size="md"
                     label={t('receive.addressType')}
@@ -1177,7 +1225,7 @@ export function Receive({ walletId, accountId, prefill = null, onBack, onChangeA
                     onChange={(event) => changeAddressType(event.target.value)}
                     disabled={generating || !addressType}
                 >
-                    {descriptor.addressTypes.map((type) => (
+                    {offeredTypes.map((type) => (
                         <option key={type} value={type}>{addressTypeLabel(type)}</option>
                     ))}
                 </Select>
@@ -1252,6 +1300,7 @@ export function Receive({ walletId, accountId, prefill = null, onBack, onChangeA
                         })}
                         onKeyDown={onLabelKeyDown}
                         placeholder={t('receive.addALabel')}
+                        maxLength={REQUEST_LABEL_MAX}
                         autoComplete="off"
                         error={labelError || undefined}
                     />
@@ -1338,7 +1387,11 @@ export function Receive({ walletId, accountId, prefill = null, onBack, onChangeA
                 </>
             ) : null}
 
-            {multisigs.map((multisig) => (
+            {multisigs.map((multisig) => (multisig.overCeiling ? (
+                <FormNotice key={multisig.multisigConfigId} variant="warning" role="alert">
+                    {t('multisig.overCeilingNotice')}
+                </FormNotice>
+            ) : (
                 <section
                     key={multisig.multisigConfigId}
                     role="group"
@@ -1380,7 +1433,7 @@ export function Receive({ walletId, accountId, prefill = null, onBack, onChangeA
                         </p>
                     ) : null}
                 </section>
-            ))}
+            )))}
 
         </>
     );

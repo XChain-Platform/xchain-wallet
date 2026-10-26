@@ -41,6 +41,7 @@ import {
     SIDECAR_KEY,
     STORE_PROFILE,
     findRegtestSidecarMarkers,
+    regtestSidecarPlugin,
     removeSidecarLoader,
     stripRegtestSidecar,
 } from '../../../packages/web/regtestSidecar.js';
@@ -50,8 +51,7 @@ const require = createRequire(import.meta.url);
 
 /** The SDK's coin registry as it sits in node_modules, i.e. what gets bundled. */
 const sdkCoins = dirname(require.resolve('xchain-sdk/src/coins/index.js'));
-// Read the list from disk to mirror the build transform, which strips ANY module
-// carrying the key (a coin the SDK adds must not fall out of coverage here).
+// Read the list from disk so a coin the SDK adds cannot fall out of coverage here.
 const SDK_COIN_FILES = readdirSync(sdkCoins).filter((file) => file.endsWith('.js')).sort();
 // Cache the installed source once so every assertion and fixture uses the same bytes.
 const SDK_SOURCES = new Map(SDK_COIN_FILES.map((file) => [
@@ -61,6 +61,13 @@ const SDK_SOURCES = new Map(SDK_COIN_FILES.map((file) => [
 const SIDECAR_CARRIERS = SDK_COIN_FILES.filter((file) => file !== 'index.js'
     && SDK_SOURCES.get(file).includes(SIDECAR_KEY));
 const SDK_FIXTURE_TIMEOUT = 60_000;
+
+// Run a source through the store plugin's own transform, gate included, so the
+// stripped copy is what a store build emits (a null return keeps the source as is).
+function storeTransform(source, file) {
+    const out = regtestSidecarPlugin(STORE_PROFILE).transform.call({}, source, `xchain-sdk/src/coins/${file}`);
+    return out === null ? source : out.code;
+}
 
 /** Two working copies: one untouched, one with the transform applied. */
 let workDir;
@@ -75,7 +82,7 @@ beforeAll(() => {
     mkdirSync(stripped);
     for (const [file, source] of SDK_SOURCES) {
         writeFileSync(join(pristine, file), source);
-        writeFileSync(join(stripped, file), stripRegtestSidecar(source).code);
+        writeFileSync(join(stripped, file), storeTransform(source, file));
     }
 }, SDK_FIXTURE_TIMEOUT);
 
@@ -131,6 +138,20 @@ describe('the transform, run against the SDK source that ships', { timeout: SDK_
             expect(findRegtestSidecarMarkers(readFileSync(join(stripped, file), 'utf8')), file)
                 .toEqual([]);
         }
+    });
+
+    it('leaves every SDK file without the key exactly as it ships', () => {
+        for (const file of SDK_COIN_FILES.filter((f) => !SDK_SOURCES.get(f).includes(SIDECAR_KEY))) {
+            expect(readFileSync(join(stripped, file), 'utf8'), file).toBe(SDK_SOURCES.get(file));
+        }
+    });
+
+    it('keeps a marker the build gate skips, so the no-marker check would see it', () => {
+        // A file naming the sidecar file without carrying the key is never
+        // transformed, and the bundle scan refuses it; the fixture must agree.
+        const source = '// reads fullnode.regtest.json when present\nmodule.exports = {};\n';
+        expect(findRegtestSidecarMarkers(storeTransform(source, 'NEW.js'))).toEqual(['fullnode.regtest.json']);
+        expect(findRegtestSidecarMarkers(stripRegtestSidecar(source).code)).toEqual([]);
     });
 
     it('removes the loader block from the registry', () => {

@@ -337,9 +337,9 @@ export function ContractsList({ walletId, onOpenContract, onDeploy, onBack }) {
             title="Contracts"
         />
     );
-    const wrap = (children, toolbar) => (
+    const wrap = (children, toolbar, notices) => (
         <Screen variant={variant} header={header}>
-            <ListPage toolbar={toolbar}>{children}</ListPage>
+            <ListPage toolbar={toolbar} notices={notices}>{children}</ListPage>
         </Screen>
     );
 
@@ -413,6 +413,20 @@ export function ContractsList({ walletId, onOpenContract, onDeploy, onBack }) {
         );
     }
 
+    // One notice for the whole page. Three sections over every chain would
+    // otherwise repeat the same sentence and the same retry up to nine times.
+    const loadFailed = [myByChain, interactionsByChain, browseByChain]
+        .some((byChain) => Object.values(byChain).some((state) => state.error));
+    const loadFailedNotice = loadFailed ? (
+        <StatusMessage
+            variant="error"
+            className={styles.entryDescription}
+            recovery={{ label: 'Try again', onAction: retryContracts }}
+        >
+            Couldn't load contracts. Try again.
+        </StatusMessage>
+    ) : null;
+
     return wrap(
         <>
             <ChainSection
@@ -422,7 +436,6 @@ export function ContractsList({ walletId, onOpenContract, onDeploy, onBack }) {
                 searchQuery={searchQuery}
                 emptyTitle="No published contracts"
                 emptyText="Published contracts appear here after you publish one."
-                onRetry={retryContracts}
                 onOpenContract={onOpenContract}
                 renderRow={(row, cid) => <ContractRow row={row} chainId={cid} />}
             />
@@ -433,7 +446,6 @@ export function ContractsList({ walletId, onOpenContract, onDeploy, onBack }) {
                 searchQuery={searchQuery}
                 emptyTitle="No contract interactions"
                 emptyText={`${actionDisplayLabel('DEPOSIT')} and ${actionDisplayLabel('WITHDRAW').toLowerCase()} actions appear here after one of your addresses interacts with a contract.`}
-                onRetry={retryContracts}
                 onOpenContract={onOpenContract}
                 renderRow={(row, cid) => <InteractionRow row={row} chainId={cid} />}
             >
@@ -453,12 +465,12 @@ export function ContractsList({ walletId, onOpenContract, onDeploy, onBack }) {
                 searchQuery={searchQuery}
                 emptyTitle="No indexed contracts"
                 emptyText="Indexed contracts appear here after contract data loads."
-                onRetry={retryContracts}
                 onOpenContract={onOpenContract}
                 renderRow={(row, cid) => <ContractRow row={row} chainId={cid} />}
             />
         </>,
         toolbar,
+        loadFailedNotice,
     );
 }
 
@@ -496,7 +508,6 @@ function ChainSection({
     searchQuery,
     emptyTitle,
     emptyText,
-    onRetry,
     onOpenContract,
     renderRow,
     children,
@@ -506,19 +517,21 @@ function ChainSection({
         const state = statesByChain[cid] || { loading: true, rows: [], error: null };
         return { cid, state, rows: applySearch(state.rows, searchQuery) };
     });
-    const shown = groups.filter(({ state, rows }) => state.loading || state.error || rows.length > 0);
+    const shown = groups.filter(({ state, rows }) => state.loading || rows.length > 0);
+    // A failed read says nothing about what is on the chain, so the section
+    // does not claim to be empty; the page notice carries the failure.
+    const readFailed = groups.some(({ state }) => state.error);
     const filteredOut = searchActive && groups.some(({ state }) => state.rows.length > 0);
     return (
         <Section title={title}>
-            {shown.length === 0 ? (
+            {shown.length === 0 ? (readFailed ? null : (
                 <EmptyState
                     title={filteredOut ? 'No matching contracts' : emptyTitle}
                     body={filteredOut ? 'Try a different name or number.' : emptyText}
                     titleAs="p"
                 />
-            ) : shown.map(({ cid, state, rows }) => (
+            )) : shown.map(({ cid, state, rows }) => (
                 <ChainGroup key={cid} descriptor={chainRegistry.get(cid)} chainId={cid} state={{ ...state, rows }}
-                            onRetry={onRetry}
                             onOpenContract={onOpenContract}
                             renderRow={(row) => renderRow(row, cid)} />
             ))}
@@ -562,12 +575,11 @@ function ChainFilterBar({ chains, value, onChange }) {
     );
 }
 
-/** One chain's rows, its loading skeleton, or its retryable error. */
+/** One chain's rows or its loading skeleton. A failed read is the page's notice. */
 function ChainGroup({
     descriptor,
     chainId,
     state,
-    onRetry,
     onOpenContract,
     renderRow,
 }) {
@@ -585,15 +597,6 @@ function ChainGroup({
                 </div>
             ) : (
                 <>
-                    {state.error ? (
-                        <StatusMessage
-                            variant="error"
-                            className={styles.entryDescription}
-                            recovery={{ label: 'Try again', onAction: onRetry }}
-                        >
-                            Couldn't load contracts. Try again.
-                        </StatusMessage>
-                    ) : null}
                     {state.rows.map((row, i) => (
                         <Button
                             key={String(rowKey(row)) + ':' + i}

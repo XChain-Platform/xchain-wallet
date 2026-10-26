@@ -26,7 +26,7 @@ const src = read('packages', 'core', 'src', 'shared', 'routes', 'DispenserForm.j
 
 // Token-priced lane: GET_TICK + GET_AMOUNT emitted when paying with a token.
 assert.match(src, /payWith === 'token'/, 'DispenserForm has a token-priced lane');
-assert.match(src, /p\.GET_TICK = getTick\.trim\(\)\.toUpperCase\(\)/, 'token lane emits GET_TICK');
+assert.match(src, /p\.GET_TICK = getTick\.trim\(\);/, 'token lane emits GET_TICK with its case kept');
 assert.match(src, /p\.GET_AMOUNT = getTokenAmount\.trim\(\)/, 'token lane emits GET_AMOUNT');
 assert.match(src, /Buyers pay with/, 'form offers a coin-vs-token payment choice');
 

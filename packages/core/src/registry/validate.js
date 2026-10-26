@@ -26,22 +26,42 @@ import {
     result,
 } from '../schemas/validate.js';
 
-// §5.5 + §36.3: donation addresses are TBD per chain at launch. Any
-// descriptor with this literal string in `adsDonationAddress` is
-// treated as "not configured": the ADS resolver refuses to submit a
-// donation output for that chain, and the submitAction integration
-// advances the accumulator as if ADS were disabled. A grep-replace
-// before mainnet release physically can't be missed because the
-// sentinel is an obvious non-address string.
+export const ADS_DONATION_ADDRESS_ROLES = /** @type {const} */ ([
+    'DONATE1',
+    'DONATE2',
+    'EXPLORER',
+]);
+
+export const ADS_DEFAULT_DONATION_ADDRESS_ROLE = 'DONATE1';
+
 export const ADS_DONATION_ADDRESS_PLACEHOLDER = 'PLACEHOLDER_REPLACE_BEFORE_MAINNET';
 
 /**
- * @param {Pick<ChainDescriptor, 'adsDonationAddress'>} descriptor
+ * @param {Pick<ChainDescriptor, 'adsDonationAddress'|'adsDonationAddresses'> | null | undefined} descriptor
+ * @param {typeof ADS_DONATION_ADDRESS_ROLES[number]} [role]
+ * @returns {string | null}
+ */
+export function donationAddressForDescriptor(
+    descriptor,
+    role = ADS_DEFAULT_DONATION_ADDRESS_ROLE,
+) {
+    if (!descriptor) return null;
+    const selected = descriptor.adsDonationAddresses
+        ? descriptor.adsDonationAddresses[role]
+        : role === ADS_DEFAULT_DONATION_ADDRESS_ROLE
+            ? descriptor.adsDonationAddress
+            : null;
+    return typeof selected === 'string' ? selected : null;
+}
+
+/**
+ * @param {Pick<ChainDescriptor, 'adsDonationAddress'|'adsDonationAddresses'> | null | undefined} descriptor
+ * @param {typeof ADS_DONATION_ADDRESS_ROLES[number]} [role]
  * @returns {boolean}
  */
-export function isDonationAddressConfigured(descriptor) {
-    if (!descriptor || typeof descriptor.adsDonationAddress !== 'string') return false;
-    return descriptor.adsDonationAddress !== ADS_DONATION_ADDRESS_PLACEHOLDER;
+export function isDonationAddressConfigured(descriptor, role) {
+    const address = donationAddressForDescriptor(descriptor, role);
+    return address !== null && address !== ADS_DONATION_ADDRESS_PLACEHOLDER;
 }
 
 export const FEE_UNITS = /** @type {const} */ ([
@@ -92,7 +112,8 @@ export const FEE_STRATEGY_NAMES = /** @type {const} */ ([
  * @property {EndpointConfig} explorer
  * @property {EndpointConfig} encoder
  * @property {EndpointConfig} [hub]
- * @property {string} adsDonationAddress          §36.3 destination for Automatic Donation System output; `ADS_DONATION_ADDRESS_PLACEHOLDER` disables submission
+ * @property {string} adsDonationAddress          §36.3 default destination for Automatic Donation System output; legacy custom descriptors may use only this field
+ * @property {{ DONATE1: string, DONATE2: string, EXPLORER: string }} [adsDonationAddresses] network-specific Automatic Donation System destinations
  * @property {{ perTxAmountSats: number, triggerAmountSats: number }} [adsDefaults]  §36.1 per-coin ADS seed values in the chain's base unit; absent = generic ADS_DEFAULT_* fallback
  * @property {string[]} [platformListOwners]      display-only platform list-owner addresses; never consensus
  * @property {boolean} [isUserAdded]              set by registry for Developer Mode entries
@@ -105,13 +126,19 @@ export const FEE_STRATEGY_NAMES = /** @type {const} */ ([
 // chains and loopback hosts (cleartext to the local machine is not
 // interceptable in transit).
 const LOOPBACK_HOSTS = new Set(['localhost', '127.0.0.1', '[::1]']);
+// A descriptor URL is capped in length and carries no userinfo: embedded
+// credentials would be stored in the vault, logged with the URL and sent on
+// every request.
+export const MAX_DESCRIPTOR_URL_LENGTH = 2048;
 const isSecureEndpointUrl = (raw, allowInsecure) => {
+    if (typeof raw !== 'string' || raw.length > MAX_DESCRIPTOR_URL_LENGTH) return false;
     let url;
     try {
         url = new URL(raw);
     } catch {
         return false;
     }
+    if (url.username !== '' || url.password !== '') return false;
     if (url.protocol === 'https:' || url.protocol === 'wss:') return true;
     if (url.protocol !== 'http:' && url.protocol !== 'ws:') return false;
     return allowInsecure || LOOPBACK_HOSTS.has(url.hostname);
@@ -130,7 +157,8 @@ const isTransactionExplorer = (v) =>
     isNonEmptyString(v.url) &&
     v.url.includes('{txid}') &&
     isSecureEndpointUrl(v.url, false) &&
-    (v.iconImg === undefined || isString(v.iconImg));
+    (v.iconImg === undefined ||
+        (isString(v.iconImg) && v.iconImg.startsWith('https://') && isSecureEndpointUrl(v.iconImg, false)));
 
 const isFeeStrategy = (v) => {
     if (!isPlainObject(v)) return false;
@@ -204,6 +232,17 @@ export const FAMILY_RBF_SUPPORTED = { dogecoin: false };
 // a custom rate far below the 1 DOGE/kB relay floor. Bitcoin and litecoin stay free.
 export const FAMILY_FEE_UNIT = { dogecoin: 'sats-per-kbyte' };
 
+// Identifier and display fields of a descriptor end up in routes, storage keys,
+// CSS custom properties, image paths and deep-link handlers, so each is
+// confined to the shape the bundled descriptors already use.
+const ID_RE = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
+const COLOR_RE = /^#[0-9a-fA-F]{3,8}$/;
+const ICON_FILE_RE = /^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/;
+const URI_SCHEME_RE = /^[a-z][a-z0-9+.-]{0,31}$/;
+const BLOCKED_URI_SCHEMES = new Set([
+    'javascript', 'data', 'file', 'vbscript', 'blob', 'about', 'http', 'https', 'ws', 'wss', 'ftp', 'mailto', 'tel', 'chrome', 'chrome-extension',
+]);
+
 const isDerivationPaths = (v) => {
     if (!isPlainObject(v)) return false;
     for (const [k, val] of Object.entries(v)) {
@@ -215,6 +254,42 @@ const isDerivationPaths = (v) => {
 };
 
 /**
+ * Extra rule for a descriptor the user pastes (Developer Mode): a known
+ * family on mainnet belongs to its reserved id alone. Address validation keys
+ * off coin and networkKind, so any other id carrying coin "bitcoin" on
+ * mainnet would accept real mainnet addresses and show mainnet-shaped funds
+ * from endpoints the user pasted. Signed registry descriptors are exempt.
+ *
+ * @param {any} record
+ * @returns {string | null} the error, or null when the descriptor is fine
+ */
+export function customChainReservedIdError(record) {
+    for (const field of ['coin', 'id']) {
+        const v = record?.[field];
+        if (typeof v === 'string' && v !== v.trim()) return `${field}: must not start or end with a space`;
+    }
+    // Case and surrounding space do not make a coin a different family.
+    const coin = typeof record?.coin === 'string' ? record.coin.trim().toLowerCase() : '';
+    if (
+        record?.networkKind === 'mainnet' &&
+        Object.prototype.hasOwnProperty.call(FAMILY_MAINNET_COIN_TYPE_SLOT, coin) &&
+        record.id !== `${coin}-mainnet`
+    ) {
+        return `id: must be "${coin}-mainnet" for a ${coin} mainnet chain`;
+    }
+    // A mainnet id that extends a reserved id ("bitcoin-mainnet-x") reads as
+    // that family's chain whatever coin it carries.
+    if (record?.networkKind === 'mainnet' && typeof record.id === 'string') {
+        for (const family of Object.keys(FAMILY_MAINNET_COIN_TYPE_SLOT)) {
+            if (record.id.startsWith(`${family}-mainnet-`)) {
+                return `id: must not extend the reserved id "${family}-mainnet"`;
+            }
+        }
+    }
+    return null;
+}
+
+/**
  * @param {unknown} record
  * @returns {{ ok: true, errors: [] } | { ok: false, errors: string[] }}
  */
@@ -224,11 +299,14 @@ export function validateChainDescriptor(record) {
         return result(errors);
     const r = /** @type {ChainDescriptor} */ (record);
     check(errors, 'id', isNonEmptyString(r.id), 'must be a non-empty string');
-    check(errors, 'coin', isNonEmptyString(r.coin), 'must be a non-empty string');
-    check(errors, 'displayName', isNonEmptyString(r.displayName), 'must be a non-empty string');
+    if (isNonEmptyString(r.id)) {
+        check(errors, 'id', r.id.length <= 64 && ID_RE.test(r.id), 'must be 1-64 lowercase letters, digits and hyphens');
+    }
+    check(errors, 'coin', isNonEmptyString(r.coin) && r.coin.length <= 32, 'must be a non-empty string of at most 32 characters');
+    check(errors, 'displayName', isNonEmptyString(r.displayName) && r.displayName.length <= 64, 'must be a non-empty string of at most 64 characters');
     check(errors, 'networkKind', isOneOf(r.networkKind, NETWORKS), `must be one of ${NETWORKS.join(', ')}`);
-    check(errors, 'color', isNonEmptyString(r.color), 'must be a non-empty string');
-    check(errors, 'icon', isString(r.icon), 'must be a string');
+    check(errors, 'color', isString(r.color) && COLOR_RE.test(r.color), 'must be a CSS hex color like #F7931A');
+    check(errors, 'icon', isString(r.icon) && (r.icon === '' || ICON_FILE_RE.test(r.icon)), 'must be empty or a plain file name');
     check(errors, 'derivationPaths', isDerivationPaths(r.derivationPaths), 'malformed');
     // Reserved-id integrity. Both parity pins below key off the free-form `coin`
     // field, while the registry overrides entries by `id` (index.js) and every
@@ -290,7 +368,10 @@ export function validateChainDescriptor(record) {
     );
     check(errors, 'feeStrategy', isFeeStrategy(r.feeStrategy), 'malformed');
     checkEach(errors, 'supportedActions', r.supportedActions, isNonEmptyString, 'must be a non-empty string');
-    check(errors, 'uriScheme', isNonEmptyString(r.uriScheme), 'must be a non-empty string');
+    check(errors, 'uriScheme', isString(r.uriScheme) && URI_SCHEME_RE.test(r.uriScheme) && !BLOCKED_URI_SCHEMES.has(r.uriScheme), 'must be a lowercase URI scheme that is not a web, script or file scheme');
+    if (r.nativeTicker !== undefined) {
+        check(errors, 'nativeTicker', isNonEmptyString(r.nativeTicker) && r.nativeTicker.length <= 12, 'must be a non-empty string of at most 12 characters');
+    }
     check(
         errors,
         'wifVersionByte',
@@ -344,6 +425,29 @@ export function validateChainDescriptor(record) {
         isNonEmptyString(r.adsDonationAddress),
         `must be a non-empty string (use ADS_DONATION_ADDRESS_PLACEHOLDER "${ADS_DONATION_ADDRESS_PLACEHOLDER}" when unset)`,
     );
+    if (r.adsDonationAddresses !== undefined) {
+        const addresses = r.adsDonationAddresses;
+        check(
+            errors,
+            'adsDonationAddresses',
+            isPlainObject(addresses) &&
+                Object.keys(addresses).length === ADS_DONATION_ADDRESS_ROLES.length &&
+                ADS_DONATION_ADDRESS_ROLES.every((role) =>
+                    isNonEmptyString(addresses[role]) &&
+                    addresses[role] !== ADS_DONATION_ADDRESS_PLACEHOLDER) &&
+                new Set(ADS_DONATION_ADDRESS_ROLES.map((role) => addresses[role])).size ===
+                    ADS_DONATION_ADDRESS_ROLES.length,
+            `must contain exactly ${ADS_DONATION_ADDRESS_ROLES.join(', ')} as distinct configured strings`,
+        );
+        if (isPlainObject(addresses) && isNonEmptyString(addresses.DONATE1)) {
+            check(
+                errors,
+                'adsDonationAddress',
+                r.adsDonationAddress === addresses.DONATE1,
+                'must match adsDonationAddresses.DONATE1',
+            );
+        }
+    }
     if (r.isUserAdded !== undefined) {
         check(errors, 'isUserAdded', isBoolean(r.isUserAdded), 'must be a boolean');
     }

@@ -15,6 +15,7 @@ import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { useSettings } from '../hooks/useSettings.js';
 import { configureClipboardAutoClear } from '../clipboard.js';
 import { PRIVATE_KEY_WARNING } from '../utils/securityMomentCopy.js';
+import { useBackHandler } from '../../ui/backStack.js';
 import styles from './ViewPrivateKey.module.css';
 
 const REVEAL_TIMEOUT_MS = 30_000;
@@ -78,6 +79,8 @@ export function ViewPrivateKey({ walletId, address, renderQR, onBack }) {
         clearSensitiveState();
         onBack();
     }, [clearSensitiveState, onBack]);
+
+    useBackHandler(stage === 'warning' ? undefined : clearSensitiveState);
 
     useEffect(() => {
         if (stage !== 'password') return undefined;

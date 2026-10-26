@@ -65,7 +65,6 @@ describe('regression/remaining-control-rows', () => {
 
         expectButtonsUseSize([
             screen.getByRole('button', { name: 'Switch input to USD' }),
-            screen.getByRole('button', { name: 'Paste from clipboard' }),
         ], 'sm');
     });
 

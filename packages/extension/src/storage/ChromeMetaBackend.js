@@ -21,7 +21,10 @@
 // doesn't wipe the bootstrap meta and vice versa. A future piece may
 // extend this to carry UI-preference defaults that should survive lock.
 
+import { storage as coreStorage } from '@xchain-wallet/core';
 import { persistWithQuotaRecovery } from '@xchain-wallet/core/storage/Vault.js';
+
+const { VaultCorruptError } = coreStorage;
 
 export const DEFAULT_META_KEY = 'xchain-wallet:vault-meta';
 
@@ -57,12 +60,19 @@ export class ChromeMetaBackend {
         const result = await this._storage.get(this._key);
         const raw = result?.[this._key];
         if (raw == null) return null;
+        // Metadata that cannot be read must not mean "no wallet": the vault
+        // ciphertext may still need these exact KDF parameters, so the shell
+        // gets the damaged-vault screen instead of an opaque start failure.
         if (typeof raw !== 'string') {
-            throw new Error(
+            throw new VaultCorruptError(
                 `ChromeMetaBackend.load: unexpected value type "${typeof raw}" at key "${this._key}"`,
             );
         }
-        return JSON.parse(raw);
+        try {
+            return JSON.parse(raw);
+        } catch {
+            throw new VaultCorruptError('ChromeMetaBackend.load: stored metadata is not valid JSON');
+        }
     }
 
     /**

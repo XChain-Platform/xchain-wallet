@@ -5,6 +5,7 @@
 
 import { Button } from '@xchain-wallet/core/ui';
 import { t } from '../../../core/src/i18n/index.js';
+import '@xchain-wallet/core/i18n/locales/en/extension.js';
 
 const RUNTIME_CONNECTION_CODES = new Set([
     'RUNTIME_DISCONNECTED',

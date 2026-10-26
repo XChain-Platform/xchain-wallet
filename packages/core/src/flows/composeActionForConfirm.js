@@ -29,14 +29,27 @@
 import { composeForConfirm } from './composeForConfirm.js';
 import { isBareNativePayment } from './nativePayment.js';
 import { assertNoTamper, TamperDetectedError } from './confirmChecks.js';
-import { checkEnvelopeReveal, envelopeNetworkFees } from './envelopeRevealCheck.js';
+import { checkEnvelopeReveal, envelopeNetworkFees, envelopeRevealRefusalMessage } from './envelopeRevealCheck.js';
 import { totalNetworkFeeSats, sumExactSats, exactSats } from './psbtNetworkFee.js';
 import { satsToCoinDecimal } from './feeEstimate.js';
 import { addressBalances } from './balances.js';
 import { simulateAction } from '../decoder/txSimulator.js';
 import { balancesFromSdk } from '../decoder/balanceAdapter.js';
 import { withListRemovalDescriptions } from '../decoder/list_removal_description.js';
+import { withContractCallDescriptions } from '../decoder/contract_call_description.js';
 import { resolveDustThreshold } from '../sdk/nativeFeePreflight.js';
+
+// The built PSBT is checked after the encoder has reserved its inputs. A check
+// that refuses the bytes ends the compose without a confirm surface to hand the
+// release back to, so the refusal gives the inputs back before it propagates.
+async function releasingOnRefusal(composed, check) {
+    try {
+        return check();
+    } catch (err) {
+        try { await composed.releaseEncoderInputs?.(); } catch { /* the reservation lapses on its own */ }
+        throw err;
+    }
+}
 
 function hasOwnChangeOutput(outputs, expectedOutputs, ownAddresses) {
     const consumed = new Set();
@@ -239,7 +252,7 @@ export async function composeActionForConfirm({
         && !hasOwnChangeOutput(decomposed.outputs || [], composed.expectedOutputs, own)
         ? dustFloor
         : null;
-    assertNoTamper({
+    await releasingOnRefusal(composed, () => assertNoTamper({
         psbtHex: composed.psbt,
         expected: composed.expectedOutputs,
         ownAddresses: [...own],
@@ -265,13 +278,13 @@ export async function composeActionForConfirm({
         rawDataCompressed: composed.compression?.compressed === true,
         network: sdk.config && sdk.config.network,
         verifyCarrierScripts: sdk.decoder.verifyCarrierScripts,
-    });
+    }));
 
     // A Taproot envelope is two transactions signed on one Approve, so the
     // reveal is checked too and each transaction's own fee is stated.
-    const envelopeFees = composed.revealPsbt
+    const envelopeFees = await releasingOnRefusal(composed, () => (composed.revealPsbt
         ? checkedEnvelopeFees({ sdk, composed, commit: decomposed, own })
-        : null;
+        : null));
     if (envelopeFees) networkFeeSats = envelopeFees.totalFeeSats;
 
     // §5.2.3 balance deltas. Computed HERE, not per-form, for the same reason
@@ -331,6 +344,7 @@ export async function composeActionForConfirm({
                 ownAddresses: [...own],
             });
             decoded = withListRemovalDescriptions(decoded, parsed);
+            decoded = withContractCallDescriptions(decoded, parsed);
         }
     } catch {
         // Leave it null: the confirm screen takes no caller-supplied `decoded`,
@@ -503,8 +517,8 @@ function checkedEnvelopeFees({ sdk, composed, commit, own }) {
     });
     if (!verdict.ok) {
         throw new TamperDetectedError(
-            'The action encoded in the transaction does not match what you approved.',
-            { reason: verdict.reason });
+            envelopeRevealRefusalMessage(verdict.reason),
+            { reason: verdict.reason, decodeReason: verdict.decodeReason });
     }
     return envelopeNetworkFees(commit, reveal);
 }

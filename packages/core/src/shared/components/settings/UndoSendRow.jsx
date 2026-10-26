@@ -30,6 +30,7 @@ import { useSettings } from '../../hooks/useSettings.js';
 import { useMessaging } from '../../useMessaging.js';
 import { INPUT, INPUT_DISABLED, ROW, ROW_TITLE, ToggleRow } from './_settingsPrimitives.jsx';
 import { t } from '../../../i18n/index.js';
+import '../../../i18n/locales/en/settings.js';
 import { blurNumberInputOnWheel } from '../../utils/formInput.js';
 
 export function UndoSendRow() {
@@ -75,6 +76,9 @@ export function UndoSendRow() {
                         const n = /^\d+$/.test(raw)
                             ? Math.min(Number(raw), UNDO_SEND_SECONDS_MAX)
                             : UNDO_SEND_SECONDS_DEFAULT;
+                        // The stored value can already equal n (99 clamps to a stored 30),
+                        // which leaves the field's key unchanged, so show n here.
+                        e.target.value = String(n);
                         update({ grace: { undoSendSeconds: n } }).catch((err) => {
                             // eslint-disable-next-line no-console
                             console.error('grace.undoSendSeconds update failed:', err);

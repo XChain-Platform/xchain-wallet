@@ -83,11 +83,21 @@ describe('the auto-enqueue hook after a vault rebuild of the same PendingTx', ()
         expect(storage.read()[W]).toEqual([expect.objectContaining({ pendingTxId: 'p1', adsCommit: VERDICT })]);
     });
 
+    it('moves a fee-bump link onto the rebuilt entry, so delivery can retire the original', async () => {
+        const { storage, engine } = await boot();
+        await engine.restoreQueueFromVault(vaultWithQueuedRecord(), chainRegistry, W);
+
+        await engine.enqueueOnBroadcastFailure(W)(hookEntry({ adsCommit: null, rbfReplacesPendingTxId: 'p0' }));
+
+        expect(engine.getQueue(W)).toEqual([expect.objectContaining({ pendingTxId: 'p1', rbfReplacesPendingTxId: 'p0' })]);
+        expect(storage.read()[W]).toEqual([expect.objectContaining({ rbfReplacesPendingTxId: 'p0' })]);
+    });
+
     it('still queues bytes that differ from the rebuilt entry, so no signed transaction is dropped', async () => {
         const { engine } = await boot();
         await engine.restoreQueueFromVault(vaultWithQueuedRecord(), chainRegistry, W);
 
-        await engine.enqueueOnBroadcastFailure(W)(hookEntry({ signedTxHex: 'hex-other' }));
+        await engine.enqueueOnBroadcastFailure(W)(hookEntry({ signedTxHex: 'hex-other', txid: 'tx-other' }));
 
         expect(engine.getQueue(W).map((e) => e.signedTxHex)).toEqual(['hex-p1', 'hex-other']);
     });
@@ -96,7 +106,9 @@ describe('the auto-enqueue hook after a vault rebuild of the same PendingTx', ()
         const { engine } = await boot();
         await engine.restoreQueueFromVault(vaultWithQueuedRecord(), chainRegistry, W);
 
-        await engine.enqueueOnBroadcastFailure(W)(hookEntry({ pendingTxId: null }));
+        await engine.enqueueOnBroadcastFailure(W)(hookEntry({
+            pendingTxId: null, signedTxHex: 'hex-p2', txid: 'tx-p2',
+        }));
 
         expect(engine.getQueue(W)).toHaveLength(2);
     });

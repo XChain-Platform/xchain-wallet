@@ -29,6 +29,8 @@
 // browser origin rules.
 
 import { defineConfig, devices } from '@playwright/test';
+import { desktopUserAgentForHost } from './host-user-agent.js';
+import { XCHAIN_SERVICE_HOSTS } from './fixtures/outboundGuard.js';
 
 // Deliberately NOT vite preview's default 4173: a hand-run preview (this
 // venue is also driven manually while debugging, and a second coder shares
@@ -87,6 +89,7 @@ export default defineConfig({
         : 'list',
     use: {
         baseURL: `http://localhost:${PREVIEW_PORT}`,
+        outboundStubHosts: XCHAIN_SERVICE_HOSTS,
         // Bounds every click and fill that names no timeout of its own. Without
         // it an action inherits the 30 minute TEST budget above, so one locator
         // that no longer matches the screen waits out the whole test and eats
@@ -102,6 +105,11 @@ export default defineConfig({
             name: 'chromium',
             use: {
                 ...devices['Desktop Chrome'],
+                // Same host-matched user agent as playwright.config.js, so
+                // ControlOrMeta and the wallet's shortcut gate agree on a Mac host.
+                userAgent: desktopUserAgentForHost(),
+                // New headless: the full browser, which renders like the headed one users run.
+                channel: 'chromium',
                 launchOptions: {
                     args: [
                         '--disable-web-security',
@@ -109,10 +117,11 @@ export default defineConfig({
                         // in out-of-process iframes/site-isolated renderers, so
                         // --disable-web-security alone is not enough.
                         '--disable-features=IsolateOrigins,site-per-process',
-                        // Keep the run off the production hub. At boot the wallet
-                        // swaps its bundled descriptors for the hub's signed registry,
-                        // and a snapshot older than the tree names the wrong regtest encoder port.
-                        '--host-resolver-rules=MAP hub.xchain.io ~NOTFOUND',
+                        // Keep every transport off the production services. HTTP
+                        // probes are answered by the page fixture; this also blocks
+                        // WebSockets, which Playwright routes cannot intercept.
+                        '--host-resolver-rules=MAP explorer.xchain.io ~NOTFOUND, '
+                            + 'MAP hub.xchain.io ~NOTFOUND, MAP encoder.xchain.io ~NOTFOUND',
                     ],
                 },
             },

@@ -15,6 +15,9 @@ import { ChevronIcon } from './ChainPicker.icons.jsx';
 import { useBackHandler } from './backStack.js';
 import styles from './ChainPicker.module.css';
 import { t } from '../i18n/index.js';
+import '../i18n/locales/en/components.js';
+import '../i18n/locales/en/extension.js';
+import '../i18n/locales/en/ui.js';
 
 /**
  * Single-select chain picker. Replaces native `<select>` in any

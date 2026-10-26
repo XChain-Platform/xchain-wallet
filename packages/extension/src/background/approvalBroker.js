@@ -204,21 +204,26 @@ export class ApprovalBroker {
 
     /**
      * Reject every parked approval and clear the toolbar badge.
-     * Lock and wipe call this so requests from an ended session cannot remain
-     * actionable or restore attention state after teardown.
+     * Lock, wipe and a network switch call this so requests from an ended
+     * session or another network cannot remain actionable. The optional
+     * one-line reason travels on the rejection result.
+     *
+     * @param {string} [reason]
      */
-    async cancelAll() {
+    async cancelAll(reason) {
         const entries = [...this._pending.values()];
-        await this._cancelEntries(entries);
+        await this._cancelEntries(entries, reason);
     }
 
-    async _cancelEntries(entries) {
+    async _cancelEntries(entries, reason) {
         const cancelled = [];
         for (const entry of entries) {
             if (this._pending.get(entry.id) !== entry) continue;
             this._pending.delete(entry.id);
             this._clearTimer(entry.timeout);
-            entry.deferred.resolve({ approved: false });
+            entry.deferred.resolve(
+                typeof reason === 'string' && reason ? { approved: false, reason } : { approved: false },
+            );
             cancelled.push(entry);
         }
         if (cancelled.length === 0) return;

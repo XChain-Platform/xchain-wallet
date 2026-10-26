@@ -16,6 +16,7 @@ import {
     decoder as decoderLib,
     flows as flowsLib,
 } from '@xchain-wallet/core';
+import '../../i18n/locales/en/send.js';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { useDemoGuard } from '../hooks/useDemoGuard.jsx';
 import { useActionConfirmFlow, useConfirmSubmit, isUserRejection } from '../hooks/useActionConfirmFlow.js';
@@ -50,11 +51,25 @@ import { preferredSourceId } from '../addressSelection.js';
 import { pickDefaultChainId } from '../chainSelection.js';
 import { submitFailureMessage } from '../utils/submitFailureMessage.js';
 import { tickerReferenceError } from '../utils/tickerGrammar.js';
+import {
+    MAX_ISSUE_TEXT_LENGTH,
+    issueDescriptionError,
+    issueSupplyLimitError,
+} from '../utils/issueFieldValidation.js';
 import { QueuedResultPanel } from '../components/QueuedResultPanel.jsx';
 import { currentListMemberCount } from '../../flows/listMembership.js';
-import { compareDecimalStrings, tokenAmountPrecisionError } from '../utils/amountFormat.js';
+import { compareDecimalStrings, formatWithThousands, tokenAmountPrecisionError } from '../utils/amountFormat.js';
+import { exceedsHeadroom, mintHeadroom } from '../utils/mintHeadroom.js';
+import { isNativeCoinTick, unknownTickMessage } from '../utils/dividendTickChecks.js';
+import { tickLookupVerdict } from '../utils/listTickItems.js';
 import { sharedBlockPickState } from '../utils/sharedBlockPick.js';
 import { listLabel } from '../utils/listLabel.js';
+import { tokenIssuerEligibility } from '../utils/tokenIssuerEligibility.js';
+import { actionTextSafetyError } from '../utils/actionTextSafety.js';
+import {
+    TOKEN_RECORD_GATE_KEYS, tokenRecordChangedMessage, tokenRecordChangedSince,
+} from '../utils/tokenRecordDrift.js';
+import { boundListIndex, listInBothSlots, listInBothSlotsMessage } from '../../flows/accessListSlots.js';
 
 const chainRegistry = registryLib.defaultRegistry();
 
@@ -177,7 +192,7 @@ export function TokenAdminForm({ walletId, mode, onBack, initialChainId, initial
         /** @type {string | null} */ (null),
     );
 
-    const [ticker, setTicker] = useState((initialTick || '').toUpperCase());
+    const [ticker, setTicker] = useState(initialTick || '');
     const [description, setDescription] = useState('');
     const [transferTo, setTransferTo] = useState('');
     // Mint settings (mode === 'mint-settings', PC-01): the four ISSUE v2
@@ -241,6 +256,7 @@ export function TokenAdminForm({ walletId, mode, onBack, initialChainId, initial
     const [result, setResult] = useState(/** @type {any | null} */ (null));
     const passwordRef = useRef(/** @type {HTMLInputElement | null} */ (null));
     const submitPendingRef = useRef(false);
+    const reviewInFlightRef = useRef(false);
 
     // The active map and the settings read are best-effort: a host without
     // `getActiveAddresses` / `getSettings`, or one whose call fails, still
@@ -343,7 +359,7 @@ export function TokenAdminForm({ walletId, mode, onBack, initialChainId, initial
     // the same owner boundary as Manage Token instead of relying on a later
     // protocol rejection that still spends the action fee.
     const assetInfo = useTokenInfo({ chainId, tick: ticker });
-    const callbackTickKey = callbackTick.trim().toUpperCase();
+    const callbackTickKey = callbackTick.trim();
     const callbackTokenInfo = useTokenInfo({
         chainId,
         tick: callbackTickKey,
@@ -357,25 +373,19 @@ export function TokenAdminForm({ walletId, mode, onBack, initialChainId, initial
         : null;
     const assetInfoMatchesSelection = !assetInfo || (
         (!assetInfo.chainId || assetInfo.chainId === chainId)
-        && (!assetInfo.tick || String(assetInfo.tick).toUpperCase() === ticker.trim().toUpperCase())
+        && (!assetInfo.tick || String(assetInfo.tick) === ticker.trim())
     );
     const currentAssetInfo = assetInfoMatchesSelection ? assetInfo : null;
     const tokenInfoPending = !!chainId && !!ticker && !currentAssetInfo;
     const tokenLocks = currentAssetInfo?.locks || {};
-    const tokenOwner = currentAssetInfo?.creator || null;
-    const walletOwnsToken = tokenOwner && addressesByChain && chainId
-        ? (addressesByChain[chainId] || []).some((address) => (
-            String(address?.address || '').toLowerCase() === String(tokenOwner).toLowerCase()
-        ))
-        : null;
-    const selectedSourceOwnsToken = !tokenOwner || !fromAddress
-        ? null
-        : String(fromAddress.address || '').toLowerCase() === String(tokenOwner).toLowerCase();
-    const ownershipError = walletOwnsToken === false
-        ? `This wallet does not own ${ticker}. Only the current owner can make this change.`
-        : selectedSourceOwnsToken === false
-            ? `The selected source address does not own ${ticker}. Choose the current owner address.`
-            : null;
+    const ownerEligibility = tokenIssuerEligibility({
+        tokenInfo: currentAssetInfo,
+        addressesByChain,
+        chainId,
+        tick: ticker,
+        sourceAddress: fromAddress?.address,
+    });
+    const ownershipError = ownerEligibility.error;
     const descriptionLocked = mode === 'description' && !!tokenLocks.description;
     const eligibilityError = descriptionLocked
         ? `The description for ${ticker} is permanently locked and cannot be updated.`
@@ -663,8 +673,9 @@ export function TokenAdminForm({ walletId, mode, onBack, initialChainId, initial
         });
     }, [stage, actionParams, chainId]);
 
-    function handleReview(event) {
+    async function handleReview(event) {
         event.preventDefault();
+        if (reviewInFlightRef.current) return;
         if (!chainId || !fromAddress) {
             setFormError('Pick a source address first.');
             return;
@@ -690,13 +701,23 @@ export function TokenAdminForm({ walletId, mode, onBack, initialChainId, initial
             setFormError('Description is required.');
             return;
         }
+        if (mode === 'description') {
+            const descriptionError = actionTextSafetyError(description, 'Description')
+                || issueDescriptionError(description);
+            if (descriptionError) {
+                setFormError(descriptionError);
+                return;
+            }
+        }
         if (mode === 'transfer') {
             if (!transferTo.trim()) {
                 setFormError('New owner address is required.');
                 return;
             }
             if (transferToError) {
-                setFormError(transferToError);
+                // The field already shows the reason under itself; the banner
+                // names the field once instead of saying it again.
+                setFormError('Fix the New owner address below.');
                 return;
             }
         }
@@ -737,6 +758,11 @@ export function TokenAdminForm({ walletId, mode, onBack, initialChainId, initial
                     setFormError(precisionError);
                     return;
                 }
+                const amountLimitError = issueSupplyLimitError(value, noun);
+                if (amountLimitError) {
+                    setFormError(amountLimitError);
+                    return;
+                }
             }
             if (mintStartBlock && !/^\d+$/.test(mintStartBlock.trim())) {
                 setFormError('Minting start must be a whole block number.');
@@ -753,6 +779,19 @@ export function TokenAdminForm({ walletId, mode, onBack, initialChainId, initial
             }
             if (mintStartBlock && mintStopBlock && Number(mintStopBlock) <= Number(mintStartBlock)) {
                 setFormError('Minting must close after it opens. Check the block numbers.');
+                return;
+            }
+            // Mint supply creates supply in this transaction, so it is bounded by what
+            // is left under the cap exactly as a MINT is; the indexer refuses an excess
+            // after the fee is spent. The form refuses it while the cap (above 0, since
+            // 0 is uncapped) and the current supply are both known for this ticker.
+            const capInfo = currentAssetInfo;
+            const capped = capInfo?.maxSupply != null && compareDecimalStrings(capInfo.maxSupply, '0') === 1;
+            const supplyRoom = capped && capInfo?.totalSupply != null
+                ? mintHeadroom({ maxSupply: capInfo.maxSupply, totalSupply: capInfo.totalSupply })
+                : null;
+            if (mintSupply && exceedsHeadroom(mintSupply, supplyRoom)) {
+                setFormError(`Only ${formatWithThousands(supplyRoom)} ${ticker.trim()} can still be minted.`);
                 return;
             }
             if (transferSupply && !mintSupply) {
@@ -788,6 +827,19 @@ export function TokenAdminForm({ walletId, mode, onBack, initialChainId, initial
                 : null;
             if (callbackTickError) {
                 setFormError(callbackTickError);
+                return;
+            }
+            // The payout token must be an XChain token on this chain: a callback that names the
+            // chain's own coin or a token that does not exist can never pay, and the terms freeze
+            // once supply is distributed.
+            if (callbackTickKey && isNativeCoinTick(callbackTickKey, { coinTicker, descriptor })) {
+                setFormError(`${coinTicker} is ${descriptor?.displayName || 'the native coin'} itself, not an XChain token. A callback pays holders in an XChain token, so enter one of those.`);
+                return;
+            }
+            const callbackTickMatches = callbackTokenInfo?.chainId === chainId && callbackTokenInfo?.tick === callbackTickKey;
+            if (callbackTickKey && !callbackTickKey.startsWith('^') && callbackTickMatches
+                && tickLookupVerdict(callbackTokenInfo) === 'missing') {
+                setFormError(unknownTickMessage(callbackTickKey, descriptor?.displayName || 'the active network'));
                 return;
             }
             if (callbackAmount && !isPositiveDecimal(callbackAmount)) {
@@ -826,6 +878,12 @@ export function TokenAdminForm({ walletId, mode, onBack, initialChainId, initial
                 setFormError('Pick a different allow-list or block-list to apply. Leaving both unchanged does nothing.');
                 return;
             }
+            // One list in both slots admits nobody: every address the allow-list
+            // accepts the block-list refuses. Dispensers refuse the same pairing.
+            if (listInBothSlots({ allowList: allowListIdx, blockList: blockListIdx })) {
+                setFormError(listInBothSlotsMessage(boundListIndex(allowListIdx)));
+                return;
+            }
         }
         if (mode === 'bridge-settings') {
             if (bridgeFrozen) {
@@ -845,6 +903,23 @@ export function TokenAdminForm({ walletId, mode, onBack, initialChainId, initial
                 setFormError('Change a destination network, the minimum confirmations, or the freeze before applying.');
                 return;
             }
+        }
+        // The gates and prefilled values above came from the record read when
+        // the form opened; a lock, transfer or settings edit since then makes
+        // them stale. Mint settings also bounds a mint-now amount by supply.
+        reviewInFlightRef.current = true;
+        try {
+            const watched = mode === 'mint-settings' && mintSupply
+                ? [...TOKEN_RECORD_GATE_KEYS, 'totalSupply']
+                : TOKEN_RECORD_GATE_KEYS;
+            if (await tokenRecordChangedSince({
+                messaging, chainId, tick: ticker.trim(), current: currentAssetInfo, keys: watched,
+            })) {
+                setFormError(tokenRecordChangedMessage(ticker.trim()));
+                return;
+            }
+        } finally {
+            reviewInFlightRef.current = false;
         }
         setFormError(null);
         if (singleEncode) { openConfirmScreen(); return; }
@@ -1219,7 +1294,7 @@ export function TokenAdminForm({ walletId, mode, onBack, initialChainId, initial
                 walletId={walletId}
                 title="Select token"
                 onSelect={(sel) => {
-                    setTicker(String(sel.tick || '').toUpperCase());
+                    setTicker(String(sel.tick || ''));
                     if (!lockedToken && sel.chainId) setChainId(sel.chainId);
                     setTokenPickerOpen(false);
                 }}
@@ -1365,12 +1440,12 @@ export function TokenAdminForm({ walletId, mode, onBack, initialChainId, initial
             {mode === 'description' ? (
                 <Input
                     label="New description"
-                    hint="Up to 250 characters. Stored on-chain and replaces the current one."
+                    hint={`Up to ${MAX_ISSUE_TEXT_LENGTH} characters. Stored on-chain and replaces the current one.`}
                     value={description}
                     onChange={(e) => setDescription(e.target.value)}
                     disabled={descriptionLocked}
                     autoComplete="off"
-                    maxLength={250}
+                    maxLength={MAX_ISSUE_TEXT_LENGTH}
                 />
             ) : null}
 
@@ -1543,7 +1618,7 @@ export function TokenAdminForm({ walletId, mode, onBack, initialChainId, initial
                         label="Callback token"
                         hint="The ticker holders are paid in when you call back. Must be a token you'll hold enough of to cover every holder."
                         value={callbackTick}
-                        onChange={(e) => setCallbackTick(e.target.value.toUpperCase())}
+                        onChange={(e) => setCallbackTick(e.target.value)}
                         autoComplete="off"
                         disabled={callbackFieldsDisabled}
                     />
@@ -1778,7 +1853,7 @@ export function TokenAdminForm({ walletId, mode, onBack, initialChainId, initial
  *   as "Update mint parameters of TICK…".
  */
 function composeAdminParams(mode, form) {
-    const TICK = (form.ticker || '').trim().toUpperCase();
+    const TICK = (form.ticker || '').trim();
     if (mode === 'lock') {
         const p = { VERSION: '3', TICK };
         const checks = form.lockChecks || {};
@@ -1811,7 +1886,7 @@ function composeAdminParams(mode, form) {
         // from the current record), never "clear to zero".
         const p = { VERSION: '4', TICK };
         if (form.callbackBlock) p.CALLBACK_BLOCK = String(form.callbackBlock).trim();
-        if (form.callbackTick) p.CALLBACK_TICK = String(form.callbackTick).trim().toUpperCase();
+        if (form.callbackTick) p.CALLBACK_TICK = String(form.callbackTick).trim();
         if (form.callbackAmount) p.CALLBACK_AMOUNT = String(form.callbackAmount).trim();
         return p;
     }

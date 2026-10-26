@@ -11,6 +11,8 @@
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 
+import { englishDictionarySource } from '../../helpers/englishNamespaces.js';
+
 const root = new URL('../../../', import.meta.url);
 const read = (path) => readFileSync(new URL(path, root), 'utf8');
 
@@ -24,7 +26,7 @@ const biometricSource = read(
 const attachmentSource = read('packages/core/src/shared/routes/ComposeMessage.jsx');
 const endpointSource = read(
     'packages/core/src/shared/components/settings/NetworkEndpointsSection.jsx',
-);
+) + englishDictionarySource();
 
 function plistString(key) {
     const match = new RegExp(

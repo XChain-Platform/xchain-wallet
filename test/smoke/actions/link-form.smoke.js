@@ -80,11 +80,15 @@ assert.ok(reviewFnStart !== -1 && submitFnStart !== -1 && reviewFnStart < submit
 const reviewFnBody = src.slice(reviewFnStart, submitFnStart);
 assert.ok(!reviewFnBody.includes('linkAction'),
     'handleReview body does not call linkAction (signing is gated by review)');
-// Review block renders decoded previews for both sides.
-assert.ok(/Side A decoded/.test(src),
-    'Review stage shows Side A decoded label');
-assert.ok(/Side B decoded/.test(src),
-    'Review stage shows Side B decoded label');
+// Review block renders a plain-language preview for both actions.
+assert.ok(/>First action</.test(src),
+    'Review stage shows the First action label');
+assert.ok(/>Second action</.test(src),
+    'Review stage shows the Second action label');
+assert.ok(!/Side [AB] decoded/.test(src),
+    'Review stage carries no decoder jargon in its labels');
+assert.ok(!/JSON\.stringify\(action\)/.test(src),
+    'decodePreview never falls back to raw action JSON');
 // Network fee row from estimateNativeSendFee.
 assert.ok(/estimateNativeSendFee/.test(src),
     'LinkForm imports and uses estimateNativeSendFee for the Network fee row');

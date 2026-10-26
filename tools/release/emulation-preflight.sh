@@ -56,7 +56,8 @@
 #   XCHAIN_BINFMT_DIR                 default /proc/sys/fs/binfmt_misc
 #   XCHAIN_REPRODUCE_ALLOW_EMULATION  1 = proceed anyway, loudly
 #
-# Exit 0 proceed, exit 2 usage (an unrecognised option), exit 3 refuse.
+# Exit 0 proceed, exit 2 usage (an unrecognised option, or a non-amd64
+# target the host would have to emulate), exit 3 refuse.
 
 set -euo pipefail
 
@@ -85,11 +86,15 @@ reproducible build, or will it die minutes in inside the bundler?
 Usage:
   bash tools/release/emulation-preflight.sh [platform]
 
-  platform   Docker platform to check, default linux/amd64.
+  platform   Docker platform to check, default linux/amd64. Any platform
+             the host runs natively passes; a platform it would have to
+             emulate must be amd64, the only target the emulator verdicts
+             below were measured for.
 
 Exit codes:
   0  proceed: native, or an emulator that finishes (Rosetta)
-  2  usage:   an unrecognised option; the only positional is a platform
+  2  usage:   an unrecognised option (the only positional is a platform),
+              or a non-amd64 target the host would have to emulate
   3  refuse:  qemu-user or an unknown emulator, which crashes the build
               with a message that names neither qemu nor the architecture
 
@@ -162,6 +167,16 @@ if [ "${HOST_ARCH_N}" = "${TARGET_ARCH_N}" ]; then
     exit 0
 fi
 
+# Refuse to judge emulation of any target but amd64: Rosetta translates
+# x86_64 only, and the qemu refusal rests on qemu-x86_64 crashing the build,
+# so every verdict below would describe amd64 instead of the platform asked.
+if [ "${TARGET_ARCH_N}" != "amd64" ]; then
+    echo "[preflight] cannot judge emulating ${TARGET_PLATFORM} on host ${HOST_ARCH}:" >&2
+    echo "[preflight] this check only knows which emulators finish a linux/amd64 build." >&2
+    echo "[preflight] Run a ${TARGET_ARCH_N} target on a host that runs it natively." >&2
+    exit 2
+fi
+
 say "host ${HOST_ARCH} must EMULATE ${TARGET_PLATFORM}"
 
 # macOS: binfmt_misc is a Linux mechanism, so which emulator Docker Desktop
@@ -185,10 +200,9 @@ if [ ! -d "${BINFMT_DIR}" ]; then
     refuse "no ${BINFMT_DIR}, so no way to tell what would execute the ${TARGET_ARCH_N} binaries."
 fi
 
-# An entry is only interesting when it is enabled AND claims the target
-# architecture. Name matching is what separates the two emulators; the
-# `enabled` line is what stops a stale, disabled registration from reading
-# as a working route.
+# Keep only enabled entries named for one of the two amd64 emulators (amd64
+# is the only target that reaches here). Name matching separates the two;
+# the `enabled` line stops a stale registration reading as a working route.
 rosetta_handler=""
 qemu_handler=""
 for entry in "${BINFMT_DIR}"/*; do

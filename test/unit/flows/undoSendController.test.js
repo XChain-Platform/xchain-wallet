@@ -165,3 +165,20 @@ describe('undo-send controller', () => {
         expect(c.cancel()).toBe(true);
     });
 });
+
+describe('undo-send controller across a clock change', () => {
+    it('keeps counting down when the clock is set back mid-countdown', () => {
+        const h = harness();
+        h.controller.start(30);
+        h.advance(10_000);
+        expect(h.onTick).toHaveBeenLastCalledWith(20);
+
+        h.advance(-3_600_000);
+        expect(h.onTick).toHaveBeenLastCalledWith(20);
+        h.advance(5_000);
+        expect(h.onTick).toHaveBeenLastCalledWith(15);
+        h.advance(15_000);
+        expect(h.onElapsed).toHaveBeenCalledTimes(1);
+        expect(h.controller.state()).toBe('elapsed');
+    });
+});

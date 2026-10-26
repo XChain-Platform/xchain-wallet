@@ -90,6 +90,15 @@ describe('History export serialization', () => {
         expect(csv).toContain('"\'=HYPERLINK(""https://example.invalid"", ""memo"")\nnext line"');
     });
 
+    it('neutralizes a formula hidden behind a leading tab or carriage return', () => {
+        const csv = entriesToCsv([
+            { raw: { memo: '\t=1+1' } },
+            { raw: { memo: '\r=1+1' } },
+        ], { columns: ['memo'] });
+
+        expect(csv).toBe("Memo\n'\t=1+1\n\"'\r=1+1\"\n");
+    });
+
     it('serializes numeric amounts with a locale-independent decimal point', () => {
         const csv = entriesToCsv([{ raw: { amount: 1234.5 } }], { columns: ['amount'] });
 

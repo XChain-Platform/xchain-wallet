@@ -13,7 +13,6 @@
 // Dogecoin's fork, so rbfSupported:false caps every stored or per-send RBF flag.
 
 import { DOGECOIN_ACTIONS } from '../actions.js';
-import { ADS_DONATION_ADDRESS_PLACEHOLDER } from '../validate.js';
 
 const COMMON = {
     coin: 'dogecoin',
@@ -35,7 +34,6 @@ const COMMON = {
     },
     supportedActions: DOGECOIN_ACTIONS,
     uriScheme: 'dogecoin',
-    adsDonationAddress: ADS_DONATION_ADDRESS_PLACEHOLDER,
     // §36.1 per-coin ADS defaults: 0.05 DOGE per tx (5,000,000 koinu),
     // donation attached once 1.25 DOGE has accumulated (~25 txs).
     adsDefaults: { perTxAmountSats: 5_000_000, triggerAmountSats: 125_000_000 },
@@ -52,6 +50,12 @@ export const dogecoinDescriptors = [
         platformListOwners: [],
         icon: 'dogecoin-mainnet-icon-20.png',
         wifVersionByte: 0x9e,
+        adsDonationAddresses: {
+            DONATE1: 'DDonate1RBcwGnCRNnVtwuCmQyWW1Gn25f',
+            DONATE2: 'DDonate2o3Sg4phybp92oFpkmv8S9ZhGSV',
+            EXPLORER: 'DDonate3FCoUgi1bxW5r9c2p75uKTLw9qE',
+        },
+        adsDonationAddress: 'DDonate1RBcwGnCRNnVtwuCmQyWW1Gn25f',
         explorer: { defaultUrl: 'https://explorer.xchain.io', defaultPort: 443 },
         encoder: { defaultUrl: 'https://encoder.xchain.io/DOGE', defaultPort: 443 },
         hub: { defaultUrl: 'https://hub.xchain.io/DOGE', defaultPort: 443 },
@@ -65,6 +69,12 @@ export const dogecoinDescriptors = [
         platformListOwners: [],
         icon: 'dogecoin-testnet-icon-20.png',
         wifVersionByte: 0xf1,
+        adsDonationAddresses: {
+            DONATE1: 'ndonate1dE87UXUFf4gjyhPg7hfQRJXVXr',
+            DONATE2: 'ndonate2wev8vKDgvd1DHhtJtvkRbn2usJ',
+            EXPLORER: 'ndonate3xHD56SnmmSxbjX7UMSPfN7XmVA',
+        },
+        adsDonationAddress: 'ndonate1dE87UXUFf4gjyhPg7hfQRJXVXr',
         explorer: { defaultUrl: 'https://explorer.xchain.io', defaultPort: 443 },
         encoder: { defaultUrl: 'https://encoder.xchain.io/TDOGE', defaultPort: 443 },
     },
@@ -80,6 +90,12 @@ export const dogecoinDescriptors = [
         // for WIF), not Dogecoin-testnet (0xf1). Matches xchain-sdk
         // networks.js and the four backend services' CryptoNetworks.
         wifVersionByte: 0xef,
+        adsDonationAddresses: {
+            DONATE1: 'mzdg8wGxgP3Jk45FuZPspumCL3Ruup37ob',
+            DONATE2: 'mmXU8RU7q3BUsyT66rtw1H6P7B2ZZd9c5Y',
+            EXPLORER: 'n1AvTJLLSA1NHamHd5KFj9mRn6BEcwnVbf',
+        },
+        adsDonationAddress: 'mzdg8wGxgP3Jk45FuZPspumCL3Ruup37ob',
         explorer: { defaultUrl: 'http://localhost', defaultPort: 18080 },
         encoder: { defaultUrl: 'http://localhost', defaultPort: 3123 },
         hub: { defaultUrl: 'http://localhost', defaultPort: 10000 },

@@ -161,6 +161,27 @@ describe('Send: multi-recipient (PC-52)', () => {
         expect(payload).toMatchObject({ to: ALICE, tick: 'PEPE', amount: '7' });
     });
 
+    it('refuses a total one unit over the balance even when every leg is under it', async () => {
+        const messaging = mount();
+        // PEPE holds 1000 whole units: 500 + 501 is one unit too many.
+        await fillFirst({ amount: '500' });
+        fireEvent.click(await addRecipient());
+        await fillRow(1, { to: BOB, amount: '501' });
+        expect(await screen.findByText('The total PEPE across all recipients exceeds the available balance.')).toBeInTheDocument();
+        fireEvent.click(screen.getByRole('button', { name: /^Send$/ }));
+        expect(messaging.composeForConfirm).not.toHaveBeenCalled();
+    });
+
+    it('still composes a total that equals the balance exactly', async () => {
+        const messaging = mount();
+        await fillFirst({ amount: '500' });
+        fireEvent.click(await addRecipient());
+        await fillRow(1, { to: BOB, amount: '500' });
+        expect(screen.queryByText(/across all recipients exceeds the available balance/)).toBeNull();
+        fireEvent.click(screen.getByRole('button', { name: /^Send$/ }));
+        await waitFor(() => expect(messaging.composeForConfirm).toHaveBeenCalled());
+    });
+
     it('removing the added recipient returns to a single-leg payload', async () => {
         const messaging = mount();
         await fillFirst();

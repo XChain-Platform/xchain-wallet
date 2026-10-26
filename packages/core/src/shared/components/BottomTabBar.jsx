@@ -16,7 +16,9 @@ import {
     navItem,
 } from './LeftNav.jsx';
 import { ROUTE_NAV_SECTIONS, TAB_BAR_DESTINATIONS } from '../routeRegistry.js';
-import { OverlaySurface } from './OverlaySurface.jsx';
+// The More sheet opens only on a tap, so its surface and styles load on demand.
+import { OverlaySurfaceOnDemand as OverlaySurface } from './onDemandOverlays.js';
+import { openWhenLoaded, useIdlePreload } from '../utils/onDemandComponent.js';
 import styles from './BottomTabBar.module.css';
 import { useBackHandler } from '../../ui/backStack.js';
 import { useFocusTrap } from '../utils/focusTrap.js';
@@ -106,6 +108,7 @@ export function BottomTabBar({
     const [rovingTab, setRovingTab] = useState(null);
     const moreTriggerRef = useRef(null);
     const sheetRef = useRef(null);
+    useIdlePreload(OverlaySurface);
     // The system Back gesture closes this before it leaves the screen.
     useBackHandler(sheetOpen ? () => setSheetOpen(false) : undefined);
     useFocusTrap(sheetRef, { active: sheetOpen, restoreFocusRef: moreTriggerRef });
@@ -235,7 +238,11 @@ export function BottomTabBar({
                     aria-expanded={sheetOpen ? 'true' : 'false'}
                     aria-controls="xc-bottom-sheet"
                     onFocus={() => setRovingTab('more')}
-                    onClick={() => setSheetOpen((v) => !v)}
+                    onClick={() => {
+                        // Open once the surface is loaded, so the focus trap sees the sheet.
+                        if (sheetOpen) setSheetOpen(false);
+                        else openWhenLoaded(OverlaySurface, () => setSheetOpen(true));
+                    }}
                 >
                     <span className={styles.tabIcon} aria-hidden="true">
                         <Icon.MenuIcon />

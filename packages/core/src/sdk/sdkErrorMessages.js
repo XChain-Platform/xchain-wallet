@@ -118,7 +118,7 @@ const LOCAL_CODE_MESSAGES = Object.freeze({
     HUB_UNAVAILABLE: 'The wallet could not reach its service directory. Check your connection and try again.',
     NON_FINITE_AMOUNT: 'A wallet service returned an invalid amount. Try again, and report it if it continues.',
     INVALID_SATS_AMOUNT: 'A wallet service returned an invalid amount. Try again, and report it if it continues.',
-    REVEAL_INPUTS_REFUSED: 'The follow-up transaction did not match the transaction already sent, so it was not signed. Retry the reveal, and report it if it continues.',
+    REVEAL_INPUTS_REFUSED: 'The follow-up transaction did not match the first transaction, so nothing was signed or sent. Try again, and report it if it continues.',
 });
 
 const NAME_ONLY_MESSAGES = Object.freeze({

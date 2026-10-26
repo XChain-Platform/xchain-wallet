@@ -16,6 +16,7 @@ import {
     decoder as decoderLib,
     flows as flowsLib,
 } from '@xchain-wallet/core';
+import '../../i18n/locales/en/send.js';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { useDemoGuard } from '../hooks/useDemoGuard.jsx';
 import { useActionConfirmFlow, isUserRejection } from '../hooks/useActionConfirmFlow.js';
@@ -37,6 +38,13 @@ import { NativeFeeToggle } from '../components/NativeFeeToggle.jsx';
 import { NATIVE_FEE_WARNING } from '../../sdk/nativeFeePreflight.js';
 import { submitFailureMessage } from '../utils/submitFailureMessage.js';
 import { TICKER_HINT, tickerGrammarError } from '../utils/tickerGrammar.js';
+import {
+    MAX_ISSUE_TEXT_LENGTH,
+    issueDescriptionError,
+    issueImageUrlError,
+    issueSupplyLimitError,
+} from '../utils/issueFieldValidation.js';
+import { actionTextSafetyError } from '../utils/actionTextSafety.js';
 import styles from './TokenWizard.module.css';
 import { useNativeFee } from '../hooks/useNativeFee.js';
 import {
@@ -205,6 +213,7 @@ export function TokenWizard({ walletId, onBack }) {
     const [password, setPassword] = useState('');
     const [result, setResult] = useState(/** @type {any | null} */ (null));
     const submitPendingRef = useRef(false);
+    const parentCheckRef = useRef(false);
 
     // The active map and the settings read are best-effort: a host without
     // `getActiveAddresses` / `getSettings`, or one whose call fails, still
@@ -374,8 +383,9 @@ export function TokenWizard({ walletId, onBack }) {
         });
     }, [stage, actionParams, chainId]);
 
-    function handleDetailsSubmit(event) {
+    async function handleDetailsSubmit(event) {
         event.preventDefault();
+        if (parentCheckRef.current) return;
         if (!chainId || !fromAddress) {
             setFormError('Pick a source address first.');
             return;
@@ -386,6 +396,11 @@ export function TokenWizard({ walletId, onBack }) {
         const nameError = tickerGrammarError(name, { noun: 'Token name' });
         if (nameError) {
             setFormError(nameError);
+            return;
+        }
+        const descriptionError = actionTextSafetyError(description, 'Description');
+        if (descriptionError) {
+            setFormError(descriptionError);
             return;
         }
         if (template === 'subtoken') {
@@ -430,6 +445,11 @@ export function TokenWizard({ walletId, onBack }) {
                 setFormError(decimals === 0
                     ? 'Supply must be a whole number for an indivisible token.'
                     : 'Supply can have at most 8 decimal places.');
+                return;
+            }
+            const supplyLimitError = issueSupplyLimitError(supply);
+            if (supplyLimitError) {
+                setFormError(supplyLimitError);
                 return;
             }
         }
@@ -486,6 +506,16 @@ export function TokenWizard({ walletId, onBack }) {
             setFormError('Image URL is required for this template.');
             return;
         }
+        // Collectible and edition write the image URL into DESCRIPTION, so it
+        // takes the description rules; the others write the description field.
+        const usesImageUrl = template === 'collectible' || template === 'edition';
+        const storedTextError = usesImageUrl
+            ? issueImageUrlError(imageUrl)
+            : issueDescriptionError(description);
+        if (storedTextError) {
+            setFormError(storedTextError);
+            return;
+        }
         // PC-06: the advanced fields share the create transaction, so a
         // bad one costs the whole token, not just the field. Pre-flight
         // them here rather than letting the indexer reject the ISSUE.
@@ -511,8 +541,49 @@ export function TokenWizard({ walletId, onBack }) {
             setFormError(`Initial mint destination is not valid for ${descriptor?.displayName || 'this chain'}.`);
             return;
         }
+        if (template === 'subtoken') {
+            parentCheckRef.current = true;
+            let parentError = null;
+            try {
+                parentError = await parentOwnershipError();
+            } finally {
+                parentCheckRef.current = false;
+            }
+            if (parentError) {
+                setFormError(parentError);
+                return;
+            }
+        }
         setFormError(null);
         setStage('preview');
+    }
+
+    // The chain refuses a subtoken whose parent is missing or owned by another
+    // address, after the fee is spent. Look the parent up before review: it has
+    // to exist, be owned by this wallet, and be owned by the fee-paying address
+    // that will sign. An explorer that cannot answer is a refusal, never a pass.
+    async function parentOwnershipError() {
+        if (flowsLib.isDemoWallet(walletId)) return null;
+        const parent = parentToken.trim();
+        const unconfirmed = `${parent} could not be confirmed as a token this wallet owns. `
+            + 'Check the ticker and your connection, then try again.';
+        if (typeof messaging?.getTokenInfo !== 'function') return unconfirmed;
+        let info = null;
+        try {
+            info = await messaging.getTokenInfo({ chainId, tick: parent });
+        } catch {
+            return unconfirmed;
+        }
+        const creator = info?.creator;
+        if (!creator) return unconfirmed;
+        const owned = (addressesByChain?.[chainId] || []).map((a) => a?.address);
+        if (!owned.includes(creator)) {
+            return `This wallet does not own ${parent}. A subtoken can only be created by the owner of its parent.`;
+        }
+        if (creator !== fromAddress.address) {
+            return `${parent} is owned by another address in this wallet. Go back and choose it as the address that pays the fee.`;
+        }
+        return null;
     }
 
     // Compose, tamper-check, and pre-flight run host-side after review.
@@ -598,7 +669,8 @@ export function TokenWizard({ walletId, onBack }) {
     );
     const wrap = (children) => (
         <Screen variant={variant} header={header} restoreScroll={stage !== 'preview'}>
-            {!networkAvailable ? (
+            {/* A load error is the page's one message; the offline note waits. */}
+            {!networkAvailable && !loadError ? (
                 <StatusMessage variant="warning">Creating a token needs a network connection.</StatusMessage>
             ) : null}
             {children}
@@ -1379,11 +1451,11 @@ function renderDetailsStage({
             {show.description ? (
                 <Input
                     label="Description (optional)"
-                    hint="Up to 250 characters. Stored on-chain."
+                    hint={`Up to ${MAX_ISSUE_TEXT_LENGTH} characters. Stored on-chain.`}
                     value={description}
                     onChange={(e) => setDescription(e.target.value)}
                     autoComplete="off"
-                    maxLength={250}
+                    maxLength={MAX_ISSUE_TEXT_LENGTH}
                 />
             ) : null}
             {show.imageUrl ? (
@@ -1397,7 +1469,7 @@ function renderDetailsStage({
                     autoComplete="off"
                     autoCapitalize="off"
                     autoCorrect="off"
-                    maxLength={250}
+                    maxLength={MAX_ISSUE_TEXT_LENGTH}
                 />
             ) : null}
             {show.maxMint ? (

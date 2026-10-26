@@ -271,6 +271,20 @@ describe('integration/shells/pre-host fresh-install backup restore', () => {
         expect(addresses.map((a) => a.address)).toEqual(['bc1qexample']);
     });
 
+    it('persists the vault in one blob write, before the kdf params', async () => {
+        // A service worker that dies between per-record writes would leave a blob
+        // with no kdf params: unopenable, and refused by every onboarding lane.
+        const writes = [];
+        const saveBlob = storageBackend.save;
+        const saveMeta = metaBackend.save;
+        storageBackend.save = async (blob) => { writes.push('blob'); return saveBlob(blob); };
+        metaBackend.save = async (m) => { writes.push('meta'); return saveMeta(m); };
+
+        await restore();
+
+        expect(writes).toEqual(['blob', 'meta']);
+    });
+
     it('the restored seed opens under the NEW device password', async () => {
         // The fresh-install half. Without the re-key the user would
         // choose a password here, unlock with it, and then be unable to sign.

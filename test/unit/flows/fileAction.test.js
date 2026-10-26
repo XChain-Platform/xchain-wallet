@@ -49,6 +49,14 @@ describe('fileAction input validation', () => {
         await expect(fileAction({ ...VALID, memo: 'm|m' })).rejects.toThrow(/cannot contain/);
     });
 
+    it.each([
+        ['name', 'bad\u0000.png'],
+        ['title', 'bad\u202etitle'],
+        ['memo', 'bad\u200bmemo'],
+    ])('rejects hostile invisible text in %s', async (field, value) => {
+        await expect(fileAction({ ...VALID, [field]: value })).rejects.toThrow(/cannot contain/);
+    });
+
     it('rejects non-text optional metadata instead of silently dropping it', async () => {
         await expect(fileAction({ ...VALID, title: 7 })).rejects.toThrow(/title must be text/);
         await expect(fileAction({ ...VALID, memo: 7 })).rejects.toThrow(/memo must be text/);

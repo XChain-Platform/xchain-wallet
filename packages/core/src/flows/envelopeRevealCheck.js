@@ -22,6 +22,7 @@ import { exactNetworkFeeSats } from './psbtNetworkFee.js';
  * @typedef {Object} EnvelopeRevealVerdict
  * @property {boolean} ok
  * @property {string} [reason]   machine-readable refusal code when not ok
+ * @property {string} [decodeReason]   the decoder's own reason, on REVEAL_ACTION_UNDECODABLE
  */
 
 /**
@@ -77,7 +78,12 @@ export function checkEnvelopeReveal({
     // The action in the envelope leaf is byte for byte the approved one.
     let decoded;
     try { decoded = decodeRevealAction(); } catch { decoded = null; }
-    if (!decoded?.ok || decoded.actionString !== actionString) {
+    // The decoder refuses a variadic field outright (an airdrop's LIST of
+    // recipients), whatever the bytes say. That is a limit of this wallet's
+    // verifier, not evidence of tampering, so it is told apart below, but only
+    // once the binding rule has proved the reveal carries the approved bytes.
+    const undecodableSize = decoded?.ok === false && UNDECODABLE_SIZE_REASONS.has(decoded.reason);
+    if (!undecodableSize && (!decoded?.ok || decoded.actionString !== actionString)) {
         return { ok: false, reason: 'REVEAL_ACTION_MISMATCH' };
     }
 
@@ -90,7 +96,33 @@ export function checkEnvelopeReveal({
     try { assertEnvelopeCarrierBinding({ revealPsbt, actionString, network }); } catch {
         return { ok: false, reason: 'REVEAL_CARRIER_BINDING' };
     }
+    // Still a refusal: the bytes match, but the decoder could not read them,
+    // so nothing here has verified what the action does.
+    if (undecodableSize) {
+        return { ok: false, reason: 'REVEAL_ACTION_UNDECODABLE', decodeReason: decoded.reason };
+    }
     return { ok: true };
+}
+
+// Decoder refusals that are about an action's variadic size, never its bytes.
+// UNKNOWN_ACTION joins them for the one repeating-field format (LIST v4) the
+// decoder does not read at all: the binding rule has already proved the bytes
+// are the approved action, so the decoder not knowing the format is a limit of
+// the verifier.
+const UNDECODABLE_SIZE_REASONS = new Set(['REST_FIELD_UNSUPPORTED', 'REST_FIELD_TOO_LONG', 'UNKNOWN_ACTION']);
+
+/**
+ * What the user reads when a reveal is refused. Every reason is a refusal and
+ * nothing is signed; only the wording differs, so a verifier limit does not
+ * read as tampering.
+ *
+ * @param {string} reason   an EnvelopeRevealVerdict reason
+ * @returns {string}
+ */
+export function envelopeRevealRefusalMessage(reason) {
+    return reason === 'REVEAL_ACTION_UNDECODABLE'
+        ? 'This wallet cannot yet verify actions of this size. Split it into smaller actions.'
+        : 'The action encoded in the transaction does not match what you approved.';
 }
 
 /**

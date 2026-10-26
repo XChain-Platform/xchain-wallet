@@ -20,6 +20,7 @@
 
 import { describe, it, expect, vi } from 'vitest';
 import { createBackgroundHost } from '../../../packages/extension/src/background/createBackgroundHost.js';
+import { createBroadcastQueueStore } from '../../../packages/extension/src/background/broadcastQueueStore.js';
 
 const CHAIN = 'bitcoin-regtest';
 const W = 'w1';
@@ -61,7 +62,7 @@ const record = (id, extra = {}) => ({
 });
 
 /** A host whose vault can attribute A_ADDR to wallet W. */
-function makeHost({ storage, pendingTxs = memCollection(), broadcastTx = vi.fn(), vault } = {}) {
+function makeHost({ storage, pendingTxs = memCollection(), broadcastTx = vi.fn(), vault, queueStore } = {}) {
     const sdk = { encoder: { broadcastTx } };
     const host = createBackgroundHost({
         vault: vault ?? {
@@ -82,6 +83,7 @@ function makeHost({ storage, pendingTxs = memCollection(), broadcastTx = vi.fn()
         bridgeEvents: { emit() {} },
         getDiagnosticContext: () => ({}),
         broadcastQueueStorage: storage ?? { load: async () => ({}), save: async () => {}, clear: async () => {} },
+        ...(queueStore ? { broadcastQueueStore: queueStore } : {}),
         signThrottleStorage: null,
         logConsoleStorage: null,
     });
@@ -295,6 +297,88 @@ describe('the vault rebuild runs while the queue blob is unreadable', () => {
         store.recover();
         const ids = (await h.list()).map((e) => e.signedTxHex).sort();
         expect(ids).toEqual(['hex-p1', 'hex-psbt']);
+    });
+});
+
+describe('a readable blob entry whose record reads broadcasting reloads as a resumed claim', () => {
+    const blobEntry = {
+        id: 'blob-1',
+        chainId: CHAIN,
+        signedTxHex: 'hex-p1',
+        summary: 'Send p1',
+        signedAt: 1,
+        pendingTxId: 'p1',
+        adsCommit: { chainId: CHAIN, donationIncluded: true },
+    };
+    const readableStorage = (initial) => {
+        let backing = JSON.parse(JSON.stringify(initial));
+        const saves = [];
+        return {
+            saves,
+            adapter: {
+                load: async () => JSON.parse(JSON.stringify(backing)),
+                save: async (snapshot) => { backing = JSON.parse(JSON.stringify(snapshot)); saves.push(backing); },
+                clear: async () => { backing = {}; },
+            },
+        };
+    };
+
+    it('labels the reloaded row once, saves the label, and a fresh worker keeps it', async () => {
+        const records = memCollection();
+        await records.put(record('p1', { status: 'broadcasting' }));
+        const store = readableStorage({ [W]: [blobEntry] });
+        const listed = await makeHost({ storage: store.adapter, pendingTxs: records }).list();
+        expect(listed).toHaveLength(1);
+        expect(listed[0]).toMatchObject({ id: 'blob-1', resumedClaim: true });
+        await settle();
+        expect(store.saves.at(-1)[W]).toEqual([expect.objectContaining({ id: 'blob-1', resumedClaim: true })]);
+
+        const reopened = await makeHost({ storage: store.adapter, pendingTxs: records }).list();
+        expect(reopened).toHaveLength(1);
+        expect(reopened[0].resumedClaim).toBe(true);
+    });
+
+    it('leaves a reloaded row whose record reads queued unlabelled', async () => {
+        const records = memCollection();
+        await records.put(record('p1'));
+        const store = readableStorage({ [W]: [blobEntry] });
+        const listed = await makeHost({ storage: store.adapter, pendingTxs: records }).list();
+        expect(listed).toHaveLength(1);
+        expect(listed[0].resumedClaim).toBeUndefined();
+    });
+
+    it('labels the row a worker killed inside the network call left behind', async () => {
+        const records = memCollection();
+        await records.put(record('p1'));
+        const store = readableStorage({ [W]: [blobEntry] });
+        const dying = makeHost({ storage: store.adapter, pendingTxs: records, broadcastTx: vi.fn(() => new Promise(() => {})) });
+        const [row] = await dying.list();
+        void dying.call('broadcast.queue.broadcast', { walletId: W, id: row.id });
+        await vi.waitFor(async () => { expect((await records.get('p1')).status).toBe('broadcasting'); });
+        expect(store.saves.at(-1)?.[W]?.[0]?.resumedClaim).toBeUndefined();
+
+        const fresh = await makeHost({ storage: store.adapter, pendingTxs: records }).list();
+        expect(fresh).toHaveLength(1);
+        expect(fresh[0].resumedClaim).toBe(true);
+    });
+
+    it('leaves the row unlabelled while a host built after a lock still broadcasts it', async () => {
+        const records = memCollection();
+        await records.put(record('p1'));
+        const store = readableStorage({ [W]: [blobEntry] });
+        const shared = createBroadcastQueueStore({ storage: store.adapter, prunedLedger: null });
+        const gate = deferred();
+        const torn = makeHost({ queueStore: shared, pendingTxs: records, broadcastTx: vi.fn(() => gate.promise) });
+        const [row] = await torn.list();
+        const inFlight = torn.call('broadcast.queue.broadcast', { walletId: W, id: row.id });
+        await vi.waitFor(async () => { expect((await records.get('p1')).status).toBe('broadcasting'); });
+
+        const rebuilt = await makeHost({ queueStore: shared, pendingTxs: records }).list();
+        expect(rebuilt).toHaveLength(1);
+        expect(rebuilt[0].resumedClaim).toBeUndefined();
+
+        gate.resolve('tx-p1');
+        expect((await inFlight).ok).toBe(true);
     });
 });
 

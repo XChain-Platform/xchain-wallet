@@ -68,7 +68,8 @@ function messaging(composeForConfirm, { walletMode = 'full', buildActionPsbtRequ
         getSettings: vi.fn().mockResolvedValue({ walletMode }),
         signerReady: vi.fn().mockResolvedValue({ ready: true }),
         getSignerStatus: vi.fn().mockResolvedValue({ status: 'unlocked' }),
-        getTokenInfo: vi.fn().mockResolvedValue({ divisibility: 8 }),
+        // ADDRESS issued ALPHA, so the owner-only ownership sale opens for it.
+        getTokenInfo: vi.fn().mockResolvedValue({ divisibility: 8, creator: ADDRESS.address }),
         composeForConfirm,
         ...(buildActionPsbtRequest ? { buildActionPsbtRequest } : {}),
     };
@@ -211,5 +212,37 @@ describe('swap form submit safety', () => {
         fireEvent.submit(form);
 
         expect(buildActionPsbtRequest).toHaveBeenCalledTimes(1);
+    });
+
+    it.each([
+        ['over 250 bytes', 'x'.repeat(251), /251 bytes; the network accepts at most 250 bytes/],
+        // The shared action-text refusal answers first, before the memo's own check.
+        ['a bidirectional override', 'pay \u202etxt.exe', /Memo cannot contain text-direction control characters/],
+        ['a tab', 'a\tb', /Memo cannot contain control characters/],
+    ])('refuses a memo %s before composing', async (_label, memo, message) => {
+        const composeForConfirm = vi.fn().mockResolvedValue({ psbt: 'aa00' });
+        render(
+            <MessagingProvider shell='desktop' messaging={messaging(composeForConfirm)}>
+                <SwapForm walletId='w' onBack={() => {}} initialChainId={BTC} initialGiveTick='ALPHA' />
+            </MessagingProvider>,
+        );
+        await fillSwap();
+        fireEvent.change(screen.getByLabelText(/^Memo/), { target: { value: memo } });
+        fireEvent.click(screen.getByRole('button', { name: 'Review' }));
+        expect(await screen.findByText(message)).toBeInTheDocument();
+        expect(composeForConfirm).not.toHaveBeenCalled();
+    });
+
+    it('accepts a memo of exactly 250 bytes', async () => {
+        const composeForConfirm = vi.fn().mockResolvedValue({ psbt: 'aa00' });
+        render(
+            <MessagingProvider shell='desktop' messaging={messaging(composeForConfirm)}>
+                <SwapForm walletId='w' onBack={() => {}} initialChainId={BTC} initialGiveTick='ALPHA' />
+            </MessagingProvider>,
+        );
+        await fillSwap();
+        fireEvent.change(screen.getByLabelText(/^Memo/), { target: { value: 'x'.repeat(250) } });
+        fireEvent.click(screen.getByRole('button', { name: 'Review' }));
+        await waitFor(() => expect(composeForConfirm).toHaveBeenCalledTimes(1));
     });
 });

@@ -27,6 +27,23 @@ describe('createAccount name validation', () => {
             .rejects.toThrow('createAccount: name must be a non-empty string');
     });
 
+    it.each(['\u200B', '\u2800'])('rejects the invisible account name %j', async (name) => {
+        await expect(createAccount(options([], name)))
+            .rejects.toThrow('createAccount: name must be a non-empty string');
+    });
+
+    it('rejects an account name over 64 characters', async () => {
+        await expect(createAccount(options([], 'x'.repeat(65))))
+            .rejects.toThrow('createAccount: name must be 64 characters or fewer');
+    });
+
+    it('rejects a name that differs from an existing one only by invisible characters', async () => {
+        const accounts = [{ id: 'account-1', walletId: 'wallet-1', index: 0, name: 'Savings' }];
+
+        await expect(createAccount(options(accounts, 'Savings\u200B')))
+            .rejects.toThrow('already exists');
+    });
+
     it('rejects an existing account name case-insensitively', async () => {
         const accounts = [{ id: 'account-1', walletId: 'wallet-1', index: 0, name: 'Savings' }];
 

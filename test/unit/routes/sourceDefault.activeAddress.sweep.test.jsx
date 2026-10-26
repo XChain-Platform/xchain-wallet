@@ -61,7 +61,7 @@ const ADDRESSES = { [CHAIN]: [ACTIVE, NEWEST_PERSONAL, DELEGATED] };
 
 const byId = (id) => ADDRESSES[CHAIN].find((a) => a.id === id)?.address;
 
-function mount(Form, props, activeByChain, walletMode) {
+function mount(Form, props, activeByChain, walletMode, issuer) {
     const messaging = {
         getAddressesByChain: vi.fn().mockResolvedValue(ADDRESSES),
         getActiveAddresses: vi.fn().mockResolvedValue(activeByChain),
@@ -82,7 +82,9 @@ function mount(Form, props, activeByChain, walletMode) {
         React.createElement(
             MessagingProvider,
             { shell: 'web', messaging },
-            React.createElement(Form, { walletId: 'w', onBack() {}, ...props }),
+            // Owner-only forms refuse until the issuer is confirmed, so each
+            // case names the address it expects the form to choose.
+            React.createElement(Form, { walletId: 'w', onBack() {}, issuerAddress: issuer, ...props }),
         ),
     );
     return messaging;
@@ -224,18 +226,18 @@ const FORMS = [
 
 describe.each(FORMS)('$name source default', ({ Form, props, read, walletMode = 'full' }) => {
     it('defaults to the active address, not the newest one', async () => {
-        const messaging = mount(Form, props, { [CHAIN]: { id: ACTIVE.id, address: ACTIVE.address } }, walletMode);
+        const messaging = mount(Form, props, { [CHAIN]: { id: ACTIVE.id, address: ACTIVE.address } }, walletMode, ACTIVE.address);
         expect(await read()).toBe(ACTIVE.address);
         expect(messaging.getActiveAddresses).toHaveBeenCalled();
     });
 
     it('never defaults to a dispenser-delegated address, even as the active entry', async () => {
-        mount(Form, props, { [CHAIN]: { id: DELEGATED.id, address: DELEGATED.address } }, walletMode);
+        mount(Form, props, { [CHAIN]: { id: DELEGATED.id, address: DELEGATED.address } }, walletMode, NEWEST_PERSONAL.address);
         expect(await read()).toBe(NEWEST_PERSONAL.address);
     });
 
     it('falls back to the newest personal address when the host has no active map', async () => {
-        mount(Form, props, {}, walletMode);
+        mount(Form, props, {}, walletMode, NEWEST_PERSONAL.address);
         expect(await read()).toBe(NEWEST_PERSONAL.address);
     });
 });

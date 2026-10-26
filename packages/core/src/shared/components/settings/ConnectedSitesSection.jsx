@@ -50,7 +50,19 @@ import {
 } from '../../../flows/signThrottle.js';
 import local from './ConnectedSitesSection.module.css';
 import { blurNumberInputOnWheel } from '../../utils/formInput.js';
+import { neutralizeControlText } from '../../utils/textHardening.js';
 import { t } from '../../../i18n/index.js';
+import '../../../i18n/locales/en/accountPicker.js';
+import '../../../i18n/locales/en/extension.js';
+import '../../../i18n/locales/en/send.js';
+import '../../../i18n/locales/en/settings.js';
+
+// A connected site names itself, so its name and origin are hostile input:
+// bidi overrides would reorder the name, and a 240-character host would run
+// past the card edge where the user cannot read the whole origin.
+const siteName = (site) => neutralizeControlText(site.appName || site.origin, { maxLength: 120 });
+const siteOrigin = (site) => neutralizeControlText(site.origin, { maxLength: 2048 });
+const SITE_ORIGIN_STYLE = { display: 'block', overflowWrap: 'anywhere', unicodeBidi: 'isolate' };
 
 // Each part of the page is one shared card, like the rows on every other Settings page.
 function SettingsCard({ children }) {
@@ -117,9 +129,9 @@ export function ConnectedSitesSection() {
         const snapshot = sites ? sites.find((s) => s.id === id) : null;
         if (!snapshot) return;
         const confirmed = await confirmDialog.confirm({
-            title: `Disconnect ${snapshot.appName || snapshot.origin}?`,
-            message: `${snapshot.origin} will lose access to the accounts you shared and will no longer be able to ask for signatures. You can reconnect the site later.`,
-            confirmLabel: 'Disconnect site',
+            title: t('settings.connectedSites.disconnectTitle', { name: siteName(snapshot) }),
+            message: t('settings.connectedSites.disconnectMessage', { origin: siteOrigin(snapshot) }),
+            confirmLabel: t('settings.connectedSites.disconnectSite'),
             danger: true,
         });
         if (!confirmed) return;
@@ -129,8 +141,8 @@ export function ConnectedSitesSection() {
             await reload();
             if (snapshot && typeof messaging.restoreConnectedSite === 'function') {
                 showToast({
-                    message: `Disconnected ${snapshot.appName || snapshot.origin}`,
-                    actionLabel: 'Undo',
+                    message: t('settings.connectedSites.disconnectedToast', { name: siteName(snapshot) }),
+                    actionLabel: t('settings.connectedSites.undo'),
                     onAction: async () => {
                         try {
                             await messaging.restoreConnectedSite({ site: snapshot });
@@ -151,9 +163,9 @@ export function ConnectedSitesSection() {
     const onBlock = async (origin, pendingKey = `block:${origin}`) => {
         if (pendingAction) return false;
         const confirmed = await confirmDialog.confirm({
-            title: `Block ${origin}?`,
-            message: 'This disconnects the site and prevents it from connecting or asking you to sign until you unblock it.',
-            confirmLabel: 'Block site',
+            title: t('settings.connectedSites.blockTitle', { origin: neutralizeControlText(origin, { maxLength: 2048 }) }),
+            message: t('settings.connectedSites.blockMessage'),
+            confirmLabel: t('settings.connectedSites.blockSite'),
             danger: true,
         });
         if (!confirmed) return false;
@@ -216,13 +228,13 @@ export function ConnectedSitesSection() {
                             <FormSection
                                 key={site.id}
                                 headingLevel="h3"
-                                title={site.appName || site.origin}
+                                title={siteName(site)}
                                 description={(
                                     <>
                                         {/* A site with no app name is titled by its
                                             origin, so the origin line would repeat it. */}
                                         {site.appName && site.appName !== site.origin ? (
-                                            <span style={{ display: 'block' }}>{site.origin}</span>
+                                            <span dir="ltr" style={SITE_ORIGIN_STYLE}>{siteOrigin(site)}</span>
                                         ) : null}
                                         <span style={ROW_HINT}>
                                             {t('settings.connectedSites.lastUsed')} {formatLastUsed(site.lastUsedAt)} {t('settings.connectedSites.connected')} {formatLastUsed(site.connectedAt)}
@@ -329,9 +341,9 @@ function BlocklistAuditPanel({ confirm }) {
     const onClear = async () => {
         if (clearing) return;
         const confirmed = await confirm({
-            title: 'Clear site block history?',
-            message: 'This permanently deletes the record of sites you blocked or unblocked.',
-            confirmLabel: 'Clear history',
+            title: t('settings.connectedSites.clearHistoryTitle'),
+            message: t('settings.connectedSites.clearHistoryMessage'),
+            confirmLabel: t('settings.connectedSites.clearHistory'),
             danger: true,
         });
         if (!confirmed) return;
@@ -426,7 +438,7 @@ function BlocklistAuditPanel({ confirm }) {
 // write the documented defaults because the settings patcher deep-merges
 // nested objects and cannot remove an existing nested key.
 function SignThrottlePanel() {
-    const { settings, update } = useSettings();
+    const { settings, update } = useSettings({ reportsOwnError: true });
     const [submitting, setSubmitting] = useState(false);
     const [error, setError] = useState(/** @type {string | null} */ (null));
     const [validationAttempt, setValidationAttempt] = useState(0);
@@ -607,7 +619,7 @@ function BlockedOriginsPanel({ blocked, manualBlock, setManualBlock, onSubmit, o
                                 style={{ display: 'flex', flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 'var(--xc-space-2)' }}
                             >
                                 {/* Native list items preserve blocked-origin list semantics because the kit has no list primitive. */}
-                                <span style={{ color: 'var(--xc-text)', wordBreak: 'break-all' }}>{origin}</span>
+                                <span dir="ltr" style={{ color: 'var(--xc-text)', overflowWrap: 'anywhere', unicodeBidi: 'isolate' }}>{neutralizeControlText(origin, { maxLength: 2048 })}</span>
                                 <Button
                                     type="button"
                                     size="sm"
@@ -703,9 +715,9 @@ function permColor(perm) {
 }
 
 function permissionLabel(perm) {
-    if (perm === 'always') return 'Always allow';
-    if (perm === 'never') return 'Never allow';
-    return 'Ask every time';
+    if (perm === 'always') return t('settings.connectedSites.alwaysAllow');
+    if (perm === 'never') return t('settings.connectedSites.permNever');
+    return t('settings.connectedSites.askEveryTime');
 }
 
 function formatWindowSeconds(windowMs) {

@@ -35,9 +35,40 @@ describe('contacts', () => {
     });
 
     it('lists vault contacts and normalizes a non-array result', async () => {
-        const rows = [{ id: 'contact-1' }];
-        await expect(listContacts({ vault: makeVault(rows) })).resolves.toBe(rows);
+        const rows = [{
+            schemaVersion: 1,
+            id: 'contact-1',
+            name: 'Alice',
+            notes: '',
+            entries: [ENTRY],
+            avatarSeed: ENTRY.address,
+            createdAt: '2026-01-01T00:00:00.000Z',
+            updatedAt: '2026-01-01T00:00:00.000Z',
+        }];
+        await expect(listContacts({ vault: makeVault(rows) })).resolves.toEqual(rows);
         await expect(listContacts({ vault: makeVault(null) })).resolves.toEqual([]);
+    });
+
+    it('keeps valid contacts available when stored rows are malformed', async () => {
+        const valid = {
+            schemaVersion: 1,
+            id: 'alice',
+            name: 'Alice',
+            notes: '',
+            entries: [ENTRY],
+            avatarSeed: ENTRY.address,
+            createdAt: '2026-01-01T00:00:00.000Z',
+            updatedAt: '2026-01-01T00:00:00.000Z',
+        };
+        const malformed = { id: 'broken', name: 'Broken', entries: {} };
+
+        await expect(listContacts({ vault: makeVault([malformed, valid]) }))
+            .resolves.toEqual([valid]);
+        await expect(findContactByAddress({
+            vault: makeVault([malformed, valid]),
+            chain: 'bitcoin',
+            address: ENTRY.address,
+        })).resolves.toBe(valid);
     });
 
     it('finds an exact chain and address pair across contact entries', async () => {

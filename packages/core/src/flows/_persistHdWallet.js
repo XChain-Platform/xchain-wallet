@@ -30,6 +30,38 @@ import { tickerForCoin } from '../registry/coinTicker.js';
 import { ensureSettings } from './seedSettings.js';
 import { unlockWalletRecord } from './unlockWallet.js';
 
+// The same phrase (and passphrase) imported twice derives the same addresses.
+// A second wallet over the same keys would double-count every balance and
+// make the picker list two wallets that are one. Refusing is deliberate over
+// silently reusing the first: nothing is written, and the user is told which
+// wallet already holds it.
+export class DuplicateWalletError extends Error {
+    constructor(walletName) {
+        super(`This recovery phrase is already in this app as "${walletName}".`);
+        this.name = 'DuplicateWalletError';
+        this.walletName = walletName;
+    }
+}
+
+/**
+ * Name of the stored HD wallet that already owns one of `derived`, or null.
+ * Compares the first address per chain, which is fixed by phrase and passphrase.
+ */
+async function existingWalletNameFor(vault, derived) {
+    const stored = await vault.addresses.list();
+    for (const { address } of derived) {
+        const match = stored.find((existing) => existing.source === 'hd'
+            && existing.address === address.address
+            && existing.chain === address.chain
+            && existing.network === address.network);
+        if (!match) continue;
+        const account = await vault.accounts.get(match.accountId);
+        const wallet = account ? await vault.wallets.get(account.walletId) : null;
+        return wallet?.name || 'another wallet';
+    }
+    return null;
+}
+
 /**
  * @typedef {Object} PersistOpts
  * @property {string} mnemonic                      already normalized + validated
@@ -250,6 +282,9 @@ export async function persistHdWallet({
             }
             addresses.push({ chainId, address: record });
         }
+
+        const duplicateOf = await existingWalletNameFor(vault, addresses);
+        if (duplicateOf !== null) throw new DuplicateWalletError(duplicateOf);
 
         // 8. Seed per-chain Settings entries (fees + ADS) for any
         //    active chain not already configured. Idempotent: a user's

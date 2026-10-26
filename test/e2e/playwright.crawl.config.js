@@ -36,6 +36,7 @@ const VENUES = [
         name: 'android-lg-k51',
         use: {
             browserName: 'chromium',
+            channel: 'chromium',
             viewport: { width: 411, height: 814 },
             deviceScaleFactor: 1.75,
             isMobile: true,
@@ -56,6 +57,7 @@ const VENUES = [
         name: 'narrow-360',
         use: {
             browserName: 'chromium',
+            channel: 'chromium',
             viewport: { width: 360, height: 800 },
             deviceScaleFactor: 2,
             isMobile: true,

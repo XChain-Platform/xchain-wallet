@@ -15,6 +15,7 @@ import {
     registry as registryLib,
     decoder as decoderLib,
 } from '@xchain-wallet/core';
+import '../../i18n/locales/en/send.js';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { useDemoGuard } from '../hooks/useDemoGuard.jsx';
 import { useGatedTickNotice, gatedTickWarningCopy } from '../hooks/useGatedTickNotice.js';
@@ -59,7 +60,7 @@ import styles from './IssueTokenForm.module.css';
 import { preferredSourceId } from '../addressSelection.js';
 import { pickDefaultChainId } from '../chainSelection.js';
 import { QueuedResultPanel } from '../components/QueuedResultPanel.jsx';
-import { MEMO_HINT } from '../utils/memoLimit.js';
+import { MEMO_HINT, memoLengthError } from '../utils/memoLimit.js';
 import { listMembers } from '../../flows/allowListSelfCheck.js';
 import { normalizeProtocolFee } from '../../flows/protocolFeeRow.js';
 
@@ -112,7 +113,7 @@ export function DividendForm({ walletId, onBack, initialChainId, initialTick, in
         /** @type {string | null} */ (null),
     );
 
-    const [tick, setTick] = useState((initialTick || '').toUpperCase());
+    const [tick, setTick] = useState(initialTick || '');
     const [dividendTick, setDividendTick] = useState('');
     // PC-26: dividends carry no gated-key handoff; warn when the
     // distributed token has gated content.
@@ -213,12 +214,14 @@ export function DividendForm({ walletId, onBack, initialChainId, initialTick, in
     // doesn't fire one query per keystroke; the 400ms window is long
     // enough to feel snappy without hammering the explorer.
     useEffect(() => {
-        const trimmed = tick.trim().toUpperCase();
+        const trimmed = tick.trim();
         if (!chainId || !trimmed) {
             setHolders({ loading: false, rows: null, error: null });
             return;
         }
-        setHolders((prev) => ({ ...prev, loading: true, error: null }));
+        // The previous token's holders must not feed the payout total, the
+        // balance gate or Max while this token's holders load.
+        setHolders({ loading: true, rows: null, error: null });
         let cancelled = false;
         const handle = setTimeout(() => {
             messaging.getHoldersForToken({ chainId, tick: trimmed, all: true })
@@ -255,7 +258,7 @@ export function DividendForm({ walletId, onBack, initialChainId, initialTick, in
     // such holder set, so typing it (BTC/LTC/DOGE, or a testnet/regtest
     // explorer form like TDOGE) is refused here instead of at the
     // confirm-time dry run. A `^ID` reference never names the coin.
-    const trimmedTick = tick.trim().toUpperCase();
+    const trimmedTick = tick.trim();
     const tickIsNativeCoin = useMemo(
         () => !trimmedTick.startsWith('^') && isNativeCoinTick(trimmedTick, { coinTicker, descriptor }),
         [trimmedTick, coinTicker, descriptor],
@@ -307,7 +310,7 @@ export function DividendForm({ walletId, onBack, initialChainId, initialTick, in
         return () => { cancelled = true; clearTimeout(handle); };
     }, [trimmedTick, chainId, messaging, tickIsNativeCoin, lockedToken]);
 
-    const trimmedDividendTick = dividendTick.trim().toUpperCase();
+    const trimmedDividendTick = dividendTick.trim();
     useEffect(() => {
         setDividendTickCheck({ verdict: null, error: null });
         if (!chainId || !trimmedDividendTick || trimmedDividendTick.startsWith('^')) return undefined;
@@ -360,7 +363,7 @@ export function DividendForm({ walletId, onBack, initialChainId, initialTick, in
     // be paid at 9.998 per unit).
     const dividendInfo = useTokenInfo({
         chainId,
-        tick: dividendTick.trim().toUpperCase(),
+        tick: dividendTick.trim(),
         skip: !dividendTick.trim(),
     });
 
@@ -415,8 +418,8 @@ export function DividendForm({ walletId, onBack, initialChainId, initialTick, in
         /** @type {Record<string, string>} */
         const p = {
             VERSION: '0',
-            TICK: tick.trim().toUpperCase(),
-            DIVIDEND_TICK: dividendTick.trim().toUpperCase(),
+            TICK: tick.trim(),
+            DIVIDEND_TICK: dividendTick.trim(),
             AMOUNT: String(amount).trim(),
         };
         if (memo.trim()) p.MEMO = memo.trim();
@@ -647,6 +650,8 @@ export function DividendForm({ walletId, onBack, initialChainId, initialTick, in
             setFormError('Memo cannot contain | or ; characters.');
             return;
         }
+        const memoError = memoLengthError(memo.trim());
+        if (memoError) { setFormError(memoError); return; }
         setFormError(null);
         if (singleEncode) { openConfirmScreen(); return; }
         setStage('review');
@@ -913,7 +918,7 @@ export function DividendForm({ walletId, onBack, initialChainId, initialTick, in
                             key={d.label}
                             label={d.label}
                             value={d.label === 'Per-unit amount'
-                                ? `${d.value} ${dividendTick.trim().toUpperCase()}`
+                                ? `${d.value} ${dividendTick.trim()}`
                                 : d.value}
                         />
                     ))}
@@ -928,7 +933,7 @@ export function DividendForm({ walletId, onBack, initialChainId, initialTick, in
                                 <>
                                     <dt className={styles.detailsLabel}>Total distribution</dt>
                                     <dd className={styles.detailsValue}>
-                                        ~{formatWithThousands(preview.total)} {dividendTick.trim().toUpperCase()}
+                                        ~{formatWithThousands(preview.total)} {dividendTick.trim()}
                                     </dd>
                                 </>
                             ) : null}
@@ -959,7 +964,7 @@ export function DividendForm({ walletId, onBack, initialChainId, initialTick, in
                 <p className={styles.hint} data-testid="dividend-review-fee-hint">
                     Paying a dividend has a protocol fee that grows with the number
                     of holders paid, charged separately from the payout. Make sure
-                    this address holds enough {dividendTick.trim().toUpperCase() || 'of the token you are paying out'}
+                    this address holds enough {dividendTick.trim() || 'of the token you are paying out'}
                     {' '}to cover the full payout.
                 </p>
                 {isWatcherMode ? (
@@ -1042,7 +1047,7 @@ export function DividendForm({ walletId, onBack, initialChainId, initialTick, in
                 title="Select token"
                 networkFilter={coinFromChainId(chainId)}
                 onSelect={(sel) => {
-                    setTick(String(sel.tick || '').toUpperCase());
+                    setTick(String(sel.tick || ''));
                     setTokenPickerOpen(false);
                 }}
                 onBack={() => setTokenPickerOpen(false)}
@@ -1058,7 +1063,7 @@ export function DividendForm({ walletId, onBack, initialChainId, initialTick, in
                 title="Select dividend token"
                 networkFilter={coinFromChainId(chainId)}
                 onSelect={(sel) => {
-                    setDividendTick(String(sel.tick || '').toUpperCase());
+                    setDividendTick(String(sel.tick || ''));
                     setDividendPickerOpen(false);
                 }}
                 onBack={() => setDividendPickerOpen(false)}
@@ -1136,7 +1141,7 @@ export function DividendForm({ walletId, onBack, initialChainId, initialTick, in
                 onMax={maxPayable ? () => setAmount(maxPerUnit) : undefined}
                 maxDisabled={!maxPayable}
                 balanceText={dividendBalance != null && dividendTick.trim()
-                    ? `${formatWithThousands(dividendBalance)} ${dividendTick.trim().toUpperCase()} available${
+                    ? `${formatWithThousands(dividendBalance)} ${dividendTick.trim()} available${
                         maxPayable ? ` · up to ${formatWithThousands(maxPerUnit)} per unit` : ''}`
                     : null}
             />
@@ -1160,7 +1165,7 @@ export function DividendForm({ walletId, onBack, initialChainId, initialTick, in
                             : holders.rows ? `${preview?.eligibleCount ?? 0} eligible holder${(preview?.eligibleCount ?? 0) === 1 ? '' : 's'}`
                                 : ''}
                     {preview?.total
-                        ? ` · total distribution ~${formatWithThousands(preview.total)} ${dividendTick.trim().toUpperCase() || 'tokens'}`
+                        ? ` · total distribution ~${formatWithThousands(preview.total)} ${dividendTick.trim() || 'tokens'}`
                         : ''}
                 </p>
             ) : null}

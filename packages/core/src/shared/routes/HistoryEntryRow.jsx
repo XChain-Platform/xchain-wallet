@@ -13,6 +13,8 @@ import { VerifiedBadge } from '@xchain-wallet/core/ui';
 import { useBalancesHidden } from '../hooks/useBalancesHidden.js';
 import { tickerForCoin, tickerForDescriptor } from '../../registry/coinTicker.js';
 import { t } from '../../i18n/index.js';
+import '../../i18n/locales/en/history.js';
+import '../../i18n/locales/en/pending.js';
 import { actionDisplayLabel } from '../utils/actionDisplayLabel.js';
 import { ActivityRow } from '../components/ActivityRow.jsx';
 import { classifyEntryAction, classifyEntryStatus } from '../utils/historyFilter.js';
@@ -20,6 +22,7 @@ import { contractDisplayLabel } from './contractResponseShape.js';
 import { truncateAddress } from '../../ui/AddressText.jsx';
 import {
     formatDecimalAmount,
+    isDisplayableAmount,
     formatHistoryAmount,
     formatHistoryAmountForSpeech,
 } from '../utils/amountFormat.js';
@@ -83,6 +86,9 @@ function settledAmountAnnotation(entry) {
     const amount = raw.amount ?? raw.AMOUNT ?? raw.quantity ?? raw.QUANTITY;
     const tick = raw.tick ?? raw.TICK ?? raw.token;
     if (amount == null || !tick) return null;
+    // A value that is not a plain decimal (an object, NaN, Infinity) has no
+    // figure to print; the row shows a placeholder instead of its String().
+    if (!isDisplayableAmount(amount)) return { amount: null, tick: String(tick), direction: null };
     return { amount: String(amount), tick: String(tick), direction: historyAmountDirection(entry) };
 }
 
@@ -237,11 +243,16 @@ export const EntryRow = memo(function EntryRow({ entry, selected, opensDetail = 
         && (actionKind === 'sweep' || actionKind === 'issue')
         ? activityRowAmount(entry, { divisibility: recordDivisibility(entry.raw) })
         : '';
+    // An amount is a left-to-right figure in every locale: in a right-to-left
+    // page its sign would otherwise land after the number ("1.5-").
     // Hidden balances mask the figure here as they do on Home and in the
     // pending annotation; the ticker stays, since it is not an amount.
-    const amount = settledAmount ? (
+    const amount = settledAmount && settledAmount.amount === null ? (
+        <span data-history-amount="unavailable" dir="ltr">{t('common.notAvailable')}</span>
+    ) : settledAmount ? (
         <span
             data-history-amount={settledAmount.direction || 'unknown'}
+            dir="ltr"
             aria-label={balancesHidden ? undefined : formatHistoryAmountForSpeech(
                 settledAmount.amount,
                 settledAmount.tick,
@@ -251,7 +262,7 @@ export const EntryRow = memo(function EntryRow({ entry, selected, opensDetail = 
             {balancesHidden ? '•••••' : formatHistoryAmount(settledAmount.amount, settledAmount.direction)} {settledAmount.tick}
         </span>
     ) : entry.blockIndex ? (baseUnitAmount ? (
-        <span data-history-amount="unknown">
+        <span data-history-amount="unknown" dir="ltr">
             {balancesHidden ? '•••••' : baseUnitAmount} {tick}
         </span>
     ) : tick) : (
@@ -289,7 +300,11 @@ export const EntryRow = memo(function EntryRow({ entry, selected, opensDetail = 
                 chainId={entry.chainId}
                 tick={tick}
                 isNative={tick === nativeTick}
-                label={actionDisplayLabel(actionKind) || actionDisplayLabel(entry.action)}
+                // The filter bucket names the common verbs. An action outside every
+                // bucket is named by its own verb, so a stake or a contract call
+                // reads "Stake" or "Contract call" rather than a bare "Other".
+                label={actionDisplayLabel(actionKind === 'other' ? entry.action : actionKind)
+                    || actionDisplayLabel(entry.action)}
                 context={(
                     <>
                         {linkedTo ? <span role="img" aria-label={linkedTo} title={linkedTo}>🔗</span> : null}

@@ -58,6 +58,7 @@ import {
     StatusMessage,
     Textarea,
 } from '@xchain-wallet/core/ui';
+import { useBackHandler } from '../../../ui/backStack.js';
 import { useMessaging, screenVariantFor } from '../../useMessaging.js';
 import { DiagnosticDetails } from '../DiagnosticDetails.jsx';
 import { ActionConfirmScreen } from '../ActionConfirmScreen.jsx';
@@ -76,6 +77,11 @@ import { ROW_HINT, STACK, SettingsActionRow, SettingsInlineForm, Status } from '
 import cardStyles from '../../../ui/Card.module.css';
 import styles from './BackupSection.module.css';
 import { t } from '../../../i18n/index.js';
+import '../../../i18n/locales/en/gatedPublish.js';
+import '../../../i18n/locales/en/history.js';
+import '../../../i18n/locales/en/importWallet.js';
+import '../../../i18n/locales/en/send.js';
+import '../../../i18n/locales/en/settings.js';
 
 /** How often the Backup panel asks the background whether a batched publish came due. */
 const AUTO_SYNC_POLL_MS = 15_000;
@@ -157,8 +163,12 @@ export function BackupSection({ activeWallet }) {
         setRevealError(null);
     }, [activeWalletId]);
 
+    // Leaving the screen (a lock included) retires any reveal or export still
+    // in flight, so a reply that lands afterwards neither shows a phrase nor
+    // saves a file the user no longer asked to see.
     useEffect(() => () => {
         revealAttemptRef.current += 1;
+        exportAttemptRef.current += 1;
     }, []);
 
     // §19.6 dry-run restore state.
@@ -301,6 +311,8 @@ export function BackupSection({ activeWallet }) {
         setRevealStage('idle');
         setRevealError(null);
     }
+
+    useBackHandler(revealStage !== 'idle' ? handleHideMnemonic : undefined);
 
     async function runDryRun({ mnemonic: candidate, format, bip39Passphrase, gapLimit }) {
         if (typeof messaging?.dryRunRestoreRequest !== 'function') {

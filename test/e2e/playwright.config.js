@@ -20,34 +20,28 @@
 // tests without reloading the tab. One worker + one tab + one IDB =
 // linear, easy-to-reason-about runs.
 //
-// The `webServer` spawns `pnpm -C packages/web dev`. On CI this gets
-// the `CI=1` + `reuseExistingServer: false` path so each job starts
-// from a clean port. Locally we reuse if already running.
+// The `webServer` spawns `pnpm -C packages/web dev` on a port this suite owns
+// (E2E_DEV_PORT, default 5473) with --strictPort and never reuses a listener:
+// a listener another session leaves on a shared port serves that session's
+// tree, so a busy port fails the run loudly instead.
 //
-// The timeouts are NOT constants. This suite shares a machine
-// with whatever else is on it, and on a busy one it used to fail a
-// different spec each run while every one of them passed in isolation.
-// `timeout-budget.js` sizes the budget from the measured load; see its
-// header for why a single number could not be right for both an idle and
-// a contended box. Pin `PW_TIMEOUT_SCALE=1` to reproduce the old numbers.
+// The timeouts are NOT constants. This suite shares a machine with whatever
+// else is on it, and a fixed budget on a busy one fails a different spec each
+// run while every one of them passes in isolation. `timeout-budget.js` sizes
+// the budget from the measured load; see its header for why a single number
+// cannot be right for both an idle and a contended box. Pin
+// `PW_TIMEOUT_SCALE=1` for the unscaled budget.
 
 import { defineConfig, devices } from '@playwright/test';
 
 import { describeBudget, timeoutBudget } from './timeout-budget.js';
+import { desktopUserAgentForHost } from './host-user-agent.js';
 
-export function desktopUserAgentForHost(
-    platform = process.platform,
-    desktopUserAgent = devices['Desktop Chrome'].userAgent,
-) {
-    const platformToken = {
-        darwin: 'Macintosh; Intel Mac OS X 10_15_7',
-        linux: 'X11; Linux x86_64',
-        win32: 'Windows NT 10.0; Win64; x64',
-    }[platform];
-    return platformToken
-        ? desktopUserAgent.replace(/\([^)]*\)/, `(${platformToken})`)
-        : desktopUserAgent;
-}
+export { desktopUserAgentForHost };
+
+// Not 5173: that is the port every other dev server and sweep config defaults to.
+const PORT = Number(process.env.E2E_DEV_PORT) || 5473;
+const BASE_URL = `http://localhost:${PORT}`;
 
 const budget = timeoutBudget();
 // Named in the run's own output, so a red run is self-describing: the
@@ -94,7 +88,7 @@ export default defineConfig({
         ? [['github'], ['html', { open: 'never' }]]
         : 'list',
     use: {
-        baseURL: 'http://localhost:5173',
+        baseURL: BASE_URL,
         trace: 'retain-on-failure',
         video: 'retain-on-failure',
         screenshot: 'only-on-failure',
@@ -107,13 +101,21 @@ export default defineConfig({
                 // Playwright derives navigator.platform from this user agent,
                 // keeping ControlOrMeta aligned with the app's host shortcut gate.
                 userAgent: desktopUserAgentForHost(),
+                // New headless: the full browser, which renders like the headed one users run.
+                channel: 'chromium',
+                launchOptions: {
+                    // The dev-mock suite reaches only loopback. Route handlers do not
+                    // cover WebSockets, so the resolver refuses every other host, which
+                    // keeps a spec from reaching a live explorer by any transport.
+                    args: ['--host-resolver-rules=MAP * ~NOTFOUND, EXCLUDE localhost, EXCLUDE 127.0.0.1'],
+                },
             },
         },
     ],
     webServer: {
-        command: 'pnpm -C ../../packages/web dev',
-        url: 'http://localhost:5173',
-        reuseExistingServer: !process.env.CI,
+        command: `pnpm -C ../../packages/web dev --port ${PORT} --strictPort`,
+        url: BASE_URL,
+        reuseExistingServer: false,
         timeout: 120_000,
         stdout: 'pipe',
         stderr: 'pipe',

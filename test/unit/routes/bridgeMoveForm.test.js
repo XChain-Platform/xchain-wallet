@@ -568,7 +568,7 @@ describe('BridgeMoveForm: invalid action fields', () => {
     it('blocks malformed source and destination addresses before compose', async () => {
         const badSource = { ...BTC_ADDRESS, address: 'not-a-bitcoin-address' };
         const messaging = mount({ byChain: { [BTC]: [badSource], [DOGE]: [DOGE_ADDRESS] } });
-        expect(await screen.findByText('This address has a typo. Check it and try again.', {}, WAIT))
+        expect(await screen.findByText('This is not a valid address.', {}, WAIT))
             .toBeInTheDocument();
         expect(moveButton()).toBeDisabled();
         expect(messaging.composeForConfirm).not.toHaveBeenCalled();
@@ -576,7 +576,7 @@ describe('BridgeMoveForm: invalid action fields', () => {
         cleanup();
         const badDestination = { ...DOGE_ADDRESS, address: 'not-a-dogecoin-address' };
         const second = mount({ byChain: { [BTC]: [BTC_ADDRESS], [DOGE]: [badDestination] } });
-        expect(await screen.findByText('This address has a typo. Check it and try again.', {}, WAIT))
+        expect(await screen.findByText('This is not a valid address.', {}, WAIT))
             .toBeInTheDocument();
         expect(moveButton()).toBeDisabled();
         expect(second.composeForConfirm).not.toHaveBeenCalled();

@@ -62,10 +62,7 @@ async function expectNoHorizontalOverflow(page, label) {
     ).toBeLessThanOrEqual(clientWidth + 1);
 }
 
-// Known product defect, listed for a fix: in CoSignerPolicyEditor's per-action
-// limit row the Remove button (md) aligns to the bottom of AmountField, which is
-// its sm Paste footer, not the field. Remove this entry once the row is fixed.
-const KNOWN_MISMATCHES = [['Paste from clipboard', 'Remove']];
+const KNOWN_MISMATCHES = [];
 
 async function expectSharedLineControlsMatch(page, label) {
     await settleLayout(page);

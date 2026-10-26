@@ -131,7 +131,7 @@ describe('SignerPool low-coverage branches', () => {
             },
         });
         vi.mocked(unlockWalletRecord).mockResolvedValue(signer);
-        const vault = ownershipVault({ wallets: { put: vi.fn() } });
+        const vault = ownershipVault({ wallets: { get: async () => null, put: vi.fn() } });
 
         await expect(pool.captureOne({
             vault,
@@ -152,7 +152,7 @@ describe('SignerPool low-coverage branches', () => {
         });
         vi.mocked(unlockWalletRecord).mockResolvedValue(signer);
         const vault = ownershipVault({
-            wallets: { put: async () => { pool.evict('wallet-1'); } },
+            wallets: { get: async () => null, put: async () => { pool.evict('wallet-1'); } },
         });
 
         await expect(pool.captureOne({

@@ -14,6 +14,7 @@ import fs from 'node:fs';
 import { describe, expect, it, vi } from 'vitest';
 import {
     assertOriginsAllowed,
+    preflightUrl,
     runOriginPreflight,
     suiteOrigin,
     suitePort,
@@ -86,15 +87,15 @@ describe('testnet origin preflight', () => {
     it('accepts wildcard and exact-origin headers and skips an empty hub URL', async () => {
         const fetch = vi.fn(async (endpoint) => response(
             204,
-            endpoint === ENDPOINTS.encoderUrl ? '*' : ORIGIN,
+            endpoint === `${ENDPOINTS.encoderUrl}/` ? '*' : ORIGIN,
         ));
 
         await expect(assertOriginsAllowed(ENDPOINTS, { origin: ORIGIN, fetch })).resolves.toBeUndefined();
 
         expect(fetch).toHaveBeenCalledTimes(2);
         expect(fetch.mock.calls.map(([endpoint]) => endpoint)).toEqual([
-            ENDPOINTS.encoderUrl,
-            ENDPOINTS.explorerUrl,
+            `${ENDPOINTS.encoderUrl}/`,
+            `${ENDPOINTS.explorerUrl}/`,
         ]);
     });
 
@@ -104,7 +105,7 @@ describe('testnet origin preflight', () => {
 
         await assertOriginsAllowed(endpoints, { origin: ORIGIN, fetch });
 
-        expect(fetch.mock.calls).toEqual(Object.values(endpoints).map((endpoint) => [endpoint, {
+        expect(fetch.mock.calls).toEqual(Object.values(endpoints).map((endpoint) => [`${endpoint}/`, {
             method: 'OPTIONS',
             headers: {
                 Origin: ORIGIN,
@@ -221,5 +222,30 @@ describe('testnet suite origin', () => {
 
         expect(suitePort(env)).toBe(expectedPort);
         expect(suiteOrigin(env)).toBe(`http://localhost:${suitePort(env)}`);
+    });
+});
+
+describe('testnet origin preflight URL', () => {
+    it('asks the base URL with the trailing slash the SDK clients request under', () => {
+        expect(preflightUrl('https://encoder.xchain.io/TBTC')).toBe('https://encoder.xchain.io/TBTC/');
+        expect(preflightUrl('https://explorer.xchain.io')).toBe('https://explorer.xchain.io/');
+    });
+
+    it('leaves a URL that already ends in a slash unchanged', () => {
+        expect(preflightUrl('https://encoder.xchain.io/TBTC/')).toBe('https://encoder.xchain.io/TBTC/');
+    });
+
+    it('accepts an origin that only the slash path allows, as encoder.xchain.io/TBTC does', async () => {
+        const base = 'https://encoder.xchain.io/TBTC';
+        const fetch = vi.fn(async (url) => (url === `${base}/`
+            ? response(204, ORIGIN)
+            : response(200)));
+
+        await expect(assertOriginsAllowed(
+            { encoderUrl: base, explorerUrl: '', hubUrl: '' },
+            { origin: ORIGIN, fetch },
+        )).resolves.toBeUndefined();
+        expect(fetch).toHaveBeenCalledOnce();
+        expect(fetch.mock.calls[0][0]).toBe(`${base}/`);
     });
 });

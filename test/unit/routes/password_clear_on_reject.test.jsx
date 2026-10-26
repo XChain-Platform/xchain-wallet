@@ -75,7 +75,7 @@ async function rejectConfirmation() {
 describe('confirmation password cleanup', () => {
     it('clears GatedPublishForm password after Reject', async () => {
         mount(GatedPublishForm, {
-            walletId: 'wallet-1', chainId: CHAIN_ID, tick: 'GATE', onBack() {},
+            walletId: 'wallet-1', chainId: CHAIN_ID, tick: 'GATE', issuerAddress: FROM.address, onBack() {},
         });
         const file = new File(['content'], 'gated.txt', { type: 'text/plain' });
         fireEvent.change(await screen.findByLabelText('File to publish'), { target: { files: [file] } });
@@ -90,7 +90,7 @@ describe('confirmation password cleanup', () => {
 
     it('clears ProjectRosterForm password after Reject', async () => {
         mount(ProjectRosterForm, {
-            walletId: 'wallet-1', chainId: CHAIN_ID, tick: 'PROJ', onBack() {},
+            walletId: 'wallet-1', chainId: CHAIN_ID, tick: 'PROJ', issuerAddress: FROM.address, onBack() {},
         });
         fireEvent.change(await screen.findByLabelText('Tokens (one per line)'), {
             target: { value: 'MEMBER' },
@@ -104,7 +104,7 @@ describe('confirmation password cleanup', () => {
 describe('primary action validation', () => {
     it('asks for a file when gated publish Review is pressed', async () => {
         mount(GatedPublishForm, {
-            walletId: 'wallet-1', chainId: CHAIN_ID, tick: 'GATE', onBack() {},
+            walletId: 'wallet-1', chainId: CHAIN_ID, tick: 'GATE', issuerAddress: FROM.address, onBack() {},
         });
         const action = await screen.findByRole('button', { name: 'Review' });
 
@@ -116,7 +116,7 @@ describe('primary action validation', () => {
 
     it('asks for a token when roster Review is pressed', async () => {
         mount(ProjectRosterForm, {
-            walletId: 'wallet-1', chainId: CHAIN_ID, tick: 'PROJ', onBack() {},
+            walletId: 'wallet-1', chainId: CHAIN_ID, tick: 'PROJ', issuerAddress: FROM.address, onBack() {},
         });
         await screen.findByLabelText('Tokens (one per line)');
         const action = screen.getByRole('button', { name: 'Review list' });

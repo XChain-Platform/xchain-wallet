@@ -213,14 +213,15 @@ describe('Settings at a 320px viewport', () => {
         expectNoFixedWidthOverflow(container);
     });
 
-    it('keeps placeholder prose and onboarding choices readable without forced word breaks', () => {
+    it('keeps the donation address and onboarding choices readable without forced word breaks', () => {
         settings = seedSettingsForChains(settings, defaultRegistry(), ['bitcoin-mainnet']);
         const { container } = renderSettings('ads');
-        // The visible placeholder is short; the full explanation stays in its accessible description.
-        const placeholder = screen.getByDisplayValue('Not available yet.');
-        expect(placeholder).toHaveAttribute('aria-description', expect.stringMatching(/A donation address for Bitcoin arrives/));
-        expect(placeholder).toHaveAttribute('readonly');
-        expect(container).toContainElement(placeholder);
+        // Shipped chains carry their real DONATE1 address, so the field shows it
+        // read-only instead of the not-yet-available placeholder.
+        const address = screen.getByDisplayValue('1Donate1GERVKPW6GFQcnGeTa8dgL6Abyp');
+        expect(address).toHaveAttribute('readonly');
+        expect(container).toContainElement(address);
+        expect(screen.queryByDisplayValue('Not available yet.')).toBeNull();
         // The word-count choice is the kit RadioGroup; its option copy wraps instead of overflowing.
         expect(radioGroupCss).toMatch(/\.option\s*\{[^}]*minmax\(0, 1fr\)/s);
         expect(radioGroupCss).toMatch(/\.label\s*\{[^}]*overflow-wrap:\s*anywhere;/s);

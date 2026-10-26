@@ -20,17 +20,49 @@ describe('deriveExtensionVersion', () => {
         expect(deriveExtensionVersion('12.34.56-rc.789')).toBe('0.12.34.789');
     });
 
+    it('maps a beta below its stable release', () => {
+        const beta = deriveExtensionVersion('0.342.0-beta.1');
+        const stable = deriveExtensionVersion('0.342.0');
+
+        expect(beta).toBe('0.0.342.1');
+        expect(compareChromeVersions(beta, stable)).toBeLessThan(0);
+    });
+
+    it('maps a respin above its stable release', () => {
+        const stable = deriveExtensionVersion('0.299.4');
+        const respin = deriveExtensionVersion('0.299.4-respin.1');
+
+        expect(respin).toBe('0.299.4.1');
+        expect(compareChromeVersions(respin, stable)).toBeGreaterThan(0);
+    });
+
     it('rejects build metadata with the documented shape error', () => {
         expect(() => deriveExtensionVersion('1.2.3+build.7')).toThrowError(
             new Error('deriveExtensionVersion: unrecognized wallet version "1.2.3+build.7"; '
-                + "expected 'M.m.p' or 'M.m.p-rc.N'"),
+                + "expected 'M.m.p', 'M.m.p-rc.N', 'M.m.p-beta.N' or 'M.m.p-respin.N'"),
         );
     });
 
     it('rejects malformed input with the documented shape error', () => {
-        expect(() => deriveExtensionVersion('1.2.3-beta.1')).toThrowError(
-            new Error('deriveExtensionVersion: unrecognized wallet version "1.2.3-beta.1"; '
-                + "expected 'M.m.p' or 'M.m.p-rc.N'"),
+        expect(() => deriveExtensionVersion('1.2.3-preview.1')).toThrowError(
+            new Error('deriveExtensionVersion: unrecognized wallet version "1.2.3-preview.1"; '
+                + "expected 'M.m.p', 'M.m.p-rc.N', 'M.m.p-beta.N' or 'M.m.p-respin.N'"),
+        );
+    });
+
+    it('rejects lane zero because it cannot preserve strict ordering', () => {
+        expect(() => deriveExtensionVersion('1.2.3-respin.0')).toThrowError(
+            new Error('deriveExtensionVersion: respin-number must be at least 1'),
         );
     });
 });
+
+function compareChromeVersions(left, right) {
+    const a = left.split('.').map(Number);
+    const b = right.split('.').map(Number);
+    for (let i = 0; i < 4; i += 1) {
+        const difference = (a[i] ?? 0) - (b[i] ?? 0);
+        if (difference !== 0) return difference;
+    }
+    return 0;
+}

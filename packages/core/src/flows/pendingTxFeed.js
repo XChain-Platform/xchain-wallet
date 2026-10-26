@@ -145,9 +145,11 @@ export async function livePendingTxs({ vault, chainRegistry, chainId, address, s
     }
     const descriptor = chainRegistry?.get?.(chainId) || null;
     const wanted = address ? String(address).toLowerCase() : null;
+    const settledReplacements = replacedByConfirmed(Array.isArray(all) ? all : []);
     const out = [];
     for (const record of Array.isArray(all) ? all : []) {
         if (!record || removedIds.has(record.id)) continue;
+        if (settledReplacements.has(record.id)) continue;
         const failed = isFailedPendingStatus(record.status);
         if (!record.txid && !failed) continue;
         if (!failed && !isLivePendingStatus(record.status) && !isChainConfirmedRecord(record)) continue;
@@ -157,13 +159,46 @@ export async function livePendingTxs({ vault, chainRegistry, chainId, address, s
         } else if (record.chain !== chainId) {
             continue;
         }
-        if (wanted && String(record.fromAddress || '').toLowerCase() !== wanted) continue;
+        // A pasted raw transaction cannot name its sender, so its record carries
+        // the 'unknown' placeholder. It belongs to the wallet's whole set of
+        // addresses; History merges the repeats by txid.
+        const sender = String(record.fromAddress || '').toLowerCase();
+        if (wanted && sender !== wanted && !(sender === 'unknown' && record.txid)) continue;
         const seen = Boolean(record.txid)
             && seenNow instanceof Set
             && seenNow.has(String(record.txid).toLowerCase());
         out.push(summarize(record, seen));
     }
     return out;
+}
+
+/**
+ * Ids of 'rbf-replaced' originals whose replacement chain ended in a confirmed
+ * record. The explorer row (or the wallet's own confirmed row) for that
+ * replacement is the truth by then, and the original would otherwise sit at
+ * the top of the pending list for good, reading as a send still in flight.
+ *
+ * @param {object[]} records
+ * @returns {Set<string>}
+ */
+function replacedByConfirmed(records) {
+    const lower = (v) => String(v || '').trim().toLowerCase();
+    const byTxid = new Map();
+    for (const r of records) {
+        if (r && r.txid) byTxid.set(lower(r.txid), r);
+    }
+    const settled = new Set();
+    for (const r of records) {
+        if (!r || r.status !== 'rbf-replaced') continue;
+        const visited = new Set([r.id]);
+        let next = byTxid.get(lower(r.rbfReplacement));
+        while (next && !visited.has(next.id)) {
+            if (next.status === 'indexed') { settled.add(r.id); break; }
+            visited.add(next.id);
+            next = next.status === 'rbf-replaced' ? byTxid.get(lower(next.rbfReplacement)) : null;
+        }
+    }
+    return settled;
 }
 
 /**

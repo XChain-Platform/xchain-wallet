@@ -13,6 +13,7 @@ import { Screen, Button, FormPage, Input, Icon, PageHeader } from '@xchain-walle
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { SignerSelectForm } from './SignerSelectForm.jsx';
 import { userFacingMessage } from '../utils/userFacingMessage.js';
+import { NAME_MAX_LENGTH, hasVisibleText, nameKey, nameLength } from '../../util/display_name.js';
 
 /**
  * Add a new BIP44 account under the active wallet (§11.3.2). Derives
@@ -87,12 +88,15 @@ export function AddAccountForm({ walletId, onBack, onCreated }) {
         event.preventDefault();
         if (busy) return;
         const trimmed = name.trim();
-        if (trimmed.length === 0) {
+        if (!hasVisibleText(trimmed)) {
             setError('Account name is required.');
             return;
         }
-        if (accounts.some((account) => account?.name?.trim().toLocaleLowerCase()
-            === trimmed.toLocaleLowerCase())) {
+        if (nameLength(trimmed) > NAME_MAX_LENGTH) {
+            setError(`Account name must be ${NAME_MAX_LENGTH} characters or fewer.`);
+            return;
+        }
+        if (accounts.some((account) => nameKey(account?.name) === nameKey(trimmed))) {
             setError(`An account named "${trimmed}" already exists.`);
             return;
         }

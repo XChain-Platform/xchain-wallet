@@ -44,10 +44,12 @@ const cfg = readFileSync(join(e2e, 'playwright.config.js'), 'utf8');
 assert.ok(/testDir:\s*'\.\/tests'/.test(cfg), 'testDir points at ./tests');
 assert.ok(/workers:\s*1/.test(cfg), 'workers=1 (single vault per run)');
 assert.ok(
-    /command:\s*'pnpm -C \.\.\/\.\.\/packages\/web dev'/.test(cfg),
-    'webServer spawns the web Vite dev server',
+    /command:\s*`pnpm -C \.\.\/\.\.\/packages\/web dev --port \$\{PORT\} --strictPort`/.test(cfg),
+    'webServer spawns the web Vite dev server on its own strict port',
 );
-assert.ok(/url:\s*'http:\/\/localhost:5173'/.test(cfg), 'webServer url is 5173');
+assert.ok(/url:\s*BASE_URL/.test(cfg), 'webServer url is the suite-owned base URL');
+assert.ok(/E2E_DEV_PORT\) \|\| 5473/.test(cfg), 'suite port is 5473, not the shared 5173');
+assert.ok(/reuseExistingServer:\s*false/.test(cfg), 'webServer never reuses a listener');
 assert.ok(/retries:\s*process\.env\.CI \? 2 : 0/.test(cfg), 'retries only on CI');
 assert.ok(
     /trace:\s*'retain-on-failure'/.test(cfg),

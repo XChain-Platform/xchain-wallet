@@ -24,6 +24,10 @@ import { Button, Input, Select, StatusMessage } from '../../ui/index.js';
 import { COINGECKO_SUPPORTED_CHAINS } from '../../flows/priceOracle.js';
 import { userFacingMessage } from '../utils/userFacingMessage.js';
 import { t } from '../../i18n/index.js';
+import '../../i18n/locales/en/components.js';
+import '../../i18n/locales/en/routes.js';
+import '../../i18n/locales/en/send.js';
+import '../../i18n/locales/en/settings.js';
 
 /** Native mainnet coins that have a price source. */
 const MAINNET_PRICE_CHAINS = COINGECKO_SUPPORTED_CHAINS.filter((c) => c.endsWith('-mainnet'));
@@ -84,7 +88,7 @@ export function PriceAlertForm({
     const disabledReason = !chainId
         ? 'Choose a coin to continue.'
         : targetStr === ''
-            ? 'Enter a target price to continue.'
+            ? t('settings.notifications.enterTargetPrice')
             : null;
 
     const alreadyMet = useMemo(() => {

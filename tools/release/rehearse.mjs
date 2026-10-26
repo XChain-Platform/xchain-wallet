@@ -682,8 +682,10 @@ export async function probeDirectLane({
         // The client refuses a body over its own cap and returns null, which
         // is indistinguishable from being offline. Checked separately so an
         // oversized feed reads as "the feed is wrong", not "no notice today".
-        if (text.length > client.UPDATE_FEED_MAX_BYTES) {
-            return fail('feed', `${lane.feed} is ${text.length} bytes; the shipped client `
+        // Counted in UTF-8 bytes: the Android bridge caps bytes, not characters.
+        const feedBytes = Buffer.byteLength(text, 'utf8');
+        if (feedBytes > client.UPDATE_FEED_MAX_BYTES) {
+            return fail('feed', `${lane.feed} is ${feedBytes} bytes; the shipped client `
                 + `reads at most ${client.UPDATE_FEED_MAX_BYTES} and would ignore it silently`);
         }
         published = client.parseUpdateFeed(JSON.parse(text));
@@ -1465,13 +1467,19 @@ export function assertRecord({ record, tag, prodManifestSha256, releaseArtifacts
                     + `${laneById(result.id)?.artifact ?? 'artifact for it'}`);
             }
         }
+        // One remedy for every missing lane: `run` rewrites the whole record,
+        // so a per-lane re-run would drop the lane the previous one wrote.
+        const missingDirect = directIds.filter((id) => !direct.some((r) => r.id === id));
+        const rerun = desktopInRelease
+            ? 'rehearse.mjs run with no --lane, which probes every desktop lane and every direct '
+              + `lane this release carries (${missingDirect.join(', ')} included)`
+            : `rehearse.mjs run ${missingDirect.map((id) => `--lane ${id}`).join(' ')}`;
         for (const lane of DIRECT_LANES.filter((l) => directIds.includes(l.id))) {
             const result = direct.find((r) => r.id === lane.id);
             if (!result) {
                 problems.push(
                     `this release ships ${lane.artifact} and the record has no result for lane `
-                    + `${lane.id}. Its feed is not rehearsed by the desktop probe: run `
-                    + `rehearse.mjs run --lane ${lane.id}.`,
+                    + `${lane.id}. Its feed is not rehearsed by the desktop probe: run ${rerun}.`,
                 );
                 continue;
             }
@@ -1717,12 +1725,14 @@ async function main(argv) {
         // they distribute, not on request. Making it a flag would mean an
         // Android release is rehearsed only by whoever remembers the flag,
         // which is the same reliance on memory that left the lane
-        // unrehearsed for its first release.
+        // unrehearsed for its first release. So `--lane` narrows the desktop
+        // lanes and can add a direct lane the release does not carry, but
+        // never drops one it does carry.
         const shipping = lanesInRelease(releaseArtifactsIn(prodInput));
         const previousVersion = previousTag ? String(previousTag).replace(/^v/, '') : null;
         const directLanes = [];
         for (const lane of DIRECT_LANES) {
-            if (only.length ? !only.includes(lane.id) : !shipping.directLanes.includes(lane.id)) continue;
+            if (!shipping.directLanes.includes(lane.id) && !only.includes(lane.id)) continue;
             process.stderr.write(`rehearse.mjs: ${lane.id} ... `);
             const entry = await probeDirectLane({
                 lane, feedBase: feed, tag, previousVersion, pinned, staged: true,

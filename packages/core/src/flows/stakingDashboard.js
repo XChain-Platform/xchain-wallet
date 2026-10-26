@@ -45,6 +45,27 @@
 
 import { estimateBlockDate } from '../shared/utils/blockDateEstimate.js';
 
+/**
+ * Explorer rows are rendered field by field, so a field that is an object or
+ * array (a malformed row) is dropped here, before any screen tries to draw it.
+ *
+ * @param {unknown} row
+ * @returns {Record<string, unknown> | null}
+ */
+export function scalarRow(row) {
+    if (!row || typeof row !== 'object' || Array.isArray(row)) return null;
+    const out = {};
+    for (const [key, value] of Object.entries(row)) {
+        if (value === null || typeof value !== 'object') out[key] = value;
+    }
+    return out;
+}
+
+/** @param {unknown} rows */
+export function scalarRows(rows) {
+    return (Array.isArray(rows) ? rows : []).map(scalarRow).filter(Boolean);
+}
+
 /** Base units per whole token at 8dp (XCHAIN's scale; see the genesis spec). */
 const SCALE = 8;
 
@@ -140,20 +161,32 @@ export function unclaimedRewards({ rewards, claims } = {}) {
     // would, overstates what a validator can claim - a worse error than the
     // sub-satoshi one it replaces, and by the amount of the whole row.
     let hasUnrepresentableAmount = false;
+    // The explorer pages by position, so a row can arrive twice when new rows
+    // land between page reads; a ledger row is counted once per identity.
+    const seenRewards = new Set();
+    const seenClaims = new Set();
     let accrued = 0n;
     for (const r of Array.isArray(rewards) ? rewards : []) {
+        if (r?.id != null && r.id !== "") {
+            if (seenRewards.has(String(r.id))) continue;
+            seenRewards.add(String(r.id));
+        }
         const p = parseAmount(r?.amount, SCALE);
-        if (p === null) continue;
+        if (p === null || p.units < 0n) continue;
         if (!p.exact) hasUnrepresentableAmount = true;
         accrued += floorUnits(p);
     }
     let claimed = 0n;
     let hasRejectedClaim = false;
     for (const c of Array.isArray(claims) ? claims : []) {
+        if (c?.action_index != null && c.action_index !== "") {
+            if (seenClaims.has(String(c.action_index))) continue;
+            seenClaims.add(String(c.action_index));
+        }
         const valid = String(c?.status ?? '') === 'valid';
         if (!valid) { hasRejectedClaim = true; continue; }
         const p = parseAmount(c?.amount, SCALE);
-        if (p === null) continue;
+        if (p === null || p.units < 0n) continue;
         if (!p.exact) hasUnrepresentableAmount = true;
         claimed += ceilUnits(p);
     }

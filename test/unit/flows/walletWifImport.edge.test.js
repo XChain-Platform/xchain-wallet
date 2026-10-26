@@ -32,6 +32,7 @@ import {
     WrongPasswordError,
 } from '../../../packages/core/src/flows/importWif.js';
 import { WalletNotFoundError } from '../../../packages/core/src/flows/unlockWallet.js';
+import { AeadAuthError } from '../../../packages/core/src/crypto/aead.js';
 
 const KDF = {
     algorithm: 'argon2id', salt: 'salt', iterations: 1, memory: 8, parallelism: 1,
@@ -214,7 +215,7 @@ describe('importWif error and rollback edges', () => {
     it('keeps a session-owned master key intact when password verification fails', async () => {
         const sessionKey = new Uint8Array([5, 6, 7]);
         const { args } = existingHarness({}, { masterKey: sessionKey, password: undefined });
-        crypto.decrypt.mockRejectedValue(new Error('bad tag'));
+        crypto.decrypt.mockRejectedValue(new AeadAuthError(new Error('bad tag')));
 
         await expect(importWif(args)).rejects.toBeInstanceOf(WrongPasswordError);
         expect([...sessionKey]).toEqual([5, 6, 7]);
@@ -225,7 +226,7 @@ describe('importWif error and rollback edges', () => {
         const derivedKey = new Uint8Array([5, 6, 7]);
         const { args } = existingHarness();
         crypto.deriveMasterKeyAsync.mockResolvedValue(derivedKey);
-        crypto.decrypt.mockRejectedValue(new Error('bad tag'));
+        crypto.decrypt.mockRejectedValue(new AeadAuthError(new Error('bad tag')));
 
         await expect(importWif(args)).rejects.toBeInstanceOf(WrongPasswordError);
         expect([...derivedKey]).toEqual([0, 0, 0]);

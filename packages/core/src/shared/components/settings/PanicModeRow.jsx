@@ -35,6 +35,7 @@ import {
 } from '../../../flows/panicMode.js';
 import { ROW, ROW_HINT } from './_settingsPrimitives.jsx';
 import { t } from '../../../i18n/index.js';
+import '../../../i18n/locales/en/settings.js';
 
 export function PanicModeRow() {
     const [state, setState] = useState(getPanicModeState);
@@ -95,7 +96,8 @@ export function PanicModeRow() {
     if (confirming) {
         return (
             <div style={{ ...ROW, alignItems: 'flex-start' }}>
-                <div style={{ display: 'flex', flexDirection: 'column', flex: 1, minWidth: 0 }}>
+                {/* A 12rem basis makes the two action buttons wrap below the text on a narrow phone instead of squeezing it into a sliver. */}
+                <div style={{ display: 'flex', flexDirection: 'column', flex: '1 1 12rem', minWidth: 0 }}>
                     <span style={labelStyle}>{t('settings.panic.confirmPanicMode')}</span>
                     <span style={ROW_HINT}>
                         {t('settings.panic.freezeAllSigningFor24')}

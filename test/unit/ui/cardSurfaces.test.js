@@ -178,6 +178,22 @@ function inlineDashedLines(sources) {
     return found;
 }
 
+/**
+ * A fieldset that draws the card tokens in its own inline style, in the element
+ * or in the object it takes. It sits inside a form card on wide screens, so it
+ * composes the shared card class (which flattens there) instead.
+ */
+function inlineFieldsetCards(sources) {
+    const found = [];
+    for (const { path, source } of sources) {
+        const patterns = [/<fieldset\b[^>]*?style=\{\{[^}]*xc-card-/g, /\bfieldsetStyle\s*=\s*\{[^}]*xc-card-/g];
+        for (const pattern of patterns) {
+            for (const match of source.matchAll(pattern)) found.push(`${path}:${source.slice(0, match.index).split('\n').length}`);
+        }
+    }
+    return found;
+}
+
 const INLINE_CARD = {
     border: "'var(--xc-card-border)'",
     borderRadius: "'var(--xc-card-radius)'",
@@ -237,12 +253,14 @@ describe('card surfaces', () => {
         const source = readFileSync(join(packagesRoot, 'core/src/ui/Card.module.css'), 'utf8');
         expect(source).toMatch(/\.card \.card,\s*\.card \.flush,\s*\.flush \.card,\s*\.flush \.flush\s*\{[^}]*border:\s*0/);
         expect(source).toMatch(/@media \(min-width: 600px\)\s*\{\s*\.formCard:not\(\.cardless\) \.card,\s*\.formCard:not\(\.cardless\) \.flush\s*\{[^}]*border:\s*0/);
-        // A full-width form of sections draws no card, so it opts out of the
-        // flattening; other full-width pages stay flat.
+        // A full-width form draws no card, so it opts out of the flattening
+        // and the cards inside it (Settings sections, the licence terms
+        // panel) keep their outline.
         const form = readFileSync(join(packagesRoot, 'core/src/ui/FormPage.module.css'), 'utf8');
         expect(form).toMatch(/\.cardlessSections\s*\{\s*composes:\s*cardless from '\.\/Card\.module\.css'/);
         const page = readFileSync(join(packagesRoot, 'core/src/ui/FormPage.jsx'), 'utf8');
-        expect(page).toMatch(/fullWidth && sectioned \? styles\.cardlessSections/);
+        expect(page).toMatch(/fullWidth \? styles\.cardlessSections/);
+        expect(page).not.toMatch(/fullWidth && sectioned \? styles\.cardlessSections/);
     });
 
     it('draws the wide form card with the same tokens', () => {
@@ -317,6 +335,19 @@ describe('card surfaces', () => {
 
     it('never tints or redraws the shared card inline', () => {
         expect(inlineCardOverrides(jsx)).toEqual([]);
+    });
+
+    it('never draws a fieldset as an inline card, which would sit as a box inside the wide form card', () => {
+        const fixture = [{
+            path: 'Group.jsx',
+            source: [
+                "<fieldset style={{ border: 'var(--xc-card-border)', padding: 'var(--xc-card-pad)' }}>",
+                "const fieldsetStyle = { border: 'var(--xc-card-border)' };",
+                "<fieldset className={cardStyles.card} style={{ margin: 0 }}>",
+            ].join('\n'),
+        }];
+        expect(inlineFieldsetCards(fixture)).toEqual(['Group.jsx:1', 'Group.jsx:2']);
+        expect(inlineFieldsetCards(jsx), 'give the fieldset className={cardStyles.card} and keep only its margin inline').toEqual([]);
     });
 
     it('draws every other bordered or filled, rounded box only where the allowlist names why', () => {

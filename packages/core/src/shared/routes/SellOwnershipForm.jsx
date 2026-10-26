@@ -38,7 +38,12 @@ import { useActionConfirmFlow, useConfirmSubmit, isUserRejection } from '../hook
 import { ActionConfirmScreen } from '../components/ActionConfirmScreen.jsx';
 import { QueuedResultPanel } from '../components/QueuedResultPanel.jsx';
 import { tokenAmountPrecisionError } from '../utils/amountFormat.js';
+import {
+    TOKEN_RECORD_GATE_KEYS, tokenRecordChangedMessage, tokenRecordChangedSince,
+} from '../utils/tokenRecordDrift.js';
 import { tickerReferenceError } from '../utils/tickerGrammar.js';
+import { memoLengthError } from '../utils/memoLimit.js';
+import { tokenIssuerEligibility } from '../utils/tokenIssuerEligibility.js';
 
 const chainRegistry = registryLib.defaultRegistry();
 
@@ -183,12 +188,20 @@ export function SellOwnershipForm({ walletId, onBack, chainId: initialChainId, t
     const hwSignerInfo = useSignerInfo({ walletId, signerId: hw ? fromAddress?.signerId : null });
     const { isWatcherMode } = useWalletMode();
 
-    const tokenUpper = (tick || '').toUpperCase();
-    const wantLabel = getMode === 'coin' ? coinTicker : (getTick.trim().toUpperCase() || 'token');
+    const tokenTick = String(tick || '');
+    const ownershipTokenInfo = useTokenInfo({ chainId, tick: tokenTick, skip: !tokenTick });
+    const issuerEligibility = tokenIssuerEligibility({
+        tokenInfo: ownershipTokenInfo,
+        addressesByChain,
+        chainId,
+        tick: tokenTick,
+        sourceAddress: fromAddress?.address,
+    });
+    const wantLabel = getMode === 'coin' ? coinTicker : (getTick.trim() || 'token');
 
     const validationError = useMemo(() => {
         if (getMode === 'token') {
-            const gt = getTick.trim().toUpperCase();
+            const gt = getTick.trim();
             if (gt) {
                 const tickError = tickerReferenceError(gt, { noun: 'Price token', allowRef: true });
                 if (tickError) return tickError;
@@ -196,7 +209,7 @@ export function SellOwnershipForm({ walletId, onBack, chainId: initialChainId, t
             if (gt && gt === coinTicker) {
                 return `Pick "Native coin" to sell for ${coinTicker}. The token field is for selling against another token.`;
             }
-            if (gt && gt === tokenUpper) {
+            if (gt && gt === tokenTick) {
                 return 'The price token must differ from the token being sold.';
             }
         }
@@ -206,14 +219,16 @@ export function SellOwnershipForm({ walletId, onBack, chainId: initialChainId, t
         if (memo.includes('|') || memo.includes(';')) {
             return 'Memo cannot contain "|" or ";".';
         }
+        const memoError = memoLengthError(memo.trim());
+        if (memoError) return memoError;
         return null;
-    }, [getMode, getTick, coinTicker, tokenUpper, expiration, memo]);
+    }, [getMode, getTick, coinTicker, tokenTick, expiration, memo]);
 
     const priceReady = /^[0-9]+(\.[0-9]+)?$/.test(price.trim()) && Number(price.trim()) > 0;
     const getTickReady = getMode === 'coin' || getTick.trim().length > 0;
     const priceTokenInfo = useTokenInfo({
         chainId,
-        tick: getTick.trim().toUpperCase(),
+        tick: getTick.trim(),
         skip: getMode !== 'token' || !getTick.trim(),
     });
 
@@ -263,14 +278,14 @@ export function SellOwnershipForm({ walletId, onBack, chainId: initialChainId, t
     const saleParams = useMemo(() => ({
         VERSION: '0',
         GIVE_COIN: coinTicker,
-        GIVE_TICK: tokenUpper,
+        GIVE_TICK: tokenTick,
         GIVE_OWNERSHIP: '1',
         GET_COIN: coinTicker,
-        ...(getMode === 'token' ? { GET_TICK: getTick.trim().toUpperCase() } : {}),
+        ...(getMode === 'token' ? { GET_TICK: getTick.trim() } : {}),
         GET_AMOUNT: String(price).trim(),
         ...(expiration.trim() ? { EXPIRATION: expiration.trim() } : {}),
         ...(memo.trim() ? { MEMO: memo.trim() } : {}),
-    }), [coinTicker, tokenUpper, getMode, getTick, price, expiration, memo]);
+    }), [coinTicker, tokenTick, getMode, getTick, price, expiration, memo]);
 
     // §5.6: the signing lanes compose ONE PSBT host-side and approve it on
     // the shared confirm page; watcher keeps the legacy review stage.
@@ -347,10 +362,19 @@ export function SellOwnershipForm({ walletId, onBack, chainId: initialChainId, t
 
     // Validate form fields and advance to the review stage; real signing
     // happens only after the user confirms on the review screen.
-    function handleReview(event) {
+    async function handleReview(event) {
         event.preventDefault();
+        if (submitPendingRef.current) return;
         if (!fromAddress || !chainId) {
             setFormError('Pick a source address first.');
+            return;
+        }
+        if (issuerEligibility.pending) {
+            setFormError(`Wait for the wallet to verify the current owner of ${tokenTick}.`);
+            return;
+        }
+        if (issuerEligibility.error) {
+            setFormError(issuerEligibility.error);
             return;
         }
         if (getMode === 'token' && !getTick.trim()) {
@@ -372,13 +396,29 @@ export function SellOwnershipForm({ walletId, onBack, chainId: initialChainId, t
             setFormError(precisionError);
             return;
         }
+        // The owner check came from the record read when the form opened; a
+        // sale or transfer of the name since then makes it stale. The pending
+        // flag also holds a second press while the record is re-read.
+        submitPendingRef.current = true;
+        let moved = false;
+        try {
+            moved = await tokenRecordChangedSince({
+                messaging, chainId, tick: tokenTick, current: ownershipTokenInfo, keys: TOKEN_RECORD_GATE_KEYS,
+            });
+        } catch {
+            moved = false;
+        }
+        if (moved) {
+            submitPendingRef.current = false;
+            setFormError(tokenRecordChangedMessage(tokenTick));
+            return;
+        }
         setFormError(null);
         if (singleEncode) {
-            if (submitPendingRef.current) return;
-            submitPendingRef.current = true;
             void openConfirmScreen();
             return;
         }
+        submitPendingRef.current = false;
         setStage('review');
     }
 
@@ -471,7 +511,7 @@ export function SellOwnershipForm({ walletId, onBack, chainId: initialChainId, t
     // Header title switches to "Review sale" once the user leaves the form stage.
     const headerTitle = (stage === 'review' || stage === 'submitting')
         ? 'Review sale'
-        : `Sell ${tokenUpper} name`;
+        : `Sell ${tokenTick} name`;
     const header = (
         <PageHeader
             onBack={stage === 'review'
@@ -519,7 +559,7 @@ export function SellOwnershipForm({ walletId, onBack, chainId: initialChainId, t
                 <p style={{ margin: '0 0 0.5rem', fontWeight: 600 }}>Name listed for sale</p>
                 {txid ? <p style={{ margin: '0 0 0.5rem' }}>Transaction: <code>{txid}</code></p> : null}
                 <p className={styles.hint}>
-                    Your {mechanism === 'dispenser' ? 'dispenser' : 'offer'} to sell ownership of {tokenUpper} for {price} {wantLabel} is open.
+                    Your {mechanism === 'dispenser' ? 'dispenser' : 'offer'} to sell ownership of {tokenTick} for {price} {wantLabel} is open.
                     {mechanism === 'dispenser'
                         ? ' A buyer can purchase it instantly at this price; close the dispenser to reclaim ownership.'
                         : ' Ownership is escrowed until a buyer matches; cancel before then to reclaim it.'}
@@ -568,12 +608,12 @@ export function SellOwnershipForm({ walletId, onBack, chainId: initialChainId, t
                 )}
             >
                 <p className={styles.summary}>
-                    Sell ownership of {tokenUpper} for {priceLabel} via {mechanismLabel}.
+                    Sell ownership of {tokenTick} for {priceLabel} via {mechanismLabel}.
                 </p>
                 <dl className={styles.detailsList}>
                     {descriptor ? <DetailRow label="Network" value={<ChainBadge descriptor={descriptor} size="sm" showName={false} />} /> : null}
                     <DetailRow label="From" value={<AddressText address={fromAddress.address} />} />
-                    <DetailRow label="Selling" value={`${tokenUpper} (ownership)`} />
+                    <DetailRow label="Selling" value={`${tokenTick} (ownership)`} />
                     <DetailRow label="Mechanism" value={mechanismLabel} />
                     <DetailRow label="Price" value={priceLabel} />
                     {expiration.trim() ? (
@@ -650,7 +690,7 @@ export function SellOwnershipForm({ walletId, onBack, chainId: initialChainId, t
                 chainIdFilter={chainId}
                 onSelect={(sel) => {
                     if (sel.chainId !== chainId) return;
-                    setGetTick(String(sel.tick || '').toUpperCase());
+                    setGetTick(String(sel.tick || ''));
                     setTokenPickerOpen(false);
                 }}
                 onBack={() => setTokenPickerOpen(false)}
@@ -661,12 +701,12 @@ export function SellOwnershipForm({ walletId, onBack, chainId: initialChainId, t
     return wrap(
         <FormPage
             demoGuard={demoGuard}
-            label={`Sell ${tokenUpper} name`}
+            label={`Sell ${tokenTick} name`}
             onSubmit={handleReview}
             inert={actionConfirm.composing ? '' : undefined}
             aria-busy={actionConfirm.composing ? 'true' : undefined}
             onChangeCapture={() => { if (formError) setFormError(null); }}
-            status={validationError || feeValidationError || formError ? (
+            status={validationError || feeValidationError || formError || issuerEligibility.error ? (
                 <>
                     {validationError ? (
                         <StatusMessage variant="error">{validationError}</StatusMessage>
@@ -677,6 +717,9 @@ export function SellOwnershipForm({ walletId, onBack, chainId: initialChainId, t
                     {formError ? (
                         <StatusMessage variant="error">{formError}</StatusMessage>
                     ) : null}
+                    {!formError && issuerEligibility.error ? (
+                        <StatusMessage variant="error">{issuerEligibility.error}</StatusMessage>
+                    ) : null}
                 </>
             ) : null}
             actions={(
@@ -684,7 +727,7 @@ export function SellOwnershipForm({ walletId, onBack, chainId: initialChainId, t
                     type="submit"
                     variant="primary"
                     loading={actionConfirm.composing}
-                    disabled={actionConfirm.composing}
+                    disabled={issuerEligibility.pending || !!issuerEligibility.error || actionConfirm.composing}
                 >
                     {actionConfirm.composing
                         ? 'Preparing review…'
@@ -703,7 +746,7 @@ export function SellOwnershipForm({ walletId, onBack, chainId: initialChainId, t
 
             <dl className={styles.detailsList}>
                 <dt className={styles.detailsLabel}>Selling the name</dt>
-                <dd className={styles.detailsValue} style={{ fontWeight: 700 }}>{tokenUpper}</dd>
+                <dd className={styles.detailsValue} style={{ fontWeight: 700 }}>{tokenTick}</dd>
                 {fromAddress ? (
                     <>
                         <dt className={styles.detailsLabel}>From</dt>

@@ -282,8 +282,8 @@ final class ScreenshotTests: XCTestCase {
     /// ordinary user can reach (the accurate-metadata exposure of Apple
     /// 2.3.3). Since xchain-wallet#78 demo mode itself lands on mainnet,
     /// because App Review is sent there first and must see a mainnet
-    /// address, so this step is now a guard: on a mainnet demo the select
-    /// offers only Mainnet and picking it changes nothing. It stays so a
+    /// address, so this step is now a guard: on a mainnet demo picking
+    /// Mainnet changes nothing. It stays so a
     /// regression back to a non-mainnet landing is switched (and confirmed)
     /// before anything is shot, rather than captured.
     ///
@@ -1095,44 +1095,14 @@ extension ScreenshotTests {
         let phraseField = app.textViews.firstMatch
         guard reach(phraseField, "recovery phrase field", timeout: 20) else { return false }
 
-        // The driver copies the phrase to the Mac clipboard only on this marker, so the
-        // app's own launch-time clipboard read never meets it, and Universal Clipboard
-        // has time to carry it over before the paste.
+        // The driver copies the phrase to the Mac clipboard only on this marker,
+        // then Universal Clipboard has time to carry it over before the native paste.
         print("REHEARSAL-MARK: READY-FOR-PHRASE")
-        // When the phrase lands, the app's own clipboard read raises the system
-        // "Allow Paste" alert, which blocks the app's main thread until answered.
-        // Answer it in Springboard; if that read fills the field, never touch the
-        // field again, because XCTest names a filled field by its contents.
+        Thread.sleep(forTimeInterval: 2)
+        _ = pasteViaMenu(into: phraseField)
         let consent = springboard.buttons["Allow Paste"]
-        if consent.waitForExistence(timeout: 25) {
-            consent.tap()
-            print("PASTE-CONSENT: allowed the app's own clipboard read")
-            Thread.sleep(forTimeInterval: 4)
-        } else {
-            Thread.sleep(forTimeInterval: 2)
-        }
-        var pasted = wordCount(phraseField) >= 12
-        if !pasted {
-            pasted = pasteViaMenu(into: phraseField) && wordCount(phraseField) >= 12
-            let again = springboard.buttons["Allow Paste"]
-            if again.waitForExistence(timeout: 3) { again.tap(); Thread.sleep(forTimeInterval: 3) }
-            pasted = wordCount(phraseField) >= 12
-        }
-        if !pasted {
-            // The screen's own "Paste recovery phrase from clipboard" control reads
-            // the clipboard programmatically, which raises the system paste
-            // consent alert; allow it wherever it appears.
-            if let own = button(anyOf: ["Paste recovery phrase from clipboard"]), own.isHittable {
-                own.tap()
-                let hosts: [XCUIApplication] = [app, springboard]
-                for host in hosts {
-                    let allow = host.buttons["Allow Paste"]
-                    if allow.waitForExistence(timeout: 3) { allow.tap(); break }
-                }
-                Thread.sleep(forTimeInterval: 1.0)
-            }
-            pasted = wordCount(phraseField) >= 12
-        }
+        if consent.waitForExistence(timeout: 3) { consent.tap(); Thread.sleep(forTimeInterval: 3) }
+        let pasted = wordCount(phraseField) >= 12
         print("REHEARSAL-MARK: PHRASE-PASTED")
         print("IMPORT: phrase field holds \(wordCount(phraseField)) words (pasted=\(pasted))")
         guard pasted else {

@@ -14,8 +14,10 @@ import { registry as registryLib } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { userFacingMessage } from '../utils/userFacingMessage.js';
 import { isCompressedPublicKey, validateCosignerXpub } from '../utils/multisigXpub.js';
+import { MAX_MULTISIG_COSIGNERS } from '../../schemas/multisigConfig.js';
 import { MultisigCosignerShare } from './MultisigCosignerShare.jsx';
 import styles from './IssueTokenForm.module.css';
+import cardStyles from '../../ui/Card.module.css';
 
 const chainRegistry = registryLib.defaultRegistry();
 
@@ -24,11 +26,7 @@ const chainRegistry = registryLib.defaultRegistry();
 // gate but via useBtcAddressesPresent; here we filter inline because
 // the multisig flow needs the BTC chainId before any address picker.
 const MULTISIG_COIN = 'bitcoin';
-const MAX_COSIGNERS = {
-    'p2sh-multisig': 15,
-    'p2wsh-multisig': 20,
-    'taproot-musig2': 20,
-};
+const FORM_KEY = 'form';
 
 const SCHEMES = [
     {
@@ -145,6 +143,8 @@ export function MultisigCreate({ walletId, onBack }) {
     // only shows once the user has changed something, so the screen does not
     // open on a red error.
     const [edited, setEdited] = useState(false);
+    const [touched, setTouched] = useState(/** @type {Set<string>} */ (() => new Set()));
+    const touch = (key) => setTouched((current) => (current.has(key) ? current : new Set(current).add(key)));
     const [rows, setRows] = useState(/** @type {CosignerRow[]} */ ([
         { id: newRowId(), origin: 'local', name: 'My signer', pubkey: '', fingerprint: '', derivationPath: '', xpub: '', localSignerId: null, addressId: null },
         { id: newRowId(), origin: 'external-xpub', name: 'Cosigner B', pubkey: '', fingerprint: '', derivationPath: '', xpub: '', localSignerId: null, addressId: null },
@@ -181,8 +181,9 @@ export function MultisigCreate({ walletId, onBack }) {
         return () => { cancelled = true; };
     }, [walletId, btcChainIds, messaging]);
 
-    const updateRow = (rowId, patch) => {
+    const updateRow = (rowId, patch, touchFields = Object.keys(patch)) => {
         setEdited(true);
+        for (const field of touchFields) touch(`${rowId}:${field}`);
         setRows((rs) => rs.map((r) => (r.id === rowId ? { ...r, ...patch } : r)));
     };
 
@@ -219,7 +220,7 @@ export function MultisigCreate({ walletId, onBack }) {
             // Local cosigner doesn't need a separate signer id slot
             // unless the address is HW-backed; preserve that.
             localSignerId: address?.signerId || `wallet:${walletId}`,
-        });
+        }, ['addressId']);
         if (!address?.id || typeof messaging.getMultisigCosignerInfo !== 'function') return;
         messaging.getMultisigCosignerInfo({ walletId, addressId: address.id })
             .then((info) => {
@@ -236,29 +237,37 @@ export function MultisigCreate({ walletId, onBack }) {
             });
     };
 
-    const composeError = useMemo(() => {
-        if (rows.length < 2) return 'Need at least 2 cosigners.';
-        const maxCosigners = MAX_COSIGNERS[scheme];
+    // Every problem with the draft, in display order. A problem carries the
+    // key of the field it belongs to ("<rowId>:<field>", "threshold") or
+    // FORM_KEY when it concerns the draft as a whole.
+    const composeProblems = useMemo(() => {
+        const problems = [];
+        const add = (key, message) => { problems.push({ key, message }); };
+        const form = (message) => { add(FORM_KEY, message); return problems; };
+        if (rows.length < 2) return form('Need at least 2 cosigners.');
+        // The host's table, so the form never offers a row count it refuses.
+        const maxCosigners = MAX_MULTISIG_COSIGNERS[scheme];
         if (rows.length > maxCosigners) {
-            return `${schemeLabel(scheme)} supports at most ${maxCosigners} cosigners.`;
+            return form(`${schemeLabel(scheme)} supports at most ${maxCosigners} cosigners.`);
         }
         const rawThreshold = threshold.trim();
-        if (!rawThreshold) return 'Threshold is required.';
-        if (!/^-?\d+(?:\.\d+)?$/.test(rawThreshold)) return 'Threshold must be a whole number.';
+        const thresholdProblem = (message) => { add('threshold', message); return problems; };
+        if (!rawThreshold) return thresholdProblem('Threshold is required.');
+        if (!/^-?\d+(?:\.\d+)?$/.test(rawThreshold)) return thresholdProblem('Threshold must be a whole number.');
         const t = Number(rawThreshold);
-        if (!Number.isInteger(t)) return 'Threshold must be a whole number.';
-        if (t <= 0) return 'Threshold must be at least 1.';
-        if (t > rows.length) return 'Threshold must be ≤ cosigner count.';
+        if (!Number.isInteger(t)) return thresholdProblem('Threshold must be a whole number.');
+        if (t <= 0) return thresholdProblem('Threshold must be at least 1.');
+        if (t > rows.length) return thresholdProblem('Threshold must be ≤ cosigner count.');
         // MuSig2 is n-of-n: a T<N Taproot-MuSig2 address can never be signed by
         // fewer than N cosigners, so the funds would be permanently locked.
         // Steer the user to P2WSH for a genuine T-of-N policy.
         if (scheme === 'taproot-musig2' && t !== rows.length) {
-            return `Taproot multi-signature requires all ${rows.length} cosigners to sign (set the threshold to ${rows.length}). To let ${t} of ${rows.length} sign, pick SegWit multi-signature instead.`;
+            return form(`Taproot multi-signature requires all ${rows.length} cosigners to sign (set the threshold to ${rows.length}). To let ${t} of ${rows.length} sign, pick SegWit multi-signature instead.`);
         }
         // Only one cosigner can be this wallet's own key: local signing
         // signs for exactly one, so a second could never add its signature.
         if (rows.filter((r) => r.origin === 'local').length > 1) {
-            return 'Only one cosigner can be this wallet\'s own key. Add the others as external cosigners.';
+            return form('Only one cosigner can be this wallet\'s own key. Add the others as external cosigners.');
         }
         const selectedAddresses = chainId ? (addressesByChain?.[chainId] || []) : [];
         const ownPubkeys = new Set(
@@ -271,28 +280,44 @@ export function MultisigCreate({ walletId, onBack }) {
         for (let i = 0; i < rows.length; i += 1) {
             const r = rows[i];
             const tag = `Cosigner ${i + 1}`;
-            if (!r.name.trim()) return `${tag}: name is required.`;
+            const at = (field) => `${r.id}:${field}`;
+            if (!r.name.trim()) add(at('name'), `${tag}: name is required.`);
             if (!isCompressedPublicKey(r.pubkey)) {
-                return `${tag}: public key must be a 33-byte compressed key in hex.`;
+                add(at('pubkey'), `${tag}: public key must be a 33-byte compressed key in hex.`);
+                continue;
             }
             const normalizedPubkey = r.pubkey.toLowerCase();
-            if (seenPubkeys.has(normalizedPubkey)) return 'Two cosigners share the same public key.';
+            if (seenPubkeys.has(normalizedPubkey)) {
+                add(at('pubkey'), 'Two cosigners share the same public key.');
+                continue;
+            }
             seenPubkeys.add(normalizedPubkey);
             if (r.origin !== 'local' && ownPubkeys.has(normalizedPubkey)) {
-                return `${tag}: this is one of the current wallet's own keys. Select it as the local cosigner instead.`;
+                add(at('pubkey'), `${tag}: this is one of the current wallet's own keys. Select it as the local cosigner instead.`);
+                continue;
             }
             if (r.origin === 'local') {
                 const selected = selectedAddresses.find((address) => address.id === r.addressId);
-                if (!selected) return `${tag}: select a local address on the chosen network.`;
+                if (!selected) {
+                    add(at('addressId'), `${tag}: select a local address on the chosen network.`);
+                    continue;
+                }
                 if (String(selected.publicKey || '').toLowerCase() !== normalizedPubkey
                     || selected.derivationPath !== r.derivationPath) {
-                    return `${tag}: local key details do not match the selected address.`;
+                    add(at('addressId'), `${tag}: local key details do not match the selected address.`);
+                    continue;
                 }
             }
-            if (!r.fingerprint || !/^[0-9a-fA-F]{8}$/.test(r.fingerprint)) return `${tag}: fingerprint must be 8 hex chars (4 bytes).`;
-            if (!/^m(?:\/\d+'?)*$/.test(r.derivationPath)) return `${tag}: enter a valid derivation path starting with m.`;
+            if (!r.fingerprint || !/^[0-9a-fA-F]{8}$/.test(r.fingerprint)) add(at('fingerprint'), `${tag}: fingerprint must be 8 hex chars (4 bytes).`);
+            if (!/^m(?:\/\d+'?)*$/.test(r.derivationPath)) {
+                add(at('derivationPath'), `${tag}: enter a valid derivation path starting with m.`);
+                continue;
+            }
             if (r.origin === 'external-xpub') {
-                if (!r.xpub) return `${tag}: xpub is required for external-xpub origin.`;
+                if (!r.xpub) {
+                    add(at('xpub'), `${tag}: xpub is required for external-xpub origin.`);
+                    continue;
+                }
                 const descriptor = chainId ? chainRegistry.get(chainId) : null;
                 const xpubError = validateCosignerXpub(
                     r.xpub,
@@ -300,11 +325,20 @@ export function MultisigCreate({ walletId, onBack }) {
                     r.derivationPath,
                     r.pubkey,
                 );
-                if (xpubError) return `${tag}: ${xpubError}`;
+                if (xpubError) add(at('xpub'), `${tag}: ${xpubError}`);
             }
         }
-        return null;
+        return problems;
     }, [rows, threshold, scheme, chainId, addressesByChain]);
+
+    // Fields the user has changed or left. A problem on an untouched field
+    // stays silent until Review is blocked on it; the form-wide problems show
+    // once anything has been edited.
+    const composeError = composeProblems.length > 0;
+    const shownProblem = composeProblems.find(
+        (p) => (p.key === FORM_KEY ? edited : touched.has(p.key)),
+    );
+    const shownError = shownProblem ? shownProblem.message : null;
 
     function handleReview(event) {
         event?.preventDefault();
@@ -465,10 +499,10 @@ export function MultisigCreate({ walletId, onBack }) {
             label="Create multisig"
             onSubmit={handleReview}
             sectioned
-            status={(edited && composeError) || submitError ? (
+            status={shownError || submitError ? (
                 <>
-                    {edited && composeError ? (
-                        <StatusMessage variant="error">{composeError}</StatusMessage>
+                    {shownError ? (
+                        <StatusMessage variant="error">{shownError}</StatusMessage>
                     ) : null}
                     {submitError ? (
                         <StatusMessage variant="error">{submitError}</StatusMessage>
@@ -479,7 +513,7 @@ export function MultisigCreate({ walletId, onBack }) {
                 <Button
                     type="submit"
                     variant="primary"
-                    disabled={Boolean(composeError) || stage === 'submitting'}
+                    disabled={composeError || stage === 'submitting'}
                     loading={stage === 'submitting'}
                 >
                     Review
@@ -511,10 +545,11 @@ export function MultisigCreate({ walletId, onBack }) {
                         row={row}
                         addresses={localAddresses}
                         networkKind={descriptor?.networkKind}
-                        onChange={(patch) => updateRow(row.id, patch)}
+                        onChange={(patch, touchFields) => updateRow(row.id, patch, touchFields)}
                         onRemove={() => removeRow(row.id)}
                         canRemove={rows.length > 2}
                         onLocalAddressPick={(addr) => handleLocalAddressPick(row.id, addr)}
+                        onTouch={(field) => touch(`${row.id}:${field}`)}
                     />
                 ))}
                 <div style={{ marginTop: 'var(--xc-space-2)' }}>
@@ -522,7 +557,7 @@ export function MultisigCreate({ walletId, onBack }) {
                         type="button"
                         variant="secondary"
                         onClick={addRow}
-                        disabled={rows.length >= MAX_COSIGNERS[scheme]}
+                        disabled={rows.length >= MAX_MULTISIG_COSIGNERS[scheme]}
                     >
                         + Add cosigner
                     </Button>
@@ -552,7 +587,8 @@ export function MultisigCreate({ walletId, onBack }) {
                 <Input
                     label={`Threshold (1..${rows.length})`}
                     value={threshold}
-                    onChange={(e) => { setEdited(true); setThreshold(e.target.value); }}
+                    onChange={(e) => { setEdited(true); touch('threshold'); setThreshold(e.target.value); }}
+                    onBlur={() => touch('threshold')}
                     inputMode="numeric"
                 />
 
@@ -573,7 +609,7 @@ export function MultisigCreate({ walletId, onBack }) {
 
 function ReviewCosigner({ index, row }) {
     return (
-        <fieldset style={{ ...fieldsetStyle, background: 'var(--xc-surface-raised)' }}>
+        <fieldset className={cardStyles.card} style={fieldsetStyle}>
             <legend style={legendStyle}>Cosigner {index + 1}: {row.name}</legend>
             <dl className={styles.detailsList}>
                 <dt className={styles.detailsLabel}>Origin</dt>
@@ -595,13 +631,14 @@ function ReviewCosigner({ index, row }) {
     );
 }
 
-function CosignerRow({ index, row, addresses, networkKind, onChange, onRemove, canRemove, onLocalAddressPick }) {
+function CosignerRow({ index, row, addresses, networkKind, onChange, onRemove, canRemove, onLocalAddressPick, onTouch }) {
     return (
-        <fieldset style={{ ...fieldsetStyle, background: 'var(--xc-surface-raised)', marginBottom: 'var(--xc-space-2)' }}>
+        <fieldset className={cardStyles.card} style={{ ...fieldsetStyle, marginBottom: 'var(--xc-space-2)' }}>
             <legend style={legendStyle}>Cosigner {index + 1}</legend>
 
             <Input
                 label="Name"
+                onBlur={() => onTouch('name')}
                 value={row.name}
                 onChange={(e) => onChange({ name: e.target.value })}
                 placeholder="My signer / Bob's Trezor / cold-storage xpub"
@@ -621,7 +658,7 @@ function CosignerRow({ index, row, addresses, networkKind, onChange, onRemove, c
                     // Keys auto-filled from this wallet must not ride along
                     // into an external cosigner row.
                     ...(row.origin === 'local' ? { pubkey: '', fingerprint: '', derivationPath: '' } : {}),
-                })}
+                }, [])}
             >
                 <option value="local">Local signer</option>
                 <option value="external-xpub">External xpub</option>
@@ -673,6 +710,7 @@ function CosignerRow({ index, row, addresses, networkKind, onChange, onRemove, c
                     {row.shareError ? <FieldNote variant="error">{row.shareError}</FieldNote> : null}
                     <Input
                         label="xpub"
+                onBlur={() => onTouch('xpub')}
                         value={row.xpub}
                         onChange={(e) => onChange({ xpub: e.target.value.trim() })}
                         placeholder="xpub6CUGRUonZSQ4..."
@@ -682,6 +720,7 @@ function CosignerRow({ index, row, addresses, networkKind, onChange, onRemove, c
 
             <Input
                 label="Public key (hex, 33-byte compressed)"
+                onBlur={() => onTouch('pubkey')}
                 value={row.pubkey}
                 onChange={(e) => onChange({ pubkey: e.target.value.trim() })}
                 placeholder="02abcdef…"
@@ -689,6 +728,7 @@ function CosignerRow({ index, row, addresses, networkKind, onChange, onRemove, c
 
             <Input
                 label="Master fingerprint (4 bytes hex)"
+                onBlur={() => onTouch('fingerprint')}
                 value={row.fingerprint}
                 onChange={(e) => onChange({ fingerprint: e.target.value.trim() })}
                 placeholder="73c5da0a"
@@ -699,6 +739,7 @@ function CosignerRow({ index, row, addresses, networkKind, onChange, onRemove, c
 
             <Input
                 label="Derivation path"
+                onBlur={() => onTouch('derivationPath')}
                 value={row.derivationPath}
                 onChange={(e) => onChange({ derivationPath: e.target.value.trim() })}
                 placeholder="m/48'/0'/0'/2'/0/0"
@@ -747,11 +788,7 @@ function originLabel(origin) {
 }
 
 const fieldsetStyle = {
-    border: 'var(--xc-card-border)',
-    borderRadius: 'var(--xc-card-radius)',
-    padding: 'var(--xc-card-pad)',
     margin: '0 0 var(--xc-space-3) 0',
-    background: 'var(--xc-card-bg)',
 };
 
 const legendStyle = {

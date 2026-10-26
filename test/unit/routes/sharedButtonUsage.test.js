@@ -450,9 +450,6 @@ describe('trade form style guide primitives', () => {
         const { create: createSource, import: importSource } = sources;
 
         expect(importSource).toMatch(/\bTextarea\b/);
-        expect(importSource).toMatch(
-            /import\s+\{\s*ClipboardPasteButton\s*\}\s+from\s+'\.\.\/\.\.\/ui\/ClipboardPasteButton\.jsx'/,
-        );
         expect(importSource).not.toMatch(/<textarea\b|<select\b/);
         expect(importSource).toMatch(/<Tabs\b/);
         expect(importSource).not.toMatch(/<button\b/);

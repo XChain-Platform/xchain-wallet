@@ -131,10 +131,11 @@ function viewFor(slot) {
  * unhydrated cache does not degrade gracefully: it answers "no lockout, no
  * duress, no freeze", which is the permissive answer to all three questions.
  *
- * No-op in a browser, the extension, and the desktop renderer, which keep
- * localStorage: their storage is not evictable in the way iOS's is, and the
- * extension already routes panic mode through chrome.storage.local for its
- * own reason (cross-context visibility, not durability).
+ * No-op in a browser, the extension, and the desktop renderer: their storage
+ * is not evictable in the way iOS's is, the extension already routes panic
+ * mode through chrome.storage.local for its own reason (cross-context
+ * visibility, not durability), and the desktop renderer sends its freeze to
+ * the main process, which signs (desktop/renderer/panicModeBridge.js).
  *
  * @returns {Promise<boolean>} whether native persistence was installed
  */

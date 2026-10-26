@@ -761,6 +761,15 @@
     }
 }
 
+/* Placeholder text takes the muted text color in every theme. The browser's
+   own placeholder color is a fixed translucent gray, 3.7:1 on the dark theme's
+   field surface, under the 4.5:1 floor. */
+input::placeholder,
+textarea::placeholder {
+    color: var(--xc-text-muted);
+    opacity: 1;
+}
+
 body {
     margin: 0;
     font-family: var(--xc-font-sans);

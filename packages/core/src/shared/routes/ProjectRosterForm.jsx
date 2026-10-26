@@ -29,8 +29,10 @@ import { extractActionIndex } from '../utils/actionIndexFromTx.js';
 import { submitFailureMessage } from '../utils/submitFailureMessage.js';
 import { useActionConfirmFlow, useConfirmSubmit, isUserRejection } from '../hooks/useActionConfirmFlow.js';
 import { ActionConfirmScreen } from '../components/ActionConfirmScreen.jsx';
+import { QueuedResultPanel } from '../components/QueuedResultPanel.jsx';
 import { classifyTickItems } from '../utils/listTickItems.js';
 import { memoLengthError, MEMO_HINT } from '../utils/memoLimit.js';
+import { tokenIssuerEligibility } from '../utils/tokenIssuerEligibility.js';
 
 const chainRegistry = registryLib.defaultRegistry();
 const POLL_INTERVAL_MS = 10_000;
@@ -114,6 +116,7 @@ export function ProjectRosterForm({ walletId, chainId, tick, issuerAddress = nul
     const [listActionIndex, setListActionIndex] = useState(/** @type {string | null} */ (null));
     const [linkTxid, setLinkTxid] = useState(/** @type {string | null} */ (null));
     const [waitElapsed, setWaitElapsed] = useState(0);
+    const [queuedLeg, setQueuedLeg] = useState(/** @type {any | null} */ (null));
     const passwordRef = useRef(/** @type {HTMLInputElement | null} */ (null));
 
     // The active map is best-effort: a host without `getActiveAddresses`, or
@@ -287,8 +290,14 @@ export function ProjectRosterForm({ walletId, chainId, tick, issuerAddress = nul
         if (!fromAddressId || !addressesByChain) return null;
         return (addressesByChain[chainId] || []).find((a) => a.id === fromAddressId) || null;
     }, [chainId, fromAddressId, addressesByChain]);
-
-    const ownerMismatch = !!(issuerAddress && fromAddress && fromAddress.address !== issuerAddress);
+    const issuerEligibility = tokenIssuerEligibility({
+        tokenInfo: { creator: issuerAddress },
+        addressesByChain,
+        chainId,
+        tick,
+        sourceAddress: fromAddress?.address,
+    });
+    const ownerMismatch = !!issuerEligibility.error;
 
     const hw = isHwSource(fromAddress);
     const [hwStatus, setHwStatus] = useState('idle');
@@ -330,6 +339,14 @@ export function ProjectRosterForm({ walletId, chainId, tick, issuerAddress = nul
         event.preventDefault();
         if (!fromAddress) {
             setFormError('No signing address available on this network.');
+            return;
+        }
+        if (issuerEligibility.pending) {
+            setFormError(`Wait for the wallet to verify the current owner of ${tick}.`);
+            return;
+        }
+        if (issuerEligibility.error) {
+            setFormError(issuerEligibility.error);
             return;
         }
         if (!rosterChecked) {
@@ -394,6 +411,8 @@ export function ProjectRosterForm({ walletId, chainId, tick, issuerAddress = nul
                     prebuiltPsbt,
                 }),
             });
+            // A transient broadcast failure resolves as queued: signed, not on the network.
+            if (res?.queued) { setQueuedLeg(res); return; }
             const txid = res?.txid || res?.broadcast?.txid;
             if (!txid) throw new Error('List broadcast did not return a transaction ID.');
             setListTxid(txid);
@@ -451,6 +470,7 @@ export function ProjectRosterForm({ walletId, chainId, tick, issuerAddress = nul
                     prebuiltPsbt,
                 }),
             });
+            if (res?.queued) { setQueuedLeg(res); return; }
             const txid = res?.txid || res?.broadcast?.txid;
             if (!txid) throw new Error('Cross-chain link broadcast did not return a transaction ID.');
             setLinkTxid(txid);
@@ -538,6 +558,12 @@ export function ProjectRosterForm({ walletId, chainId, tick, issuerAddress = nul
                 hintClassName={styles.hint}
             />
         );
+    }
+
+    // A leg signed but not broadcast stops the flow: the panel offers no retry,
+    // because signing again while a signed copy is queued double-broadcasts.
+    if (queuedLeg) {
+        return wrap(<QueuedResultPanel onDone={onBack} what="official token list" unsaved={queuedLeg?.unsaved} />);
     }
 
     if (stage === 'done') {
@@ -712,8 +738,8 @@ export function ProjectRosterForm({ walletId, chainId, tick, issuerAddress = nul
                     </dd>
                 </dl>
                 {ownerMismatch ? (
-                    <FormNotice variant="warning" role="alert">
-                        {`This wallet isn't signing from the project's owner address (${issuerAddress}). The link will only be honoured if it's signed by the current owner.`}
+                    <FormNotice variant="error" role="alert">
+                        {issuerEligibility.error}
                     </FormNotice>
                 ) : null}
                 <SignCredentials
@@ -742,13 +768,14 @@ export function ProjectRosterForm({ walletId, chainId, tick, issuerAddress = nul
             demoGuard={demoGuard}
             label="Official token list"
             onSubmit={handleReviewList}
-            status={formError ? (
-                <StatusMessage variant="error">{formError}</StatusMessage>
+            status={formError || issuerEligibility.error ? (
+                <StatusMessage variant="error">{formError || issuerEligibility.error}</StatusMessage>
             ) : null}
             actions={(
                 <Button
                     type="submit"
                     variant="primary"
+                    disabled={issuerEligibility.pending || !!issuerEligibility.error}
                 >
                     Review list
                 </Button>
@@ -798,13 +825,6 @@ export function ProjectRosterForm({ walletId, chainId, tick, issuerAddress = nul
                 onChange={(e) => setMemo(e.target.value)}
                 autoComplete="off"
             />
-            {ownerMismatch ? (
-                <FormNotice variant="warning" role="alert">
-                        This wallet doesn't hold the project's owner address.
-                        the final link step will only be honoured if signed
-                        by the current owner.
-                </FormNotice>
-            ) : null}
             {feeTiers ? (
                 <FeeSelector
                     label="Network fee"

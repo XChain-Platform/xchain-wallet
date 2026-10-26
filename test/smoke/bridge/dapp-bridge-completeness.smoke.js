@@ -17,6 +17,7 @@ import { strict as assert } from 'node:assert';
 import { existsSync, readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { englishDictionarySource } from '../../helpers/englishNamespaces.js';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const wsRoot = join(here, '..', '..', '..');
@@ -123,7 +124,7 @@ assert.ok(/useExtensionWallet/.test(bannerSrc),
 // The accept label is localized: the banner names the key and the English
 // dictionary carries the visible text.
 assert.ok(/t\('extensionBanner\.useExtension'\)/.test(bannerSrc)
-    && /'extensionBanner\.useExtension': 'Use extension wallet'/.test(readFileSync(join(wsRoot, 'packages', 'core', 'src', 'i18n', 'locales', 'en', 'index.js'), 'utf8')),
+    && /'extensionBanner\.useExtension': 'Use extension wallet'/.test(englishDictionarySource()),
     'ExtensionBanner offers the accept action');
 const extHook = readFileSync(join(web, 'src', 'useExtensionWallet.js'), 'utf8');
 assert.ok(/xchain#initialized/.test(extHook),

@@ -10,6 +10,7 @@
 
 import { expect } from '@playwright/test';
 import { compareDecimal, subtractDecimal } from '../../../packages/core/src/shared/utils/mintHeadroom.js';
+import { waitForShownTxid } from './pendingHistory.js';
 import { openPaletteCommand } from './wallet.js';
 import { approveConfirm, expectConfirmModal } from './regtest.js';
 import { TESTNET_ADDRESS_RE, TESTNET_CHAIN_LABEL } from './testnet.js';
@@ -89,4 +90,6 @@ export async function mintTestnetXchain(page, amount, opts) {
 
     await expectConfirmModal(page, `the MINT of ${amount} XCHAIN`);
     await approveConfirm(page, `the MINT of ${amount} XCHAIN`);
+    const txid = await waitForShownTxid(page.getByRole('main'));
+    return txid;
 }

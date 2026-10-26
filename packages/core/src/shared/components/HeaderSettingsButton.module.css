@@ -37,25 +37,6 @@
     box-shadow: var(--xc-shadow-surface-ring);
 }
 
-/* ───── Popover ───── */
-
-.popover {
-    position: absolute;
-    top: calc(100% + 6px);
-    inset-inline-end: 0;
-    z-index: var(--xc-z-dropdown);
-    width: 320px;
-    max-width: calc(100vw - (2 * var(--xc-space-3)));
-    background: var(--xc-surface);
-    border: 1px solid var(--xc-border-strong);
-    border-radius: var(--xc-radius-lg);
-    box-shadow: var(--xc-shadow-popover);
-    padding: var(--xc-space-2);
-    display: flex;
-    flex-direction: column;
-    gap: var(--xc-space-3);
-}
-
 .section {
     display: flex;
     flex-direction: column;
@@ -75,22 +56,6 @@
    dropdown rule in tokens.css. */
 .networkSelect {
     width: 100%;
-}
-
-.empty {
-    font-size: var(--xc-text-sm);
-    color: var(--xc-text-muted);
-    text-align: center;
-    padding: var(--xc-space-3);
-}
-
-/* ───── Account section ───── */
-
-.walletName {
-    flex: 1 1 auto;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
 }
 
 /* Summary row - active wallet / account, click navigates to the

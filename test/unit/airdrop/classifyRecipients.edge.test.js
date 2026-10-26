@@ -26,11 +26,11 @@ describe('classifyRecipients edge cases', () => {
         });
     });
 
-    it('deduplicates valid bech32 addresses without changing the retained spelling', () => {
+    it('deduplicates bech32 case variants and returns the lowercase form', () => {
         const upper = BTC_MAINNET.toUpperCase();
         const out = classifyRecipients([upper, BTC_MAINNET, upper], CHAIN);
 
-        expect(out.valid).toEqual([upper]);
+        expect(out.valid).toEqual([BTC_MAINNET]);
         expect(out.duplicates).toBe(2);
     });
 
@@ -82,5 +82,18 @@ describe('classifyRecipients edge cases', () => {
 
         expect(out.invalid).toEqual([BTC_REGTEST, 'not-an-address']);
         expect(out.wrongNetwork).toEqual([BTC_REGTEST]);
+    });
+});
+
+// One pasted token with no separators costs minutes unless it is refused first:
+// the validators decode it as base58 once per coin and network, and that decode
+// is quadratic.
+describe('classifyRecipients on a very long single entry', () => {
+    it('drops it as invalid in well under a second', () => {
+        const started = performance.now();
+        const result = classifyRecipients(['x'.repeat(30_000)], { coin: 'bitcoin', networkKind: 'mainnet' });
+        expect(result.valid).toEqual([]);
+        expect(result.invalid).toHaveLength(1);
+        expect(performance.now() - started).toBeLessThan(1000);
     });
 });

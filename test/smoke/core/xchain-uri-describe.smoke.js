@@ -42,6 +42,7 @@ import {
     t,
 } from '../../../packages/core/src/i18n/index.js';
 import * as coreUri from '../../../packages/core/src/uri/index.js';
+import { englishDictionarySource } from '../../helpers/englishNamespaces.js';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const wsRoot = join(here, '..', '..', '..');
@@ -223,10 +224,7 @@ assert.equal(
 
 // --- 9. i18n dictionary exposes every key -------------------------------
 
-const en = readFileSync(
-    join(wsRoot, 'packages', 'core', 'src', 'i18n', 'locales', 'en', 'index.js'),
-    'utf8',
-);
+const en = englishDictionarySource();
 const requiredKeys = [
     'uri.intent.send',
     'uri.intent.sendTo',

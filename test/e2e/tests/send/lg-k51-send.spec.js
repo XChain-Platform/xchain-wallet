@@ -52,7 +52,8 @@ async function expectReviewAndReject(page, expectedAmount, expectedFee, label) {
     await expect(page.getByTestId('confirm-chain-badge')).toHaveText('Bitcoin');
 
     const fee = page.getByTestId('confirm-fee');
-    await expect(fee).toHaveText(`Network fee: ${expectedFee} BTC`);
+    // The dev SDK quotes a rate-table fee, which review labels as an estimate.
+    await expect(fee).toHaveText(`Network fee: ${expectedFee} BTC (estimate)`);
     const feeAmount = Number((await fee.innerText()).match(/[\d.]+/)?.[0]);
     expect(feeAmount, `${label}: review shows no positive network fee`).toBeGreaterThan(0);
 

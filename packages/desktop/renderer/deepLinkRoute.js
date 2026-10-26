@@ -17,6 +17,7 @@
 import { useEffect, useState } from 'react';
 import { normalizeBip21Amount, parseBip21Uri } from '../../core/src/uri/bip21.js';
 import { hardenUriIntentText, parseXchainUri } from '../../core/src/uri/xchainUri.js';
+import { isValidAddressForChain } from '../../core/src/shared/utils/addressValidation.js';
 import { tickerReferenceError } from '../../core/src/shared/utils/tickerGrammar.js';
 
 const COIN_SCHEMES = Object.freeze({
@@ -28,6 +29,11 @@ const COIN_SCHEMES = Object.freeze({
 const ROUTABLE_XCHAIN_ACTIONS = new Set(['send', 'receive', 'execute']);
 
 export const INVALID_DEEP_LINK_MESSAGE = 'This link is invalid or unsupported.';
+
+function descriptorAcceptsAddress(descriptor, address) {
+    if (!COIN_SCHEMES[descriptor.coin]) return true;
+    return isValidAddressForChain(address, descriptor.coin, descriptor.networkKind);
+}
 
 function invalidRoute() {
     return { view: 'deep-link-error', message: INVALID_DEEP_LINK_MESSAGE };
@@ -67,15 +73,25 @@ export function deepLinkRoute(raw, chainRegistry) {
             const parts = parseBip21Uri(normalized);
             if (parts.required?.length > 0) return invalidRoute();
             const memo = parts.message ?? parts.label;
-            const hardened = hardenUriIntentText({ kind: 'send', memo });
+            const hardened = hardenUriIntentText({ kind: 'send', memo, tick: parts.params?.tick });
             const chainId = chainRegistry?.chainIdFor?.(coinScheme.coin, 'mainnet') || undefined;
             if (!chainId) return invalidRoute();
+            // The link's target must be an address on the scheme's own chain.
+            if (!isValidAddressForChain(parts.address, coinScheme.coin, 'mainnet')) return invalidRoute();
+            // A request that names another network cannot be shown as a
+            // payment on this scheme's own chain, and a named token must not
+            // fall back to the coin: either would prefill a different payment
+            // than the link describes.
+            const namedChain = parts.params?.chain;
+            if (namedChain !== undefined && namedChain !== chainId) return invalidRoute();
+            const namedTick = hardened.tick ? hardened.tick.toUpperCase() : undefined;
+            if (namedTick && tickerReferenceError(namedTick, { allowRef: true })) return invalidRoute();
             return {
                 view: 'send',
                 sendPrefill: {
                     address: parts.address,
                     amount: parts.amount,
-                    tick: coinScheme.tick,
+                    tick: namedTick || coinScheme.tick,
                     chainId,
                     memo: hardened.memo,
                 },
@@ -99,13 +115,25 @@ export function deepLinkRoute(raw, chainRegistry) {
     // URI tooling. External links accept only screens that require an explicit
     // review action, so a typo or future privileged action fails closed here.
     if (intent?.action && !ROUTABLE_XCHAIN_ACTIONS.has(intent.action)) return invalidRoute();
+    // A path-style link names its chain in the path. That chain must be one
+    // the registry holds, and a destination must be an address on it, the bar
+    // the coin-code form already meets.
+    if (intent?.chainId && typeof chainRegistry?.get === 'function') {
+        const descriptor = chainRegistry.get(intent.chainId);
+        if (!descriptor) return invalidRoute();
+        if (intent.kind === 'send' && intent.address && !descriptorAcceptsAddress(descriptor, intent.address)) {
+            return invalidRoute();
+        }
+    }
     if (intent?.kind === 'send') {
         if (intent.tick && tickerReferenceError(intent.tick, { allowRef: true })) {
             return invalidRoute();
         }
         let amount = intent.amount;
         try {
-            amount = normalizeBip21Amount(amount);
+            // Token amounts carry up to 18 decimals, the same bound the BIP21
+            // parser applies when a tick is named.
+            amount = normalizeBip21Amount(amount, intent.tick ? 18 : undefined);
         } catch {
             return invalidRoute();
         }

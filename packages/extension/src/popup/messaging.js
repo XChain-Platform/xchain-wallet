@@ -224,8 +224,8 @@ export function createAccount(opts) {
  * @param {string} [accountId]   when supplied, restrict to a single BIP44 account; otherwise aggregate across all accounts under the wallet
  * @returns {Promise<Record<string, Array<{ address: string, addressType: string, label: string, balances: unknown | null, error: string | null }>>>}
  */
-export function getWalletBalances(walletId, accountId) {
-    return /** @type {any} */ (sendMessage('balances.wallet', { walletId, accountId }));
+export function getWalletBalances(walletId, accountId, chainId) {
+    return /** @type {any} */ (sendMessage('balances.wallet', chainId ? { walletId, accountId, chainId } : { walletId, accountId }));
 }
 
 /**
@@ -291,6 +291,11 @@ export function getNewestAddress(walletId, chainId, accountId) {
     return /** @type {any} */ (
         sendMessage('addresses.newest', { walletId, chainId, accountId })
     );
+}
+
+/** Which registry address types the installed SDK can generate on a chain. @param {string} chainId */
+export function getSupportedAddressTypes(chainId) {
+    return /** @type {any} */ (sendMessage('sdk.addressTypes', { chainId }));
 }
 
 /** Rename an address (set its label). @param {string} id @param {string} label */
@@ -2579,6 +2584,17 @@ export function buildBatchCommand(req) {
  */
 export function getActionFormats(req) {
     return /** @type {any} */ (sendMessage('sdk.getActionFormats', req));
+}
+
+/**
+ * The coins whose addresses an address LIST on the chain accepts once
+ * token-policy inheritance is active, read from the explorer's gate flag.
+ * Answers [] when the gate is off or on any failure.
+ *
+ * @param {{ chainId: string, coin: string, networkKind: string }} req
+ */
+export function listAnyCoinItems(req) {
+    return /** @type {any} */ (sendMessage('sdk.listAnyCoinItems', req));
 }
 
 /**

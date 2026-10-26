@@ -275,6 +275,23 @@ describe('the transport carries the structured error fields', () => {
         expect(resp.error.message).toMatch(/CHAIN_NOT_PERMITTED/);
     });
 
+    it('refuses a non-string signMessage message before any prompt', async () => {
+        const prompt = vi.fn(async () => ({ approved: true, password: 'pw', walletId: 'wallet-1' }));
+        const host = new MessageHost({
+            vault: makeVault({ site: connectedSite() }), chainRegistry, sdkRegistry: {},
+        });
+        registerBridgeHandlers(host, { approvals: { ...approvals, signMessage: prompt }, signThrottle: okThrottle });
+        for (const message of [{ a: 1 }, 5, null, ['x'], 'Sign in\u2800\u2800 now', 'pay\u202Ebob']) {
+            const resp = await host.handle({
+                type: 'bridge.signMessage',
+                request: { origin: ORIGIN, chainId: CHAIN, address: FROM, message },
+            });
+            expect(resp.ok).toBe(false);
+            expect(resp.error.code).toBe('INVALID_PARAMS');
+        }
+        expect(prompt).not.toHaveBeenCalled();
+    });
+
     it('reports a rejected approval as USER_REJECTED, not as an error class name', async () => {
         const host = new MessageHost({
             vault: makeVault({ site: connectedSite() }), chainRegistry, sdkRegistry: {},

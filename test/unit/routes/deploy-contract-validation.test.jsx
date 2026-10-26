@@ -323,6 +323,36 @@ describe('DeployContractForm validation diagnostics', () => {
         expect(utils.getByLabelText('Gas limit')).toHaveValue('100000');
     });
 
+    it('renders hostile constructor text plainly and preserves exact values in review', async () => {
+        let utils;
+        await domAct(async () => {
+            utils = render(
+                <MessagingProvider
+                    shell="web"
+                    messaging={messagingWithValidation({ valid: true }, {
+                        getSettings: () => Promise.resolve({ walletMode: 'watcher' }),
+                    })}
+                >
+                    <DeployContractForm walletId="w" onBack={() => {}} />
+                </MessagingProvider>,
+            );
+            await drain();
+        });
+        fireEvent.change(utils.getByLabelText('Code source'), { target: { value: SOURCE } });
+        fireEvent.change(utils.getByLabelText('Gas limit'), { target: { value: '9007199254740993' } });
+        fireEvent.change(utils.getByLabelText('Constructor params (optional)'), {
+            target: { value: '<img src=x>⚡|9007199254740993' },
+        });
+        fireEvent.click(utils.getByRole('button', { name: 'Preview' }));
+
+        expect(await utils.findByRole('heading', { name: 'Review publish' })).toBeInTheDocument();
+        const constructorRow = utils.getByText('Constructor').nextElementSibling;
+        expect(Array.from(constructorRow.querySelectorAll('li')).map((node) => node.textContent))
+            .toEqual(['<img src=x>⚡', '9007199254740993']);
+        expect(constructorRow.querySelector('img')).toBeNull();
+        expect(utils.getByText('9007199254740993', { selector: 'dd' })).toBeInTheDocument();
+    });
+
 });
 
 describe('DeployContractForm suggested gas label', () => {

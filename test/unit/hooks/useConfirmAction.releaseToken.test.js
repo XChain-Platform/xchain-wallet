@@ -165,6 +165,50 @@ describe('useConfirmAction releases a wire-shaped compose through its token', ()
         expect(h.isReserved()).toBe(true);
     });
 
+    it('Reject after a wrong password frees the inputs the failed attempt held', async () => {
+        const h = makeHost();
+        const hook = renderHook(() => useConfirmAction());
+        const bad = Object.assign(new Error('Incorrect password'), { name: 'InvalidPasswordError' });
+        const { confirmation } = await openConfirm(hook.result, {
+            compose: h.composeOverWire,
+            sendRelease: h.sendRelease,
+            onApprove: async () => { throw bad; },
+        });
+
+        await act(async () => {
+            await hook.result.current.approve({});
+        });
+        expect(hook.result.current.phase).toBe('ready');
+        expect(h.isReserved()).toBe(true);
+
+        await act(async () => {
+            await hook.result.current.reject();
+        });
+        expect((await confirmation).error).toMatchObject({ reason: 'user-rejected' });
+        expect(h.sendRelease).toHaveBeenCalledOnce();
+        expect(h.isReserved()).toBe(false);
+        hook.unmount();
+    });
+
+    it('leaving the page after a wrong password frees the inputs and settles the confirmation', async () => {
+        const h = makeHost();
+        const hook = renderHook(() => useConfirmAction());
+        const bad = Object.assign(new Error('Incorrect password'), { name: 'InvalidPasswordError' });
+        const { confirmation } = await openConfirm(hook.result, {
+            compose: h.composeOverWire,
+            sendRelease: h.sendRelease,
+            onApprove: async () => { throw bad; },
+        });
+        await act(async () => {
+            await hook.result.current.approve({});
+        });
+
+        hook.unmount();
+
+        expect((await confirmation).error).toMatchObject({ reason: 'user-rejected' });
+        await waitFor(() => expect(h.isReserved()).toBe(false));
+    });
+
     it('a failed send keeps the confirmation open, and Reject again resends', async () => {
         const h = makeHost();
         const real = h.sendRelease.getMockImplementation();

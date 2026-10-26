@@ -28,9 +28,14 @@ import { Button, EmptyState, ListPage, ListRow, PageHeader, Screen, StatusMessag
 import { contactsPickerStyles as styles } from './ContactsPickerScreen.jsx';
 import { currentListItems, currentListMemberCount } from '../../flows/listMembership.js';
 import { listLabel } from '../utils/listLabel.js';
+import { listStatusText } from '../utils/listItemStatusText.js';
 import { neutralizeControlText } from '../utils/textHardening.js';
 import { formatDecimalAmount } from '../utils/amountFormat.js';
 import { t } from '../../i18n/index.js';
+import '../../i18n/locales/en/components.js';
+
+// Lists read at once while counting members; the explorer rate-limits a burst.
+const LIST_DETAIL_CONCURRENCY = 4;
 
 function firstMemberIndex(detail) {
     const first = (currentListItems(detail) || [])[0];
@@ -125,24 +130,45 @@ export function ListPickerScreen({
                 uniq.sort((a, b) => Number(b.block_index || 0) - Number(a.block_index || 0));
                 setRows(uniq);
                 if (typeof messaging.getListByActionIndex !== 'function') return;
-                for (const row of uniq) {
-                    const idx = String(row.action_index);
-                    try {
-                        const detail = await messaging.getListByActionIndex({ chainId, actionIndex: idx });
-                        if (cancelled) return;
-                        setCounts((prev) => ({ ...prev, [idx]: currentListMemberCount(detail) }));
-                        setDescriptions((prev) => ({
-                            ...prev,
-                            [idx]: typeof detail?.description === 'string' && detail.description.length > 0
+                // Counts arrive a few at a time. A state update per list
+                // re-renders every row each time, which grows with the square
+                // of the list count and froze the screen for a wallet with
+                // hundreds of lists, so results are buffered and flushed in
+                // batches.
+                let pendingCounts = {};
+                let pendingDescriptions = {};
+                let flushTimer = null;
+                const flush = () => {
+                    flushTimer = null;
+                    if (cancelled) return;
+                    const nextCounts = pendingCounts;
+                    const nextDescriptions = pendingDescriptions;
+                    pendingCounts = {};
+                    pendingDescriptions = {};
+                    setCounts((prev) => ({ ...prev, ...nextCounts }));
+                    setDescriptions((prev) => ({ ...prev, ...nextDescriptions }));
+                };
+                const queue = [...uniq];
+                const readNext = async () => {
+                    while (queue.length >= 1 && !cancelled) {
+                        const idx = String(queue.shift().action_index);
+                        try {
+                            // eslint-disable-next-line no-await-in-loop
+                            const detail = await messaging.getListByActionIndex({ chainId, actionIndex: idx });
+                            pendingCounts[idx] = currentListMemberCount(detail);
+                            pendingDescriptions[idx] = typeof detail?.description === 'string' && detail.description.length > 0
                                 ? detail.description
-                                : null,
-                        }));
-                    } catch {
-                        if (cancelled) return;
-                        setCounts((prev) => ({ ...prev, [idx]: null }));
-                        setDescriptions((prev) => ({ ...prev, [idx]: null }));
+                                : null;
+                        } catch {
+                            pendingCounts[idx] = null;
+                            pendingDescriptions[idx] = null;
+                        }
+                        if (!cancelled && flushTimer === null) flushTimer = setTimeout(flush, 100);
                     }
-                }
+                };
+                await Promise.all(Array.from({ length: LIST_DETAIL_CONCURRENCY }, readNext));
+                if (flushTimer !== null) clearTimeout(flushTimer);
+                flush();
             })
             .catch(() => { if (!cancelled) setLoadError('Couldn’t load lists. Check your connection and try again.'); });
         return () => { cancelled = true; };
@@ -234,7 +260,7 @@ export function ListPickerScreen({
                             const idx = String(row.action_index ?? '?');
                             const isTick = String(row.type) === '1';
                             const isUnion = String(row.type) === '3';
-                            const status = String(row.status || '');
+                            const statusWhy = listStatusText(row.status);
                             const count = counts[idx];
                             const kind = isUnion ? 'Union' : isTick ? 'Token' : 'Address';
                             const titleLabel = typeof row.name === 'string' && row.name.length > 0
@@ -264,7 +290,7 @@ export function ListPickerScreen({
                                         title={(
                                             <span className={styles.abName}>
                                                 {titleLabel}
-                                                {status && status !== 'valid' ? ` (${status})` : ''}
+                                                {statusWhy ? ` (${statusWhy})` : ''}
                                             </span>
                                         )}
                                         subtitle={(

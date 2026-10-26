@@ -21,8 +21,6 @@
 // code a fake `navigator.clipboard` that RECORDS what it was asked to write,
 // and then asserts that the secret never appears in that recording.
 
-import { createElement } from 'react';
-import { fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, describe, it, expect, vi } from 'vitest';
 import {
     CLIPBOARD_PLUGIN_NAME,
@@ -35,7 +33,6 @@ import {
     sensitiveCopySupported,
 } from '../../../packages/core/src/shared/clipboard.js';
 import { getNativePlugin, isNativeShell } from '../../../packages/core/src/shared/nativeShell.js';
-import { ClipboardPasteButton } from '../../../packages/core/src/ui/ClipboardPasteButton.jsx';
 import {
     checkPasteIntegrity,
     MAX_PASTE_INTEGRITY_LENGTH,
@@ -101,29 +98,6 @@ afterEach(() => {
 });
 
 describe('clipboard reads', () => {
-    it('reads only after a paste click and rejects oversized text before use', async () => {
-        const readText = vi.fn().mockResolvedValue('  abcde  ');
-        const onPaste = vi.fn();
-        Object.defineProperty(globalThis.navigator, 'clipboard', {
-            value: { readText },
-            configurable: true,
-        });
-
-        render(createElement(ClipboardPasteButton, { onPaste, maxLength: 4 }));
-
-        const button = screen.getByRole('button', { name: 'Paste from clipboard' });
-        expect(readText).not.toHaveBeenCalled();
-        fireEvent.focus(button);
-        expect(readText).not.toHaveBeenCalled();
-        fireEvent.click(button);
-
-        expect(await screen.findByRole('alert')).toHaveTextContent(
-            'Clipboard content is too long. Paste manually instead.',
-        );
-        expect(readText).toHaveBeenCalledOnce();
-        expect(onPaste).not.toHaveBeenCalled();
-    });
-
     it('bounds and normalizes an explicit paste before checking clipboard contents', async () => {
         const readText = vi.fn().mockResolvedValue(' value ');
         await expect(checkPasteIntegrity({

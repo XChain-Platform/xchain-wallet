@@ -41,6 +41,7 @@
 
 import {
     PANIC_ARMED_SELF,
+    getPanicModeState,
     getPanicRemainingMs,
     isSigningFrozen,
 } from '../../flows/panicMode.js';
@@ -134,4 +135,24 @@ function discloseCopy(surface, remainingText) {
         title: 'Panic mode is on. Signing is frozen.',
         detail: `Nothing can be sent or signed for another ${remainingText}. Balances and history still work. Turn it off in Settings > Safety.`,
     };
+}
+
+/**
+ * The sentence for a submit the freeze refused, or null when the wallet may
+ * not say so. Keyed on the error name, the only part of the error that
+ * survives the messaging boundary. A duress-armed freeze answers null, so the
+ * caller keeps its generic failure line and the observer sees no cue; a freeze
+ * this context cannot see (still loading, or already over) answers null too.
+ *
+ * @param {unknown} err
+ * @param {object} [opts]
+ * @param {import('../../flows/panicMode.js').PanicModeState} [opts.state]
+ * @param {number} [opts.nowMs]
+ * @returns {string|null}
+ */
+export function panicRefusalMessage(err, { state = getPanicModeState(), nowMs = Date.now() } = {}) {
+    if (/** @type {any} */ (err)?.name !== 'PanicModeActiveError') return null;
+    const notice = panicFreezeNotice({ state, nowMs });
+    if (!notice || !notice.disclose) return null;
+    return `Panic mode is on, so nothing was sent. Signing stays frozen for another ${notice.remainingText}. Turn panic mode off in Settings > Safety to continue.`;
 }

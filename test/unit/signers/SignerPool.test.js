@@ -334,6 +334,25 @@ describe('signers/SignerPool', () => {
             expect(summary.passphraseCaptureNeeded).toEqual([]);
         });
 
+        it('keeps a rename that lands while the passphrase is being verified', async () => {
+            const vault = memoryVault();
+            const signer = capturingSigner(PUB);
+            signer.getPublicKey = async () => {
+                const row = await vault.wallets.get('w1');
+                await vault.wallets.put({ ...row, name: 'Renamed meanwhile' });
+                return { publicKey: PUB };
+            };
+            unlockWalletRecord.mockResolvedValue(signer);
+
+            await new SignerPool().captureOne({
+                vault, wallet: { ...LEGACY }, password: 'pw', bip39Passphrase: 'right', ...REG,
+            });
+
+            const stored = await vault.wallets.get('w1');
+            expect(stored.name).toBe('Renamed meanwhile');
+            expect(typeof stored.encryptedPassphrase).toBe('string');
+        });
+
         it('refuses a passphrase that derives a different key, persisting nothing', async () => {
             const vault = memoryVault();
             const signer = capturingSigner('03deadbeef');

@@ -33,6 +33,7 @@ import {
     cancelSendAssetSwitch,
 } from '@xchain-wallet/core/shared/utils/sendAssetSwitch.js';
 import { i18n, registry as registryLib } from '@xchain-wallet/core';
+import '@xchain-wallet/core/i18n/locales/en/extension.js';
 import { isDemoWallet } from '@xchain-wallet/core/flows';
 import { deepLinkRoute } from '../../../desktop/renderer/deepLinkRoute.js';
 import { withResolvedIssuer } from '@xchain-wallet/core/shared/utils/tokenDetailIssuer.js';
@@ -71,10 +72,10 @@ import { RenameWalletForm } from '@xchain-wallet/core/shared/routes/RenameWallet
 import { RenameAccountForm } from '@xchain-wallet/core/shared/routes/RenameAccountForm.jsx';
 import { clearActiveAccount, writeActiveAccount } from '@xchain-wallet/core/shared/utils/activeAccountMemory.js';
 import { reconcileActiveAccount } from '@xchain-wallet/core/shared/utils/activeAccountScope.js';
-import { readActiveWallet, writeActiveWallet } from '@xchain-wallet/core/shared/utils/activeWalletMemory.js';
+import { clearActiveWallet, readActiveWallet, writeActiveWallet } from '@xchain-wallet/core/shared/utils/activeWalletMemory.js';
 import { takePostDemoIntent } from '@xchain-wallet/core/shared/utils/demoGraduation.js';
 import { historyScopeForAsset } from '@xchain-wallet/core/shared/utils/historyEntryScope.js';
-import { defaultDexAssetForNetwork, syncDexAssetToNetwork } from '@xchain-wallet/core/shared/chainSelection.js';
+import { defaultDexAssetForNetwork, sharedListDirectoryChainId, syncDexAssetToNetwork } from '@xchain-wallet/core/shared/chainSelection.js';
 import { lockImmediately } from '@xchain-wallet/core/shared/utils/lockAction.js';
 import { Locked } from '@xchain-wallet/core/shared/routes/Locked.jsx';
 import { Home } from '@xchain-wallet/core/shared/routes/Home.jsx';
@@ -82,14 +83,14 @@ import { ResumeConfirm } from '@xchain-wallet/core/shared/routes/ResumeConfirm.j
 import { CommandPalette } from '@xchain-wallet/core/shared/commandPalette/CommandPalette.jsx';
 import { useCommandPalette } from '@xchain-wallet/core/shared/commandPalette/useCommandPalette.js';
 import { AppHeader } from '@xchain-wallet/core/shared/components/AppHeader.jsx';
-import { buildCommands, contactsToCommands, parseFreeformCommands, balancesToCommands, helpToCommands, settingsSectionsToCommands, sitesToCommands } from '@xchain-wallet/core/shared/commandPalette/commandRegistry.js';
+import { buildCommands, contactsToCommands, parseFreeformCommands, balancesToCommands, helpToCommands, settingsSectionsToCommands, sitesToCommands, hiddenSettingsSectionIds } from '@xchain-wallet/core/shared/commandPalette/commandRegistry.js';
 import { useSettings } from '@xchain-wallet/core/shared/hooks/useSettings.js';
 import { useWalletMode } from '@xchain-wallet/core/shared/hooks/useWalletMode.js';
 import { useDemoAutoWipe } from '@xchain-wallet/core/shared/hooks/useDemoAutoWipe.js';
 import { useKeyboardShortcuts } from '@xchain-wallet/core/shared/keyboard/useKeyboardShortcuts.js';
 import { ShortcutHelp } from '@xchain-wallet/core/shared/keyboard/ShortcutHelp.jsx';
 import { TokenDetail } from '@xchain-wallet/core/shared/routes/TokenDetail.jsx';
-import { ToastHost, useToast } from '@xchain-wallet/core/shared/components/ToastHost.jsx';
+import { ToastHost, useClearToastsOnLock, useToast } from '@xchain-wallet/core/shared/components/ToastHost.jsx';
 import { ReachabilityBanner } from '@xchain-wallet/core/shared/components/ReachabilityBanner.jsx';
 import { QueuedBroadcastBanner } from '@xchain-wallet/core/shared/components/QueuedBroadcastBanner.jsx';
 import { BottomTabBar } from '@xchain-wallet/core/shared/components/BottomTabBar.jsx';
@@ -190,6 +191,7 @@ import {
     parseExtensionHandoff,
     shellForExtensionView,
 } from './launchState.js';
+import { shouldClearTransientState } from '@xchain-wallet/core/shared/utils/launchRouteState.js';
 import { usePopupPaletteData } from './usePopupPaletteData.js';
 import {
     activeTabSupportsWallet,
@@ -292,6 +294,7 @@ export function App() {
 function AppInner({ canOpenInTab, titleEnabled }) {
     const { showToast } = useToast();
     const [status, setStatus] = useState(/** @type {any} */ ({ state: 'loading' }));
+    useClearToastsOnLock(status.state);
     const [surfaceStateRevision, setSurfaceStateRevision] = useState(0);
     const [extensionHandoff] = useState(() => (
         typeof window === 'undefined' ? null : parseExtensionHandoff(window.location.search)
@@ -456,6 +459,10 @@ function AppInner({ canOpenInTab, titleEnabled }) {
     // the manifest's `protocol_handlers` route to popup.html?uri=<uri>.
     // Parsed on mount, prefill goes into the Send route, then the param
     // is stripped via history.replaceState.
+    // Counts payment links that prefilled Send. It keys the Send route so a
+    // link arriving while Send is open replaces the form (the earlier one is
+    // kept as a draft) instead of being dropped silently.
+    const [sendLinkSeq, setSendLinkSeq] = useState(0);
     const [sendPrefill, setSendPrefill] = useState(
         /** @type {{ address?: string, amount?: string, tick?: string, chainId?: string, memo?: string } | null} */ (null),
     );
@@ -632,9 +639,54 @@ function AppInner({ canOpenInTab, titleEnabled }) {
         return () => { refreshRequestId.current += 1; };
     }, [refresh]);
 
+    // The listener below outlives renders, so it reads what this surface is
+    // showing through a ref.
+    const shownWalletIds = useRef(/** @type {Array<string | null | undefined>} */ ([]));
+    shownWalletIds.current = [activeWalletId, walletDetailsId, walletRenameTarget?.id];
+    const shownWalletId = useRef(/** @type {string | null} */ (null));
+    shownWalletId.current = activeWalletId;
+    // The wallet list read in flight, or chosen and not yet rendered, is
+    // invisible to the refs above. Removals that name a wallet the list read
+    // has not shown yet wait here for it.
+    const chosenWalletId = useRef(/** @type {string | null} */ (null));
+    const removedBeforeShown = useRef(/** @type {Set<string>} */ (new Set()));
+
     useEffect(() => attachSurfaceStateListener((event) => {
         applySurfaceStateEvent(event, {
             refreshSession: refresh,
+            refreshWallets: () => {
+                listWallets()
+                    .then((list) => { if (Array.isArray(list) && list.length) setWallets(list); })
+                    .catch(() => { /* the next session refresh reloads the list */ });
+            },
+            // A wallet removed in another surface must not stay open here:
+            // the session reload picks the stored wallet if it survives, the
+            // first remaining wallet otherwise, and Welcome when none remain.
+            walletRemoved: (walletId) => {
+                if (readActiveWallet() === walletId) clearActiveWallet();
+                if (shownWalletIds.current.includes(walletId) || chosenWalletId.current === walletId) {
+                    refresh();
+                    return;
+                }
+                if (!shownWalletId.current) removedBeforeShown.current.add(walletId);
+                listWallets()
+                    .then((list) => { if (Array.isArray(list) && list.length) setWallets(list); })
+                    .catch(() => { /* the next session refresh reloads the list */ });
+                setSurfaceStateRevision((value) => value + 1);
+            },
+            // An account added or renamed in another surface: re-pick the
+            // active account from the fresh list and reload the open screen.
+            accountsChanged: (walletId) => {
+                if (shownWalletId.current !== walletId) return;
+                listAccounts(walletId)
+                    .then((list) => {
+                        if (shownWalletId.current !== walletId) return;
+                        const sorted = Array.isArray(list) ? [...list].sort((a, b) => a.index - b.index) : [];
+                        setActiveAccountId(reconcileActiveAccount(walletId, sorted));
+                        setSurfaceStateRevision((value) => value + 1);
+                    })
+                    .catch(() => { /* the next wallet switch reloads the accounts */ });
+            },
             selectWallet: (walletId) => {
                 writeActiveWallet(walletId);
                 setActiveWalletId(walletId);
@@ -646,6 +698,8 @@ function AppInner({ canOpenInTab, titleEnabled }) {
             },
             // Chain-scoped routes load from the active network when they mount.
             remountNetworkState: () => setSurfaceStateRevision((value) => value + 1),
+            // Screens that load wallet or account rows on mount read them again.
+            remountScreens: () => setSurfaceStateRevision((value) => value + 1),
         });
     }), [refresh]);
 
@@ -666,7 +720,10 @@ function AppInner({ canOpenInTab, titleEnabled }) {
                 setDeepLinkNotice(route.message);
                 return;
             }
-            if (route.view === 'send') setSendPrefill(route.sendPrefill);
+            if (route.view === 'send') {
+                setSendPrefill(route.sendPrefill);
+                setSendLinkSeq((n) => n + 1);
+            }
             if (route.view === 'contract-execute') {
                 setContractRef(route.contractRef);
                 setExecutePrefill(route.executePrefill);
@@ -684,18 +741,35 @@ function AppInner({ canOpenInTab, titleEnabled }) {
         }
     }, []);
 
+    const previousSessionStateRef = useRef(undefined);
     useEffect(() => {
+        const previousState = previousSessionStateRef.current;
+        previousSessionStateRef.current = status.state;
         if (status.state !== 'unlocked') {
-            clearTransientActionState();
+            // A link opened before unlock parks its prefill while the popup
+            // loads or sits locked; only leaving an unlocked session wipes it.
+            if (shouldClearTransientState(previousState, status.state)) clearTransientActionState();
             setActiveWalletId(null);
             setActiveAccountId(null);
             setWallets([]);
+            chosenWalletId.current = null;
+            removedBeforeShown.current.clear();
             return;
         }
         let cancelled = false;
         listWallets()
-            .then((list) => {
+            .then((fetched) => {
                 if (cancelled) return;
+                // A wallet removed in another surface while this read was in
+                // flight can still be in the list; the session reload decides
+                // what is left.
+                const gone = removedBeforeShown.current;
+                const list = Array.isArray(fetched) ? fetched.filter((w) => !gone.has(w?.id)) : fetched;
+                if (gone.size > 0 && Array.isArray(fetched) && fetched.length > 0 && list.length === 0) {
+                    gone.clear();
+                    refresh();
+                    return;
+                }
                 if (Array.isArray(list) && list.length > 0) {
                     setWallets(list);
                     // D-34(c): restore the last selected WALLET if it still
@@ -709,14 +783,14 @@ function AppInner({ canOpenInTab, titleEnabled }) {
                     // id is validated against the live list so a removed wallet
                     // or another device falls back to the default.
                     const persisted = readActiveWallet();
-                    setActiveWalletId(
-                        (persisted && list.some((w) => w.id === persisted)) ? persisted : list[0].id,
-                    );
+                    const chosen = (persisted && list.some((w) => w.id === persisted)) ? persisted : list[0].id;
+                    chosenWalletId.current = chosen;
+                    setActiveWalletId(chosen);
                 }
             })
             .catch(() => { /* Home surfaces load errors */ });
         return () => { cancelled = true; };
-    }, [status.state]);
+    }, [status]);
 
     // Resolved from the loaded list rather than tracked as its own state, so
     // `handleSwitchWallet` stays the single writer.
@@ -896,7 +970,10 @@ function AppInner({ canOpenInTab, titleEnabled }) {
         }),
         ...contactsToCommands(paletteContacts, { navigate: palette.navigate }),
         ...sitesToCommands(paletteSites, { openConnectedSites: () => palette.navigate('connected-sites') }),
-        ...settingsSectionsToCommands({ openSettings: openSettingsSection }),
+        ...settingsSectionsToCommands({
+            openSettings: openSettingsSection,
+            hiddenSettingsSections: hiddenSettingsSectionIds({ settings, compact: true }),
+        }),
         ...helpToCommands({
             openSettings: openSettingsSection,
             openHelp: () => setShortcutHelpOpen(true),
@@ -1007,6 +1084,7 @@ function AppInner({ canOpenInTab, titleEnabled }) {
                     onImportFromFreeWallet={() => setOnboardingStep('import-freewallet')}
                     onPairPartner={() => setOnboardingStep('pair-partner')}
                     onDemoEntered={refresh}
+                    onWalletFound={refresh}
                 />
             );
         case 'locked':
@@ -1020,7 +1098,7 @@ function AppInner({ canOpenInTab, titleEnabled }) {
             if (unlockedView === 'send' && activeWalletId) {
                 return (
                     <Send
-                        key={`${activeWalletId}:${activeAccountId || 'all'}`}
+                        key={`${activeWalletId}:${activeAccountId || 'all'}:${sendLinkSeq}`}
                         walletId={activeWalletId}
                         accountId={activeAccountId || undefined}
                         onViewHistory={(target) => {
@@ -1402,14 +1480,14 @@ function AppInner({ canOpenInTab, titleEnabled }) {
                 return (
                     <SharedListDirectory
                         walletId={activeWalletId}
-                        chainId={listRef?.directoryChainId || listRef?.chainId || 'bitcoin-mainnet'}
+                        chainId={sharedListDirectoryChainId(listRef, settings?.activeNetwork)}
                         mode="browse"
                         onOpenList={(chainId, actionIndex) => {
                             setListRef({
                                 chainId,
                                 actionIndex,
                                 origin: 'shared',
-                                directoryChainId: listRef?.directoryChainId || listRef?.chainId || 'bitcoin-mainnet',
+                                directoryChainId: sharedListDirectoryChainId(listRef, settings?.activeNetwork),
                             });
                             setUnlockedView('list-detail');
                         }}
@@ -2290,6 +2368,7 @@ function AppInner({ canOpenInTab, titleEnabled }) {
                         mode="unstake"
                         walletId={activeWalletId}
                         chainId={stakingRef.chainId}
+                        initialFromAddress={stakingRef.address || undefined}
                         onBack={() => setUnlockedView('stake-detail')}
                     />
                 );
@@ -2300,6 +2379,7 @@ function AppInner({ canOpenInTab, titleEnabled }) {
                         mode="claim-rewards"
                         walletId={activeWalletId}
                         chainId={stakingRef.chainId}
+                        initialFromAddress={stakingRef.address || undefined}
                         onBack={() => setUnlockedView('stake-detail')}
                     />
                 );
@@ -2310,6 +2390,7 @@ function AppInner({ canOpenInTab, titleEnabled }) {
                         mode="delegate"
                         walletId={activeWalletId}
                         chainId={stakingRef.chainId}
+                        initialFromAddress={stakingRef.address || undefined}
                         onBack={() => setUnlockedView('stake-detail')}
                     />
                 );
@@ -2320,6 +2401,7 @@ function AppInner({ canOpenInTab, titleEnabled }) {
                         mode="revoke"
                         walletId={activeWalletId}
                         chainId={stakingRef.chainId}
+                        initialFromAddress={stakingRef.address || undefined}
                         onBack={() => setUnlockedView('stake-detail')}
                     />
                 );

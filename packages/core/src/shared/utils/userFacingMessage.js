@@ -44,6 +44,10 @@ const MAX_REFUSAL_REASON_LENGTH = 500;
 // (the confirm page's refusals); the code names the case and is not developer
 // output, so it must not hide that sentence.
 const USER_COPY_CODES = new Set(['NATIVE_FEE_CHANGED', 'INPUTS_SPENT']);
+// A rejected private key carries the SDK's machine code beside a sentence the
+// flow already wrote for the user (wifFailureMessage), so the code must not
+// hide that sentence.
+const USER_COPY_ERROR_NAMES = new Set(['InvalidWifError']);
 // The encoder's coin-selection shortfall is a build failure, not a rule the
 // node enforced, so it keeps the encoder copy that says nothing was signed or
 // sent instead of being shown as a bare reason.
@@ -138,6 +142,26 @@ export function isShowableRefusal(text) {
         && !SERIALIZED_DATA.test(value);
 }
 
+/** Shown when the SDK refuses to build an address of a type it does not know. */
+export const UNSUPPORTED_ADDRESS_TYPE_MESSAGE = 'This address type is not available yet. Choose another address type.';
+
+/**
+ * The clear message for the SDK's unknown-address-type refusal, or null for any
+ * other error. The refusal names the SDK's own list of types, which is
+ * developer output, and without this branch it falls to the caller's generic
+ * fallback (for address generation, a hint about unlocking the wallet).
+ *
+ * @param {unknown} err
+ * @returns {string|null}
+ */
+export function unsupportedAddressTypeMessage(err) {
+    const code = err && typeof err === 'object' ? /** @type {any} */ (err).code : undefined;
+    if (code === 'INVALID_ADDRESS_TYPE' || /unknown address type/i.test(errorText(err))) {
+        return UNSUPPORTED_ADDRESS_TYPE_MESSAGE;
+    }
+    return null;
+}
+
 /**
  * @param {unknown} err       the caught error (Error, string, or anything)
  * @param {string} fallback   house-voice copy to show when the message is
@@ -147,6 +171,8 @@ export function isShowableRefusal(text) {
 export function userFacingMessage(err, fallback = 'Something went wrong. Try again.') {
     const refusal = protocolRefusalReason(err);
     if (refusal) return refusal;
+    const unsupportedType = unsupportedAddressTypeMessage(err);
+    if (unsupportedType) return unsupportedType;
     const text = errorText(err);
     if (isDeveloperMessage(err)) return fallback;
     return text;
@@ -168,7 +194,7 @@ export function isDeveloperMessage(err) {
         if (/^SDK[A-Za-z]*Error$/.test(String(e.name || ''))) return true;
         if (RUNTIME_ERROR_NAMES.has(String(e.name || ''))) return true;
         if (isPlatformException(e)) return true;
-        if (typeof e.code === 'string' && !USER_COPY_CODES.has(e.code) && /^[A-Z][A-Z0-9_]+$/.test(e.code)) return true;
+        if (typeof e.code === 'string' && !USER_COPY_CODES.has(e.code) && !USER_COPY_ERROR_NAMES.has(String(e.name || '')) && /^[A-Z][A-Z0-9_]+$/.test(e.code)) return true;
     }
     return DEV_PREFIX.test(text) || INTERNALS.test(text)
         || containsInternalErrorIdentifier(text)

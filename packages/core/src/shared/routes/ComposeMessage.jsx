@@ -19,6 +19,7 @@ import { useActionConfirmFlow, useConfirmSubmit, isUserRejection } from '../hook
 import { useOwnerActionLane } from '../hooks/useOwnerActionLane.js';
 import { ActionConfirmScreen } from '../components/ActionConfirmScreen.jsx';
 import { WatcherResultPanel } from '../components/WatcherResultPanel.jsx';
+import { QueuedResultPanel } from '../components/QueuedResultPanel.jsx';
 import { ContactsPickerScreen } from '../components/ContactsPickerScreen.jsx';
 import { buildDeliveryNetworkOptions } from '../utils/deliveryNetworks.js';
 import { useSignerReady } from '../hooks/useSignerReady.js';
@@ -40,6 +41,7 @@ import {
     MESSAGE_ATTACHMENT_TYPES,
     serializeMessageContent,
 } from '../utils/messageContent.js';
+import { actionTextSafetyError } from '../utils/actionTextSafety.js';
 import { MAX_MESSAGE_BYTES, messageWireByteLength } from '../../flows/messageAction.js';
 import styles from './IssueTokenForm.module.css';
 
@@ -53,7 +55,7 @@ const NATIVE_TICKER_BY_CHAIN = { bitcoin: 'BTC', litecoin: 'LTC', dogecoin: 'DOG
 // It names both ways out, since this form has no passphrase or password field.
 const UNSTORED_PASSPHRASE_REASON = 'This wallet uses a 25th-word passphrase that has not been '
     + 'stored yet, so the key request cannot be signed. Lock the wallet; the unlock screen will '
-    + 'capture it, or pick "Plain text" above to message them without encryption.';
+    + 'capture it, or pick "Plain text" below to message them without encryption.';
 
 /**
  * The address a message is funded from on its delivery chain. The chain's
@@ -191,7 +193,25 @@ function ComposeMessageForm({
     );
     const [pubkeyError, setPubkeyError] = useState(/** @type {string | null} */ (null));
     const [sendUnencrypted, setSendUnencrypted] = useState(fixedEncryption === 'plaintext');
-    const [plaintextConfirmationPending, setPlaintextConfirmationPending] = useState(false);
+    // The plain-text warning, shown before every plaintext send. 'select' asks
+    // when the user picks Plain text from the Encryption menu; 'send' asks when
+    // Send message is pressed on a message that is already plain text (a reply
+    // in a plaintext thread locks the method, so the menu never asks).
+    const [plaintextConfirmationPending, setPlaintextConfirmationPending] = useState(
+        /** @type {false | 'select' | 'send'} */ (false),
+    );
+    // True once the user has accepted the warning for the send in progress. The
+    // send that follows consumes it, so the next plaintext send asks again.
+    const plaintextAckRef = useRef(false);
+    // The warning leads the page while Send message sits at the bottom, so on a
+    // narrow screen it would appear out of sight. Bring it into view when it
+    // opens, and put focus on its safe button so a keyboard or screen-reader
+    // user lands on the question.
+    useEffect(() => {
+        if (!plaintextConfirmationPending) return;
+        document.getElementById('compose-plaintext-confirm')?.scrollIntoView?.({ block: 'nearest' });
+        document.getElementById('compose-plaintext-cancel')?.focus?.({ preventScroll: true });
+    }, [plaintextConfirmationPending]);
     // Encryption choice when the recipient's pubkey is known: 'ecies' (default,
     // only the recipient can read) or 'ecdh' (a shared session key both parties
     // derive, so the sender can read their own sent messages too). ECDH needs
@@ -204,6 +224,8 @@ function ComposeMessageForm({
     const [handshakeBusy, setHandshakeBusy] = useState(false);
     const [handshakeSent, setHandshakeSent] = useState(false);
     const [handshakeResult, setHandshakeResult] = useState(/** @type {any | null} */ (null));
+    // A key request that is signed and held in the broadcast queue.
+    const [handshakeQueued, setHandshakeQueued] = useState(/** @type {any | null} */ (null));
     // The key request's OWN error, deliberately not `submitError`. It used to
     // write into that one, which the form stage renders nowhere (only the
     // review stage and the hardware branch do), so every failure of this button
@@ -278,6 +300,18 @@ function ComposeMessageForm({
         return () => { cancelled = true; };
     }, [messaging]);
 
+    // Read right before the picker shows rows, so a contact edited in another
+    // window cannot leave the picker offering its old address.
+    async function openContactsPicker() {
+        if (typeof messaging.listContacts === 'function') {
+            try {
+                const rows = await messaging.listContacts();
+                setContacts(Array.isArray(rows) ? rows : []);
+            } catch { /* the picker keeps the rows it already has */ }
+        }
+        setContactsPickerOpen(true);
+    }
+
     // The recipient's own chain (the message's COIN / where their key is looked
     // up), derived from the address rather than the delivery network: a message
     // can be addressed to a Bitcoin address yet broadcast over Dogecoin. When
@@ -311,6 +345,7 @@ function ComposeMessageForm({
                     if (pubkey && !fixedEncryption) {
                         setSendUnencrypted(false);
                         setPlaintextConfirmationPending(false);
+                        plaintextAckRef.current = false;
                     }
                 })
                 .catch((err) => {
@@ -471,6 +506,8 @@ function ComposeMessageForm({
     const messageLengthError = wireMessageBytes > MAX_MESSAGE_BYTES
         ? `${messageLengthSubject} ${wireMessageBytes.toLocaleString()} bytes; the network accepts at most ${MAX_MESSAGE_BYTES.toLocaleString()} bytes.`
         : undefined;
+    const messageCharacterError = actionTextSafetyError(message, 'Message') || undefined;
+    const messageError = messageCharacterError || messageLengthError;
 
     function handleAttachmentPick(event) {
         const file = event.target?.files?.[0];
@@ -516,16 +553,20 @@ function ComposeMessageForm({
     // The selected encryption, as a single dropdown value. 'plaintext' maps to
     // the unencrypted (v3) send; 'ecies'/'ecdh' are the encrypted methods.
     const encryptionValue = sendUnencrypted ? 'plaintext' : encryptionChoice;
+    // The control shows the choice being asked about while the confirmation is
+    // open; the send itself still follows encryptionValue until it is accepted.
+    const encryptionControlValue = plaintextConfirmationPending === 'select' ? 'plaintext' : encryptionValue;
     function onEncryptionChange(value) {
         if (value === 'plaintext') {
             if (!fixedEncryption) {
-                setPlaintextConfirmationPending(true);
+                setPlaintextConfirmationPending('select');
                 return;
             }
             setSendUnencrypted(true);
             return;
         }
         setPlaintextConfirmationPending(false);
+        plaintextAckRef.current = false;
         setSendUnencrypted(false);
         setEncryptionChoice(value);
     }
@@ -632,7 +673,7 @@ function ComposeMessageForm({
     // review stage. No signing or broadcast happens here; the message is only
     // sent once the user confirms on the review screen via handleSubmit.
     function handleReview(event) {
-        event.preventDefault();
+        event?.preventDefault?.();
         if (stage !== 'form') return;
         // Require a source on the selected delivery network.
         if (!fromAddress || !chainId) {
@@ -648,7 +689,7 @@ function ComposeMessageForm({
             setSubmitError('Write a message to send, or attach a file.');
             return;
         }
-        if (messageLengthError) return;
+        if (messageError) return;
         if (addressInvalid) return;
         if (feeValidationError) {
             setSubmitError(feeValidationError);
@@ -657,6 +698,16 @@ function ComposeMessageForm({
         // Plain text needs no recipient key, so it never waits on (or is blocked
         // by) the pubkey lookup; encrypted sends require a resolved key.
         if (!sendUnencrypted && pubkeyState !== 'found') return;
+        // Every plaintext send shows the warning first and consumes the
+        // acceptance, so a reply in a plaintext thread is asked like a new message.
+        if (sendUnencrypted) {
+            if (!plaintextAckRef.current) {
+                setSubmitError(null);
+                setPlaintextConfirmationPending('send');
+                return;
+            }
+            plaintextAckRef.current = false;
+        }
         setSubmitError(null);
         // On the confirm-page path the password is collected IN the modal, so
         // the credential guards below (which the legacy review stage relies on)
@@ -671,7 +722,7 @@ function ComposeMessageForm({
         event.preventDefault();
         if (stage === 'submitting') return;
         if (!fromAddress || !chainId || !toAddress.trim() || (!message.trim() && !attachment)) return;
-        if (messageLengthError) return;
+        if (messageError) return;
         if (addressInvalid) return;
         if (feeValidationError) return;
         if (!sendUnencrypted && pubkeyState !== 'found') return;
@@ -798,6 +849,11 @@ function ComposeMessageForm({
                 setHandshakeResult(requestResult);
                 return;
             }
+            // Signed but not broadcast: the request is not out, and a second press would sign a duplicate.
+            if (requestResult?.queued) {
+                setHandshakeQueued(requestResult);
+                return;
+            }
             setHandshakeSent(true);
         } catch (err) {
             if (!isUserRejection(err)) {
@@ -840,6 +896,10 @@ function ComposeMessageForm({
         return wrap(<p className={styles.hint}>Loading wallet…</p>);
     }
 
+    if (handshakeQueued) {
+        return wrap(<QueuedResultPanel onDone={onBack} what="key request" unsaved={handshakeQueued.unsaved} />);
+    }
+
     if (handshakeResult) {
         return wrap(
             <WatcherResultPanel
@@ -851,6 +911,10 @@ function ComposeMessageForm({
     }
 
     if (stage === 'done') {
+        // Signed but held in the broadcast queue: the message has not left the wallet.
+        if (result?.queued) {
+            return wrap(<QueuedResultPanel onDone={onBack} what="message" unsaved={result.unsaved} />);
+        }
         return wrap(
             <>
                 <p style={{ margin: '0 0 0.5rem', fontWeight: 600 }}>Message sent</p>
@@ -1028,18 +1092,81 @@ function ComposeMessageForm({
             demoGuard={demoGuard}
             label="New message"
             onSubmit={handleReview}
-            status={submitError ? (
-                <StatusMessage variant="error" details={submitErrorDetails}>
-                    {submitError}
-                </StatusMessage>
-            ) : null}
+            status={[
+                submitError ? (
+                    <StatusMessage key="submit-error" variant="error" details={submitErrorDetails}>
+                        {submitError}
+                    </StatusMessage>
+                ) : null,
+                plaintextConfirmationPending ? (
+                    <StatusMessage key="plaintext-confirm" id="compose-plaintext-confirm" variant="warning" role="alert">
+                        <p style={{ margin: '0 0 0.5rem' }}>
+                            Send this message as plain text? Anyone can read it on the blockchain.
+                        </p>
+                        <Button
+                            type="button"
+                            variant="danger"
+                            size="sm"
+                            onClick={() => {
+                                const sending = plaintextConfirmationPending === 'send';
+                                plaintextAckRef.current = true;
+                                setSendUnencrypted(true);
+                                setPlaintextConfirmationPending(false);
+                                if (sending) handleReview(null);
+                            }}
+                        >
+                            Send as plain text
+                        </Button>{' '}
+                        <Button
+                            type="button"
+                            id="compose-plaintext-cancel"
+                            variant="secondary"
+                            size="sm"
+                            onClick={() => setPlaintextConfirmationPending(false)}
+                        >
+                            {plaintextConfirmationPending === 'send' ? 'Cancel' : 'Keep encrypted'}
+                        </Button>
+                    </StatusMessage>
+                ) : null,
+                pubkeyState === 'missing' && encryptionValue !== 'plaintext' ? (
+                    <StatusMessage key="key-missing" variant="warning" role="alert">
+                        <p style={{ margin: '0 0 0.5rem' }}>
+                            We don't know the recipient's public key yet, so we can't encrypt. They need to
+                            send a transaction first, or pick "Plain text" below.
+                        </p>
+                        {handshakeSent ? null : (
+                            <Button
+                                type="button"
+                                variant="secondary"
+                                size="sm"
+                                loading={handshakeBusy}
+                                onClick={handleRequestSession}
+                            >
+                                Request encrypted session (publish your key)
+                            </Button>
+                        )}
+                    </StatusMessage>
+                ) : null,
+                pubkeyState === 'missing' && encryptionValue !== 'plaintext' && handshakeSent ? (
+                    <StatusMessage key="key-request-sent" variant="success">
+                        Key request sent. Once they respond or send any transaction, you can
+                        message them encrypted.
+                    </StatusMessage>
+                ) : null,
+                pubkeyState === 'missing' && encryptionValue !== 'plaintext' && !handshakeSent && handshakeError ? (
+                    <StatusMessage key="key-request-error" variant="error" testId="key-request-error">{handshakeError}</StatusMessage>
+                ) : null,
+                pubkeyState === 'error' && encryptionValue !== 'plaintext' && pubkeyError ? (
+                    <StatusMessage key="key-lookup-error" variant="error">{pubkeyError}</StatusMessage>
+                ) : null,
+            ]}
             actions={(
                 <Button
                     type="submit"
                     variant="primary"
                     icon={<Icon.SendIcon />}
                     loading={actionConfirm.composing}
-                    disabled={actionConfirm.composing || Boolean(messageLengthError)}
+                    disabled={actionConfirm.composing || Boolean(messageError)}
                 >
                     {actionConfirm.composing ? 'Preparing review…' : 'Send message'}
                 </Button>
@@ -1056,9 +1183,10 @@ function ComposeMessageForm({
                     setHandshakeError(null);
                     setPubkeyError(null);
                     setPlaintextConfirmationPending(false);
+                    plaintextAckRef.current = false;
                     if (submitError) setSubmitError(null);
                 }}
-                onIconClick={() => setContactsPickerOpen(true)}
+                onIconClick={openContactsPicker}
                 placeholder="Recipient address"
                 error={addressError}
             />
@@ -1073,10 +1201,10 @@ function ComposeMessageForm({
                 }}
                 rows={4}
                 placeholder="Write your message…"
-                hint={messageLengthError
+                hint={messageError
                     ? undefined
                     : `${wireMessageBytes.toLocaleString()} / ${MAX_MESSAGE_BYTES.toLocaleString()}${sendUnencrypted ? ' bytes.' : ' encrypted bytes.'}`}
-                error={messageLengthError}
+                error={messageError}
                 style={{ minHeight: '4rem' }}
             />
 
@@ -1114,37 +1242,11 @@ function ComposeMessageForm({
                 conversation keeps the method it started with. */}
             <IconSelect
                 label="Encryption"
-                value={encryptionValue}
+                value={encryptionControlValue}
                 onChange={onEncryptionChange}
                 options={encryptionOptions}
                 disabled={Boolean(fixedEncryption)}
             />
-            {plaintextConfirmationPending ? (
-                <div role="alert" style={{ marginTop: '0.5rem' }}>
-                    <p style={{ margin: '0 0 0.5rem' }}>
-                        Send this message as plain text? Anyone can read it on the blockchain.
-                    </p>
-                    <Button
-                        type="button"
-                        variant="danger"
-                        size="sm"
-                        onClick={() => {
-                            setSendUnencrypted(true);
-                            setPlaintextConfirmationPending(false);
-                        }}
-                    >
-                        Send as plain text
-                    </Button>{' '}
-                    <Button
-                        type="button"
-                        variant="secondary"
-                        size="sm"
-                        onClick={() => setPlaintextConfirmationPending(false)}
-                    >
-                        Keep encrypted
-                    </Button>
-                </div>
-            ) : null}
             {pubkeyState === 'checking' && encryptionValue !== 'plaintext' ? (
                 <p className={styles.hint} style={{ marginTop: '0.25rem' }}>
                     Looking up recipient's public key…
@@ -1155,44 +1257,6 @@ function ComposeMessageForm({
                     ✓ Recipient public key found.
                 </p>
             ) : null}
-            {pubkeyState === 'missing' && encryptionValue !== 'plaintext' ? (
-                <div>
-                    <FieldNote variant="warning" role="alert">
-                        We don't know the recipient's public key yet, so we can't encrypt. They need to
-                        send a transaction first, or pick "Plain text" above.
-                    </FieldNote>
-                    {handshakeSent ? (
-                        <FieldNote variant="success">
-                            Key request sent. Once they respond or send any transaction, you can
-                            message them encrypted.
-                        </FieldNote>
-                    ) : (
-                        <>
-                            <Button
-                                type="button"
-                                variant="secondary"
-                                size="sm"
-                                loading={handshakeBusy}
-                                onClick={handleRequestSession}
-                            >
-                                Request encrypted session (publish your key)
-                            </Button>
-                            {/* The button's failures live HERE, beside it. This
-                                is the only stage it is reachable from, and
-                                nothing on this stage rendered an error before,
-                                so a refused or failed key request looked like a
-                                button that does nothing. */}
-                            <FieldNote variant="error">{handshakeError}</FieldNote>
-                        </>
-                    )}
-                </div>
-            ) : null}
-            {pubkeyState === 'error' && encryptionValue !== 'plaintext' ? (
-                <FieldNote variant="error">
-                    {pubkeyError}
-                </FieldNote>
-            ) : null}
-
             {/* 4. Delivery network */}
             <IconSelect
                 label="Delivery network"

@@ -84,7 +84,7 @@ describe('notification delivery recovery', () => {
         await restartedWorker.pollOnce();
 
         expect(notify).toHaveBeenCalledTimes(1);
-        expect(markTriggered).toHaveBeenCalledWith('alert-restart');
+        expect(markTriggered).toHaveBeenCalledWith('alert-restart', undefined);
         expect(fired).toEqual([]);
     });
 

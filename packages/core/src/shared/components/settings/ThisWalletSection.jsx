@@ -28,10 +28,15 @@ import { clearLastView } from '../../utils/lastViewMemory.js';
 import { sweepMsgMemoryForWallet } from '../../utils/msgReadMemory.js';
 import { clearRemovedWalletStorage } from '../../utils/wipeWalletStorage.js';
 import { retireBiometricAfterPasswordChange } from '../../../flows/biometricUnlock.js';
+import { isDuressMatch } from '../../../flows/duressPassphrase.js';
 import { SettingsActionRow, SettingsInlineForm, Status } from './_settingsPrimitives.jsx';
 import cardStyles from '../../../ui/Card.module.css';
 import styles from './ThisWalletSection.module.css';
 import { t } from '../../../i18n/index.js';
+import '../../../i18n/locales/en/history.js';
+import '../../../i18n/locales/en/send.js';
+import '../../../i18n/locales/en/settings.js';
+import '../../../i18n/locales/en/walletDetails.js';
 
 const PUBLIC_EXTENDED_KEY_RE = /^(?:xpub|tpub)[1-9A-HJ-NP-Za-km-z]+$/;
 
@@ -328,6 +333,13 @@ function ChangePasswordRow({ walletId, disabled }) {
         }
         if (newPassword === currentPassword) {
             setError('Choose a new password that differs from the current password.', 'new');
+            return;
+        }
+        // The Locked screen tries the real unlock before the duress check, so
+        // a wallet password equal to the duress passphrase opens the wallet
+        // when it is typed under duress and arms nothing.
+        if (isDuressMatch(newPassword)) {
+            setError('Choose a password that differs from your duress passphrase.', 'new');
             return;
         }
         if (typeof messaging?.changePassword !== 'function') {

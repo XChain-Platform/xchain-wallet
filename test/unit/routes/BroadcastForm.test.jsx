@@ -98,6 +98,7 @@ function mountForm(chainId = 'bitcoin-mainnet', addresses = ADDRESSES, props = {
         getAddressesByChain: vi.fn().mockResolvedValue(addresses),
         getSettings: vi.fn().mockResolvedValue({ walletMode: 'full' }),
         signerReady: vi.fn().mockResolvedValue({ ready: false }),
+        getTokenInfo: vi.fn().mockResolvedValue(props.tokenInfo || {}),
         listContacts: vi.fn().mockResolvedValue([]),
         composeForConfirm,
         preflight: vi.fn().mockResolvedValue({ verdict: 'pass', findings: [] }),
@@ -120,6 +121,8 @@ function mountForm(chainId = 'bitcoin-mainnet', addresses = ADDRESSES, props = {
             React.createElement(BroadcastForm, {
                 walletId: 'w',
                 initialChainId: chainId,
+                initialTick: props.initialTick,
+                initialFromAddress: props.initialFromAddress,
                 onBack: props.onBack || (() => {}),
                 onDone: props.onDone,
             }),
@@ -165,6 +168,20 @@ afterEach(() => {
 });
 
 describe('BroadcastForm keeps the typed body on the wire', () => {
+    it('refuses a token broadcast before review when the issuer is unknown', async () => {
+        mountForm('bitcoin-mainnet', ADDRESSES, {
+            initialTick: 'S20FEED',
+            initialFromAddress: ADDRESS,
+            tokenInfo: { tick: 'S20FEED', creator: null },
+        });
+
+        expect(await screen.findByRole('alert')).toHaveTextContent(
+            "The token's issuer could not be confirmed, so this action is not available. Try again when the explorer answers.",
+        );
+        expect(screen.getByRole('button', { name: 'Broadcast' })).toBeDisabled();
+        expect(composeForConfirm).not.toHaveBeenCalled();
+    });
+
     it('picks a MEMO-carrying version for a feed broadcast with no feed fee', async () => {
         mountForm();
         await fill({ feed: 'S20FEED', body: 'MEMO-SURVIVES-TEST' });
@@ -341,6 +358,23 @@ describe('BroadcastForm broadcasts a pasted signed transaction safely', () => {
         expect(onBack).not.toHaveBeenCalled();
     });
 
+    it('returns from the preview to the form with the pasted hex kept, without submitting again', async () => {
+        mountForm();
+        await openRawTransaction(LEGACY_TX);
+        expect(await screen.findByText(/spends 1 input and creates 2 outputs/)).toBeTruthy();
+
+        // A real click activates whichever node holds the Back slot after React re-renders, so
+        // that node must not be the one that becomes the form's submit button.
+        const back = screen.getByRole('button', { name: 'Back' });
+        fireEvent.click(back);
+        expect(back.isConnected).toBe(false);
+
+        const field = await screen.findByLabelText('Signed transaction hex');
+        expect(field).toHaveValue(LEGACY_TX);
+        expect(screen.queryByText(/spends 1 input and creates 2 outputs/)).toBeNull();
+        expect(screen.getByRole('button', { name: 'Preview transaction' })).toBeTruthy();
+    });
+
     it.each([
         ['non-hex data', '00zz', /hexadecimal characters only/],
         ['an incomplete byte', 'abc', /complete bytes/],
@@ -351,6 +385,32 @@ describe('BroadcastForm broadcasts a pasted signed transaction safely', () => {
 
         expect(await screen.findByText(message)).toBeTruthy();
         expect(broadcastSignedTxRequest).not.toHaveBeenCalled();
+    });
+
+    it('sends once when the review form is submitted twice in one event turn', async () => {
+        mountForm();
+        broadcastSignedTxRequest.mockImplementationOnce(() => new Promise(() => {}));
+        await openRawTransaction(LEGACY_TX);
+        await screen.findByText(/spends 1 input/);
+        const form = screen.getByRole('button', { name: 'Broadcast transaction' }).closest('form');
+        act(() => {
+            fireEvent.submit(form);
+            fireEvent.submit(form);
+        });
+        expect(broadcastSignedTxRequest).toHaveBeenCalledTimes(1);
+    });
+
+    it('lists a bounded number of outputs for a transaction with thousands', async () => {
+        mountForm();
+        const output = `40e20100000000001976a914${'44'.repeat(20)}88ac`;
+        const count = 3000;
+        const varint = `fd${(count & 0xff).toString(16).padStart(2, '0')}${(count >> 8).toString(16).padStart(2, '0')}`;
+        const head = LEGACY_TX.slice(0, LEGACY_TX.indexOf('fdffffff') + 8);
+        await openRawTransaction(`${head}${varint}${output.repeat(count)}00000000`);
+
+        expect(await screen.findByText(/creates 3000 outputs/)).toBeTruthy();
+        expect(screen.getAllByText(/BTC to P2PKH script/)).toHaveLength(50);
+        expect(screen.getByText(/2950 further outputs are not listed/)).toBeTruthy();
     });
 
     it('blocks an output type that the selected coin does not support', async () => {
@@ -375,6 +435,18 @@ describe('BroadcastForm broadcasts a pasted signed transaction safely', () => {
         expect(await screen.findByText(
             'The node rejected this transaction because an input is missing or already spent.',
         )).toBeTruthy();
+    });
+
+    it('says the network already has the transaction instead of calling it queued', async () => {
+        mountForm();
+        broadcastSignedTxRequest.mockResolvedValueOnce({ txid: undefined, alreadyOnNetwork: true });
+        await openRawTransaction(LEGACY_TX);
+        await screen.findByText(/spends 1 input/);
+        fireEvent.click(screen.getByRole('button', { name: 'Broadcast transaction' }));
+
+        expect(await screen.findByRole('heading', { name: 'Already on the network' })).toBeTruthy();
+        expect(screen.queryByText(/broadcast queue/)).toBeNull();
+        expect(screen.queryByRole('heading', { name: 'Transaction queued' })).toBeNull();
     });
 
     // The host reports a refused queue save as `persisted: false` and never sets

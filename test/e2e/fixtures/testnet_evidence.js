@@ -13,10 +13,12 @@
 //
 // The report nests suites inside suites, and the on-chain transaction ids are
 // carried as annotations of type txid, each described as a label (funding,
-// stake, unstake or collect), one space and the 64 hex characters of the id.
+// mint, stake, unstake or collect), one space and the 64 hex characters of
+// the id.
 // summarizeRun flattens that tree in report order; main prints one line per
 // test with its ids indented below it and exits 0 only for a clean run that
-// holds at least one id. Nothing here prints a key, a phrase or an address.
+// holds every required id label. Nothing here prints a key, a phrase or an
+// address.
 
 import fs from 'node:fs/promises';
 import { realpathSync } from 'node:fs';
@@ -25,7 +27,15 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const DEFAULT_REPORT = path.resolve(HERE, '..', 'test-results-testnet', 'results.json');
-const TXID_PATTERN = /^(funding|stake|unstake|collect) ([0-9a-f]{64})$/;
+const TXID_PATTERN = /^(funding|mint|stake|unstake|collect) ([0-9a-f]{64})$/;
+
+export const REQUIRED_TXID_LABELS = Object.freeze([
+    'funding',
+    'mint',
+    'stake',
+    'unstake',
+    'collect',
+]);
 
 function collectTxids(annotations, file, title, seen, out) {
     for (const annotation of annotations || []) {
@@ -83,17 +93,24 @@ export async function main({
     }
     const { errors, tests } = summarizeRun(report);
     let txidCount = 0;
+    const txidLabels = new Set();
     for (const test of tests) {
         stdout.write(`${test.status} ${test.file} ${test.title}\n`);
         for (const { label, txid } of test.txids) {
             stdout.write(`  ${label} ${txid}\n`);
             txidCount += 1;
+            txidLabels.add(label);
         }
     }
+    const missingTxidLabels = REQUIRED_TXID_LABELS.filter((label) => !txidLabels.has(label));
     const passed = errors === 0
         && tests.length > 0
         && tests.every((t) => t.status === 'expected')
-        && txidCount > 0;
+        && txidCount > 0
+        && missingTxidLabels.length === 0;
+    if (missingTxidLabels.length > 0) {
+        stdout.write(`missing txid: ${missingTxidLabels.join(', ')}\n`);
+    }
     stdout.write(passed ? 'testnet run passed\n' : 'testnet run failed\n');
     return passed ? 0 : 1;
 }

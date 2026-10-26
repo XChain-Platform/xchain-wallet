@@ -1,9 +1,8 @@
 // Copyright © 2025-2026 Dankest, LLC
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-import { readFileSync } from 'node:fs';
-import { resolve } from 'node:path';
 import { en } from '../../packages/core/src/i18n/locales/en/index.js';
+import { englishNamespaceSources } from './englishNamespaces.js';
 
 // Source-reading contract tests match the English copy a component renders.
 // Copy moved out of JSX literals by the i18n sweep now lives in the locale
@@ -14,13 +13,13 @@ import { en } from '../../packages/core/src/i18n/locales/en/index.js';
 // `prop: t('k')` becomes `prop: 'text'`, and any other plain t('k') becomes the
 // quoted English string. Calls with arguments and keys that predate the sweep
 // are left as written, so tests that audit t() usage keep seeing it.
-// Tests and smokes both run from the wallet repo root.
-const EN_FILE = resolve(process.cwd(), 'packages/core/src/i18n/locales/en/index.js');
+// Each namespace file under locales/en/ lists its swept keys after the sweep
+// marker.
 const SWEEP_MARKER = '// Copy moved out of JSX literals by the i18n sweep.';
-const dictionarySource = readFileSync(EN_FILE, 'utf8');
 const sweepKeys = new Set(
-    [...dictionarySource.slice(dictionarySource.indexOf(SWEEP_MARKER)).matchAll(/^ {4}'([^']+)':/gm)]
-        .map((match) => match[1]),
+    englishNamespaceSources().flatMap(({ source }) => (source.includes(SWEEP_MARKER)
+        ? [...source.slice(source.indexOf(SWEEP_MARKER)).matchAll(/^ {4}'([^']+)':/gm)].map((match) => match[1])
+        : [])),
 );
 // Dictionary keys that predate the sweep but that it started using again for
 // copy it moved out of JSX, because the English text was identical.

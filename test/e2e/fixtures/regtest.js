@@ -257,10 +257,16 @@ export async function assertVenueReachable() {
     // Names the ports THIS run needs, not Bitcoin's: a Litecoin run whose
     // encoder tunnel is missing would otherwise be told to open Bitcoin's and
     // find that it already is.
+    // Off Bitcoin the gas token arrives over the bridge from Bitcoin regtest,
+    // so those runs need the Bitcoin encoder and miner tunnelled too.
+    const bitcoinPorts = REGTEST_COIN === 'RBTC' ? ''
+        : `-L ${VENUES.RBTC.encoderPort}:localhost:${VENUES.RBTC.encoderPort} `
+        + `-L ${VENUES.RBTC.minerPort}:localhost:${VENUES.RBTC.minerPort} `;
     const hint =
         `Regtest venue (${REGTEST_COIN}) unreachable. Open the tunnels:\n`
         + `  ssh -N -L 18080:localhost:18080 -L ${VENUE.encoderPort}:localhost:${VENUE.encoderPort} `
         + `-L 10000:localhost:10000 -L ${VENUE.minerPort}:localhost:${VENUE.minerPort} `
+        + bitcoinPorts
         + '"$XC_REGTEST_SSH_HOST"';
 
     let status;
@@ -594,6 +600,8 @@ export async function seedPrices({ attempts = 4 } = {}) {
     // the anchors and the shadowing check both depend on them.
     let state;
     let rows;
+    let written = 0;
+    let cleared = 0;
     try {
         state = await runInIndexer(readStateScript([XCHAIN_PAIR, venue.coinPair]));
         const existingRounds = {};
@@ -606,7 +614,9 @@ export async function seedPrices({ attempts = 4 } = {}) {
             chainTime: state.chainTime,
             wallTime: Math.floor(Date.now() / 1000),
         });
-        await runInIndexer(writeRowsScript(rows));
+        const result = await runInIndexer(writeRowsScript(rows, { chainTime: state.chainTime }));
+        written = Number(result?.written) || 0;
+        cleared = Number(result?.cleared) || 0;
     } catch (err) {
         throw new Error(unusablePriceMessage({
             regtestCoin: REGTEST_COIN,
@@ -641,10 +651,14 @@ export async function seedPrices({ attempts = 4 } = {}) {
         busyReprobes: BUSY_REPROBES,
         busyReprobeMs: BUSY_REPROBE_MS,
     });
+    // Zero written for planned rows means the venue's own oracle prices it (the writer
+    // stood aside), so neither "seeded" nor the planned rows may be reported as written.
+    const liveOracle = written === 0 && rows.length > 0;
     if (after.usable) {
         return {
-            seeded: true,
-            rows: rows.length,
+            seeded: written > 0,
+            rows: written,
+            cleared,
             chainTime: state.chainTime,
             ...after,
         };
@@ -653,11 +667,14 @@ export async function seedPrices({ attempts = 4 } = {}) {
     throw new Error(unusablePriceMessage({
         regtestCoin: REGTEST_COIN,
         reason: after.reason,
-        seeded: true,
+        seeded: written > 0,
+        liveOracle,
+        cleared,
         state: {
             chainTime: state.chainTime,
             tipIndex: state.tipIndex,
-            wrote: rows.map((r) => `${r.coinPair}#${r.roundNumber}@${r.blockTimestamp}`),
+            wrote: liveOracle ? [] : rows.map((r) => `${r.coinPair}#${r.roundNumber}@${r.blockTimestamp}`),
+            cleared,
             found: (state.rows || []).map((r) => `${r.coinPair}#${r.round}@${r.timestamp}`),
         },
     }));
@@ -1945,6 +1962,26 @@ export function activeNetworkControl(page) {
 }
 
 /**
+ * Turns Developer Mode on from the Settings index and returns to it. Without
+ * it the Active network select offers Mainnet and Testnet but not Regtest.
+ * Idempotent: a wallet that already has it on is left alone.
+ */
+export async function enableDeveloperMode(page) {
+    await page.getByRole('button', { name: /^Developer mode/ }).click();
+    const devToggle = page.getByRole('switch', { name: 'Turn on developer mode', exact: true });
+    await expect(devToggle).toBeVisible();
+    if (!(await devToggle.isChecked())) {
+        // `.check()` fails here: the input is fully controlled by PERSISTED
+        // settings, so its `checked` does not flip until the vault write
+        // resolves, and check()'s post-click assertion is synchronous.
+        // Click, then wait for the state the write produces.
+        await devToggle.click();
+        await expect(devToggle).toBeChecked();
+    }
+    await page.getByRole('button', { name: 'Back to settings' }).click();
+}
+
+/**
  * Flips the wallet onto the regtest network and waits for it to come
  * back up.
  *
@@ -1967,18 +2004,7 @@ export async function switchToRegtest(page, password) {
     // because it has no nav surface.
     await openSettings(page);
 
-    await page.getByRole('button', { name: /^Developer mode/ }).click();
-    const devToggle = page.getByRole('switch', { name: 'Turn on developer mode', exact: true });
-    await expect(devToggle).toBeVisible();
-    if (!(await devToggle.isChecked())) {
-        // `.check()` fails here: the input is fully controlled by PERSISTED
-        // settings, so its `checked` does not flip until the vault write
-        // resolves, and check()'s post-click assertion is synchronous.
-        // Click, then wait for the state the write produces.
-        await devToggle.click();
-        await expect(devToggle).toBeChecked();
-    }
-    await page.getByRole('button', { name: 'Back to settings' }).click();
+    await enableDeveloperMode(page);
 
     // This select now derives an address on each chain of the
     // network it switches to. Before that fix it only moved a filter,
@@ -1987,7 +2013,14 @@ export async function switchToRegtest(page, password) {
     await activeNetworkControl(page).selectOption('regtest');
     // The switch reloads the wallet, so Settings asks first.
     const confirm = page.getByRole('dialog', { name: 'Switch to Regtest?' });
+    // Settings derives the regtest addresses before it reloads, and until the
+    // reload lands the old unlocked page still shows the App header. On a
+    // loaded runner that work outlasts unlockAfterReload's short wait for the
+    // lock screen, so the next step met a page mid-reload with no navigation.
+    // Wait for the reloaded page itself before reading the screen.
+    const reloaded = page.waitForEvent('load', { timeout: kdfStepTimeout() });
     await confirm.getByRole('button', { name: 'Switch network', exact: true }).click();
+    await reloaded;
 
     await unlockAfterReload(page, password);
 }

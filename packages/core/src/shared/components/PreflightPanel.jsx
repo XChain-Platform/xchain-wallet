@@ -32,6 +32,8 @@ import {
 import { unverifiedText, warningText } from '../utils/preflightFindingCopy.js';
 import { formatDecimalAmount } from '../utils/amountFormat.js';
 import { t } from '../../i18n/index.js';
+import '../../i18n/locales/en/components.js';
+import '../../i18n/locales/en/settings.js';
 
 // Tier-1 headline codes (xchain-sdk preflight constants.js). Duplicated as
 // literals rather than imported: this component is rendered by the extension
@@ -79,6 +81,13 @@ export const TIER1_NOTICE_CODES = Object.freeze({
 // utils/preflightFindingKey.js), `findings[].data.subCommandCount` and
 // `findings[].data.accepted` (whether the network judged a batch in FULL; the
 // notice copy and the verdict chip both branch on them),
+// `findings[].data.status` and `findings[].data.error` (the network's
+// `invalid:` refusal text, read through consensusRefusalReason in
+// utils/preflightFindingKey.js for every error row's signer copy and the
+// hard-block fallback, and stripped by name in the extension's
+// advisoryPreflightReport), the `findings[]._downgradedBy` VALUE
+// `dryrun-valid-local-delta` (utils/preflightFindingCopy.js keys the local
+// balance warning headline on it),
 // `restricted` (defined beside REPORT_SCHEMA_VERSION there: a proper-subset
 // report, never a completeness claim; the "Partial check" chip below),
 // `stateHeight`, and `unverified[].check` / `unverified[].reason` straight off

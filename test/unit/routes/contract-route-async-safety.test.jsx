@@ -157,7 +157,7 @@ describe('contract route request isolation', () => {
 });
 
 describe('contract list failure containment', () => {
-    it('renders section errors when host methods throw before returning promises', async () => {
+    it('renders one page error when host methods throw before returning promises', async () => {
         const throws = () => { throw new Error('host disconnected'); };
         render(provider({
             getAddressesByChain: () => Promise.resolve({ [CHAIN]: [ADDRESS] }),
@@ -174,7 +174,9 @@ describe('contract list failure containment', () => {
         )));
 
         await waitFor(() => {
-            expect(screen.getAllByText(/Couldn't load contracts\. Try again\./)).toHaveLength(3);
+            // Every section failed, and the page says so once with one Try again.
+            expect(screen.getAllByText(/Couldn't load contracts\. Try again\./)).toHaveLength(1);
+            expect(screen.getAllByRole('button', { name: 'Try again' })).toHaveLength(1);
         });
     });
 

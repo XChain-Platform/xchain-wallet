@@ -44,8 +44,8 @@ assert.ok(/typeof messaging\.generateDispenserAddress === 'function'/.test(modal
 // selected chain's address types; changing the coin resets the type.
 assert.ok(/coinOptions/.test(modal) && /chainRegistry\.get\(cid\)/.test(modal),
     'coin options derive from the account chainIds via the registry');
-assert.ok(/selected\?\.addressTypes/.test(modal),
-    'type options follow the selected coin address types');
+assert.ok(/useSupportedAddressTypes\(selected/.test(modal) && /offeredTypes\.map/.test(modal),
+    'type options follow the selected coin address types the SDK can generate');
 assert.ok(/function changeCoin/.test(modal) && /defaultAddressType/.test(modal),
     'changing the coin resets the type to that chain default');
 

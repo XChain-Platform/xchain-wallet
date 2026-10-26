@@ -50,6 +50,7 @@
 // scriptSig data are not compared - they are the signature, which is exactly
 // what the device is there to add.
 
+import { sha256 } from '@noble/hashes/sha2';
 import { SignerStatusError } from './Signer.js';
 
 /** Reader over a hex string, byte-addressed, that refuses to run off the end. */
@@ -110,6 +111,28 @@ function reverseHex(hex) {
  *   outputs: Array<{ valueSat: bigint, scriptPubKeyHex: string }> }}
  */
 export function parseRawTx(txHex) {
+    return walkRawTx(txHex).tx;
+}
+
+/**
+ * The txid of a serialized transaction: the double SHA-256 of the serialization
+ * without its witness data, in display (reversed) byte order. Throws for the
+ * same inputs parseRawTx refuses.
+ *
+ * @param {string} txHex
+ * @returns {string}
+ */
+export function rawTxid(txHex) {
+    const { legacyHex } = walkRawTx(txHex);
+    const bytes = new Uint8Array(legacyHex.length / 2);
+    for (let i = 0; i < bytes.length; i++) bytes[i] = parseInt(legacyHex.slice(i * 2, i * 2 + 2), 16);
+    const digest = sha256(sha256(bytes));
+    let out = '';
+    for (let i = digest.length - 1; i >= 0; i--) out += digest[i].toString(16).padStart(2, '0');
+    return out;
+}
+
+function walkRawTx(txHex) {
     const c = new Cursor(txHex);
     const version = Number(BigInt.asIntN(32, c.uintLE(4)));
 
@@ -117,10 +140,12 @@ export function parseRawTx(txHex) {
     // real transaction always has at least one input, so a zero input count is
     // never ambiguous with the marker.
     let segwit = false;
+    const versionHex = c.hex.slice(0, 8);
     if (c.remaining >= 2 && c.hex.slice(c.pos * 2, c.pos * 2 + 4) === '0001') {
         c.take(2);
         segwit = true;
     }
+    const bodyStart = c.pos;
 
     const inputs = [];
     const inputCount = c.varint();
@@ -140,6 +165,7 @@ export function parseRawTx(txHex) {
         outputs.push({ valueSat, scriptPubKeyHex: c.varSlice() });
     }
 
+    const bodyEnd = c.pos;
     // The witness stacks sit between the outputs and the locktime, so they have
     // to be walked even though nothing here reads them.
     if (segwit) {
@@ -151,7 +177,8 @@ export function parseRawTx(txHex) {
 
     const locktime = Number(c.uintLE(4));
     if (c.remaining !== 0) throw new Error(`parseRawTx: ${c.remaining} trailing byte(s) after locktime`);
-    return { version, locktime, inputs, outputs };
+    const legacyHex = `${versionHex}${c.hex.slice(bodyStart * 2, bodyEnd * 2)}${c.hex.slice(c.hex.length - 8)}`;
+    return { tx: { version, locktime, inputs, outputs }, legacyHex };
 }
 
 /** `n` as a BigInt, refusing a satoshi count JS has already rounded. */

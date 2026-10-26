@@ -55,7 +55,11 @@
 // invalidate already-persisted records; the registry's own validator
 // is the single source of truth for "is this descriptor usable?".
 
-import { validateChainDescriptor } from '../registry/validate.js';
+import { customChainReservedIdError, validateChainDescriptor } from '../registry/validate.js';
+
+// A pasted descriptor is stored in the vault settings and read on every boot,
+// so its serialized size is capped well above any real descriptor.
+export const MAX_CUSTOM_DESCRIPTOR_CHARS = 32768;
 
 async function readSettings(vault) {
     return vault.settings.get();
@@ -102,18 +106,25 @@ export async function listCustomChains({ vault }) {
  */
 export async function addCustomChain({ vault, chainRegistry, descriptor, sdkRegistry }) {
     if (!descriptor || typeof descriptor !== 'object') {
-        throw new Error('addCustomChain: descriptor must be an object');
+        throw new Error('The network description must be a JSON object.');
+    }
+    if (JSON.stringify(descriptor).length > MAX_CUSTOM_DESCRIPTOR_CHARS) {
+        throw new Error('The network description is too large.');
     }
     const res = validateChainDescriptor(descriptor);
     if (!res.ok) {
-        throw new Error(`addCustomChain: invalid descriptor: ${res.errors.join('; ')}`);
+        throw new Error(`This network can't be added. ${res.errors.join('; ')}`);
+    }
+    const reserved = customChainReservedIdError(descriptor);
+    if (reserved) {
+        throw new Error(`This network can't be added. ${reserved}`);
     }
     if (chainRegistry?.has?.(descriptor.id)) {
-        throw new Error(`addCustomChain: chain "${descriptor.id}" is already registered`);
+        throw new Error(`The network "${descriptor.id}" is already registered.`);
     }
     const settings = await readSettings(vault);
     if (!settings) {
-        throw new Error('addCustomChain: settings store unavailable');
+        throw new Error('Settings are unavailable, so the network was not added.');
     }
     const list = asList(settings);
     const firstSameId = list.findIndex((d) => d?.id === descriptor.id);

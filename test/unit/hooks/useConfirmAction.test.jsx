@@ -190,6 +190,36 @@ describe('useConfirmAction', () => {
         expect(reserve).toHaveBeenCalledTimes(1);
     });
 
+    it('gives two windows confirming the same action different reservation ids', async () => {
+        vi.useFakeTimers({ toFake: ['Date'] });
+        vi.setSystemTime(new Date('2026-10-23T12:00:00Z'));
+        try {
+            const ids = [];
+            for (let window = 0; window < 2; window += 1) {
+                const { result, unmount } = renderHook(() => useConfirmAction());
+                const reserve = vi.fn(async () => {});
+                let p;
+                await act(async () => {
+                    p = result.current.confirm({
+                        compose: async () => COMPOSED,
+                        onApprove: async () => 'ok',
+                        chainId: 'btc', preflight: preflightWith(),
+                        reservationLedger: { reserve, release: async () => {} },
+                        reserve: { tick: 'JDOG', amount: '5' },
+                    });
+                });
+                await waitFor(() => expect(result.current.phase).toBe('ready'));
+                await act(async () => { await result.current.approve({}); });
+                await p;
+                ids.push(reserve.mock.calls[0][0].id);
+                unmount();
+            }
+            expect(ids[0]).not.toBe(ids[1]);
+        } finally {
+            vi.useRealTimers();
+        }
+    });
+
     // A form that does not declare what it spends still gets §4.7
     // protection, derived from the compose envelope's projected balances.
     it('derives the reservation from the simulation when the caller names none', async () => {

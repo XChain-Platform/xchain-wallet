@@ -44,6 +44,7 @@
 import { parseBip21Uri, InvalidBip21Error } from '@xchain-wallet/core/uri/bip21.js';
 import { parseXchainUri, hardenUriIntentText } from '@xchain-wallet/core/uri/xchainUri.js';
 import { reportMainFailure } from './errorBoundary.js';
+import { focusWindow, showWindow } from './testFocus.js';
 
 /** URI schemes the app is allowed to claim. */
 export const TIER_1_SCHEME = 'xchain';
@@ -260,8 +261,8 @@ export function pickDeepLinkTarget(live, focused, isDetached) {
  */
 export function focusDeepLinkTarget(win) {
     if (win.isMinimized()) win.restore();
-    if (!win.isVisible()) win.show();
-    win.focus();
+    if (!win.isVisible()) showWindow(win);
+    focusWindow(win);
 }
 
 function dispatch(url, onDeepLink) {

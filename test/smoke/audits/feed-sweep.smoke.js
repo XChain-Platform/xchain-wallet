@@ -689,6 +689,15 @@ function clientVerdict(pointerText, manifests, artifacts) {
     };
     assert.equal(sized(UPDATE_FEED_MAX_BYTES).length, UPDATE_FEED_MAX_BYTES,
         'the boundary fixture really sits ON the cap, or it tests the wrong side of it');
+    // Two-byte padding: n UTF-8 bytes in far fewer than n characters.
+    const sizedBytes = (n) => {
+        const room = n - JSON.stringify({ version: '1.2.3', pad: '' }).length;
+        return JSON.stringify({ version: '1.2.3', pad: '\u00e9'.repeat(Math.floor(room / 2)) + 'x'.repeat(room % 2) });
+    };
+    assert.equal(Buffer.byteLength(sizedBytes(UPDATE_FEED_MAX_BYTES + 1), 'utf8'), UPDATE_FEED_MAX_BYTES + 1,
+        'the multibyte fixture really sits one byte over the cap');
+    assert.ok(sizedBytes(UPDATE_FEED_MAX_BYTES + 1).length <= UPDATE_FEED_MAX_BYTES,
+        'and under it in characters, or it cannot tell a byte rule from a character rule');
 
     const table = [
         '{"version":"0.336.0"}',
@@ -705,11 +714,15 @@ function clientVerdict(pointerText, manifests, artifacts) {
         'not json at all',
         sized(UPDATE_FEED_MAX_BYTES),
         sized(UPDATE_FEED_MAX_BYTES + 1),
+        sizedBytes(UPDATE_FEED_MAX_BYTES),
+        sizedBytes(UPDATE_FEED_MAX_BYTES + 1),
     ];
 
-    // The app's own acceptance, expressed the way checkForDirectUpdate
-    // expresses it: the cap first, on the decoded text, then the parse.
+    // The app's own acceptance on the one self-updating lane: the Android
+    // bridge (XChainVaultPlugin.java) caps the body in UTF-8 bytes before
+    // checkForDirectUpdate sees it, then the JS cap and the parse run.
     const clientAccepts = (text) => {
+        if (Buffer.byteLength(text, 'utf8') > UPDATE_FEED_MAX_BYTES) return false;
         if (text.length > UPDATE_FEED_MAX_BYTES) return false;
         try { parseUpdateFeed(JSON.parse(text)); return true; } catch { return false; }
     };

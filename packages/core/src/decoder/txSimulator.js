@@ -213,7 +213,12 @@ function simulateSweep(p, balMap, coinTick, feeEstimate) {
     // user their whole coin balance was leaving with the tokens.
     // BALANCES=0 (ownerships only) leaves token balances put too, so
     // the projection follows the flag rather than assuming it.
-    const sweepsBalances = str(p.BALANCES ?? '1') !== '0';
+    const flagOn = (v, dflt) => (v === undefined || v === null || str(v) === '' ? dflt : str(v) === '1');
+    const sweepsBalances = flagOn(p.BALANCES, true);
+    const sweepsOwnerships = flagOn(p.OWNERSHIPS, true);
+    const closes = [['ORDERS', 'orders'], ['SWAPS', 'swaps'], ['DISPENSERS', 'dispensers']]
+        .filter(([key]) => flagOn(p[key], false))
+        .map(([, label]) => label);
     const deltas = [];
     if (sweepsBalances) {
         for (const [tick, before] of balMap.entries()) {
@@ -222,9 +227,20 @@ function simulateSweep(p, balMap, coinTick, feeEstimate) {
         }
     }
     pushFeeRow(deltas, balMap, coinTick, feeEstimate);
-    const notes = [sweepsBalances
-        ? 'Sweep moves every token balance at the source address to the destination.'
-        : 'Sweep moves ownerships only; token balances stay at the source address.'];
+    // The note names what this sweep actually does. "Ownerships only" was the
+    // fallback for every BALANCES=0 sweep, so one that selected only open
+    // orders or dispensers told the signer it moved ownerships, which it did not.
+    const notes = [];
+    if (sweepsBalances) {
+        notes.push('Sweep moves every token balance at the source address to the destination.');
+    } else if (sweepsOwnerships && closes.length === 0) {
+        notes.push('Sweep moves ownerships only; token balances stay at the source address.');
+    } else {
+        notes.push('Token balances stay at the source address.');
+    }
+    if (closes.length > 0) {
+        notes.push(`Open ${closes.join(', ')} at the source address are force-closed, and whatever they hold in escrow is released to the destination.`);
+    }
     if (coinTick) {
         notes.push(`Your ${coinTick} balance is not swept - only the fee leaves this address.`);
     }

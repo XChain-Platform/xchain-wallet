@@ -161,6 +161,10 @@ function validateOpenDetached(args) {
     return options;
 }
 
+// The frame rules match main/security.js isValidSignerBridgeMessage exactly: a
+// frame main refuses is dropped with no reply, so it must throw here instead.
+const SIGNER_ID_MAX_LENGTH = 256;
+
 function validateSignerMessage(args) {
     const method = 'xchainWalletSignerBridge.postMessage';
     assertArgumentCount(method, args, 1);
@@ -170,8 +174,10 @@ function validateSignerMessage(args) {
     if (message.kind === 'register' || message.kind === 'unregister') {
         assertAllowedKeys(method, message, ['kind', 'signerIds']);
         if (!Array.isArray(message.signerIds)
-            || message.signerIds.some((id) => typeof id !== 'string' || id.length === 0)) {
-            throw new TypeError(`${method}: signerIds must be an array of non-empty strings`);
+            || message.signerIds.some((id) => typeof id !== 'string' || id.length === 0
+                || id.length > SIGNER_ID_MAX_LENGTH)) {
+            throw new TypeError(`${method}: signerIds must be an array of non-empty strings `
+                + `of at most ${SIGNER_ID_MAX_LENGTH} characters`);
         }
         return message;
     }
@@ -186,13 +192,18 @@ function validateSignerMessage(args) {
         }
         if (!message.ok) {
             if (!isRecord(message.error)
-                || typeof message.error.name !== 'string'
-                || typeof message.error.message !== 'string') {
-                throw new TypeError(`${method}: error must contain string name and message properties`);
+                || typeof message.error.name !== 'string' || message.error.name.length === 0
+                || typeof message.error.message !== 'string' || message.error.message.length === 0) {
+                throw new TypeError(`${method}: error must contain non-empty string name and message properties`);
             }
             assertAllowedKeys(method, message.error, ['name', 'message']);
+            if (Object.hasOwn(message, 'result')) {
+                throw new TypeError(`${method}: failed responses cannot contain result`);
+            }
         } else if (Object.hasOwn(message, 'error')) {
             throw new TypeError(`${method}: successful responses cannot contain error`);
+        } else if (!Object.hasOwn(message, 'result')) {
+            throw new TypeError(`${method}: successful responses must contain result`);
         }
         return message;
     }

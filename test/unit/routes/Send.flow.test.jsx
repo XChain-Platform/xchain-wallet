@@ -678,9 +678,6 @@ describe('Send flow with mocked messaging', () => {
         await user.tab();
         expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Open address book' }));
         await user.tab();
-        // The recipient field's paste control sits below it, after its in-field icon.
-        expect(document.activeElement).toBe(screen.getAllByRole('button', { name: 'Paste from clipboard' })[0]);
-        await user.tab();
         expect(document.activeElement).toBe(screen.getByLabelText('Token'));
         await user.tab();
         expect(document.activeElement).toBe(screen.getByLabelText(/^Amount \(/));
@@ -814,6 +811,49 @@ describe('Send flow with mocked messaging', () => {
         )).toBeInTheDocument();
     });
 
+    it('keeps a refused payment request note after the field loses focus', async () => {
+        mount();
+        const toField = await screen.findByLabelText(/^To$/);
+
+        fireEvent.paste(toField, {
+            clipboardData: { getData: () => `bitcoin:${TO}?req-extra=needed` },
+        });
+        fireEvent.blur(toField);
+
+        expect(await screen.findByText(
+            'This payment request requires a feature this wallet does not support.',
+        )).toBeInTheDocument();
+    });
+
+    it('does not say the amount was cleared when the pasted link supplies one', async () => {
+        mount();
+        const toField = await screen.findByLabelText(/^To$/);
+
+        fireEvent.paste(toField, {
+            clipboardData: { getData: () => `bitcoin:${TO}?amount=0.25&tick=PEPE` },
+        });
+
+        expect(screen.getByLabelText(/^Amount \(/)).toHaveValue('0.25');
+        expect(screen.queryByText(/amount was cleared/i)).toBeNull();
+    });
+
+    it('drops the previous link message when the next pasted link has none', async () => {
+        mount();
+        const toField = await screen.findByLabelText(/^To$/);
+
+        fireEvent.paste(toField, {
+            clipboardData: { getData: () => `bitcoin:${TO}?amount=0.25&message=Rent` },
+        });
+        fireEvent.change(screen.getByLabelText('Token'), { target: { value: 'XCP' } });
+        expect(screen.getByLabelText('Memo (optional)')).toHaveValue('Rent');
+
+        fireEvent.paste(toField, {
+            clipboardData: { getData: () => `bitcoin:${TO}?amount=0.5` },
+        });
+        expect(screen.getByLabelText('Memo (optional)')).toHaveValue('');
+        expect(screen.queryByTestId('payment-request-message')).toBeNull();
+    });
+
     it.each([
         ['malformed', 'bitcoin', TO, '../../evil'],
         ['unsupported', 'bitcoin', TO, 'monero-mainnet'],
@@ -847,7 +887,7 @@ describe('Send flow with mocked messaging', () => {
         expect(screen.queryByText(/This address has a typo/i)).toBeNull();
 
         fireEvent.blur(toField);
-        expect(await screen.findByText(/This address has a typo/i)).toBeInTheDocument();
+        expect(await screen.findByText(/This is not a valid address/i)).toBeInTheDocument();
 
         fireEvent.change(toField, { target: { value: TO } });
         expect(screen.queryByText(/This address has a typo/i)).toBeNull();
@@ -862,7 +902,7 @@ describe('Send flow with mocked messaging', () => {
         });
 
         expect(toField).toHaveValue('abc');
-        expect(await screen.findByText(/This address has a typo/i)).toBeInTheDocument();
+        expect(await screen.findByText(/This is not a valid address/i)).toBeInTheDocument();
     });
 
     it('keeps a checksum typo on the form with the shared address copy', async () => {
@@ -1324,6 +1364,32 @@ describe('Send flow with mocked messaging', () => {
 
         expect(vibrate).not.toHaveBeenCalled();
     });
+
+    it('drops the form draft when Approve dispatches so a lock mid-send cannot offer the payment again', async () => {
+        const broadcast = deferred();
+        const draftKey = `xc:formdraft:send:${WALLET_ID}`;
+        const messaging = mount({
+            messagingOverrides: {
+                getSettings: vi.fn().mockResolvedValue({
+                    walletMode: 'full',
+                    activeNetwork: 'mainnet',
+                    grace: { testSendThresholdSats: 0 },
+                    privacy: { formDraftTtlMs: 86_400_000 },
+                }),
+                sendToken: vi.fn(() => broadcast.promise),
+            },
+        });
+        await openPasswordConfirm(messaging);
+        expect(localStorage.getItem(draftKey)).not.toBeNull();
+
+        await approveWithPassword(messaging);
+
+        expect(localStorage.getItem(draftKey)).toBeNull();
+        messaging.unmountView();
+        broadcast.resolve({ txid: TXID });
+        await Promise.resolve();
+        expect(localStorage.getItem(draftKey)).toBeNull();
+    });
 });
 
 describe.each(['ledger', 'trezor'])('%s hardware signing flow', (kind) => {
@@ -1407,5 +1473,37 @@ describe.each(['ledger', 'trezor'])('%s hardware signing flow', (kind) => {
         );
         expect(screen.getByTestId('confirm-modal')).toBeInTheDocument();
         expect(screen.queryByRole('heading', { name: 'Broadcast pending' })).not.toBeInTheDocument();
+    });
+});
+
+describe('Send refused by a freeze armed during the review', () => {
+    const frozen = () => Object.assign(
+        new Error('Signing is frozen by panic mode (1440 min remaining)'),
+        { name: 'PanicModeActiveError' },
+    );
+
+    it('states a self-armed freeze once, in the form notice, with no generic retry line', async () => {
+        const { activatePanicMode } = await import('../../../packages/core/src/flows/panicMode.js');
+        const messaging = mount({ sendResult: frozen() });
+        await openPasswordConfirm(messaging);
+        activatePanicMode();
+        await approveWithPassword(messaging);
+
+        expect(await screen.findByText('Panic mode is on. This send cannot be signed.')).toBeInTheDocument();
+        expect(screen.queryByText(/Something went wrong/)).not.toBeInTheDocument();
+        expect(screen.queryByText(/Signing is frozen by panic mode/)).not.toBeInTheDocument();
+    });
+
+    it('keeps the generic failure line and names no freeze when it was duress-armed', async () => {
+        const { activatePanicMode, PANIC_ARMED_DURESS } = await import('../../../packages/core/src/flows/panicMode.js');
+        const messaging = mount({ sendResult: frozen() });
+        await openPasswordConfirm(messaging);
+        activatePanicMode({ armedBy: PANIC_ARMED_DURESS });
+        // The form logs an unclassified failure; the screen is what an observer reads.
+        vi.spyOn(console, 'error').mockImplementation(() => {});
+        await approveWithPassword(messaging);
+
+        expect(await screen.findByText(/Couldn't send\. Something went wrong\. Try again\./)).toBeInTheDocument();
+        expect(screen.queryByText(/panic|frozen/i)).not.toBeInTheDocument();
     });
 });

@@ -12,7 +12,6 @@
 // No staking / smart-contract actions at launch (BTC-exclusive).
 
 import { LITECOIN_ACTIONS } from '../actions.js';
-import { ADS_DONATION_ADDRESS_PLACEHOLDER } from '../validate.js';
 
 const COMMON = {
     coin: 'litecoin',
@@ -36,7 +35,6 @@ const COMMON = {
     },
     supportedActions: LITECOIN_ACTIONS,
     uriScheme: 'litecoin',
-    adsDonationAddress: ADS_DONATION_ADDRESS_PLACEHOLDER,
     // §36.1 per-coin ADS defaults: 0.001 LTC per tx (100,000 litoshis),
     // donation attached once 0.025 LTC has accumulated (~25 txs).
     adsDefaults: { perTxAmountSats: 100_000, triggerAmountSats: 2_500_000 },
@@ -53,6 +51,12 @@ export const litecoinDescriptors = [
         platformListOwners: [],
         icon: 'litecoin-mainnet-icon-20.png',
         wifVersionByte: 0xb0,
+        adsDonationAddresses: {
+            DONATE1: 'Ldonate18tNZcVThKm5MX33EjvhaanJ6Mg',
+            DONATE2: 'Ldonate2io846q2e7q8dUArh3TNnaq9ENb',
+            EXPLORER: 'Ldonate3FfyqbYQAYxo3qjFLcu28oUdAfn',
+        },
+        adsDonationAddress: 'Ldonate18tNZcVThKm5MX33EjvhaanJ6Mg',
         explorer: { defaultUrl: 'https://explorer.xchain.io', defaultPort: 443 },
         encoder: { defaultUrl: 'https://encoder.xchain.io/LTC', defaultPort: 443 },
         hub: { defaultUrl: 'https://hub.xchain.io/LTC', defaultPort: 443 },
@@ -66,6 +70,12 @@ export const litecoinDescriptors = [
         platformListOwners: [],
         icon: 'litecoin-testnet-icon-20.png',
         wifVersionByte: 0xef,
+        adsDonationAddresses: {
+            DONATE1: 'mybp5CceJvVV5tNCCiF7oBiZWko2fNkmnT',
+            DONATE2: 'muKEjejjXQvLY7Lp7Ecpn29gM2TCb5BLTF',
+            EXPLORER: 'mzCXcxcECbY5aNSXsfWjzKQN1YwoefEcG8',
+        },
+        adsDonationAddress: 'mybp5CceJvVV5tNCCiF7oBiZWko2fNkmnT',
         explorer: { defaultUrl: 'https://explorer.xchain.io', defaultPort: 443 },
         encoder: { defaultUrl: 'https://encoder.xchain.io/TLTC', defaultPort: 443 },
     },
@@ -78,6 +88,12 @@ export const litecoinDescriptors = [
         platformListOwners: [],
         icon: 'litecoin-regtest-icon-20.png',
         wifVersionByte: 0xef,
+        adsDonationAddresses: {
+            DONATE1: 'mgNY2ZXbnNEkRT5ZRF8yGamivrSX2QH97h',
+            DONATE2: 'n2DLJPppXUi8jC6fLiSkthZi2sc9UKiZHd',
+            EXPLORER: 'myL7sZGPEG3LhFXn7RFCZ321r8bxgmgDBz',
+        },
+        adsDonationAddress: 'mgNY2ZXbnNEkRT5ZRF8yGamivrSX2QH97h',
         explorer: { defaultUrl: 'http://localhost', defaultPort: 18080 },
         encoder: { defaultUrl: 'http://localhost', defaultPort: 3223 },
         hub: { defaultUrl: 'http://localhost', defaultPort: 10000 },

@@ -30,6 +30,10 @@
 
 const KEY = 'xchain:autolock';
 
+// Ordinary clock corrections (NTP steps, a second device syncing) stay well
+// inside this; anything larger is treated as a clock set backwards.
+const CLOCK_ROLLBACK_TOLERANCE_MS = 5 * 60 * 1000;
+
 function sessionArea() {
     return globalThis.chrome?.storage?.session ?? null;
 }
@@ -127,5 +131,10 @@ export function shouldAutoLock(state, now) {
     if (!state || state.armed !== true) return false;
     if (!(typeof state.idleMs === 'number' && state.idleMs > 0)) return false;
     if (!(typeof state.lastActivity === 'number' && state.lastActivity > 0)) return false;
+    // A stamp ahead of the clock means the wall clock moved backwards since it
+    // was written, so the idle time cannot be measured. Locking is the safe
+    // answer: waiting for the clock to catch up would keep the session open
+    // for as long as the clock was set back.
+    if (state.lastActivity - now > CLOCK_ROLLBACK_TOLERANCE_MS) return true;
     return now - state.lastActivity >= state.idleMs;
 }

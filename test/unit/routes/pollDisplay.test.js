@@ -6,7 +6,9 @@
 import { describe, expect, it } from 'vitest';
 import {
     latestBallotRows,
+    pollRowForDisplay,
     pollResultPercentages,
+    samePollIndex,
 } from '../../../packages/core/src/shared/routes/pollDisplay.js';
 
 const VOTER = 'bc1qvotervotervotervotervotervoterxx';
@@ -58,5 +60,16 @@ describe('poll display calculations', () => {
             BALLOT_ROWS[1],
             BALLOT_ROWS[2],
         ]);
+    });
+
+    it('compares poll indexes exactly past the safe integer range and enforces uint64', () => {
+        expect(samePollIndex('9007199254740993', '9007199254740993')).toBe(true);
+        expect(samePollIndex('9007199254740993', '9007199254740992')).toBe(false);
+        expect(samePollIndex('18446744073709551616', '18446744073709551616')).toBe(false);
+    });
+
+    it('accepts either poll id alias but rejects a row whose aliases disagree', () => {
+        expect(pollRowForDisplay({ poll_index: 7, options: [] })?.action_index).toBe(7);
+        expect(pollRowForDisplay({ action_index: '7', poll_index: 8, options: [] })).toBeNull();
     });
 });

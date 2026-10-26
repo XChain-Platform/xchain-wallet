@@ -40,6 +40,7 @@ import { actionDisplayLabel } from '../shared/utils/actionDisplayLabel.js';
 import { withAdsPlanAtEncode } from './buildActionPsbt.js';
 import { importedAddressIdsFor } from './_importedAddressIds.js';
 import { assertReferencedOfferActionable } from './marketExpiry.js';
+import { assertSafeActionText } from '../shared/utils/actionTextSafety.js';
 
 /**
  * §4.7: the single-tick debit a SEND moves, for the concurrent-window
@@ -127,7 +128,7 @@ export function nativeDebitSatsFromPsbt(decomposed, ownedAddresses) {
  * @property {(phase: string, data: object) => void} [onProgress]
  * @property {(transactions: { signed: object, revealSigned: object | null }) => void | Promise<void>} [beforeBroadcast] awaited after signing and before any broadcast
  * @property {boolean} [verifyBuiltTx]   hold the encoder's PSBT to the confirm pipeline's tamper checks before signing (submitWithSigner)
- * @property {(entry: { signedTxHex: string, txid: string, chainId: string, signedAt: number, summary: string, error: string, pendingTxId: string | null, adsCommit: { chainId: string, donationIncluded: boolean } | null, commitLanded?: true, commitTxid?: string | null }) => boolean | void | Promise<boolean | void>} [onBroadcastFailure]   Cluster G FOLLOWUP 1: fires when the broadcast leg fails after a successful sign. The bridge background host resolves false when the entry did not reach §49.5's durable queued-broadcast surface; legacy void callbacks are treated as accepted handoffs.
+ * @property {(entry: { signedTxHex: string, txid: string, chainId: string, signedAt: number, summary: string, error: string, pendingTxId: string | null, adsCommit: { chainId: string, donationIncluded: boolean } | null, commitLanded?: true, commitTxid?: string | null, revealTxHex?: string, revealTxid?: string | null }) => boolean | void | Promise<boolean | void>} [onBroadcastFailure]   Cluster G FOLLOWUP 1: fires when the broadcast leg fails after a successful sign. A two-phase commit's entry carries its signed reveal (`revealTxHex`), which the queue sends right after the commit. The bridge background host resolves false when the entry did not reach §49.5's durable queued-broadcast surface; legacy void callbacks are treated as accepted handoffs.
  */
 
 /**
@@ -167,6 +168,7 @@ export async function submitAction({
     onBroadcastFailure,
     verifyBuiltTx = false,
 }) {
+    assertSafeActionText(actionData);
     if (!injectedSigner && (typeof password !== 'string' || password.length === 0)) {
         throw new Error('submitAction: either `password` or `signer` is required');
     }
@@ -250,7 +252,29 @@ export async function submitAction({
 
     const writePending = async (patch) => {
         if (!pending) return;
-        pending = { ...pending, ...patch };
+        let next = { ...pending, ...patch };
+        // The mempool and confirmation watchers write this same record while the
+        // broadcast call is still returning. This copy is older than theirs, so a
+        // blind write would turn a confirmed send back into a broadcast one (and
+        // keep subtracting its spend), and erase the network sighting.
+        const stored = typeof vault.pendingTxs.get === 'function'
+            ? await vault.pendingTxs.get(pending.id)
+            : null;
+        if (stored) {
+            if (stored.mempoolSeenAt && !next.mempoolSeenAt) next.mempoolSeenAt = stored.mempoolSeenAt;
+            if (stored.status === 'indexed' && next.status !== 'indexed') {
+                next = {
+                    ...next,
+                    status: 'indexed',
+                    confirmedAt: stored.confirmedAt ?? next.confirmedAt,
+                    ...(stored.chainConfirmed === true ? {
+                        chainConfirmed: true,
+                        confirmedBlockIndex: stored.confirmedBlockIndex ?? null,
+                    } : {}),
+                };
+            }
+        }
+        pending = next;
         await vault.pendingTxs.put(pending);
     };
 
@@ -285,6 +309,11 @@ export async function submitAction({
                 status: 'broadcasting',
                 txid: data.txid,
                 ...(typeof data?.txHex === 'string' && data.txHex ? { txHex: data.txHex } : {}),
+                // The signed reveal of a two-phase action, so a restart that
+                // resumes this record sends the commit and then the reveal.
+                ...(typeof data?.revealTxHex === 'string' && data.revealTxHex
+                    ? { revealTxHex: data.revealTxHex, revealTxid: data.revealTxid ?? null }
+                    : {}),
             });
         } else if (phase === 'envelope_revealed' && typeof data?.txid === 'string') {
             // The reveal is the action's identity; the row moves off the commit txid.
@@ -484,18 +513,25 @@ export async function submitAction({
                     // Mark a queued reveal or phase-2 whose commit landed, so a later
                     // permanent retry verdict keeps it 'broadcast' as the branch above does.
                     const commitMark = phase1Landed ? { commitLanded: true, commitTxid } : {};
+                    // A refused commit queues with its signed reveal, so the drain
+                    // sends both and never the commit alone.
+                    const revealMark = !phase1Landed && err.revealTxHex
+                        ? { revealTxHex: err.revealTxHex, revealTxid: err.revealTxid ?? null }
+                        : {};
                     const pendingSaved = await stampPending({
                         status: 'queued',
                         txid: err.txid,
                         txHex: err.signedTxHex,
                         error: err && err.message ? String(err.message) : String(err),
                         ...commitMark,
+                        ...revealMark,
                     });
                     let queueSaved = false;
                     if (typeof onBroadcastFailure === 'function') {
                         try {
                             queueSaved = await onBroadcastFailure({
                                 ...commitMark,
+                                ...revealMark,
                                 signedTxHex: err.signedTxHex,
                                 txid: err.txid,
                                 chainId: err.chainId,
@@ -582,33 +618,45 @@ export async function submitAction({
     // Settle: ensure the final txid and status reach the record even if
     // no wait callback was supplied. Without waitForTxid, status ends at
     // 'broadcast'; with it, it ends at 'indexed'.
+    //
+    // The transaction is already on the network here, so a refused write (a full
+    // disk, a storage backend that went away) must not turn the send into a
+    // failure: the caller would tell the user it failed and invite a second
+    // send. The record the 'broadcasting' phase wrote already carries the txid
+    // for the watchers; the refusal rides on the result for diagnostics.
+    let settleWriteError = null;
     if (pending) {
-        if (!waitForTxid) {
-            await writePending({
-                status: 'broadcast',
-                broadcastAt: new Date().toISOString(),
-                txid: result.txid,
-                txHex: result.signed.txHex ?? null,
-            });
-        } else if (pending.status !== 'indexed') {
-            // Defensive: the lifecycle callback should have advanced to
-            // 'indexed' via the 'confirmed' phase. If for some reason the
-            // progress event was missed, patch the terminal state here.
-            await writePending({
-                status: 'indexed',
-                confirmedAt: pending.confirmedAt ?? new Date().toISOString(),
-                txid: result.txid,
-                txHex: result.signed.txHex ?? null,
-            });
-        } else {
-            // Already 'indexed'; just make sure txHex is stored.
-            await writePending({ txHex: result.signed.txHex ?? null });
+        try {
+            if (!waitForTxid) {
+                await writePending({
+                    status: 'broadcast',
+                    broadcastAt: new Date().toISOString(),
+                    txid: result.txid,
+                    txHex: result.signed.txHex ?? null,
+                });
+            } else if (pending.status !== 'indexed') {
+                // Defensive: the lifecycle callback should have advanced to
+                // 'indexed' via the 'confirmed' phase. If for some reason the
+                // progress event was missed, patch the terminal state here.
+                await writePending({
+                    status: 'indexed',
+                    confirmedAt: pending.confirmedAt ?? new Date().toISOString(),
+                    txid: result.txid,
+                    txHex: result.signed.txHex ?? null,
+                });
+            } else {
+                // Already 'indexed'; just make sure txHex is stored.
+                await writePending({ txHex: result.signed.txHex ?? null });
+            }
+        } catch (writeErr) {
+            settleWriteError = writeErr && writeErr.message ? String(writeErr.message) : String(writeErr);
         }
     }
 
     return {
         ...result,
         pendingTxId: pending?.id ?? null,
+        ...(settleWriteError ? { pendingTxWriteError: settleWriteError } : {}),
         // The address the change actually paid, so a caller can say so
         // (and so a test can assert the rotation rather than infer it).
         changeAddress: encoderOptsForSubmit?.change ?? null,

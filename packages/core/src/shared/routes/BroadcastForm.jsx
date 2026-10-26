@@ -15,6 +15,7 @@ import {
     registry as registryLib,
     decoder as decoderLib,
 } from '@xchain-wallet/core';
+import '../../i18n/locales/en/send.js';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { useDemoGuard } from '../hooks/useDemoGuard.jsx';
 import { useActionConfirmFlow, isUserRejection } from '../hooks/useActionConfirmFlow.js';
@@ -40,12 +41,15 @@ import { pickDefaultChainId } from '../chainSelection.js';
 import { submitFailureMessage } from '../utils/submitFailureMessage.js';
 import { QueuedResultPanel } from '../components/QueuedResultPanel.jsx';
 import { MAX_MEMO_LENGTH, memoLengthError, utf8ByteLength } from '../utils/memoLimit.js';
+import { actionTextSafetyError } from '../utils/actionTextSafety.js';
 import { parseRawTx } from '../../signers/verifySignedTx.js';
 import { formatNativeBaseUnits, tickerForDescriptor } from '../../registry/coinTicker.js';
 import { readFailureMessage } from '../utils/readFailureMessage.js';
 import { useSettings } from '../hooks/useSettings.js';
 import { explorerPageUrl } from '../utils/explorerLinks.js';
 import { useLongOperationStatus } from '../hooks/useLongOperationStatus.js';
+import { useTokenInfo } from '../hooks/useTokenInfo.js';
+import { tokenIssuerEligibility } from '../utils/tokenIssuerEligibility.js';
 
 const chainRegistry = registryLib.defaultRegistry();
 
@@ -146,6 +150,9 @@ function BroadcastKindPicker({ value, onChange }) {
     );
 }
 
+// A pasted transaction can hold thousands of outputs; drawing every one freezes the tab.
+const MAX_PREVIEW_OUTPUTS = 50;
+
 function RawTransactionBroadcast({
     walletId, chainId, setChainId, messaging, onKindChange, onBusyChange, onDone, demoGuard,
 }) {
@@ -160,6 +167,8 @@ function RawTransactionBroadcast({
     const mismatch = rawTransactionMismatch(preview?.decoded, descriptor);
     const chainIds = chainRegistry.supportedChains().map((chain) => chain.id);
     const broadcastTime = useLongOperationStatus(state === 'submitting', { timeoutMs: 30_000 });
+    // Two submits in one event turn both read state 'preview'; the ref closes that gap.
+    const sendingRef = useRef(false);
 
     function review(event) {
         event.preventDefault();
@@ -179,7 +188,8 @@ function RawTransactionBroadcast({
 
     async function broadcast(event) {
         event.preventDefault();
-        if (!preview || !chainId || mismatch || state === 'submitting') return;
+        if (!preview || !chainId || mismatch || state === 'submitting' || sendingRef.current) return;
+        sendingRef.current = true;
         setState('submitting');
         onBusyChange(true);
         setError(null);
@@ -195,12 +205,15 @@ function RawTransactionBroadcast({
             setError(rawBroadcastFailure(err));
             setState('preview');
         } finally {
+            sendingRef.current = false;
             onBusyChange(false);
         }
     }
 
     if (state === 'done') {
         const txid = result?.txid || result?.broadcast?.txid || '';
+        // A node that already holds these exact bytes answers with no new txid; that is not a queued send.
+        const alreadyOnNetwork = result?.alreadyOnNetwork === true;
         // A relay that queued the transaction instead of broadcasting it is
         // not a broadcast; say so before any success copy can render.
         if (result?.queued) {
@@ -225,7 +238,7 @@ function RawTransactionBroadcast({
         return (
             <div>
                 <div role="status" aria-live="polite" aria-atomic="true">
-                    <h2 className={styles.successTitle}>{txid ? 'Broadcast pending' : 'Transaction queued'}</h2>
+                    <h2 className={styles.successTitle}>{txid ? 'Broadcast pending' : alreadyOnNetwork ? 'Already on the network' : 'Transaction queued'}</h2>
                     {txid ? (
                         <p className={styles.hint}>
                             The transaction was broadcast but is not confirmed yet.
@@ -245,7 +258,11 @@ function RawTransactionBroadcast({
                         ) : null}
                     </>
                 ) : (
-                    <p>The signed transaction is saved in the broadcast queue. Send it from there when the network is available.</p>
+                    <p>
+                        {alreadyOnNetwork
+                            ? 'The network already has this transaction, so there is nothing more to send.'
+                            : 'The signed transaction is saved in the broadcast queue. Send it from there when the network is available.'}
+                    </p>
                 )}
                 <div className={styles.actions}>
                     <Button type="button" onClick={() => {
@@ -273,7 +290,9 @@ function RawTransactionBroadcast({
                 ) : null}
                 actions={(
                     <>
+                        {/* Keyed so the Back button and the form's Preview button are different nodes: they share a slot, and a reused node would turn Back into a submit mid-click. */}
                         <Button
+                            key="back"
                             type="button"
                             variant="ghost"
                             onClick={() => setState('form')}
@@ -281,7 +300,7 @@ function RawTransactionBroadcast({
                         >
                             Back
                         </Button>
-                        <Button type="submit" variant="primary" loading={state === 'submitting'} disabled={!!mismatch}>
+                        <Button key="broadcast" type="submit" variant="primary" loading={state === 'submitting'} disabled={!!mismatch}>
                             Broadcast transaction
                         </Button>
                     </>
@@ -293,13 +312,19 @@ function RawTransactionBroadcast({
                     {' '}and creates {preview.decoded.outputs.length} output{preview.decoded.outputs.length === 1 ? '' : 's'}.
                 </p>
                 <dl className={styles.detailsList}>
-                    {preview.decoded.outputs.map((output, index) => (
+                    {preview.decoded.outputs.slice(0, MAX_PREVIEW_OUTPUTS).map((output, index) => (
                         <DetailRow
                             key={`${output.scriptPubKeyHex}-${index}`}
                             label={`Output ${index + 1}`}
                             value={`${formatCoinAmount(output.valueSat, descriptor)} to ${scriptType(output.scriptPubKeyHex)} script ${output.scriptPubKeyHex}`}
                         />
                     ))}
+                    {preview.decoded.outputs.length > MAX_PREVIEW_OUTPUTS ? (
+                        <DetailRow
+                            label="More outputs"
+                            value={`${preview.decoded.outputs.length - MAX_PREVIEW_OUTPUTS} further outputs are not listed.`}
+                        />
+                    ) : null}
                     <DetailRow
                         label="Network fee"
                         value="Cannot be calculated from raw transaction data because it does not include the amounts of the spent inputs."
@@ -328,7 +353,7 @@ function RawTransactionBroadcast({
             label="Broadcast signed transaction"
             onSubmit={review}
             status={error ? <StatusMessage variant="error">{error}</StatusMessage> : null}
-            actions={<Button type="submit" variant="primary">Preview transaction</Button>}
+            actions={<Button key="preview" type="submit" variant="primary">Preview transaction</Button>}
         >
             <BroadcastKindPicker value="transaction" onChange={onKindChange} />
             <ChainPicker label="Network" value={chainId} onChange={setChainId} chainIds={chainIds} chainRegistry={chainRegistry} hideNetworkKind />
@@ -489,6 +514,18 @@ export function BroadcastForm({ walletId, onBack, onDone, initialChainId, initia
         if (!chainId || !fromAddressId || !addressesByChain) return null;
         return (addressesByChain[chainId] || []).find((a) => a.id === fromAddressId) || null;
     }, [chainId, fromAddressId, addressesByChain]);
+    const tokenInfo = useTokenInfo({
+        chainId,
+        tick: initialTick,
+        skip: !lockedToken,
+    });
+    const issuerEligibility = tokenIssuerEligibility({
+        tokenInfo: lockedToken ? tokenInfo : { creator: fromAddress?.address },
+        addressesByChain,
+        chainId,
+        tick: initialTick,
+        sourceAddress: fromAddress?.address,
+    });
 
     const chainsWithAddresses = addressesByChain ? Object.keys(addressesByChain) : [];
     const coinTicker = tickerForDescriptor(descriptor);
@@ -557,9 +594,9 @@ export function BroadcastForm({ walletId, onBack, onDone, initialChainId, initia
 
     const messageBytes = utf8ByteLength(actionParams.MESSAGE);
     const memoBytes = utf8ByteLength(actionParams.MEMO);
-    const messageLengthError = messageBytes > MAX_BROADCAST_MESSAGE_LENGTH
+    const messageLengthError = actionTextSafetyError(actionParams.MESSAGE, 'Message') || (messageBytes > MAX_BROADCAST_MESSAGE_LENGTH
         ? `Message is ${messageBytes} bytes; the network accepts at most ${MAX_BROADCAST_MESSAGE_LENGTH} bytes.`
-        : null;
+        : null);
     const broadcastMemoLengthError = memoLengthError(actionParams.MEMO || '');
     const broadcastLengthError = messageLengthError || broadcastMemoLengthError;
 
@@ -591,6 +628,14 @@ export function BroadcastForm({ walletId, onBack, onDone, initialChainId, initia
         event.preventDefault();
         if (!chainId || !fromAddress) {
             setFormError('Pick a source address first.');
+            return;
+        }
+        if (lockedToken && issuerEligibility.pending) {
+            setFormError(`Wait for the wallet to verify the current owner of ${initialTick}.`);
+            return;
+        }
+        if (lockedToken && issuerEligibility.error) {
+            setFormError(issuerEligibility.error);
             return;
         }
         if (!feedName.trim() && !text.trim()) {
@@ -997,8 +1042,8 @@ export function BroadcastForm({ walletId, onBack, onDone, initialChainId, initia
             demoGuard={demoGuard}
             label="Broadcast"
             onSubmit={handleReview}
-            status={formError ? (
-                <StatusMessage variant="error">{formError}</StatusMessage>
+            status={formError || (lockedToken && issuerEligibility.error) ? (
+                <StatusMessage variant="error">{formError || issuerEligibility.error}</StatusMessage>
             ) : null}
             actions={(
                 <Button
@@ -1006,6 +1051,7 @@ export function BroadcastForm({ walletId, onBack, onDone, initialChainId, initia
                     variant="primary"
                     loading={actionConfirm.composing}
                     disabled={!fromAddress
+                        || (lockedToken && (issuerEligibility.pending || !!issuerEligibility.error))
                         || (!feedName.trim() && !text.trim())
                         || !!broadcastLengthError
                         || actionConfirm.composing}

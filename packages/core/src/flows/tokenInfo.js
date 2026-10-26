@@ -116,6 +116,7 @@ import { fetchWithRetry } from '../shared/utils/fetchWithRetry.js';
  * @property {number | null} marketPrice                 coin-denominated price, null if unset
  * @property {number | null} marketFloor                 coin-denominated floor, null if unset
  * @property {number | null} divisibility                token decimals (0-8); null when the explorer doesn't expose this field
+ * @property {boolean} [loadError]                     true when the explorer failed to answer; every field then reads as unknown
  * @property {string[]} projects                         project ticks whose CURRENT roster includes this token (the "Official" banner data)
  * @property {string | null} imageUrl                    best-effort hero image URL (TIS images[0] if present, else regex from description)
  * @property {TisMediaEntry[]} images                    full image gallery (icon / standard / large / hires)
@@ -1139,11 +1140,14 @@ export async function tokenInfoFor({
     if (!tick) throw new Error('tokenInfoFor: tick is required');
     const sdk = sdkRegistry.get(chainId);
     let raw = demo ? demoRowFor(tick) : null;
+    // A read the explorer failed to answer is not a token it does not know.
+    let readFailed = false;
     if (!demo && typeof sdk?.getToken === 'function') {
         try {
             raw = await sdk.getToken(tick);
         } catch {
             raw = null;
+            readFailed = true;
         }
     }
     let tisBundle = null;
@@ -1173,9 +1177,13 @@ export async function tokenInfoFor({
         if (fixture?.tis) tisBundle = tisToMediaBundle(fixture.tis);
     }
     if (!demo) resolveMediaDataRefs(tisBundle, sdk);
-    return normalizeTokenInfo(chainId, tick, raw, tisBundle, {
+    const info = normalizeTokenInfo(chainId, tick, raw, tisBundle, {
         allowRemoteMedia: metadataFetchEnabled && !demo,
     });
+    // Marks a record built without the explorer's answer, so callers neither
+    // cache it nor present its empty fields as the token's real state.
+    if (readFailed) info.loadError = true;
+    return info;
 }
 
 // Resolve on-chain media references (dataRef = "action:<index>") across a

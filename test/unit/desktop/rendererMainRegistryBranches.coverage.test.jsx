@@ -13,6 +13,7 @@ const boot = vi.hoisted(() => ({
 
 vi.mock('react-dom/client', () => ({ createRoot: boot.createRoot }));
 vi.mock('@xchain-wallet/core', () => ({
+    flows: {},
     registry: {
         defaultRegistry: () => ({ applyRemoteDescriptors: boot.applyRemoteDescriptors }),
     },
@@ -27,6 +28,11 @@ vi.mock('../../../packages/desktop/renderer/fiatRateSource.js', () => ({
     installDesktopFiatRateSource: boot.installFiatRateSource,
 }));
 vi.mock('../../../packages/desktop/renderer/App.jsx', () => ({ App: () => null }));
+// The freeze bridge talks to main over IPC; these tests are about the
+// registry and render fallbacks, so it resolves at once.
+vi.mock('../../../packages/desktop/renderer/panicModeBridge.js', () => ({
+    installDesktopPanicModeBridge: vi.fn(async () => {}),
+}));
 vi.mock('../../../packages/desktop/renderer/DesktopUpdateBanner.jsx', () => ({
     DesktopUpdateBanner: () => null,
 }));
@@ -50,7 +56,7 @@ describe('desktop renderer registry response branches', () => {
 
         expect(boot.applyRemoteDescriptors).not.toHaveBeenCalled();
         expect(info).not.toHaveBeenCalled();
-        expect(boot.createRoot).toHaveBeenCalledOnce();
+        await vi.waitFor(() => expect(boot.createRoot).toHaveBeenCalledOnce());
         info.mockRestore();
         delete window.xchainWalletRegistry;
     });

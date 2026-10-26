@@ -701,7 +701,7 @@ export function synthesizeDemoDefiPositions(opts = {}) {
 // aggregate; the demo path drops this in instead. Only Bitcoin is
 // populated (staking is BTC-only), keyed under bitcoin-mainnet because the
 // demo wallet lands on mainnet; demoStakingFixture() resolves the regtest
-// and testnet ids to the same entry so a Developer Mode network switch
+// and testnet ids to the same entry so a network switch
 // still shows the positions. The narrative matches the DeFi-tab
 // "XCHAIN stake delegated to demo-validator-7" position above.
 // Contract-flavored positions live in DEMO_CONTRACT_STAKES_BY_CHAIN

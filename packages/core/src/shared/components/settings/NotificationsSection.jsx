@@ -38,6 +38,7 @@ import { usePriceAlerts } from '../../hooks/usePriceAlerts.js';
 import { useMessaging } from '../../useMessaging.js';
 import { PriceAlertForm, coinLabelForChain } from '../PriceAlertForm.jsx';
 import { RelativeTime } from '../RelativeTime.jsx';
+import { expandDecimalNotation } from '../../utils/amountFormat.js';
 import { QUIET_HOURS_DEFAULT } from '../../../schemas/settings.js';
 import {
     SOUND_FAMILIES,
@@ -48,6 +49,8 @@ import {
 } from '../../../notifications/notificationSounds.js';
 import { ROW, ROW_HINT, STACK, SettingsLoadError, Status } from './_settingsPrimitives.jsx';
 import { t } from '../../../i18n/index.js';
+import '../../../i18n/locales/en/send.js';
+import '../../../i18n/locales/en/settings.js';
 
 /**
  * Browser/OS notification-permission affordance. The extension requests and
@@ -153,7 +156,7 @@ function PermissionRow({ permission, setPermission }) {
             );
         }
     } else if (permission === 'denied') {
-        hint = 'Notifications are blocked. Open your browser or system settings, find XChain Wallet, and allow notifications.';
+        hint = t('settings.notifications.blockedHint');
     } else if (permission !== 'checking') {
         action = (
             <Button type="button" size="sm" icon={null} onClick={request} disabled={requesting} aria-busy={requesting}>
@@ -237,7 +240,7 @@ const NOTIFICATION_FLAGS = /** @type {const} */ ([
  * @param {string | null | undefined} [props.walletId]  active wallet; scopes the price-alert manager
  */
 export function NotificationsSection({ walletId } = {}) {
-    const { settings, loading, error, update } = useSettings();
+    const { settings, loading, error, update } = useSettings({ reportsOwnError: true });
     const chromePermissions = globalThis.chrome?.permissions;
     const extensionSupported = typeof chromePermissions?.contains === 'function'
         && typeof chromePermissions?.request === 'function'
@@ -678,13 +681,20 @@ async function runAlertAction(id, action, setBusyId, setActionError) {
     }
 }
 
-/** Compact, locale-free threshold label, e.g. 70000/usd → "$70,000". */
-function formatThreshold(value, fiatCurrency) {
+/**
+ * Compact, locale-free threshold label, e.g. 70000/usd → "$70,000". Only the
+ * whole-number part takes thousands separators; the fraction and any
+ * exponent form print as plain digits so "0.1234" never reads "0.1,234".
+ */
+export function formatThreshold(value, fiatCurrency) {
     const cur = String(fiatCurrency || 'usd').toLowerCase();
     const n = Number(value);
-    const grouped = Number.isFinite(n)
-        ? String(Math.abs(n)).replace(/\B(?=(\d{3})+(?!\d))/g, ',')
-        : String(value);
-    const body = (n < 0 ? '-' : '') + grouped;
+    let body = String(value);
+    if (Number.isFinite(n)) {
+        const plain = expandDecimalNotation(String(Math.abs(n))) || String(Math.abs(n));
+        const [whole, fraction] = plain.split('.');
+        const grouped = whole.replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+        body = (n < 0 ? '-' : '') + (fraction ? `${grouped}.${fraction}` : grouped);
+    }
     return cur === 'usd' ? `$${body}` : `${body} ${cur.toUpperCase()}`;
 }

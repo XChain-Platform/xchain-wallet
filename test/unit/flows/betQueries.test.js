@@ -187,9 +187,31 @@ describe('betPoolAmounts', () => {
         expect(betPoolAmounts([{ outcome: 0, pool: null }, { outcome: 1 }], 2)).toEqual(['0', '0']);
     });
 
-    it('grows to the declared outcome count and never shrinks below the rows', () => {
+    it('replaces malformed, negative and over-wide explorer pools with zero', () => {
+        expect(betPoolAmounts([
+            { outcome: 0, pool: '-1' },
+            { outcome: 1, pool: 'not-an-amount' },
+            { outcome: 2, pool: '1'.repeat(48) },
+        ], 3)).toEqual(['0', '0', '0']);
+    });
+
+    it('does not let duplicate explorer rows amplify a pool', () => {
+        expect(betPoolAmounts([
+            { outcome: 0, pool: '5' },
+            { outcome: 0, pool: '999' },
+        ], 2)).toEqual(['5', '0']);
+    });
+
+    it('grows to the declared outcome count and drops rows outside that count', () => {
         expect(betPoolAmounts([{ outcome: 0, pool: '1' }], 3)).toEqual(['1', '0', '0']);
-        expect(betPoolAmounts([{ outcome: 4, pool: '1' }], 2)).toHaveLength(5);
+        expect(betPoolAmounts([{ outcome: 4, pool: '999' }], 2)).toEqual(['0', '0']);
+    });
+
+    it('does not let a hostile explorer outcome index drive allocation', () => {
+        expect(betPoolAmounts([
+            { outcome: 0, pool: '5' },
+            { outcome: 100_000, pool: '999' },
+        ], 2)).toEqual(['5', '0']);
     });
 
     it('survives a missing or non-array pools field', () => {

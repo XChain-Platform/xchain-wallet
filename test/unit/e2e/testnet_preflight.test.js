@@ -212,6 +212,9 @@ describe('testnet global setup', () => {
             MINT_AMOUNT: 200,
             preflightGasHeadroom: vi.fn(async () => {}),
         }));
+        vi.doMock('../../e2e/fixtures/testnet_keys.js', () => ({
+            preflightRunInputKeys: vi.fn(),
+        }));
         vi.doMock('../../e2e/fixtures/testnet_rewards.js', () => ({
             preflightClaimantReward: vi.fn(async () => {}),
         }));
@@ -228,6 +231,7 @@ describe('testnet global setup', () => {
             vi.doUnmock('../../e2e/fixtures/testnet_preflight.js');
             vi.doUnmock('../../e2e/fixtures/testnet_origin.js');
             vi.doUnmock('../../e2e/fixtures/testnet_gas_preflight.js');
+            vi.doUnmock('../../e2e/fixtures/testnet_keys.js');
             vi.doUnmock('../../e2e/fixtures/testnet_rewards.js');
             vi.resetModules();
             log.mockRestore();

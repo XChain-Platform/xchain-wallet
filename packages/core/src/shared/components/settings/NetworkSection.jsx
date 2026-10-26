@@ -35,9 +35,10 @@ import { userFacingMessage } from '../../utils/userFacingMessage.js';
 import { ROW, SELECT, SettingsLoadError, Status } from './_settingsPrimitives.jsx';
 import { ConfirmModal } from '../ConfirmModal.jsx';
 import { t } from '../../../i18n/index.js';
+import '../../../i18n/locales/en/settings.js';
 
 export function NetworkSection({ activeWallet, reload = reloadPage } = {}) {
-    const { settings, loading, error, update } = useSettings();
+    const { settings, loading, error, update } = useSettings({ reportsOwnError: true });
     const { messaging } = useMessaging();
     const confirmDialog = useConfirmModal();
     const [switching, setSwitching] = useState(false);

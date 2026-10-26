@@ -42,6 +42,10 @@ import { fetchWithRetry } from '../shared/utils/fetchWithRetry.js';
 // the feed is wedged; fall back rather than show a dead price.
 const ORACLE_STALE_MS = 30 * 60 * 1000;
 
+// Allow ordinary clock skew without letting a bad future timestamp make a
+// snapshot appear fresh until wall time catches up to it.
+const PRICE_TIMESTAMP_FUTURE_SKEW_MS = 5 * 60 * 1000;
+
 // Don't re-hit the network for a coin whose cached rate is younger
 // than this. Mirrors priceOracle.js's spot TTL.
 const REFRESH_TTL_MS = 5 * 60 * 1000;
@@ -345,7 +349,9 @@ async function fetchOracleSnapshotRate(fetchImpl, chainCoin, pair, nowMs, signal
         const parsed = Date.parse(row.created_at);
         if (Number.isFinite(parsed)) tsMs = parsed;
     }
-    if (tsMs != null && nowMs - tsMs > ORACLE_STALE_MS) return null;
+    if (tsMs == null) return null;
+    const ageMs = nowMs - tsMs;
+    if (ageMs > ORACLE_STALE_MS || ageMs < -PRICE_TIMESTAMP_FUTURE_SKEW_MS) return null;
     return rate;
 }
 
@@ -702,7 +708,9 @@ async function fetchMarketPriceInCoin(fetchImpl, chainCoin, tick, nativeTicker, 
         // bounds how stale the DATA can be rather than the trade. That is
         // still the only freshness signal this endpoint gives us.
         const tsMs = Number(row.last_updated) * 1000;
-        if (Number.isFinite(tsMs) && tsMs > 0 && nowMs - tsMs > MARKET_STALE_MS) continue;
+        if (!Number.isFinite(tsMs) || tsMs <= 0) continue;
+        const ageMs = nowMs - tsMs;
+        if (ageMs > MARKET_STALE_MS || ageMs < -PRICE_TIMESTAMP_FUTURE_SKEW_MS) continue;
         return { price, change24hPct: marketChange24hOf(row, tick, nativeTicker) };
     }
     return null;

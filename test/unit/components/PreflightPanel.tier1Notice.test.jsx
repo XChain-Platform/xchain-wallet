@@ -22,11 +22,12 @@
 // `unreachedReport` findings array was captured from a live `sdk.preflight`
 // run against a mock explorer whose `getFeeQuote` never resolves.
 //
-// NOT covered here, deliberately: reports with no Tier-1 finding at ALL
-// (`local` mode, the DEPLOY/EXECUTE/XEXEC/BATCH denylist, `feeExempt`
-// responses like DISPENSE). Those are spec §4.3 cases where Tier 1 was never
-// asked rather than asked-and-silent; the panel exposes them as
-// `data-dryrun="none"` if that ever needs its own copy.
+// Local mode, the DEPLOY/EXECUTE/XEXEC denylist and `feeExempt` replies like
+// DISPENSE are not Tier-1-silent: the SDK turns each into a DRYRUN_UNAVAILABLE
+// info finding ("not consulted" for local mode, "declined to judge" otherwise;
+// BATCH is pre-flighted per sub-command), so they render `data-dryrun="unreached"`.
+// The cases below cover both wordings; `none` is left for a report with no
+// Tier-1 finding at all, which a producer other than the SDK can still author.
 
 import React from 'react';
 import { describe, it, expect, afterEach } from 'vitest';
@@ -37,6 +38,7 @@ import { fileURLToPath } from 'node:url';
 import { requireSdkDeep, sdkInstalled } from '../../helpers/sdkDeepPaths.js';
 import { PreflightPanel, TIER1_NOTICE_CODES, SUPPORTED_SCHEMA_VERSION }
     from '../../../packages/core/src/shared/components/PreflightPanel.jsx';
+import { isHardPreflightFinding } from '../../../packages/core/src/shared/utils/preflightFindingKey.js';
 
 const here = dirname(fileURLToPath(import.meta.url));
 
@@ -173,6 +175,22 @@ describe('PreflightPanel Tier-1 notice (§4.2, )', () => {
         expect(notice.textContent).toContain('guardInert');
     });
 
+    // Local mode is a deliberate opt-out, so its sentence must not call it a refusal.
+    it('discloses a local-only report as unreached without calling it a refusal', () => {
+        mount(reportWith('pass', [{
+            code: 'DRYRUN_UNAVAILABLE',
+            severity: 'info',
+            source: 'dryrun',
+            message: 'The network was not consulted (local-only mode); relying on client checks.',
+            data: {},
+        }]));
+        expect(chip().textContent).toMatch(/local checks only/i);
+        expect(panel().getAttribute('data-dryrun')).toBe('unreached');
+        const notice = screen.getByTestId('preflight-notice-DRYRUN_UNAVAILABLE').textContent;
+        expect(notice).toMatch(/not consulted \(local-only mode\)/);
+        expect(notice).not.toMatch(/declined/i);
+    });
+
     it('states the network verdict when the network DID answer', () => {
         mount(reportWith('pass', [DRYRUN_VALID_FINDING]));
         expect(chip().textContent).toBe('Looks good');
@@ -201,6 +219,7 @@ describe('PreflightPanel Tier-1 notice (§4.2, )', () => {
         expect(panel().getAttribute('data-dryrun')).toBe('approved');
         second.unmount();
 
+        // No Tier-1 finding at all: a non-SDK producer's shape, never local mode.
         mount(reportWith('pass', []));
         expect(panel().getAttribute('data-dryrun')).toBe('none');
     });
@@ -496,6 +515,49 @@ describe('PreflightPanel <-> xchain-sdk contract', () => {
     // fixtures above stopped describing reality, so assert the two agree.
     it('renders fixtures stamped with the supported schema version', () => {
         expect(reportWith('pass').schemaVersion).toBe(SUPPORTED_SCHEMA_VERSION);
+    });
+
+    // Every error row's signer copy and the hard-block fallback read the refusal
+    // text from `data.status` / `data.error`, so feed them the installed producer.
+    it('turns the refusal text the SDK producer stamps into signer copy', () => {
+        const { applyTier1 } = requireSdkDeep('preflightTier1Findings');
+        const single = applyTier1([], {
+            kind: 'verdict', valid: false, status: 'invalid: insufficient funds', error: null,
+        });
+        const batch = applyTier1([], {
+            kind: 'verdict', valid: true, subCommands: [
+                { position: 0, action: 'SEND', status: 'valid' },
+                { position: 1, action: 'SEND', status: 'invalid: insufficient funds' },
+            ],
+        });
+        mount(reportWith('fail', [...single, ...batch]));
+        const text = panel().textContent;
+        expect(text).toContain('This action would be refused because insufficient funds.');
+        expect(text).toContain('Batch command 2 would be refused because insufficient funds.');
+        expect(text).not.toMatch(/reports (?:this|batch command 2) will fail/);
+
+        // With no producer override flag, the action-level refusal is the hard block.
+        const refusal = single.find((f) => f.severity === 'error');
+        expect(isHardPreflightFinding({ ...refusal, overridable: undefined })).toBe(true);
+    });
+
+    // Local mode and the denylist reach the panel only through the producer's
+    // no-verdict branch; both must read as unreached, each in its own words.
+    it('discloses the producer no-verdict reports as unreached, not as none', () => {
+        const { applyTier1 } = requireSdkDeep('preflightTier1Findings');
+        const cases = [
+            ['local-only mode', /not consulted/i],
+            ['denylisted', /declined to judge/i],
+            ['feeExempt', /declined to judge/i],
+        ];
+        for (const [reason, wording] of cases) {
+            const { unmount } = mount(reportWith('pass', applyTier1([], { kind: 'no-verdict', reason })));
+            expect(panel().getAttribute('data-dryrun'), reason).toBe('unreached');
+            expect(chip().textContent, reason).toMatch(/local checks only/i);
+            expect(screen.getByTestId('preflight-notice-DRYRUN_UNAVAILABLE').textContent, reason)
+                .toMatch(wording);
+            unmount();
+        }
     });
 
     // The SDK is not the only producer of this report. The wallet authors two

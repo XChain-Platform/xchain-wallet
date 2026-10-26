@@ -151,7 +151,7 @@ function nativeFromAddress(addrResp, nativeTicker) {
     const balances = addrResp && addrResp.balances;
     const confirmed = atomicFromHumanAmount(balances?.confirmed, 8);
     if (confirmed == null || !nativeTicker) return null;
-    const pending = balances?.pending == null
+    const pending = balances?.pending == null || !isExactNonnegativeDecimal(balances.pending)
         ? null
         : atomicFromHumanAmount(balances.pending, 8);
     return {
@@ -176,26 +176,62 @@ function nativeFromAddress(addrResp, nativeTicker) {
 // XCHAIN shown as 0.00003000). Rows that already carry `quantity` (demo
 // fixtures, dev mocks) are atomic already and pass through untouched.
 export function tokensFromBalances(balResp) {
-    const rows = balResp && Array.isArray(balResp.data) ? balResp.data : [];
-    return rows
-        .map((r) => {
-            const divisibility = Number(r.divisibility ?? r.decimals ?? 0);
-            let quantity;
-            if (r.quantity != null) {
-                quantity = String(r.quantity);
-            } else {
-                const human = r.amount != null ? r.amount : '0';
-                quantity = atomicFromHumanAmount(human, divisibility) ?? String(human);
-            }
-            return {
-                tick: r.tick,
-                quantity,
-                divisibility,
-                displayName: r.displayName || r.display_name || r.tick,
-                imageUrl: r.imageUrl || r.image || null,
-            };
-        })
-        .filter((t) => t.tick);
+    return tokenRowsFromBalances(balResp).rows;
+}
+
+// A row that is not an object (null, a number) carries no tick; it is skipped
+// so the rest of the ledger stays readable, and the read is marked partial.
+function tokenRowsFromBalances(balResp) {
+    if (!balResp || !Array.isArray(balResp.data)) return { rows: [], invalid: true };
+    const rows = [];
+    let invalid = false;
+    for (const row of balResp.data) {
+        const normalized = normalizeTokenBalanceRow(row);
+        if (!normalized) {
+            invalid = true;
+            continue;
+        }
+        rows.push(normalized);
+    }
+    return { rows, invalid };
+}
+
+function normalizeTokenBalanceRow(row) {
+    if (!row || typeof row !== 'object') return null;
+    const tick = typeof row.tick === 'string' ? row.tick.trim() : '';
+    const divisibility = Number(row.divisibility ?? row.decimals ?? 0);
+    if (!tick || !Number.isInteger(divisibility) || divisibility < 0 || divisibility > 18) return null;
+
+    let quantity;
+    if (row.quantity != null) {
+        if (!isExactNonnegativeInteger(row.quantity)) return null;
+        quantity = String(row.quantity).trim();
+    } else {
+        if (row.amount == null || !isExactNonnegativeDecimal(row.amount)) return null;
+        quantity = atomicFromHumanAmount(row.amount, divisibility);
+        if (quantity === null) return null;
+    }
+    return {
+        tick,
+        quantity,
+        divisibility,
+        displayName: row.displayName || row.display_name || tick,
+        imageUrl: row.imageUrl || row.image || null,
+    };
+}
+
+function isExactNonnegativeInteger(value) {
+    if (typeof value === 'number') return Number.isSafeInteger(value) && value >= 0;
+    if (typeof value === 'bigint') return value >= 0n;
+    return /^\d+$/.test(String(value).trim());
+}
+
+function isExactNonnegativeDecimal(value) {
+    if (typeof value === 'number') {
+        return Number.isFinite(value) && value >= 0
+            && (!Number.isInteger(value) || Number.isSafeInteger(value));
+    }
+    return /^\+?\d+(?:\.\d+)?$/.test(String(value).trim());
 }
 
 // Human-scale decimal string -> atomic-unit integer string, BigInt-exact.
@@ -232,8 +268,16 @@ function subtractAtomic(quantity, debit) {
  */
 export function applyPendingBalanceDeltas(byChain, pendingTxs, chainRegistry) {
     if (!byChain || !Array.isArray(pendingTxs)) return byChain;
+    // One transaction is one spend: signing an identical payment again leaves a
+    // second record with the same txid, and netting both would debit it twice.
+    const nettedTxids = new Set();
     for (const pending of pendingTxs) {
         if (!pending || !LIVE_PENDING_STATUSES.has(pending.status)) continue;
+        if (typeof pending.txid === 'string' && pending.txid) {
+            const key = `${pending.chain}/${pending.network}/${pending.fromAddress}/${pending.txid.toLowerCase()}`;
+            if (nettedTxids.has(key)) continue;
+            nettedTxids.add(key);
+        }
         const chainId = chainRegistry.chainIdFor(pending.chain, pending.network);
         const entries = chainId && Array.isArray(byChain[chainId]) ? byChain[chainId] : [];
         for (const entry of entries) {
@@ -317,18 +361,24 @@ function shapeFromReads({ balResp, addrResp, nativeTicker }) {
     // null amounts when its UTXO tracker is not answering, and that body is
     // "could not read", not "holds nothing". It is marked the same way a
     // thrown read is, so Home says Unavailable and the Confirm preview stops
-    // projecting the coin from zero.
+    // projecting the coin from zero. A confirmed amount that is not a
+    // non-negative decimal (text, a negative, an object) is the same
+    // "could not read": the number is unknown, not zero.
+    const tokenResult = balOk ? tokenRowsFromBalances(balResp) : { rows: [], invalid: false };
+    const balUnreadable = balOk && tokenResult.invalid;
     const addrUnreadable = addrOk && nativeAnswerUnreadable(addrResp);
     const unavailable = [
-        ...(balOk ? [] : ['tokens']),
+        ...(balOk && !balUnreadable ? [] : ['tokens']),
         ...(addrOk && !addrUnreadable ? [] : ['native']),
     ];
     const reason = !balOk
         ? balResp?.message
-        : (addrUnreadable ? NATIVE_BALANCE_UNREADABLE_REASON : addrResp?.message);
+        : (balUnreadable
+            ? 'balance service returned invalid token data'
+            : (addrUnreadable ? NATIVE_BALANCE_UNREADABLE_REASON : addrResp?.message));
     return {
         native: addrOk && !addrUnreadable ? nativeFromAddress(addrResp, nativeTicker) : null,
-        tokens: balOk ? tokensFromBalances(balResp) : [],
+        tokens: tokenResult.rows,
         ...(unavailable.length > 0 ? {
             unavailable,
             unavailableReason: String(reason || 'balance read failed'),
@@ -345,7 +395,9 @@ export const NATIVE_BALANCE_UNREADABLE_REASON = 'balance service unavailable';
 function nativeAnswerUnreadable(addrResp) {
     if (!addrResp || typeof addrResp !== 'object') return true;
     if (addrResp.tracker_available === false) return true;
-    return addrResp.balances?.confirmed == null;
+    const confirmed = addrResp.balances?.confirmed;
+    return confirmed == null || !isExactNonnegativeDecimal(confirmed)
+        || atomicFromHumanAmount(confirmed, 8) === null;
 }
 
 // Demo wallets (issue #82). A demo wallet lands on mainnet, so every balance
@@ -448,7 +500,20 @@ export async function addressBalances({ sdkRegistry, chainRegistry, chainId, add
     const sdk = sdkRegistry.get(chainId);
     const descriptor = chainRegistry ? chainRegistry.descriptorFor(chainId) : null;
     const nativeTicker = tickerForCoin(descriptor && descriptor.coin);
-    return fetchAddressShape({ sdk, address, nativeTicker, opts });
+    const shape = await fetchAddressShape({ sdk, address, nativeTicker, opts });
+    if (!vault || !chainRegistry || !shape || typeof shape !== 'object') return shape;
+    // Net this address's unconfirmed sends the way Home does, so the Send form's
+    // available amount and Max never offer coins an earlier send already spent.
+    let pendingTxs = [];
+    try {
+        pendingTxs = await vault.pendingTxs.list();
+    } catch {
+        pendingTxs = [];
+    }
+    const netted = applyPendingBalanceDeltas(
+        { [chainId]: [{ address, balances: shape }] }, pendingTxs, chainRegistry,
+    );
+    return netted[chainId][0].balances;
 }
 
 /**

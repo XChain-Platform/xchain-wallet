@@ -24,6 +24,16 @@
 // surfacing dead entries.
 
 import { t } from '../../i18n/index.js';
+import '../../i18n/locales/en/components.js';
+import '../../i18n/locales/en/governance.js';
+import '../../i18n/locales/en/issue.js';
+import '../../i18n/locales/en/keyboard.js';
+import '../../i18n/locales/en/palette.js';
+import '../../i18n/locales/en/routes.js';
+import '../../i18n/locales/en/scan.js';
+import '../../i18n/locales/en/send.js';
+import '../../i18n/locales/en/settings.js';
+import '../../i18n/locales/en/ui.js';
 import { Icon } from '../../ui/index.js';
 
 // Categories double as the Tab-cycle groups in the palette (§33.4). Order
@@ -98,6 +108,11 @@ const DEMO_UNAVAILABLE_COMMAND_IDS = new Set([
 
 // Watch-only wallets can author unsigned transactions, but they cannot use
 // commands whose only outcome requires a private key in this wallet.
+// Signer mode does not author or broadcast transactions; the Actions menu
+// keeps only the signing tools there, so the palette drops the same authoring
+// categories instead of opening forms the mode refuses to submit.
+const SIGNER_UNAVAILABLE_CATEGORIES = new Set(['Create', 'Trade']);
+
 const WATCHER_UNAVAILABLE_COMMAND_IDS = new Set([
     'sign-message',
     'sign-psbt',
@@ -348,6 +363,9 @@ export function buildCommands(ctx) {
         { id: 'nav-connected-sites', category: 'Settings', title: t('settings.connectedSites.connectedSites'), subtitle: t('palette.navConnectedSites.subtitle'), keywords: ['dapps', 'permissions', 'connections'], Icon: Icon.LinkIcon, run: go('connected-sites') },
     );
 
+    if (ctx.isSignerMode) {
+        return list.filter((command) => !SIGNER_UNAVAILABLE_CATEGORIES.has(command.category));
+    }
     if (ctx.isDemoWallet) {
         return list.filter((command) => !DEMO_UNAVAILABLE_COMMAND_IDS.has(command.id));
     }
@@ -474,16 +492,35 @@ const SETTINGS_SECTIONS = /** @type {const} */ ([
 ]);
 
 /**
+ * Settings sections the Settings screen does not list for this wallet, by the
+ * same rules as its `visible` flags: Network endpoints needs Developer Mode
+ * (an unloaded settings object counts as visible, as there), and the compact
+ * popup has no Keyboard section.
+ *
+ * @param {{ settings?: { developerMode?: boolean } | null, compact?: boolean }} opts
+ * @returns {string[]}
+ */
+export function hiddenSettingsSectionIds({ settings, compact = false } = {}) {
+    const hidden = [];
+    if (settings?.developerMode === false) hidden.push('network-endpoints');
+    if (compact) hidden.push('keyboard');
+    return hidden;
+}
+
+/**
  * Settings-section deep-link commands (§33.2). `openSettings(sectionId)` is
  * shell-supplied (sets the Settings initialSubpageId and navigates); when
  * absent (extension popup has no Settings route) no commands are produced.
+ * Sections named in `hiddenSettingsSections` are left out, because opening
+ * one would land on the bare Settings list.
  *
- * @param {{ openSettings?: (sectionId: string) => void }} ctx
+ * @param {{ openSettings?: (sectionId: string) => void, hiddenSettingsSections?: string[] }} ctx
  * @returns {import('./fuzzyMatch.js').Command[]}
  */
 export function settingsSectionsToCommands(ctx) {
     if (typeof ctx?.openSettings !== 'function') return [];
-    return SETTINGS_SECTIONS.map((s) => ({
+    const hidden = new Set(ctx.hiddenSettingsSections || []);
+    return SETTINGS_SECTIONS.filter((s) => !hidden.has(s.id)).map((s) => ({
         id: `settings-${s.id}`,
         category: 'Settings',
         title: t('palette.settingsSectionTitle', { section: s.title }),

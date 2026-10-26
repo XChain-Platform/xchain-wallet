@@ -14,6 +14,10 @@ import { GatedFileViewer } from '../../../packages/core/src/shared/components/Ga
 import { NoticeModal } from '../../../packages/core/src/shared/components/NoticeModal.jsx';
 import buttonStyles from '../../../packages/core/src/ui/Button.module.css';
 import overlayStyles from '../../../packages/core/src/shared/components/OverlaySurface.module.css';
+import { preloadOnDemandOverlays } from '../../../packages/core/src/shared/components/onDemandOverlays.js';
+
+// The app loads these on idle after first paint; load them up front here.
+beforeAll(() => preloadOnDemandOverlays());
 
 const COMPONENT_DIR = join(process.cwd(), 'packages/core/src/shared/components');
 const ROUTE_DIR = join(process.cwd(), 'packages/core/src/shared/routes');
@@ -260,6 +264,14 @@ describe('320x568 modal layout contracts', () => {
         expect(rule(overlay, '.body')).toMatch(/min-height:\s*0/);
         expect(rule(overlay, '.body')).toMatch(/flex:\s*1 1 auto/);
         expect(rule(overlay, '.body')).toMatch(/overflow-y:\s*auto/);
+    });
+
+    it('wraps the palette no-match line so a long unbroken query stays inside the panel', () => {
+        const palette = readFileSync(
+            join(COMPONENT_DIR, '..', 'commandPalette', 'CommandPalette.module.css'),
+            'utf8',
+        );
+        expect(rule(palette, '.empty')).toMatch(/overflow-wrap:\s*anywhere/);
     });
 
     it('bounds the phone command sheet and keeps its results as the scroll region', () => {

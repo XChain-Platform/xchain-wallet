@@ -28,6 +28,7 @@ import { parseRawTx } from '../signers/verifySignedTx.js';
 
 export const PSBT_HEX_PREFIX = '70736274ff';
 export const PARTNER_PAIRING_PREFIX = 'XCW-PAIR:';
+const MAX_WIF_LENGTH = 64;
 
 /**
  * @typedef {(
@@ -160,11 +161,15 @@ export function detectQrContent(input, opts = {}) {
     }
 
     // --- Step 3: WIF (base58check-decodable with 33- or 34-byte payload) ---
-    try {
-        const decoded = decodeWif(raw);
-        return { type: 'wif', wif: raw, decoded };
-    } catch {
-        // not a WIF
+    // A WIF is 51 to 52 characters; the base58 decode is quadratic, so longer
+    // text is never offered to it.
+    if (raw.length <= MAX_WIF_LENGTH) {
+        try {
+            const decoded = decodeWif(raw);
+            return { type: 'wif', wif: raw, decoded };
+        } catch {
+            // not a WIF
+        }
     }
 
     // --- Step 4: BIP39 mnemonic (whitespace + case normalized first) ---

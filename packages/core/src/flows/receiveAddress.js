@@ -81,10 +81,27 @@ async function addressEverFunded(sdk, address) {
  */
 
 /**
+ * Calls on one vault take turns. Each call reads the held indexes, picks the
+ * lowest free one and writes the record, so two in flight (a double tap, the
+ * Receive screen beside the Add addresses dialog) would both pick the same
+ * index and store the same address twice. A failed call never blocks the next.
+ *
  * @param {ReceiveAddressOpts} opts
  * @returns {Promise<import('../schemas/address.js').Address>}
  */
-export async function receiveAddress({
+export function receiveAddress(opts) {
+    const vault = opts?.vault;
+    if (vault === null || typeof vault !== 'object') return deriveReceiveAddress(opts);
+    const previous = receiveQueues.get(vault) ?? Promise.resolve();
+    const run = previous.then(() => deriveReceiveAddress(opts));
+    receiveQueues.set(vault, run.catch(() => {}));
+    return run;
+}
+
+/** Tail of each vault's receive-address queue. */
+const receiveQueues = new WeakMap();
+
+async function deriveReceiveAddress({
     vault,
     walletId,
     password,

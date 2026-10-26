@@ -15,6 +15,7 @@ import { alertSeverityPresentation } from './alertSeverity.js';
 import { useBackHandler } from '../../ui/backStack.js';
 import { useFocusTrap } from '../utils/focusTrap.js';
 import { t } from '../../i18n/index.js';
+import '../../i18n/locales/en/alerts.js';
 
 /**
  * Full-overlay alerts panel. Surfaces wallet-level notifications that

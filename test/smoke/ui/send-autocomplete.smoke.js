@@ -82,7 +82,11 @@ assert.doesNotMatch(
 assert.match(sendSrc, /uriLib\.detectQrContent\(/, 'paste path runs detectQrContent');
 assert.match(sendSrc, /detected\.type === 'bip21'/, 'BIP21 branch');
 assert.match(sendSrc, /detected\.type === 'xchain-uri'/, 'xchain: URI branch');
-assert.match(sendSrc, /detected\.type === 'wif'/, 'WIF branch surfaces an import hint');
+// A pasted secret (bare, or in a payment link's address slot) is classified
+// before the link branches, so the WIF hint comes from the secret check.
+assert.match(sendSrc, /PASTED_SECRET_TYPES = new Set\(\[[^\]]*'wif'/, 'WIF is a pasted secret type');
+assert.match(sendSrc, /const secretKind = pastedSecretKind\(/, 'paste path classifies secrets first');
+assert.match(sendSrc, /secretKind === 'wif'/, 'WIF branch surfaces an import hint');
 assert.match(
     sendSrc,
     /That looks like a private key/i,

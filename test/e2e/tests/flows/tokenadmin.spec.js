@@ -293,7 +293,10 @@ for (const viewport of VIEWPORTS) {
 
         await test.step('Destroy from Manage token', async () => {
             await openManagedToken(page);
-            await page.getByRole('main').getByRole('button', { name: 'Destroy', exact: true }).click();
+            // A holder who is not the issuer sees Dispenser, Dividends and Airdrop
+            // first, so Destroy sits under More.
+            await page.getByRole('main').getByRole('button', { name: 'More', exact: true }).click();
+            await page.getByRole('main').getByRole('menuitem', { name: 'Destroy', exact: true }).click();
             await expectScreenLayout(page, 'Destroy', `${viewport.name} Destroy`);
 
             const main = page.getByRole('main');

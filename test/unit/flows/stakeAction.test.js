@@ -46,6 +46,7 @@ describe('stakeAction', () => {
         [{ params: { VERSION: '3', AMOUNT: '1', SIGNING_PUBKEY: PUBKEY } }, /params.VERSION/],
         [{ params: { VERSION: '1', AMOUNT: '0', SIGNING_PUBKEY: PUBKEY } }, /AMOUNT must be greater than 0/],
         [{ params: { VERSION: '1', AMOUNT: '1.000000001', SIGNING_PUBKEY: PUBKEY } }, /at most 8 fractional digits/],
+        [{ params: { VERSION: '1', AMOUNT: Number.MAX_SAFE_INTEGER + 2, SIGNING_PUBKEY: PUBKEY } }, /exact decimal string/],
         [{ params: { VERSION: '1', AMOUNT: '1', SIGNING_PUBKEY: 'xyz' } }, /64 hex chars/],
     ])('rejects invalid input before submitting %#', async (input, message) => {
         await expect(stakeAction(input)).rejects.toThrow(message);
@@ -118,5 +119,17 @@ describe('stakeAction', () => {
         expect(lastSubmission().actionData).toEqual({ action: 'STAKE', params });
         expect(lastSubmission().signingPaths).toEqual([{ inputIndex: 0, addressId: 'address-9' }]);
         expect(lastSubmission().pendingTxMeta).toBeUndefined();
+    });
+
+    it('keeps an exact whole amount past the safe integer range as a string', async () => {
+        const params = {
+            VERSION: '1',
+            AMOUNT: '9007199254740993',
+            SIGNING_PUBKEY: PUBKEY,
+        };
+
+        await stakeAction(options({ params }));
+
+        expect(lastSubmission().actionData.params.AMOUNT).toBe('9007199254740993');
     });
 });

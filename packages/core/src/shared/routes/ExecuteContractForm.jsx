@@ -24,6 +24,7 @@ import {
 } from '../../sdk/nativeFeePreflight.js';
 import { submitFailureMessage } from '../utils/submitFailureMessage.js';
 import { userFacingMessage } from '../utils/userFacingMessage.js';
+import { revealHiddenText } from '../utils/textHardening.js';
 import { SignCredentials } from '../components/SignCredentials.jsx';
 import { useSignerReady } from '../hooks/useSignerReady.js';
 import { WatcherResultPanel } from '../components/WatcherResultPanel.jsx';
@@ -34,6 +35,7 @@ import {
     estimateNativeSendFee,
     estimateNativeSendFeeTiers,
     customFeeEstimate,
+    customFeeRateBoundsError,
     displayRateToSettingsCustom,
 } from '../../flows/feeEstimate.js';
 import { useContractManifest } from '../hooks/useContractManifest.js';
@@ -51,8 +53,12 @@ import { coinFromChainId } from '../components/BalanceList.jsx';
 import { useTickBalance } from '../hooks/useTickBalance.js';
 import { compareDecimalStrings, formatWithThousands, tokenAmountPrecisionError } from '../utils/amountFormat.js';
 import { t } from '../../i18n/index.js';
+import '../../i18n/locales/en/execute.js';
+import '../../i18n/locales/en/send.js';
 import { isValidAddressForChain } from '../utils/addressValidation.js';
+import { tickerReferenceError } from '../utils/tickerGrammar.js';
 import { useTokenInfo } from '../hooks/useTokenInfo.js';
+import { actionTextSafetyError } from '../utils/actionTextSafety.js';
 
 const chainRegistry = registryLib.defaultRegistry();
 
@@ -82,6 +88,13 @@ function abiArgumentError(param, value, descriptor) {
     if (type === 'address' && (!descriptor?.coin || !descriptor?.networkKind
         || !isValidAddressForChain(text, descriptor.coin, descriptor.networkKind))) {
         return `${name} must be a valid address for ${descriptor?.displayName || 'this network'}.`;
+    }
+    if (type === 'tick') {
+        // A ticker a call names must be one the chain could have coined; a
+        // stray space or comma would be sent as typed and the paid call would
+        // fail at runtime.
+        const tickError = tickerReferenceError(text, { noun: name, allowRef: true });
+        if (tickError) return tickError;
     }
     if (type === 'number' && !/^-?(?:\d+(?:\.\d+)?|\.\d+)$/.test(text)) {
         return `${name} must be a decimal number.`;
@@ -255,8 +268,17 @@ export function ExecuteContractForm({ walletId, chainId, contractActionIndex, in
                 const names = Object.keys(abi.methods);
                 if (initialMethod && names.includes(initialMethod)) {
                     const declared = abi.methods[initialMethod].params || [];
-                    const given = (initialParamsText || '').split('|');
-                    setAbiParamValues(declared.map((p, i) => (given[i] !== undefined ? given[i] : '')));
+                    const givenText = initialParamsText || '';
+                    const given = givenText === '' ? [] : givenText.split('|');
+                    if (given.length > declared.length) {
+                        // The manual lane exposes every supplied value instead
+                        // of hiding arguments that the ABI does not declare.
+                        setManualMode(true);
+                        return;
+                    }
+                    const declaredValues = declared.map((p, i) => (given[i] !== undefined ? given[i] : ''));
+                    setAbiParamValues(declaredValues);
+                    setParamsText(declaredValues.join('|'));
                 } else if (initialMethod) {
                     setManualMode(true);
                 } else {
@@ -532,6 +554,11 @@ export function ExecuteContractForm({ walletId, chainId, contractActionIndex, in
 
     function handleReview(event) {
         event.preventDefault();
+        // A rate outside the chain bounds is refused here too, so a form that skips native validation still stops.
+        const feeBoundsError = feePick.mode === 'custom'
+            ? customFeeRateBoundsError({ rate: Number(feePick.customRate), tiers: feeTiers })
+            : null;
+        if (feeBoundsError) { setFormError(feeBoundsError); return; }
         // EXECUTE is signed from an address on this chain; without one there is
         // nothing to pay the call's fee from.
         if (!fromAddress) {
@@ -549,6 +576,11 @@ export function ExecuteContractForm({ walletId, chainId, contractActionIndex, in
         }
         if (method.includes('|') || method.includes(';')) {
             setFormError('Method name cannot contain "|" or ";".');
+            return;
+        }
+        const methodSafetyError = actionTextSafetyError(method, 'Method');
+        if (methodSafetyError) {
+            setFormError(methodSafetyError);
             return;
         }
         if (abiActive) {
@@ -569,6 +601,11 @@ export function ExecuteContractForm({ walletId, chainId, contractActionIndex, in
         // boundaries. Nothing we can do about those except surface
         // clearly below.
         for (const p of paramsArray) {
+            const parameterSafetyError = actionTextSafetyError(p, 'Parameter');
+            if (parameterSafetyError) {
+                setFormError(parameterSafetyError);
+                return;
+            }
             if (p.includes(';')) {
                 setFormError(`Parameter "${p}" contains a semicolon, which is not allowed in parameters.`);
                 return;
@@ -829,7 +866,7 @@ export function ExecuteContractForm({ walletId, chainId, contractActionIndex, in
                             <dd className={styles.detailsValue}>
                                 <ol style={{ margin: 0, paddingLeft: '1.25rem' }}>
                                     {paramsArray.map((p, i) => (
-                                        <li key={i} className={contractStyles.monospaceValue}>{p}</li>
+                                        <li key={i} className={contractStyles.monospaceValue}>{revealHiddenText(p)}</li>
                                     ))}
                                 </ol>
                             </dd>

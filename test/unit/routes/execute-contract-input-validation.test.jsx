@@ -9,7 +9,7 @@
 // contact legal@dankest.llc.
 
 import { readFileSync } from 'node:fs';
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import React from 'react';
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
@@ -131,6 +131,17 @@ describe('ExecuteContractForm argument validation', () => {
         expect(await screen.findByRole('alert')).toHaveTextContent('Method name is required.');
     });
 
+    it('refuses hostile method text before review', async () => {
+        mount();
+        fireEvent.click(await screen.findByRole('button', { name: 'Enter method manually' }));
+        fireEvent.change(screen.getByLabelText('Method'), { target: { value: 'pay\u202eout' } });
+        fireEvent.click(screen.getByRole('button', { name: 'Call contract' }));
+
+        expect(await screen.findByRole('alert'))
+            .toHaveTextContent('Method cannot contain text-direction control characters.');
+        expect(screen.queryByRole('form', { name: /Review/ })).toBeNull();
+    });
+
     it('rejects malformed declared addresses before compose', async () => {
         mount('full', 'recipient', {
             getContractByActionIndex: () => Promise.resolve({
@@ -165,6 +176,36 @@ describe('ExecuteContractForm argument validation', () => {
 
         expect(await screen.findAllByText(/limit can have at most 8 decimal places/))
             .not.toHaveLength(0);
+    });
+
+    it('rejects wrong boolean types and negative amounts before compose', async () => {
+        mount('full', 'enabled', {
+            getContractByActionIndex: () => Promise.resolve({
+                data: {
+                    abi: {
+                        version: 1,
+                        methods: {
+                            configure: {
+                                params: [
+                                    { name: 'enabled', type: 'bool' },
+                                    { name: 'limit', type: 'amount' },
+                                ],
+                            },
+                        },
+                    },
+                },
+            }),
+        });
+        fireEvent.change(await screen.findByLabelText('enabled (bool)'), {
+            target: { value: 'TRUE' },
+        });
+        fireEvent.change(screen.getByLabelText('limit (amount)'), { target: { value: '-1' } });
+        fireEvent.click(screen.getByRole('button', { name: 'Call contract' }));
+        expect(await screen.findAllByText('enabled must be true or false.')).not.toHaveLength(0);
+
+        fireEvent.change(screen.getByLabelText('enabled (bool)'), { target: { value: 'false' } });
+        fireEvent.click(screen.getByRole('button', { name: 'Call contract' }));
+        expect(await screen.findAllByText('limit must be a positive decimal amount.')).not.toHaveLength(0);
     });
 
     it('rejects a malformed contract ID before compose', async () => {
@@ -224,5 +265,92 @@ describe('ExecuteContractForm argument validation', () => {
         expect(await screen.findByRole('form', { name: 'Call contract' })).toBeInTheDocument();
         expect(screen.getByLabelText('config (json)')).toHaveValue('{"enabled":true}');
         expect(screen.getByLabelText('limit (amount)')).toHaveValue('2.5');
+    });
+
+    it('shows undeclared deep-link arguments and composes the visible values exactly', async () => {
+        const composeForConfirm = vi.fn(() => new Promise(() => {}));
+        mount('full', 'config', { composeForConfirm }, {
+            initialMethod: 'configure',
+            initialParamsText: '{"safe":true}|9007199254740993|hidden',
+        });
+
+        expect(await screen.findByLabelText('Arguments (optional)'))
+            .toHaveValue('{"safe":true}|9007199254740993|hidden');
+        expect(screen.queryByLabelText('config (json)')).toBeNull();
+
+        fireEvent.click(screen.getByRole('button', { name: 'Call contract' }));
+        await waitFor(() => expect(composeForConfirm).toHaveBeenCalledTimes(1));
+        expect(composeForConfirm.mock.calls[0][0].actionData.params.PARAMS).toEqual([
+            '{"safe":true}',
+            '9007199254740993',
+            'hidden',
+        ]);
+    });
+});
+
+describe('ExecuteContractForm tick arguments', () => {
+    const tickAbi = () => ({
+        getContractByActionIndex: () => Promise.resolve({
+            data: {
+                abi: {
+                    version: 1,
+                    methods: { claim: { params: [{ name: 'asset', type: 'tick' }] } },
+                },
+            },
+        }),
+    });
+
+    it.each(['XCH AIN', 'A,B', 'A;B', '.A', 'A..B'])('rejects the ticker %j before compose', async (value) => {
+        mount('full', 'config', tickAbi());
+        fireEvent.change(await screen.findByLabelText('asset (tick)'), { target: { value } });
+        fireEvent.click(screen.getByRole('button', { name: 'Call contract' }));
+
+        expect((await screen.findAllByText(/^asset /)).length).toBeGreaterThan(0);
+        expect(screen.queryByRole('heading', { name: 'Review contract call' })).toBeNull();
+    });
+
+    it.each(['XCHAIN', 'Mixed-Case.sub', '^123'])('accepts the ticker %j', async (value) => {
+        mount('watcher', 'config', tickAbi());
+        fireEvent.change(await screen.findByLabelText('asset (tick)'), { target: { value } });
+        fireEvent.click(screen.getByRole('button', { name: 'Preview' }));
+
+        expect(await screen.findByRole('heading', { name: 'Review contract call' })).toBeInTheDocument();
+    });
+});
+
+describe('ExecuteContractForm link prefill against a declared method', () => {
+    const twoParamAbi = () => ({
+        getContractByActionIndex: () => Promise.resolve({
+            data: {
+                abi: {
+                    version: 1,
+                    methods: {
+                        pay: { params: [{ name: 'who', type: 'string' }, { name: 'note', type: 'string' }] },
+                        ping: { params: [] },
+                    },
+                },
+            },
+        }),
+    });
+
+    it('fills the typed inputs when the link carries the declared arguments', async () => {
+        mount('full', 'config', twoParamAbi(), { initialMethod: 'pay', initialParamsText: 'ann|thanks' });
+
+        expect(await screen.findByLabelText('who (string)')).toHaveValue('ann');
+        expect(screen.getByLabelText('note (string)')).toHaveValue('thanks');
+    });
+
+    it('keeps every argument visible when the link carries more than the method declares', async () => {
+        mount('full', 'config', twoParamAbi(), { initialMethod: 'pay', initialParamsText: 'ann|thanks|extra' });
+
+        expect(await screen.findByLabelText('Arguments (optional)')).toHaveValue('ann|thanks|extra');
+        expect(screen.queryByLabelText('who (string)')).toBeNull();
+    });
+
+    it('keeps the declared inputs for a no-argument method and a link with no arguments', async () => {
+        mount('full', 'config', twoParamAbi(), { initialMethod: 'ping', initialParamsText: '' });
+
+        expect(await screen.findByRole('button', { name: 'Enter method manually' })).toBeInTheDocument();
+        expect(screen.queryByLabelText('Arguments (optional)')).toBeNull();
     });
 });

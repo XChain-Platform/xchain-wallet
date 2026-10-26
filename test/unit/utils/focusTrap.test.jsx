@@ -334,4 +334,19 @@ describe('useFocusTrap opener handling', () => {
         expect(styleChanges).toHaveLength(2);
         observer.disconnect();
     });
+
+    it('locks the scroll of the document the dialog renders in, not the page around it', () => {
+        // The style guide renders open dialogs into width-frame iframes; a lock
+        // on the outer body froze the whole guide.
+        const iframe = document.createElement('iframe');
+        document.body.appendChild(iframe);
+        const frameDoc = iframe.contentDocument;
+        const host = frameDoc.body.appendChild(frameDoc.createElement('div'));
+        const { unmount } = render(<TrapHarness active />, { container: host });
+        expect(frameDoc.body.style.overflow).toBe('hidden');
+        expect(document.body.style.overflow).toBe('');
+        unmount();
+        expect(frameDoc.body.style.overflow).toBe('');
+        iframe.remove();
+    });
 });

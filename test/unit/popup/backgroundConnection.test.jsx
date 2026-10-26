@@ -14,6 +14,7 @@ import {
 import { getSessionStatus } from '../../../packages/extension/src/popup/messaging.js';
 import {
     BACKGROUND_INTERRUPTED_MESSAGE,
+    READ_RETRY_DELAYS_MS,
     RUNTIME_MESSAGE_TIMEOUT_MS,
     RUNTIME_REQUEST_TIMEOUT_MS,
     sendMessage,
@@ -162,6 +163,66 @@ describe('popup background connection recovery', () => {
         fireEvent.click(screen.getByRole('button', { name: 'Reload' }));
         expect(onReload).toHaveBeenCalledOnce();
         expect(runtime.sendMessage).toHaveBeenCalledTimes(3);
+    });
+});
+
+describe('reads repeated while the service worker wakes', () => {
+    const closedPort = { message: 'The message port closed before a response was received.' };
+
+    it('repeats a read whose port closed until the worker answers', async () => {
+        const runtime = { lastError: undefined, sendMessage: vi.fn() };
+        runtime.sendMessage
+            .mockImplementationOnce((_message, callback) => reply(runtime, callback, undefined, closedPort))
+            .mockImplementationOnce((_message, callback) => reply(runtime, callback, undefined, closedPort))
+            .mockImplementationOnce((_message, callback) => reply(runtime, callback, { ok: true, result: { theme: 'dark' } }));
+        vi.stubGlobal('chrome', { runtime });
+
+        const request = sendMessage('settings.get');
+        await vi.advanceTimersByTimeAsync(READ_RETRY_DELAYS_MS[0] + READ_RETRY_DELAYS_MS[1]);
+
+        await expect(request).resolves.toEqual({ theme: 'dark' });
+        expect(runtime.sendMessage).toHaveBeenCalledTimes(3);
+    });
+
+    it('gives up with the restart sentence after the last delay', async () => {
+        const runtime = { lastError: undefined, sendMessage: vi.fn() };
+        runtime.sendMessage.mockImplementation((_message, callback) => reply(runtime, callback, undefined, closedPort));
+        vi.stubGlobal('chrome', { runtime });
+
+        const request = sendMessage('wallet.list');
+        const rejection = expect(request).rejects.toMatchObject({
+            code: 'RUNTIME_DISCONNECTED',
+            message: BACKGROUND_INTERRUPTED_MESSAGE,
+        });
+        await vi.advanceTimersByTimeAsync(READ_RETRY_DELAYS_MS.reduce((a, b) => a + b, 0));
+
+        await rejection;
+        expect(runtime.sendMessage).toHaveBeenCalledTimes(READ_RETRY_DELAYS_MS.length + 1);
+    });
+
+    it('never repeats a write, which the worker may have finished', async () => {
+        const runtime = { lastError: undefined, sendMessage: vi.fn() };
+        runtime.sendMessage.mockImplementation((_message, callback) => reply(runtime, callback, undefined, closedPort));
+        vi.stubGlobal('chrome', { runtime });
+
+        const rejection = expect(sendMessage('action.sendToken', { walletId: 'w' }))
+            .rejects.toMatchObject({ code: 'RUNTIME_DISCONNECTED' });
+        await vi.advanceTimersByTimeAsync(5000);
+
+        await rejection;
+        expect(runtime.sendMessage).toHaveBeenCalledOnce();
+    });
+
+    it('does not repeat a read the worker answered with an error', async () => {
+        const runtime = { lastError: undefined, sendMessage: vi.fn() };
+        runtime.sendMessage.mockImplementation((_message, callback) => reply(runtime, callback, {
+            ok: false,
+            error: { name: 'VaultLockedError', message: 'locked' },
+        }));
+        vi.stubGlobal('chrome', { runtime });
+
+        await expect(sendMessage('settings.get')).rejects.toMatchObject({ name: 'VaultLockedError' });
+        expect(runtime.sendMessage).toHaveBeenCalledOnce();
     });
 });
 

@@ -341,6 +341,13 @@ export const SYNTHETIC_ROUNDS = Object.freeze([
 
 const SYNTHETIC = new Set(SYNTHETIC_ROUNDS);
 
+/**
+ * Lowest synthetic round any XChain fixture writes. A finalized row below it came
+ * from a real oracle, not from this seed or a sibling seed (the DOGE setups write
+ * 990001-990012 on the same venues), so the live-oracle check keys on it.
+ */
+export const PRICE_SEED_MARKER_FLOOR = Math.min(...SYNTHETIC_ROUNDS);
+
 /** The indexer's `ORACLE_MAX_PRICE_AGE_SECONDS`. See the anchor rule above. */
 export const ORACLE_MAX_PRICE_AGE_SECONDS = 1800;
 
@@ -643,7 +650,7 @@ export async function settlePrice({
  * temporarily unavailable"), so this names the venue, the reason, and what was
  * tried, and it is raised from global setup rather than mid-spec.
  */
-export function unusablePriceMessage({ regtestCoin, reason, seeded, state }) {
+export function unusablePriceMessage({ regtestCoin, reason, seeded, liveOracle = false, cleared = 0, state }) {
     const lines = [
         `Regtest ${regtestCoin} cannot price a fee-bearing action: ${reason}`,
         '',
@@ -651,7 +658,18 @@ export function unusablePriceMessage({ regtestCoin, reason, seeded, state }) {
         'dispenser) is valued against the indexer\'s price_snapshots, and nothing on a',
         'regtest stack publishes those rows - there is no validator federation here.',
     ];
-    if (seeded) {
+    if (liveOracle) {
+        // Checked first: the write ran but stood aside, so "DID write" would be false
+        // and "did NOT write (ssh or seeding off)" would send the reader the wrong way.
+        lines.push(
+            '',
+            'seedPrices() wrote NO rows: this venue\'s own hub finalizes price rounds, so the',
+            `fixture left them to price the run and cleared ${cleared} stale fixture round(s)`,
+            'that outranked them. The venue still refuses, so its newest live round for this',
+            'pair is missing or older than the indexer\'s price age, or a fresh synthetic round',
+            'from another suite outranks it: getLatestPrice takes the HIGHEST round first.',
+        );
+    } else if (seeded) {
         lines.push(
             '',
             'seedPrices() DID write a fresh snapshot and the venue still refuses, so the',
@@ -737,22 +755,82 @@ export function readStateScript(coinPairs) {
  * coin_pair) key, which is what lets this move an existing sentinel forward
  * rather than stacking a new round beside it.
  */
-export function writeRowsScript(rows) {
+export async function writePriceSeedRows(query, rows, markerFloor = PRICE_SEED_MARKER_FLOOR) {
+    const liveRows = await query(
+        `SELECT validator_count, source_action_index FROM price_snapshots
+         WHERE status = 'finalized' AND round_number < ?
+           AND created_at >= DATE_SUB(NOW(), INTERVAL 5 MINUTE)`,
+        [markerFloor],
+    );
+    const foreignLiveRow = liveRows.find((row) => Number(row.validator_count) !== 1
+        || row.source_action_index !== null);
+    if (foreignLiveRow) {
+        throw new Error(
+            'REFUSING: the wallet e2e price fixture found a recently finalized foreign '
+            + 'price_snapshots row below its marker range. This hub database has an active '
+            + 'foreign oracle, so writing synthetic finalized rows would corrupt its consensus '
+            + 'clamp reference.',
+        );
+    }
+    if (liveRows.length) return 0;
+
+    for (const row of rows) {
+        await query(
+            'INSERT INTO price_snapshots'
+            + ' (round_number, coin_pair, price, reference_block, reference_chain,'
+            + '  block_timestamp, validator_count, consensus_round, consensus_proof, status)'
+            + " VALUES (?, ?, ?, 0, 'BTC', ?, 1, 1, '[]', 'finalized')"
+            + ' ON DUPLICATE KEY UPDATE price = VALUES(price),'
+            + ' reference_block = VALUES(reference_block),'
+            + ' block_timestamp = VALUES(block_timestamp),'
+            + " status = 'finalized'",
+            [row.roundNumber, row.coinPair, row.price, row.blockTimestamp],
+        );
+    }
+    return rows.length;
+}
+
+/**
+ * Deletes this fixture family's synthetic rounds for `pairs` that are already too
+ * old to price anything, and returns how many went.
+ *
+ * Runs only when `writePriceSeedRows` stood aside for the venue's own oracle. The
+ * indexer takes the HIGHEST round and only then checks its age, so a synthetic
+ * round left by an earlier run outranks every live hub round and turns a venue
+ * that prices every minute into "no current oracle price" (wallet CI venue, 2026-10-25:
+ * BTC/USD round 888100012 at 100000, ten hours old, above live round 131952).
+ * Only rounds in `rounds` (the shared synthetic list) and only rows stamped before
+ * `staleBefore` (chain time minus the indexer's price age) are touched, so a real
+ * round, or a sibling suite's seed that still prices, is never removed.
+ */
+export async function clearStaleSeedRows(query, { pairs, rounds, staleBefore }) {
+    if (!pairs.length || !rounds.length || !Number.isFinite(Number(staleBefore))) return 0;
+    const result = await query(
+        'DELETE FROM price_snapshots WHERE coin_pair IN (' + pairs.map(() => '?').join(',') + ')'
+        + ' AND round_number IN (' + rounds.map(() => '?').join(',') + ') AND block_timestamp < ?',
+        [...pairs, ...rounds, Number(staleBefore)],
+    );
+    return Number((result && result.affectedRows) || 0);
+}
+
+export function writeRowsScript(rows, { chainTime } = {}) {
     return containerScript(`
-        for (const row of ROWS){
-            await priceConn.query(
-                'INSERT INTO price_snapshots'
-                + ' (round_number, coin_pair, price, reference_block, reference_chain,'
-                + '  block_timestamp, validator_count, consensus_round, consensus_proof, status)'
-                + " VALUES (?, ?, ?, 0, 'BTC', ?, 1, 1, '[]', 'finalized')"
-                + ' ON DUPLICATE KEY UPDATE price = VALUES(price),'
-                + ' reference_block = VALUES(reference_block),'
-                + ' block_timestamp = VALUES(block_timestamp),'
-                + " status = 'finalized'",
-                [row.roundNumber, row.coinPair, row.price, row.blockTimestamp]);
-        }
-        out = { written: ROWS.length, network: process.env.INDEXER_NETWORK };
-    `, { ROWS: rows });
+        const query = (sql, params) => priceConn.query(sql, params);
+        const written = await writePriceSeedRows(query, ROWS, PRICE_SEED_MARKER_FLOOR);
+        // Zero written for planned rows means the venue's own oracle prices it; clear
+        // only the stale fixture rounds that would outrank that oracle's live rows.
+        const cleared = (written === 0 && ROWS.length && STALE_BEFORE !== null)
+            ? await clearStaleSeedRows(query, {
+                pairs: [...new Set(ROWS.map((r) => r.coinPair))], rounds: SYNTHETIC_ROUNDS, staleBefore: STALE_BEFORE,
+            })
+            : 0;
+        out = { written, cleared, network: process.env.INDEXER_NETWORK };
+    `, {
+        ROWS: rows,
+        PRICE_SEED_MARKER_FLOOR,
+        SYNTHETIC_ROUNDS,
+        STALE_BEFORE: Number(chainTime) > 0 ? Number(chainTime) - ORACLE_MAX_PRICE_AGE_SECONDS : null,
+    }, [writePriceSeedRows, clearStaleSeedRows]);
 }
 
 /**
@@ -769,13 +847,15 @@ export function writeRowsScript(rows) {
  * only ever exists in the indexer's own database, so the tip is read there
  * regardless.
  */
-function containerScript(body, constants = {}) {
+function containerScript(body, constants = {}, helpers = []) {
     const decls = Object.entries(constants)
         .map(([name, value]) => `const ${name} = ${JSON.stringify(value)};`)
         .join('\n');
+    const helperDecls = helpers.map((helper) => helper.toString()).join('\n');
     return `'use strict';
 const mariadb = require('mariadb');
 ${decls}
+${helperDecls}
 const env = process.env;
 if (env.INDEXER_NETWORK !== 'regtest'){
     console.error('REFUSING: INDEXER_NETWORK is ' + JSON.stringify(env.INDEXER_NETWORK)

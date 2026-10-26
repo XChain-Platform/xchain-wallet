@@ -65,6 +65,7 @@ import {
     trimAmountTail,
 } from '../utils/amountFormat.js';
 import { tickerReferenceError } from '../utils/tickerGrammar.js';
+import { actionTextSafetyError } from '../utils/actionTextSafety.js';
 
 const chainRegistry = registryLib.defaultRegistry();
 
@@ -433,6 +434,9 @@ function CreatePollFormState({ walletId, chainId: initialChainId, presetTick, on
         if (!/^[1-9]\d*$/.test(endBlock.trim())) { setFormError('End block must be a positive whole block height.'); return; }
         if (currentHeight != null && Number(endBlock) <= currentHeight) { setFormError(`End block must be above the current indexed block (${currentHeight}).`); return; }
         if (cleanOptions.length < 2) { setFormError('Add at least two non-empty options.'); return; }
+        const pollTextError = actionTextSafetyError(question, 'Question')
+            || cleanOptions.map((option) => actionTextSafetyError(option, 'Option')).find(Boolean);
+        if (pollTextError) { setFormError(pollTextError); return; }
         if (cleanOptions.some((o) => o.includes(','))) { setFormError('Option labels cannot contain a comma.'); return; }
         const selectionCount = Number(maxSelections);
         if (!/^\d+$/.test(maxSelections.trim()) || !Number.isInteger(selectionCount) || selectionCount < 1 || selectionCount > cleanOptions.length) {

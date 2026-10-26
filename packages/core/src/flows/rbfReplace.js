@@ -29,6 +29,8 @@
 // this contract today won't change when the engine ships.
 
 import { t } from '../i18n/index.js';
+import '../i18n/locales/en/flows.js';
+import '../i18n/locales/en/send.js';
 
 const activeBroadcasts = new WeakMap();
 

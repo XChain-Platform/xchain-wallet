@@ -124,7 +124,10 @@ async function checkPrivateKeyScrubbing(page, label) {
     // Leave the app entirely so the demo entry starts from a blank page, as in
     // every other spec; a second load of the same URL straight from the setup
     // screen is aborted intermittently.
-    await page.goto('about:blank');
+    // The page's own navigation can supersede a goto issued from it, so the page
+    // leaves by itself and the test waits for the blank URL.
+    await page.evaluate(() => window.location.replace('about:blank'));
+    await page.waitForURL('about:blank');
 }
 
 async function setWatcherMode(page, label) {

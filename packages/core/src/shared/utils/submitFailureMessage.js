@@ -56,6 +56,7 @@ import { humanizeError } from './humanizeError.js';
 import { actionDisplayLabel } from './actionDisplayLabel.js';
 import { CHUNK_LANE_OPENER_RE } from './chunkLaneCopy.js';
 import { isShowableRefusal, protocolRefusalReason, userFacingMessage } from './userFacingMessage.js';
+import { panicRefusalMessage } from '../safety/panicNotice.js';
 
 const NEXT_STEP_RE = /\b(?:add|check|choose|enter|give|reconnect|report|retry(?:ing)?|review|try|update|wait)\b/i;
 const SIGNER_CANCELLED_RE = /\b(?:user (?:cancelled|canceled)|(?:cancelled|canceled) (?:by the user|on (?:the )?device)|user rejected on (?:the )?device)\b/i;
@@ -250,6 +251,41 @@ export function chainGateErrorMessage(err) {
     return null;
 }
 
+const INTERRUPTED_CODES = new Set(['RUNTIME_DISCONNECTED', 'RUNTIME_NO_RESPONSE']);
+
+export const MAINNET_PRELAUNCH_MESSAGE =
+    'This action is not available on mainnet before launch. Nothing was signed. Switch to a test network to try it.';
+
+/**
+ * The refusal the signing path raises for an XChain action on a mainnet chain
+ * before launch. Matched by name and code so the message survives the hop
+ * through the extension background, which rebuilds errors from those two fields.
+ *
+ * @param {unknown} err
+ * @returns {boolean}
+ */
+function isMainnetPrelaunch(err) {
+    const e = /** @type {any} */ (err);
+    return Boolean(e && typeof e === 'object'
+        && (e.code === 'MAINNET_PRELAUNCH' || e.name === 'MainnetPrelaunchError'));
+}
+
+/**
+ * A request the extension's service worker dropped by restarting, as the
+ * messaging wrapper reports it. Matched by name and code so core does not
+ * import the extension package.
+ *
+ * @param {unknown} err
+ * @returns {boolean}
+ */
+function isBackgroundInterrupted(err) {
+    const e = /** @type {any} */ (err);
+    return Boolean(e && typeof e === 'object'
+        && e.name === 'RuntimeConnectionError'
+        && INTERRUPTED_CODES.has(e.code)
+        && String(e.message || '').trim());
+}
+
 /**
  * Turn a caught submit error into the sentence to show.
  *
@@ -274,6 +310,19 @@ export function submitFailureMessage(
     const generic = `Couldn't ${verb}. Something went wrong. Try again.`;
     const protocolRefusal = protocolRefusalReason(err);
     if (protocolRefusal) return protocolRefusal;
+    // A freeze refusal says so only when the user armed it; a duress-armed one
+    // keeps the generic line, which is the cover that flow promises.
+    const panicCopy = panicRefusalMessage(err);
+    if (panicCopy) return panicCopy;
+    if (/** @type {any} */ (err)?.name === 'PanicModeActiveError') return generic;
+    // The extension's service worker restarted while the request was in
+    // flight. The error already carries the wallet's own sentence, which says
+    // to review and try again; the generic line would hide that.
+    if (isBackgroundInterrupted(err)) return String(/** @type {any} */ (err).message).trim();
+    // A mainnet action refused before launch names the chain id and the word
+    // "prelaunch" in its own text, which the filters below reduce to the
+    // generic line. Nothing was signed, and the remedy is a test network.
+    if (isMainnetPrelaunch(err)) return MAINNET_PRELAUNCH_MESSAGE;
     if (unknownSdkErrorCode(err)) return generic;
     if (isSignerCancellation(err)) {
         return 'Signing was cancelled. Nothing was signed. Review the details and try again when you are ready.';

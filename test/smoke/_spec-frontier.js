@@ -61,15 +61,20 @@ export function skipUnlessSpecs(smokeName) {
     process.exit(0);
 }
 
-/** Every spec file in the platform tree's specs directory, as { name, path, text }. */
+/** Where a spec keeps its frontier: the live directory, and history/ where run narrative and the frontier of a spec moved once it left the live set. */
+export const SPEC_DIRS = [SPECS_DIR, join(SPECS_DIR, 'history')];
+
+/** Every spec file in the platform tree's specs directories, as { name, path, text }. */
 export function listSpecs() {
-    return readdirSync(SPECS_DIR)
-        .filter((n) => n.endsWith('.md'))
-        .sort()
-        .map((name) => {
-            const path = join(SPECS_DIR, name);
-            return { name, path, text: readFileSync(path, 'utf8') };
-        });
+    return SPEC_DIRS
+        .filter((dir) => existsSync(dir))
+        .flatMap((dir) => readdirSync(dir)
+            .filter((n) => n.endsWith('.md'))
+            .sort()
+            .map((name) => {
+                const path = join(dir, name);
+                return { name, path, text: readFileSync(path, 'utf8') };
+            }));
 }
 
 // A cited path, and only ever inside backticks. The backtick is the whole

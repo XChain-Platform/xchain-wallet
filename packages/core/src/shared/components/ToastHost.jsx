@@ -9,19 +9,46 @@
 // contact legal@dankest.llc.
 
 import { createContext, useCallback, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
-import { Button } from '../../ui/Button.jsx';
 import styles from './ToastHost.module.css';
+import { onDemandComponent, useIdlePreload } from '../utils/onDemandComponent.js';
 import { HapticProvider, useHaptic } from '../hooks/useHaptic.js';
 import { clearToastRoom, placeToastStack } from './toastPlacement.js';
 import { t } from '../../i18n/index.js';
 
+// The cards and their styles load after first paint (or with the first toast);
+// the viewport and its live region render from the first frame.
+const ToastStack = onDemandComponent(() => import('./ToastStack.jsx'), 'ToastStack');
+
+/** Loads the toast cards now instead of on idle, for a caller that needs them at once. */
+export const preloadToastStack = () => ToastStack.preload().then(() => {});
+
 const VISIBLE_LIMIT = 3;
-// One duration for every toast, set here rather than per call: 8 s to read a
-// message, and 12 s when it carries an action (Undo, Review), so the action
-// can still be reached. Callers do not pass durationMs; specs pass 0 to keep a
-// toast until it is dismissed.
+// One duration policy for every toast, set here rather than per call: 8 s for
+// an error or warning, 12 s when it carries an action (Undo, Review) so the
+// action can still be reached, and a short read time for a plain confirmation
+// ("Copied.") that grows with the message. Callers do not pass durationMs;
+// specs pass 0 to keep a toast until it is dismissed.
 const DEFAULT_DURATION_MS = 8000;
 const ACTION_MIN_DURATION_MS = 12000;
+const CONFIRMATION_MIN_DURATION_MS = 2500;
+const CONFIRMATION_BASE_MS = 1500;
+const CONFIRMATION_PER_CHAR_MS = 40;
+// A toast younger than this is treated as part of the navigation that
+// produced it and survives the route change.
+const ROUTE_CHANGE_GRACE_MS = 400;
+
+function confirmationDuration(message) {
+    const length = typeof message === 'string' ? message.length : 0;
+    return Math.min(
+        DEFAULT_DURATION_MS,
+        Math.max(CONFIRMATION_MIN_DURATION_MS, CONFIRMATION_BASE_MS + CONFIRMATION_PER_CHAR_MS * length),
+    );
+}
+
+function isConfirmation(input) {
+    if (input.actionLabel && input.onAction) return false;
+    return !input.variant || input.variant === 'default' || input.variant === 'info' || input.variant === 'success';
+}
 
 /**
  * @typedef {{
@@ -40,6 +67,7 @@ const ACTION_MIN_DURATION_MS = 12000;
  *   announce: (message: string) => void,
  *   dismissToast: (id: string) => void,
  *   clearToasts: () => void,
+ *   dismissStaleToasts: () => void,
  * }} ToastApi
  */
 
@@ -57,6 +85,7 @@ export function ToastHost({ children }) {
     const timersRef = useRef(/** @type {Map<string, ReturnType<typeof setTimeout>>} */ (new Map()));
     const viewportRef = useRef(/** @type {HTMLDivElement | null} */ (null));
     const haptic = useHaptic();
+    useIdlePreload(ToastStack);
 
     const announce = useCallback((message) => {
         if (typeof message !== 'string' || message.length === 0) return;
@@ -76,11 +105,11 @@ export function ToastHost({ children }) {
         const id = input.id || `toast-${Date.now()}-${Math.floor(Math.random() * 1e6)}`;
         const requestedDuration = Number.isFinite(input.durationMs)
             ? Math.max(0, input.durationMs)
-            : DEFAULT_DURATION_MS;
+            : (isConfirmation(input) ? confirmationDuration(input.message) : DEFAULT_DURATION_MS);
         const duration = requestedDuration > 0 && input.actionLabel && input.onAction
             ? Math.max(requestedDuration, ACTION_MIN_DURATION_MS)
             : requestedDuration;
-        const record = { ...input, id, durationMs: duration };
+        const record = { ...input, id, durationMs: duration, shownAt: Date.now() };
         const existingTimer = timersRef.current.get(id);
         if (existingTimer) {
             clearTimeout(existingTimer);
@@ -104,13 +133,32 @@ export function ToastHost({ children }) {
         setToasts([]);
     }, []);
 
+    // Called on a route change: drops the toasts left over from the screen
+    // being left, except any with an action (Undo, Review) and any shown as
+    // part of the navigation itself.
+    const dismissStaleToasts = useCallback(() => {
+        const cutoff = Date.now() - ROUTE_CHANGE_GRACE_MS;
+        setToasts((prev) => {
+            const next = prev.filter((toast) => (toast.actionLabel && toast.onAction) || toast.shownAt > cutoff);
+            if (next.length === prev.length) return prev;
+            const keep = new Set(next.map((toast) => toast.id));
+            for (const toast of prev) {
+                if (keep.has(toast.id)) continue;
+                const timer = timersRef.current.get(toast.id);
+                if (timer) clearTimeout(timer);
+                timersRef.current.delete(toast.id);
+            }
+            return next;
+        });
+    }, []);
+
     useEffect(() => () => {
         for (const timer of timersRef.current.values()) clearTimeout(timer);
         timersRef.current.clear();
     }, []);
 
-    const api = useMemo(() => ({ showToast, announce, dismissToast, clearToasts }), [
-        showToast, announce, dismissToast, clearToasts,
+    const api = useMemo(() => ({ showToast, announce, dismissToast, clearToasts, dismissStaleToasts }), [
+        showToast, announce, dismissToast, clearToasts, dismissStaleToasts,
     ]);
 
     const visibleToasts = toasts.slice(0, VISIBLE_LIMIT);
@@ -185,81 +233,30 @@ export function ToastHost({ children }) {
                     <span className={styles.liveAnnouncement} key={announcement.id}>
                         {announcement.message}
                     </span>
-                    {hiddenCount > 0 ? (
-                        <div className={styles.overflowBadge} aria-hidden="true">
-                            {t('components.toastHost.more', { hiddenCount })}
-                        </div>
-                    ) : null}
-                    {visibleToasts.map((t) => (
-                        <ToastItem
-                            key={t.id}
-                            toast={t}
-                            onAction={() => {
-                                if (typeof t.onAction === 'function') {
+                    {visibleToasts.length > 0 || hiddenCount > 0 ? (
+                        <ToastStack
+                            toasts={visibleToasts}
+                            hiddenCount={hiddenCount}
+                            onAction={(toast) => {
+                                if (typeof toast.onAction === 'function') {
                                     try {
-                                        Promise.resolve(t.onAction()).catch(() => {
+                                        Promise.resolve(toast.onAction()).catch(() => {
                                             /* The caller surfaces action failures through its own UI. */
                                         });
                                     } catch {
                                         /* The caller surfaces action failures through its own UI. */
                                     }
                                 }
-                                dismissToast(t.id);
+                                dismissToast(toast.id);
                             }}
-                            onDismiss={() => dismissToast(t.id)}
+                            onDismiss={dismissToast}
                         />
-                    ))}
+                    ) : null}
                 </div>
             </ToastContext.Provider>
         </HapticProvider>
     );
 }
-
-function ToastItem({ toast, onAction, onDismiss }) {
-    const presentation = TOAST_PRESENTATION[toast.variant || 'default'] || TOAST_PRESENTATION.default;
-    return (
-        <div
-            className={`${styles.toast} ${styles[`variant_${presentation.tone}`]}`}
-            data-variant={presentation.tone}
-            onKeyDown={(event) => {
-                if (event.key !== 'Escape') return;
-                event.preventDefault();
-                event.stopPropagation();
-                onDismiss();
-            }}
-        >
-            <span className={styles.icon} aria-hidden="true">{presentation.icon}</span>
-            <span className={styles.message}>{toast.message}</span>
-            <div className={styles.controls}>
-                {toast.actionLabel && toast.onAction ? (
-                    <button
-                        type="button"
-                        className={styles.actionBtn}
-                        onClick={onAction}
-                    >
-                        {toast.actionLabel}
-                    </button>
-                ) : null}
-                <Button
-                    size="sm"
-                    variant="secondary"
-                    className={styles.dismissBtn}
-                    icon={<span aria-hidden="true">×</span>}
-                    onClick={onDismiss}
-                    aria-label={t('components.toastHost.dismissNotification')}
-                />
-            </div>
-        </div>
-    );
-}
-
-const TOAST_PRESENTATION = {
-    default: { tone: 'info', icon: 'ℹ' },
-    info: { tone: 'info', icon: 'ℹ' },
-    warning: { tone: 'warning', icon: '⚠' },
-    success: { tone: 'success', icon: '✓' },
-    error: { tone: 'error', icon: '✕' },
-};
 
 /**
  * Hook for routes / components that want to surface a toast. Falls back
@@ -275,5 +272,24 @@ export function useToast() {
         announce: () => {},
         dismissToast: () => {},
         clearToasts: () => {},
+        dismissStaleToasts: () => {},
     });
+}
+
+/**
+ * Takes every toast off the screen when the session reaches the lock screen,
+ * so nothing from the unlocked session (an amount, a wallet name, an undo
+ * prompt) stays on it. A passing `loading` state (a status refresh after
+ * adding a wallet) leaves toasts alone. Call it once from each shell's App.
+ *
+ * @param {string} sessionState
+ */
+export function useClearToastsOnLock(sessionState) {
+    const { clearToasts } = useToast();
+    const previous = useRef(sessionState);
+    useEffect(() => {
+        const was = previous.current;
+        previous.current = sessionState;
+        if (was !== sessionState && (sessionState === 'locked' || sessionState === 'no-wallet')) clearToasts();
+    }, [sessionState, clearToasts]);
 }

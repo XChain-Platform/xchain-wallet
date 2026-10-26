@@ -32,7 +32,7 @@ describe('SleepForm rendering', () => {
             getSettings: vi.fn().mockResolvedValue({ walletMode: 'full' }),
             signerReady: vi.fn().mockResolvedValue({ ready: true }),
             getIndexerWatermark: vi.fn().mockResolvedValue({ watermark: 100 }),
-            getTokenInfo: vi.fn().mockResolvedValue({ tick: 'GATE', locks: {} }),
+            getTokenInfo: vi.fn().mockResolvedValue({ tick: 'gate', creator: ADDRESS.address, locks: {} }),
             sleepState: vi.fn().mockResolvedValue({ resumeBlock: -1 }),
         };
 
@@ -49,7 +49,7 @@ describe('SleepForm rendering', () => {
         );
 
         expect(await screen.findByRole('heading', { name: 'Pause token' })).toBeInTheDocument();
-        expect(await screen.findByText('GATE is currently PAUSED indefinitely.')).toBeInTheDocument();
+        expect(await screen.findByText('gate is currently PAUSED indefinitely.')).toBeInTheDocument();
 
         fireEvent.click(screen.getByRole('radio', { name: 'Resume now (unpause)' }));
 
@@ -84,6 +84,30 @@ describe('SleepForm rendering', () => {
         fireEvent.click(screen.getByRole('button', { name: 'Resume token' }));
 
         expect(await screen.findByText("Token can be a name, or ^ followed by the token's number (^123).")).toBeInTheDocument();
+        expect(messaging.composeForConfirm).not.toHaveBeenCalled();
+    });
+
+    it('refuses a token pause before review when the issuer is unknown', async () => {
+        const messaging = {
+            getAddressesByChain: vi.fn().mockResolvedValue({ [CHAIN]: [ADDRESS] }),
+            getActiveAddresses: vi.fn().mockResolvedValue({ [CHAIN]: { id: ADDRESS.id } }),
+            getSettings: vi.fn().mockResolvedValue({ walletMode: 'full' }),
+            signerReady: vi.fn().mockResolvedValue({ ready: true }),
+            getIndexerWatermark: vi.fn().mockResolvedValue({ watermark: 100 }),
+            getTokenInfo: vi.fn().mockResolvedValue({ tick: 'GATE', creator: null, locks: {} }),
+            composeForConfirm: vi.fn(),
+        };
+
+        render(
+            <MessagingProvider shell="web" messaging={messaging}>
+                <SleepForm walletId="wallet-1" mode="tick" initialChainId={CHAIN} initialTick="GATE" onBack={vi.fn()} />
+            </MessagingProvider>,
+        );
+
+        expect(await screen.findByRole('alert')).toHaveTextContent(
+            "The token's issuer could not be confirmed, so this action is not available. Try again when the explorer answers.",
+        );
+        expect(screen.getByRole('button', { name: 'Pause token' })).toBeDisabled();
         expect(messaging.composeForConfirm).not.toHaveBeenCalled();
     });
 });

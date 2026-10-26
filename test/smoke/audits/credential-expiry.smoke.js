@@ -94,7 +94,7 @@ assert.equal(k3.expires, '2027-02-01T22:12:15Z',
 // fingerprints the observed key pin records, so the row cannot name another key.
 const k1 = declared.credentials.find((c) => c.id === 'K1');
 assert.ok(k1, 'K1, the release-signing key, must stay on the clock');
-const keyPin = JSON.parse(readFileSync(join(root, 'docs/release-key-pin.json'), 'utf8'));
+const keyPin = JSON.parse(readFileSync(join(root, 'tools/release/pins/release-key-pin.json'), 'utf8'));
 assert.equal(k1.fingerprint, keyPin.fingerprint, 'the K1 row names the pinned primary fingerprint');
 assert.equal(k1.signingSubkey, keyPin.signingSubkey, 'the K1 row names the pinned signing subkey');
 assert.ok(existsSync(resolveVerifyFrom(k1.verifyFrom)),

@@ -21,12 +21,14 @@ import { useMessaging } from '../useMessaging.js';
 import { sampleMatchesFor } from '../../market/sampleMarketData.js';
 import { normalizeMarketHistoryRowExact } from '../../market/history_rows.js';
 import { readFailureMessage } from '../utils/readFailureMessage.js';
+import { useReportLoadFailure } from './pageLoadFailures.jsx';
 import {
     compareDecimalStrings,
     roundDecimalString,
 } from '../utils/amountFormat.js';
 import tableStyles from './DataTable.module.css';
 import { t } from '../../i18n/index.js';
+import '../../i18n/locales/en/components.js';
 
 const MAX_ROWS = 30;
 
@@ -44,6 +46,8 @@ export function RecentTradesPanel({ chainId, tick1, tick2, demo = false, onOpenT
     const [loading, setLoading] = useState(true);
     const [loadError, setLoadError] = useState(/** @type {string | null} */ (null));
     const [retryKey, setRetryKey] = useState(0);
+    // On a page that shows one load error, the page names this failure.
+    const pageShowsError = useReportLoadFailure('recent trades', Boolean(loadError));
 
     useEffect(() => {
         setRows([]);
@@ -143,7 +147,7 @@ export function RecentTradesPanel({ chainId, tick1, tick2, demo = false, onOpenT
             {loading ? (
                 <StatusMessage variant="status">{t('components.recentTradesPanel.loadingRecentTrades')}</StatusMessage>
             ) : null}
-            {loadError ? (
+            {loadError && !pageShowsError ? (
                 <StatusMessage
                     variant="error"
                     recovery={{

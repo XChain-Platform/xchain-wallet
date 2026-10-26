@@ -52,8 +52,11 @@ for (const size of [{ width: 360, height: 800 }, { width: 1440, height: 900 }]) 
             await gotoSection(page, 'Scan');
             const cont = page.getByRole('button', { name: 'Continue' });
             if (await cont.count()) await cont.first().click();
-            const alert = page.getByTestId('scan-route').getByRole('alert');
+            // The camera failure is a page notice: it leads the page content,
+            // above the Scan form.
+            const alert = page.getByRole('main').getByRole('alert');
             await expect(alert).toHaveCount(1);
+            await expect(page.getByTestId('scan-route').getByRole('alert')).toHaveCount(0);
             await shot(page, `scan-error-${size.width}`);
             await expect(alert).toHaveAttribute('data-variant', 'error');
         });

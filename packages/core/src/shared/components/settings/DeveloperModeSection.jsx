@@ -12,8 +12,9 @@
 //
 // Live:
 //   - Developer Mode master toggle (`settings.developerMode`). Gates
-//     non-Mainnet choices, endpoint overrides, local controls, and
-//     diagnostics. Turning it off also returns the wallet to Mainnet.
+//     the Regtest network choice, endpoint overrides, local controls, and
+//     diagnostics. Turning it off while on Regtest returns the wallet to
+//     Mainnet; Testnet is open to everyone and stays selected.
 //   - Learn Mode toggle (`settings.learnMode`). Drives explanatory
 // copy on confirmation screens. a later change gave it its first reader:
 //     DisplayPrefsGate stamps it on <html> and <LearnNote> renders the
@@ -45,6 +46,7 @@ import { useEffect, useState } from 'react';
 import { registry as registryLib, schemas } from '@xchain-wallet/core';
 import { DEFAULT_MINER_URL } from '../../../branding/branding.js';
 import { fundActiveWalletFromMiner } from '../../../flows/regtestFaucet.js';
+import { MAX_CUSTOM_DESCRIPTOR_CHARS } from '../../../flows/customChains.js';
 import {
     Button,
     EmptyState,
@@ -55,12 +57,12 @@ import {
     Select,
     Textarea,
 } from '@xchain-wallet/core/ui';
-import { ClipboardPasteButton } from '../../../ui/ClipboardPasteButton.jsx';
 import { useMessaging } from '../../useMessaging.js';
 import { useSettings } from '../../hooks/useSettings.js';
 import { LogConsole } from '../LogConsole.jsx';
 import { DiagnosticDetails } from '../DiagnosticDetails.jsx';
 import { SignerSelectForm } from '../../routes/SignerSelectForm.jsx';
+import { normalizeActiveNetwork } from '../../utils/activeNetworkSwitch.js';
 import {
     SettingsFieldRow,
     SettingsInlineForm,
@@ -69,6 +71,8 @@ import {
     ToggleRow,
 } from './_settingsPrimitives.jsx';
 import { t } from '../../../i18n/index.js';
+import '../../../i18n/locales/en/send.js';
+import '../../../i18n/locales/en/settings.js';
 import styles from './DeveloperModeSection.module.css';
 
 const PROTOCOL_COIN_TICKER = {
@@ -107,8 +111,10 @@ export function DeveloperModeSection({ activeWallet, activeAccount, onNavigateTo
         }
     };
 
+    // Regtest is the only network that needs Developer Mode, so turning it off
+    // moves the wallet off Regtest and leaves a Mainnet or Testnet choice alone.
     const onDeveloperModeToggle = async (next) => {
-        const returnToMainnet = !next && settings.activeNetwork !== 'mainnet';
+        const returnToMainnet = !next && normalizeActiveNetwork(settings.activeNetwork) === 'regtest';
         if (!returnToMainnet) {
             await onToggle('developerMode', next);
             return;
@@ -643,6 +649,10 @@ function CustomChainsRow({ developerMode }) {
             setErrorText('addCustomChain is not wired in this shell yet.');
             return;
         }
+        if (pasted.length > MAX_CUSTOM_DESCRIPTOR_CHARS) {
+            setErrorText('That text is too large to be a chain descriptor.');
+            return;
+        }
         let descriptor;
         try {
             descriptor = JSON.parse(pasted);
@@ -767,11 +777,6 @@ function CustomChainsRow({ developerMode }) {
                         spellCheck={false}
                         disabled={busy}
                         className={styles.descriptor}
-                    />
-                    <ClipboardPasteButton
-                        onPaste={setPasted}
-                        disabled={busy}
-                        label={t('settings.developer.pasteCustomChainDescriptor')}
                     />
                     <div className={styles.actions}>
                         <Button type="submit" size="sm" icon={null} disabled={busy || pasted.length === 0}>

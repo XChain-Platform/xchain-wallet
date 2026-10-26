@@ -590,3 +590,20 @@ describe('failed local records in the merged list', () => {
         expect(merged.pending).toHaveLength(0);
     });
 });
+
+describe('malformed mempool rows', () => {
+    const own = new Set(['mine']);
+    const entry = (row) => mempoolRowToEntry({
+        chainId: 'c', address: 'mine', row, ownAddresses: own, observedAtMs: 1234,
+    });
+
+    it('falls back to the first sighting for a stamp no Date can hold', () => {
+        expect(firstSeenToMs(1e30)).toBeNull();
+        expect(entry({ tx_hash: 'ab', first_seen: 1e30 }).timestamp).toBe(1234);
+    });
+
+    it('refuses a transaction hash that is not text', () => {
+        expect(entry({ tx_hash: {} })).toBeNull();
+        expect(entry({ tx_hash: ['ab'] })).toBeNull();
+    });
+});

@@ -35,6 +35,7 @@ import { useSignerInfo } from '../hooks/useSignerInfo.js';
 import { actionDisplayLabel } from '../utils/actionDisplayLabel.js';
 import { NativeFeeToggle } from '../components/NativeFeeToggle.jsx';
 import { NATIVE_FEE_WARNING } from '../../sdk/nativeFeePreflight.js';
+import { memoCharacterError, memoLengthError } from '../utils/memoLimit.js';
 import { submitFailureMessage } from '../utils/submitFailureMessage.js';
 import {
     hasAnyAddress,
@@ -317,6 +318,8 @@ export function SwapForm({ walletId, onBack, initialChainId, initialGiveTick, in
         if (allowListIdx && !isPositiveActionIndex(allowListIdx)) return 'Allow-list ID must be a positive whole number.';
         if (blockListIdx && !isPositiveActionIndex(blockListIdx)) return 'Block-list ID must be a positive whole number.';
         if (memo.includes('|') || memo.includes(';')) return 'Memo cannot contain "|" or ";".';
+        const memoError = memoLengthError(memo.trim()) || memoCharacterError(memo.trim());
+        if (memoError) return memoError;
         return null;
     }, [giveTick, getTick, coinTicker, giveOwnership, giveAmount, getOwnership, getAmount,
         giveTokenInfo?.divisibility, getTokenInfo?.divisibility, giveBalance, getAddress,
@@ -479,6 +482,11 @@ export function SwapForm({ walletId, onBack, initialChainId, initialGiveTick, in
             return;
         }
         if (validationError || expError || feeError) return;
+        // The memoized check keeps the clock of the last edit, so ask again now.
+        if (expirationValidationError(expMode, expInput)) {
+            setFormError('Expiration must be a future date and time.');
+            return;
+        }
         setFormError(null);
         if (singleEncode) {
             if (submitPendingRef.current) return;

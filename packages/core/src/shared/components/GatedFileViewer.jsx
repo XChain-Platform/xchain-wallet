@@ -39,6 +39,7 @@ import { useBackHandler } from '../../ui/backStack.js';
 import { useFocusTrap } from '../utils/focusTrap.js';
 import { formatDecimalAmount } from '../utils/amountFormat.js';
 import { t } from '../../i18n/index.js';
+import '../../i18n/locales/en/components.js';
 
 const MAX_TEXT_CHARS = 200_000;
 const MAX_PREVIEW_BYTES = 5 * 1024 * 1024;
@@ -80,6 +81,19 @@ function declaredMatchesSniff(declared, sniffed) {
     }
     // binary: only an explicit opaque declaration matches.
     return declared === 'application/octet-stream';
+}
+
+// The file name is publisher text. A saved name carries no path separator,
+// control or bidi-override character, no reserved Windows character, no
+// leading dot and no trailing dot or space, and stays within 120 characters.
+export function safeDownloadName(name) {
+    const cleaned = String(name ?? '')
+        // eslint-disable-next-line no-control-regex
+        .replace(/[\u0000-\u001f\u007f-\u009f\u200e\u200f\u202a-\u202e\u2066-\u2069/\\:*?"<>|]+/g, '_')
+        .replace(/^[.\s_]+/, '')
+        .replace(/[.\s]+$/, '')
+        .slice(0, 120);
+    return cleaned || 'unlocked-file';
 }
 
 function kindLabel(kind, mime) {
@@ -175,7 +189,7 @@ export function GatedFileViewer({ name, declaredType, plaintextBase64, onClose }
             url = URL.createObjectURL(new Blob([bytes], { type: 'application/octet-stream' }));
             const a = document.createElement('a');
             a.href = url;
-            a.download = name || 'unlocked-file';
+            a.download = safeDownloadName(name);
             document.body.appendChild(a);
             a.click();
             a.remove();

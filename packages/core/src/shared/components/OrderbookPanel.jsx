@@ -33,10 +33,12 @@ import {
     trimAmountTail,
 } from '../utils/amountFormat.js';
 import { readFailureMessage } from '../utils/readFailureMessage.js';
+import { useReportLoadFailure } from './pageLoadFailures.jsx';
 import tableStyles from './DataTable.module.css';
 import { startVisibleInterval } from '../utils/visibleInterval.js';
 import styles from './MarketTrading.module.css';
 import { t } from '../../i18n/index.js';
+import '../../i18n/locales/en/components.js';
 
 const POLL_INTERVAL_MS = 5000;
 
@@ -54,6 +56,8 @@ export function OrderbookPanel({ chainId, tick1, tick2, demo = false, onPickPric
     const [loading, setLoading] = useState(true);
     const [loadError, setLoadError] = useState(/** @type {string | null} */ (null));
     const [retryKey, setRetryKey] = useState(0);
+    // On a page that shows one load error, the page names this failure.
+    const pageShowsError = useReportLoadFailure('order book', Boolean(loadError));
 
     useEffect(() => {
         let cancelled = false;
@@ -134,7 +138,7 @@ export function OrderbookPanel({ chainId, tick1, tick2, demo = false, onPickPric
             {loading ? (
                 <StatusMessage variant="status">{t('components.orderbookPanel.loadingOrderBook')}</StatusMessage>
             ) : null}
-            {loadError ? (
+            {loadError && !pageShowsError ? (
                 <StatusMessage
                     variant="error"
                     recovery={{

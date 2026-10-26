@@ -17,7 +17,6 @@
 // per-network icons live in packages/core/src/branding/images/.
 
 import { BITCOIN_ACTIONS } from '../actions.js';
-import { ADS_DONATION_ADDRESS_PLACEHOLDER } from '../validate.js';
 
 const COMMON = {
     coin: 'bitcoin',
@@ -42,7 +41,6 @@ const COMMON = {
     },
     supportedActions: BITCOIN_ACTIONS,
     uriScheme: 'bitcoin',
-    adsDonationAddress: ADS_DONATION_ADDRESS_PLACEHOLDER,
     // §36.1 per-coin ADS defaults: 1,000 sats per tx, donation output
     // attached to the next tx once 25,000 sats have accumulated.
     adsDefaults: { perTxAmountSats: 1000, triggerAmountSats: 25000 },
@@ -59,6 +57,12 @@ export const bitcoinDescriptors = [
         platformListOwners: [],
         icon: 'bitcoin-mainnet-icon-20.png',
         wifVersionByte: 0x80,
+        adsDonationAddresses: {
+            DONATE1: '1Donate1GERVKPW6GFQcnGeTa8dgL6Abyp',
+            DONATE2: '1Donate2LkbBrsanwCVRPWZCXAqQcvcqGz',
+            EXPLORER: '1Donate3GBGSZzzrS9U9gUgURYKscAE6Yn',
+        },
+        adsDonationAddress: '1Donate1GERVKPW6GFQcnGeTa8dgL6Abyp',
         explorer: { defaultUrl: 'https://explorer.xchain.io', defaultPort: 443 },
         encoder: { defaultUrl: 'https://encoder.xchain.io/BTC', defaultPort: 443 },
         hub: { defaultUrl: 'https://hub.xchain.io/BTC', defaultPort: 443 },
@@ -72,6 +76,12 @@ export const bitcoinDescriptors = [
         platformListOwners: [],
         icon: 'bitcoin-testnet-icon-20.png',
         wifVersionByte: 0xef,
+        adsDonationAddresses: {
+            DONATE1: 'mfztXKX1HeVdCQf6pDCZFEzo5i5wYNHAM6',
+            DONATE2: 'myBbbZ4t7BPoyNcT4sHtFwZDuiyYGDXLQM',
+            EXPLORER: 'n1jbLKMrhvFae7NwTj37ZtkN4uPy29o9aM',
+        },
+        adsDonationAddress: 'mfztXKX1HeVdCQf6pDCZFEzo5i5wYNHAM6',
         explorer: { defaultUrl: 'https://explorer.xchain.io', defaultPort: 443 },
         encoder: { defaultUrl: 'https://encoder.xchain.io/TBTC', defaultPort: 443 },
     },
@@ -84,6 +94,12 @@ export const bitcoinDescriptors = [
         platformListOwners: [],
         icon: 'bitcoin-regtest-icon-20.png',
         wifVersionByte: 0xef,
+        adsDonationAddresses: {
+            DONATE1: 'muYHF9MMnK6Nmd5zx7EBtqEYZdaf2Xy8JX',
+            DONATE2: 'mkQd27aJSqsQ666z1Q4MLFmd3Ybqzy3TNw',
+            EXPLORER: 'mrDH7rA2ZmGoh4Qx5guhDBJbZotUd6XyVH',
+        },
+        adsDonationAddress: 'muYHF9MMnK6Nmd5zx7EBtqEYZdaf2Xy8JX',
         explorer: { defaultUrl: 'http://localhost', defaultPort: 18080 },
         encoder: { defaultUrl: 'http://localhost', defaultPort: 3023 },
         hub: { defaultUrl: 'http://localhost', defaultPort: 10000 },

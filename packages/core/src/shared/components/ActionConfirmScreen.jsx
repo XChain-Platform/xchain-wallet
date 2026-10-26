@@ -29,6 +29,8 @@ import { withOutcomeLabels } from '../utils/betOutcomeLabels.js';
 import { readActiveWallet } from '../utils/activeWalletMemory.js';
 import { sumDecimalStrings, trimAmountTail } from '../utils/amountFormat.js';
 import { t } from '../../i18n/index.js';
+import '../../i18n/locales/en/components.js';
+import '../../i18n/locales/en/send.js';
 
 const chainRegistry = registryLib.defaultRegistry();
 
@@ -205,6 +207,11 @@ export function ActionConfirmScreen({
         ? `No change output was created. Any remainder below ${formatNativeBaseUnits(dustChangeLimit, descriptor)} ${ticker}`
             + ' is included in the network fee shown above.'
         : null;
+    // The caller's text is a rate-table figure, not the fee of these bytes, so it is
+    // marked as an estimate rather than passing for the amount that will be paid.
+    const estimatedFeeText = feeText && !/estimate/i.test(String(feeText))
+        ? `${feeText} (estimate)`
+        : feeText;
     const unavailableFeeText = ticker ? `Network fee estimate unavailable (${ticker}).` : null;
     const displayedFee = dustChangeText ? (
         <>
@@ -212,7 +219,7 @@ export function ActionConfirmScreen({
             <br />
             <span data-testid="confirm-dust-change">{dustChangeText}</span>
         </>
-    ) : (exactFeeText || feeText || unavailableFeeText);
+    ) : (exactFeeText || estimatedFeeText || unavailableFeeText);
 
     // (c): still the host's decode of the composed bytes, with the
     // outcome INDEX annotated by the market's own label for it. The index

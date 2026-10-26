@@ -880,7 +880,7 @@ try {
     } else {
         /* XCHAIN_VERIFY_KEY because verify.sh binds a signature to an
          * expected fingerprint, and this fixture repo
-         * carries no docs/release-key-pin.json to supply one. The
+         * carries no tools/release/pins/release-key-pin.json to supply one. The
          * throwaway key IS the expected key here; that binding has its
          * own driver in release-verify-signer.smoke.js. */
         const env = { ...gpgEnv, XCHAIN_RELEASE_GPG_KEY: fpr, XCHAIN_VERIFY_KEY: fpr };

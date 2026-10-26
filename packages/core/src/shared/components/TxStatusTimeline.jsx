@@ -11,6 +11,8 @@
 import { useEffect, useState } from 'react';
 import styles from './TxStatusTimeline.module.css';
 import { t } from '../../i18n/index.js';
+import '../../i18n/locales/en/transactionStatus.js';
+import '../../i18n/locales/en/txTimeline.js';
 import { pendingDisplayState } from '../utils/pendingHistory.js';
 import { formatRelativeTime } from '../utils/dateTime.js';
 

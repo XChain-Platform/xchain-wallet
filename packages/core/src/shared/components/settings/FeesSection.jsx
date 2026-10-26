@@ -28,6 +28,7 @@ import { resolveFeeConfig } from '../../../schemas/settings.js';
 import {
     defaultCustomSettingsRate,
     displayRateToSettingsCustom,
+    estimateNativeSendFeeTiers,
     resolveFeeUnit,
     settingsCustomToDisplayRate,
 } from '../../../flows/feeEstimate.js';
@@ -46,6 +47,7 @@ import {
     ToggleRow,
 } from './_settingsPrimitives.jsx';
 import { t } from '../../../i18n/index.js';
+import '../../../i18n/locales/en/settings.js';
 
 const chainRegistry = registryLib.defaultRegistry();
 
@@ -115,7 +117,7 @@ export function FeesSection() {
 
     return (
         <div style={STACK}>
-            {chainIds.map((chainId) => {
+            {chainIds.map((chainId, index) => {
                 // §35.10: stored null = follow the release default; render
                 // the resolved preference. Writes may carry concrete
                 // values - updateSettings normalizes a value equal to the
@@ -126,6 +128,7 @@ export function FeesSection() {
                 // Derive the unit and seed from the descriptor (a fixed 1000 is 1 sat/vB but 0.00001 DOGE/kB).
                 const unit = resolveFeeUnit(descriptor);
                 const seedRate = defaultCustomSettingsRate(unit);
+                const rateBounds = estimateNativeSendFeeTiers({ chainId, chainRegistry });
                 const headingId = `fee-settings-${chainId}`;
                 const rateErrorId = `fee-rate-${chainId}-error`;
                 return (
@@ -134,7 +137,7 @@ export function FeesSection() {
 
                         <SettingsFieldRow
                             label={t('settings.fees.feeStrategy')}
-                            hint={t('settings.fees.chooseTheBalanceBetweenConfirmation')}
+                            hint={index === 0 ? t('settings.fees.chooseTheBalanceBetweenConfirmation') : undefined}
                             embedded
                         >
                             <select
@@ -142,7 +145,6 @@ export function FeesSection() {
                                 onChange={(e) => onPatch(chainId, {
                                     strategy: e.target.value,
                                     customSatsPerKb: e.target.value === 'custom' ? (fees.customSatsPerKb ?? seedRate) : null,
-                                    rbfByDefault: fees.rbfByDefault,
                                 })}
                                 aria-label={t('settings.fees.feeStrategy2', { displayName })}
                                 style={SELECT}
@@ -180,21 +182,55 @@ export function FeesSection() {
                                             }));
                                             return;
                                         }
+                                        if (displayRate === 0) {
+                                            setRateErrors((current) => ({
+                                                ...current,
+                                                [chainId]: t('settings.fees.rateGreaterThanZero'),
+                                            }));
+                                            return;
+                                        }
+                                        if (Number.isFinite(rateBounds?.minimumRate)
+                                            && displayRate < rateBounds.minimumRate) {
+                                            setRateErrors((current) => ({
+                                                ...current,
+                                                [chainId]: t('settings.fees.rateAtLeast', {
+                                                    rate: formatWithThousands(rateBounds.minimumRate),
+                                                    unit,
+                                                }),
+                                            }));
+                                            return;
+                                        }
+                                        if (Number.isFinite(rateBounds?.maximumRate)
+                                            && displayRate > rateBounds.maximumRate) {
+                                            setRateErrors((current) => ({
+                                                ...current,
+                                                [chainId]: t('settings.fees.rateNoHigherThan', {
+                                                    rate: formatWithThousands(rateBounds.maximumRate),
+                                                    unit,
+                                                }),
+                                            }));
+                                            return;
+                                        }
+                                        const n = displayRateToSettingsCustom(unit, displayRate);
+                                        if (!Number.isSafeInteger(n) || n <= 0) {
+                                            setRateErrors((current) => ({
+                                                ...current,
+                                                [chainId]: t('settings.fees.rateWithinSupportedRange'),
+                                            }));
+                                            return;
+                                        }
                                         setRateErrors((current) => {
                                             const next = { ...current };
                                             delete next[chainId];
                                             return next;
                                         });
-                                        const n = displayRateToSettingsCustom(unit, displayRate);
                                         const input = e.currentTarget;
                                         const previous = formatWithThousands(settingsCustomToDisplayRate(
                                             unit,
                                             fees.customSatsPerKb ?? seedRate,
                                         ));
                                         onPatch(chainId, {
-                                            strategy: 'custom',
                                             customSatsPerKb: n,
-                                            rbfByDefault: fees.rbfByDefault,
                                         }, () => { input.value = previous; });
                                     }}
                                     onKeyDown={(e) => { if (e.key === 'Enter') e.currentTarget.blur(); }}
@@ -211,14 +247,12 @@ export function FeesSection() {
 
                         <ToggleRow
                             label={t('settings.fees.allowFeeBumpReplaceBy')}
-                            accessibleLabel={`${displayName} allow fee bump (Replace-by-Fee)`}
+                            accessibleLabel={t('settings.fees.allowFeeBumpReplaceBy2', { displayName })}
                             hint={descriptor?.feeStrategy?.rbfSupported
                                 ? t('settings.fees.keepThisOnSoYou')
                                 : t('settings.fees.feeBumpingIsNotSupported', { displayName })}
                             checked={Boolean(fees.rbfByDefault)}
                             onChange={(v) => onPatch(chainId, {
-                                strategy: fees.strategy,
-                                customSatsPerKb: fees.customSatsPerKb,
                                 rbfByDefault: v,
                             })}
                             disabled={!descriptor?.feeStrategy?.rbfSupported}

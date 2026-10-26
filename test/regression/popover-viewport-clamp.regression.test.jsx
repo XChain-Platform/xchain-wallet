@@ -15,7 +15,7 @@
 
 import React from 'react';
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 
 const reachability = vi.hoisted(() => ({
     value: { overall: 'normal', perChain: [] },
@@ -28,6 +28,10 @@ vi.mock('../../packages/core/src/shared/hooks/useReachability.js', () => ({
 import { HeaderSettingsButton } from '../../packages/core/src/shared/components/HeaderSettingsButton.jsx';
 import { NetworkStatusIndicator } from '../../packages/core/src/shared/components/NetworkStatusIndicator.jsx';
 import { VIEWPORT_CLAMP_MARGIN } from '../../packages/core/src/shared/hooks/useViewportClamp.js';
+import { preloadOnDemandOverlays } from '../../packages/core/src/shared/components/onDemandOverlays.js';
+
+// The app loads these on idle after first paint; load them up front here.
+beforeAll(() => preloadOnDemandOverlays());
 
 const VIEWPORT_WIDTH = 360;
 const PAGE_GUTTER = 12;

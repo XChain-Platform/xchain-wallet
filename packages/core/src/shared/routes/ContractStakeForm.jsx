@@ -12,6 +12,7 @@ import { t } from '../../i18n/index.js';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { AddressField, AddressText, Button, ChainBadge, FeeSelector, FormNotice, FormPage, Input, PageHeader, RadioGroup, Screen, StatusMessage } from '@xchain-wallet/core/ui';
 import { registry as registryLib } from '@xchain-wallet/core';
+import '../../i18n/locales/en/send.js';
 import { isDemoWallet, synthesizeDemoContractMeta } from '@xchain-wallet/core/flows';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { useDemoGuard } from '../hooks/useDemoGuard.jsx';
@@ -139,6 +140,7 @@ export function ContractStakeForm({
     const [submitError, setSubmitError] = useState(/** @type {string | null} */ (null));
     const [result, setResult] = useState(/** @type {any | null} */ (null));
     const passwordRef = useRef(/** @type {HTMLInputElement | null} */ (null));
+    const submitInFlightRef = useRef(false);
 
     useEffect(() => {
         let cancelled = false;
@@ -417,6 +419,9 @@ export function ContractStakeForm({
     // Compose + tamper-check + pre-flight all run HOST-side; Approve signs the
     // byte-identical prebuilt PSBT. Reject is a calm no-op back to the form.
     async function openConfirmScreen() {
+        // A second press while the confirm page is still composing is the same request.
+        if (submitInFlightRef.current) return;
+        submitInFlightRef.current = true;
         const wireAction = mode === 'stake' ? 'STAKE' : mode === 'unstake' ? 'UNSTAKE' : 'DELEGATE';
         const wireVersion = mode === 'stake' ? '3' : '1';
         const from = {
@@ -455,6 +460,8 @@ export function ContractStakeForm({
             setFormError(submitFailureMessage(err, {
                 chainId, coinTicker, fallback: err?.message || `${mode} failed.`,
             }));
+        } finally {
+            submitInFlightRef.current = false;
         }
     }
 

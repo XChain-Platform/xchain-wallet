@@ -36,6 +36,8 @@ import { registry as registryLib } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { useSupportedChains } from '../hooks/useSupportedChains.js';
 import { t } from '../../i18n/index.js';
+import '../../i18n/locales/en/send.js';
+import '../../i18n/locales/en/verifySignature.js';
 
 const chainRegistry = registryLib.defaultRegistry();
 
@@ -176,10 +178,12 @@ export function VerifySignatureForm({ onBack }) {
                 value={address}
                 onChange={(e) => { setAddress(e.target.value); clearSettledFeedback(); }}
                 autoComplete="off"
+                dir="ltr"
                 placeholder={t('verifySignature.addressPlaceholder')}
             />
             <Textarea
                 id="verify-message"
+                dir="auto"
                 label={t('verifySignature.message')}
                 value={message}
                 onChange={(e) => { setMessage(e.target.value); clearSettledFeedback(); }}
@@ -189,6 +193,7 @@ export function VerifySignatureForm({ onBack }) {
             />
             <Textarea
                 id="verify-signature"
+                dir="ltr"
                 label={t('verifySignature.signature')}
                 value={signature}
                 onChange={(e) => { setSignature(e.target.value); clearSettledFeedback(); }}
