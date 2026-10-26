@@ -161,12 +161,13 @@ describe('testnet global setup ordering', () => {
         expect(process.env[RUN_INPUT_ENV]).toBeUndefined();
     });
 
-    it('cleans staged input when key preflight refuses, before run-input preflight', async () => {
-        const refusal = new Error('Key preflight refused');
+    it('cleans staged input when key preflight refuses before any UTXO read', async () => {
+        const refusal = new Error('Key preflight refused: claimant');
         mocks.preflightRunInputKeys.mockImplementationOnce(() => { throw refusal; });
 
         await expect(globalSetup()).rejects.toBe(refusal);
 
+        expect(mocks.preflightRunInputKeys).toHaveBeenCalledOnce();
         expect(mocks.preflightRunInputKeys).toHaveBeenCalledWith(mocks.input);
         expect(mocks.cleanup).toHaveBeenCalledTimes(1);
         expect(mocks.readRunInput.mock.invocationCallOrder[0])
@@ -202,6 +203,7 @@ describe('testnet global setup ordering', () => {
         });
         expect(mocks.stageRunInput).toHaveBeenCalledWith(process.stdin);
         expect(mocks.readRunInput).toHaveBeenCalledWith(STAGED_FILE);
+        expect(mocks.preflightRunInputKeys).toHaveBeenCalledOnce();
         expect(mocks.preflightRunInputKeys).toHaveBeenCalledWith(mocks.input);
         expect(mocks.preflightRunInput).toHaveBeenCalledWith(mocks.venue, mocks.input);
         expect(mocks.preflightClaimantReward).toHaveBeenCalledWith(mocks.input, {

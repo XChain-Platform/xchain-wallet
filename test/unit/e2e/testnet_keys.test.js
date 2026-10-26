@@ -12,60 +12,109 @@
 
 import { describe, expect, it } from 'vitest';
 import xchainSdk from 'xchain-sdk';
-import { TESTNET_CHAIN_ID } from '../../e2e/fixtures/testnet.js';
 import { preflightRunInputKeys } from '../../e2e/fixtures/testnet_keys.js';
 
-const TREASURY = Object.freeze({
-    wif: 'cS9nRNmyK8RA5QC7MQAAErJSgR5kmD7mRjpn1TaiDnLqFn4jj3SF',
-    address: 'tb1qz2qzsfp5g3g2ez6k4z4x56vuzs3uh3hehhq469',
-});
-const STRANGER_ADDRESS = 'tb1qzz55z44a8g0er7wtr4ylk74wwcxpve3z63e0tn';
+const { WalletUtils } = xchainSdk;
 
-const wallet = new xchainSdk.WalletUtils(TESTNET_CHAIN_ID);
-const legacy = wallet.deriveAddress(wallet.importWIF(TREASURY.wif).publicKey, { type: 'p2pkh' });
-
-function input(overrides = {}) {
-    return { ...TREASURY, claimant: { wif: TREASURY.wif, address: legacy }, ...overrides };
+function generatedKey(wallet, type) {
+    const key = wallet.generateKeyPair();
+    const address = wallet.deriveAddress(key.publicKey, { type });
+    if (Buffer.isBuffer(key.privateKey)) key.privateKey.fill(0);
+    return { wif: key.wif, address };
 }
 
-describe('testnet key preflight', () => {
-    it('accepts a treasury and a claimant that own their declared addresses', () => {
-        expect(preflightRunInputKeys(input())).toBeUndefined();
-        expect(() => preflightRunInputKeys(input({ claimant: TREASURY }))).not.toThrow();
+function fixture() {
+    const wallet = new WalletUtils('bitcoin-testnet');
+    return {
+        wallet,
+        treasury: generatedKey(wallet, 'p2wpkh'),
+        claimant: generatedKey(wallet, 'p2pkh'),
+        stranger: generatedKey(wallet, 'p2wpkh'),
+    };
+}
+
+function refusal(input, wallet) {
+    try {
+        preflightRunInputKeys(input, { wallet });
+    } catch (error) {
+        return error;
+    }
+    throw new Error('expected key preflight to refuse');
+}
+
+describe('testnet run-input key preflight', () => {
+    it('accepts a matching p2wpkh treasury and p2pkh claimant', () => {
+        const { wallet, treasury, claimant } = fixture();
+
+        expect(() => preflightRunInputKeys({ ...treasury, claimant }, { wallet })).not.toThrow();
     });
 
-    it('refuses a treasury key that does not derive its address, naming the role', () => {
-        expect(() => preflightRunInputKeys(input({ address: STRANGER_ADDRESS })))
-            .toThrow(/Key preflight refused: treasury: KEY\/ADDRESS MISMATCH/);
+    it('also accepts a matching p2wpkh claimant', () => {
+        const { wallet, treasury } = fixture();
+
+        expect(() => preflightRunInputKeys({ ...treasury, claimant: treasury }, { wallet })).not.toThrow();
     });
 
-    it('refuses a claimant key that does not derive its address, even when the treasury is sound', () => {
-        expect(() => preflightRunInputKeys(input({ claimant: { wif: TREASURY.wif, address: STRANGER_ADDRESS } })))
-            .toThrow(/Key preflight refused: claimant: KEY\/ADDRESS MISMATCH/);
-    });
+    it('refuses a treasury address derived from another key without exposing input', () => {
+        const { wallet, treasury, claimant, stranger } = fixture();
+        const input = { ...treasury, address: stranger.address, claimant };
+        const error = refusal(input, wallet);
 
-    it('refuses a claimant address of an unsupported type', () => {
-        expect(() => preflightRunInputKeys(input({ claimant: { wif: TREASURY.wif, address: '1BoatSLRHtKNngkdXEeobR76b53LETtpyT' } })))
-            .toThrow(/Key preflight refused: claimant: .*neither/);
-    });
-
-    it('proves both keys through the wallet it is given', () => {
-        const seen = [];
-        const spy = {
-            importWIF: (wif) => { seen.push(wif); return wallet.importWIF(wif); },
-            deriveAddress: (pub, opts) => wallet.deriveAddress(pub, opts),
-        };
-        preflightRunInputKeys(input(), spy);
-        expect(seen).toHaveLength(2);
-    });
-
-    it('never echoes a key in its refusal', () => {
-        let message = '';
-        try {
-            preflightRunInputKeys(input({ address: STRANGER_ADDRESS }));
-        } catch (err) {
-            message = err.message;
+        expect(error).toBeInstanceOf(Error);
+        expect(error.message).toMatch(/^Key preflight refused.*treasury/i);
+        for (const secret of [input.wif, input.address, input.claimant.wif, input.claimant.address]) {
+            expect(error.message).not.toContain(secret);
         }
-        expect(message).not.toContain(TREASURY.wif);
+    });
+
+    it('refuses a claimant address derived from another key without exposing input', () => {
+        const { wallet, treasury, claimant, stranger } = fixture();
+        const input = { ...treasury, claimant: { ...claimant, address: stranger.address } };
+        const error = refusal(input, wallet);
+
+        expect(error).toBeInstanceOf(Error);
+        expect(error.message).toMatch(/^Key preflight refused.*claimant/i);
+        for (const secret of [input.wif, input.address, input.claimant.wif, input.claimant.address]) {
+            expect(error.message).not.toContain(secret);
+        }
+    });
+
+    it('refuses a claimant address of neither supported type', () => {
+        const { wallet, treasury, claimant } = fixture();
+        const error = refusal({
+            ...treasury,
+            claimant: { ...claimant, address: 'not-a-testnet-address' },
+        }, wallet);
+
+        expect(error.message).toMatch(/^Key preflight refused.*claimant/i);
+    });
+
+    it('allows an absent claimant for the run-input preflight to diagnose', () => {
+        const { wallet, treasury } = fixture();
+
+        expect(() => preflightRunInputKeys(treasury, { wallet })).not.toThrow();
+    });
+
+    it('refuses instead of skipping when the supplied wallet cannot validate', () => {
+        const { treasury, claimant } = fixture();
+
+        expect(() => preflightRunInputKeys({ ...treasury, claimant }, { wallet: {} }))
+            .toThrow(/^Key preflight refused.*treasury/i);
+    });
+
+    it('proves both present keys through the supplied wallet', () => {
+        const { wallet, treasury, claimant } = fixture();
+        const imported = [];
+        const spy = {
+            importWIF: (wif) => {
+                imported.push(wif);
+                return wallet.importWIF(wif);
+            },
+            deriveAddress: (publicKey, options) => wallet.deriveAddress(publicKey, options),
+        };
+
+        preflightRunInputKeys({ ...treasury, claimant }, { wallet: spy });
+
+        expect(imported).toEqual([treasury.wif, claimant.wif]);
     });
 });
