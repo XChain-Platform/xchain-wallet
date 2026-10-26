@@ -322,6 +322,22 @@ const musigBaseCrypto = createRequire(
     createRequire(import.meta.url).resolve('xchain-sdk/package.json'),
 ).resolve('@brandonblack/musig/base_crypto');
 
+// xchain-sdk's bitcoinjs-lib 7 patch (src/utils/apply_bufferutils_patch/v7.js)
+// assigns `uint8Tools.writeInt64 = ...` on `require('uint8array-tools')`.
+// That package's exports map offers `require` only under the `node`
+// condition, so a browser build picks the ESM `src/mjs/browser.js`, and the
+// CommonJS interop hands the SDK a getter-only namespace: the assignment
+// throws "Cannot set property writeInt64 ... which has only a getter", the
+// SDK import rejects, and every SDK call hits the not-loaded placeholder.
+// Pin the CJS build (the one Node loads), resolved from bitcoinjs-lib's own
+// context, so the SDK and bitcoinjs-lib share one mutable exports object
+// exactly as they do under Node. Buffer comes from the polyfill globals.
+const sdkRequire = createRequire(
+    createRequire(import.meta.url).resolve('xchain-sdk/package.json'),
+);
+const uint8ArrayToolsCjs = createRequire(sdkRequire.resolve('bitcoinjs-lib'))
+    .resolve('uint8array-tools');
+
 export default defineConfig({
     define: {
         'require.main': 'undefined',
@@ -362,6 +378,7 @@ export default defineConfig({
             { find: 'zlib', replacement: zlibBrowserShim },
             // Point the bare musig subpath at its real file (see note above).
             { find: '@brandonblack/musig/base_crypto', replacement: musigBaseCrypto },
+            { find: /^uint8array-tools$/, replacement: uint8ArrayToolsCjs },
         ],
     },
     // xchain-sdk is a `link:` dependency, so it resolves OUTSIDE this project
