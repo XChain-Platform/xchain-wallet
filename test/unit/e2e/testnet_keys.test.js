@@ -95,6 +95,13 @@ describe('testnet run-input key preflight', () => {
         expect(() => preflightRunInputKeys(treasury, { wallet })).not.toThrow();
     });
 
+    it('refuses instead of skipping when the supplied wallet cannot validate', () => {
+        const { treasury, claimant } = fixture();
+
+        expect(() => preflightRunInputKeys({ ...treasury, claimant }, { wallet: {} }))
+            .toThrow(/^Key preflight refused.*treasury/i);
+    });
+
     it('proves both present keys through the supplied wallet', () => {
         const { wallet, treasury, claimant } = fixture();
         const imported = [];
