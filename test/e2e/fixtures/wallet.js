@@ -50,10 +50,15 @@ export const test = base.extend({
     // drive the license gate itself.
     acceptLicense: [true, { option: true }],
     outboundStubHosts: [[], { option: true }],
+    // Hosts a suite drives for real (the testnet config sets the services).
+    outboundLiveHosts: [[], { option: true }],
 
-    page: async ({ page, acceptLicense, outboundStubHosts }, use) => {
+    page: async ({ page, acceptLicense, outboundStubHosts, outboundLiveHosts }, use) => {
         // Registered first so it runs last: only a request no stub answered reaches it.
-        const outbound = await guardOutbound(page, { stubbedHosts: outboundStubHosts });
+        const outbound = await guardOutbound(page, {
+            stubbedHosts: outboundStubHosts,
+            liveHosts: outboundLiveHosts,
+        });
         // Regtest starts on the production network before each spec switches it.
         // Answer only the probes needed to render Home and refuse every other call.
         await stubOutboundHosts(page.context(), outboundStubHosts);

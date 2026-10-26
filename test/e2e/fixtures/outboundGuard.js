@@ -115,16 +115,21 @@ export async function stubOutboundHosts(context, hosts = []) {
 /**
  * Starts recording non-local requests and WebSockets of a page.
  *
+ * `liveHosts` are let through to the network untouched: the testnet suite
+ * exists to drive the live testnet services, so blocking them leaves the
+ * wallet offline and every network action greyed out.
+ *
  * @param {import('@playwright/test').Page} page
- * @param {{ stubbedHosts?: Iterable<string> }} [options]
+ * @param {{ stubbedHosts?: Iterable<string>, liveHosts?: Iterable<string> }} [options]
  * @returns {{ attempts: string[] }}
  */
-export async function guardOutbound(page, { stubbedHosts = [] } = {}) {
+export async function guardOutbound(page, { stubbedHosts = [], liveHosts = [] } = {}) {
     const attempts = [];
     const stubbed = hostSet(stubbedHosts);
+    const live = hostSet(liveHosts);
     await page.context().route('**/*', async (route) => {
         const url = route.request().url();
-        if (isLocalUrl(url)) {
+        if (isLocalUrl(url) || isStubbedUrl(url, live)) {
             await route.fallback();
             return;
         }
@@ -136,7 +141,8 @@ export async function guardOutbound(page, { stubbedHosts = [] } = {}) {
         await route.abort('blockedbyclient');
     });
     page.on('websocket', (ws) => {
-        if (!isLocalUrl(ws.url()) && !isStubbedUrl(ws.url(), stubbed)) attempts.push(`WS ${ws.url()}`);
+        const url = ws.url();
+        if (!isLocalUrl(url) && !isStubbedUrl(url, stubbed) && !isStubbedUrl(url, live)) attempts.push(`WS ${url}`);
     });
     return { attempts };
 }

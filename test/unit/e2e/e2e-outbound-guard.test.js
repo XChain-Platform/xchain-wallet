@@ -123,3 +123,37 @@ test('the guard reports unknown hosts but leaves configured stubs to the transpo
         'WS wss://other.example/ws',
     ]);
 });
+
+test('the guard lets a live venue through and still reports every other host', async () => {
+    let routeHandler;
+    let websocketHandler;
+    const page = {
+        context: () => ({
+            route: async (pattern, callback) => {
+                routeHandler = callback;
+            },
+        }),
+        on: (event, callback) => {
+            websocketHandler = callback;
+        },
+    };
+    const outbound = await guardOutbound(page, { liveHosts: XCHAIN_SERVICE_HOSTS });
+    const dispatch = async (url) => {
+        const route = {
+            request: () => ({ method: () => 'GET', url: () => url }),
+            abort: vi.fn(),
+            fallback: vi.fn(),
+        };
+        await routeHandler(route);
+        return route;
+    };
+
+    const live = await dispatch('https://explorer.xchain.io/TBTC/api/status');
+    expect(live.fallback).toHaveBeenCalledOnce();
+    expect(live.abort).not.toHaveBeenCalled();
+
+    const other = await dispatch('https://explorer.xchain.io.evil.example/TBTC/api/status');
+    expect(other.abort).toHaveBeenCalledWith('blockedbyclient');
+    websocketHandler({ url: () => 'wss://encoder.xchain.io/TBTC' });
+    expect(outbound.attempts).toEqual(['GET https://explorer.xchain.io.evil.example/TBTC/api/status']);
+});

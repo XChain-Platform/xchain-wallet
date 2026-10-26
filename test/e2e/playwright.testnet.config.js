@@ -24,6 +24,7 @@
 // spec sets an explicit budget for its full chain sequence.
 
 import { defineConfig, devices } from '@playwright/test';
+import { XCHAIN_SERVICE_HOSTS } from './fixtures/outboundGuard.js';
 import { suiteOrigin, suitePort } from './fixtures/testnet_origin.js';
 
 // Distinct from the regtest venue's 4183 and vite preview's 4173, so a testnet
@@ -53,6 +54,9 @@ export default defineConfig({
         trace: 'retain-on-failure',
         video: 'retain-on-failure',
         screenshot: 'only-on-failure',
+        // The live testnet services are the venue; the guard still fails a
+        // spec that reaches any other host.
+        outboundLiveHosts: XCHAIN_SERVICE_HOSTS,
     },
     projects: [
         {
