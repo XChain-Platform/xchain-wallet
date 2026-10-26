@@ -81,7 +81,10 @@ test.describe('STAKE and partial UNSTAKE on Bitcoin testnet', () => {
         let stake;
 
         await test.step('fund a new wallet and mint XCHAIN', async () => {
-            const phrase = await createWallet(page, { password: WALLET_UNLOCK });
+            const phrase = await createWallet(page, {
+                password: WALLET_UNLOCK,
+                waitForBalances: false,
+            });
             await switchToTestnet(page, WALLET_UNLOCK);
             address = await readTestnetReceiveAddress(page);
             fundedAddress = address;

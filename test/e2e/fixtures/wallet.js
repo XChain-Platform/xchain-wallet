@@ -495,6 +495,9 @@ export async function completeRecoveryPhraseChallenge(page, words) {
  * onboarding walk itself is identical, and keeping one copy of it is the
  * reason this fixture exists at all.
  *
+ * Pass `waitForBalances: false` when an offline venue needs to switch networks
+ * before Home can load the active address balances.
+ *
  * Pass `bip39Passphrase` to take the "Use a BIP39 passphrase (advanced)"
  * branch. That produces an ORDINARY wallet: the passphrase typed here is
  * sealed onto the record under the wallet's own master key, and every later
@@ -513,7 +516,7 @@ export async function completeRecoveryPhraseChallenge(page, words) {
 export async function createWallet(page, options = {}) {
     const {
         password = DEFAULT_PASSWORD, name, ads = 'off', navigate = true,
-        bip39Passphrase = null,
+        bip39Passphrase = null, waitForBalances = true,
     } = options;
 
     if (navigate) await page.goto('/');
@@ -561,11 +564,15 @@ export async function createWallet(page, options = {}) {
     await completeRecoveryPhraseChallenge(page, words);
     await page.getByRole('button', { name: 'Create wallet' }).click();
 
-    await acknowledgeDonationNotice(page, ads);
+    await acknowledgeDonationNotice(page, ads, { waitForBalances });
 
     // Argon2id runs on the CI runner's CPU; this is the slow step.
-    await expect(unlockedShell(page)).toBeVisible({ timeout: KDF_STEP_MS });
+    await expect(createdWalletShell(page, waitForBalances)).toBeVisible({ timeout: KDF_STEP_MS });
     return words;
+}
+
+function createdWalletShell(page, waitForBalances) {
+    return waitForBalances ? unlockedShell(page) : unlockedAnyScreen(page);
 }
 
 /**
@@ -630,14 +637,14 @@ export async function dismissIntroCarousel(page) {
  * the wait, which keeps the extension venue fast without pinning any number
  * to the derivation.
  */
-export async function acknowledgeDonationNotice(page, ads = 'off') {
+export async function acknowledgeDonationNotice(page, ads = 'off', { waitForBalances = true } = {}) {
     const notice = page.getByRole('heading', { name: 'Automatic Donation System', exact: true });
-    await notice.or(unlockedShell(page)).first()
+    await notice.or(createdWalletShell(page, waitForBalances)).first()
         .waitFor({ state: 'visible', timeout: KDF_STEP_MS });
     // The shell won the race, so there is no notice here to acknowledge.
     if (!(await notice.isVisible())) return false;
     await page.getByRole('button', { name: 'Continue', exact: true }).click();
-    if (ads === 'off') await turnOffDonations(page);
+    if (ads === 'off') await turnOffDonations(page, { waitForBalances });
     return true;
 }
 
@@ -664,8 +671,8 @@ export async function acknowledgeImportNotice(page, ads = 'on') {
  * Turns the Automatic Donation System off the only way the wallet offers:
  * Settings -> Automatic Donation System. Ends back on Home.
  */
-export async function turnOffDonations(page) {
-    await expect(unlockedShell(page)).toBeVisible({ timeout: KDF_STEP_MS });
+export async function turnOffDonations(page, { waitForBalances = true } = {}) {
+    await expect(createdWalletShell(page, waitForBalances)).toBeVisible({ timeout: KDF_STEP_MS });
     await openSettings(page);
     await page.getByRole('button', { name: /^Automatic donation system/ }).click();
     const toggle = page.getByRole('switch', { name: 'Turn on Automatic Donation System', exact: true });
@@ -679,7 +686,7 @@ export async function turnOffDonations(page) {
     await page.getByRole('button', { name: 'Back to settings', exact: true }).click();
     if (await nav(page).count() > 0) await gotoSection(page, 'Home');
     else await page.getByRole('button', { name: 'Back', exact: true }).click();
-    await expect(unlockedShell(page)).toBeVisible();
+    await expect(createdWalletShell(page, waitForBalances)).toBeVisible();
 }
 
 /** The locked screen's submit button. Disabled until a password is typed. */
