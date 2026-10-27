@@ -168,6 +168,21 @@ describe('buildCommands', () => {
         expect(findById(noBtc, 'nav-multisig-create')).toBeUndefined();
     });
 
+    // Agent accounts is an actions-menu entry behind the Bitcoin gate, so the
+    // palette finds it at every width, the way it finds the multisig surfaces.
+    it('finds Agent accounts behind the Bitcoin gate and hides it in the demo wallet', () => {
+        const navigate = vi.fn();
+        const btc = buildCommands({ navigate, hasBtcAddress: true });
+        for (const query of ['agent accounts', 'agent', 'cosigner']) {
+            expect(filterCommands(btc, query).map((c) => c.id), query).toContain('nav-cosigner-accounts');
+        }
+        findById(btc, 'nav-cosigner-accounts').run();
+        expect(navigate).toHaveBeenCalledWith('cosigner-accounts');
+
+        expect(findById(buildCommands({ navigate() {} }), 'nav-cosigner-accounts')).toBeUndefined();
+        expect(findById(buildCommands({ navigate() {}, hasBtcAddress: true, isDemoWallet: true }), 'nav-cosigner-accounts')).toBeUndefined();
+    });
+
     // The betting views shipped with no palette entry at all, so the only route
     // to them was More -> More actions -> Betting: two clicks deep in a
     // catalogue, for a surface whose whole point is coming back to check a

@@ -45,6 +45,8 @@ const messages = {
     'palette.navMultisigCreate.subtitle': 'Shared wallet that needs several approvals',
     'palette.navMultisigSign.title': 'Multisig signing',
     'palette.navMultisigSign.subtitle': 'Add your approval to a shared-wallet payment',
+    'palette.navCoSignerAccounts.title': 'Agent accounts',
+    'palette.navCoSignerAccounts.subtitle': 'Share a 2-of-2 address with an automated agent',
     'palette.navGovernance.subtitle': 'Polls and voting',
     'palette.navBetting.title': 'Betting',
     'palette.navBetting.subtitle': 'Browse betting markets',

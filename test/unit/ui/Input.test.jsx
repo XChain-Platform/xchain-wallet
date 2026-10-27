@@ -80,9 +80,9 @@ describe('<Input>', () => {
         const tokensCss = readFileSync('packages/core/src/ui/tokens.css', 'utf8');
         const inputCss = readFileSync('packages/core/src/ui/Input.module.css', 'utf8');
         const mouseTokens = {
-            '--xc-control-font-sm': '13px',
-            '--xc-control-font-md': '14px',
-            '--xc-control-font-lg': '16px',
+            '--xc-control-font-sm': 'var(--xc-text-sm)',
+            '--xc-control-font-md': 'var(--xc-text-md)',
+            '--xc-control-font-lg': 'var(--xc-text-lg)',
             '--xc-control-pad-x-sm': '8px',
             '--xc-control-pad-x-md': '12px',
             '--xc-control-pad-x-lg': '16px',

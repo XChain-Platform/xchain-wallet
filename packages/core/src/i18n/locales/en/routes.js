@@ -21,6 +21,7 @@ const messages = {
     'routes.addressList.generate': 'Generate',
     'routes.addressList.coin': 'Coin',
     'routes.addressList.startsWith': ' (starts with {hint})',
+    'routes.advancedActions.resumeBlock': 'Resume block',
     'routes.addressList.derivationIndex': 'Derivation index',
     'routes.addressList.useTheExactExternalIndex':
         'Use the exact external index of the receive address you want to recover or recreate. It must not already be held by this account.',

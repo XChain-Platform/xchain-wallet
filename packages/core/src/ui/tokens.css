@@ -154,9 +154,11 @@
     --xc-control-h-sm: 28px;
     --xc-control-h-md: 36px;
     --xc-control-h-lg: 44px;
-    --xc-control-font-sm: 13px;
-    --xc-control-font-md: 14px;
-    --xc-control-font-lg: 16px;
+    /* Control text follows the root size like labels do, so it scales with the
+     * text-size setting; the sizes are 13, 14 and 16px at a 16px root. */
+    --xc-control-font-sm: var(--xc-text-sm);
+    --xc-control-font-md: var(--xc-text-md);
+    --xc-control-font-lg: var(--xc-text-lg);
     --xc-control-pad-x-sm: 8px;
     --xc-control-pad-x-md: 12px;
     --xc-control-pad-x-lg: 16px;

@@ -18,6 +18,7 @@ import {
     registry as registryLib,
     decoder as decoderLib,
 } from '@xchain-wallet/core';
+import '../../i18n/locales/en/routes.js';
 import '../../i18n/locales/en/send.js';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { useDemoGuard } from '../hooks/useDemoGuard.jsx';
@@ -81,6 +82,20 @@ export function formatValidationError(err) {
 // xchain-sdk/src/formatSelector.js). The form splits array input on
 // newlines/commas, same convention as AirdropForm's paste box.
 const REST_PREFIX = '...';
+
+/**
+ * The label a field shows in the form: plain words where the protocol name is
+ * a code, the protocol name otherwise.
+ *
+ * @param {string} base  field name without the rest-field prefix
+ * @returns {string}
+ */
+export function fieldLabel(base) {
+    // Protocol names that read as codes get a plain label; every other field
+    // keeps the name the SDK lists.
+    if (base === 'RESUME_BLOCK') return t('routes.advancedActions.resumeBlock');
+    return base;
+}
 
 // VERSION is auto-selected by the SDK's FormatSelector, never
 // user-provided in the form.
@@ -891,7 +906,7 @@ export function AdvancedActionsForm({ walletId, onBack, hasDexSurface = true }) 
                     return (
                         <Textarea
                             key={fieldName}
-                            label={`${base} (one per line or comma-separated)`}
+                            label={`${fieldLabel(base)} (one per line or comma-separated)`}
                             className={styles.picker}
                             value={raw}
                             onChange={(e) => handleFieldChange(base, e.target.value)}
@@ -906,7 +921,7 @@ export function AdvancedActionsForm({ walletId, onBack, hasDexSurface = true }) 
                 return (
                     <Input
                         key={fieldName}
-                        label={base}
+                        label={fieldLabel(base)}
                         value={raw}
                         error={blankField === base ? `Enter a value for ${base}.` : undefined}
                         onChange={(e) => handleFieldChange(base, e.target.value)}

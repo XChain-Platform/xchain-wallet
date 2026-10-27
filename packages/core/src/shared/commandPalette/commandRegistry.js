@@ -102,6 +102,7 @@ const DEMO_UNAVAILABLE_COMMAND_IDS = new Set([
     'nav-actions',
     'nav-multisig-create',
     'nav-multisig-sign',
+    'nav-cosigner-accounts',
     'sign-message',
     'sign-psbt',
 ]);
@@ -259,6 +260,7 @@ export function buildCommands(ctx) {
         list.push(
             { id: 'nav-multisig-create', category: 'Navigate', title: t('palette.navMultisigCreate.title'), subtitle: t('palette.navMultisigCreate.subtitle'), keywords: ['multisig', 'cosigner', 'shared', 'xpub', 'fingerprint', 'n-of-m'], Icon: Icon.UsersIcon, run: go('multisig-create') },
             { id: 'nav-multisig-sign', category: 'Navigate', title: t('palette.navMultisigSign.title'), subtitle: t('palette.navMultisigSign.subtitle'), keywords: ['multisig', 'cosigner', 'approve', 'psbt'], Icon: Icon.SignIcon, run: go('multisig-sign') },
+            { id: 'nav-cosigner-accounts', category: 'Navigate', title: t('palette.navCoSignerAccounts.title'), subtitle: t('palette.navCoSignerAccounts.subtitle'), keywords: ['agent', 'automated', 'cosigner', 'co-sign', 'musig2', 'policy', 'bot'], Icon: Icon.UsersIcon, run: go('cosigner-accounts') },
         );
     }
     if (ctx.hasGovernanceAddress) {
