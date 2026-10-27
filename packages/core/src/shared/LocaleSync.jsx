@@ -23,6 +23,12 @@
 //     keep the live locale and document metadata in lockstep with the
 //     persisted value.
 //
+// Settings live in the encrypted vault, so the lock screen cannot read
+// `settings.language`. Like the display prefs mirror, the language is cached
+// in localStorage while the wallet is unlocked and replayed while settings
+// are unreadable, so a reload paints the lock screen in the chosen language
+// and direction instead of English. The mirror holds a locale code only.
+//
 // The Settings panel's own change handler also calls setLocale eagerly
 // for an instant UI flip; this component is the cold-start safety net
 // + cross-tab coverage. Unknown locale codes are silently ignored;
@@ -37,10 +43,33 @@ import {
     syncDocumentLocale,
 } from '../i18n/index.js';
 
+export const LANGUAGE_CACHE_KEY = 'xc:language';
+
+/** @returns {string | null} the language chosen the last time settings were readable */
+export function readCachedLanguage() {
+    try {
+        const code = globalThis.localStorage?.getItem(LANGUAGE_CACHE_KEY);
+        return typeof code === 'string' && code.length > 0 ? code : null;
+    } catch {
+        return null;
+    }
+}
+
+function cacheLanguage(code) {
+    try {
+        if (code) globalThis.localStorage?.setItem(LANGUAGE_CACHE_KEY, code);
+        else globalThis.localStorage?.removeItem(LANGUAGE_CACHE_KEY);
+    } catch { /* storage may be blocked in some shells */ }
+}
+
 export function LocaleSync() {
     const { settings } = useSettings();
-    const language = settings?.language;
+    const settingsLanguage = settings?.language;
+    const hasSettings = Boolean(settings);
+    // Locked or still loading: fall back to the cached choice.
+    const language = hasSettings ? settingsLanguage : readCachedLanguage();
     useEffect(() => {
+        if (hasSettings) cacheLanguage(typeof settingsLanguage === 'string' ? settingsLanguage : null);
         if (typeof language !== 'string' || language.length === 0) return;
         if (!availableLocales().includes(language)) return;
         if (getLocale() === language) {
@@ -48,6 +77,6 @@ export function LocaleSync() {
             return;
         }
         try { setLocale(language); } catch (_err) { /* never bubble */ }
-    }, [language]);
+    }, [language, hasSettings, settingsLanguage]);
     return null;
 }

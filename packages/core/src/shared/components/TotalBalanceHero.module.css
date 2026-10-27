@@ -246,6 +246,10 @@
     min-width: 0;
     max-width: 100%;
     overflow-wrap: anywhere;
+    /* A signed percent and a fiat delta keep their left-to-right order inside a
+       right-to-left page: bidi reordering would otherwise print "13.38%-". */
+    direction: ltr;
+    unicode-bidi: isolate;
 }
 
 .changePositive {

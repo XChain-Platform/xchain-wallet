@@ -587,6 +587,9 @@ function MarketRow({ chainId, selectedTick, tick1, tick2, name1, name2, lastPric
                                     fontSize: 'var(--xc-text-sm)',
                                     fontWeight: 600,
                                     color: changeColor,
+                                    // A signed percent keeps its sign in front on a right-to-left page.
+                                    direction: 'ltr',
+                                    unicodeBidi: 'isolate',
                                 }}
                             >
                                 {changeDisplay?.text ?? change24h}

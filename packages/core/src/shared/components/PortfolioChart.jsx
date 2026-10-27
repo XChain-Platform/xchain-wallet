@@ -197,8 +197,10 @@ export function PortfolioChart({ rows, walletId, nativePriceMap, nativePricesLoa
                         className={`${styles.change} ${tone}`}
                         aria-label={t('components.portfolioChart.change', { label: range.label, value: pctDisplay?.label ?? 'Change unavailable', formatFiatValue: formatFiat(Math.abs(delta), fiatCurrency) })}
                     >
-                        {arrow} {formatFiat(Math.abs(delta), fiatCurrency)}
-                        {pctDisplay ? ` (${pctDisplay.text})` : ''} · {range.label}
+                        <bdi dir="ltr">
+                            {arrow} {formatFiat(Math.abs(delta), fiatCurrency)}
+                            {pctDisplay ? ` (${pctDisplay.text})` : ''} · {range.label}
+                        </bdi>
                     </div>
                 ) : null}
                 {priceLoading ? (

@@ -188,6 +188,9 @@
     display: inline-block;
     white-space: nowrap;
     transform-origin: left center;
+    /* An amount keeps its left-to-right order on a right-to-left page. */
+    direction: ltr;
+    unicode-bidi: isolate;
 }
 
 /* Unit code (BTC / USD / JPY / …) suffix next to the primary big

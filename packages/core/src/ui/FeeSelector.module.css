@@ -183,6 +183,9 @@
 
 .sliderReadoutFiat {
     margin-inline-start: var(--xc-space-2);
+    /* An amount keeps its left-to-right order on a right-to-left page. */
+    direction: ltr;
+    unicode-bidi: isolate;
     background: color-mix(in srgb, var(--xc-success) 14%, transparent);
     color: var(--xc-success);
     border-radius: 999px;

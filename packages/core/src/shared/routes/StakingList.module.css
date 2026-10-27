@@ -32,6 +32,9 @@
    visible on the staking root, on the validator rows they belong to). */
 .rewardChip {
     flex-shrink: 0;
+    /* An amount keeps its left-to-right order on a right-to-left page. */
+    direction: ltr;
+    unicode-bidi: isolate;
     font-size: var(--xc-text-xs);
     color: var(--xc-success);
     font-weight: 600;

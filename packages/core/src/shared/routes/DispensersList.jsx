@@ -538,7 +538,7 @@ function DispenserRow({ row, label, oracleFeeds, cancelTimestamp, nowMs, chainCl
             title={<span className={local.name}>{label ? `${label}: ` : ''}{row.give_tick || '?'}</span>}
             subtitle={(
                 <span className={local.body}>
-                    <span className={local.subtitle}>{dispenserRateLabel(row, oracleFeeds)}</span>
+                    <span className={local.subtitle}><bdi dir="ltr">{dispenserRateLabel(row, oracleFeeds)}</bdi></span>
                 {/* Escrow is only stated when it is known. The explorer's
                     dispenser LIST lane carries no escrow column (remaining is
                     derived per action, in the detail read path), so on real
@@ -548,7 +548,7 @@ function DispenserRow({ row, label, oracleFeeds, cancelTimestamp, nowMs, chainCl
                     see its live balance. */}
                 {row.escrow_remaining != null && !isTerminal ? (
                     <span className={local.subtitle}>
-                        {`${formatNum(row.escrow_remaining)} ${row.give_tick || ''} in escrow`.trim()}
+                        <bdi dir="ltr">{`${formatNum(row.escrow_remaining)} ${row.give_tick || ''} in escrow`.trim()}</bdi>
                     </span>
                 ) : null}
                 </span>
