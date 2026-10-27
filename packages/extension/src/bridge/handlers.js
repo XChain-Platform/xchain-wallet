@@ -534,6 +534,7 @@ export function registerBridgeHandlers(host, opts = {}) {
         });
         if (!decision?.approved) throw new UserRejectedError('signMessage');
         if (!decision.password) throw bridgeError('NO_PASSWORD', 'approvals must return password');
+        await assertGrantStillHeld(req, deps, site);
         const result = await invokeSignMessage(deps, {
             ...req,
             // The vault record owns the signing key. The approval window's
@@ -592,6 +593,7 @@ export function registerBridgeHandlers(host, opts = {}) {
         });
         if (!decision?.approved) throw new UserRejectedError('signPsbt');
         if (!decision.password) throw bridgeError('NO_PASSWORD', 'approvals must return password');
+        await assertGrantStillHeld(req, deps, site);
         const resolved = await resolveBridgeSigningPaths(deps, site, req.chainId, req.signingPaths);
         const signed = await signPsbtFlow({
             vault: deps.vault,
@@ -662,6 +664,7 @@ export function registerBridgeHandlers(host, opts = {}) {
         });
         if (!decision?.approved) throw new UserRejectedError('coSign');
         if (!decision.password) throw bridgeError('NO_PASSWORD', 'approvals must return password');
+        await assertGrantStillHeld(req, deps, site);
         const outcome = await passiveCoSignForAccount({
             vault: deps.vault,
             chainRegistry: deps.chainRegistry,
@@ -802,6 +805,7 @@ export function registerBridgeHandlers(host, opts = {}) {
         if (!decision.password || !decision.address) {
             throw bridgeError('NO_CREDENTIALS', 'approvals must return { password, address }');
         }
+        await assertGrantStillHeld(req, deps, site);
         // The window's answer is untrusted: it must name one of the offered
         // addresses, and that address must still pass the per-site grant.
         const chosen = candidates.find((c) => c.address === decision.address
@@ -1025,6 +1029,7 @@ async function executeSignAction(req, deps, ctx) {
     }
     if (!decision?.approved) throw new UserRejectedError('signAction');
     if (!decision.password) throw bridgeError('NO_PASSWORD', 'approvals must return password');
+    await assertGrantStillHeld(req, deps, site);
 
     const finish = async (submitted) => {
         const success = signActionSuccess(req.chainId, submitted);
@@ -1502,6 +1507,17 @@ async function assertNotBlocked(req, deps) {
     if (isOriginBlocked(settings.blockedOrigins, req.origin)) {
         throw bridgeError('BLOCKED_BY_USER', req.origin);
     }
+}
+
+// A prompt can outlive the grant it was raised under. Revoking or blocking a
+// site cancels the prompts already parked for it, but a request that had passed
+// its site check and not yet registered its prompt parks afterwards, and a site
+// can drop its own grant while a prompt is open. Read the grant again once the
+// user has answered so a revoked, blocked or replaced site never signs.
+async function assertGrantStillHeld(req, deps, site) {
+    await assertNotBlocked(req, deps);
+    const current = await findConnectedSite(deps.vault, req.origin);
+    if (!current || current.id !== site.id) throw bridgeError('NOT_CONNECTED', req.origin);
 }
 
 function assertNotThrottled(throttle, req) {
