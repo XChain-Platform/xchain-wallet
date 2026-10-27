@@ -74,6 +74,16 @@ const WINDOW_PRESETS = [
 
 // datetime-local string -> Unix seconds. DEADLINE is a wall-clock Unix
 // timestamp compared against the block time, not a block height.
+// Seconds for a custom publish window typed in days. Plain decimal text only:
+// Number() also reads "0x10" as 16 days and "1e1" as 10.
+export function customWindowSeconds(daysText) {
+    const text = String(daysText ?? '').trim();
+    if (!/^(?:\d+(?:\.\d+)?|\.\d+)$/.test(text)) return null;
+    const days = Number(text);
+    if (!Number.isFinite(days) || days <= 0) return null;
+    return Math.round(days * 86400);
+}
+
 function localInputToUnix(localStr) {
     const ms = Date.parse(String(localStr));
     if (!Number.isFinite(ms)) return null;
@@ -267,9 +277,7 @@ export function CreateBetFeedForm({
     const deadlineUnix = useMemo(() => localInputToUnix(deadlineInput), [deadlineInput]);
     const refundSeconds = useMemo(() => {
         if (windowPreset !== 'custom') return Number(windowPreset);
-        const days = Number(String(windowCustomDays).trim());
-        if (!Number.isFinite(days) || days <= 0) return null;
-        return Math.round(days * 86400);
+        return customWindowSeconds(windowCustomDays);
     }, [windowPreset, windowCustomDays]);
 
     function setOutcomeAt(i, value) {

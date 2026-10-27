@@ -55,7 +55,7 @@ import { submitFailureMessage, SIGNED_NOT_BROADCAST_TITLE } from '../utils/submi
 import { preferredSourceId } from '../addressSelection.js';
 import { estimateNativeSendFee } from '../../flows/feeEstimate.js';
 import { compareAmounts, multiplyAmounts } from '../../market/orderMath.js';
-import { tokenAmountPrecisionError } from '../utils/amountFormat.js';
+import { normalizeAmountFieldInput, tokenAmountPrecisionError } from '../utils/amountFormat.js';
 import { baseUnitsToCoinText } from '../../market/obligationStatus.js';
 import { useNativeFee } from '../hooks/useNativeFee.js';
 import { useTokenInfo } from '../hooks/useTokenInfo.js';
@@ -976,9 +976,11 @@ export function PlaceOrderPanel({ walletId, chainId, tick1, tick2, prefillPrice,
     );
 }
 
+// The shared locale reader, so "0,5" is 0.5 here as in every amount field.
+// Deleting the comma would make it 05.
 function normalizeDecimalEntry(value, previous) {
-    const stripped = String(value).replace(/,/g, '');
-    return stripped === '' || /^\d*\.?\d*$/.test(stripped) ? stripped : previous;
+    const normalized = normalizeAmountFieldInput(value);
+    return normalized === null ? previous : normalized;
 }
 
 // Render a balance value with thousand separators. `quantity` comes from

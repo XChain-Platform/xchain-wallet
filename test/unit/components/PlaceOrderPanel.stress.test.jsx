@@ -144,3 +144,33 @@ describe('PlaceOrderPanel stress', () => {
         expect(params.GET_AMOUNT).toBe(wire);
     });
 });
+
+describe('PlaceOrderPanel decimal entry', () => {
+    it.each([
+        ['0,5', '0.5'],
+        ['1,5', '1.5'],
+        ['1,000', '1000'],
+    ])('reads the size %s as %s on the wire', async (typed, wire) => {
+        const messaging = messagingFor();
+        render(panel(messaging));
+        fireEvent.click(await screen.findByRole('radio', { name: 'Sell XCHAIN' }));
+        await settle();
+        fireEvent.change(screen.getByLabelText('Price (BTC)'), { target: { value: '1' } });
+        fireEvent.change(screen.getByLabelText('Size (XCHAIN)'), { target: { value: typed } });
+        expect(screen.getByLabelText('Size (XCHAIN)')).toHaveValue(wire);
+        fireEvent.click(screen.getByRole('button', { name: 'Place sell order' }));
+        await settle();
+
+        const params = messaging.composeForConfirm.mock.calls[0][0].actionData.params;
+        expect(params.GIVE_AMOUNT).toBe(wire);
+    });
+
+    it.each(['1e2', '0x10', '-1', 'Infinity', '５'])('keeps the previous size when %s is typed', async (typed) => {
+        render(panel(messagingFor()));
+        fireEvent.click(await screen.findByRole('radio', { name: 'Sell XCHAIN' }));
+        await settle();
+        fireEvent.change(screen.getByLabelText('Size (XCHAIN)'), { target: { value: '7' } });
+        fireEvent.change(screen.getByLabelText('Size (XCHAIN)'), { target: { value: typed } });
+        expect(screen.getByLabelText('Size (XCHAIN)')).toHaveValue('7');
+    });
+});

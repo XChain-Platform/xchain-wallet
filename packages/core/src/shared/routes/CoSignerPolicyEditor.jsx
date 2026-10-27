@@ -172,14 +172,16 @@ export function buildPolicyDraft(draft) {
     // maxPerWindow: only when explicitly enabled and given a positive window.
     let maxPerWindow = null;
     if (draft.windowEnabled) {
-        const hours = Number(draft.windowHours);
+        // Plain decimal text only: Number() also reads "0x10" and "1e1" as 16 and 10.
+        const hoursText = String(draft.windowHours ?? '').trim();
+        const hours = /^(?:\d+(?:\.\d+)?|\.\d+)$/.test(hoursText) ? Number(hoursText) : NaN;
         if (!Number.isFinite(hours) || hours <= 0) {
             return { error: 'The rolling limit needs a window length in hours greater than zero.' };
         }
         maxPerWindow = { hours };
         const maxActions = String(draft.windowMaxActions || '').trim();
         if (maxActions) {
-            const n = Number(maxActions);
+            const n = /^\d+$/.test(maxActions) ? Number(maxActions) : NaN;
             if (!Number.isSafeInteger(n) || n <= 0) return { error: 'Max actions per window must be a positive whole number.' };
             maxPerWindow.maxActions = n;
         }
@@ -239,7 +241,7 @@ export function buildPolicyDraft(draft) {
         if (!address) return { error: 'An allowed-output max value is missing its address.' };
         const out = { address };
         if (mv) {
-            const n = Number(mv);
+            const n = /^\d+$/.test(mv) ? Number(mv) : NaN;
             // Beyond 2^53 the number stored is not the number typed, so refuse it.
             if (!Number.isSafeInteger(n) || n < 0) return { error: `Allowed-output max value for ${address} must be a whole number no greater than ${Number.MAX_SAFE_INTEGER}.` };
             out.maxValue = n;
