@@ -591,6 +591,25 @@ function RegtestFaucetForm({
 // (`chainRegistry.addCustomChain` → `validateChainDescriptor`); error
 // messages here are forwarded verbatim so the user sees exactly which
 // field failed.
+/**
+ * Turn a custom-chain mutation failure into a plain sentence: the host and the
+ * flows lead their messages with the function name, which the user never sees
+ * anywhere else.
+ *
+ * @param {unknown} err
+ * @param {string} fallback
+ * @returns {string}
+ */
+export function customChainErrorText(err, fallback) {
+    const raw = err && typeof err === 'object' && typeof err.message === 'string' ? err.message : '';
+    const stripped = raw.replace(/^(?:chainRegistry\.)?(?:add|remove)CustomChain:\s*/, '').trim();
+    if (!stripped) return fallback;
+    const bundled = stripped.match(/^"([^"]+)" is a bundled chain and cannot be removed$/);
+    const text = bundled ? `"${bundled[1]}" is a built-in network and can't be removed` : stripped;
+    const sentence = text.charAt(0).toUpperCase() + text.slice(1);
+    return /[.!?]$/.test(sentence) ? sentence : `${sentence}.`;
+}
+
 function CustomChainsRow({ developerMode }) {
     const { messaging } = useMessaging();
     const [chains, setChains] = useState(/** @type {object[]} */ ([]));
@@ -647,7 +666,7 @@ function CustomChainsRow({ developerMode }) {
         event.preventDefault();
         if (busy) return;
         if (typeof messaging?.addCustomChain !== 'function') {
-            setErrorText('addCustomChain is not wired in this shell yet.');
+            setErrorText('Adding a custom network is not available in this shell yet.');
             return;
         }
         if (pasted.length > MAX_CUSTOM_DESCRIPTOR_CHARS) {
@@ -691,7 +710,7 @@ function CustomChainsRow({ developerMode }) {
             setOpen(false);
             await refresh();
         } catch (err) {
-            setErrorText(err?.message || 'Failed to add custom network.');
+            setErrorText(customChainErrorText(err, 'Failed to add custom network.'));
         } finally {
             setBusy(false);
         }
@@ -700,7 +719,7 @@ function CustomChainsRow({ developerMode }) {
     const onRemove = async (chainId) => {
         if (busy) return;
         if (typeof messaging?.removeCustomChain !== 'function') {
-            setErrorText('removeCustomChain is not wired in this shell yet.');
+            setErrorText('Removing a custom network is not available in this shell yet.');
             return;
         }
         setBusy(true);
@@ -716,7 +735,7 @@ function CustomChainsRow({ developerMode }) {
             setStatusText(`Removed "${chainId}".`);
             await refresh();
         } catch (err) {
-            setErrorText(err?.message || 'Failed to remove custom network.');
+            setErrorText(customChainErrorText(err, 'Failed to remove custom network.'));
         } finally {
             setBusy(false);
         }

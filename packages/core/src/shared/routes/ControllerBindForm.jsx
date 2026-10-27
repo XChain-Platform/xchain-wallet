@@ -52,6 +52,16 @@ const PROTOCOL_COIN_TICKER = {
 // gates a token's ownership deed-over rather than its balances.
 const FALLBACK_ACTION_CLASSES = ['transfer', 'trade', 'burn', 'mint', 'stake', 'ownership', 'all'];
 
+// Which input a controllerBindValidationError message is about, by the field name
+// the message leads with; null when it concerns the form as a whole.
+function controllerBindErrorField(message) {
+    if (/^Guard contract/.test(message)) return 'controller';
+    if (/^Cooldown blocks/.test(message)) return 'cooldown';
+    if (/^Memo|memo/.test(message)) return 'memo';
+    if (/action class/i.test(message)) return 'actionClass';
+    return null;
+}
+
 function decimalPlaces(value) {
     const [mantissa, exponentText] = String(value ?? '').toLowerCase().split('e');
     return Math.max(0, (mantissa.split('.')[1]?.length || 0) - Number(exponentText || 0));
@@ -115,6 +125,8 @@ export function ControllerBindForm({ walletId, chainId: initialChainId, tick, on
         /** @type {'form' | 'review' | 'submitting' | 'done'} */ ('form'),
     );
     const [formError, setFormError] = useState(/** @type {string | null} */ (null));
+    const [fieldError, setFieldError] = useState(/** @type {{ field: string, message: string } | null} */ (null));
+    const errorFor = (field) => (fieldError && fieldError.field === field ? fieldError.message : undefined);
     const [submitError, setSubmitError] = useState(/** @type {string | null} */ (null));
     const [result, setResult] = useState(/** @type {any | null} */ (null));
     const passwordRef = useRef(/** @type {HTMLInputElement | null} */ (null));
@@ -356,9 +368,14 @@ export function ControllerBindForm({ walletId, chainId: initialChainId, tick, on
         }
         const validationError = controllerBindValidationError(bindRequest());
         if (validationError) {
-            setFormError(validationError);
+            // An error that belongs to one field shows on that field, tied to it for
+            // assistive tech; the rest stay in the status line.
+            const field = controllerBindErrorField(validationError);
+            setFieldError(field ? { field, message: validationError } : null);
+            setFormError(field ? null : validationError);
             return;
         }
+        setFieldError(null);
         if (feePick.mode === 'custom' && feePerKb === null) {
             const rate = Number(feePick.customRate);
             if (!Number.isFinite(rate) || rate <= 0) {
@@ -733,6 +750,7 @@ export function ControllerBindForm({ walletId, chainId: initialChainId, tick, on
                     hint="The action number of the deployed contract that will gate the selected actions."
                     inputMode="numeric"
                     value={controller}
+                    error={errorFor('controller')}
                     onChange={(e) => setController(e.target.value)}
                     autoComplete="off"
                     autoCapitalize="off"
@@ -744,6 +762,7 @@ export function ControllerBindForm({ walletId, chainId: initialChainId, tick, on
             <Select
                 label="Action class"
                 value={actionClass}
+                error={errorFor('actionClass')}
                 onChange={(e) => setActionClass(e.target.value)}
             >
                 {actionClasses.map((ac) => (
@@ -779,6 +798,7 @@ export function ControllerBindForm({ walletId, chainId: initialChainId, tick, on
                     hint="Blocks a later unbind must wait before it takes effect. Leave blank for none."
                     inputMode="numeric"
                     value={cooldownBlocks}
+                    error={errorFor('cooldown')}
                     onChange={(e) => setCooldownBlocks(e.target.value)}
                     autoComplete="off"
                 />
@@ -788,6 +808,7 @@ export function ControllerBindForm({ walletId, chainId: initialChainId, tick, on
                 label="Memo (optional)"
                 hint="Free-text note recorded with the bind/unbind event."
                 value={memo}
+                error={errorFor('memo')}
                 onChange={(e) => setMemo(e.target.value)}
                 autoComplete="off"
                 autoCapitalize="off"

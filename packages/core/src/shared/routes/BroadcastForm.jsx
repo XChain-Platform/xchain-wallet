@@ -73,7 +73,8 @@ const DECIMAL_NUMBER = /^[+-]?(?:\d+(?:\.\d*)?|\.\d+)$/;
 const HEX_ONLY = /^[0-9a-fA-F]+$/;
 
 function normalizeRawTransaction(raw) {
-    const compact = String(raw || '').replace(/\s+/g, '');
+    // A 0x prefix is the usual way to write hex; it is not part of the bytes.
+    const compact = String(raw || '').replace(/\s+/g, '').replace(/^0x/i, '');
     if (!compact) throw new Error('Paste a signed transaction first.');
     if (!HEX_ONLY.test(compact)) throw new Error('Transaction data must contain hexadecimal characters only.');
     if (compact.length % 2 !== 0) throw new Error('Transaction data must contain complete bytes (two hexadecimal characters per byte).');
@@ -222,7 +223,7 @@ function RawTransactionBroadcast({
             // would show another action's leftover warning, or none at all.
             return (
                 <QueuedResultPanel
-                    onDone={() => setState('form')}
+                    onDone={onDone}
                     what="broadcast"
                     unsaved={result?.persisted === false}
                 />

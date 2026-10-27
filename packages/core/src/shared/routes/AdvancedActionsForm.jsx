@@ -178,6 +178,8 @@ export function AdvancedActionsForm({ walletId, onBack, hasDexSurface = true }) 
         /** @type {'compose' | 'review' | 'submitting' | 'done'} */ ('compose'),
     );
     const [formError, setFormError] = useState(/** @type {string | null} */ (null));
+    // The field named by the blank-form refusal, so its input carries the error too.
+    const [blankField, setBlankField] = useState(/** @type {string | null} */ (null));
     const [submitError, setSubmitError] = useState(/** @type {string | null} */ (null));
     const [result, setResult] = useState(/** @type {any | null} */ (null));
     const [password, setPassword] = useState('');
@@ -370,6 +372,7 @@ export function AdvancedActionsForm({ walletId, onBack, hasDexSurface = true }) 
 
     const handleFieldChange = useCallback((field, rawValue) => {
         setValues((prev) => ({ ...prev, [field]: rawValue }));
+        setBlankField(null);
     }, []);
 
     function handleActionChange(nextAction) {
@@ -380,6 +383,7 @@ export function AdvancedActionsForm({ walletId, onBack, hasDexSurface = true }) 
         setValues({});
         setValidation(null);
         setFormError(null);
+        setBlankField(null);
     }
 
     function handleChainChange(nextChainId) {
@@ -396,6 +400,14 @@ export function AdvancedActionsForm({ walletId, onBack, hasDexSurface = true }) 
         }
         if (!action) {
             setFormError('Pick an action.');
+            return;
+        }
+        // A form nobody has typed in has nothing to encode; name the field to fill instead of
+        // letting the encoder answer with a generic failure.
+        if (fields.length > 0 && Object.keys(actionParams).every((k) => k === 'VERSION')) {
+            const first = baseFieldName(fields[0]);
+            setBlankField(first);
+            setFormError(`Enter a value for ${first}.`);
             return;
         }
         if (validation && !validation.valid) {
@@ -896,6 +908,7 @@ export function AdvancedActionsForm({ walletId, onBack, hasDexSurface = true }) 
                         key={fieldName}
                         label={base}
                         value={raw}
+                        error={blankField === base ? `Enter a value for ${base}.` : undefined}
                         onChange={(e) => handleFieldChange(base, e.target.value)}
                         autoCapitalize="off"
                         autoComplete="off"

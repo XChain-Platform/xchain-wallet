@@ -191,11 +191,14 @@
     border-color: #475569;
 }
 
+/* The edge is the label colour so the button stays visible on the red error
+ * notice, whose fill is the same red. */
 .danger {
     --xc-button-hover-bg: var(--xc-danger);
-    --xc-button-hover-border: var(--xc-danger);
+    --xc-button-hover-border: var(--xc-on-danger);
     background: var(--xc-danger);
     color: var(--xc-on-danger);
+    border-color: var(--xc-on-danger);
 }
 
 .success {
