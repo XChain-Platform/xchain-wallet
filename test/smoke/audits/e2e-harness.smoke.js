@@ -154,9 +154,17 @@ assert.ok(
 const consentFn = fixture.slice(fixture.indexOf('export async function acknowledgeDonationNotice'));
 const consentBody = consentFn.slice(0, consentFn.indexOf('\n}\n') + 2);
 assert.ok(consentBody.length > 100, 'located acknowledgeDonationNotice in the fixture');
+// The race goes through createdWalletShell, which is the unlocked shell
+// itself unless a caller opts out of the balances wait for an offline venue.
 assert.ok(
-    /\.or\(unlockedShell\(page\)\)/.test(consentBody),
-    'donation-notice wait races the notice heading against the unlocked shell',
+    /\.or\(createdWalletShell\(page, waitForBalances\)\)/.test(consentBody),
+    'donation-notice wait races the notice heading against the created-wallet shell',
+);
+const shellFn = fixture.slice(fixture.indexOf('function createdWalletShell'));
+const shellBody = shellFn.slice(0, shellFn.indexOf('\n}\n') + 2);
+assert.ok(
+    /waitForBalances \? unlockedShell\(page\) : unlockedAnyScreen\(page\)/.test(shellBody),
+    'the created-wallet shell is the unlocked shell unless the balances wait is off',
 );
 assert.ok(
     /timeout:\s*KDF_STEP_MS/.test(consentBody),
