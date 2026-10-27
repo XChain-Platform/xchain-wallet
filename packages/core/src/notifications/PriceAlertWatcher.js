@@ -242,6 +242,8 @@ export class PriceAlertWatcher {
                 if (!current || generation !== this._generation) return;
 
                 for (const alert of alerts) {
+                    // A lock during an earlier delivery must not let later alerts out.
+                    if (generation !== this._generation) return;
                     if (current.get(alert.id) !== alertTerms(alert)) continue;
                     const entry = result.prices[alert.chainId];
                     const price = this._isFreshPrice(entry)

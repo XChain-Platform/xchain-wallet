@@ -124,6 +124,7 @@ import {
     tearDownHost,
     wipeRuntimeStores,
 } from './runtime.js';
+import { createOsNotifier } from './osNotification.js';
 
 logConsole.attach();
 
@@ -560,15 +561,7 @@ function buildRuntime() {
         },
         // §46: OS-notification adapter (main process owns the `electron`
         // import; the runtime stays Electron-free for unit testing).
-        notify: ({ title, body }) => {
-            try {
-                if (Notification.isSupported && Notification.isSupported()) {
-                    new Notification({ title, body }).show();
-                }
-            } catch (err) {
-                reportMainFailure('desktop notification', err);
-            }
-        },
+        notify: createOsNotifier({ Notification, reportFailure: reportMainFailure }),
         // §50 / Cluster L FOLLOWUP 4: desktop diagnostic env + build.
         // Electron version + OS + Chromium UA help support narrow down
         // whether a bug is shell-specific.
