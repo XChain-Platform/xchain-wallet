@@ -276,7 +276,9 @@ export const EntryRow = memo(function EntryRow({ entry, selected, opensDetail = 
     // A row names its counterparty, so a send shows where it went. The
     // address keeps both identifying ends: an end-clipped one showed only its
     // first characters on a phone.
-    const counterparty = namedContext ? '' : (peerAddressOfEntry(entry) || entry.source || '');
+    // A raw broadcast has no address to name, so the row names the transaction
+    // by its txid.
+    const counterparty = namedContext ? '' : (peerAddressOfEntry(entry) || entry.source || entry.txHash || '');
     const contextLabel = namedContext || counterparty;
     const contextText = namedContext || truncateAddress(counterparty);
     const linkedTo = entry.link

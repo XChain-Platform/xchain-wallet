@@ -88,7 +88,7 @@ const ACTIONS = {
 };
 export function DisplaySection() {
     const { messaging } = useMessaging();
-    const { settings, loading, error, update } = useSettings();
+    const { settings, loading, error, update } = useSettings({ reportsOwnError: true });
     const chains = useSupportedChains();
     const confirmDialog = useConfirmModal();
     // Cluster O FOLLOWUP 3: show a brief confirmation after a

@@ -9,6 +9,7 @@
 // contact legal@dankest.llc.
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useFocusNoticeOnAttempt } from '../hooks/useFocusNoticeOnAttempt.js';
 import { AddressField, AddressText, Button, ChainBadge, ChainPicker, Checkbox, FeeSelector, FieldNote, FormNotice, FormPage, FormSection, Icon, Input, PageHeader, RadioGroup, Screen, StatusMessage } from '@xchain-wallet/core/ui';
 import { registry as registryLib } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
@@ -180,6 +181,7 @@ export function SwapForm({ walletId, onBack, initialChainId, initialGiveTick, in
         /** @type {'form' | 'review' | 'submitting' | 'done'} */ ('form'),
     );
     const [formError, setFormError] = useState(/** @type {string | null} */ (null));
+    const markReviewAttempt = useFocusNoticeOnAttempt();
     const [submitError, setSubmitError] = useState(/** @type {string | null} */ (null));
     const [result, setResult] = useState(/** @type {any | null} */ (null));
     const [hwStatus, setHwStatus] = useState('idle');
@@ -471,6 +473,7 @@ export function SwapForm({ walletId, onBack, initialChainId, initialGiveTick, in
     function handleReview(event) {
         event.preventDefault();
         if (!networkAvailable) return;
+        markReviewAttempt();
         if (!fromAddress || !chainId) {
             setFormError('Pick a source address first.');
             return;

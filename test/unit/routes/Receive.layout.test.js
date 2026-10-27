@@ -65,7 +65,7 @@ describe('Receive action layout', () => {
 
     it('keeps field actions attached at the medium kit size', () => {
         expect(css).toMatch(
-            /\.labelEditor\s*\{[^}]*grid-template-columns:\s*minmax\(0, 1fr\) auto;[^}]*align-items:\s*end;/,
+            /\.labelEditor\s*\{[^}]*display:\s*flex;[^}]*flex-wrap:\s*wrap;[^}]*align-items:\s*end;/,
         );
         expect(css).not.toMatch(/@media[^}]+\{[\s\S]*?\.labelEditor\s*\{[^}]*grid-template-columns:\s*1fr;/);
         expect(css).toMatch(

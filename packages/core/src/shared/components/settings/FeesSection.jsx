@@ -73,7 +73,7 @@ const CHAIN_HEADER = {
     fontSize: 'var(--xc-text-sm)',
 };
 export function FeesSection() {
-    const { settings, loading, error, update } = useSettings();
+    const { settings, loading, error, update } = useSettings({ reportsOwnError: true });
     const [rateErrors, setRateErrors] = useState(/** @type {Record<string, string>} */ ({}));
     const [saveErrors, setSaveErrors] = useState(/** @type {Record<string, string>} */ ({}));
 

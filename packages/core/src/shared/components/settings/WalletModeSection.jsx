@@ -46,7 +46,7 @@ const modeOptions = () => /** @type {const} */ ([
 ]);
 
 export function WalletModeSection() {
-    const { settings, loading, error, update } = useSettings();
+    const { settings, loading, error, update } = useSettings({ reportsOwnError: true });
     const [pending, setPending] = useState(/** @type {typeof WALLET_MODES[number] | null} */ (null));
     const [saving, setSaving] = useState(false);
     const [saveError, setSaveError] = useState(/** @type {string | null} */ (null));

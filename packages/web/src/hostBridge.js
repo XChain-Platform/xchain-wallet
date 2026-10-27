@@ -389,6 +389,15 @@ const createDevMockSdk = import.meta.env?.PROD ? null : (constructorOpts) => {
         },
     });
     const sdk = {
+        // Agent accounts derive their aggregate address through the SDK, so the
+        // dev shell serves a deterministic marker address for the key pair; the
+        // real MuSig2 aggregation needs the real xchain-sdk.
+        coSigner: {
+            deriveMuSig2P2TR(publicKeys) {
+                const tail = (publicKeys || []).map((key) => String(key).slice(2, 10)).join('');
+                return { address: mockDeriveAddress(chainId, 'p2tr', tail), tweaks: [] };
+            },
+        },
         wallet: {
             /**
              * @param {string} publicKeyHex

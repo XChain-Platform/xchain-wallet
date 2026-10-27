@@ -319,8 +319,11 @@ export function pendingTxToEntry({
     if (!txHash && !(failed && pendingTxId)) return null;
     const chainConfirmed = isChainConfirmedRecord(pendingTx);
     if (!failed && !isLivePendingStatus(pendingTx?.status) && !chainConfirmed) return null;
-    const source = String(pendingTx?.fromAddress || '');
-    const destinations = pendingTx?.toAddress ? [String(pendingTx.toAddress)] : [];
+    // A raw broadcast records "unknown" for the parties it can't name; that is
+    // a placeholder, not an address, so the entry carries none.
+    const addressOf = (value) => (value && value !== 'unknown' ? String(value) : '');
+    const source = addressOf(pendingTx?.fromAddress);
+    const destinations = addressOf(pendingTx?.toAddress) ? [addressOf(pendingTx.toAddress)] : [];
     const broadcastAtMs = isoToMs(pendingTx?.broadcastAt);
     // M2.2 records the network sighting on the record itself; until that row
     // lands the field is simply absent and the entry stays "awaiting network".

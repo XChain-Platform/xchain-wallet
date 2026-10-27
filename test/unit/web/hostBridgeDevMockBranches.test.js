@@ -109,3 +109,15 @@ describe('host bridge dev mock branches', () => {
         unsubscribeMempool();
     });
 });
+
+describe('host bridge dev mock agent accounts', () => {
+    it('derives a deterministic aggregate address for an agent key pair', () => {
+        const sdk = __createDevMockSdkForTests({ network: 'bitcoin-mainnet' });
+        const agent = `02${'ab'.repeat(32)}`;
+        const wallet = `03${'cd'.repeat(32)}`;
+        const first = sdk.coSigner.deriveMuSig2P2TR([agent, wallet]);
+        expect(first.address).toMatch(/^bc1p/);
+        expect(sdk.coSigner.deriveMuSig2P2TR([agent, wallet]).address).toBe(first.address);
+        expect(sdk.coSigner.deriveMuSig2P2TR([wallet, agent]).address).not.toBe(first.address);
+    });
+});

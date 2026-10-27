@@ -123,9 +123,11 @@
     margin: var(--xc-space-4) 0;
 }
 
+/* The field keeps a readable width: when large text or a narrow screen leaves
+   less than that beside the button, the button moves to its own line. */
 .labelEditor {
-    display: grid;
-    grid-template-columns: minmax(0, 1fr) auto;
+    display: flex;
+    flex-wrap: wrap;
     align-items: end;
     gap: var(--xc-space-2);
     margin-bottom: var(--xc-space-3);
@@ -133,6 +135,15 @@
 
 .labelEditor > * {
     margin-bottom: 0;
+}
+
+.labelEditor > :first-child {
+    flex: 1 1 12rem;
+    min-width: 0;
+}
+
+.labelEditor > :last-child {
+    flex: 0 0 auto;
 }
 
 /* The "no addresses anywhere" fallback. Centred so the CTA reads

@@ -32,6 +32,8 @@ const DISPLAY_MAP = /** @type {Record<string, string>} */ ({
     SWAP: 'Swap',
     DIVIDEND: 'Dividend',
     BROADCAST: 'Broadcast',
+    // A pasted, already-signed transaction pushed as it is; not the BROADCAST action.
+    BROADCAST_SIGNED_TX: 'Raw transaction',
     MESSAGE: 'Message',
     AIRDROP: 'Airdrop',
     BATCH: 'Batch',

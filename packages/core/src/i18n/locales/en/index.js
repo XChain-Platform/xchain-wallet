@@ -66,6 +66,7 @@ import bridgeOrigin from './bridgeOrigin.js';
 import commandPalette from './commandPalette.js';
 import common from './common.js';
 import components from './components.js';
+import coSigner from './coSigner.js';
 import createOrder from './createOrder.js';
 import createWallet from './createWallet.js';
 import crossChainOrder from './crossChainOrder.js';
@@ -127,6 +128,7 @@ export const en = {
     ...commandPalette,
     ...common,
     ...components,
+    ...coSigner,
     ...createOrder,
     ...createWallet,
     ...crossChainOrder,

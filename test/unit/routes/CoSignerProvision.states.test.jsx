@@ -139,7 +139,8 @@ describe('CoSignerProvision states', () => {
         expect(screen.getByText('Treasury agent')).toBeInTheDocument();
         expect(screen.getByText(AGENT_KEY)).toBeInTheDocument();
         expect(screen.getByText('["SEND"]')).toBeInTheDocument();
-        expect(screen.getAllByText('null')).toHaveLength(4);
+        expect(screen.getAllByText('No limit')).toHaveLength(4);
+        expect(screen.queryByText('null')).toBeNull();
         expect(screen.getByText('[]')).toBeInTheDocument();
         expect(provisionCoSignerAccount).not.toHaveBeenCalled();
 

@@ -236,7 +236,7 @@ export const FormPage = forwardRef(function FormPage(
     const noticeBox = entries.length > 0 ? <StatusMessageGroup entries={entries} /> : null;
     const statusNode = otherNodes.length > 0 || noticeBox
         ? (
-            <div className={styles.status}>
+            <div className={styles.status} data-form-status="" tabIndex={-1}>
                 {/* A lone node keeps its place unkeyed, as it was passed. */}
                 {otherNodes.length === 1 ? otherNodes[0] : otherNodes}
                 {noticeBox}

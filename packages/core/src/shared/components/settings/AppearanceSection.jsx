@@ -45,7 +45,7 @@ const REDUCED_MOTION_OPTIONS = /** @type {const} */ ([
 ]);
 
 export function AppearanceSection() {
-    const { settings, loading, error, update } = useSettings();
+    const { settings, loading, error, update } = useSettings({ reportsOwnError: true });
     const [saveError, setSaveError] = useState(/** @type {string | null} */ (null));
 
     if (loading) return <Status text={t('common.loading')} />;

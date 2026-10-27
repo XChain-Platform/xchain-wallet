@@ -46,6 +46,7 @@ import {
 import { actionDisplayLabel } from '../utils/actionDisplayLabel.js';
 import { addressValidationError } from '../utils/addressValidation.js';
 import { userFacingMessage } from '../utils/userFacingMessage.js';
+import { policyNoLimitText } from '../utils/coSignerPolicyLimit.js';
 import styles from './IssueTokenForm.module.css';
 
 const chainRegistry = registryLib.defaultRegistry();
@@ -70,6 +71,11 @@ function policyAddressError(built, descriptor) {
 
 function exactValue(value) {
     return JSON.stringify(value);
+}
+
+// A policy field left unset is unrestricted; the review says so in words.
+function limitValue(value) {
+    return policyNoLimitText(value) ?? <code>{exactValue(value)}</code>;
 }
 
 /**
@@ -327,13 +333,13 @@ export function CoSignerProvision({ walletId, onBack, onDone }) {
                         {' '}<code>{exactValue(reviewedPolicy.allowedActions)}</code>
                     </dd>
                     <dt className={styles.detailsLabel}>Allowed recipients</dt>
-                    <dd className={styles.detailsValue}><code>{exactValue(reviewedPolicy.allowedDestinations)}</code></dd>
+                    <dd className={styles.detailsValue}>{limitValue(reviewedPolicy.allowedDestinations)}</dd>
                     <dt className={styles.detailsLabel}>Per-action limits</dt>
-                    <dd className={styles.detailsValue}><code>{exactValue(reviewedPolicy.maxPerAction)}</code></dd>
+                    <dd className={styles.detailsValue}>{limitValue(reviewedPolicy.maxPerAction)}</dd>
                     <dt className={styles.detailsLabel}>Rolling limit</dt>
-                    <dd className={styles.detailsValue}><code>{exactValue(reviewedPolicy.maxPerWindow)}</code></dd>
+                    <dd className={styles.detailsValue}>{limitValue(reviewedPolicy.maxPerWindow)}</dd>
                     <dt className={styles.detailsLabel}>Confirmation thresholds</dt>
-                    <dd className={styles.detailsValue}><code>{exactValue(reviewedPolicy.confirmAbove)}</code></dd>
+                    <dd className={styles.detailsValue}>{limitValue(reviewedPolicy.confirmAbove)}</dd>
                     <dt className={styles.detailsLabel}>Allowed transaction outputs</dt>
                     <dd className={styles.detailsValue}><code>{exactValue(reviewPayload.allowedOutputs)}</code></dd>
                 </dl>
