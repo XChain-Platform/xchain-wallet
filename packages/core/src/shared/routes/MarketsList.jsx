@@ -661,6 +661,17 @@ function extractRows(resp) {
     return [];
 }
 
+// A price or change figure from the explorer, or null when it is not a finite
+// number. An object, NaN or an overflowing exponent has no honest rendering,
+// so the market shows no figure rather than "NaN" or "[object Object]".
+function finiteFigure(value, { percent = false } = {}) {
+    if (typeof value !== 'string' && typeof value !== 'number') return null;
+    const text = String(value).trim();
+    if (text === '') return null;
+    const numeric = percent ? text.replace(/%$/, '') : text;
+    return Number.isFinite(Number(numeric)) ? text : null;
+}
+
 /**
  * Normalize a market row. The explorer returns one of several shapes
  * depending on version; pick out the fields we render and fail closed
@@ -670,9 +681,12 @@ export function normalizeMarket(row) {
     if (!row || typeof row !== 'object') return null;
     const tick1 = row.tick1 || row.tickA || row.give_tick || row.base || null;
     const tick2 = row.tick2 || row.tickB || row.get_tick || row.quote || null;
-    if (!tick1 || !tick2) return null;
-    const lastPrice = row.tick1_price ?? row.last_price ?? row.lastPrice ?? row.last ?? null;
-    const change24h = row.tick1_24hr_change ?? row.change_24h ?? row.change24h ?? null;
+    if (typeof tick1 !== 'string' || typeof tick2 !== 'string') return null;
+    const lastPrice = finiteFigure(row.tick1_price ?? row.last_price ?? row.lastPrice ?? row.last);
+    const change24h = finiteFigure(
+        row.tick1_24hr_change ?? row.change_24h ?? row.change24h,
+        { percent: true },
+    );
     const depthRaw = row.depth ?? row.open_orders ?? row.orderCount;
     const depth = typeof depthRaw === 'number' ? depthRaw : Number(depthRaw);
     const name1 = row.name1 ?? row.tick1_name ?? row.tick1Name ?? row.base_name ?? row.baseName;
@@ -682,8 +696,8 @@ export function normalizeMarket(row) {
         tick2: String(tick2),
         ...(name1 != null && String(name1).length > 0 ? { name1: String(name1) } : {}),
         ...(name2 != null && String(name2).length > 0 ? { name2: String(name2) } : {}),
-        lastPrice: lastPrice != null && String(lastPrice).length > 0 ? String(lastPrice) : undefined,
-        change24h: change24h != null && String(change24h).length > 0 ? String(change24h) : undefined,
-        depth: Number.isFinite(depth) ? depth : undefined,
+        lastPrice: lastPrice ?? undefined,
+        change24h: change24h ?? undefined,
+        depth: Number.isFinite(depth) && depth >= 0 ? depth : undefined,
     };
 }

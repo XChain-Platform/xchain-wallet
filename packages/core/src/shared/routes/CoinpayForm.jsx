@@ -31,6 +31,7 @@ import {
 import { coinpayExpiryText } from '../../market/coinpayExpiry.js';
 import { baseUnitsToCoinText, obligationBaseUnits } from '../../market/obligationStatus.js';
 import { classifyObligation } from '../../market/obligationStatus.js';
+import { hasAttemptedCoinpay } from '../../market/coinpayPending.js';
 import styles from './IssueTokenForm.module.css';
 import { QueuedResultPanel } from '../components/QueuedResultPanel.jsx';
 import { submitFailureMessage } from '../utils/submitFailureMessage.js';
@@ -163,8 +164,13 @@ function ScopedCoinpayForm({
                         address: pair.address,
                     });
                     const rows = extractRows(resp);
+                    const seenMatches = new Set();
                     for (const row of rows) {
                         if (!isPendingForPayer(row, pair.address)) continue;
+                        // A match listed twice would render two rows under one key.
+                        const matchKey = String(row.action_index ?? row.actionIndex);
+                        if (seenMatches.has(matchKey)) continue;
+                        seenMatches.add(matchKey);
                         found.push({
                             chainId: pair.chainId,
                             address: pair.address,
@@ -346,6 +352,21 @@ function ScopedCoinpayForm({
         setStage('submitting');
         setSubmitError(null);
         try {
+            // The explorer keeps listing the obligation until the payment
+            // confirms, so a payment already signed or broadcast from this wallet
+            // for the same match must stop a second one. An unreadable list is
+            // unknown, never a refusal.
+            const ownRows = typeof messaging.getPendingTxsForAddress === 'function'
+                ? await messaging.getPendingTxsForAddress({
+                    chainId: selected.chainId, address: selected.addr.address,
+                }).catch(() => null)
+                : null;
+            const ownList = Array.isArray(ownRows) ? ownRows : (ownRows?.rows || ownRows?.data || []);
+            if (hasAttemptedCoinpay(ownList, summary.actionIndex)) {
+                setSubmitError('A payment for this order is already on its way from this wallet. Wait for it to confirm before paying again.');
+                setStage('review');
+                return;
+            }
             const from = {
                 address: selected.addr.address,
                 publicKey: selected.addr.publicKey,

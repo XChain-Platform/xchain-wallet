@@ -272,6 +272,31 @@ describe('CoinpayForm shared confirmation', () => {
         expect(utils.queryByText(/internal encoder|private\/wire\/path/i)).toBeNull();
     });
 
+    it('lists a match once when the explorer returns it twice', async () => {
+        const { utils } = await mount(undefined, {
+            getCoinpayObligationsForAddress: () => Promise.resolve([OBLIGATION, { ...OBLIGATION }]),
+        }, { orderMatchActionIndex: undefined });
+        expect(utils.getAllByText('Matched order #648')).toHaveLength(1);
+    });
+
+    it('stops a second payment while the first is still on its way', async () => {
+        const { utils, calls } = await mount(undefined, {
+            getPendingTxsForAddress: () => Promise.resolve([{
+                action: 'COINPAY',
+                status: 'broadcast',
+                fromAddress: PAYER,
+                actionSummary: 'Pay 10 DOGE for match #648',
+            }]),
+        });
+        await step(() => fireEvent.click(utils.getByRole('button', { name: 'Review' })));
+        await step(() => fireEvent.click(
+            utils.getByRole('button', { name: 'Continue to confirmation' }),
+        ));
+
+        expect(utils.getByText(/already on its way from this wallet/)).toBeTruthy();
+        expect(calls.some((call) => call.method === 'composeForConfirm')).toBe(false);
+    });
+
     it('removes the previous wallet selection while the next wallet loads', async () => {
         let finishWalletTwo;
         const walletTwoAddresses = new Promise((resolve) => { finishWalletTwo = resolve; });
@@ -394,6 +419,7 @@ describe('CoinpayForm shared confirmation', () => {
             .toBe('true');
         expect(utils.getByText('Preparing payment for confirmation…')).toBeTruthy();
 
+        await domAct(async () => { await drain(60); });
         await domAct(async () => {
             finishCompose(COMPOSED);
             await drain();

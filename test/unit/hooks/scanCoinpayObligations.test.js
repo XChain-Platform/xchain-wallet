@@ -126,6 +126,21 @@ describe('hooks/scanCoinpayObligations', () => {
         expect(out.map((o) => o.orderMatchActionIndex)).toEqual(['3', '1', '2']);
     });
 
+    it('lists a match once when the explorer returns it twice', async () => {
+        const messaging = messagingWith({
+            byChain: { 'btc-regtest': [{ address: A1 }] },
+            obligations: {
+                [`btc-regtest:${A1}`]: [
+                    row({ action_index: '7' }),
+                    row({ action_index: '7' }),
+                    row({ action_index: '8' }),
+                ],
+            },
+        });
+        const out = await scanCoinpayObligations({ messaging, walletId: 'w1' });
+        expect(out.map((o) => o.orderMatchActionIndex)).toEqual(['7', '8']);
+    });
+
     it('returns [] when the messaging layer lacks the obligation methods', async () => {
         const out = await scanCoinpayObligations({ messaging: {}, walletId: 'w1' });
         expect(out).toEqual([]);

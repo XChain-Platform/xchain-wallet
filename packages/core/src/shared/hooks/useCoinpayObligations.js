@@ -122,9 +122,15 @@ export async function scanCoinpayObligations({ messaging, walletId, accountId })
         throw results[0].error || new Error('Failed to scan for payments due.');
     }
     const found = [];
+    // An explorer page that overlaps, or one address held twice, lists a match
+    // twice; the queue shows each match once.
+    const seen = new Set();
     for (const r of results) {
         for (const row of r.rows) {
             if (!isPendingForPayer(row, r.address)) continue;
+            const key = `${r.chainId}:${r.address}:${row.action_index ?? row.actionIndex}`;
+            if (seen.has(key)) continue;
+            seen.add(key);
             found.push({
                 chainId: r.chainId,
                 address: r.address,

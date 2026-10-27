@@ -1213,6 +1213,35 @@ export function DispenserDetail({ walletId, chainId, actionIndex, onBack, onCanc
                 fallback: err?.message || fallback,
             }));
 
+    // The page keeps the dispenser it loaded. A dispenser that closed, expired
+    // or sold out since then still draws the payment, which reaches the creator
+    // and releases nothing, so the buy reads the dispenser again before it
+    // composes and again at approval. A failed read is unknown, never a refusal.
+    const buyStateRefusal = useCallback(async (expectedIdentity) => {
+        if (isDemoWallet || typeof messaging.getDispenserByActionIndex !== 'function') return null;
+        let fresh;
+        try {
+            fresh = pickDispenser(await messaging.getDispenserByActionIndex({ chainId, actionIndex }));
+        } catch {
+            return null;
+        }
+        if (!fresh || expectedIdentity !== detailIdentityRef.current) return null;
+        const live = flowsLib.dispenserLiveState(fresh);
+        if (live.status && live.status !== 'open' && live.status !== 'valid') {
+            setDispenser(fresh);
+            return `This dispenser is ${live.status === 'cancelling' ? 'closing' : (dispenserStatusLabel(live.status) || 'not open').toLowerCase()}`
+                + ' and no longer sells. Nothing was sent.';
+        }
+        const left = remainingFillsFrom(live.giveRemaining, fresh.give_amount);
+        if (left != null && fillsCount != null && fillsCount > left) {
+            setDispenser(fresh);
+            return left === 0n
+                ? 'This dispenser has sold out. Nothing was sent.'
+                : `Only ${left} complete fill${left === 1n ? '' : 's'} remain. Reduce the number of fills.`;
+        }
+        return null;
+    }, [chainId, actionIndex, messaging, isDemoWallet, fillsCount]);
+
     const beginBuy = useCallback(async () => {
         if (buyInFlightRef.current || buyStage === 'submitting' || !buyRequest) return;
         if (priceStale) {
@@ -1222,6 +1251,11 @@ export function DispenserDetail({ walletId, chainId, actionIndex, onBack, onCanc
         buyInFlightRef.current = true;
         const expectedIdentity = detailIdentityRef.current;
         try {
+            const stateRefusal = await buyStateRefusal(expectedIdentity);
+            if (stateRefusal) {
+                if (expectedIdentity === detailIdentityRef.current) setBuyError(stateRefusal);
+                return;
+            }
             // Resolve every buyer and pay-to list before any transaction reaches Confirm.
             if (await refreshBuyerEligibility(expectedIdentity)) return;
             if (expectedIdentity !== detailIdentityRef.current
@@ -1235,6 +1269,13 @@ export function DispenserDetail({ walletId, chainId, actionIndex, onBack, onCanc
                     from: buyRequest.from,
                     compose: () => messaging.composeForConfirm(buyRequest),
                     onApprove: async (prebuiltPsbt) => {
+                        // Recheck at approval because the dispenser can close while Confirm is open.
+                        const closedRefusal = await buyStateRefusal(expectedIdentity);
+                        if (closedRefusal) {
+                            const refused = new Error(closedRefusal);
+                            refused.name = BUYER_ACCESS_REFUSED;
+                            throw refused;
+                        }
                         // Recheck at approval because list edits can land while Confirm is open.
                         if (await refreshBuyerEligibility(expectedIdentity)) {
                             const refused = new Error(
@@ -1259,7 +1300,7 @@ export function DispenserDetail({ walletId, chainId, actionIndex, onBack, onCanc
         }
     }, [buyStage, buyRequest, priceStale, refreshBuyerEligibility, buyUnderfunded, buyDustBlock,
         fillsError, inventoryError,
-        ownerLane.isWatcherMode, buyConfirm, chainId, messaging, submitConfirmedBuy]);
+        ownerLane.isWatcherMode, buyConfirm, chainId, messaging, submitConfirmedBuy, buyStateRefusal]);
 
     /**
      * Sign one owner action (close, refill or edit) and settle its stage.

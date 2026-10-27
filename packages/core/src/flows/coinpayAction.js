@@ -35,6 +35,7 @@ import { submitAction } from './submitAction.js';
 import { buildActionPsbt } from './buildActionPsbt.js';
 import { assertValidDestination, normalizeSource } from './sendToken.js';
 import { verifyCoinpayObligation } from './coinpayQueries.js';
+import { hasAttemptedCoinpay } from '../market/coinpayPending.js';
 
 /**
  * @typedef {Object} CoinpayActionOpts
@@ -163,6 +164,20 @@ async function prepareCoinpay(opts, fnName) {
         payeeAddress: opts.payeeAddress,
         coinAmount,
     });
+
+    // The explorer lists the obligation as pending until the payment confirms,
+    // so a payment this vault already signed or broadcast for the same match
+    // still reads as owed. A second one is burned: the protocol settles a match
+    // once.
+    const ownPendingTxs = typeof opts.vault?.pendingTxs?.list === 'function'
+        ? await opts.vault.pendingTxs.list()
+        : [];
+    if (hasAttemptedCoinpay(
+        ownPendingTxs.filter((tx) => !tx?.fromAddress || tx.fromAddress === source.address),
+        actionIndex,
+    )) {
+        throw new Error(`${fnName}: a payment for ORDER_MATCH #${actionIndex} is already in flight from this wallet; wait for it to confirm`);
+    }
 
     // Build from the obligation the chain vouches for, not from the request.
     // verifyCoinpayObligation has already proven these equal, so this is belt

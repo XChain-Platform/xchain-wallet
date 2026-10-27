@@ -579,11 +579,12 @@ function formatNum(v) {
 function extractRows(resp) {
     // Explorer returns { data: [...] } for list queries; be defensive
     // because some wrapper layers unwrap to a bare array.
-    if (!resp) return [];
-    if (Array.isArray(resp)) return resp;
-    if (Array.isArray(resp.data)) return resp.data;
-    if (Array.isArray(resp.rows)) return resp.rows;
-    return [];
+    // A null or scalar entry is no dispenser; keeping it would throw in the
+    // de-dupe and leave the whole chain's list unloaded.
+    const rows = Array.isArray(resp) ? resp
+        : Array.isArray(resp?.data) ? resp.data
+            : Array.isArray(resp?.rows) ? resp.rows : [];
+    return rows.filter((row) => row !== null && typeof row === 'object');
 }
 
 function short(addr) {
