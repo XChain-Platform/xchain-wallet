@@ -135,6 +135,35 @@ for (const size of SIZES) {
             await expect(heading, 'focus does not fall to the page body').toBeFocused();
         });
 
+        test('a form opened in place by keyboard takes focus on its heading and Back returns to the opener', async ({ page }) => {
+            await gotoSection(page, 'Contacts');
+            const add = page.getByRole('button', { name: 'Add contact' }).first();
+            await add.focus();
+            await page.keyboard.press('Enter');
+            const form = page.getByRole('heading', { level: 1, name: 'New contact' });
+            await expect(form).toBeVisible();
+            await expect(form, 'focus does not fall to the page body').toBeFocused();
+            await page.getByRole('button', { name: 'Back to previous screen' }).focus();
+            await page.keyboard.press('Enter');
+            await expect(page.getByRole('heading', { level: 1, name: 'Contacts' })).toBeVisible();
+            await expect(add, 'Back returns focus to the control that opened the form').toBeFocused();
+        });
+
+        test('a destination chosen in the More sheet by keyboard takes focus on its heading', async ({ page }) => {
+            const more = page.getByRole('button', { name: 'More', exact: true });
+            test.skip(await more.count() === 0, 'This width shows every destination in the rail');
+            await more.focus();
+            await page.keyboard.press('Enter');
+            const sheet = page.getByRole('dialog', { name: 'More', exact: true });
+            await expect(sheet).toBeVisible();
+            const row = sheet.getByRole('button', { name: 'Receive', exact: true });
+            await row.focus();
+            await page.keyboard.press('Enter');
+            const heading = page.getByRole('heading', { level: 1, name: 'Receive', exact: true });
+            await expect(heading).toBeVisible();
+            await expect(heading, 'focus does not return to the More button behind the new screen').toBeFocused();
+        });
+
         for (const route of ['Send', 'Receive', 'Settings']) {
             test(`${route} is fully reachable by Tab with visible focus`, async ({ page }) => {
                 await gotoSection(page, route);

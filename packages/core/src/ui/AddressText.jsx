@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-import { useState } from 'react';
+import { useLayoutEffect, useRef, useState } from 'react';
 import styles from './AddressText.module.css';
 
 /**
@@ -45,8 +45,18 @@ export function truncateAddress(address) {
  * @param {string} [props.className]
  * @param {boolean} [props.focusable]   false when a focusable control already owns the value, such as a read-only field's preview
  */
+// A control inside a button, link or menu row is not a second tab stop: the
+// enclosing control is the one stop and nesting focusable content in it is invalid.
+const INTERACTIVE_ANCESTOR = 'button, a[href], summary, [role="button"], [role="link"], [role="menuitem"], [role="option"], [role="tab"], [role="checkbox"], [role="radio"], [role="switch"]';
+
 export function AddressText({ address, truncate = true, highlight = false, size = 'md', className = '', focusable = true }) {
     const [focused, setFocused] = useState(false);
+    const [nested, setNested] = useState(false);
+    const ref = useRef(null);
+    useLayoutEffect(() => {
+        const el = ref.current;
+        setNested(Boolean(el?.parentElement?.closest(INTERACTIVE_ANCESTOR)));
+    });
     const cls = `${styles.addr} ${styles[size]} ${className}`.trim();
     if (typeof address !== 'string' || address.length === 0) {
         return <span className={cls} dir="ltr">…</span>;
@@ -72,13 +82,14 @@ export function AddressText({ address, truncate = true, highlight = false, size 
         wordBreak: 'normal',
     };
     const commonProps = {
+        ref,
         className: cls,
         title: address,
         'aria-label': address,
         dir: 'ltr',
         // A preview drawn over a focusable input stays out of the tab order:
         // the input is the one stop for that value.
-        tabIndex: focusable ? 0 : undefined,
+        tabIndex: focusable && !nested ? 0 : undefined,
         style: displayStyle,
         onFocus: focusable ? () => setFocused(true) : undefined,
         onBlur: focusable ? () => setFocused(false) : undefined,

@@ -391,14 +391,21 @@ export function FullLayoutWithNav({ nav, bottomBar, header, notices, children })
             heading.tabIndex = -1;
             heading.classList.add(styles.routeFocusTarget);
             heading.focus({ preventScroll: true });
-            return true;
+            // A heading under an inert background (the More sheet is still
+            // closing) refuses focus; the observer below tries again.
+            return document.activeElement === heading;
         };
         if (focusHeading()) return undefined;
         const observer = new MutationObserver(() => {
             if (focusHeading()) observer.disconnect();
         });
-        observer.observe(routeBody, { childList: true, subtree: true });
-        return () => observer.disconnect();
+        observer.observe(routeBody, { childList: true, subtree: true, attributes: true, attributeFilter: ['inert'] });
+        // The page's own background loses inert on the same frame the sheet
+        // unmounts, which is outside routeBody: watch the shell root too.
+        const shell = routeBody.closest('[data-xc-tier]');
+        if (shell) observer.observe(shell, { attributes: true, attributeFilter: ['inert'], subtree: true });
+        const stop = setTimeout(() => observer.disconnect(), 3000);
+        return () => { clearTimeout(stop); observer.disconnect(); };
     }, [routeKey]);
 
     return (

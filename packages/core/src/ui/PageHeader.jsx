@@ -80,7 +80,9 @@ export function PageHeader({
         if (!heading) return;
         heading.tabIndex = -1;
         heading.focus({ preventScroll: true });
-    }, []);
+        // A screen that swaps its content in place (a list becoming its edit
+        // form) keeps this header mounted and changes only the title.
+    }, [typeof title === 'string' ? title : null]); // eslint-disable-line react-hooks/exhaustive-deps
     const accessibleBackLabel = backLabel.trim().toLowerCase() === 'back'
         ? 'Back to previous screen'
         : backLabel;

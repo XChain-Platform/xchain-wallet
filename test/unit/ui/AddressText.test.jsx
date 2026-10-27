@@ -43,6 +43,21 @@ describe('<AddressText>', () => {
     });
 });
 
+describe('<AddressText> inside a control', () => {
+    it('is not a second tab stop when a button or link already owns the row', () => {
+        render(
+            <div>
+                <button type="button"><AddressText address={ADDRESS} /></button>
+                <a href="#x"><AddressText address={ADDRESS} /></a>
+                <div role="menuitem"><AddressText address={ADDRESS} /></div>
+                <AddressText address={ADDRESS} />
+            </div>,
+        );
+        const spans = screen.getAllByLabelText(ADDRESS);
+        expect(spans.map((el) => el.getAttribute('tabindex'))).toEqual([null, null, null, '0']);
+    });
+});
+
 describe('<AddressField>', () => {
     it('keeps the full read-only value available behind the middle-ellipsis display', () => {
         render(
