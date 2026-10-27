@@ -20,6 +20,7 @@ import { getDemoWalletId, markDemoWallet } from '../../flows/demoMode.js';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { useNativeExitRoot } from '../hooks/useNativeExitRoot.js';
 import { demoOwnsVaultPassword, exitDemoWallet } from '../utils/demoGraduation.js';
+import { isWalletExistsError } from '../utils/walletExistsError.js';
 import { OnboardingCarousel } from './OnboardingCarousel.jsx';
 import styles from './Onboarding.module.css';
 import { t } from '../../i18n/index.js';
@@ -137,13 +138,6 @@ function markAccepted() {
  * @param {() => void} [props.onBack]                 rendered as a Cancel button when present (used by the unlocked-state "Add Wallet" entry point)
  * @param {'fresh' | 'add'} [props.mode]              'fresh' = no wallet on the device; 'add' = adds to an already-open vault. Defaults to 'fresh'.
  */
-// The vault refuses a new wallet over an existing one with a named error
-// (assertFreshVault); a shell that passes errors across a message boundary
-// keeps only the message, so that is read too.
-function isWalletExistsError(err) {
-    return err?.name === 'WalletExistsError' || /^A wallet already exists\b/.test(String(err?.message || ''));
-}
-
 export function Onboarding({ onCreate, onImport, onImportFromFreeWallet, onPairPartner, onDemoEntered, onWalletFound, onBack, mode = 'fresh' }) {
     const { messaging, shell } = useMessaging();
     const variant = screenVariantFor(shell);

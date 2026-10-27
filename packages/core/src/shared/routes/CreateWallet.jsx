@@ -20,6 +20,7 @@ import { AdsNotice } from '../components/AdsNotice.jsx';
 import { pickQuizPositions } from '../utils/pickQuizPositions.js';
 import { nextPaint } from '../utils/nextPaint.js';
 import { userFacingMessage } from '../utils/userFacingMessage.js';
+import { isWalletExistsError } from '../utils/walletExistsError.js';
 import { writeActiveWallet } from '../utils/activeWalletMemory.js';
 import { NAME_MAX_LENGTH, hasVisibleText, nameLength } from '../../util/display_name.js';
 import { useBackHandler } from '../../ui/backStack.js';
@@ -62,8 +63,15 @@ function numberedWalletName(wallets) {
  * @param {() => void} props.onBack
  * @param {(wallet?: { id: string, name: string }) => void} props.onCreated
  * @param {'fresh' | 'add'} [props.mode]   'fresh' = first wallet (pre-host `wallet.import`); 'add' = adds to an open vault (`wallet.add.import`). Defaults to 'fresh'.
+ *
+ * `staleGuard` is passed by a shell whose windows share one vault (the
+ * extension popup): `report(hold)` says whether this window holds a phrase
+ * ('hold'), is writing the wallet ('persisting') or neither ('idle'), and
+ * `elsewhere` turns true when another window created the wallet. A window
+ * holding a phrase then stays on a lasting notice instead of following the
+ * session to Home, because the phrase it showed belongs to no wallet.
  */
-export function CreateWallet({ onBack, onCreated: handleCreated, mode = 'fresh' }) {
+export function CreateWallet({ onBack, onCreated: handleCreated, mode = 'fresh', staleGuard }) {
     // S4: The recovery phrase is displayed here. A screenshot of it, or the
     // recents snapshot Android persists, is a copy of the wallet.
     // No-op on every shell that installs no screen guard (web, extension,
@@ -75,7 +83,7 @@ export function CreateWallet({ onBack, onCreated: handleCreated, mode = 'fresh' 
     const isFull = variant === 'full';
 
     const [stage, setStage] = useState(
-        /** @type {'password'|'mnemonic'|'verify'|'persisting'|'ads-notice'} */ ('password'),
+        /** @type {'password'|'mnemonic'|'verify'|'persisting'|'ads-notice'|'stale'} */ ('password'),
     );
     // §19.2 / G033: verification quiz state. `quizPositions` is a sorted
     // list of 1-based word indices the user must type back; `quizAnswers`
@@ -171,6 +179,26 @@ export function CreateWallet({ onBack, onCreated: handleCreated, mode = 'fresh' 
         setQuizErrorPosition(null);
         phraseGeneratedRef.current = false;
     }
+
+    function goStale() {
+        clearWalletSecrets();
+        setPersistError(null);
+        setStage('stale');
+    }
+
+    // Another window created the wallet while this one held a phrase.
+    useEffect(() => {
+        if (staleGuard?.elsewhere && (stage === 'mnemonic' || stage === 'verify')) goStale();
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [staleGuard?.elsewhere, stage]);
+
+    const holdState = stage === 'persisting'
+        ? 'persisting'
+        : (stage === 'mnemonic' || stage === 'verify' || stage === 'stale') ? 'hold' : 'idle';
+    const reportHold = staleGuard?.report;
+    useEffect(() => {
+        reportHold?.(holdState);
+    }, [holdState, reportHold]);
 
     function onCreated() {
         handleCreated(createdWalletRef.current || undefined);
@@ -341,6 +369,10 @@ export function CreateWallet({ onBack, onCreated: handleCreated, mode = 'fresh' 
             clearWalletSecrets();
             setStage('ads-notice');
         } catch (err) {
+            if (staleGuard && isWalletExistsError(err)) {
+                goStale();
+                return;
+            }
             setPersistError(userFacingMessage(err, 'Failed to create wallet. Try again.'));
             setStage('verify');
         } finally {
@@ -357,18 +389,40 @@ export function CreateWallet({ onBack, onCreated: handleCreated, mode = 'fresh' 
                 ? (isFull ? 'Verify your recovery phrase' : 'Verify phrase')
                 : stage === 'persisting'
                     ? 'Creating your wallet'
-                    : 'Automatic Donation System';
+                    : stage === 'stale'
+                        ? 'Wallet already created'
+                        : 'Automatic Donation System';
     // The window title names the step the heading shows.
     useDocumentTitleSection(headerTitle);
     const screenHeader = (
         <PageHeader
             onBack={stage === 'verify' ? undefined : handleBack}
             backLabel={stage === 'password' ? t('importWallet.backToSetup') : t('createWallet.backToPreviousStep')}
-            backDisabled={stage === 'persisting' || stage === 'ads-notice'}
+            backDisabled={stage === 'persisting' || stage === 'ads-notice' || stage === 'stale'}
             title={headerTitle}
             titleRef={headingRef}
         />
     );
+
+    if (stage === 'stale') {
+        return (
+            <Screen variant={variant} header={screenHeader}>
+                <FormPage
+                    ref={stageFormRef}
+                    label={t('createWallet.walletAlreadyCreated')}
+                    status={(
+                        <StatusMessage
+                            variant="warning"
+                            role="alert"
+                            recovery={{ label: t('adsNotice.continue'), onAction: onCreated }}
+                        >
+                            {t('createWallet.staleWindowNotice')}
+                        </StatusMessage>
+                    )}
+                />
+            </Screen>
+        );
+    }
 
     if (stage === 'ads-notice') {
         const noticeBody = (

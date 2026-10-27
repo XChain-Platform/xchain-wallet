@@ -20,6 +20,8 @@ const messages = {
     'createWallet.walletCreationStatus': 'Wallet creation status',
     'createWallet.step3Of3': 'Step 3 of 3',
     'createWallet.createWallet': 'Create wallet',
+    'createWallet.walletAlreadyCreated': 'Wallet already created',
+    'createWallet.staleWindowNotice': 'The recovery phrase shown in this window was not saved, because another window created a wallet. Write down nothing from this window.',
     'createWallet.verifyRecoveryPhrase': 'Verify recovery phrase',
     'createWallet.word': 'Word {p}',
     'createWallet.step2Of3': 'Step 2 of 3',

@@ -53,6 +53,11 @@ const SHELL_ONLY = {
         },
     },
     props: {
+        'CreateWallet.staleGuard': {
+            shells: ['extension'],
+            kind: 'intended',
+            reason: 'Only the extension popup shares one vault across live windows, so only it can find that another window created the wallet.',
+        },
         'AddressList.networkFilter': {
             shells: ['web'],
             kind: 'intended',

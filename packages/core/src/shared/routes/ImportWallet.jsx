@@ -43,6 +43,7 @@ import {
 // ("importMnemonic: mnemonic is required"), and `|| fallback` only fires on an
 // EMPTY message, so those reached the recovery screen verbatim.
 import { userFacingMessage } from '../utils/userFacingMessage.js';
+import { NAME_MAX_LENGTH, hasVisibleText, nameLength } from '../../util/display_name.js';
 import { takeForgotPasswordRestoreLane } from '../utils/forgotPasswordRecovery.js';
 import { useBackHandler } from '../../ui/backStack.js';
 import { useDocumentTitleSection } from '../hooks/useDocumentTitle.js';
@@ -574,10 +575,28 @@ export function ImportWallet({
         reader.readAsText(file);
     }
 
+    // A blank name takes the default; a name that draws no mark or runs past the
+    // cap would read as nothing in every list, so it is refused as Create does.
+    function walletNameError() {
+        const trimmedName = name.trim();
+        if (trimmedName.length > 0 && !hasVisibleText(trimmedName)) {
+            return 'Wallet name must include a visible character.';
+        }
+        if (nameLength(trimmedName) > NAME_MAX_LENGTH) {
+            return `Wallet name must be ${NAME_MAX_LENGTH} characters or fewer.`;
+        }
+        return null;
+    }
+
     async function handleSubmit(event) {
         event.preventDefault();
         setValidationAttempt((attempt) => attempt + 1);
         if (busyRef.current) return;
+        const nameProblem = walletNameError();
+        if (nameProblem) {
+            setError(nameProblem);
+            return;
+        }
         const trimmed = normalizePhraseEntry(mnemonic);
         if (trimmed.length === 0) {
             setError('Enter a recovery phrase.');
@@ -683,6 +702,11 @@ export function ImportWallet({
     async function handleWifSubmit(event) {
         event.preventDefault();
         if (busyRef.current) return;
+        const nameProblem = walletNameError();
+        if (nameProblem) {
+            setError(nameProblem);
+            return;
+        }
         const trimmedWif = wif.trim();
         if (trimmedWif.length === 0) {
             setError('WIF private key is required.');
@@ -822,6 +846,8 @@ export function ImportWallet({
         } else if (lowerError.includes(restoreDeviceLabel(mode).toLowerCase())) {
             importErrorTarget = { id: 'import-backup-device-password', label: restoreDeviceLabel(mode) };
         }
+    } else if (/^Wallet name/i.test(error || '')) {
+        importErrorTarget = { id: 'import-name', label: 'Wallet name' };
     } else if (/recovery phrase|expected .*word|mnemonic/i.test(error || '')) {
         importErrorTarget = { id: 'xc-mnemonic', label: 'Recovery phrase' };
     } else if (/at least .* characters/i.test(error || '')) {
@@ -1170,9 +1196,10 @@ export function ImportWallet({
                 </p>
             </div>
             <Input
+                id="import-name"
                 label={t('renameWallet.name')}
                 value={name}
-                onChange={(e) => setName(e.target.value)}
+                onChange={(e) => { setName(e.target.value); if (error) setError(null); }}
                 autoComplete="off"
                 disabled={busy}
             />
@@ -1268,9 +1295,10 @@ export function ImportWallet({
                         disabled={busy}
                     />
                     <Input
+                        id="import-name"
                         label={t('renameWallet.name')}
                         value={name}
-                        onChange={(e) => setName(e.target.value)}
+                        onChange={(e) => { setName(e.target.value); if (error) setError(null); }}
                         autoComplete="off"
                         disabled={busy}
                     />

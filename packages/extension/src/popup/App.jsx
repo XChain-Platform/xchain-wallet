@@ -603,6 +603,32 @@ function AppInner({ canOpenInTab, titleEnabled }) {
     }, [extensionHandoff]);
     useDemoAutoWipe(activeWalletId, refresh);
 
+    // Another window creating the wallet moves this one to Home, which would
+    // drop a recovery phrase this window is still showing. The create screen
+    // reports whether it holds one; a held phrase turns the move into a
+    // lasting notice on that screen, and a wallet write in flight waits for
+    // its own result.
+    const createHold = useRef('idle');
+    const statusState = useRef('loading');
+    const onboardingStepRef = useRef('welcome');
+    const [walletElsewhere, setWalletElsewhere] = useState(false);
+    const createGuard = useMemo(() => ({
+        elsewhere: walletElsewhere,
+        report: (hold) => { createHold.current = hold; },
+    }), [walletElsewhere]);
+    statusState.current = status.state;
+    onboardingStepRef.current = onboardingStep;
+    useEffect(() => {
+        if (onboardingStep !== 'create' || status.state !== 'no-wallet') setWalletElsewhere(false);
+    }, [onboardingStep, status.state]);
+    const refreshUnlessCreating = useCallback(() => {
+        if (statusState.current === 'no-wallet' && onboardingStepRef.current === 'create') {
+            if (createHold.current === 'hold') { setWalletElsewhere(true); return; }
+            if (createHold.current === 'persisting') return;
+        }
+        refresh();
+    }, [refresh]);
+
     function clearTransientActionState() {
         setUnlockedView('home');
         setFormReturnView(null);
@@ -653,7 +679,7 @@ function AppInner({ canOpenInTab, titleEnabled }) {
 
     useEffect(() => attachSurfaceStateListener((event) => {
         applySurfaceStateEvent(event, {
-            refreshSession: refresh,
+            refreshSession: refreshUnlessCreating,
             refreshWallets: () => {
                 listWallets()
                     .then((list) => { if (Array.isArray(list) && list.length) setWallets(list); })
@@ -701,7 +727,7 @@ function AppInner({ canOpenInTab, titleEnabled }) {
             // Screens that load wallet or account rows on mount read them again.
             remountScreens: () => setSurfaceStateRevision((value) => value + 1),
         });
-    }), [refresh]);
+    }), [refresh, refreshUnlessCreating]);
 
     // §47 / Cluster L FOLLOWUP 2: consume `?uri=` from popup.html's
     // location.search when the popup boots. Manifest's
@@ -1039,6 +1065,7 @@ function AppInner({ canOpenInTab, titleEnabled }) {
                     <CreateWallet
                         onBack={() => setOnboardingStep('welcome')}
                         onCreated={refresh}
+                        staleGuard={createGuard}
                     />
                 );
             }
