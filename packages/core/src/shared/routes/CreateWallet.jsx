@@ -21,6 +21,7 @@ import { pickQuizPositions } from '../utils/pickQuizPositions.js';
 import { nextPaint } from '../utils/nextPaint.js';
 import { userFacingMessage } from '../utils/userFacingMessage.js';
 import { writeActiveWallet } from '../utils/activeWalletMemory.js';
+import { NAME_MAX_LENGTH, hasVisibleText, nameLength } from '../../util/display_name.js';
 import { useBackHandler } from '../../ui/backStack.js';
 import { useDocumentTitleSection } from '../hooks/useDocumentTitle.js';
 import styles from './CreateWallet.module.css';
@@ -209,6 +210,17 @@ export function CreateWallet({ onBack, onCreated: handleCreated, mode = 'fresh' 
         event.preventDefault();
         if (stage !== 'password' || (phraseGeneratedRef.current && !mnemonic)) return;
         setValidationAttempt((attempt) => attempt + 1);
+        // A blank name falls back to the default; a name that draws no mark or
+        // runs past the cap would read as nothing in every list.
+        const trimmedName = name.trim();
+        if (trimmedName.length > 0 && !hasVisibleText(trimmedName)) {
+            setPasswordError('Wallet name must include a visible character.');
+            return;
+        }
+        if (nameLength(trimmedName) > NAME_MAX_LENGTH) {
+            setPasswordError(`Wallet name must be ${NAME_MAX_LENGTH} characters or fewer.`);
+            return;
+        }
         if (password.length < MIN_PASSWORD_LENGTH) {
             setPasswordError(
                 `Password must be at least ${MIN_PASSWORD_LENGTH} characters.`,
@@ -523,7 +535,8 @@ export function CreateWallet({ onBack, onCreated: handleCreated, mode = 'fresh' 
             ? 'Confirm your password to continue.'
             : null;
     let passwordErrorTarget;
-    if (/at least/i.test(passwordError || '')) passwordErrorTarget = { id: 'create-password', label: 'Password' };
+    if (/^Wallet name/i.test(passwordError || '')) passwordErrorTarget = { id: 'create-name', label: 'Wallet name' };
+    else if (/at least/i.test(passwordError || '')) passwordErrorTarget = { id: 'create-password', label: 'Password' };
     else if (passwordError === 'Passwords do not match.') passwordErrorTarget = { id: 'create-confirm', label: 'Confirm password' };
     else if (/^Enter the BIP39/i.test(passwordError || '')) passwordErrorTarget = { id: 'create-bip39-passphrase', label: 'BIP39 passphrase' };
     else if (/BIP39 passphrases do not match/i.test(passwordError || '')) passwordErrorTarget = { id: 'create-bip39-confirm', label: 'Confirm passphrase' };
@@ -567,11 +580,13 @@ export function CreateWallet({ onBack, onCreated: handleCreated, mode = 'fresh' 
             )}
         >
             <Input
+                id="create-name"
                 label={t('renameWallet.name')}
                 value={name}
                 onChange={(e) => {
                     nameEditedRef.current = true;
                     setName(e.target.value);
+                    if (passwordError) setPasswordError(null);
                 }}
                 autoComplete="off"
             />

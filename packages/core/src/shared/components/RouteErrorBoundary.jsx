@@ -11,6 +11,7 @@
 import { Component } from 'react';
 import { Button, FormPage, Icon, StatusMessage } from '@xchain-wallet/core/ui';
 import { logConsole } from '../utils/logConsole.js';
+import { isChunkLoadError } from '../utils/chunkLoadError.js';
 import styles from './RouteErrorBoundary.module.css';
 import { t } from '../../i18n/index.js';
 
@@ -25,11 +26,11 @@ import { t } from '../../i18n/index.js';
 export class RouteErrorBoundary extends Component {
     constructor(props) {
         super(props);
-        this.state = { failed: false };
+        this.state = { failed: false, chunkFailed: false };
     }
 
-    static getDerivedStateFromError() {
-        return { failed: true };
+    static getDerivedStateFromError(error) {
+        return { failed: true, chunkFailed: isChunkLoadError(error) };
     }
 
     componentDidCatch(error, info) {
@@ -47,6 +48,14 @@ export class RouteErrorBoundary extends Component {
         }
     }
 
+    reload = () => {
+        if (this.props.onReload) {
+            this.props.onReload();
+            return;
+        }
+        if (typeof window !== 'undefined') window.location.reload();
+    };
+
     goHome = () => {
         if (this.props.onHome) {
             this.props.onHome();
@@ -60,6 +69,11 @@ export class RouteErrorBoundary extends Component {
     };
 
     retry = () => {
+        // The browser remembers the failed chunk fetch, so only a reload can load it.
+        if (this.state.chunkFailed) {
+            this.reload();
+            return;
+        }
         this.props.onRetry?.();
         this.setState({ failed: false });
     };

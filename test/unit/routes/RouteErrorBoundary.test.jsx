@@ -176,4 +176,35 @@ describe('RouteErrorBoundary', () => {
 
         expect(screen.getByRole('button', { name: 'Go to Home' })).toBeTruthy();
     });
+
+    it('reloads on Try again after a route chunk failed to load', () => {
+        const onReload = vi.fn();
+        const onRetry = vi.fn();
+        function ChunkRoute() {
+            throw new TypeError('Failed to fetch dynamically imported module: http://localhost/CreateWallet.jsx');
+        }
+        render(
+            <RouteErrorBoundary onReload={onReload} onRetry={onRetry}>
+                <ChunkRoute />
+            </RouteErrorBoundary>,
+        );
+
+        fireEvent.click(screen.getByRole('button', { name: 'Try again' }));
+        expect(onReload).toHaveBeenCalledOnce();
+        expect(onRetry).not.toHaveBeenCalled();
+    });
+
+    it('retries in place after any other route failure', () => {
+        const onReload = vi.fn();
+        const onRetry = vi.fn();
+        render(
+            <RouteErrorBoundary onReload={onReload} onRetry={onRetry}>
+                <ThrowingRoute />
+            </RouteErrorBoundary>,
+        );
+
+        fireEvent.click(screen.getByRole('button', { name: 'Try again' }));
+        expect(onRetry).toHaveBeenCalledOnce();
+        expect(onReload).not.toHaveBeenCalled();
+    });
 });
