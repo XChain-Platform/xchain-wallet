@@ -68,6 +68,7 @@ import { BalancesUncheckedState, useBalancesUnchecked } from '../components/Bala
 import { useLongOperationStatus } from '../hooks/useLongOperationStatus.js';
 import { isNavigatorOnline, useOnlineStatus } from '../hooks/useOnlineStatus.js';
 import { readHistoryCache, writeHistoryCache } from '../utils/historyCache.js';
+import { readAllListPages } from '../utils/historyPages.js';
 import { startVisibleInterval } from '../utils/visibleInterval.js';
 import { Settings } from './Settings.jsx';
 import { hasAvailableChain, NO_CHAINS_BODY, NO_CHAINS_TITLE } from '../utils/chainAvailability.js';
@@ -477,6 +478,7 @@ export function History({ walletId, accountId, onBack, onReceive, onSelectEntry,
         observedAtRef.current.clear();
         lastMempoolSeenRef.current.clear();
         rememberedMempoolRef.current.clear();
+        listPageSnapshotsRef.current.clear();
         initialFocusFiredRef.current = false;
         let cancelled = false;
         setLoadError(null);
@@ -573,6 +575,9 @@ export function History({ walletId, accountId, onBack, onReceive, onSelectEntry,
     // its place. A failed read keeps the last known state and proves nothing
     // about whether the transaction remains in the mempool.
     const rememberedMempoolRef = useRef(/** @type {Map<string, any>} */ (new Map()));
+    // The last complete multi-page read of each address list, by kind, chain
+    // and address; see readListPages in the fan-out below.
+    const listPageSnapshotsRef = useRef(/** @type {Map<string, any>} */ (new Map()));
 
     // One re-fetch rule for this mount, on the same interval the beat below
     // runs at: a `focus` bump only buys something once the rows are older than
@@ -691,6 +696,20 @@ export function History({ walletId, accountId, onBack, onReceive, onSelectEntry,
                 return [];
             });
 
+        // The explorer serves an address list 100 rows at a time. The rows of
+        // an earlier complete read are reused while the list's total and head
+        // are unchanged, so the beat re-reads one page, not all of them.
+        const readListPages = async (kind, cid, address, read) => {
+            const snapshotKey = `${kind}:${cid}:${String(address).toLowerCase()}`;
+            const { rows, snapshot } = await readAllListPages(
+                (page) => read(page ? { page } : null),
+                listPageSnapshotsRef.current.get(snapshotKey) || null,
+            );
+            if (snapshot) listPageSnapshotsRef.current.set(snapshotKey, snapshot);
+            else listPageSnapshotsRef.current.delete(snapshotKey);
+            return rows;
+        };
+
         const tasks = [];
         for (const cid of chainsToLoad) {
             for (const a of addressesByChain[cid]) {
@@ -706,9 +725,22 @@ export function History({ walletId, accountId, onBack, onReceive, onSelectEntry,
                 }
                 tasks.push(
                     Promise.all([
-                        messaging.getAddressHistory({ chainId: cid, address: a.address })
-                            .then((r) => extractRows(r)),
-                        optionalRows(messaging.getLinksForAddress({ chainId: cid, address: a.address })),
+                        readListPages(
+                            'history',
+                            cid,
+                            a.address,
+                            (opts) => messaging.getAddressHistory(
+                                opts ? { chainId: cid, address: a.address, opts } : { chainId: cid, address: a.address },
+                            ),
+                        ),
+                        optionalRows(readListPages(
+                            'links',
+                            cid,
+                            a.address,
+                            (opts) => messaging.getLinksForAddress(
+                                opts ? { chainId: cid, address: a.address, opts } : { chainId: cid, address: a.address },
+                            ),
+                        )),
                         // M2.1: both pending sources. Each degrades to [] on
                         // the initial load, so an explorer without the
                         // unconfirmed surface still shows confirmed history.
