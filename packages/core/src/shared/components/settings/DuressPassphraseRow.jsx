@@ -37,7 +37,7 @@ import {
     setDuressPassphrase,
     clearDuressPassphrase,
 } from '../../../flows/duressPassphrase.js';
-import { ROW, ROW_HINT, SettingsInlineForm } from './_settingsPrimitives.jsx';
+import { ROW, ROW_HINT, SettingsInlineForm, useFocusAfterSwap } from './_settingsPrimitives.jsx';
 import { t } from '../../../i18n/index.js';
 import '../../../i18n/locales/en/history.js';
 import '../../../i18n/locales/en/settings.js';
@@ -56,6 +56,7 @@ export function DuressPassphraseRow() {
     // an incorrect current password require an edit, so those leave retryRef
     // null and the alert renders without a misleading "Try again" button.
     const retryRef = useRef(/** @type {null | (() => void)} */ (null));
+    const swap = useFocusAfterSwap(configured);
 
     async function attemptSet() {
         if (busy) return;
@@ -81,6 +82,7 @@ export function DuressPassphraseRow() {
         try {
             await messaging.unlockWallet(currentPassword);
             setDuressPassphrase(pass);
+            swap.request();
             setConfigured(true);
             setShowForm(false);
             setCurrentPassword('');
@@ -105,7 +107,16 @@ export function DuressPassphraseRow() {
 
     function handleClear() {
         clearDuressPassphrase();
+        swap.request();
         setConfigured(false);
+    }
+
+    function cancelForm() {
+        setShowForm(false);
+        setCurrentPassword('');
+        setPass('');
+        setConfirm('');
+        setError(null);
     }
 
     const labelStyle = { color: 'var(--xc-text)', fontWeight: 500 };
@@ -118,7 +129,7 @@ export function DuressPassphraseRow() {
                         {t('settings.duress.configuredEnteringThisPassphraseOn')}
                     </span>
                 </div>
-                <Button type="button" size="sm" variant="ghost" icon={null} onClick={handleClear}>
+                <Button ref={swap.target} type="button" size="sm" variant="ghost" icon={null} onClick={handleClear}>
                     {t('settings.biometric.disable')}
                 </Button>
             </div>
@@ -130,6 +141,8 @@ export function DuressPassphraseRow() {
             <SettingsInlineForm
                 error={error}
                 recovery={retryRef.current ? { label: t('common.tryAgain'), onAction: retryRef.current } : undefined}
+                onCancel={cancelForm}
+                cancelDisabled={busy}
             >
                 <form onSubmit={handleSet} style={{ ...ROW, flexDirection: 'column', alignItems: 'stretch' }}>
                     <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--xc-space-1)' }}>
@@ -174,13 +187,7 @@ export function DuressPassphraseRow() {
                             size="sm"
                             variant="ghost"
                             icon={null}
-                            onClick={() => {
-                                setShowForm(false);
-                                setCurrentPassword('');
-                                setPass('');
-                                setConfirm('');
-                                setError(null);
-                            }}
+                            onClick={cancelForm}
                             disabled={busy}
                         >
                             {t('common.cancel')}
@@ -207,7 +214,7 @@ export function DuressPassphraseRow() {
                     {t('settings.duress.aSecondPasswordThatIf')}
                 </span>
             </div>
-            <Button type="button" size="sm" variant="ghost" icon={null} onClick={() => setShowForm(true)}>
+            <Button ref={swap.target} type="button" size="sm" variant="ghost" icon={null} onClick={() => setShowForm(true)}>
                 {t('settings.duress.set')}
             </Button>
         </div>

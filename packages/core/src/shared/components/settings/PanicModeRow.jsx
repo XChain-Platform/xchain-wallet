@@ -33,7 +33,7 @@ import {
     getPanicModeState,
     getPanicRemainingMs,
 } from '../../../flows/panicMode.js';
-import { ROW, ROW_HINT } from './_settingsPrimitives.jsx';
+import { ROW, ROW_HINT, SettingsInlineForm, useFocusAfterSwap } from './_settingsPrimitives.jsx';
 import { t } from '../../../i18n/index.js';
 import '../../../i18n/locales/en/settings.js';
 
@@ -58,8 +58,10 @@ export function PanicModeRow() {
     }, [state, remainingMs]);
 
     const isActive = remainingMs > 0;
+    const swap = useFocusAfterSwap(isActive);
 
     function handleActivate() {
+        swap.request();
         const next = activatePanicMode();
         setState(next);
         setRemainingMs(getPanicRemainingMs(next));
@@ -67,6 +69,7 @@ export function PanicModeRow() {
     }
 
     function handleDeactivate() {
+        swap.request();
         deactivatePanicMode();
         setState(getPanicModeState());
         setRemainingMs(0);
@@ -86,7 +89,7 @@ export function PanicModeRow() {
                         {t('settings.panic.remaining')}
                     </span>
                 </div>
-                <Button type="button" size="sm" variant="ghost" icon={null} onClick={handleDeactivate}>
+                <Button ref={swap.target} type="button" size="sm" variant="ghost" icon={null} onClick={handleDeactivate}>
                     {t('settings.panic.deactivate')}
                 </Button>
             </div>
@@ -95,23 +98,25 @@ export function PanicModeRow() {
 
     if (confirming) {
         return (
-            <div style={{ ...ROW, alignItems: 'flex-start' }}>
-                {/* A 12rem basis makes the two action buttons wrap below the text on a narrow phone instead of squeezing it into a sliver. */}
-                <div style={{ display: 'flex', flexDirection: 'column', flex: '1 1 12rem', minWidth: 0 }}>
-                    <span style={labelStyle}>{t('settings.panic.confirmPanicMode')}</span>
-                    <span style={ROW_HINT}>
-                        {t('settings.panic.freezeAllSigningFor24')}
-                    </span>
+            <SettingsInlineForm onCancel={() => setConfirming(false)}>
+                <div style={{ ...ROW, alignItems: 'flex-start' }}>
+                    {/* A 12rem basis makes the two action buttons wrap below the text on a narrow phone instead of squeezing it into a sliver. */}
+                    <div style={{ display: 'flex', flexDirection: 'column', flex: '1 1 12rem', minWidth: 0 }}>
+                        <span style={labelStyle}>{t('settings.panic.confirmPanicMode')}</span>
+                        <span style={ROW_HINT}>
+                            {t('settings.panic.freezeAllSigningFor24')}
+                        </span>
+                    </div>
+                    <div style={{ display: 'flex', gap: 'var(--xc-space-2)' }}>
+                        <Button type="button" size="sm" variant="ghost" icon={null} onClick={() => setConfirming(false)}>
+                            {t('common.cancel')}
+                        </Button>
+                        <Button type="button" size="sm" variant="danger" icon={null} onClick={handleActivate}>
+                            {t('settings.panic.confirm24HourFreeze')}
+                        </Button>
+                    </div>
                 </div>
-                <div style={{ display: 'flex', gap: 'var(--xc-space-2)' }}>
-                    <Button type="button" size="sm" variant="ghost" icon={null} onClick={() => setConfirming(false)}>
-                        {t('common.cancel')}
-                    </Button>
-                    <Button type="button" size="sm" variant="danger" icon={null} onClick={handleActivate}>
-                        {t('settings.panic.confirm24HourFreeze')}
-                    </Button>
-                </div>
-            </div>
+            </SettingsInlineForm>
         );
     }
 
@@ -123,7 +128,7 @@ export function PanicModeRow() {
                     {t('settings.panic.activateToFreezeAllSigning')}
                 </span>
             </div>
-            <Button type="button" size="sm" variant="danger" icon={null} onClick={() => setConfirming(true)}>
+            <Button ref={swap.target} type="button" size="sm" variant="danger" icon={null} onClick={() => setConfirming(true)}>
                 {t('settings.developer.activate2')}
             </Button>
         </div>

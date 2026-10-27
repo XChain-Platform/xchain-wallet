@@ -15,10 +15,11 @@
 // Underscore prefix marks this as internal to `components/settings/`;
 // other directories shouldn't import from here.
 
-import { cloneElement, useId } from 'react';
+import { cloneElement, useEffect, useId, useLayoutEffect, useRef } from 'react';
 import { StatusMessage, Switch } from '@xchain-wallet/core/ui';
 import { userFacingMessage } from '../../utils/userFacingMessage.js';
 import cardStyles from '../../../ui/Card.module.css';
+import { useBackHandler } from '../../../ui/backStack.js';
 
 // A row's layout. The rows below draw their surface with the shared card
 // class (ui/Card.module.css), so a row inside a wide form card flattens.
@@ -251,15 +252,93 @@ export function Status({ text, tone, id }) {
  * @param {object} props
  * @param {string | null | undefined} [props.error]   the form-level error, if any
  * @param {{ label: string, onAction: () => void | Promise<void> }} [props.recovery]   a one-click fix shown with the error
+ * @param {() => void} [props.onCancel]   closes the form; passing it also moves focus into the form on open, closes it on Escape and returns focus to its opener
+ * @param {boolean} [props.cancelDisabled]   swallow Escape while the form is busy
  * @param {import('react').ReactNode} props.children  the form and its card
  */
-export function SettingsInlineForm({ error, recovery, children }) {
+export function SettingsInlineForm({ error, recovery, onCancel, cancelDisabled = false, children }) {
+    const rootRef = useRef(/** @type {HTMLDivElement | null} */ (null));
+    const managed = typeof onCancel === 'function';
+    // The control that opened the form is the focused element while this
+    // renders, before the commit removes it.
+    const openerRef = useRef(/** @type {RememberedControl | null} */ (null));
+    const wasManaged = useRef(false);
+    if (managed && !wasManaged.current) openerRef.current = rememberFocusedControl();
+    useLayoutEffect(() => { wasManaged.current = managed; });
+    // Escape closes the form before the Settings page behind it.
+    useBackHandler(managed ? onCancel : undefined, cancelDisabled);
+
+    // A form that replaces its opener takes focus on its first field, so the
+    // keyboard cursor never falls to the page.
+    useLayoutEffect(() => {
+        if (!managed || !openerRef.current || !focusIsLost()) return;
+        /** @type {HTMLElement | null | undefined} */ (rootRef.current?.querySelector(FORM_FIELD_SELECTOR))?.focus();
+    }, [managed]);
+
+    // Closing the form hands focus back to its opener (or the control that
+    // replaced it) when the closed form held it.
+    useEffect(() => {
+        if (!managed) return undefined;
+        return () => {
+            if (!focusIsLost()) return;
+            findRememberedControl(openerRef.current)?.focus();
+        };
+    }, [managed]);
+
     return (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--xc-space-2)' }}>
+        <div ref={rootRef} style={{ display: 'flex', flexDirection: 'column', gap: 'var(--xc-space-2)' }}>
             {error ? <StatusMessage variant="error" recovery={recovery}>{error}</StatusMessage> : null}
             {children}
         </div>
     );
+}
+
+/**
+ * Keeps the keyboard cursor on a row whose button is replaced by another when
+ * the row changes state (Activate then Deactivate). Call `request` from the
+ * handler that causes the swap, put `target` on the button that takes over,
+ * and pass a value that changes with the swap.
+ *
+ * @param {unknown} swapKey
+ */
+export function useFocusAfterSwap(swapKey) {
+    const target = useRef(/** @type {HTMLElement | null} */ (null));
+    const wanted = useRef(false);
+    useEffect(() => {
+        if (wanted.current && focusIsLost()) target.current?.focus();
+        wanted.current = false;
+    }, [swapKey]);
+    return { target, request: () => { wanted.current = true; } };
+}
+
+const FORM_FIELD_SELECTOR = 'input:not([disabled]):not([type="hidden"]), textarea:not([disabled]), select:not([disabled]), button:not([disabled])';
+
+/** @typedef {{ el: HTMLElement, tag: string, label: string, scope: ParentNode }} RememberedControl */
+
+const controlLabel = (el) => (el.getAttribute('aria-label') || el.textContent || '').trim();
+
+/** True when the cursor is on the page itself, as after the focused control is removed. */
+export function focusIsLost() {
+    return typeof document !== 'undefined'
+        && (!document.activeElement || document.activeElement === document.body);
+}
+
+/** @returns {RememberedControl | null} the focused button or field inside the page content, if any */
+function rememberFocusedControl() {
+    if (typeof document === 'undefined') return null;
+    const el = /** @type {HTMLElement | null} */ (document.activeElement);
+    const scope = el?.closest?.('main');
+    if (!el || !scope || !['BUTTON', 'INPUT', 'SELECT', 'TEXTAREA'].includes(el.tagName)) return null;
+    return { el, tag: el.tagName, label: controlLabel(el), scope };
+}
+
+/** The remembered control itself, or the same-named control that took its place. */
+function findRememberedControl(remembered) {
+    if (!remembered) return null;
+    if (remembered.el.isConnected) return remembered.el;
+    const scope = remembered.scope.isConnected ? remembered.scope : document;
+    return /** @type {HTMLElement | undefined} */ ([...scope.querySelectorAll(remembered.tag)]
+        .find((candidate) => controlLabel(candidate) === remembered.label)) || null;
 }
 
 export const SETTINGS_LOAD_FALLBACK = 'Settings could not be loaded. Close and reopen the wallet, then try again.';

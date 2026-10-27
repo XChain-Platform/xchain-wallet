@@ -21,9 +21,10 @@
 // useCommandPalette / ShortcutHelp). Context shortcuts (§34.2) render
 // read-only: they dispatch inside their route, not from the settings table.
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useId, useMemo, useState } from 'react';
 import { Button } from '@xchain-wallet/core/ui';
 import { useSettings } from '../../hooks/useSettings.js';
+import { useBackHandler } from '../../../ui/backStack.js';
 import {
     SHORTCUTS,
     SHORTCUT_GROUPS,
@@ -119,6 +120,10 @@ export function KeyboardSection() {
     const [leaderLead, setLeaderLead] = useState(/** @type {string | null} */ (null));
     const [status, setStatus] = useState(/** @type {{ kind: 'ok' | 'error', text: string } | null} */ (null));
 
+    const labelPrefix = useId();
+    // Escape cancels a capture in progress before it can close the sub-page.
+    useBackHandler(capturingId ? () => { setCapturingId(null); setLeaderLead(null); } : undefined);
+
     useEffect(() => {
         if (!capturingId || typeof window === 'undefined') return undefined;
         const target = shortcuts.find((s) => s.id === capturingId);
@@ -203,12 +208,12 @@ export function KeyboardSection() {
                         return (
                             <div key={s.id} style={SHORTCUT_ROW}>
                                 <span style={{ display: 'flex', flexDirection: 'column', flex: 1, minWidth: 0 }}>
-                                    <span style={ROW_LABEL}>{s.label}</span>
+                                    <span id={`${labelPrefix}-${s.id}`} style={ROW_LABEL}>{s.label}</span>
                                     {availability ? <span style={{ ...ROW_LABEL, fontSize: 'var(--xc-text-xs)' }}>{availability}</span> : null}
                                 </span>
                                 <span style={ACTIONS}>
                                     {s.overridden ? (
-                                        <Button size="sm" variant="ghost" onClick={() => resetOne(s.id)}>
+                                        <Button size="sm" variant="ghost" onClick={() => resetOne(s.id)} aria-describedby={`${labelPrefix}-${s.id}`}>
                                             {t('settings.keyboard.reset')}
                                         </Button>
                                     ) : null}
@@ -225,6 +230,7 @@ export function KeyboardSection() {
                                             <Button
                                                 size="sm"
                                                 variant="secondary"
+                                                aria-describedby={`${labelPrefix}-${s.id}`}
                                                 onClick={() => {
                                                     setStatus(null);
                                                     setLeaderLead(null);

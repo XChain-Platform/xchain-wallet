@@ -117,6 +117,12 @@ export function BiometricRow() {
         doEnable();
     }
 
+    function cancelEnrol() {
+        setEnrolAction(null);
+        setPassword('');
+        setError(null);
+    }
+
     async function handleDisable() {
         if (busy) return;
         setBusy(true);
@@ -196,6 +202,8 @@ export function BiometricRow() {
             <SettingsInlineForm
                 error={error}
                 recovery={retryRef.current ? { label: t('common.tryAgain'), onAction: retryRef.current } : undefined}
+                onCancel={cancelEnrol}
+                cancelDisabled={busy}
             >
                 <form onSubmit={handleEnable} style={{ ...ROW, flexDirection: 'column', alignItems: 'stretch' }}>
                     <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--xc-space-1)' }}>
@@ -220,7 +228,7 @@ export function BiometricRow() {
                             size="sm"
                             variant="ghost"
                             icon={null}
-                            onClick={() => { setEnrolAction(null); setPassword(''); setError(null); }}
+                            onClick={cancelEnrol}
                             disabled={busy}
                         >
                             {t('common.cancel')}

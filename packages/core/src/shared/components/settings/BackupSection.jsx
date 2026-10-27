@@ -686,7 +686,7 @@ function UnlockPrompt({ label, hint, busy, error, onCancel, onSubmit }) {
         onSubmit(pw);
     };
     return (
-        <SettingsInlineForm error={error && error !== INCORRECT_PASSWORD ? error : null}>
+        <SettingsInlineForm error={error && error !== INCORRECT_PASSWORD ? error : null} onCancel={onCancel} cancelDisabled={busy}>
             <form onSubmit={submit} noValidate>
                 <FormSection title={label} description={hint} className={cardStyles.card}>
                     <Input
@@ -870,7 +870,7 @@ function DryRunForm({ busy, error, onCancel, onSubmit }) {
     };
 
     return (
-        <SettingsInlineForm error={error}>
+        <SettingsInlineForm error={error} onCancel={onCancel} cancelDisabled={busy}>
             <form onSubmit={submit} onKeyDown={submitOnlyFromLastField} noValidate>
                 <FormSection
                     title={t('settings.backup.testBackup')}
@@ -1059,7 +1059,7 @@ function PasswordPrompt({ label, hint, busy, operationTime, error, onCancel, onS
         onSubmit(pw1);
     };
     return (
-        <SettingsInlineForm error={error}>
+        <SettingsInlineForm error={error} onCancel={onCancel} cancelDisabled={busy}>
             <form onSubmit={submit} onKeyDown={submitOnlyFromLastField} noValidate>
                 <FormSection
                     title={t('settings.backup.exportEncryptedBackup')}
@@ -1261,7 +1261,7 @@ function PublishLabelsForm({ walletId, busy, error, password, onPasswordChange, 
     const canSubmit = !busy && !loadingChains;
 
     return (
-        <SettingsInlineForm error={error && error !== INCORRECT_PASSWORD ? error : null}>
+        <SettingsInlineForm error={error && error !== INCORRECT_PASSWORD ? error : null} onCancel={onCancel} cancelDisabled={busy}>
             <FormSection
                 title={t('settings.backup.publishLabelsOnChain')}
                 description={t('settings.backup.theLabelsContactsAreEncrypted')}
@@ -1401,7 +1401,7 @@ function RestoreLabelsForm({ walletId, busy, error, onCancel, onSubmit }) {
     const canSubmit = !!chainId && password.length > 0 && !busy;
 
     return (
-        <SettingsInlineForm error={error && error !== INCORRECT_PASSWORD ? error : null}>
+        <SettingsInlineForm error={error && error !== INCORRECT_PASSWORD ? error : null} onCancel={onCancel} cancelDisabled={busy}>
             <FormSection
                 title={t('settings.backup.checkChainForBackedUp')}
                 description={t('settings.backup.decryptsTheLabelsContactsFile')}

@@ -598,6 +598,7 @@ function CustomChainsRow({ developerMode }) {
     const [loadError, setLoadError] = useState(/** @type {string | null} */ (null));
     const [open, setOpen] = useState(false);
     const [pasted, setPasted] = useState('');
+    const cancelAdd = () => { setOpen(false); setPasted(''); setErrorText(null); };
     const [busy, setBusy] = useState(false);
     const [errorText, setErrorText] = useState(/** @type {string | null} */ (null));
     const [statusText, setStatusText] = useState(/** @type {string | null} */ (null));
@@ -731,7 +732,7 @@ function CustomChainsRow({ developerMode }) {
                 </>
             )}
         >
-            <SettingsInlineForm error={errorText}>
+            <SettingsInlineForm error={errorText} onCancel={open ? cancelAdd : undefined} cancelDisabled={busy}>
             {loadError ? <Status text={loadError} tone="error" /> : null}
             {!loading && chains.length === 0 && !loadError ? (
                 <EmptyState title={t('settings.developer.noCustomChainsYet')} titleAs="h3" body={t('settings.developer.chainsYouAddHereAppear')} />
@@ -787,7 +788,7 @@ function CustomChainsRow({ developerMode }) {
                             variant="ghost"
                             size="sm"
                             icon={null}
-                            onClick={() => { setOpen(false); setPasted(''); setErrorText(null); }}
+                            onClick={cancelAdd}
                             disabled={busy}
                         >
                             {t('common.cancel')}

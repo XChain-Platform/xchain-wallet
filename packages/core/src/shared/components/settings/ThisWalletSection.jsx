@@ -415,7 +415,7 @@ function ChangePasswordRow({ walletId, disabled }) {
         : fieldError('confirm');
 
     return (
-        <SettingsInlineForm error={error && error.field === null ? error.text : null}>
+        <SettingsInlineForm error={error && error.field === null ? error.text : null} onCancel={close} cancelDisabled={busy}>
             <form onSubmit={submit} onKeyDown={submitOnlyFromLastField} aria-busy={busy}>
                 <FormSection
                     title={t('settings.thisWallet.changeWalletPassword')}
@@ -486,7 +486,7 @@ function PublicKeyExport({
     onClose,
 }) {
     return (
-        <SettingsInlineForm error={stage === 'password' ? error : null}>
+        <SettingsInlineForm error={stage === 'password' ? error : null} onCancel={onClose} cancelDisabled={busy}>
             <FormSection
                 title={(accountName ? t('settings.thisWallet.extendedPublicKeysFor', { name: accountName }) : t('settings.thisWallet.extendedPublicKeys'))}
                 description={t('settings.thisWallet.anExtendedPublicKeyDoes')}
@@ -572,7 +572,7 @@ function RemoveConfirm({ walletName, busy, error, onCancel, onConfirm }) {
     // Require the exact wallet name so accidental destructive clicks stay disabled.
     const matches = typed === walletName;
     return (
-        <SettingsInlineForm error={error}>
+        <SettingsInlineForm error={error} onCancel={onCancel} cancelDisabled={busy}>
             <FormSection
                 title={t('settings.thisWallet.remove2', { walletName })}
                 description={(
