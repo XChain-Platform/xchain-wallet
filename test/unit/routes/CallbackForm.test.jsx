@@ -143,11 +143,61 @@ describe('CallbackForm review safety', () => {
         const messaging = mount();
         await readySubmit();
 
-        await waitFor(() => expect(messaging.tokenHolderSummary).toHaveBeenCalled());
-        expect(messaging.tokenHolderSummary).toHaveBeenCalledWith(expect.objectContaining({
+        await waitFor(() => expect(messaging.tokenHolderSummary).toHaveBeenCalledWith(expect.objectContaining({
             callbackAmount: '1.25',
             callbackDecimals: 2,
+        })));
+        for (const [args] of messaging.tokenHolderSummary.mock.calls) {
+            expect(args.callbackDecimals).toBe(2);
+        }
+    });
+
+    // The holder summary floors each holder's payout to the decimals it is
+    // given, so asking before the payout token loads shows a short figure.
+    function payoutByDecimals() {
+        return vi.fn(async ({ callbackDecimals }) => ({
+            recipientCount: 2,
+            totalPayout: callbackDecimals === 2 ? '2.5' : '2',
+            partial: false,
         }));
+    }
+
+    it('waits for the payout token before asking for the holder payout', async () => {
+        let releasePayout = () => {};
+        const payoutRead = new Promise((resolve) => {
+            releasePayout = () => resolve({ tick: 'PAY', divisibility: 2 });
+        });
+        const messaging = mount({
+            getTokenInfo: vi.fn(async ({ tick }) => (tick === 'CALLABLE' ? { ...TERMS } : payoutRead)),
+            tokenHolderSummary: payoutByDecimals(),
+        });
+        await readySubmit();
+        await new Promise((resolve) => { setTimeout(resolve, 20); });
+
+        expect(messaging.tokenHolderSummary).not.toHaveBeenCalled();
+        expect(screen.queryByText('2 PAY')).toBeNull();
+
+        releasePayout();
+        expect(await screen.findByText('2.5 PAY')).toBeTruthy();
+        for (const [args] of messaging.tokenHolderSummary.mock.calls) {
+            expect(args.callbackDecimals).toBe(2);
+        }
+    });
+
+    it('shows no payout figure when the payout token read fails', async () => {
+        const messaging = mount({
+            getTokenInfo: vi.fn(async ({ tick }) => (
+                tick === 'CALLABLE' ? { ...TERMS } : { tick: 'PAY', divisibility: null, loadError: true }
+            )),
+            tokenHolderSummary: payoutByDecimals(),
+        });
+        await readySubmit();
+        await waitFor(() => expect(messaging.getTokenInfo).toHaveBeenCalledWith(expect.objectContaining({ tick: 'PAY' })));
+        await new Promise((resolve) => { setTimeout(resolve, 20); });
+
+        expect(messaging.tokenHolderSummary).not.toHaveBeenCalled();
+        expect(screen.queryByText('Total payout')).toBeNull();
+        expect(screen.queryByText('2 PAY')).toBeNull();
     });
 
     it('shows a plain error for a malformed source before review', async () => {

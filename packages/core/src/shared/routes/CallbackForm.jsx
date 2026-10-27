@@ -216,7 +216,10 @@ export function CallbackForm({ walletId, onBack, initialChainId, initialTick, in
         sourceAddress: fromAddress?.address,
     });
     const payoutInfo = useTokenInfo({ chainId, tick: cbTick, skip: !cbTick });
-    const payoutDivisibility = payoutInfo == null
+    // Unknown until the payout token answers: a failed read carries no
+    // decimals, and guessing 0 floors every holder's payout to whole units.
+    const payoutPending = !!cbTick && payoutInfo == null;
+    const payoutDivisibility = payoutInfo == null || payoutInfo.loadError
         ? null
         : Number.isInteger(Number(payoutInfo.divisibility))
             && Number(payoutInfo.divisibility) >= 0
@@ -257,18 +260,25 @@ export function CallbackForm({ walletId, onBack, initialChainId, initialTick, in
             setSummaryLoading(false);
             return undefined;
         }
+        // The payout figure is floored to the payout token's decimals, so it
+        // waits for them instead of showing a short total meanwhile.
+        if (payoutDivisibility == null) {
+            setSummary(null);
+            setSummaryLoading(payoutPending);
+            return undefined;
+        }
         let cancelled = false;
         setSummaryLoading(true);
         messaging.tokenHolderSummary({
             chainId, tick: ticker, owner,
             callbackAmount: cbAmount,
-            callbackDecimals: payoutDivisibility ?? 0,
+            callbackDecimals: payoutDivisibility,
         })
             .then((s) => { if (!cancelled) setSummary(s || null); })
             .catch(() => { if (!cancelled) setSummary(null); })
             .finally(() => { if (!cancelled) setSummaryLoading(false); });
         return () => { cancelled = true; };
-    }, [chainId, ticker, cbTick, cbAmount, owner, payoutDivisibility, messaging, walletId]);
+    }, [chainId, ticker, cbTick, cbAmount, owner, payoutDivisibility, payoutPending, messaging, walletId]);
 
     const demoWallet = flowsLib.isDemoWallet(walletId);
     const blockReached = cbBlock != null
