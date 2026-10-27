@@ -25,6 +25,9 @@
     /* The brand mark has no matching size token at its default presentation width. */
     width: 96px;
     height: auto;
+    /* The mark is 750x464. The ratio reserves its height before the file
+       decodes, so the centred form does not move when the logo arrives. */
+    aspect-ratio: 750 / 464;
     margin-bottom: var(--xc-space-3);
 }
 

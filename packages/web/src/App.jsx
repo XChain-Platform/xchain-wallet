@@ -28,7 +28,7 @@
 // need to know about web-only chrome. Auto-hides when `window.xchain`
 // isn't injected, or when the user dismisses it for the session.
 
-import { Fragment, Suspense, lazy, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { Fragment, Suspense, lazy, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { Skeleton } from '@xchain-wallet/core/ui/Skeleton.jsx';
 import { useSupportedChains } from '@xchain-wallet/core/shared/hooks/useSupportedChains.js';
 import { useAutoLockPolicy } from '@xchain-wallet/core/shared/hooks/useAutoLockPolicy.js';
@@ -940,7 +940,9 @@ function AppInner() {
     // open and focused. The hostBridge NotificationService fires a window
     // CustomEvent for every notification; when the tab is backgrounded the
     // adapter shows an OS notification instead, so we skip the toast then.
-    useEffect(() => {
+    // A layout effect, so the listener comes off and the toasts are dismissed in
+    // the commit that shows the lock screen, before it paints.
+    useLayoutEffect(() => {
         if (status.state !== 'unlocked') return undefined;
         const gate = createNotificationToastGate();
         // Ids this effect put on screen: a lock must take them off again, since

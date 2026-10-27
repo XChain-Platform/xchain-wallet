@@ -43,3 +43,22 @@ for (const size of [{ width: 360, height: 600 }, { width: 360, height: 800 }, { 
         expect(Math.abs(after - before)).toBeLessThanOrEqual(1);
     });
 }
+
+// The logo has a width and an automatic height, so an image that has not decoded
+// yet takes no height and the centred form shifts by half of it once it does.
+// A request that never answers stands in for a slow decode.
+test('the locked logo keeps its height before its file loads', async ({ page }) => {
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await createWallet(page);
+    await lockWallet(page);
+    await page.route('**/logo-probe-never.png', () => {});
+    const heights = await page.evaluate(() => {
+        const logo = document.querySelector('img[src*="xchain-color"]');
+        const probe = logo.cloneNode();
+        probe.src = '/logo-probe-never.png';
+        logo.parentElement.append(probe);
+        return { loaded: logo.getBoundingClientRect().height, pending: probe.getBoundingClientRect().height };
+    });
+    expect(heights.loaded).toBeGreaterThan(40);
+    expect(Math.abs(heights.pending - heights.loaded)).toBeLessThanOrEqual(1);
+});

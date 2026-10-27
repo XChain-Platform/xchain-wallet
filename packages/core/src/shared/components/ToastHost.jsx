@@ -282,12 +282,16 @@ export function useToast() {
  * prompt) stays on it. A passing `loading` state (a status refresh after
  * adding a wallet) leaves toasts alone. Call it once from each shell's App.
  *
+ * The clear runs in a layout effect so it lands in the same frame as the lock
+ * screen: a passive effect runs after paint, and the screen would show the
+ * unlocked session's toasts for a frame.
+ *
  * @param {string} sessionState
  */
 export function useClearToastsOnLock(sessionState) {
     const { clearToasts } = useToast();
     const previous = useRef(sessionState);
-    useEffect(() => {
+    useLayoutEffect(() => {
         const was = previous.current;
         previous.current = sessionState;
         if (was !== sessionState && (sessionState === 'locked' || sessionState === 'no-wallet')) clearToasts();
