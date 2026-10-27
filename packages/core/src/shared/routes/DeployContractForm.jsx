@@ -30,6 +30,7 @@ import {
     NATIVE_FEE_UNVERIFIED_NOTICE,
 } from '../../sdk/nativeFeePreflight.js';
 import { submitFailureMessage } from '../utils/submitFailureMessage.js';
+import { userFacingMessage } from '../utils/userFacingMessage.js';
 import { humanizeDeployDiagnostic, humanizeGasRationale } from '../utils/deployDiagnostic.js';
 import { SignCredentials } from '../components/SignCredentials.jsx';
 import { useSignerReady } from '../hooks/useSignerReady.js';
@@ -306,7 +307,7 @@ export function DeployContractForm({ walletId, onBack }) {
                 setChainId(firstDeployable);
             })
             .catch((err) => {
-                if (!cancelled) setLoadError(err?.message || 'Failed to load addresses.');
+                if (!cancelled) setLoadError(userFacingMessage(err, 'Failed to load addresses.'));
             });
         return () => { cancelled = true; };
     }, [walletId, messaging, deployChainIds, deployChainCoins]);
@@ -510,7 +511,7 @@ export function DeployContractForm({ walletId, onBack }) {
             setValidation(null);
             setSizeInfo(null);
         } catch (e) {
-            setFormError(e?.message || `Could not load the "${templateName}" template.`);
+            setFormError(userFacingMessage(e, `Could not load the "${templateName}" template.`));
         } finally {
             setToolBusy(null);
         }
@@ -637,7 +638,7 @@ export function DeployContractForm({ walletId, onBack }) {
             setSizeInfo(res);
         } catch (e) {
             if (sizeRequestRef.current !== request || latestCodeRef.current !== source) return;
-            setFormError(e?.message || 'Size check failed.');
+            setFormError(userFacingMessage(e, 'Size check failed.'));
         } finally {
             if (sizeRequestRef.current === request) setSizeBusy(false);
         }
@@ -659,7 +660,7 @@ export function DeployContractForm({ walletId, onBack }) {
             if (!gasLimit) setGasLimit(String(suggested));
         } catch (e) {
             if (gasRequestRef.current !== request || latestCodeRef.current !== source) return;
-            setFormError(e?.message || 'Gas suggestion failed.');
+            setFormError(userFacingMessage(e, 'Gas suggestion failed.'));
         } finally {
             if (gasRequestRef.current === request) setGasBusy(false);
         }
@@ -687,7 +688,7 @@ export function DeployContractForm({ walletId, onBack }) {
             setResumable((rows) => rows.filter((x) => x.id !== id));
             if (resumeId === id) setResumeId(null);
         } catch (e) {
-            setFormError(e?.message || 'Could not discard the pending publish.');
+            setFormError(userFacingMessage(e, 'Could not discard the pending publish.'));
         } finally {
             setToolBusy(null);
         }
@@ -846,7 +847,7 @@ export function DeployContractForm({ walletId, onBack }) {
                 chainId,
                 coinTicker,
                 mandatory: nativeFee.mandatory,
-                fallback: err?.message || 'Publish failed.',
+                fallback: userFacingMessage(err, 'Publish failed.'),
             }));
         }
     }
@@ -941,7 +942,7 @@ export function DeployContractForm({ walletId, onBack }) {
                         chainId,
                         coinTicker,
                         mandatory: nativeFee.mandatory,
-                        fallback: err?.message || 'Publish failed.',
+                        fallback: userFacingMessage(err, 'Publish failed.'),
                     }),
             );
             setChunkProgress(null);

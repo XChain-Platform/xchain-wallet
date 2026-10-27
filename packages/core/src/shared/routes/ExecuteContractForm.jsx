@@ -194,6 +194,10 @@ export function ExecuteContractForm({ walletId, chainId, contractActionIndex, in
     const passwordRef = useRef(/** @type {HTMLInputElement | null} */ (null));
     const submitInFlightRef = useRef(false);
     const contractIdentityRef = useRef(`${chainId}\0${contractActionIndex}`);
+    // What the user has typed or reviewed by the time the abi answers. The abi
+    // reply is asynchronous, so it reads the latest values through this ref.
+    const typedCallRef = useRef({ method: '', paramsText: '', stage: 'form' });
+    typedCallRef.current = { method, paramsText, stage };
 
     useEffect(() => {
         let cancelled = false;
@@ -280,6 +284,13 @@ export function ExecuteContractForm({ walletId, chainId, contractActionIndex, in
                     setAbiParamValues(declaredValues);
                     setParamsText(declaredValues.join('|'));
                 } else if (initialMethod) {
+                    setManualMode(true);
+                } else if (typedCallRef.current.method.trim() !== ''
+                    || typedCallRef.current.paramsText.trim() !== ''
+                    || typedCallRef.current.stage !== 'form') {
+                    // A call the user already typed or is reviewing stays exactly
+                    // as it is; the declared methods wait behind the toggle
+                    // instead of replacing the method and arguments under them.
                     setManualMode(true);
                 } else {
                     const first = names[0];
