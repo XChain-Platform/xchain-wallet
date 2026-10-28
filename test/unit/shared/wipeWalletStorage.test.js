@@ -108,11 +108,41 @@ describe('wipeWalletStorage on renderer-backed shells', () => {
         expect(deleted).toEqual(['xchain-wallet']);
     });
 
-    it('resolves when the IndexedDB delete errors or is blocked, since the caller reloads anyway', async () => {
-        stubIndexedDB('onerror');
-        await expect(wipeWalletStorage()).resolves.toBeUndefined();
+    it('resolves when the IndexedDB delete is blocked, since the queued delete completes once other tabs close', async () => {
         stubIndexedDB('onblocked');
         await expect(wipeWalletStorage()).resolves.toBeUndefined();
+    });
+
+    it('keeps the wallet whole and throws when the browser refuses the IndexedDB delete', async () => {
+        const meta = '{"kdfParams":"x"}';
+        globalThis.localStorage.setItem(META_KEY, meta);
+        globalThis.localStorage.setItem('xc:activeWallet', '"w1"');
+        globalThis.localStorage.setItem(LOCKOUT_KEY, HIGH_LADDER);
+        stubIndexedDB('onerror');
+
+        await expect(wipeWalletStorage()).rejects.toThrow(/Could not clear the wallet data/);
+
+        // The vault blob survived, so its kdfParams and its guards stay with it.
+        expect(globalThis.localStorage.getItem(META_KEY)).toBe(meta);
+        expect(globalThis.localStorage.getItem('xc:activeWallet')).toBe('"w1"');
+        expect(globalThis.localStorage.getItem(LOCKOUT_KEY)).toBe(HIGH_LADDER);
+
+        // A retry once the browser allows the delete completes the wipe.
+        stubIndexedDB();
+        await wipeWalletStorage();
+        expect(globalThis.localStorage.getItem(META_KEY)).toBe(null);
+        expect(globalThis.localStorage.getItem('xc:activeWallet')).toBe(null);
+    });
+
+    it('still hands off to the shell when deleteDatabase throws instead of answering', async () => {
+        // A renderer whose IndexedDB throws on use never held the vault there;
+        // the shell store is where the wallet lives, so its wipe must still run.
+        globalThis.indexedDB = { deleteDatabase() { throw new DOMException('denied', 'SecurityError'); } };
+        const wipeStorage = vi.fn(async () => ({ ok: true }));
+        globalThis.xchainWalletBridge = { wipeStorage };
+
+        await expect(wipeWalletStorage()).resolves.toBeUndefined();
+        expect(wipeStorage).toHaveBeenCalledTimes(1);
     });
 
     it('removes the page-hosted broadcast queue, which holds signed tx bytes', async () => {

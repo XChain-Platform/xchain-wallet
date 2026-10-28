@@ -462,6 +462,28 @@ describe('desktop main entry point', () => {
         );
     });
 
+    it('tells sibling windows to re-read the session when a wipe fails after the host is torn down', async () => {
+        electron.app.whenReady.mockResolvedValueOnce();
+        const main = await import('../../../packages/desktop/main/index.js');
+        await vi.waitFor(() => expect(electron.BrowserWindow.instances).toHaveLength(1));
+        const sender = electron.BrowserWindow.instances[0];
+        const sibling = main.createWindow();
+        runtime.wipeRuntimeStores.mockResolvedValue({
+            ok: false,
+            cleared: [],
+            errors: [{ store: 'meta', message: 'EPERM: operation not permitted' }],
+        });
+        const wipe = electron.ipcMain.handle.mock.calls
+            .find(([channel]) => channel === 'xchain:wipe-storage')[1];
+
+        const result = await wipe({ sender: sender.webContents, senderFrame: { url: appIndex } });
+
+        expect(result.ok).toBe(false);
+        expect(result.error).toMatch(/meta: EPERM/);
+        expect(sibling.webContents.send).toHaveBeenCalledWith('xchain:state-changed', { kind: 'session' });
+        expect(sender.webContents.send).not.toHaveBeenCalledWith('xchain:state-changed', { kind: 'session' });
+    });
+
     it('restores, shows, and focuses the Electron window receiving a link', async () => {
         const { focusDeepLinkTarget } = await vi.importActual(
             '../../../packages/desktop/main/protocol.js',

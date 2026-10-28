@@ -29,6 +29,7 @@ import {
     attachWipeStorageListener,
 } from '@xchain-wallet/extension/src/background/wipeExtensionStorage.js';
 import { installExtensionWipeHook } from '@xchain-wallet/extension/src/storage/wipeHook.js';
+import { logConsole } from '@xchain-wallet/core/shared/utils/logConsole.js';
 import { attachChromeRuntime } from '@xchain-wallet/extension/src/background/ChromeRuntimeAdapter.js';
 
 /** A trusted extension page, the sender shape both listeners gate on. */
@@ -147,6 +148,75 @@ describe('background/wipeExtensionStorage', () => {
         const res = await wipeExtensionStorage({ local, session });
         expect(res.ok).toBe(false);
         expect(res.error).toMatch(/session store locked/);
+    });
+
+    it('empties the in-memory log so its next flush cannot write wiped wallet ids back', async () => {
+        const { local, session } = seededStores();
+        const saves = [];
+        logConsole.clear();
+        logConsole.attachMirror({ save: async (entries) => { saves.push(entries); }, debounceMs: 0, sourceAllow: () => true });
+        try {
+            logConsole.record({ source: 'background', message: 'unlocked wallet w-wiped' });
+
+            await wipeExtensionStorage({ local, session });
+            logConsole.record({ source: 'background', message: 'after the wipe' });
+            await new Promise((resolve) => setTimeout(resolve, 10));
+
+            const last = saves.at(-1).map((e) => e.message);
+            expect(last).toContain('after the wipe');
+            expect(last.join(' ')).not.toContain('w-wiped');
+        } finally {
+            logConsole.detachMirror();
+            logConsole.clear();
+        }
+    });
+
+    it('drops the log lines the host teardown writes after a successful wipe', async () => {
+        const runtime = fakeRuntime();
+        const local = fakeArea({ 'xchain.logConsole': { entries: [] } });
+        logConsole.clear();
+        try {
+            attachWipeStorageListener({
+                wipe: async () => {
+                    await local.remove(['xchain.logConsole']);
+                    return { ok: true, cleared: [] };
+                },
+                // The teardown locks the signers and logs each wallet id.
+                onWiped: async () => {
+                    logConsole.record({ source: 'signer:software', message: 'lock id=w-wiped' });
+                    await local.set({ 'xchain.logConsole': { entries: logConsole.entries() } });
+                },
+                local,
+            }, runtime);
+
+            const res = await runtime.emit({ type: WIPE_STORAGE_MESSAGE_TYPE }, trustedSender);
+
+            expect(res.ok).toBe(true);
+            expect(logConsole.entries()).toEqual([]);
+            expect(local.map.has('xchain.logConsole')).toBe(false);
+        } finally {
+            logConsole.clear();
+        }
+    });
+
+    it('keeps the vault whole when the session clear refuses, so its keys never outlive it', async () => {
+        const { local, session } = seededStores();
+        session.clear = async () => { throw new Error('session store locked'); };
+
+        const res = await wipeExtensionStorage({ local, session });
+
+        expect(res.ok).toBe(false);
+        // The master key and signing secret survived, so the vault they open stays too.
+        expect(session.map.get('xchain-wallet:session')).toBe('MASTER-KEY-BYTES');
+        expect(local.map.get('xchain-wallet:vault')).toBe('ENCRYPTED-VAULT-BLOB');
+        expect(local.map.get('xchain-wallet:vault-meta')).toBe('{"kdfParams":{"salt":"aa"}}');
+
+        // A retry once the store answers completes the wipe.
+        session.clear = async () => { session.map.clear(); };
+        const retry = await wipeExtensionStorage({ local, session });
+        expect(retry.ok).toBe(true);
+        expect(session.map.size).toBe(0);
+        expect(local.map.has('xchain-wallet:vault')).toBe(false);
     });
 });
 

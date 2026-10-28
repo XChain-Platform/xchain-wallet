@@ -29,11 +29,15 @@
 // teardown is not a wipe.
 
 import { BROADCAST_QUEUE_PRUNED_PREFIX } from '@xchain-wallet/core/shared/utils/wipeWalletStorage.js';
+import { logConsole } from '@xchain-wallet/core/shared/utils/logConsole.js';
 import { isTrustedExtensionSender } from '../bridge/publicSurface.js';
 import { serializeError } from './MessageHost.js';
 
 /** Message type the extension pages send to ask for a wipe. */
 export const WIPE_STORAGE_MESSAGE_TYPE = 'wallet.wipeStorage';
+
+/** Key the worker mirrors its diagnostic log to (background/logConsoleStorage.js). */
+const LOG_CONSOLE_KEY = 'xchain.logConsole';
 
 /** Upper bound on the pre-wipe step, so a hung seal cannot stall the erase. */
 export const BEFORE_WIPE_TIMEOUT_MS = 2000;
@@ -134,9 +138,37 @@ export async function wipeExtensionStorage(stores = {}) {
     const cleared = [];
     const errors = [];
 
-    // Each store is attempted independently. They hold DIFFERENT secrets, so
-    // a local-store failure must not skip the session clear: doing so left
-    // the session key resident while the caller was told the wipe succeeded.
+    // The session area goes FIRST. It holds the master key and the cached
+    // signing secret, which outlive the vault for the rest of the browser
+    // session if they survive it. A refused session clear therefore stops
+    // here with the vault intact: a whole wallet behind a plain error, rather
+    // than an install that reads as empty while its keys stay readable and
+    // nothing prompts a retry.
+    //
+    // Best-effort by contract but NOT silent: an engine without
+    // chrome.storage.session (pre-Chrome-102) never held the key in the first
+    // place, while a present-but-failing store is a secret that survived and
+    // has to reach the user.
+    if (session && typeof session.clear === 'function') {
+        try {
+            await session.clear();
+            cleared.push('chrome.storage.session (all)');
+        } catch (err) {
+            return { ok: false, cleared, error: err?.message || String(err) };
+        }
+    }
+
+    // The worker mirrors its in-memory log to `xchain.logConsole` on the
+    // next entry, so removing the key alone lets that flush write every
+    // pre-wipe line, wallet ids included, straight back. Empty the buffer first.
+    try {
+        logConsole.clear();
+    } catch (_err) {
+        // The key removal below still runs.
+    }
+
+    // A local-store failure past this point leaves a vault no session can
+    // open, which the lock screen meets and offers to reset again.
     try {
         if (!local || typeof local.remove !== 'function') {
             throw new Error('chrome.storage.local is unavailable');
@@ -160,21 +192,27 @@ export async function wipeExtensionStorage(stores = {}) {
         }
     }
 
-    // Best-effort by contract but NOT silent: an engine without
-    // chrome.storage.session (pre-Chrome-102) never held the key in the first
-    // place, while a present-but-failing store is a secret that survived and
-    // has to reach the user.
-    if (session && typeof session.clear === 'function') {
-        try {
-            await session.clear();
-            cleared.push('chrome.storage.session (all)');
-        } catch (err) {
-            errors.push(err?.message || String(err));
-        }
-    }
-
     if (errors.length) return { ok: false, cleared, error: errors.join('; ') };
     return { ok: true, cleared };
+}
+
+/**
+ * Empty the in-memory log and remove its persisted copy, best-effort.
+ *
+ * @param {{ remove?: (keys: string[]) => Promise<void> } | undefined} local
+ * @returns {Promise<void>}
+ */
+async function dropWipedLog(local) {
+    try {
+        logConsole.clear();
+    } catch (_err) {
+        // The key removal below still runs.
+    }
+    try {
+        if (local && typeof local.remove === 'function') await local.remove([LOG_CONSOLE_KEY]);
+    } catch (_err) {
+        // The wipe itself succeeded; a log line left behind is not worth failing it.
+    }
 }
 
 /**
@@ -191,7 +229,10 @@ export async function wipeExtensionStorage(stores = {}) {
  *
  * @param {{ beforeWipe?: () => void | Promise<void>,
  *           onWiped?: () => void | Promise<void>,
- *           wipe?: typeof wipeExtensionStorage }} [deps]
+ *           wipe?: typeof wipeExtensionStorage,
+ *           local?: { remove: (keys: string[]) => Promise<void> } }} [deps]
+ *   `local` (tests) defaults to chrome.storage.local; after a successful wipe
+ *   the log lines the teardown wrote are removed from it.
  *   `beforeWipe` runs BEFORE the clear, bounded by BEFORE_WIPE_TIMEOUT_MS, and
  *   a failure there never stops the wipe; it is where the caller seals writers
  *   that could put wiped data back, since a write already inside set() cannot be
@@ -235,6 +276,9 @@ export function attachWipeStorageListener(deps = {}, chromeRuntime) {
             } catch (err) {
                 console.error('[xchain] wipe teardown failed:', err);
             }
+            // The teardown logs the signers it locks by wallet id, after the
+            // clear. Drop those lines too, so the erased wallet leaves no id behind.
+            if (result?.ok === true) await dropWipedLog(deps.local ?? globalThis.chrome?.storage?.local);
             // Report the WIPE's own verdict, not the fact that the handler
             // ran. A hardcoded true made a failed clear read as a successful
             // wipe: core's wipeShellStorage gates on response.ok !== true, so

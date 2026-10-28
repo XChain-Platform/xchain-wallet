@@ -689,7 +689,8 @@ export function tearDownHost(runtime) {
  * write a store back after it was unlinked.
  *
  * Per-store failures are collected rather than thrown so one unwritable
- * file cannot leave the others behind; the caller reports `ok`.
+ * file cannot leave the others behind; the caller reports `ok`. The meta is
+ * the exception: when it will not go, the wipe stops with the wallet whole.
  *
  * @param {DesktopRuntime} runtime
  * @returns {Promise<WipeResult>}
@@ -727,7 +728,6 @@ export async function wipeRuntimeStores(runtime) {
         // and its file go with it, as every other shell's reset does.
         ['panicMode', runtime.panicModeStore],
     ];
-    if (runtime.panicModeStore) flowsLib.applyExternalPanicModeState(null);
     for (const [name, backend] of targets) {
         if (!backend || typeof backend.clear !== 'function') continue;
         try {
@@ -735,8 +735,15 @@ export async function wipeRuntimeStores(runtime) {
             cleared.push(name);
         } catch (err) {
             errors.push({ store: name, message: String(err?.message ?? err) });
+            // A meta file that will not go must keep its blob: unlinking the
+            // blob anyway leaves the meta-alone dead end the order above
+            // avoids, while stopping here leaves the wallet whole for a retry.
+            if (name === 'meta') break;
         }
     }
+    // Main's in-memory freeze follows its file: a wipe that stopped before the
+    // file went leaves the surviving wallet frozen, in memory as on disk.
+    if (cleared.includes('panicMode')) flowsLib.applyExternalPanicModeState(null);
     return { ok: errors.length === 0, cleared, errors };
 }
 

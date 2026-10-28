@@ -1281,8 +1281,11 @@ void runMainTask(async () => {
         }
         try {
             const result = await wipeRuntimeStores(runtime);
+            // The host is torn down before any store is touched, so every
+            // other window re-reads its session whatever the stores did;
+            // otherwise a sibling keeps showing an unlocked wallet with no host.
+            broadcastToWindows('xchain:state-changed', { kind: 'session' }, event.sender);
             if (result.ok) {
-                broadcastToWindows('xchain:state-changed', { kind: 'session' }, event.sender);
                 return { ok: true, cleared: result.cleared };
             }
             return {

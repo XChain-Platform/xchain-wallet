@@ -17,6 +17,7 @@ import { describe, expect, it, vi } from 'vitest';
 
 import { createRuntime, wipeRuntimeStores } from '../../../packages/desktop/main/runtime.js';
 import { handleSessionStatus } from '../../../packages/extension/src/background/sessionMeta.js';
+import { applyExternalPanicModeState, isSigningFrozen } from '../../../packages/core/src/flows/panicMode.js';
 import { assertFreshVault } from '../../../packages/extension/src/background/walletCreate.js';
 
 /**
@@ -79,6 +80,78 @@ describe('desktop reset interrupted between the vault and meta unlinks', () => {
         } else {
             // The lock screen carries Forgot password, which runs the reset again.
             expect(status.state).toBe('locked');
+        }
+    });
+});
+
+describe('desktop reset whose meta file refuses to unlink', () => {
+    function store(initial) {
+        let value = initial;
+        return {
+            load: vi.fn(async () => value),
+            save: vi.fn(async (next) => { value = next; }),
+            clear: vi.fn(async () => { value = null; }),
+        };
+    }
+
+    it('keeps the vault with its meta so the install still opens on the lock screen', async () => {
+        const storageBackend = store(new Uint8Array([1, 2, 3]));
+        const metaBackend = store({ kdfParams: { algo: 'argon2id', salt: 'AA' } });
+        const refuse = metaBackend.clear;
+        metaBackend.clear = vi.fn(async () => { throw Object.assign(new Error('operation not permitted'), { code: 'EPERM' }); });
+        const session = sessionBackend();
+        const runtime = createRuntime({
+            storageBackend,
+            metaBackend,
+            sessionBackend: session,
+            chainRegistry: {},
+            sdkRegistry: {},
+        });
+
+        const result = await wipeRuntimeStores(runtime);
+
+        expect(result.ok).toBe(false);
+        expect(result.errors.map((e) => e.store)).toEqual(['meta']);
+        expect(await storageBackend.load()).not.toBe(null);
+        const status = await handleSessionStatus({ storageBackend, sessionBackend: session });
+        expect(status.state).toBe('locked');
+
+        // Once the file answers, the retry from the lock screen completes the reset.
+        metaBackend.clear = refuse;
+        const retry = await wipeRuntimeStores(runtime);
+        expect(retry.ok).toBe(true);
+        expect(await storageBackend.load()).toBe(null);
+        expect(await metaBackend.load()).toBe(null);
+        await expect(assertFreshVault({ metaBackend, storageBackend })).resolves.toBeUndefined();
+    });
+
+    it('keeps the surviving wallet frozen in memory while its panic file stays armed', async () => {
+        const armed = { activatedAt: Date.now(), expiresAt: Date.now() + 600_000, durationMs: 600_000, armedBy: 'user' };
+        applyExternalPanicModeState(armed);
+        const panicModeStore = store(armed);
+        const metaBackend = store({ kdfParams: { algo: 'argon2id', salt: 'AA' } });
+        metaBackend.clear = vi.fn(async () => { throw new Error('operation not permitted'); });
+        const runtime = createRuntime({
+            storageBackend: store(new Uint8Array([1, 2, 3])),
+            metaBackend,
+            sessionBackend: sessionBackend(),
+            panicModeStore,
+            chainRegistry: {},
+            sdkRegistry: {},
+        });
+        try {
+            const result = await wipeRuntimeStores(runtime);
+
+            expect(result.ok).toBe(false);
+            expect(await panicModeStore.load()).toEqual(armed);
+            expect(isSigningFrozen()).toBe(true);
+
+            // A completed retry lifts the freeze along with its file.
+            metaBackend.clear = vi.fn(async () => {});
+            expect((await wipeRuntimeStores(runtime)).ok).toBe(true);
+            expect(isSigningFrozen()).toBe(false);
+        } finally {
+            applyExternalPanicModeState(null);
         }
     });
 });
