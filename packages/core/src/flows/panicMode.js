@@ -157,6 +157,31 @@ export function subscribePanicModeSaveStatus(listener) {
     return () => { saveStatusListeners.delete(listener); };
 }
 
+/** @type {Set<() => void>} */
+const stateListeners = new Set();
+
+// Any change to the freeze this context enforces: a hydrate or store event, a
+// held freeze, an activation, a deactivation, an expiry or a wipe. A screen
+// that asks for a password re-reads on it, so a freeze that loads or arrives
+// after it opened replaces the field at once.
+function notifyStateChange() {
+    for (const listener of [...stateListeners]) {
+        try { listener(); } catch (_err) { /* a listener fault never blocks the others */ }
+    }
+}
+
+/**
+ * Called after any change to the freeze this context enforces. The listener
+ * reads the state itself with getPanicModeState().
+ *
+ * @param {() => void} listener
+ * @returns {() => void} unsubscribe
+ */
+export function subscribePanicModeState(listener) {
+    stateListeners.add(listener);
+    return () => { stateListeners.delete(listener); };
+}
+
 /**
  * The stricter of two records: the one frozen for longer.
  * @param {PanicModeState} base
@@ -420,6 +445,8 @@ function expireState() {
     writeToken += 1;
     heldFreeze = null;
     setSaveStatus(PANIC_SAVE_OK);
+    // An expired record reads as no freeze whatever the store still holds.
+    notifyStateChange();
     if (persistentStore) {
         persistenceGeneration += 1;
         awaitingHydration = false;
@@ -509,6 +536,7 @@ function adoptStoredState(raw) {
     const state = coercePanicState(raw);
     memoryFallback = state.expiresAt === 0 ? null : state;
     memoryFallbackActive = false;
+    notifyStateChange();
     return state;
 }
 
@@ -528,6 +556,7 @@ export function holdPanicModeFreeze(raw, { unsaved = false } = {}) {
     if (!isSigningFrozen(state)) return readState();
     heldFreeze = stricterState(heldFreeze || emptyPanicModeState(), state);
     if (unsaved) setSaveStatus(PANIC_SAVE_UNSAVED);
+    notifyStateChange();
     return readState();
 }
 
@@ -583,6 +612,7 @@ export function activatePanicMode({ durationMs, nowMs = Date.now(), armedBy } = 
         armedBy: normalizeArmedBy(armedBy),
     };
     void writeActiveState(next);
+    notifyStateChange();
     return next;
 }
 
@@ -595,7 +625,10 @@ export function activatePanicMode({ durationMs, nowMs = Date.now(), armedBy } = 
  * @returns {Promise<boolean>}
  */
 export function deactivatePanicMode() {
-    return writeClearedState();
+    return writeClearedState().then((off) => {
+        notifyStateChange();
+        return off;
+    });
 }
 
 /** Clear the active freeze while keeping the configured persistence backend. */
@@ -610,12 +643,13 @@ export function clearPanicModeState() {
         persistenceGeneration += 1;
         const store = persistentStore;
         persistBestEffort(() => store.clear());
-        return;
+    } else {
+        const store = getStorage();
+        if (store) {
+            try { store.removeItem(STORAGE_KEY); } catch (_err) { /* ignore */ }
+        }
     }
-    const store = getStorage();
-    if (store) {
-        try { store.removeItem(STORAGE_KEY); } catch (_err) { /* ignore */ }
-    }
+    notifyStateChange();
 }
 
 /** Test seam: forget any injected persistence. */

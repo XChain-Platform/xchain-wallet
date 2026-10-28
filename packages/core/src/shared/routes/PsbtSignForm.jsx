@@ -81,7 +81,7 @@ import {
 import { isUserRejection } from '../hooks/useActionConfirmFlow.js';
 import { PsbtConfirmScreen } from '../components/PsbtConfirmScreen.jsx';
 import { HwSignBlock } from '../components/HwSignBlock.jsx';
-import { SigningReadyNote } from '../safety/PanicFreezeNotice.jsx';
+import { PanicPasswordGate, SigningReadyNote } from '../safety/PanicFreezeNotice.jsx';
 import { decodeBbqrPsbt, parseBbqrFrame } from '../../uri/bbqrPsbt.js';
 import { decodeUrPsbt, UrPsbtDecoder } from '../../uri/urPsbt.js';
 import { detectQrFrameFormat, describeUnsupportedFormat } from '../../uri/qrPsbtFormat.js';
@@ -1489,13 +1489,15 @@ export function PsbtSignForm({ walletId, onBack, initialPsbt }) {
                     </p>
                 </SigningReadyNote>
             ) : (
-                <Input
-                    type="password"
-                    label="Wallet password"
-                    value={password}
-                    onChange={(e) => { setPassword(e.target.value); if (error) setError(null); }}
-                    autoComplete="current-password"
-                />
+                <PanicPasswordGate>
+                    <Input
+                        type="password"
+                        label="Wallet password"
+                        value={password}
+                        onChange={(e) => { setPassword(e.target.value); if (error) setError(null); }}
+                        autoComplete="current-password"
+                    />
+                </PanicPasswordGate>
             )}
         </FormPage>
     );

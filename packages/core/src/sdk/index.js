@@ -18,3 +18,4 @@ export {
 export { adaptXChainSDK } from './defaultFactory.js';
 export { submitWithSigner } from './submitWithSigner.js';
 export { isDevMockAddress, mockDeriveAddress } from './devMockAddresses.js';
+export { DEV_MOCK_SIGNING_UNAVAILABLE, devMockSigningError } from './devMockErrors.js';

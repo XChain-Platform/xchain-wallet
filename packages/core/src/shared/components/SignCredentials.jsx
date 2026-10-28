@@ -36,7 +36,7 @@
 import { useCallback } from 'react';
 import { Input, FieldNote } from '../../ui/index.js';
 import { HwSignBlock } from './HwSignBlock.jsx';
-import { SigningReadyNote } from '../safety/PanicFreezeNotice.jsx';
+import { PanicPasswordGate, SigningReadyNote } from '../safety/PanicFreezeNotice.jsx';
 import { t } from '../../i18n/index.js';
 import '../../i18n/locales/en/components.js';
 import '../../i18n/locales/en/send.js';
@@ -142,17 +142,19 @@ export function SignCredentials({
         );
     }
     return (
-        <Input
-            ref={passwordRef}
-            type="password"
-            label={t('common.password')}
-            hint={t('components.messageConfirmScreen.requiredToSign')}
-            value={password || ''}
-            onChange={(e) => onPasswordChange?.(e.target.value)}
-            autoComplete="current-password"
-            disabled={disabled}
-            error={submitError || undefined}
-        />
+        <PanicPasswordGate>
+            <Input
+                ref={passwordRef}
+                type="password"
+                label={t('common.password')}
+                hint={t('components.messageConfirmScreen.requiredToSign')}
+                value={password || ''}
+                onChange={(e) => onPasswordChange?.(e.target.value)}
+                autoComplete="current-password"
+                disabled={disabled}
+                error={submitError || undefined}
+            />
+        </PanicPasswordGate>
     );
 }
 

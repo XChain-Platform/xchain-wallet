@@ -87,6 +87,37 @@ for (const parts of SIGN_SURFACES) {
     // The note is the literal sentence or its dictionary key (send.walletUnlocked).
     assert.match(src, /No password needed|t\('send\.walletUnlocked'\)/, `${file} still has the unlocked note`);
     assert.match(src, /<SigningReadyNote>/, `${file} guards the unlocked note with SigningReadyNote`);
+    // The locked branch asks for a password the freeze would refuse, so every
+    // sign password field sits inside the gate that states a self-armed freeze
+    // in its place.
+    assert.match(
+        src,
+        /<PanicPasswordGate>\s*<Input\b[^>]*?type="password"/,
+        `${file} puts its sign password field inside PanicPasswordGate`,
+    );
+    assert.doesNotMatch(
+        src,
+        /<\/SigningReadyNote>\s*\)\s*:\s*\(\s*<Input\b/,
+        `${file} has no sign password field outside the gate`,
+    );
 }
+
+// The extension approval window has no unlocked branch: it always asks for a
+// password, so it reads the freeze itself and states it first.
+const approvalSrc = readFileSync(
+    join(wsRoot, 'packages', 'extension', 'src', 'approval', 'kinds', 'SignApproval.jsx'),
+    'utf8',
+);
+assert.match(approvalSrc, /usePanicFreeze\(PANIC_SURFACE_SIGN\)/, 'the approval window reads the sign-surface freeze');
+assert.match(
+    approvalSrc,
+    /<ListPage>\s*\{panicFrozen \? \(\s*<PanicSignStatus/,
+    'the approval window states a self-armed freeze as its first content',
+);
+assert.match(
+    approvalSrc,
+    /const signingUnavailable = [^;]*\bpanicFrozen\b/,
+    'a self-armed freeze withdraws the password field and Approve',
+);
 
 console.log('panic-surfacing smoke OK');

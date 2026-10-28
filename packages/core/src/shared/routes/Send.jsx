@@ -71,7 +71,7 @@ import { useConfirmAction } from '../hooks/useConfirmAction.js';
 import { prebuiltPsbtFromComposed } from '../../flows/prebuiltPsbtFromComposed.js';
 import { ActionConfirmScreen } from '../components/ActionConfirmScreen.jsx';
 import { UndoSendToast } from '../components/UndoSendToast.jsx';
-import { PanicFreezeNotice, SigningReadyNote } from '../safety/PanicFreezeNotice.jsx';
+import { PanicFreezeNotice, PanicPasswordGate, SigningReadyNote } from '../safety/PanicFreezeNotice.jsx';
 import { panicRefusalMessage } from '../safety/panicNotice.js';
 import {
     resolveFeeConfig,
@@ -3699,19 +3699,21 @@ export function Send({ walletId, accountId, onBack, prefill = null, onDone, onCh
                         </p>
                     </SigningReadyNote>
                 ) : (
-                    <Input
-                        ref={passwordRef}
-                        type="password"
-                        label={t('common.password')}
-                        hint={t('send.passwordHint')}
-                        value={password}
-                        onChange={(e) => {
-                            setPassword(e.target.value);
-                            if (submitError) { setSubmitError(null); setSubmitErrorCause(null); }
-                        }}
-                        autoComplete="current-password"
-                        disabled={stage === 'submitting'}
-                    />
+                    <PanicPasswordGate>
+                        <Input
+                            ref={passwordRef}
+                            type="password"
+                            label={t('common.password')}
+                            hint={t('send.passwordHint')}
+                            value={password}
+                            onChange={(e) => {
+                                setPassword(e.target.value);
+                                if (submitError) { setSubmitError(null); setSubmitErrorCause(null); }
+                            }}
+                            autoComplete="current-password"
+                            disabled={stage === 'submitting'}
+                        />
+                    </PanicPasswordGate>
                 )}
             </FormPage>,
         );

@@ -58,15 +58,23 @@ function stubChrome({ refuseSet = false, refuseRemove = false } = {}) {
             onChanged: { addListener: (fn) => changeListeners.push(fn) },
         },
     });
-    // What the worker's runtime.onMessage would deliver for a message sent
-    // from an extension page (sender.id is ours, no tab).
+    // What runtime.onMessage delivers for a message sent from an extension
+    // page (sender.id is ours, no tab): every listener in every other context
+    // hears it, and the first response is the one the sender reads.
     const sendFromPage = (type, request, sender = { id: RUNTIME_ID, url: `chrome-extension://${RUNTIME_ID}/popup.html` }) =>
         new Promise((resolve, reject) => {
-            const handled = messageListeners.some((fn) => fn({ type, request }, sender, (response) => {
+            let answered = false;
+            const respond = (response) => {
+                if (answered) return;
+                answered = true;
                 if (response?.ok) resolve(response.result);
                 else reject(Object.assign(new Error(response?.error?.message || 'refused'), response?.error || {}));
-            }));
-            if (!handled) reject(new Error(`no listener for ${type}`));
+            };
+            let handled = false;
+            for (const fn of [...messageListeners]) {
+                if (fn({ type, request }, sender, respond) === true) handled = true;
+            }
+            if (!handled && !answered) reject(new Error(`no listener for ${type}`));
         });
     return { items, sendFromPage };
 }
@@ -172,14 +180,35 @@ describe('panic mode when chrome.storage.local refuses the write', () => {
         expect(worker.flows.isSigningFrozen()).toBe(false);
     });
 
+    it('shows a freeze armed in the popup to an approval window already open', async () => {
+        const chromeStub = stubChrome({ refuseSet: true });
+        const { popup } = await bootWorkerAndPopup(chromeStub);
+        const approval = await loadRealm();
+        await approval.adapter.initPanicModePersistence(approval.flows, { notifyWorker: chromeStub.sendFromPage });
+        expect(approval.flows.isSigningFrozen()).toBe(false);
+
+        popup.flows.activatePanicMode();
+        await settle();
+        expect(chromeStub.items[STORAGE_KEY]).toBeUndefined();
+        expect(approval.flows.isSigningFrozen()).toBe(true);
+
+        expect(await popup.flows.deactivatePanicMode()).toBe(true);
+        await settle();
+        expect(approval.flows.isSigningFrozen()).toBe(false);
+    });
+
     it('refuses the direct channel to a web page', async () => {
         const chromeStub = stubChrome({ refuseSet: true });
         const { worker } = await bootWorkerAndPopup(chromeStub);
         const record = { activatedAt: Date.now(), expiresAt: Date.now() + 60_000, durationMs: 60_000, armedBy: 'self' };
         const webSender = { id: RUNTIME_ID, url: 'https://example.test/', tab: { id: 4 }, origin: 'https://example.test' };
 
+        const approval = await loadRealm();
+        await approval.adapter.initPanicModePersistence(approval.flows, { notifyWorker: chromeStub.sendFromPage });
+
         await expect(chromeStub.sendFromPage('panic.state.hold', record, webSender))
             .rejects.toMatchObject({ code: 'FORBIDDEN_SENDER' });
         expect(worker.flows.isSigningFrozen()).toBe(false);
+        expect(approval.flows.isSigningFrozen()).toBe(false);
     });
 });

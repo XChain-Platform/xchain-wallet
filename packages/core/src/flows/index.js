@@ -628,6 +628,7 @@ export {
     holdPanicModeFreeze,
     getPanicModeSaveStatus,
     subscribePanicModeSaveStatus,
+    subscribePanicModeState,
     PANIC_SAVE_OK,
     PANIC_SAVE_UNSAVED,
     PANIC_SAVE_CLEAR_FAILED,

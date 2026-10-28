@@ -34,6 +34,8 @@
 //   - Extension (SW or page) → chrome.storage.local
 //   - No chrome.storage       → null (core falls back to localStorage)
 
+import { isTrustedExtensionSender } from '../bridge/publicSurface.js';
+
 const STORAGE_KEY = 'xchain.panicMode';
 
 /** Popup and side panel to service worker: hold this freeze in memory now. */
@@ -145,6 +147,11 @@ function createPanicModeStorage({ notifyWorker = null } = {}) {
  * after a refused save still shows the freeze the worker enforces. The worker
  * itself passes nothing and reads storage alone.
  *
+ * A renderer also follows the hold and resync messages another page sends the
+ * worker (chrome.runtime.sendMessage reaches every extension page), so an
+ * approval window already open when panic mode is armed elsewhere shows the
+ * freeze even when storage refused it and no storage event fired.
+ *
  * @param {{ configurePanicModePersistence: (s: unknown) => Promise<void>, applyExternalPanicModeState: (raw: unknown) => void, holdPanicModeFreeze?: (raw: unknown, opts?: { unsaved?: boolean }) => unknown, isSigningFrozen?: (state?: any) => boolean }} flows
  * @param {{ notifyWorker?: ((type: string, request?: unknown) => Promise<unknown>) | null }} [opts]
  * @returns {Promise<void>}
@@ -155,6 +162,7 @@ export async function initPanicModePersistence(flows, { notifyWorker = null } = 
     store.watch((state) => flows.applyExternalPanicModeState(state));
     await flows.configurePanicModePersistence(store);
     if (!notifyWorker || typeof flows.holdPanicModeFreeze !== 'function') return;
+    followPeerPanicMessages(flows, store);
     let held = null;
     try {
         held = await notifyWorker(PANIC_LOAD_MESSAGE_TYPE);
@@ -167,6 +175,35 @@ export async function initPanicModePersistence(flows, { notifyWorker = null } = 
     if (heldExpiry > storedExpiry && heldExpiry > Date.now()) {
         flows.holdPanicModeFreeze(held, { unsaved: true });
     }
+}
+
+/**
+ * A renderer's view of the direct channel: the worker answers every message,
+ * and this page only mirrors what it implies. A hold is held here too; a
+ * resync re-reads storage, which is how a deactivation that reached storage
+ * lifts a freeze this page holds only from a hold message. Extension pages
+ * only, as on the worker's side.
+ *
+ * @param {{ holdPanicModeFreeze: (raw: unknown) => unknown, applyExternalPanicModeState: (raw: unknown) => void }} flows
+ * @param {PanicModeStorage} store
+ */
+function followPeerPanicMessages(flows, store) {
+    const runtime = /** @type {any} */ (globalThis.chrome?.runtime);
+    if (!runtime?.onMessage?.addListener) return;
+    runtime.onMessage.addListener((message, sender) => {
+        if (!message || typeof message !== 'object') return false;
+        if (message.type !== PANIC_HOLD_MESSAGE_TYPE && message.type !== PANIC_RESYNC_MESSAGE_TYPE) return false;
+        if (!isTrustedExtensionSender(sender, runtime.id)) return false;
+        if (message.type === PANIC_HOLD_MESSAGE_TYPE) {
+            flows.holdPanicModeFreeze(message.request);
+        } else {
+            store.load()
+                .then((stored) => flows.applyExternalPanicModeState(stored))
+                .catch(() => { /* the next storage event or reopen corrects it */ });
+        }
+        // Never answers: the worker's reply is the one the sender reads.
+        return false;
+    });
 }
 
 /**

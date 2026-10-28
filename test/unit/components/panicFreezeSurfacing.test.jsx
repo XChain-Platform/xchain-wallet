@@ -21,7 +21,7 @@
 //      the duress flow keeps giving an observer no cue.
 
 import { describe, it, expect, afterEach } from 'vitest';
-import { render, screen, cleanup } from '@testing-library/react';
+import { act, render, screen, cleanup } from '@testing-library/react';
 import {
     PANIC_ARMED_DURESS,
     activatePanicMode,
@@ -29,6 +29,7 @@ import {
 } from '../../../packages/core/src/flows/panicMode.js';
 import {
     PanicFreezeNotice,
+    PanicPasswordGate,
     SigningReadyNote,
 } from '../../../packages/core/src/shared/safety/PanicFreezeNotice.jsx';
 import { SignCredentials } from '../../../packages/core/src/shared/components/SignCredentials.jsx';
@@ -90,10 +91,54 @@ describe('SignCredentials under a signing freeze', () => {
         expect(screen.getByText(/signing is frozen by panic mode/i)).toBeTruthy();
     });
 
-    it('leaves the locked password field alone', () => {
+    it('asks for no password and states the freeze when the user armed it', () => {
         activatePanicMode();
         render(<SignCredentials fromAddress={softwareAddress} chainId="bitcoin-mainnet" />);
+        expect(screen.queryByLabelText(/password/i)).toBeNull();
+        expect(screen.getByText(/panic mode is on/i)).toBeTruthy();
+    });
+
+    it('keeps the locked password field for a duress-armed freeze', () => {
+        activatePanicMode({ armedBy: PANIC_ARMED_DURESS });
+        const { container } = render(<SignCredentials fromAddress={softwareAddress} chainId="bitcoin-mainnet" />);
         expect(screen.getByLabelText(/password/i)).toBeTruthy();
+        expect(container.textContent).not.toMatch(/panic/i);
+    });
+
+    it('keeps the locked password field when signing is allowed', () => {
+        render(<SignCredentials fromAddress={softwareAddress} chainId="bitcoin-mainnet" />);
+        expect(screen.getByLabelText(/password/i)).toBeTruthy();
+    });
+});
+
+describe('PanicPasswordGate', () => {
+    const field = <label>Password<input type="password" /></label>;
+
+    it('shows the field when signing is allowed', () => {
+        render(<PanicPasswordGate>{field}</PanicPasswordGate>);
+        expect(screen.getByLabelText('Password')).toBeTruthy();
+    });
+
+    it('states a self-armed freeze in place of the field', () => {
+        activatePanicMode();
+        render(<PanicPasswordGate>{field}</PanicPasswordGate>);
+        expect(screen.queryByLabelText('Password')).toBeNull();
+        expect(screen.getByText(/panic mode is on/i)).toBeTruthy();
+    });
+
+    it('keeps the field and says nothing for a duress-armed freeze', () => {
+        activatePanicMode({ armedBy: PANIC_ARMED_DURESS });
+        const { container } = render(<PanicPasswordGate>{field}</PanicPasswordGate>);
+        expect(screen.getByLabelText('Password')).toBeTruthy();
+        expect(container.textContent).toBe('Password');
+    });
+
+    it('follows a freeze armed while the screen is open', () => {
+        render(<PanicPasswordGate>{field}</PanicPasswordGate>);
+        expect(screen.getByLabelText('Password')).toBeTruthy();
+        act(() => { activatePanicMode(); });
+        expect(screen.queryByLabelText('Password')).toBeNull();
+        expect(screen.getByText(/panic mode is on/i)).toBeTruthy();
     });
 });
 

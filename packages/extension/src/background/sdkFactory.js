@@ -96,7 +96,7 @@ export function createDevMockSdk(constructorOpts) {
                 // descriptor's default, which is p2pkh on dogecoin.
                 return sdkLib.mockDeriveAddress(chainId, opts?.type, publicKeyHex);
             },
-            signPsbt() { throw new Error('Dev SDK stub: signing requires the real xchain-sdk'); },
+            signPsbt() { throw sdkLib.devMockSigningError('Dev SDK stub: signing requires the real xchain-sdk'); },
             validateAddress(addr) {
                 return {
                     valid: typeof addr === 'string' && addr.length > 0,
@@ -111,7 +111,7 @@ export function createDevMockSdk(constructorOpts) {
             importWIF() { throw new Error('Dev SDK stub: WIF import requires the real xchain-sdk'); },
         },
         auth: {
-            signMessage() { throw new Error('Dev SDK stub: message signing requires the real xchain-sdk'); },
+            signMessage() { throw sdkLib.devMockSigningError('Dev SDK stub: message signing requires the real xchain-sdk'); },
             verifyMessage() { return false; },
             generateChallenge() { return ''; },
         },

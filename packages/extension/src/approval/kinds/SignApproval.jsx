@@ -33,6 +33,8 @@ import '@xchain-wallet/core/i18n/locales/en/signerSelect.js';
 import '@xchain-wallet/core/i18n/locales/en/verifySignature.js';
 import { BalanceChanges } from '@xchain-wallet/core/shared/components/BalanceChanges.jsx';
 import { RawPsbtViewer } from '@xchain-wallet/core/shared/components/RawPsbtViewer.jsx';
+import { PanicSignStatus, usePanicFreeze } from '@xchain-wallet/core/shared/safety/PanicFreezeNotice.jsx';
+import { PANIC_SURFACE_SIGN } from '@xchain-wallet/core/shared/safety/panicNotice.js';
 // §5.6 slice 4: the confirm surface's building blocks, reused here.
 // The whole <ConfirmActionModal> deliberately is NOT reused: this window is
 // already a confirm surface with its own Screen, origin block, always-allow
@@ -153,6 +155,7 @@ export function SignApproval({ id, kind, payload, onReject }) {
         /** @type {Set<string> | null} */ (null),
     );
     const [settings, setSettings] = useState(/** @type {any | null} */ (null));
+    const panicNotice = usePanicFreeze(PANIC_SURFACE_SIGN);
     const inputRef = useRef(/** @type {HTMLInputElement | null} */ (null));
     const requestedFee = approvalFeeRequest(payload, descriptor);
     const nativeTicker = tickerForDescriptor(descriptor);
@@ -747,7 +750,12 @@ export function SignApproval({ id, kind, payload, onReject }) {
         : 'Watcher mode never signs or asks for a password. Reject this request or switch to Normal mode to sign on this device.';
     const approvalBlocked = psbtApprovalBlocked || coSignApprovalBlocked
         || !!psbtRefusal || preflightBlocked || signInBlocked;
-    const signingUnavailable = watcherMode || watchOnlyBlocked;
+    // A freeze the user armed is stated first and the window asks for no
+    // password, since the worker refuses the signature whatever is typed. A
+    // duress-armed freeze leaves the window looking as it always does
+    // (panicNotice.js): the worker still refuses, and an observer sees no cue.
+    const panicFrozen = Boolean(panicNotice?.disclose);
+    const signingUnavailable = watcherMode || watchOnlyBlocked || panicFrozen;
     const modeApprovalBlocked = walletMode === null || signingUnavailable;
 
     async function handleApprove() {
@@ -824,6 +832,9 @@ export function SignApproval({ id, kind, payload, onReject }) {
         >
             <div className={styles.body}>
             <ListPage>
+                {panicFrozen ? (
+                    <PanicSignStatus notice={panicNotice} testId="approval-panic-freeze" role="alert" />
+                ) : null}
                 {descriptor ? (
                     <div className={styles.chainLine}>
                         <ChainBadge descriptor={descriptor} size="sm" showName />
@@ -974,7 +985,7 @@ export function SignApproval({ id, kind, payload, onReject }) {
                 }
             />
 
-                {watchOnlyBlocked ? (
+                {panicFrozen ? null : watchOnlyBlocked ? (
                     <StatusMessage variant="error" role="status">
                         {WATCH_ONLY_SIGNING_MESSAGE}
                     </StatusMessage>

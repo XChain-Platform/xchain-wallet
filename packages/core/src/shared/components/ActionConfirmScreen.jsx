@@ -23,7 +23,7 @@ import { registry as registryLib } from '@xchain-wallet/core';
 import { MessagingContext } from '../MessagingContext.js';
 import { ConfirmActionModal } from './ConfirmActionModal.jsx';
 import { SignCredentials } from './SignCredentials.jsx';
-import { SigningReadyNote } from '../safety/PanicFreezeNotice.jsx';
+import { PanicPasswordGate, SigningReadyNote } from '../safety/PanicFreezeNotice.jsx';
 import { formatNativeBaseUnits, tickerForDescriptor } from '../../registry/coinTicker.js';
 import { withOutcomeLabels } from '../utils/betOutcomeLabels.js';
 import { readActiveWallet } from '../utils/activeWalletMemory.js';
@@ -321,14 +321,16 @@ export function ActionConfirmScreen({
                             </p>
                         </SigningReadyNote>
                     ) : (
-                        <Input
-                            type="password"
-                            label={t('common.password')}
-                            hint={t('components.messageConfirmScreen.requiredToSign')}
-                            value={password}
-                            onChange={(e) => onPasswordChange(e.target.value)}
-                            autoComplete="current-password"
-                        />
+                        <PanicPasswordGate>
+                            <Input
+                                type="password"
+                                label={t('common.password')}
+                                hint={t('components.messageConfirmScreen.requiredToSign')}
+                                value={password}
+                                onChange={(e) => onPasswordChange(e.target.value)}
+                                autoComplete="current-password"
+                            />
+                        </PanicPasswordGate>
                     )}
                 </>
             )}

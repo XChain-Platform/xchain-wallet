@@ -39,6 +39,7 @@ import { deriveMasterKeyAsync, makeFreshKdfParams } from '../../core/src/crypto/
 import { defaultRegistry } from '../../core/src/registry/index.js';
 import { SDKRegistry } from '../../core/src/sdk/SDKRegistry.js';
 import { isDevMockAddress, mockDeriveAddress } from '../../core/src/sdk/devMockAddresses.js';
+import { devMockSigningError } from '../../core/src/sdk/devMockErrors.js';
 import { SignerPool } from '../../core/src/signers/SignerPool.js';
 import { Vault } from '../../core/src/storage/Vault.js';
 import { VaultEvictedError, VaultIncompleteError } from '../../core/src/storage/backend.js';
@@ -408,7 +409,7 @@ const createDevMockSdk = import.meta.env?.PROD ? null : (constructorOpts) => {
                 // descriptor's default, which is p2pkh on dogecoin.
                 return mockDeriveAddress(chainId, opts?.type, publicKeyHex);
             },
-            signPsbt() { throw new Error('Dev SDK stub: signing requires the real xchain-sdk'); },
+            signPsbt() { throw devMockSigningError('Dev SDK stub: signing requires the real xchain-sdk'); },
             validateAddress(addr) {
                 return {
                     valid: typeof addr === 'string' && addr.length > 0,
@@ -515,7 +516,7 @@ const createDevMockSdk = import.meta.env?.PROD ? null : (constructorOpts) => {
             return { schemaVersion: 1, verdict, restricted: false, checksRun: ['BALANCE_INSUFFICIENT'], findings, unverified: [], quote: null, stateHeight: null, elapsedMs: 0 };
         },
         auth: {
-            signMessage() { throw new Error('Dev SDK stub: message signing requires the real xchain-sdk'); },
+            signMessage() { throw devMockSigningError('Dev SDK stub: message signing requires the real xchain-sdk'); },
             verifyMessage() { return false; },
             generateChallenge() { return ''; },
         },

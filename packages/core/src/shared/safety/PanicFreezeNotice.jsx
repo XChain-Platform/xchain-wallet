@@ -13,6 +13,9 @@
 // re-read the persisted freeze and how to draw it.
 //
 // Re-read triggers, beyond the initial mount:
+//   - any change to the freeze this context enforces (subscribePanicModeState):
+//     a hydrate that lands after mount, a store event relayed from another
+//     extension context, a freeze held for the worker, an activation here
 //   - a 30s tick, so the countdown stays honest without a per-second render
 //   - window focus, because a popup or tab can be re-shown long after mount
 //   - the `storage` event, because another tab (or, in the extension, another
@@ -21,8 +24,8 @@
 
 import { useEffect, useState } from 'react';
 import { FormNotice, StatusMessage } from '../../ui/index.js';
-import { getPanicModeState } from '../../flows/panicMode.js';
-import { PANIC_SURFACE_HOME, panicFreezeNotice } from './panicNotice.js';
+import { getPanicModeState, subscribePanicModeState } from '../../flows/panicMode.js';
+import { PANIC_SURFACE_HOME, PANIC_SURFACE_SIGN, panicFreezeNotice } from './panicNotice.js';
 
 const TICK_MS = 30_000;
 
@@ -62,6 +65,7 @@ export function usePanicFreeze(surface = PANIC_SURFACE_HOME) {
             setNotice((prev) => (noticeKey(prev) === noticeKey(next) ? prev : next));
         };
         refresh();
+        const unsubscribe = subscribePanicModeState(refresh);
         const handle = setInterval(refresh, TICK_MS);
         if (typeof window !== 'undefined') {
             window.addEventListener('focus', refresh);
@@ -69,6 +73,7 @@ export function usePanicFreeze(surface = PANIC_SURFACE_HOME) {
         }
         return () => {
             cancelled = true;
+            unsubscribe();
             clearInterval(handle);
             if (typeof window !== 'undefined') {
                 window.removeEventListener('focus', refresh);
@@ -112,11 +117,40 @@ export function PanicFreezeNotice({ surface = PANIC_SURFACE_HOME }) {
  * @param {import('react').ReactNode} [props.children]
  */
 export function SigningReadyNote({ children }) {
-    const notice = usePanicFreeze('sign');
+    const notice = usePanicFreeze(PANIC_SURFACE_SIGN);
     if (!notice) return children ?? null;
     if (!notice.disclose) return null;
+    return <PanicSignStatus notice={notice} />;
+}
+
+/**
+ * Sign-screen stand-in for the password field. A screen that asks for a
+ * password the freeze will refuse invites the user to type it for nothing, so:
+ *
+ *   not frozen        renders `children` (the password field)
+ *   self-armed        renders the freeze in its place; with no password the
+ *                     caller's Approve stays disabled
+ *   duress-armed      renders `children` unchanged: a field that vanished
+ *                     would be the cue the duress flow promises not to give
+ *
+ * @param {object} props
+ * @param {import('react').ReactNode} [props.children]
+ */
+export function PanicPasswordGate({ children }) {
+    const notice = usePanicFreeze(PANIC_SURFACE_SIGN);
+    if (!notice || !notice.disclose) return children ?? null;
+    return <PanicSignStatus notice={notice} />;
+}
+
+/**
+ * @param {object} props
+ * @param {import('./panicNotice.js').PanicNotice} props.notice
+ * @param {string} [props.testId]
+ * @param {string} [props.role]
+ */
+export function PanicSignStatus({ notice, testId, role }) {
     return (
-        <StatusMessage variant="error">
+        <StatusMessage variant="error" testId={testId} role={role}>
             <strong>{notice.title}</strong>{' '}{notice.detail}
         </StatusMessage>
     );

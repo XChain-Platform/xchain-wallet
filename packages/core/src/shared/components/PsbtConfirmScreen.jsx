@@ -27,7 +27,7 @@
 import { Input } from '@xchain-wallet/core/ui';
 import { ConfirmActionModal } from './ConfirmActionModal.jsx';
 import { PsbtIntentPanel } from './PsbtIntentPanel.jsx';
-import { SigningReadyNote } from '../safety/PanicFreezeNotice.jsx';
+import { PanicPasswordGate, SigningReadyNote } from '../safety/PanicFreezeNotice.jsx';
 import { isUnreadableActionReason } from './psbtDecodeReasons.js';
 import { t } from '../../i18n/index.js';
 import '../../i18n/locales/en/components.js';
@@ -146,14 +146,16 @@ export function PsbtConfirmScreen({
                     </p>
                 </SigningReadyNote>
             ) : (
-                <Input
-                    type="password"
-                    label={t('common.password')}
-                    hint={t('components.messageConfirmScreen.requiredToSign')}
-                    value={password}
-                    onChange={(e) => onPasswordChange(e.target.value)}
-                    autoComplete="current-password"
-                />
+                <PanicPasswordGate>
+                    <Input
+                        type="password"
+                        label={t('common.password')}
+                        hint={t('components.messageConfirmScreen.requiredToSign')}
+                        value={password}
+                        onChange={(e) => onPasswordChange(e.target.value)}
+                        autoComplete="current-password"
+                    />
+                </PanicPasswordGate>
             )}
         />
     );
