@@ -135,22 +135,30 @@ export function MigrateToBip39({ legacyWalletId, onBack, onMigrated, onSweepChai
     }, [newWalletId, messaging, addressLoadSeq]);
 
     const perChainPairs = useMemo(() => {
-        /** @type {Array<{ chainId: string, legacy: string | null, next: string | null }>} */
+        /** @type {Array<{ chainId: string, legacy: string[], next: string | null }>} */
         const rows = [];
         const chains = new Set([
             ...Object.keys(legacyAddrs || {}),
             ...Object.keys(newAddrs || {}),
         ]);
         for (const chainId of chains) {
-            const legacy = (legacyAddrs?.[chainId] || []).find(
-                (a) => a.source === 'hd' && externalIndexOf(a.derivationPath) !== null,
-            );
+            // A restored Counterwallet phrase holds every used receive address,
+            // and tokens sit on whichever one received them, so each receive
+            // address and each imported key gets its own sweep. Change
+            // addresses hold no tokens of their own, and watch-only addresses
+            // hold no key to sign with.
+            const legacy = (legacyAddrs?.[chainId] || [])
+                .map((a) => ({ a, index: a.source === 'hd' ? externalIndexOf(a.derivationPath) : null }))
+                .filter(({ a, index }) => (a.source === 'hd' && index !== null) || a.source === 'imported-wif')
+                .sort((x, y) => (x.index ?? Infinity) - (y.index ?? Infinity))
+                .map(({ a }) => a.address)
+                .filter((address, i, list) => address && list.indexOf(address) === i);
             const next = (newAddrs?.[chainId] || []).find(
                 (a) => a.source === 'hd' && externalIndexOf(a.derivationPath) !== null,
             );
             rows.push({
                 chainId,
-                legacy: legacy?.address || null,
+                legacy,
                 next: next?.address || null,
             });
         }
@@ -448,11 +456,11 @@ export function MigrateToBip39({ legacyWalletId, onBack, onMigrated, onSweepChai
                                         {d ? <ChainBadge descriptor={d} size="sm" showName={false} /> : 'Network'}
                                     </dt>
                                     <dd className={styles.detailsValue}>
-                                        {row.legacy ? (
-                                            <>
+                                        {row.legacy.length > 0 ? row.legacy.map((legacyAddress) => (
+                                            <div key={legacyAddress}>
                                                 <div>
                                                     <strong>Legacy address</strong>{' '}
-                                                    <AddressText address={row.legacy} />
+                                                    <AddressText address={legacyAddress} />
                                                 </div>
                                                 <div>
                                                     <strong>New address</strong>{' '}
@@ -467,15 +475,15 @@ export function MigrateToBip39({ legacyWalletId, onBack, onMigrated, onSweepChai
                                                             legacyWalletId,
                                                             newWalletId,
                                                             chainId: row.chainId,
-                                                            fromAddress: row.legacy,
+                                                            fromAddress: legacyAddress,
                                                             toAddress: row.next,
                                                         })}
                                                     >
                                                         Review sweep
                                                     </Button>
                                                 ) : null}
-                                            </>
-                                        ) : (
+                                            </div>
+                                        )) : (
                                             <em>No legacy address on this network.</em>
                                         )}
                                     </dd>
