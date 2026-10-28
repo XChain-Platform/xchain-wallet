@@ -28,14 +28,10 @@ async function installCoSignerDerivationStub(page) {
     await page.route('**/src/hostBridge.js*', async (route) => {
         const response = await route.fetch();
         const source = await response.text();
-        const seam = '    const sdk = {\n        wallet: {';
-        const replacement = `    const sdk = {
-        coSigner: {
-            deriveMuSig2P2TR() {
-                return { address: '${AGGREGATE_ADDRESS}' };
-            },
-        },
-        wallet: {`;
+        // The dev SDK derives a marker address from the keys; the stub pins one
+        // fixed address so the screens can be read by it.
+        const seam = '            deriveMuSig2P2TR(publicKeys) {\n';
+        const replacement = `${seam}                return { address: '${AGGREGATE_ADDRESS}', tweaks: [] };\n`;
         expect(source, 'the dev SDK construction seam changed').toContain(seam);
         await route.fulfill({ response, body: source.replace(seam, replacement) });
     });
