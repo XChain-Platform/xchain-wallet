@@ -20,6 +20,7 @@
 // so a later re-unlock doesn't race against stale state.
 
 import { clearSigningSecret } from './signingSecretSession.js';
+import { AUTO_LOCK_REQUEST_CEILING_MS } from '@xchain-wallet/core/shared/hooks/autoLockGuard.js';
 
 /**
  * Raised when any step of the lock sequence failed. Every other step still
@@ -115,12 +116,8 @@ export async function sequenceUnlockedSession(deps) {
     return deps.continueUnlock();
 }
 
-/**
- * Longest one signing or broadcast request holds a due idle lock. A hardware
- * wallet confirm can run for minutes; a request hung on an unreachable
- * network must not keep a wallet open for good.
- */
-export const AUTO_LOCK_REQUEST_CEILING_MS = 10 * 60_000;
+// The ceiling is shared with the foreground hold in core.
+export { AUTO_LOCK_REQUEST_CEILING_MS };
 
 // Requests that sign or broadcast. A due idle lock waits for one of these to
 // settle, the same work the foreground hook holds its lock for. A read never
