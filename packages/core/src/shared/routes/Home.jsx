@@ -1545,15 +1545,15 @@ export function Home({ onLocked, onResumeConfirm, onSend, onReceive, onSwap, onE
                         onLockWallet={onLockWallet}
                         actions={quickActions}
                     />
-                ) : offline ? (
-                    // Offline with nothing saved yet: the notice above says the
-                    // balances are unavailable, and the actions that need no
-                    // network (Receive) stay reachable beside the ones that
-                    // explain why they wait.
+                ) : offline || loadErrorText ? (
+                    // Offline, or a first balance read that failed, with nothing
+                    // saved yet: the notice above says the balances are
+                    // unavailable, and the actions stay reachable instead of
+                    // leaving Home with only a Retry button.
                     quickActions
-                ) : !loadErrorText ? (
+                ) : (
                     <HomeLoadingSkeleton actionCount={quickActionCount} />
-                ) : null}
+                )}
 
                 {activeWalletId ? (
                     <BackupReminderCard
