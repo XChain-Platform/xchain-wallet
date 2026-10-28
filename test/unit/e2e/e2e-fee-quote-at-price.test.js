@@ -15,7 +15,7 @@ import { describe, it, expect } from 'vitest';
 import { feeQuoteAtCoinPriceFactor } from '../../e2e/fixtures/feeQuoteAtPrice.js';
 import { compareNativeFeeQuote } from '../../../packages/core/src/flows/nativeFeeRequote.js';
 
-// A test01 RBTC ISSUE quote, as /feequote answered it.
+// A regtest RBTC ISSUE quote, as /feequote answered it.
 const VENUE_QUOTE = Object.freeze({
     supported: true, action: 'ISSUE', coin: 'BTC', feeDestination: 'mfeesX6rLE6V3WPg9tsbL2fHNS7E4rDAim',
     toleranceMin: '0.95000000', toleranceMax: '1.10000000', blockIndex: 3116, blockTime: 1793152220,
