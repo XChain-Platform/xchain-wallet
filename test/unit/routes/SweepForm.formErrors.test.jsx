@@ -357,6 +357,22 @@ describe('SweepForm preview and navigation states', () => {
         });
     });
 
+    it('renders one unavailable help line when multiple selected categories fail preview', async () => {
+        const q = await mountSweep({
+            sweepPreview: () => Promise.resolve({
+                ...EMPTY_PREVIEW,
+                balances: { rows: [], error: 'balance preview failed' },
+                ownerships: { rows: [], error: 'ownership preview failed' },
+            }),
+        });
+
+        await waitFor(() => {
+            const copies = Array.from(q.container.querySelectorAll('p'))
+                .filter((node) => node.textContent === 'Preview unavailable for this category; the sweep still moves it.');
+            expect(copies).toHaveLength(1);
+        });
+    });
+
     it('does not expose a balance lookup failure message', async () => {
         const q = await mountSweep({
             sweepPreview: () => Promise.reject(new Error('upstream host secret detail')),

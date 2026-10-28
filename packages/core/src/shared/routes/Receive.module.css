@@ -23,21 +23,6 @@
     outline-offset: calc(var(--xc-space-1) * 0.5);
 }
 
-/* The QR card spans the form like the address field below it; only the code
-   inside is capped, so card, address and actions share one left edge. */
-.qrBox {
-    margin: 0;
-    max-width: none;
-}
-
-/* On a wide screen the form is already a card, so the QR frame gives up its
-   border and keeps only the white quiet zone a scanner needs. */
-@media (min-width: 600px) {
-    .qrBox {
-        border-color: transparent;
-    }
-}
-
 /* The multisig address card flattens inside the wide form card like any card. */
 .multisigCard {
     composes: card from '../../ui/Card.module.css';
@@ -50,10 +35,9 @@
     margin-bottom: var(--xc-space-3);
 }
 
-/* The address field and QR actions span the form like every other field, so
-   they share its left edge in the wide card; the shared frame still caps the
-   QR itself at --xc-qr-frame-size. The doubled class outranks QrDisplay's
-   .stack cap whichever stylesheet the bundle emits last. */
+/* The address field and QR actions span the form like every other field, while
+   the unframed QR itself stays capped at --xc-qr-frame-size. The doubled class
+   outranks QrDisplay's .stack cap whichever stylesheet the bundle emits last. */
 .receiveQrDisplay.receiveQrDisplay {
     max-width: none;
 }

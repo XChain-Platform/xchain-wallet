@@ -66,6 +66,10 @@ const appHeaderCss = readFileSync(
     join(process.cwd(), 'packages/core/src/shared/components/AppHeader.module.css'),
     'utf8',
 );
+const headerSettingsCss = readFileSync(
+    join(process.cwd(), 'packages/core/src/shared/components/HeaderSettingsButton.module.css'),
+    'utf8',
+);
 
 const gear = () => screen.queryByRole('button', { name: 'Settings' })
     || screen.queryByRole('menuitem', { name: 'Settings' });
@@ -417,6 +421,17 @@ describe('AppHeader action row', () => {
         }
     });
 
+    it('fits the complete phone action menu in two columns without an inner scroller', () => {
+        render(<AppHeader {...allActions} platformCurrent="wallet" />);
+        openHeaderMenu();
+
+        expect(screen.getByRole('menu', { name: 'Header actions' })).toBeInTheDocument();
+        expect(screen.getAllByRole('menuitem').length).toBeGreaterThan(7);
+        expect(appHeaderCss).toMatch(
+            /@media \(max-width: 480px\)[\s\S]*?\.actionMenu\s*\{[^}]*display:\s*grid;[^}]*grid-template-columns:\s*repeat\(2, minmax\(0, 1fr\)\);[^}]*overflow-y:\s*hidden;/,
+        );
+    });
+
     it('returns focus to the header trigger when Escape closes its menu', () => {
         render(<AppHeader onScan={() => {}} onManageAddresses={() => {}} />);
         const trigger = screen.getByRole('button', { name: 'Open menu' });
@@ -489,6 +504,37 @@ describe('AppHeader action row', () => {
 });
 
 describe('HeaderSettingsButton section gating', () => {
+    it('uses the remaining phone viewport and compact sections for the complete popover', async () => {
+        render(
+            <HeaderSettingsButton
+                activeWallet={{ id: 'w1', name: 'Main' }}
+                activeAccount={{ id: 'a1', name: 'Everyday', index: 0 }}
+                onOpenWalletPicker={() => {}}
+                onOpenAccountPicker={() => {}}
+                onOpenSettings={() => {}}
+                chainRegistry={chainRegistry}
+                coinFamilies={COIN_FAMILIES}
+                networkFilter="all"
+                onNetworkFilterChange={() => {}}
+                activeNetwork="mainnet"
+                onActiveNetworkChange={() => Promise.resolve()}
+            />,
+        );
+        fireEvent.click(gear());
+
+        const popover = screen.getByRole('dialog', { name: 'Wallet settings' });
+        expect(await within(popover).findByText('Network filter')).toBeTruthy();
+        expect(within(popover).getByRole('button', { name: 'Main' })).toBeTruthy();
+        expect(within(popover).getByRole('button', { name: 'Everyday' })).toBeTruthy();
+        expect(within(popover).getByRole('button', { name: 'All settings' })).toBeTruthy();
+        expect(headerSettingsCss).toMatch(
+            /\.popover\.popover\s*\{[^}]*max-height:\s*calc\(var\(--xc-viewport-h, 100vh\) - var\(--xc-control-h-md\) - var\(--xc-space-6\)\);/,
+        );
+        expect(headerSettingsCss).toMatch(
+            /\.section\s*\{[^}]*gap:\s*var\(--xc-space-1\);[^}]*padding:\s*var\(--xc-space-1\) var\(--xc-space-2\);/,
+        );
+    });
+
     it('closes the settings popover on Android Back instead of minimizing the app', () => {
         render(
             <HeaderSettingsButton

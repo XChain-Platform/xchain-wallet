@@ -12,6 +12,47 @@
     margin-bottom: var(--xc-space-4);
 }
 
+.welcomeHeader {
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    justify-content: center;
+    gap: var(--xc-space-3);
+    width: 100%;
+    min-width: 0;
+    text-align: start;
+}
+
+.welcomeHeader > .logoPopup,
+.welcomeHeader > .logoFull {
+    width: min(40%, 140px);
+    margin: 0;
+    flex: 0 1 auto;
+}
+
+.welcomeCopy {
+    display: flex;
+    flex-direction: column;
+    gap: var(--xc-space-1);
+    min-width: 0;
+}
+
+.welcomeTitle {
+    margin: 0;
+    color: var(--xc-text);
+    font-size: var(--xc-text-xl);
+    font-weight: 700;
+    line-height: 1.25;
+    overflow-wrap: anywhere;
+}
+
+.welcomeTagline {
+    margin: 0;
+    color: var(--xc-text-muted);
+    font-size: var(--xc-text-sm);
+    line-height: 1.5;
+}
+
 /* Short landscape viewports keep the first actions near the fold while the
    Screen body remains the single scroll container for every later action. */
 @media (max-height: 520px) {

@@ -30,9 +30,13 @@ afterEach(() => {
 
 describe('Onboarding wallet choice', () => {
     it('shows the brand block on the first-run screen that has no page header', () => {
-        draw({});
-        expect(screen.getByRole('heading', { name: 'XChain Wallet' })).toBeTruthy();
-        expect(screen.getByRole('img', { name: 'XChain Wallet' })).toBeTruthy();
+        const { container } = draw({});
+        const welcomeHeader = container.querySelector('[data-onboarding-welcome-header]');
+        expect(welcomeHeader).toBeTruthy();
+        expect(welcomeHeader).toContainElement(screen.getByRole('heading', { name: 'XChain Wallet' }));
+        expect(welcomeHeader).toContainElement(screen.getByRole('img', { name: 'XChain Wallet' }));
+        expect(welcomeHeader).toContainElement(screen.getByText(/open-source, non-custodial wallet/));
+        expect(welcomeHeader.children).toHaveLength(2);
     });
 
     it('drops the brand block under the Add wallet page header so the title and logo are not repeated', () => {

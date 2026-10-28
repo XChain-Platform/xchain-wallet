@@ -582,14 +582,18 @@ export function Onboarding({ onCreate, onImport, onImportFromFreeWallet, onPairP
                 // Inside the app the page header already names the screen and the
                 // app header carries the logo, so the brand block only shows on the
                 // first-run screen that has neither.
-                title={header ? undefined : branding.PRODUCT_NAME}
-                description={header ? undefined : branding.TAGLINE}
                 visual={header ? undefined : (
-                    <img
-                        src={branding.logoUrl()}
-                        alt={branding.PRODUCT_NAME}
-                        className={isFull ? styles.logoFull : styles.logoPopup}
-                    />
+                    <div className={styles.welcomeHeader} data-onboarding-welcome-header="">
+                        <img
+                            src={branding.logoUrl()}
+                            alt={branding.PRODUCT_NAME}
+                            className={isFull ? styles.logoFull : styles.logoPopup}
+                        />
+                        <div className={styles.welcomeCopy}>
+                            <h1 className={styles.welcomeTitle}>{branding.PRODUCT_NAME}</h1>
+                            <p className={styles.welcomeTagline}>{branding.TAGLINE}</p>
+                        </div>
+                    </div>
                 )}
                 status={demoError ? (
                     <StatusMessage

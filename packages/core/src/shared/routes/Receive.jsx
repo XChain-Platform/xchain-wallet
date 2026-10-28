@@ -1238,26 +1238,24 @@ export function Receive({ walletId, accountId, prefill = null, onBack, onChangeA
 
             {address ? (
                 <div className={`${qrStyles.stack} ${styles.receiveQrDisplay}`}>
-                    <div className={`${qrStyles.frame} ${styles.qrBox}`}>
-                        <div
-                            ref={qrSurfaceRef}
-                            className={styles.qrSurface}
-                            style={qrFit ? { '--xc-qr-fit-size': `${qrFit}px` } : undefined}
-                        >
-                            {qrDataUrl ? (
-                                <img
-                                    src={qrDataUrl}
-                                    alt={t('receive.qrCodeFor', { address: address.address })}
-                                    width={qrPixelSize}
-                                    height={qrPixelSize}
-                                    className={styles.qr}
-                                />
-                            ) : (
-                                <div className={styles.qrPlaceholder} aria-hidden="true">
-                                    {t('receive.renderingQr')}
-                                </div>
-                            )}
-                        </div>
+                    <div
+                        ref={qrSurfaceRef}
+                        className={styles.qrSurface}
+                        style={qrFit ? { '--xc-qr-fit-size': `${qrFit}px` } : undefined}
+                    >
+                        {qrDataUrl ? (
+                            <img
+                                src={qrDataUrl}
+                                alt={t('receive.qrCodeFor', { address: address.address })}
+                                width={qrPixelSize}
+                                height={qrPixelSize}
+                                className={styles.qr}
+                            />
+                        ) : (
+                            <div className={styles.qrPlaceholder} aria-hidden="true">
+                                {t('receive.renderingQr')}
+                            </div>
+                        )}
                     </div>
                     <AddressField
                         size="md"
@@ -1407,7 +1405,7 @@ export function Receive({ walletId, accountId, prefill = null, onBack, onChangeA
                     </header>
                     <div className={`${qrStyles.stack} ${styles.receiveQrDisplay}`}>
                         {multisigQrs[multisig.multisigConfigId] ? (
-                            <div className={`${qrStyles.frame} ${styles.qrBox}`}>
+                            <div className={styles.qrSurface}>
                                 <img
                                     src={multisigQrs[multisig.multisigConfigId]}
                                     alt={t('receive.multisigQrCodeFor', { address: multisig.address })}
@@ -1417,7 +1415,7 @@ export function Receive({ walletId, accountId, prefill = null, onBack, onChangeA
                                 />
                             </div>
                         ) : (
-                            <div className={`${qrStyles.frame} ${styles.qrBox}`} aria-hidden="true">
+                            <div className={styles.qrSurface} aria-hidden="true">
                                 <div className={styles.qrPlaceholder}>{t('receive.renderingMultisigQr')}</div>
                             </div>
                         )}

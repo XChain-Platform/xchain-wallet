@@ -384,6 +384,9 @@ export function SweepForm({
             return category && !category.error && Array.isArray(category.rows)
                 && category.rows.length === 0;
         });
+    const selectedPreviewUnavailable = CATEGORY_META.some(
+        (category) => flags[category.key] && preview?.[category.key]?.error,
+    );
 
     useEffect(() => {
         if (stage === 'review') {
@@ -1058,6 +1061,9 @@ export function SweepForm({
                     {flags[c.key] ? <CategoryPreview preview={preview} categoryKey={c.key} /> : null}
                 </div>
             ))}
+            {selectedPreviewUnavailable ? (
+                <p className={styles.hint}>Preview unavailable for this category; the sweep still moves it.</p>
+            ) : null}
             {previewLoading ? <p className={styles.hint}>Loading preview…</p> : null}
             {previewError ? (
                 <p className={styles.hint}>
@@ -1213,9 +1219,7 @@ function categoryCount(preview, key) {
 function CategoryPreview({ preview, categoryKey }) {
     const cat = preview?.[categoryKey];
     if (!cat) return null;
-    if (cat.error) {
-        return <p className={styles.hint}>Preview unavailable for this category; the sweep still moves it.</p>;
-    }
+    if (cat.error) return null;
     const rows = Array.isArray(cat.rows) ? cat.rows : [];
     if (rows.length === 0) return null;
     const shown = rows.slice(0, PREVIEW_ROW_CAP);

@@ -263,6 +263,7 @@ export function HeaderSettingsButton({
                 {open && typeof document !== 'undefined' ? createPortal(
                     <OverlaySurface
                         variant="popover"
+                        className={styles.popover}
                         surfaceRef={popoverPlacement.ref}
                         style={popoverPlacement.style}
                         title={t('shell.settingsButton.walletSettings')}
