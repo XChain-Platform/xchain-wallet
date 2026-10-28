@@ -327,3 +327,61 @@ describe('TokenAdminForm review interaction safety', () => {
         expect(buildActionPsbtRequest).not.toHaveBeenCalled();
     });
 });
+
+describe('Callback settings reads the holders again at Review', () => {
+    // The indexer refuses a callback edit once supply is distributed, after the
+    // fee is spent. The holder read that disables the fields can fail, or
+    // predate the first transfer out, so Review reads it again.
+    async function fillCallback(beforeReview = () => {}) {
+        fireEvent.change(await screen.findByLabelText('Callback token'), { target: { value: 'PAY' } });
+        fireEvent.change(screen.getByLabelText('Payout per unit'), { target: { value: '2' } });
+        fireEvent.change(screen.getByLabelText('Callback allowed from block'), { target: { value: '150' } });
+        const preview = screen.getByRole('button', { name: 'Preview' });
+        await waitFor(() => expect(preview).toBeEnabled());
+        beforeReview();
+        fireEvent.click(preview);
+    }
+
+    function base(tokenHolderSummary, buildActionPsbtRequest) {
+        return {
+            getIndexerWatermark: vi.fn().mockResolvedValue({ watermark: 100 }),
+            getTokenInfo: vi.fn(async ({ tick }) => (
+                tick === 'PAY'
+                    ? { chainId: CHAIN, tick: 'PAY', divisibility: 0, creator: NEW_OWNER }
+                    : { chainId: CHAIN, tick: 'TOKEN', creator: SOURCE.address, locks: {} }
+            )),
+            tokenHolderSummary,
+            buildActionPsbtRequest,
+        };
+    }
+
+    it('refuses while the holders cannot be read', async () => {
+        const buildActionPsbtRequest = vi.fn().mockResolvedValue({ psbtHex: '70736274ff00', chainId: CHAIN });
+        mountAdmin('callback-settings', base(vi.fn().mockRejectedValue(new Error('explorer 500')), buildActionPsbtRequest));
+        await fillCallback();
+        expect(await screen.findByRole('alert')).toHaveTextContent(
+            "Couldn't check whether TOKEN has holders. Callback settings can change only before any supply is distributed, so try again when the explorer answers.",
+        );
+        expect(screen.queryByRole('form', { name: /Review callback settings/ })).toBeNull();
+        expect(buildActionPsbtRequest).not.toHaveBeenCalled();
+    });
+
+    it('refuses when supply went out after the form opened', async () => {
+        const buildActionPsbtRequest = vi.fn().mockResolvedValue({ psbtHex: '70736274ff00', chainId: CHAIN });
+        let distributed = false;
+        const summary = vi.fn(async () => ({ isDistributed: distributed, holderCount: distributed ? 2 : 1 }));
+        mountAdmin('callback-settings', base(summary, buildActionPsbtRequest));
+        await fillCallback(() => { distributed = true; });
+        expect(await screen.findByRole('alert')).toHaveTextContent(
+            'Callback settings can only be changed before any supply is distributed. This token already has holders.',
+        );
+        expect(screen.queryByRole('form', { name: /Review callback settings/ })).toBeNull();
+        expect(buildActionPsbtRequest).not.toHaveBeenCalled();
+    });
+
+    it('reaches review while supply is still undistributed', async () => {
+        mountAdmin('callback-settings', base(vi.fn().mockResolvedValue({ isDistributed: false, holderCount: 1 }), vi.fn()));
+        await fillCallback();
+        expect(await screen.findByRole('form', { name: /Review callback settings/ })).toBeInTheDocument();
+    });
+});

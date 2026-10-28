@@ -16,6 +16,7 @@ import {
     decoder as decoderLib,
     flows as flowsLib,
 } from '@xchain-wallet/core';
+import '../../i18n/locales/en/routes.js';
 import '../../i18n/locales/en/send.js';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { useDemoGuard } from '../hooks/useDemoGuard.jsx';
@@ -562,9 +563,9 @@ export function TokenAdminForm({ walletId, mode, onBack, initialChainId, initial
     // supply is undistributed (indexer isDistributed = >1 holder or one
     // non-owner holder). Read the live holder summary so the form can
     // disable the fields with an honest reason. Null while loading /
-    // when the read fails: fail toward ALLOWING the edit (the indexer is
-    // the real gate; a false "distributed" would wrongly block a valid
-    // config change), and let the on-chain validation reject if wrong.
+    // when the read fails: the fields stay editable (a false "distributed"
+    // would wrongly block a valid config change), and Review reads the
+    // holders again and refuses while they are unread or distributed.
     const [distribution, setDistribution] = useState(/** @type {{ isDistributed: boolean, holderCount: number } | null} */ (null));
     useEffect(() => {
         if (mode !== 'callback-settings' || !chainId || !ticker) { setDistribution(null); return undefined; }
@@ -677,6 +678,25 @@ export function TokenAdminForm({ walletId, mode, onBack, initialChainId, initial
             chainRegistry,
         });
     }, [stage, actionParams, chainId]);
+
+    async function callbackDistributionError() {
+        if (flowsLib.isDemoWallet(walletId) || typeof messaging?.tokenHolderSummary !== 'function') return null;
+        let fresh = null;
+        try {
+            fresh = await messaging.tokenHolderSummary({
+                chainId, tick: ticker, owner: currentAssetInfo?.creator || null,
+            });
+        } catch {
+            fresh = null;
+        }
+        if (!fresh || typeof fresh.isDistributed !== 'boolean') {
+            return t('routes.tokenAdmin.callbackHoldersUnread', { tick: ticker.trim() });
+        }
+        setDistribution({ isDistributed: fresh.isDistributed, holderCount: Number(fresh.holderCount) || 0 });
+        return fresh.isDistributed
+            ? 'Callback settings can only be changed before any supply is distributed. This token already has holders.'
+            : null;
+    }
 
     async function handleReview(event) {
         event.preventDefault();
@@ -917,6 +937,17 @@ export function TokenAdminForm({ walletId, mode, onBack, initialChainId, initial
         // them stale. Mint settings also bounds a mint-now amount by supply.
         reviewInFlightRef.current = true;
         try {
+            // The holder read that disables the callback fields can fail or
+            // predate the first transfer out, and the indexer refuses a
+            // callback edit on distributed supply after the fee is spent, so
+            // Review reads it again and refuses when it is unread.
+            if (mode === 'callback-settings') {
+                const distributionError = await callbackDistributionError();
+                if (distributionError) {
+                    setFormError(distributionError);
+                    return;
+                }
+            }
             const watched = mode === 'mint-settings' && mintSupply
                 ? [...TOKEN_RECORD_GATE_KEYS, 'totalSupply']
                 : TOKEN_RECORD_GATE_KEYS;

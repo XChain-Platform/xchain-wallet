@@ -38,6 +38,7 @@ import { reserveFromSimulation } from '../../flows/reserveFromSimulation.js';
 import { livenessMessage } from '../../flows/inputLiveness.js';
 import { compareNativeFeeQuote, isNativeFeeRefusal, nativeFeeChangedError } from '../../flows/nativeFeeRequote.js';
 import { isHardPreflightFinding, preflightFindingKey } from '../utils/preflightFindingKey.js';
+import { APPROVE_REFUSAL_NAME } from '../utils/approveRefusal.js';
 import {
     clearQueuedResultHandoff,
     setQueuedResultHandoff,
@@ -658,9 +659,11 @@ export function useConfirmAction() {
                 return undefined;
             }
 
-            // The caller refused before signing, so nothing can spend the
-            // reserved inputs: hand them back like a Reject would.
-            if (err?.refusedBeforeSigning === true) {
+            // The caller refused before signing, or the form's own Approve-time
+            // check refused before anything was signed, so nothing can spend the
+            // reserved inputs: hand them back like a Reject would. Kept, the hold
+            // refuses every compose over the same coins for minutes.
+            if (err?.refusedBeforeSigning === true || err?.name === APPROVE_REFUSAL_NAME) {
                 approvalBeganRef.current = false;
                 releaseUnlessApproving(built);
             }

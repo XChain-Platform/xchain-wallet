@@ -298,3 +298,27 @@ describe('CallbackForm review safety', () => {
         expect(messaging.buildActionPsbtRequest).not.toHaveBeenCalled();
     });
 });
+
+describe('CallbackForm with an unread token record', () => {
+    // An explorer outage returns a record with no fields. The callback terms
+    // are then unknown, not absent: the form states the one issuer refusal and
+    // never tells the owner to set up a callback the token may already have.
+    it('states the outage once and never reads it as a missing callback', async () => {
+        const buildActionPsbtRequest = vi.fn();
+        mount({
+            getTokenInfo: vi.fn(async ({ tick }) => (
+                tick === 'CALLABLE' ? { tick: 'CALLABLE', loadError: true } : { tick: 'PAY', divisibility: 2 }
+            )),
+            buildActionPsbtRequest,
+        });
+
+        expect(await screen.findByText(
+            "The token's issuer could not be confirmed, so this action is not available. Try again when the explorer answers.",
+        )).toBeTruthy();
+        expect(screen.queryByText(/has no callback configured/)).toBeNull();
+        expect(screen.queryByText(/No callback configured/)).toBeNull();
+        expect(screen.getAllByText('Unavailable').length).toBeGreaterThan(0);
+        expect(screen.getByRole('button', { name: 'Preview' })).toBeDisabled();
+        expect(buildActionPsbtRequest).not.toHaveBeenCalled();
+    });
+});

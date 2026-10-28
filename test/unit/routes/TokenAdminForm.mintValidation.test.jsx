@@ -206,6 +206,8 @@ describe('TokenAdminForm callback payout token', () => {
             )),
             getIndexerWatermark: vi.fn().mockResolvedValue({ watermark: 900000 }),
             getHoldersForToken: vi.fn().mockResolvedValue([]),
+            // Review reads the holders again before a callback edit composes.
+            tokenHolderSummary: vi.fn().mockResolvedValue({ isDistributed: false, holderCount: 0 }),
             composeForConfirm,
         };
         const messaging = new Proxy(target, {

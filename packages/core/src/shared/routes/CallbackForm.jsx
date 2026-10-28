@@ -16,6 +16,7 @@ import {
     decoder as decoderLib,
     flows as flowsLib,
 } from '@xchain-wallet/core';
+import '../../i18n/locales/en/balances.js';
 import '../../i18n/locales/en/send.js';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { useDemoGuard } from '../hooks/useDemoGuard.jsx';
@@ -46,6 +47,7 @@ import { customFeeReviewStop } from '../../flows/feeEstimate.js';
 import { OwnAddressPickerScreen } from '../components/OwnAddressPickerScreen.jsx';
 import styles from './IssueTokenForm.module.css';
 import { submitFailureMessage } from '../utils/submitFailureMessage.js';
+import { APPROVE_REFUSAL_NAME, approveRefusal } from '../utils/approveRefusal.js';
 import { MAX_MEMO_LENGTH, memoLengthError, utf8ByteLength } from '../utils/memoLimit.js';
 import { isValidAddressForChain } from '../utils/addressValidation.js';
 import { tickerReferenceError } from '../utils/tickerGrammar.js';
@@ -266,6 +268,10 @@ export function CallbackForm({ walletId, onBack, initialChainId, initialTick, in
     const blockReached = cbBlock != null
         && (demoWallet || (currentHeight != null && currentHeight >= cbBlock));
     const configComplete = !!(cbTick && cbAmount && cbBlockText);
+    // A token record the explorer did not answer for carries no callback
+    // fields, which is not the same as a token with no callback: the terms
+    // are unknown, and the issuer refusal above already says to try again.
+    const termsUnread = !!assetInfo?.loadError;
 
     const [feePick, setFeePick] = useState(
         /** @type {{ mode: 'low' | 'normal' | 'fast' | 'custom', customRate?: number }} */ ({ mode: 'normal' }),
@@ -342,7 +348,9 @@ export function CallbackForm({ walletId, onBack, initialChainId, initialTick, in
             <dd className={styles.detailsValue}>
                 {configComplete
                     ? `${cbAmount} ${cbTick} per unit of ${ticker}`
-                    : <em>No callback configured for {ticker}.</em>}
+                    : termsUnread
+                        ? t('balances.unavailable')
+                        : <em>No callback configured for {ticker}.</em>}
             </dd>
             {cbBlock != null ? (
                 <>
@@ -418,23 +426,33 @@ export function CallbackForm({ walletId, onBack, initialChainId, initialTick, in
                 requoteNativeFee: ({ actionString, source }) => messaging.requoteNativeFee({
                     chainId, actionString, source,
                 }),
-                onApprove: (_creds, composed) => submit({
-                    params: actionParams,
-                    password: passwordValueRef.current,
-                    extraBase: {
-                        payFeeInNativeCoin: nativeFee.flag,
-                        ...(feePerKb != null ? { feePerKb } : {}),
-                        // The shared mapping, envelope and deferred outputs included.
-                        prebuiltPsbt: prebuiltPsbtFromComposed(composed),
-                    },
-                }),
+                onApprove: async (_creds, composed) => {
+                    // Review read the owner, terms, height and payout before
+                    // composing. The confirm page can stay open past an
+                    // ownership transfer or a payout-token spend, and its
+                    // pre-flight re-check waits for its report to age, so
+                    // Approve reads them all again and stops before signing.
+                    const approveError = await refreshBeforeReview();
+                    if (approveError) throw approveRefusal(approveError);
+                    return submit({
+                        params: actionParams,
+                        password: passwordValueRef.current,
+                        extraBase: {
+                            payFeeInNativeCoin: nativeFee.flag,
+                            ...(feePerKb != null ? { feePerKb } : {}),
+                            // The shared mapping, envelope and deferred outputs included.
+                            prebuiltPsbt: prebuiltPsbtFromComposed(composed),
+                        },
+                    });
+                },
             });
             setResult(res);
             setPassword('');
             setStage('done');
         } catch (err) {
             if (err && (err.reason === 'user-rejected' || err.name === 'UserRejectedError')) return;
-            console.error('Callback (confirm) failed:', err); // eslint-disable-line no-console
+            // The form's own Approve-time refusal is an answer, not a fault.
+            if (err?.name !== APPROVE_REFUSAL_NAME) console.error('Callback (confirm) failed:', err); // eslint-disable-line no-console
             setFormError(submitFailureMessage(err, {
                 chainId,
                 coinTicker,
@@ -918,7 +936,7 @@ export function CallbackForm({ walletId, onBack, initialChainId, initialTick, in
 
             {previewBlock}
             {summaryLoading ? <p className={styles.hint}>Loading holder preview…</p> : null}
-            {!configComplete ? (
+            {termsUnread ? null : !configComplete ? (
                 <FormNotice variant="warning" role="alert">
                     {`${ticker} has no callback configured. Set the callback token, payout, and block in Callback settings before you can recall.`}
                 </FormNotice>

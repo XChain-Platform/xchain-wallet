@@ -134,6 +134,8 @@ const messages = {
     'routes.sleepForm.lockStateUnread':
         "The wallet couldn't check whether this address is already locked, so it can't lock it. Check your connection and try again.",
     'routes.sleepForm.lockStatePending': 'Wait for the wallet to check whether this address is already locked.',
+    'routes.tokenAdmin.callbackHoldersUnread':
+        "Couldn't check whether {tick} has holders. Callback settings can change only before any supply is distributed, so try again when the explorer answers.",
 };
 
 addEnglish(messages);
