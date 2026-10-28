@@ -62,8 +62,26 @@ const polyfillShimResolver = {
     },
 };
 
+// xchain-sdk's bitcoinjs-lib 7 patch (src/utils/apply_bufferutils_patch/v7.js)
+// assigns `uint8Tools.writeInt64 = ...` on `require('uint8array-tools')`. A
+// browser build picks that package's ESM entry, whose CommonJS interop object
+// is getter-only, so the assignment throws "Cannot set property writeInt64
+// ... which has only a getter" when the SDK wallet module loads. The renderer
+// loads it to pair a Ledger or a Trezor, so without this every hardware
+// pairing fails.
+// Pin the CJS build (the one Node loads), resolved from bitcoinjs-lib's own
+// context, as packages/web and packages/extension do.
+const sdkRequire = createRequire(shimRequire.resolve('xchain-sdk/package.json'));
+const uint8ArrayToolsCjs = createRequire(sdkRequire.resolve('bitcoinjs-lib'))
+    .resolve('uint8array-tools');
+
 export default defineConfig({
     root: resolve(here, 'renderer'),
+    resolve: {
+        alias: [
+            { find: /^uint8array-tools$/, replacement: uint8ArrayToolsCjs },
+        ],
+    },
     build: {
         outDir: resolve(here, 'renderer', 'dist'),
         emptyOutDir: true,

@@ -14,6 +14,15 @@
 
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { EventEmitter } from 'node:events';
+import { createRequire } from 'node:module';
+import { join } from 'node:path';
+
+// The Transport class TransportWebHID extends. It offers on, off and emit,
+// and no once, so a fake built on EventEmitter alone can pass where the real
+// transport does not.
+const fromWebHid = createRequire(createRequire(join(process.cwd(), 'packages', 'desktop', 'package.json'))
+    .resolve('@ledgerhq/hw-transport-webhid'));
+const LedgerTransport = fromWebHid('@ledgerhq/hw-transport').default;
 
 vi.mock('@xchain-wallet/core/signerFactories', () => ({
     makeLedgerFactory: vi.fn(),
@@ -28,10 +37,10 @@ const {
     resetLedgerTransport,
 } = await import('../../../packages/desktop/renderer/signerFactories/ledgerFactory.js');
 
-function webHidLoader() {
+function webHidLoader(makeTransport = () => new EventEmitter()) {
     const made = [];
     const create = vi.fn(async () => {
-        const transport = new EventEmitter();
+        const transport = makeTransport();
         transport.id = made.length + 1;
         made.push(transport);
         return transport;
@@ -49,6 +58,18 @@ describe('desktop Ledger transport after an unplug', () => {
         const second = await getLedgerTransport(loader);
         expect(second).not.toBe(first);
         expect(made).toHaveLength(2);
+    });
+
+    it('opens a fresh transport once a @ledgerhq transport reports disconnect', async () => {
+        const { loader, made } = webHidLoader(() => new LedgerTransport());
+        const first = await getLedgerTransport(loader);
+        expect(typeof first.once).toBe('undefined');
+        first.emit('disconnect');
+        const second = await getLedgerTransport(loader);
+        expect(second).not.toBe(first);
+        expect(made).toHaveLength(2);
+        first.emit('disconnect');
+        await expect(getLedgerTransport(loader)).resolves.toBe(second);
     });
 
     it('keeps the live transport when an evicted one reports disconnect late', async () => {
