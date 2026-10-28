@@ -21,8 +21,13 @@
     color: var(--xc-text);
 }
 
+/* Toggle typography and radius match a small button while Chip continues to
+   own its border, spacing, height, and alignment. */
 .toggle {
     appearance: none;
+    border-radius: var(--xc-control-radius);
+    font-size: var(--xc-control-font-sm);
+    font-weight: 600;
     min-height: var(--xc-tap-min);
     background: var(--xc-control-bg);
     color: var(--xc-text);
