@@ -585,13 +585,13 @@ export function Locked({ onUnlocked, lockReason = null }) {
     // inside it so a screen reader does not repeat the sentence every second.
     const lockoutBanner = isLockedOut ? (
         <StatusMessage variant="warning" className={styles.lockoutBanner}>
-            {/* The device scope and network guidance distinguish this
-                local counter from a network-level restriction. */}
+            {/* "On this device" marks the counter as local. The lock screen
+                has no network control, so the banner names none. */}
             {t('locked.tooManyIncorrectPasswordsOn')}{' '}
             <span className={styles.lockoutCountdown} aria-live="off">
                 {formatCountdown(remainingMs)}
             </span>
-            {' '}{t('locked.beforeTryingAgainChangingNetworks')}
+            {' '}{t('locked.beforeTryingAgain')}
         </StatusMessage>
     ) : null;
 

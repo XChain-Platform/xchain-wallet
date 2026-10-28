@@ -75,9 +75,10 @@ describe('Locked password failure feedback', () => {
         const banner = screen.getByRole('status');
         expect(banner).toHaveTextContent(
             'Too many incorrect passwords on this device. '
-            + 'Wait 5 seconds before trying again. '
-            + 'Changing networks won\'t skip the wait.',
+            + 'Wait 5 seconds before trying again.',
         );
+        // The lock screen has no network control, so the banner names none.
+        expect(banner.textContent).not.toMatch(/network/i);
         expect(screen.getAllByText(/too many incorrect passwords on this device/i))
             .toHaveLength(1);
         expect(password).toHaveValue('');
