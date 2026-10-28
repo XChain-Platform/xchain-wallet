@@ -31,7 +31,10 @@
     gap: var(--xc-space-2);
     min-height: var(--xc-control-h-md);
     padding: 0 var(--xc-space-3);
-    border: 0;
+    /* A transparent 1px edge on every tab lets the selected and hovered tab,
+       which fill near white on a white page, show an outline without
+       shifting the row. */
+    border: 1px solid transparent;
     border-bottom: 2px solid transparent;
     background: transparent;
     color: var(--xc-text-muted);
@@ -47,6 +50,8 @@
 @media (hover: hover) and (pointer: fine) {
     .tab:hover:not([aria-selected='true']) {
         background: var(--xc-control-bg-hover);
+        border-color: var(--xc-control-border);
+        border-bottom-color: transparent;
         color: var(--xc-text);
     }
 }
@@ -65,7 +70,21 @@
 .tab[aria-selected='true'] {
     background: var(--xc-control-bg-hover);
     color: var(--xc-accent-text);
+    border-color: var(--xc-control-border);
     border-bottom-color: var(--xc-control-selected);
+}
+
+/* Forced colors paints a transparent border in CanvasText, which would outline
+   every tab. Idle tabs take the canvas colour and the selected tab takes the
+   selection colour, so only the current tab shows an edge. */
+@media (forced-colors: active) {
+    .tab {
+        border-color: Canvas;
+    }
+
+    .tab[aria-selected='true'] {
+        border-color: Highlight;
+    }
 }
 
 .label {

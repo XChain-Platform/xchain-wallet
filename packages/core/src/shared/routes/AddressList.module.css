@@ -102,7 +102,8 @@
     flex: 1 1 0;
     min-height: calc(var(--xc-control-h-md) - 2px);
     appearance: none;
-    background: var(--xc-surface);
+    /* The group paints the surface and draws the edge, as in SegmentedControl. */
+    background: transparent;
     border: none;
     border-inline-start: 1px solid var(--xc-border);
     padding: var(--xc-space-2) var(--xc-space-1);
