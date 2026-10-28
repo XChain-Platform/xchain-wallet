@@ -4,7 +4,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 import {
-    copyFileSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync,
+    copyFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync,
 } from 'node:fs';
 import net from 'node:net';
 import { tmpdir } from 'node:os';
@@ -20,13 +20,29 @@ function fixture() {
     const root = mkdtempSync(path.join(tmpdir(), 'run-suite-'));
     const toolDir = path.join(root, 'tools', 'sweep');
     const webDir = path.join(root, 'packages', 'web');
+    const smokeDir = path.join(root, 'test', 'smoke');
     mkdirSync(toolDir, { recursive: true });
     mkdirSync(webDir, { recursive: true });
+    mkdirSync(smokeDir, { recursive: true });
     for (const name of ['lane-pid.mjs', 'run-suite.mjs', 'wait-for.mjs']) {
         copyFileSync(path.join(SOURCE_DIR, name), path.join(toolDir, name));
     }
-    writeFileSync(path.join(root, 'unit.mjs'), "console.log(' Tests  2 passed | 1 skipped (3)');\n");
+    writeFileSync(path.join(root, 'unit.mjs'), `
+console.log(JSON.stringify(process.argv.slice(2)));
+console.log(' Tests  2 passed | 1 skipped (3)');
+`);
     writeFileSync(path.join(root, 'regression.mjs'), "console.log(' Tests  1 failed | 2 passed (3)'); process.exitCode = 1;\n");
+    writeFileSync(path.join(smokeDir, '_run-smokes.js'), `
+require('node:fs').writeFileSync('whole-smoke-suite-ran', 'yes');
+console.log('1 smoke(s) passed / 0 skipped');
+`);
+    writeFileSync(path.join(smokeDir, 'alpha.smoke.js'), `
+require('node:fs').writeFileSync('alpha-smoke-ran', 'yes');
+process.exitCode = 1;
+`);
+    writeFileSync(path.join(smokeDir, 'beta.smoke.js'), `
+require('node:fs').writeFileSync('beta-smoke-ran', 'yes');
+`);
     writeFileSync(path.join(root, 'e2e.mjs'), `
 const response = await fetch('http://127.0.0.1:' + process.env.E2E_DEV_PORT + '/');
 if (!response.ok) process.exitCode = 1;
@@ -46,7 +62,7 @@ server.listen(port, '127.0.0.1');
         private: true,
         scripts: {
             'test:unit': 'node unit.mjs',
-            'test:smoke': 'node unit.mjs',
+            'test:smoke': 'node test/smoke/_run-smokes.js',
             'test:regression': 'node regression.mjs',
             'test:e2e': 'node e2e.mjs',
         },
@@ -97,6 +113,35 @@ describe('run-suite', () => {
         expect(JSON.parse(readFileSync(path.join(out, 'unit.pid'), 'utf8'))).toMatchObject({
             pid: expect.any(Number), pgid: expect.any(Number),
         });
+    });
+
+    it('passes unit file filters without an argument separator', () => {
+        const { root, tool } = fixture();
+        const out = path.join(root, 'results-unit-files');
+        const result = run(tool, [
+            '--suite', 'unit', '--files', 'alpha.test.js', 'beta.test.js', '--out', out,
+        ]);
+        const argvLine = readFileSync(path.join(out, 'unit.log'), 'utf8')
+            .split(/\r?\n/).find((line) => line.startsWith('["'));
+
+        expect(result.status).toBe(0);
+        expect(JSON.parse(argvLine)).toEqual(['alpha.test.js', 'beta.test.js']);
+    });
+
+    it('runs named smoke files directly and counts their exit codes', () => {
+        const { root, tool } = fixture();
+        const out = path.join(root, 'results-smoke-files');
+        const result = run(tool, [
+            '--suite', 'smoke', '--files',
+            'test/smoke/alpha.smoke.js', 'test/smoke/beta.smoke.js', '--out', out,
+        ]);
+        const summary = JSON.parse(readFileSync(path.join(out, 'summary.json'), 'utf8'));
+
+        expect(result.status).toBe(1);
+        expect(summary).toMatchObject({ suite: 'smoke', pass: 1, fail: 1, skipped: 0, exitCode: 1 });
+        expect(readFileSync(path.join(root, 'alpha-smoke-ran'), 'utf8')).toBe('yes');
+        expect(readFileSync(path.join(root, 'beta-smoke-ran'), 'utf8')).toBe('yes');
+        expect(existsSync(path.join(root, 'whole-smoke-suite-ran'))).toBe(false);
     });
 
     it('returns non-zero and records failures for a red suite', () => {

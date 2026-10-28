@@ -92,9 +92,9 @@ function pnpmCommand() {
     return process.env.XCHAIN_SWEEP_PNPM || 'pnpm';
 }
 
-function suiteProcess(options, repoRoot) {
-    const args = ['run', `test:${options.suite}`];
-    if (options.files.length > 0) args.push('--', ...options.files);
+function suiteProcess(options, repoRoot, smokeFile) {
+    const command = smokeFile ? process.execPath : pnpmCommand();
+    const args = smokeFile ? [smokeFile] : ['run', `test:${options.suite}`, ...options.files];
     const env = { ...process.env };
     if (options.suite === 'e2e') {
         env.E2E_DEV_PORT = String(options.port);
@@ -102,7 +102,7 @@ function suiteProcess(options, repoRoot) {
     }
     return startRecordedProcess(options.suite, {
         dir: options.out,
-        command: pnpmCommand(),
+        command,
         args,
         cwd: repoRoot,
         env,
@@ -156,13 +156,30 @@ export async function runSuite(options, { repoRoot = REPO_ROOT } = {}) {
     let server;
     let output = '';
     let exitCode = 2;
+    let counts;
     let operationalError;
     let stopError;
     try {
         if (options.suite === 'e2e') server = await startE2eServer(options, repoRoot);
-        const suite = suiteProcess(options, repoRoot);
-        exitCode = await waitForExit(suite.child);
-        output = readFileSync(suite.logPath, 'utf8');
+        if (options.suite === 'smoke' && options.files.length > 0) {
+            counts = { pass: 0, fail: 0, skipped: 0 };
+            exitCode = 0;
+            for (const file of options.files) {
+                const suite = suiteProcess(options, repoRoot, file);
+                const fileExitCode = await waitForExit(suite.child);
+                output += readFileSync(suite.logPath, 'utf8');
+                if (fileExitCode === 0) {
+                    counts.pass += 1;
+                } else {
+                    counts.fail += 1;
+                    if (exitCode === 0) exitCode = fileExitCode;
+                }
+            }
+        } else {
+            const suite = suiteProcess(options, repoRoot);
+            exitCode = await waitForExit(suite.child);
+            output = readFileSync(suite.logPath, 'utf8');
+        }
     } catch (error) {
         operationalError = error.message || String(error);
     } finally {
@@ -175,7 +192,7 @@ export async function runSuite(options, { repoRoot = REPO_ROOT } = {}) {
         }
     }
 
-    const counts = parseRunnerSummary(output);
+    counts ??= parseRunnerSummary(output);
     if (exitCode !== 0 || operationalError || stopError) counts.fail = Math.max(1, counts.fail);
     if ((operationalError || stopError) && exitCode === 0) exitCode = 2;
     const summary = {
