@@ -240,12 +240,12 @@ describe('the host queue sends a two-phase entry as commit then reveal', () => {
         const h = bootHost({ pendingTxs, entries: [pair], broadcastTx: never });
 
         void h.call('broadcast.queue.broadcast', { walletId: W, id: 'A' });
-        await vi.waitFor(() => expect(h.sent()).toEqual(['TX(PHASE1)']));
+        await vi.waitFor(() => expect(h.sent()).toEqual([COMMIT.txHex]));
         const second = await h.call('broadcast.queue.broadcast', { walletId: W, id: 'A' });
 
         expect(second.ok).toBe(false);
         expect(second.error).toMatchObject({ name: 'QueuedBroadcastInFlightError' });
-        expect(h.sent()).toEqual(['TX(PHASE1)']);
+        expect(h.sent()).toEqual([COMMIT.txHex]);
     });
 
     it('sends an entry written before the reveal field as the one transaction it names', async () => {
