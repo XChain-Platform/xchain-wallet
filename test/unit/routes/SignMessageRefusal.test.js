@@ -44,4 +44,23 @@ describe('Sign message refusal wording', () => {
     ])('names %s as a hidden character problem', (_name, text) => {
         expect(messageRefusalReason(text)).toMatch(/invisible, look-alike or direction-control/);
     });
+
+    // Format controls and default-ignorable marks that draw nothing on the
+    // review page, so the signed bytes carry text the signer never saw.
+    it.each([
+        ['a musical beam control', 'pay\u{1D173} 1 unit'],
+        ['a musical phrase control', 'pay\u{1D17A} 1 unit'],
+        ['a Mongolian variation selector', 'pay᠋ 1 unit'],
+        ['the Mongolian fourth variation selector', 'pay᠏ 1 unit'],
+        ['a Syriac abbreviation mark', 'pay܏ 1 unit'],
+        ['an interlinear annotation anchor', 'pay￹ 1 unit￻'],
+        ['a shorthand format control', 'pay\u{1BCA0} 1 unit'],
+        ['an Egyptian hieroglyph format control', 'pay\u{13430} 1 unit'],
+    ])('names %s, which draws nothing, as a hidden character problem', (_name, text) => {
+        expect(messageRefusalReason(text)).toMatch(/invisible, look-alike or direction-control/);
+    });
+
+    it('keeps emoji presentation selectors', () => {
+        expect(messageRefusalReason('ok ❤️ and ☺︎')).toBeNull();
+    });
 });

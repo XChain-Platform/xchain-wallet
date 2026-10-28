@@ -76,6 +76,19 @@ describe('signMessageFlow', () => {
         expect(signer.signMessage).not.toHaveBeenCalled();
     });
 
+    it.each([
+        ['a musical beam control', 'pay\u{1D173} 1 unit'],
+        ['a Mongolian variation selector', 'pay᠋ 1 unit'],
+        ['a Syriac abbreviation mark', 'pay܏ 1 unit'],
+    ])('refuses a message with %s as deceptive before the signer is called', async (_name, message) => {
+        const signer = mockSigner();
+
+        await expect(signMessageFlow({
+            vault, walletId: 'wallet-1', chainId, path: "m/84'/0'/0'/0/0", message, signer, ...registries,
+        })).rejects.toThrow(/deceptive characters/);
+        expect(signer.signMessage).not.toHaveBeenCalled();
+    });
+
     it('signs a message with tabs, line feeds and paired surrogates', async () => {
         const signer = mockSigner();
 

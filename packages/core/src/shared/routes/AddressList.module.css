@@ -83,11 +83,14 @@
 }
 
 /* Full-width segmented toggle (All | Normal | Imported | Other) between the
-   filter row and the results. Equal-width segments; active one filled. */
+   filter row and the results. Equal-width segments; active one filled. When
+   the labels are wider than the control (a Slide Over window at the largest
+   text size), the segments wrap onto a second row instead of being cut. */
 .segmented {
     display: flex;
+    flex-wrap: wrap;
     width: 100%;
-    height: var(--xc-control-h-md);
+    min-height: var(--xc-control-h-md);
     border: 1px solid var(--xc-border-strong);
     border-radius: var(--xc-control-radius);
     overflow: hidden;
@@ -95,10 +98,15 @@
 
 .segment {
     flex: 1 1 0;
+    min-height: calc(var(--xc-control-h-md) - 2px);
     appearance: none;
     background: var(--xc-surface);
     border: none;
     border-inline-start: 1px solid var(--xc-border);
+    /* A hairline above a wrapped row. On the first row it sits under the
+       control's own border, where the control's overflow clips it. */
+    border-block-start: 1px solid var(--xc-border);
+    margin-block-start: -1px;
     padding: var(--xc-space-2) var(--xc-space-1);
     font: inherit;
     font-size: var(--xc-control-font-md, var(--xc-control-font));
