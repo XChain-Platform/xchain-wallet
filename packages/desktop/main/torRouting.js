@@ -103,17 +103,49 @@ export async function applyProxyToSession(session) {
     if (session?.setProxy) await session.setProxy(currentProxyConfig());
 }
 
+/**
+ * True while any egress path may still be off direct: set before an on
+ * apply touches anything, cleared only by an off that restores every path.
+ * A failed apply leaves `applied` off but this set, so the next off still
+ * restores and the next on still applies in full.
+ */
+let routed = false;
+
+/**
+ * Run `fn` on every session, so one rejection never skips the rest, and
+ * rethrow the first failure once all have been tried.
+ */
+async function forEachSession(sessions, fn) {
+    let firstError = null;
+    for (const s of sessions) {
+        try {
+            await fn(s);
+        } catch (err) {
+            if (!firstError) firstError = err;
+        }
+    }
+    if (firstError) throw firstError;
+}
+
 async function applyNow({ settings, sdkRegistry, session, extraSessions = () => [], log = () => {} }) {
     const { enabled, proxy } = readTorSettings(settings);
 
     if (!enabled) {
-        if (applied.on) {
-            // Restore, in the reverse order of application.
-            if (originalDispatcher) setGlobalDispatcher(originalDispatcher);
-            if (session?.setProxy) await session.setProxy({ mode: 'direct' });
-            for (const extra of extraSessions()) await extra.setProxy({ mode: 'direct' });
-            sdkRegistry?.setPool?.(null);
-            log('[xchain] Tor routing off: traffic is direct again');
+        if (applied.on || routed) {
+            // Restore, in the reverse order of application. `applied` reads
+            // off whatever happens below, because the main session and
+            // dispatcher go direct first; a rejecting session leaves
+            // `routed` set so the next off retries it.
+            try {
+                if (originalDispatcher) setGlobalDispatcher(originalDispatcher);
+                const sessions = [...(session?.setProxy ? [session] : []), ...extraSessions()];
+                sdkRegistry?.setPool?.(null);
+                await forEachSession(sessions, (s) => s.setProxy({ mode: 'direct' }));
+                routed = false;
+                log('[xchain] Tor routing off: traffic is direct again');
+            } finally {
+                applied = { on: false, host: null, port: null };
+            }
         }
         applied = { on: false, host: null, port: null };
         return { on: false };
@@ -131,26 +163,36 @@ async function applyNow({ settings, sdkRegistry, session, extraSessions = () => 
 
     const { httpAgent, httpsAgent, connect } = createSocksAgents(proxy);
 
-    // 1. the SDK's axios clients
-    sdkRegistry?.setPool?.({ httpAgent, httpsAgent });
+    routed = true;
+    try {
+        // 1. the SDK's axios clients
+        sdkRegistry?.setPool?.({ httpAgent, httpsAgent });
 
-    // 2. Node's global fetch
-    if (!originalDispatcher) originalDispatcher = getGlobalDispatcher();
-    setGlobalDispatcher(new UndiciAgent({ connect }));
+        // 2. Node's global fetch
+        if (!originalDispatcher) originalDispatcher = getGlobalDispatcher();
+        setGlobalDispatcher(new UndiciAgent({ connect }));
 
-    // 3. Chromium (renderer + electron-updater)
-    if (session?.setProxy) {
-        await session.setProxy({
-            proxyRules: `socks5://${proxy.host}:${proxy.port}`,
-            // Without this, Chromium resolves hostnames locally before
-            // handing them to the proxy, which leaks every destination to
-            // the user's DNS resolver while looking like it works.
-            proxyBypassRules: '<-loopback>',
-        });
+        // 3. Chromium (renderer + electron-updater)
+        if (session?.setProxy) {
+            await session.setProxy({
+                proxyRules: `socks5://${proxy.host}:${proxy.port}`,
+                // Without this, Chromium resolves hostnames locally before
+                // handing them to the proxy, which leaks every destination to
+                // the user's DNS resolver while looking like it works.
+                proxyBypassRules: '<-loopback>',
+            });
+        }
+
+        // Marked on before the extra sessions so a session created while
+        // they apply asks for the SOCKS proxy, not direct.
+        applied = { on: true, host: proxy.host, port: proxy.port };
+        await forEachSession(extraSessions(), applyProxyToSession);
+    } catch (err) {
+        // A session that refused the proxy may be direct; reporting on
+        // would hide that, and the `already` shortcut would skip the retry.
+        applied = { on: false, host: null, port: null };
+        throw err;
     }
-
-    applied = { on: true, host: proxy.host, port: proxy.port };
-    for (const extra of extraSessions()) await applyProxyToSession(extra);
     log(reach.ok
         ? `[xchain] Tor routing on via ${proxy.host}:${proxy.port}`
         : `[xchain] Tor routing on via ${proxy.host}:${proxy.port}, but the proxy did not answer (${reach.reason}). Requests will fail until it does.`);
@@ -162,5 +204,6 @@ async function applyNow({ settings, sdkRegistry, session, extraSessions = () => 
 export function resetTorRoutingState() {
     originalDispatcher = null;
     applied = { on: false, host: null, port: null };
+    routed = false;
     applyQueue = Promise.resolve();
 }
