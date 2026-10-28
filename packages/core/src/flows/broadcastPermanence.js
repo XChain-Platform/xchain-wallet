@@ -82,6 +82,12 @@ const PERMANENT_PATTERNS = [
     // Seen live on a DIVIDEND whose 2-sat protocol-fee output was below Bitcoin's dust limit,
     // where the transient default left the wallet claiming the dividend had been sent.
     /\bdust\b/i,
+    // A script-check refusal is a property of the signed bytes too: the signature or
+    // witness does not satisfy the script it spends, which no retry can change. Covers
+    // every naming Bitcoin Core has used (mandatory-, non-mandatory-, mempool- and
+    // block-script-verify-flag), seen when a device or its relay returns a malformed
+    // or foreign signature that the reply check cannot see.
+    /script-verify-flag/i,
 ];
 
 // Node/connection is momentarily unavailable but the SAME signed tx can

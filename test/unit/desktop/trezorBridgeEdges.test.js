@@ -80,13 +80,13 @@ describe('desktop Trezor bridge edges', () => {
         await expect(connection).rejects.toThrow('desktop trezorFactory: bridge call failed');
     });
 
-    it('refuses proxy calls after the bridge window is lost', async () => {
+    it('refuses a proxy call as a disconnect when the replacement bridge also closes', async () => {
         const bridgeWindow = openBridge();
         const connect = await connectBridge(bridgeWindow);
         bridgeWindow.closed = true;
 
         await expect(connect.signMessage({ path: "m/84'/0'/0'", message: 'exact message' }))
-            .rejects.toThrow('bridge window is not open');
+            .rejects.toThrow('Trezor Connect transport disconnected');
         expect(bridgeWindow.postMessage).toHaveBeenCalledTimes(1);
     });
 

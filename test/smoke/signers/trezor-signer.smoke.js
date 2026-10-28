@@ -319,7 +319,9 @@ function makeMockSdkRegistry({ decomposed }) {
 // (aa…aa:1, sequence fdffffff) paying the same 90,000 sats to 0014cc…cc.
 // signPsbt compares the reply back to the approved PSBT before returning a
 // txid, so a placeholder would exercise the refusal path instead of this one.
-const DEVICE_TX = '0200000001aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa0100000000fdffffff01905f010000000000160014cccccccccccccccccccccccccccccccccccccccc00000000';
+// Segwit form with a two-item witness: a reply with no signature on an
+// input is refused before it reaches a caller.
+const DEVICE_TX = '02000000000101aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa0100000000fdffffff01905f010000000000160014cccccccccccccccccccccccccccccccccccccccc0201aa01bb00000000';
 
 const decomposedFixture = {
     txVersion: 2,

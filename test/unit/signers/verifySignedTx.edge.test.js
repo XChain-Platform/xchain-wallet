@@ -12,7 +12,8 @@ import {
     rawTxid,
 } from '../../../packages/core/src/signers/verifySignedTx.js';
 
-const INPUT = `${'00'.repeat(32)}0000000000ffffffff`;
+// One-byte scriptSig: the comparison refuses an input that carries no signature.
+const INPUT = `${'00'.repeat(32)}000000000151ffffffff`;
 const OUTPUT = '010000000000000000';
 
 function oneInputTx(inputCount = '01') {

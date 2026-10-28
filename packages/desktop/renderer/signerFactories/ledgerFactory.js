@@ -41,6 +41,25 @@ const WalletUtils = walletModule.default ?? walletModule;
 
 /** @type {any | null} */
 let sharedTransport = null;
+/** @type {(() => void) | null} */
+let sharedDisconnectHandler = null;
+
+/**
+ * Cache a transport until it reports disconnect. An unplugged Ledger closes its
+ * WebHID device for good, so a kept transport would fail every pairing after
+ * the device is plugged back in until the app restarts.
+ */
+function cacheTransport(transport) {
+    sharedTransport = transport;
+    if (typeof transport?.once !== 'function') return;
+    const onDisconnect = () => {
+        if (sharedTransport !== transport) return;
+        sharedTransport = null;
+        sharedDisconnectHandler = null;
+    };
+    sharedDisconnectHandler = onDisconnect;
+    transport.once('disconnect', onDisconnect);
+}
 
 /**
  * Lazy-create a shared WebHID transport.
@@ -54,8 +73,9 @@ export async function getLedgerTransport(loader = defaultTransportLoader) {
     if (!TransportWebHID || typeof TransportWebHID.create !== 'function') {
         throw new Error('desktop ledgerFactory: loaded module does not look like @ledgerhq/hw-transport-webhid');
     }
-    sharedTransport = await TransportWebHID.create();
-    return sharedTransport;
+    const transport = await TransportWebHID.create();
+    cacheTransport(transport);
+    return transport;
 }
 
 function defaultTransportLoader() {
@@ -90,5 +110,12 @@ export async function pairLedgerSigner({
 }
 
 export function resetLedgerTransport() {
+    const transport = sharedTransport;
+    const handler = sharedDisconnectHandler;
     sharedTransport = null;
+    sharedDisconnectHandler = null;
+    if (transport && handler) {
+        const remove = transport.off ?? transport.removeListener;
+        if (typeof remove === 'function') remove.call(transport, 'disconnect', handler);
+    }
 }

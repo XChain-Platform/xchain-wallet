@@ -49,6 +49,14 @@
 // caller may predict a hardware-signed txid from the PSBT. Witness and
 // scriptSig data are not compared - they are the signature, which is exactly
 // what the device is there to add.
+//
+// They must be PRESENT, though. A reply that echoes the transaction back with
+// an input's scriptSig and witness empty matches every field above and is
+// still unsigned; broadcast, the node refuses it and the wallet holds a
+// transaction that can never confirm. So every input must carry a non-empty
+// scriptSig or a non-empty witness item, and an input the PSBT names as
+// segwit (p2wpkh, p2sh-p2wpkh, p2wsh) must carry a witness. This proves the
+// device answered with signature material, not that the signature verifies.
 
 import { sha256 } from '@noble/hashes/sha2';
 import { SignerStatusError } from './Signer.js';
@@ -148,14 +156,17 @@ function walkRawTx(txHex) {
     const bodyStart = c.pos;
 
     const inputs = [];
+    // Per input: how much signature material the reply carries (never its content).
+    const signatures = [];
     const inputCount = c.varint();
     if (inputCount === 0) throw new Error('parseRawTx: transaction has no inputs');
     for (let i = 0; i < inputCount; i++) {
         const prevTxHash = reverseHex(c.take(32));
         const prevTxIndex = Number(c.uintLE(4));
-        c.varSlice();                                   // scriptSig: the signature, not compared
+        const scriptSigHex = c.varSlice();              // the signature: present, never compared
         const sequence = Number(c.uintLE(4));
         inputs.push({ prevTxHash, prevTxIndex, sequence });
+        signatures.push({ scriptSigBytes: scriptSigHex.length / 2, witnessItems: 0 });
     }
 
     const outputs = [];
@@ -166,19 +177,21 @@ function walkRawTx(txHex) {
     }
 
     const bodyEnd = c.pos;
-    // The witness stacks sit between the outputs and the locktime, so they have
-    // to be walked even though nothing here reads them.
+    // The witness stacks sit between the outputs and the locktime. Only the count
+    // of non-empty items per input is kept, for the signature-presence check.
     if (segwit) {
         for (let i = 0; i < inputCount; i++) {
             const items = c.varint();
-            for (let j = 0; j < items; j++) c.varSlice();
+            for (let j = 0; j < items; j++) {
+                if (c.varSlice().length > 0) signatures[i].witnessItems += 1;
+            }
         }
     }
 
     const locktime = Number(c.uintLE(4));
     if (c.remaining !== 0) throw new Error(`parseRawTx: ${c.remaining} trailing byte(s) after locktime`);
     const legacyHex = `${versionHex}${c.hex.slice(bodyStart * 2, bodyEnd * 2)}${c.hex.slice(c.hex.length - 8)}`;
-    return { tx: { version, locktime, inputs, outputs }, legacyHex };
+    return { tx: { version, locktime, inputs, outputs }, legacyHex, signatures };
 }
 
 /** `n` as a BigInt, refusing a satoshi count JS has already rounded. */
@@ -190,6 +203,9 @@ function exactSats(value, what) {
     // pass a tampered value that differs only there. Refuse instead.
     throw new Error(`${what} is not an exact satoshi amount: ${String(value)}`);
 }
+
+/** Input script types whose signature lives in the witness. */
+const SEGWIT_SCRIPT_TYPES = new Set(['p2wpkh', 'p2sh-p2wpkh', 'p2wsh', 'p2sh-p2wsh']);
 
 /** Valid nSequence: a uint32 as a Number, never coerced from a missing value. */
 export function isValidSequence(sequence) {
@@ -228,8 +244,9 @@ export function assertSignedTxMatchesPsbt({ txHex, decomposed, signerId }) {
     }
 
     let tx;
+    let signatures;
     try {
-        tx = parseRawTx(txHex);
+        ({ tx, signatures } = walkRawTx(txHex));
     } catch (err) {
         // An unparseable reply is not a pass. It is a reply nothing can vouch
         // for, which is the same refusal as a mismatched one.
@@ -274,6 +291,13 @@ export function assertSignedTxMatchesPsbt({ txHex, decomposed, signerId }) {
         if (got.sequence !== want.sequence) {
             throw refusal(`input ${i} has sequence 0x${got.sequence.toString(16)}, `
                 + `the PSBT asked for 0x${want.sequence.toString(16)}`);
+        }
+        const sig = signatures[i];
+        if (sig.scriptSigBytes === 0 && sig.witnessItems === 0) {
+            throw refusal(`input ${i} carries no signature`);
+        }
+        if (SEGWIT_SCRIPT_TYPES.has(want.scriptType) && sig.witnessItems === 0) {
+            throw refusal(`input ${i} is ${want.scriptType} and carries no witness signature`);
         }
     }
 

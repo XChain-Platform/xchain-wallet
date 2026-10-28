@@ -272,7 +272,9 @@ const segwitDecomposed = {
 // 0014cc…cc. signPsbt compares the reply back to the approved PSBT before it
 // hands out a txid, so a placeholder here would exercise the refusal path
 // rather than the signing path.
-const DEVICE_TX = '0200000001abababababababababababababababababababababababababababababababab0000000000fdffffff01905f010000000000160014cccccccccccccccccccccccccccccccccccccccc00000000';
+// Segwit form with a two-item witness: a reply with no signature on an
+// input is refused before it reaches a caller.
+const DEVICE_TX = '02000000000101abababababababababababababababababababababababababababababababab0000000000fdffffff01905f010000000000160014cccccccccccccccccccccccccccccccccccccccc0201aa01bb00000000';
 
 let capturedCreateArgs = null;
 let capturedSplitCalls = [];

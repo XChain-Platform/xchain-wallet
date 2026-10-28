@@ -119,7 +119,9 @@ function makeMockConnect({ serializedTx }) {
 // input (ab…ab:0, sequence fdffffff) paying the same 90,000 sats to
 // 0014cc…cc. TrezorSigner.signPsbt compares the device reply back to the
 // approved PSBT, so a placeholder would never reach the transport at all.
-const DEVICE_TX = '0200000001abababababababababababababababababababababababababababababababab0000000000fdffffff01905f010000000000160014cccccccccccccccccccccccccccccccccccccccc00000000';
+// Segwit form with a two-item witness: a reply with no signature on an
+// input is refused before it reaches a caller.
+const DEVICE_TX = '02000000000101abababababababababababababababababababababababababababababababab0000000000fdffffff01905f010000000000160014cccccccccccccccccccccccccccccccccccccccc0201aa01bb00000000';
 
 const decomposedFixture = {
     txVersion: 2,
