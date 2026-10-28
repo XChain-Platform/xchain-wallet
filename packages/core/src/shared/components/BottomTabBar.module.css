@@ -135,38 +135,26 @@
     outline: none;
 }
 
-.sheetItem:focus-visible {
+/* The rows-menu reset in tokens.css (:root [data-xc-menu-list="rows"] [data-xc-menu-item],
+   specificity 0,3,0) zeroes the row border, so these rules name the list and
+   item attributes to outrank it. Hover draws the 1px control edge with an
+   inset outline that does not change row size, while keyboard focus keeps its
+   2px accent ring. */
+.sheetList[data-xc-menu-list="rows"] .sheetItem[data-xc-menu-item]:hover {
+    outline: 1px solid var(--xc-control-border);
+    outline-offset: -1px;
+}
+
+.sheetList[data-xc-menu-list="rows"] .sheetItem[data-xc-menu-item]:focus-visible {
     outline: 2px solid var(--xc-accent-primary, var(--xc-text));
     outline-offset: -2px;
 }
 
-/* The rows-menu reset in tokens.css (:root [data-xc-menu-list="rows"] [data-xc-menu-item],
-   specificity 0,3,0) zeroes the row border and sets the row padding, so these
-   rules name the list and item attributes to outrank it. Hover fills the row
-   near white on a white sheet, so hover and focus draw the 1px control edge.
-   Every row keeps a transparent 1px edge and gives it back in padding, so the
-   hovered row keeps its size. */
-.sheetList[data-xc-menu-list="rows"] .sheetItem[data-xc-menu-item] {
-    padding: calc(var(--xc-menu-item-pad-block) - 1px) calc(var(--xc-menu-item-pad-inline) - 1px);
-    border: 1px solid transparent;
-}
-
-.sheetList[data-xc-menu-list="rows"] .sheetItem[data-xc-menu-item]:hover,
-.sheetList[data-xc-menu-list="rows"] .sheetItem[data-xc-menu-item]:focus-visible {
-    border-color: var(--xc-control-border);
-}
-
-/* Forced colors paints a transparent border in CanvasText, which would outline
-   every row. Idle rows take the canvas colour and the hovered or focused row
-   takes the selection colour. */
+/* Forced colors uses the selection colour for both interactive outlines. */
 @media (forced-colors: active) {
-    .sheetList[data-xc-menu-list="rows"] .sheetItem[data-xc-menu-item] {
-        border-color: Canvas;
-    }
-
     .sheetList[data-xc-menu-list="rows"] .sheetItem[data-xc-menu-item]:hover,
     .sheetList[data-xc-menu-list="rows"] .sheetItem[data-xc-menu-item]:focus-visible {
-        border-color: Highlight;
+        outline-color: Highlight;
     }
 }
 
