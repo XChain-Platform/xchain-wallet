@@ -34,7 +34,9 @@
 // the context is built per test rather than by Playwright's default
 // browser fixture.
 //
-// `--disable-web-security` is required for the same reason as the regtest
+// `--disable-web-security` is required by the chain specs here (confirm-resume,
+// popup-close-mid-send, reservation-race, sw-kill-rehydration,
+// passphrase-sw-restart) for the same reason as the regtest
 // preview config: the manifest declares NO `host_permissions`, so the
 // service worker's fetches are ordinary CORS-governed requests, and the
 // regtest explorer sends no CORS headers. That is a property of the local
@@ -43,7 +45,6 @@
 
 import { test as base, chromium, expect } from '@playwright/test';
 import fs from 'fs';
-import os from 'os';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import { LICENSE_VERSION } from '../../../packages/core/src/buildInfo.js';
@@ -57,13 +58,15 @@ export const EXTENSION_DIST = path.resolve(HERE, '../../../packages/extension/di
  * its id plus a helper for opening additional popup windows.
  */
 export const test = base.extend({
-    context: async ({}, use) => {
+    context: async ({}, use, testInfo) => {
         if (!fs.existsSync(path.join(EXTENSION_DIST, 'manifest.json'))) {
             throw new Error(
                 `Extension not built at ${EXTENSION_DIST}. Run: pnpm -C packages/extension build`,
             );
         }
-        const userDataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'xc-ext-e2e-'));
+        // The profile lives under the run's output dir, so a run leaves nothing in the system temp dir.
+        fs.mkdirSync(testInfo.outputDir, { recursive: true });
+        const userDataDir = fs.mkdtempSync(path.join(testInfo.outputDir, 'profile-'));
         const context = await chromium.launchPersistentContext(userDataDir, {
             // New headless loads extensions, so no window opens.
             channel: 'chromium',
@@ -76,15 +79,14 @@ export const test = base.extend({
                 // and the regtest explorer sends no CORS headers.
                 '--disable-web-security',
                 '--disable-features=IsolateOrigins,site-per-process',
-                // The platform's public hosts fail to resolve, so a run that has
-                // not yet switched to regtest cannot reach a mainnet service
+                // Every host but this machine fails to resolve, so a run that has
+                // not yet switched to regtest cannot reach any outside service
                 // from the page or the service worker.
-                '--host-resolver-rules=MAP *.xchain.io ~NOTFOUND, MAP *.dankest.io ~NOTFOUND, MAP *.dankest.llc ~NOTFOUND',
+                '--host-resolver-rules=MAP * ~NOTFOUND, EXCLUDE localhost, EXCLUDE 127.0.0.1',
             ],
         });
         await use(context);
         await context.close();
-        fs.rmSync(userDataDir, { recursive: true, force: true });
     },
 
     extensionId: async ({ context }, use) => {

@@ -157,7 +157,7 @@ describe('the message key-request reports its failures', () => {
         expect(utils.queryByTestId('confirm-modal'), 'a password prompt this wallet cannot satisfy')
             .toBeNull();
         const said = alertText(utils);
-        expect(said).toMatch(/cannot be signed/i);
+        expect(said).toMatch(/can't be signed/i);
         expect(said, 'names why this wallet has no signer').toMatch(/25th-word passphrase/i);
         expect(said, 'names the unlock screen as the fix').toMatch(/unlock screen/i);
         expect(said, 'names the remedy the banner already offers').toMatch(/plain text/i);
@@ -197,7 +197,7 @@ describe('the message key-request reports its failures', () => {
             await drainMicrotasks();
         });
 
-        expect(alertText(utils)).toMatch(/Could not send the key request/i);
+        expect(alertText(utils)).toMatch(/Couldn't send the key request/i);
         expect(alertText(utils)).not.toMatch(/the chain refused the handshake/i);
     });
 

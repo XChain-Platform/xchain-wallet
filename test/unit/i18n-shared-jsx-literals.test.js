@@ -92,6 +92,7 @@ const ROUTE_E_TO_K = /\/routes\/[E-K][^/]*\.jsx$/;
 
 const localizedRoutes = [
     'AccountPicker.jsx',
+    'ComposeMessage.jsx',
     'CreateWallet.jsx',
     'Locked.jsx',
     'Onboarding.jsx',

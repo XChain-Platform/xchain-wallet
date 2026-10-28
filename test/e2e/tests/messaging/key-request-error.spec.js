@@ -281,7 +281,7 @@ test.describe('a failed message key-request says why', () => {
         // button lives inside it) but nothing on screen reports a failure. This
         // is what stops the banner from standing in for the answer below.
         expect(await alertText(main), 'a failure is being reported for an attempt nobody made')
-            .not.toMatch(/cannot be signed|locked/i);
+            .not.toMatch(/can't be signed|locked/i);
 
         await requestButton(main).click();
 
@@ -293,7 +293,7 @@ test.describe('a failed message key-request says why', () => {
 
         const said = (await pressOutcome(main).allInnerTexts()).join(' | ');
         expect(said, 'the key request answered, but not with a reason')
-            .toMatch(/cannot be signed/i);
+            .toMatch(/can't be signed/i);
         // And the reason has to be one the user can comply with on THIS stage.
         // The old copy asked for a password here; there is no password field on
         // the compose form to type one into.

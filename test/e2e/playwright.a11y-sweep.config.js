@@ -32,7 +32,7 @@ export default defineConfig({
     use: { baseURL: BASE_URL, trace: 'off', video: 'off', screenshot: 'off' },
     projects: [{ name: 'chromium', use: { browserName: 'chromium', channel: 'chromium' } }],
     webServer: {
-        command: `pnpm -C ../../packages/web dev --port ${PORT} --strictPort`,
+        command: `pnpm -C ../../packages/web dev --port ${PORT} --strictPort --host 127.0.0.1`,
         url: BASE_URL,
         reuseExistingServer: !process.env.CI,
         timeout: 120_000,

@@ -23,7 +23,8 @@ const cameraSource = read(
 const biometricSource = read(
     'packages/mobile/ios/App/App/vault/VaultBiometricSidecar.swift',
 );
-const attachmentSource = read('packages/core/src/shared/routes/ComposeMessage.jsx');
+// The attachment hint (PNG, JPEG, ...) lives in the English dictionary.
+const attachmentSource = read('packages/core/src/shared/routes/ComposeMessage.jsx') + englishDictionarySource();
 const endpointSource = read(
     'packages/core/src/shared/components/settings/NetworkEndpointsSection.jsx',
 ) + englishDictionarySource();

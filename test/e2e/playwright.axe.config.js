@@ -49,7 +49,7 @@ export default defineConfig({
         { name: 'android-lg-k51', use: phone('chromium', 411, 814, 1.75) },
     ],
     webServer: {
-        command: `pnpm -C ../../packages/web dev --port ${PORT} --strictPort`,
+        command: `pnpm -C ../../packages/web dev --port ${PORT} --strictPort --host 127.0.0.1`,
         url: BASE_URL,
         reuseExistingServer: !process.env.CI,
         timeout: 120_000,

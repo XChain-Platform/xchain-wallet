@@ -91,7 +91,7 @@ export default defineConfig({
     },
     projects,
     webServer: {
-        command: `pnpm -C ../../packages/web dev --port ${PORT} --strictPort`,
+        command: `pnpm -C ../../packages/web dev --port ${PORT} --strictPort --host 127.0.0.1`,
         url: BASE_URL,
         reuseExistingServer: !process.env.CI,
         timeout: 120_000,

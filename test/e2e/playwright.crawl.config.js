@@ -94,7 +94,7 @@ export default defineConfig({
     },
     projects,
     webServer: {
-        command: `pnpm -C ../../packages/web exec vite --port ${PORT} --strictPort`,
+        command: `pnpm -C ../../packages/web exec vite --port ${PORT} --strictPort --host 127.0.0.1`,
         url: `http://localhost:${PORT}`,
         reuseExistingServer: true,
         timeout: 120_000,

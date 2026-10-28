@@ -25,6 +25,7 @@ export const RAW_SOURCE_SMOKES = new Set([
     'core/i18n.smoke.js',
     'ui/ads-onboarding-notice.smoke.js',
     'ui/demo-disclosure-on-home.smoke.js',
+    'ui/input-capslock-warning.smoke.js',
     'ui/send-autocomplete.smoke.js',
     'ui/verify-signature.smoke.js',
 ]);

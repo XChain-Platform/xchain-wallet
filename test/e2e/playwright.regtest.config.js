@@ -129,8 +129,8 @@ export default defineConfig({
     ],
     webServer: {
         command: REUSE_BUILD
-            ? `pnpm -C ../../packages/web preview --port ${PREVIEW_PORT} --strictPort`
-            : `pnpm -C ../../packages/web build && pnpm -C ../../packages/web preview --port ${PREVIEW_PORT} --strictPort`,
+            ? `pnpm -C ../../packages/web preview --port ${PREVIEW_PORT} --strictPort --host 127.0.0.1`
+            : `pnpm -C ../../packages/web build && pnpm -C ../../packages/web preview --port ${PREVIEW_PORT} --strictPort --host 127.0.0.1`,
         url: `http://localhost:${PREVIEW_PORT}`,
         // Always false, even locally: reusing a preview server means
         // reusing whatever build it was started with, which reintroduces

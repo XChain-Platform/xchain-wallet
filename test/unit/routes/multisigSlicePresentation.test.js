@@ -11,6 +11,7 @@
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
+import { withEnglishCopy } from '../../helpers/englishSource.js';
 
 const route = (name) => readFileSync(join(
     process.cwd(), 'packages', 'core', 'src', 'shared', 'routes', name,
@@ -18,7 +19,7 @@ const route = (name) => readFileSync(join(
 
 describe('multisig slice presentation safeguards', () => {
     it('uses theme tokens for status and accent colors', () => {
-        const compose = route('ComposeMessage.jsx');
+        const compose = withEnglishCopy(route('ComposeMessage.jsx'));
         const parallel = route('ParallelComposer.jsx');
         const parallelStyles = route('ParallelComposer.module.css');
         const inbox = route('MessagingInbox.jsx');

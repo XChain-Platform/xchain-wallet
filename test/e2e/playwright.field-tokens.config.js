@@ -27,7 +27,7 @@ export default defineConfig({
         { name: 'dark-360', use: { browserName: 'chromium', channel: 'chromium', viewport: { width: 360, height: 800 }, colorScheme: 'dark', isMobile: true, hasTouch: true } },
     ],
     webServer: {
-        command: `pnpm -C ../../packages/web dev --port ${PORT} --strictPort`,
+        command: `pnpm -C ../../packages/web dev --port ${PORT} --strictPort --host 127.0.0.1`,
         url: BASE_URL,
         reuseExistingServer: !process.env.CI,
         timeout: 120_000,

@@ -44,7 +44,7 @@ const cfg = readFileSync(join(e2e, 'playwright.config.js'), 'utf8');
 assert.ok(/testDir:\s*'\.\/tests'/.test(cfg), 'testDir points at ./tests');
 assert.ok(/workers:\s*1/.test(cfg), 'workers=1 (single vault per run)');
 assert.ok(
-    /command:\s*`pnpm -C \.\.\/\.\.\/packages\/web dev --port \$\{PORT\} --strictPort`/.test(cfg),
+    /command:\s*`pnpm -C \.\.\/\.\.\/packages\/web dev --port \$\{PORT\} --strictPort --host 127\.0\.0\.1`/.test(cfg),
     'webServer spawns the web Vite dev server on its own strict port',
 );
 assert.ok(/url:\s*BASE_URL/.test(cfg), 'webServer url is the suite-owned base URL');

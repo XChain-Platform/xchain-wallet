@@ -475,6 +475,8 @@ describe('translations', () => {
             .sort((a, b) => a[0].localeCompare(b[0]));
 
         expect(duplicateKeyGroups).toEqual([
+            // The noun the queued-result panel names for a held message and the noun the signing warning names.
+            ['composeMessage.whatMessage', 'extension.sign.warningNoun.message'],
             // Retrying a desktop update download and retrying a balance load.
             ['desktopUpdate.retry', 'home.retryBalances'],
             // The History status filter header and the parallel composer's status-pill label prefix.
