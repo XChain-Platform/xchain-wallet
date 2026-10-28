@@ -55,6 +55,7 @@ import {
     customFeeEstimate,
     displayRateToSettingsCustom,
 } from '../../flows/feeEstimate.js';
+import { customFeeReviewStop } from '../../flows/feeEstimate.js';
 import { extractHolderCount } from '../utils/holderRows.js';
 import { extractActionIndex } from '../utils/actionIndexFromTx.js';
 import styles from './IssueTokenForm.module.css';
@@ -948,6 +949,8 @@ export function AirdropForm({ walletId, resumeId = null, onBack, initialChainId,
     // 'review-list' first, exactly as the pre-PC-11 flow did.
     function handleComposeSubmit(event) {
         event.preventDefault();
+        const feeStop = customFeeReviewStop({ feePick, tiers: feeTiers, estimate: feeCustomEstimate });
+        if (feeStop) { setFormError(feeStop.formError); return; }
         if (!chainId || !fromAddress) {
             setFormError('Pick a source address first.');
             return;

@@ -28,6 +28,7 @@ import {
     customFeeEstimate,
     displayRateToSettingsCustom,
 } from '../../flows/feeEstimate.js';
+import { customFeeReviewStop } from '../../flows/feeEstimate.js';
 import { coinpayExpiryText } from '../../market/coinpayExpiry.js';
 import { baseUnitsToCoinText, obligationBaseUnits } from '../../market/obligationStatus.js';
 import { classifyObligation } from '../../market/obligationStatus.js';
@@ -309,6 +310,8 @@ function ScopedCoinpayForm({
     // Signs nothing; just gates stage transition.
     function handleReview(event) {
         event.preventDefault();
+        const feeStop = customFeeReviewStop({ feePick, tiers: feeTiers, estimate: feeCustomEstimate });
+        if (feeStop) { setSubmitError(feeStop.formError); return; }
         if (!selected || !summary) {
             setSubmitError('Choose a payment before continuing.');
             return;

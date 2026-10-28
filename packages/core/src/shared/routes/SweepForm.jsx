@@ -40,10 +40,9 @@ import {
     estimateNativeSendFee,
     estimateNativeSendFeeTiers,
     customFeeEstimate,
-    customFeeRateBoundsError,
     displayRateToSettingsCustom,
 } from '../../flows/feeEstimate.js';
-import { publishFeeValidationError } from '../utils/publishingFile.js';
+import { customFeeReviewStop } from '../../flows/feeEstimate.js';
 import { OwnAddressPickerScreen } from '../components/OwnAddressPickerScreen.jsx';
 import styles from './IssueTokenForm.module.css';
 import { submitFailureMessage } from '../utils/submitFailureMessage.js';
@@ -545,25 +544,8 @@ export function SweepForm({
         }
         const memoError = memoLengthError(m);
         if (memoError) { setFormError(memoError); return; }
-        // The form is noValidate, so the fee field's own validity never stops
-        // this submit. A rate above the chain ceiling would price the carrier at
-        // that rate, and one the form cannot price would compose at the
-        // encoder's default while the field shows the typed rate.
-        if (feePick.mode === 'custom') {
-            const rate = Number(feePick.customRate);
-            const boundsError = customFeeRateBoundsError({ rate, tiers: feeTiers });
-            // The fee field already names an empty, non-positive or out-of-range
-            // rate, so the form status stays clear rather than repeat it.
-            if (String(feePick.customRate ?? '').trim() === '' || !(rate > 0) || boundsError) {
-                setFormError(null);
-                return;
-            }
-            const customFeeError = publishFeeValidationError(feePick, feeEstimate);
-            if (feePerKb === null || customFeeError) {
-                setFormError(customFeeError || 'Custom fee rate is outside the supported range.');
-                return;
-            }
-        }
+        const feeStop = customFeeReviewStop({ feePick, tiers: feeTiers, estimate: feeCustomEstimate });
+        if (feeStop) { setFormError(feeStop.formError); return; }
         if (!gateSatisfied) {
             setFormError(`Unlock keys for ${gateMissingTicks.join(', ')} are not in the vault yet. Recover them below, or acknowledge sweeping without them.`);
             return;

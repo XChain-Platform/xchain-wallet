@@ -31,6 +31,7 @@ import {
     customFeeEstimate,
     displayRateToSettingsCustom,
 } from '../../flows/feeEstimate.js';
+import { customFeeReviewStop } from '../../flows/feeEstimate.js';
 import { coinToFiatExact } from '../../flows/priceLookup.js';
 import { formatFiatAmount } from '../utils/fiatAmountFormat.js';
 import { useFiatRate } from '../hooks/useFiatRate.js';
@@ -449,20 +450,7 @@ function ComposeMessageForm({
         && Number.isFinite(selectedFeeEstimate.rateValue) && selectedFeeEstimate.rateValue > 0)
         ? displayRateToSettingsCustom(selectedFeeEstimate.unit, selectedFeeEstimate.rateValue)
         : null;
-    const customFeeRate = Number(feePick.customRate);
-    const customFeeRateText = String(feePick.customRate ?? '').toLowerCase();
-    const [customFeeMantissa, customFeeExponentText] = customFeeRateText.split('e');
-    const customFeeDecimals = Math.max(
-        0,
-        (customFeeMantissa.split('.')[1]?.length || 0) - Number(customFeeExponentText || 0),
-    );
-    const feeValidationError = feePick.mode !== 'custom'
-        ? null
-        : !Number.isFinite(customFeeRate) || customFeeRate <= 0
-            ? 'Enter a custom fee rate greater than zero.'
-            : customFeeDecimals > 8 || !customEstimate
-                ? 'Custom fee rate can have at most 8 decimal places.'
-                : null;
+    const feeStop = customFeeReviewStop({ feePick, tiers: feeTiers, estimate: customEstimate });
 
     // Fiat value of a fee amount, paid on the delivery network. Passed to the
     // FeeSelector so each tier's readout shows its cost in a colored bubble next
@@ -691,8 +679,8 @@ function ComposeMessageForm({
         }
         if (messageError) return;
         if (addressInvalid) return;
-        if (feeValidationError) {
-            setSubmitError(feeValidationError);
+        if (feeStop) {
+            setSubmitError(feeStop.formError);
             return;
         }
         // Plain text needs no recipient key, so it never waits on (or is blocked
@@ -724,7 +712,7 @@ function ComposeMessageForm({
         if (!fromAddress || !chainId || !toAddress.trim() || (!message.trim() && !attachment)) return;
         if (messageError) return;
         if (addressInvalid) return;
-        if (feeValidationError) return;
+        if (feeStop) return;
         if (!sendUnencrypted && pubkeyState !== 'found') return;
         if (!hw && !signerReady && password.length === 0) return;
         if (hw && hwStatus !== 'available') return;
@@ -819,8 +807,8 @@ function ComposeMessageForm({
     // rather than sending an (impossible to encrypt) message.
     async function handleRequestSession() {
         if (handshakeBusy || !fromAddress || !chainId || !toAddress.trim()) return;
-        if (feeValidationError) {
-            setHandshakeError(feeValidationError);
+        if (feeStop) {
+            setHandshakeError(feeStop.formError);
             return;
         }
         setHandshakeBusy(true);

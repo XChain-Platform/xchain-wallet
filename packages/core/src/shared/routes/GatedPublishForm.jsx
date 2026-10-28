@@ -20,14 +20,14 @@ import { useWalletMode } from '../hooks/useWalletMode.js';
 import {
     estimateNativeSendFeeTiers,
     customFeeEstimate,
-    customFeeRateBoundsError,
     displayRateToSettingsCustom,
 } from '../../flows/feeEstimate.js';
+import { customFeeReviewStop } from '../../flows/feeEstimate.js';
 import { submitFailureMessage } from '../utils/submitFailureMessage.js';
 import { useActionConfirmFlow, useConfirmSubmit, isUserRejection } from '../hooks/useActionConfirmFlow.js';
 import { ActionConfirmScreen } from '../components/ActionConfirmScreen.jsx';
 import { QueuedResultPanel } from '../components/QueuedResultPanel.jsx';
-import { imagePreviewDataUrl, publishFeeValidationError, publishFileType } from '../utils/publishingFile.js';
+import { imagePreviewDataUrl, publishFileType } from '../utils/publishingFile.js';
 import { memoLengthError } from '../utils/memoLimit.js';
 import { actionTextSafetyError } from '../utils/actionTextSafety.js';
 import { tokenIssuerEligibility } from '../utils/tokenIssuerEligibility.js';
@@ -288,11 +288,8 @@ export function GatedPublishForm({ walletId, chainId, tick, issuerAddress = null
         if (unsafeMetadata) { setFormError(unsafeMetadata); return; }
         const memoError = memoLengthError(memo.trim());
         if (memoError) { setFormError(memoError); return; }
-        const feeError = publishFeeValidationError(feePick, feeCustomEstimate)
-            || (feePick.mode === 'custom'
-                ? customFeeRateBoundsError({ rate: Number(feePick.customRate), tiers: feeTiers })
-                : null);
-        if (feeError) { setFormError(feeError); return; }
+        const feeStop = customFeeReviewStop({ feePick, tiers: feeTiers, estimate: feeCustomEstimate });
+        if (feeStop) { setFormError(feeStop.formError); return; }
         const thresholdValue = thresholdActive ? gateMinAmount.trim() : '';
         const thresholdError = thresholdValue
             ? flowsLib.gateMinAmountValidationError(thresholdValue)

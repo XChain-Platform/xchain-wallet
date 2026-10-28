@@ -203,7 +203,6 @@ export function getUnusualSendWarnings({
 }
 import {
     estimateNativeSendFee,
-    customFeeRateBoundsError,
     estimateNativeSendFeeTiers,
     fetchNativeSendFeeTiers,
     customFeeEstimate,
@@ -211,6 +210,7 @@ import {
     displayRateToSettingsCustom,
     resolveFeeUnit,
 } from '../../flows/feeEstimate.js';
+import { customFeeReviewStop } from '../../flows/feeEstimate.js';
 import { coinToFiatExact, fiatToCoin } from '../../flows/priceLookup.js';
 import { useFiatRate, useTickFiatRate } from '../hooks/useFiatRate.js';
 import { HwSignBlock } from '../components/HwSignBlock.jsx';
@@ -260,7 +260,6 @@ import {
 } from '../addressSelection.js';
 import { pickDefaultChainId, recordLastUsedChain } from '../chainSelection.js';
 import { MAX_MEMO_LENGTH, MEMO_HINT, memoCharacterError, memoLengthError, utf8ByteLength } from '../utils/memoLimit.js';
-import { publishFeeValidationError } from '../utils/publishingFile.js';
 
 // §30.5 user-initiated cancel detection. HW-device libraries surface a
 // rejection as an Error whose message contains words like "cancelled",
@@ -2537,16 +2536,8 @@ export function Send({ walletId, accountId, onBack, prefill = null, onDone, onCh
             }
         }
         if (amountBalanceError) return;
-        // A custom fee the form cannot price (zero, negative, non-numeric, over 8 decimals)
-        // would compose with the encoder's own default fee while the field says otherwise.
-        const customFeeError = publishFeeValidationError(feePick, feeEstimate)
-            || (feePick.mode === 'custom'
-                ? customFeeRateBoundsError({ rate: Number(feePick.customRate), tiers: feeTiers })
-                : null);
-        if (feePick.mode === 'custom' && (feePerKb === null || customFeeError)) {
-            setFormError(customFeeError || 'Custom fee rate is outside the supported range.');
-            return;
-        }
+        const feeStop = customFeeReviewStop({ feePick, tiers: feeTiers, estimate: feeEstimate });
+        if (feeStop) { setFormError(feeStop.formError); return; }
         // Refuse a below-dust amount BEFORE composing. Enter also submits this
         // form, so the inline warning alone would not be enough (same reasoning as the
         // test-send gate below).

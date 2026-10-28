@@ -17,6 +17,7 @@ import {
     customFeeEstimate,
     displayRateToSettingsCustom,
 } from '../../flows/feeEstimate.js';
+import { customFeeReviewStop } from '../../flows/feeEstimate.js';
 import { ActionConfirmScreen } from './ActionConfirmScreen.jsx';
 import { QueuedResultPanel } from './QueuedResultPanel.jsx';
 import { WatcherResultPanel } from './WatcherResultPanel.jsx';
@@ -81,7 +82,7 @@ function OperatorPublisherModeView({
     const fee = usePublisherFee(chainId);
     const submission = usePublisherSubmission({
         messaging, walletId, chainId, coinTicker, fromAddress, sourceError: source.error,
-        feedActionIndex, feePerKb: fee.feePerKb, feeValidationError: fee.validationError,
+        feedActionIndex, feePerKb: fee.feePerKb, feeStop: fee.reviewStop,
     });
     const hwSignerInfo = useSignerInfo({
         walletId,
@@ -177,17 +178,13 @@ function usePublisherFee(chainId) {
     const feePerKb = (estimate?.unit && Number.isFinite(estimate.rateValue) && estimate.rateValue > 0)
         ? displayRateToSettingsCustom(estimate.unit, estimate.rateValue)
         : null;
-    const validationError = pick.mode !== 'custom' || feePerKb !== null
-        ? null
-        : Number(pick.customRate) > 0
-            ? t('components.operatorPublisherMode.feeDecimals')
-            : t('components.operatorPublisherMode.feePositive');
-    return { pick, setPick, tiers, customEstimate, feePerKb, validationError };
+    const reviewStop = customFeeReviewStop({ feePick: pick, tiers, estimate: customEstimate });
+    return { pick, setPick, tiers, customEstimate, feePerKb, reviewStop };
 }
 
 function usePublisherSubmission({
     messaging, walletId, chainId, coinTicker, fromAddress, sourceError, feedActionIndex,
-    feePerKb, feeValidationError,
+    feePerKb, feeStop,
 }) {
     const [value, setValue] = useState('');
     const [submitting, setSubmitting] = useState(false);
@@ -211,7 +208,7 @@ function usePublisherSubmission({
         }
         if (!cleanValue) { setError(t('components.operatorPublisherMode.valueRequired')); return; }
         if (!DECIMAL_NUMBER.test(cleanValue)) { setError(t('components.operatorPublisherMode.valueNumber')); return; }
-        if (feeValidationError) { setError(feeValidationError); return; }
+        if (feeStop) { setError(feeStop.formError); return; }
         setSubmitting(true);
         setError(null);
         const params = {

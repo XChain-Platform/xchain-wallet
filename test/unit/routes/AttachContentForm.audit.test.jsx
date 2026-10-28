@@ -174,12 +174,13 @@ describe('AttachContentForm validation and review', () => {
     });
 
     it.each([
-        ['', 'Enter a custom fee rate greater than zero.'],
-        ['0', 'Enter a custom fee rate greater than zero.'],
-        ['-1', 'Enter a custom fee rate greater than zero.'],
-        ['0.123456789', 'Custom fee rate can have at most 8 decimal places.'],
-        ['0.00000001', 'Custom fee rate is too small to encode. Enter a larger rate.'],
-        ['100000000000000000000', 'Custom fee rate is too high. Enter a smaller rate.'],
+        ['', 'Enter a custom fee rate.'],
+        ['0', 'Custom fee rate must be greater than zero.'],
+        ['-1', 'Custom fee rate must be greater than zero.'],
+        ['0.123456789', 'Enter a rate of at least 1 sat/vB.'],
+        ['1.123456789', 'Custom fee rate can have at most 8 decimal places.'],
+        ['0.00000001', 'Enter a rate of at least 1 sat/vB.'],
+        ['100000000000000000000', 'Enter a rate no higher than 1,000 sat/vB.'],
     ])('refuses custom fee %j before review', async (rate, message) => {
         mount();
         await chooseFile();
@@ -192,7 +193,7 @@ describe('AttachContentForm validation and review', () => {
 
         await review();
 
-        expect(await screen.findByText(message)).toBeInTheDocument();
+        expect(await screen.findAllByText(message)).toHaveLength(1);
         expect(screen.queryByRole('form', { name: 'Review artwork upload' })).toBeNull();
     });
 

@@ -52,6 +52,7 @@ import {
     customFeeEstimate,
     displayRateToSettingsCustom,
 } from '../../flows/feeEstimate.js';
+import { customFeeReviewStop } from '../../flows/feeEstimate.js';
 import { extractHolderRows } from '../utils/holderRows.js';
 import { tickerReferenceError } from '../utils/tickerGrammar.js';
 import { tickLookupVerdict } from '../utils/listTickItems.js';
@@ -582,6 +583,8 @@ export function DividendForm({ walletId, onBack, initialChainId, initialTick, in
 
     function handleReview(event) {
         event.preventDefault();
+        const feeStop = customFeeReviewStop({ feePick, tiers: feeTiers, estimate: feeCustomEstimate });
+        if (feeStop) { setFormError(feeStop.formError); return; }
         if (!chainId || !fromAddress) {
             setFormError('Pick a source address first.');
             return;

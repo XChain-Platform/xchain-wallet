@@ -42,6 +42,7 @@ vi.mock('../../../packages/core/src/flows/feeEstimate.js', () => ({
     estimateNativeSendFeeTiers: () => null,
     customFeeEstimate: () => null,
     displayRateToSettingsCustom: () => null,
+    customFeeReviewStop: () => null,
 }));
 
 import { OperatorPublisherMode } from '../../../packages/core/src/shared/components/OperatorPublisherMode.jsx';

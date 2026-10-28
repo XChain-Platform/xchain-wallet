@@ -608,17 +608,20 @@ describe('BridgeMoveForm: invalid action fields', () => {
         expect(moveButton()).toBeDisabled();
 
         cleanup();
-        mount();
+        const messaging = mount();
         await waitFor(
             () => expect(screen.getByLabelText('Receive at')).toHaveValue(DOGE_ADDRESS.address),
             WAIT,
         );
         fireEvent.change(amountInput(), { target: { value: '1' } });
         fireEvent.change(screen.getByRole('slider', { name: 'Network fee' }), { target: { value: '3' } });
-        fireEvent.change(screen.getByLabelText(/Custom fee rate/), { target: { value: '0.123456789' } });
-        expect(await screen.findByText(/Custom fee rate can have at most 8 decimal places/i))
-            .toBeInTheDocument();
-        expect(moveButton()).toBeDisabled();
+        fireEvent.change(screen.getByLabelText(/Custom fee rate/), { target: { value: '1.123456789' } });
+        fireEvent.click(moveButton());
+        expect(await screen.findAllByText('Custom fee rate can have at most 8 decimal places.')).toHaveLength(1);
+        fireEvent.change(screen.getByLabelText(/Custom fee rate/), { target: { value: '50000' } });
+        fireEvent.click(moveButton());
+        expect(await screen.findAllByText('Enter a rate no higher than 1,000 sat/vB.')).toHaveLength(1);
+        expect(messaging.composeForConfirm).not.toHaveBeenCalled();
     });
 
     it('refuses review when fresh bridge settings differ from the displayed route', async () => {

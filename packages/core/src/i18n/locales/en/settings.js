@@ -551,6 +551,8 @@ const messages = {
     'settings.fees.rateAtLeast': 'Enter a rate of at least {rate} {unit}.',
     'settings.fees.rateNoHigherThan': 'Enter a rate no higher than {rate} {unit}.',
     'settings.fees.rateWithinSupportedRange': 'Enter a fee rate within the supported range.',
+    'settings.fees.rateDecimals': 'Custom fee rate can have at most 8 decimal places.',
+    'settings.fees.rateUnpriced': 'Custom fee rate is outside the supported range.',
     'settings.panic.panicModeIsActive': 'Panic mode is active',
     'settings.panic.signingIsFrozenUntilThe': 'Signing is frozen until the timer expires.',
     'settings.panic.remaining': 'remaining.',

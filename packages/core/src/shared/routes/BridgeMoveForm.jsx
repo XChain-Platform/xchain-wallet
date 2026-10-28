@@ -43,6 +43,7 @@ import {
     customFeeEstimate,
     displayRateToSettingsCustom,
 } from '../../flows/feeEstimate.js';
+import { customFeeReviewStop } from '../../flows/feeEstimate.js';
 import {
     GAS_TICK,
     bridgeLegFor,
@@ -375,13 +376,6 @@ export function BridgeMoveForm({ walletId, accountId, initialChainId, initialTic
     const tokenError = tick.toUpperCase() === GAS_TICK
         ? null
         : tickerReferenceError(tick, { noun: 'Token', allowRef: true });
-    const customFeeError = feePick.mode !== 'custom'
-        ? null
-        : feePerKb === null
-            ? Number(feePick.customRate) > 0
-                ? 'Custom fee rate can have at most 8 decimal places and must fit the supported range.'
-                : 'Enter a custom fee rate greater than zero.'
-            : null;
     const memoError = memo.includes('|') || memo.includes(';')
         ? 'Memo cannot contain "|" or ";".'
         : memoLengthError(memo.trim());
@@ -399,7 +393,6 @@ export function BridgeMoveForm({ walletId, accountId, initialChainId, initialTic
         || amountError
         || overBalanceError
         || memoError
-        || customFeeError
         || null;
 
     const actionConfirm = useActionConfirmFlow({ messaging, walletId });
@@ -466,6 +459,8 @@ export function BridgeMoveForm({ walletId, accountId, initialChainId, initialTic
 
     async function handleSubmit(event) {
         event.preventDefault();
+        const feeStop = customFeeReviewStop({ feePick, tiers: feeTiers, estimate: feeCustomEstimate });
+        if (feeStop) { setFormError(feeStop.formError); return; }
         if (stage === 'submitting') return;
         if (!fromAddress || !sourceChainId) {
             setFormError('No usable source address is available. Choose another source address.');

@@ -127,7 +127,7 @@ describe('SellOwnershipForm rendering', () => {
         fireEvent.change(screen.getByLabelText(/^Custom fee rate/), { target: { value: '' } });
         fireEvent.click(screen.getByRole('button', { name: 'List name for sale' }));
 
-        expect(screen.getByText('Enter a custom fee rate greater than zero.')).toBeInTheDocument();
+        expect(screen.getAllByText('Enter a custom fee rate.')).toHaveLength(1);
         expect(screen.getByRole('heading', { name: 'Sell alpha name' })).toBeInTheDocument();
     });
 

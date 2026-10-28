@@ -27,9 +27,9 @@ import {
     estimateNativeSendFee,
     estimateNativeSendFeeTiers,
     customFeeEstimate,
-    customFeeRateBoundsError,
     displayRateToSettingsCustom,
 } from '../../flows/feeEstimate.js';
+import { customFeeReviewStop } from '../../flows/feeEstimate.js';
 import styles from './IssueTokenForm.module.css';
 import { QueuedResultPanel } from '../components/QueuedResultPanel.jsx';
 import { latestEffectiveStakingRow } from '../../flows/stakingDashboard.js';
@@ -297,16 +297,6 @@ export function DelegationActionForm({ mode, walletId, chainId: initialChainId, 
         && Number.isFinite(feeEstimate.rateValue) && feeEstimate.rateValue > 0)
         ? displayRateToSettingsCustom(feeEstimate.unit, feeEstimate.rateValue)
         : null;
-    const customFeeRate = Number(feePick.customRate);
-    const customFeeRateError = feePick.mode !== 'custom'
-        ? null
-        : !Number.isFinite(customFeeRate) || customFeeRate <= 0
-            ? 'Enter a custom network fee rate greater than zero.'
-            : customFeeRateBoundsError({ rate: customFeeRate, tiers: feeTiers })
-                ? customFeeRateBoundsError({ rate: customFeeRate, tiers: feeTiers })
-                : !feeCustomEstimate
-                    ? 'Custom network fee rate can have at most 8 decimal places.'
-                    : null;
 
     const actionParams = useMemo(() => {
         const pk = pubkey.trim().toLowerCase();
@@ -340,10 +330,8 @@ export function DelegationActionForm({ mode, walletId, chainId: initialChainId, 
             setFormError('Signing pubkey must be exactly 64 hex characters (Ed25519 public key).');
             return;
         }
-        if (customFeeRateError) {
-            setFormError(customFeeRateError);
-            return;
-        }
+        const feeStop = customFeeReviewStop({ feePick, tiers: feeTiers, estimate: feeCustomEstimate });
+        if (feeStop) { setFormError(feeStop.formError); return; }
         setFormError(null);
         if (singleEncode) { openConfirmScreen(); return; }
         setStage('review');

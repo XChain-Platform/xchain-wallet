@@ -48,6 +48,7 @@ import {
     customFeeEstimate,
     displayRateToSettingsCustom,
 } from '../../flows/feeEstimate.js';
+import { customFeeReviewStop } from '../../flows/feeEstimate.js';
 import styles from './IssueTokenForm.module.css';
 
 const chainRegistry = registryLib.defaultRegistry();
@@ -375,10 +376,6 @@ export function CrossChainSwapForm({ walletId, onBack }) {
         && Number.isFinite(feeEstimate.rateValue) && feeEstimate.rateValue > 0)
         ? displayRateToSettingsCustom(feeEstimate.unit, feeEstimate.rateValue)
         : null;
-    const feeError = feePick.mode === 'custom'
-        && (!Number.isFinite(feePick.customRate) || Number(feePick.customRate) <= 0 || !feeCustomEstimate)
-        ? 'Enter a valid custom network fee rate before reviewing.'
-        : null;
     const giveTicker = giveDescriptor?.coin
         ? NATIVE_TICKER_BY_COIN[giveDescriptor.coin] || giveDescriptor.coin.toUpperCase()
         : null;
@@ -491,6 +488,8 @@ export function CrossChainSwapForm({ walletId, onBack }) {
     // reachable only from the review screen.
     function handleReview(event) {
         event.preventDefault();
+        const feeStop = customFeeReviewStop({ feePick, tiers: feeTiers, estimate: feeCustomEstimate });
+        if (feeStop) { setFormError(feeStop.formError); return; }
         if (!networkAvailable) return;
         markReviewAttempt();
         if (!fromAddress || !giveChainId || !getChainId) {
@@ -506,7 +505,7 @@ export function CrossChainSwapForm({ walletId, onBack }) {
             setFormError('Enter a receive address on the get network.');
             return;
         }
-        if (validationError || feeError) return;
+        if (validationError) return;
         // The memoized check keeps the clock of the last edit, so ask again now.
         if (expirationValidationError(expMode, expInput)) {
             setFormError('Expiration must be a future date and time.');
@@ -523,7 +522,7 @@ export function CrossChainSwapForm({ walletId, onBack }) {
         if (stage === 'submitting') return;
         if (!fromAddress || !giveChainId || !getChainId) return;
         const freshExpirationError = expirationValidationError(expMode, expInput);
-        if (validationError || feeError) return;
+        if (validationError) return;
         if (freshExpirationError) {
             setFormError('Expiration must be a future date and time.');
             setSubmitError(null);
@@ -912,13 +911,10 @@ export function CrossChainSwapForm({ walletId, onBack }) {
             // fields hold still until the confirm page opens.
             inert={actionConfirm.composing ? '' : undefined}
             aria-busy={actionConfirm.composing ? 'true' : undefined}
-            status={(validationError || feeError || formError) ? (
+            status={(validationError || formError) ? (
                 <>
                     {validationError ? (
                         <StatusMessage variant="error">{validationError}</StatusMessage>
-                    ) : null}
-                    {feeError ? (
-                        <StatusMessage variant="error">{feeError}</StatusMessage>
                     ) : null}
                     {formError ? (
                         <StatusMessage variant="error">{formError}</StatusMessage>

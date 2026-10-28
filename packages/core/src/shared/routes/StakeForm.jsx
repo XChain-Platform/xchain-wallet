@@ -36,6 +36,7 @@ import {
     customFeeEstimate,
     displayRateToSettingsCustom,
 } from '../../flows/feeEstimate.js';
+import { customFeeReviewStop } from '../../flows/feeEstimate.js';
 import styles from './IssueTokenForm.module.css';
 import { QueuedResultPanel } from '../components/QueuedResultPanel.jsx';
 import { effectiveStakingRows } from '../../flows/stakingDashboard.js';
@@ -345,8 +346,6 @@ export function StakeForm({ walletId, chainId: initialChainId, onBack }) {
         && Number.isFinite(feeEstimate.rateValue) && feeEstimate.rateValue > 0)
         ? displayRateToSettingsCustom(feeEstimate.unit, feeEstimate.rateValue)
         : null;
-    const customFeeRateValid = feePick.mode !== 'custom'
-        || (Number.isFinite(Number(feePick.customRate)) && Number(feePick.customRate) > 0);
 
     const actionParams = useMemo(() => {
         /** @type {Record<string, string>} */
@@ -391,6 +390,8 @@ export function StakeForm({ walletId, chainId: initialChainId, onBack }) {
 
     function handleReview(event) {
         event.preventDefault();
+        const feeStop = customFeeReviewStop({ feePick, tiers: feeTiers, estimate: feeCustomEstimate });
+        if (feeStop) { setFormError(feeStop.formError); return; }
         if (!fromAddress) {
             setFormError('No source address available.');
             return;
@@ -423,10 +424,6 @@ export function StakeForm({ walletId, chainId: initialChainId, onBack }) {
         }
         if (!/^[0-9a-fA-F]{64}$/.test(pk)) {
             setFormError('Signing public key must be exactly 64 hexadecimal characters (Ed25519).');
-            return;
-        }
-        if (!customFeeRateValid) {
-            setFormError('Enter a custom network fee rate greater than zero.');
             return;
         }
         setFormError(null);

@@ -207,7 +207,7 @@ describe('SleepForm address lock chain selection', () => {
         fireEvent.change(await screen.findByLabelText(/Custom fee rate/), { target: { value: '' } });
         fireEvent.click(screen.getByRole('button', { name: 'Preview' }));
 
-        expect(await screen.findByText('Enter a custom network fee rate greater than zero.')).toBeInTheDocument();
+        expect(await screen.findAllByText('Enter a custom fee rate.')).toHaveLength(1);
         expect(screen.getByRole('heading', { name: 'Lock address' })).toBeInTheDocument();
     });
 

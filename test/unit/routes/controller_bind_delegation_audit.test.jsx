@@ -205,11 +205,11 @@ describe('controller binding and signing-key delegation disclosures', () => {
             target: { value: '3' },
         });
         fireEvent.change(await screen.findByLabelText(/Custom fee rate/), {
-            target: { value: '0.123456789' },
+            target: { value: '1.123456789' },
         });
         fireEvent.click(screen.getByRole('button', { name: 'Bind' }));
 
-        expect(await screen.findByText('Custom network fee rate can have at most 8 decimal places.')).toBeTruthy();
+        expect(await screen.findAllByText('Custom fee rate can have at most 8 decimal places.')).toHaveLength(1);
         expect(messaging.buildControllerBindParams).not.toHaveBeenCalled();
     });
 

@@ -34,9 +34,9 @@ import {
     estimateNativeSendFee,
     estimateNativeSendFeeTiers,
     customFeeEstimate,
-    customFeeRateBoundsError,
     displayRateToSettingsCustom,
 } from '../../flows/feeEstimate.js';
+import { customFeeReviewStop } from '../../flows/feeEstimate.js';
 import { OwnAddressPickerScreen } from '../components/OwnAddressPickerScreen.jsx';
 import { ListPickerScreen } from '../components/ListPickerScreen.jsx';
 import styles from './IssueTokenForm.module.css';
@@ -456,11 +456,8 @@ export function CreateOrderForm({ walletId, onBack, initialChainId, initialFromA
 
     function handleReview(event) {
         event.preventDefault();
-        // A rate outside the chain bounds is refused here too, so a form that skips native validation still stops.
-        const feeBoundsError = feePick.mode === 'custom'
-            ? customFeeRateBoundsError({ rate: Number(feePick.customRate), tiers: feeTiers })
-            : null;
-        if (feeBoundsError) { setFormError(feeBoundsError); return; }
+        const feeStop = customFeeReviewStop({ feePick, tiers: feeTiers, estimate: feeCustomEstimate });
+        if (feeStop) { setFormError(feeStop.formError); return; }
         if (!guardBeforeSign()) return;
         setFormError(null);
         if (singleEncode) { void openConfirmModal(); return; }

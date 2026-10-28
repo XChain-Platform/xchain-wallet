@@ -27,6 +27,7 @@ import {
     customFeeEstimate,
     displayRateToSettingsCustom,
 } from '../../flows/feeEstimate.js';
+import { customFeeReviewStop } from '../../flows/feeEstimate.js';
 import styles from './IssueTokenForm.module.css';
 import { preferredSourceId } from '../addressSelection.js';
 import { extractActionIndex } from '../utils/actionIndexFromTx.js';
@@ -346,27 +347,6 @@ export function AttachContentForm({ walletId, chainId, tick, issuerAddress = nul
         && Number.isFinite(feeEstimate.rateValue) && feeEstimate.rateValue > 0)
         ? displayRateToSettingsCustom(feeEstimate.unit, feeEstimate.rateValue)
         : null;
-    const customFeeRate = Number(feePick.customRate);
-    const customFeeRateText = String(feePick.customRate ?? '').toLowerCase();
-    const [customFeeMantissa, customFeeExponentText] = customFeeRateText.split('e');
-    const customFeeDecimals = Math.max(
-        0,
-        (customFeeMantissa.split('.')[1]?.length || 0) - Number(customFeeExponentText || 0),
-    );
-    const customFeePerKb = feeTiers?.unit && Number.isFinite(customFeeRate)
-        ? displayRateToSettingsCustom(feeTiers.unit, customFeeRate)
-        : null;
-    const feeValidationError = feePick.mode !== 'custom'
-        ? null
-        : !Number.isFinite(customFeeRate) || customFeeRate <= 0
-            ? 'Enter a custom fee rate greater than zero.'
-            : customFeeDecimals > 8
-                ? 'Custom fee rate can have at most 8 decimal places.'
-                : customFeePerKb === 0
-                    ? 'Custom fee rate is too small to encode. Enter a larger rate.'
-                    : !feeCustomEstimate || !Number.isSafeInteger(customFeePerKb)
-                        ? 'Custom fee rate is too high. Enter a smaller rate.'
-                        : null;
 
     // Owner mismatch: the LINK leg will be recorded but not honoured
     // unless it's signed by the token's current owner.
@@ -555,6 +535,8 @@ export function AttachContentForm({ walletId, chainId, tick, issuerAddress = nul
 
     async function handleReviewFile(event) {
         event.preventDefault();
+        const feeStop = customFeeReviewStop({ feePick, tiers: feeTiers, estimate: feeCustomEstimate });
+        if (feeStop) { setFormError(feeStop.formError); return; }
         if (!fromAddress) {
             setFormError('No signing address available on this network.');
             return;
@@ -596,10 +578,6 @@ export function AttachContentForm({ walletId, chainId, tick, issuerAddress = nul
         const memoTooLong = memoLengthError(fileParams.MEMO);
         if (memoTooLong) {
             setFormError(memoTooLong);
-            return;
-        }
-        if (feeValidationError) {
-            setFormError(feeValidationError);
             return;
         }
         if (setAsTokenInfo && !previewUrl) {

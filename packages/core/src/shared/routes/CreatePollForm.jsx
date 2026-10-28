@@ -48,6 +48,7 @@ import {
     customFeeEstimate,
     displayRateToSettingsCustom,
 } from '../../flows/feeEstimate.js';
+import { customFeeReviewStop } from '../../flows/feeEstimate.js';
 import {
     isVoteBindingMinimumsActive,
     isVoteCallbackTimelockActive,
@@ -422,6 +423,8 @@ function CreatePollFormState({ walletId, chainId: initialChainId, presetTick, on
 
     function handleReview(event) {
         event.preventDefault();
+        const feeStop = customFeeReviewStop({ feePick, tiers: feeTiers, estimate: feeCustomEstimate });
+        if (feeStop) { setFormError(feeStop.formError); return; }
         if (!fromAddress) { setFormError('No source address available.'); return; }
         if (!tick.trim()) { setFormError('Governance token is required.'); return; }
         const tickError = tickerReferenceError(tick, { noun: 'Governance token' });

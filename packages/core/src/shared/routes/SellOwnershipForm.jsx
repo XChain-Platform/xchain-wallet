@@ -28,6 +28,7 @@ import {
     customFeeEstimate,
     displayRateToSettingsCustom,
 } from '../../flows/feeEstimate.js';
+import { customFeeReviewStop } from '../../flows/feeEstimate.js';
 import styles from './IssueTokenForm.module.css';
 import receivePickerStyles from './TokenPicker.module.css';
 import { externalIndexOf, preferredSourceId } from '../addressSelection.js';
@@ -255,20 +256,6 @@ export function SellOwnershipForm({ walletId, onBack, chainId: initialChainId, t
         && Number.isFinite(feeEstimate.rateValue) && feeEstimate.rateValue > 0)
         ? displayRateToSettingsCustom(feeEstimate.unit, feeEstimate.rateValue)
         : null;
-    const customFeeRate = Number(feePick.customRate);
-    const customFeeRateText = String(feePick.customRate ?? '').toLowerCase();
-    const [customFeeMantissa, customFeeExponentText] = customFeeRateText.split('e');
-    const customFeeDecimals = Math.max(
-        0,
-        (customFeeMantissa.split('.')[1]?.length || 0) - Number(customFeeExponentText || 0),
-    );
-    const feeValidationError = feePick.mode !== 'custom'
-        ? null
-        : !Number.isFinite(customFeeRate) || customFeeRate <= 0
-            ? 'Enter a custom fee rate greater than zero.'
-            : customFeeDecimals > 8 || !feeCustomEstimate
-                ? 'Custom fee rate can have at most 8 decimal places.'
-                : null;
 
     // ORDER and DISPENSER ownership sales take the same fields; only the
     // action name and the submit handler differ. GIVE_ESCROW is omitted (it
@@ -364,6 +351,8 @@ export function SellOwnershipForm({ walletId, onBack, chainId: initialChainId, t
     // happens only after the user confirms on the review screen.
     async function handleReview(event) {
         event.preventDefault();
+        const feeStop = customFeeReviewStop({ feePick, tiers: feeTiers, estimate: feeCustomEstimate });
+        if (feeStop) { setFormError(feeStop.formError); return; }
         if (submitPendingRef.current) return;
         if (!fromAddress || !chainId) {
             setFormError('Pick a source address first.');
@@ -381,7 +370,7 @@ export function SellOwnershipForm({ walletId, onBack, chainId: initialChainId, t
             setFormError('Select a price token.');
             return;
         }
-        if (validationError || feeValidationError) return;
+        if (validationError) return;
         if (!priceReady || !getTickReady) {
             setFormError(`Enter what you want in return and a price greater than 0.`);
             return;
@@ -706,13 +695,10 @@ export function SellOwnershipForm({ walletId, onBack, chainId: initialChainId, t
             inert={actionConfirm.composing ? '' : undefined}
             aria-busy={actionConfirm.composing ? 'true' : undefined}
             onChangeCapture={() => { if (formError) setFormError(null); }}
-            status={validationError || feeValidationError || formError || issuerEligibility.error ? (
+            status={validationError || formError || issuerEligibility.error ? (
                 <>
                     {validationError ? (
                         <StatusMessage variant="error">{validationError}</StatusMessage>
-                    ) : null}
-                    {feeValidationError ? (
-                        <StatusMessage variant="error">{feeValidationError}</StatusMessage>
                     ) : null}
                     {formError ? (
                         <StatusMessage variant="error">{formError}</StatusMessage>

@@ -221,7 +221,7 @@ describe('swap review editing', () => {
         fireEvent.change(screen.getByLabelText(/Custom fee rate/), { target: { value: '0' } });
         fireEvent.click(screen.getByRole('button', { name: 'Review' }));
 
-        expect(screen.getByText('Enter a valid custom network fee rate before reviewing.')).toBeInTheDocument();
+        expect(screen.getAllByText('Custom fee rate must be greater than zero.')).toHaveLength(1);
         expect(screen.queryByRole('button', { name: 'Edit' })).toBeNull();
     });
 
@@ -751,7 +751,7 @@ describe('swap review editing', () => {
         fireEvent.change(screen.getByLabelText(/Custom fee rate/), { target: { value: '0' } });
         fireEvent.click(screen.getByRole('button', { name: 'Review' }));
 
-        expect(screen.getByText('Enter a valid custom network fee rate before reviewing.')).toBeInTheDocument();
+        expect(screen.getAllByText('Custom fee rate must be greater than zero.')).toHaveLength(1);
         expect(screen.queryByRole('button', { name: 'Edit' })).toBeNull();
     });
 

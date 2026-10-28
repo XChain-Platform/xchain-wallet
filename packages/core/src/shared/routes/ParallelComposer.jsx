@@ -34,6 +34,7 @@ import {
     customFeeEstimate,
     displayRateToSettingsCustom,
 } from '../../flows/feeEstimate.js';
+import { customFeeReviewStop } from '../../flows/feeEstimate.js';
 import styles from './IssueTokenForm.module.css';
 import parallelStyles from './ParallelComposer.module.css';
 import { preferredSourceId } from '../addressSelection.js';
@@ -397,6 +398,11 @@ export function ParallelComposer({ walletId, onBack, initialRows, hasDexSurface 
     async function signActiveRow() {
         if (!activeRow || !activeFromAddress) return;
         if (activeLane.composing || activeRow.status === 'submitting') return;
+        const feeStop = customFeeReviewStop({ feePick, tiers: feeTiers, estimate: feeCustomEstimate });
+        if (feeStop) {
+            if (feeStop.formError) updateRow(activeRowIndex, { status: 'failed', error: feeStop.formError });
+            return;
+        }
 
         updateRow(activeRowIndex, { status: 'submitting', error: null });
         const params = JSON.parse(activeRow.paramsJson || '{}');

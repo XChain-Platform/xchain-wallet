@@ -15,7 +15,6 @@ import React from 'react';
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
 import {
     CallbackForm,
-    callbackFeeError,
     callbackTermsError,
 } from '../../../packages/core/src/shared/routes/CallbackForm.jsx';
 import { __clearTokenInfoCache } from '../../../packages/core/src/shared/hooks/useTokenInfo.js';
@@ -127,14 +126,6 @@ describe('callback field validation', () => {
         [{ ...TERMS, callbackBlock: '9007199254740992' }, 'supported range'],
     ])('rejects malformed callback terms %#', (terms, message) => {
         expect(callbackTermsError(terms, 2)).toContain(message);
-    });
-
-    it.each([
-        [{ mode: 'custom', customRate: 0 }, {}, 'greater than zero'],
-        [{ mode: 'custom', customRate: -1 }, {}, 'greater than zero'],
-        [{ mode: 'custom', customRate: 1.123456789 }, {}, 'at most 8 decimal places'],
-    ])('rejects invalid custom fees %#', (pick, estimate, message) => {
-        expect(callbackFeeError(pick, estimate)).toContain(message);
     });
 });
 

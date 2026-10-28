@@ -189,7 +189,7 @@ describe('message validation is visible from the primary action', () => {
     });
 
     it.each([
-        ['', /greater than zero/i],
+        ['', /enter a custom fee rate\./i],
         ['0', /greater than zero/i],
         ['-1', /greater than zero/i],
         ['1.123456789', /at most 8 decimal places/i],

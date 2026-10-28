@@ -56,6 +56,7 @@ import {
     customFeeEstimate,
     displayRateToSettingsCustom,
 } from '../../flows/feeEstimate.js';
+import { customFeeReviewStop } from '../../flows/feeEstimate.js';
 import styles from './IssueTokenForm.module.css';
 import { preferredSourceId } from '../addressSelection.js';
 import { useActionConfirmFlow, useConfirmSubmit, isUserRejection } from '../hooks/useActionConfirmFlow.js';
@@ -495,6 +496,8 @@ export function BatchComposerForm({ walletId, onBack, hasDexSurface = true }) {
 
     async function handleSign(event) {
         event.preventDefault();
+        const feeStop = customFeeReviewStop({ feePick, tiers: feeTiers, estimate: feeCustomEstimate });
+        if (feeStop) { setBuildError(feeStop.formError); return; }
         if (stage === 'submitting' || !composed) return;
         const hw = hwSource;
         if (!isWatcherMode && !hw && (!signerReady && password.length === 0)) return;

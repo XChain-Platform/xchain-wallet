@@ -22,9 +22,9 @@ import {
     estimateNativeSendFee,
     estimateNativeSendFeeTiers,
     customFeeEstimate,
-    customFeeRateBoundsError,
     displayRateToSettingsCustom,
 } from '../../flows/feeEstimate.js';
+import { customFeeReviewStop } from '../../flows/feeEstimate.js';
 import styles from './IssueTokenForm.module.css';
 import { preferredSourceId } from '../addressSelection.js';
 import { extractActionIndex } from '../utils/actionIndexFromTx.js';
@@ -559,17 +559,8 @@ function ListForkFormScreen({ walletId, listRef, onBack, onDone, repointHandlers
         if (!listActionIndexValid) { setFormError('List reference must be a positive whole number.'); return; }
         if (ownershipReason) { setFormError(ownershipReason); return; }
         if (!fromAddress) { setFormError('No signing address available on this network.'); return; }
-        if (feePick.mode === 'custom' && feePerKb === null) {
-            const rate = Number(feePick.customRate);
-            setFormError(rate > 0
-                ? 'Custom fee rate can have no more than 8 decimal places.'
-                : 'Custom fee rate must be greater than zero.');
-            return;
-        }
-        const feeBoundsError = feePick.mode === 'custom'
-            ? customFeeRateBoundsError({ rate: Number(feePick.customRate), tiers: feeTiers })
-            : null;
-        if (feeBoundsError) { setFormError(feeBoundsError); return; }
+        const feeStop = customFeeReviewStop({ feePick, tiers: feeTiers, estimate: feeCustomEstimate });
+        if (feeStop) { setFormError(feeStop.formError); return; }
         if (additions.invalid.length > 0) {
             const noun = isTick
                 ? (additions.invalid.length === 1 ? 'token name' : 'token names')

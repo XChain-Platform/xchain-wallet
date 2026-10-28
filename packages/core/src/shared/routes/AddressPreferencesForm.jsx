@@ -40,6 +40,7 @@ import {
     customFeeEstimate,
     displayRateToSettingsCustom,
 } from '../../flows/feeEstimate.js';
+import { customFeeReviewStop } from '../../flows/feeEstimate.js';
 import {
     feePreferenceLabel,
     requireMemoLabel,
@@ -190,6 +191,8 @@ export function AddressPreferencesForm({ walletId, chainId: initialChainId, addr
     // shown are the truth at sign time, not the load-time snapshot.
     async function handleReview(event) {
         event.preventDefault();
+        const feeStop = customFeeReviewStop({ feePick, tiers: feeTiers, estimate: feeCustomEstimate });
+        if (feeStop) { setFormError(feeStop.formError); return; }
         setFormError(null);
         const memoError = memoLengthError(memo.trim());
         if (memoError) { setFormError(memoError); return; }

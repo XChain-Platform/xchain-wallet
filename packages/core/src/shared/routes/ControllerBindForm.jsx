@@ -29,6 +29,7 @@ import {
     customFeeEstimate,
     displayRateToSettingsCustom,
 } from '../../flows/feeEstimate.js';
+import { customFeeReviewStop } from '../../flows/feeEstimate.js';
 import styles from './IssueTokenForm.module.css';
 import { externalIndexOf, preferredSourceId } from '../addressSelection.js';
 import { pickDefaultChainId } from '../chainSelection.js';
@@ -60,11 +61,6 @@ function controllerBindErrorField(message) {
     if (/^Memo|memo/.test(message)) return 'memo';
     if (/action class/i.test(message)) return 'actionClass';
     return null;
-}
-
-function decimalPlaces(value) {
-    const [mantissa, exponentText] = String(value ?? '').toLowerCase().split('e');
-    return Math.max(0, (mantissa.split('.')[1]?.length || 0) - Number(exponentText || 0));
 }
 
 /**
@@ -342,6 +338,8 @@ export function ControllerBindForm({ walletId, chainId: initialChainId, tick, on
 
     function handleReview(event) {
         event.preventDefault();
+        const feeStop = customFeeReviewStop({ feePick, tiers: feeTiers, estimate: feeCustomEstimate });
+        if (feeStop) { setFormError(feeStop.formError); return; }
         if (!fromAddress) {
             setFormError('No source address available.');
             return;
@@ -376,17 +374,6 @@ export function ControllerBindForm({ walletId, chainId: initialChainId, tick, on
             return;
         }
         setFieldError(null);
-        if (feePick.mode === 'custom' && feePerKb === null) {
-            const rate = Number(feePick.customRate);
-            if (!Number.isFinite(rate) || rate <= 0) {
-                setFormError('Custom network fee rate must be greater than zero.');
-            } else if (decimalPlaces(feePick.customRate) > 8) {
-                setFormError('Custom network fee rate can have at most 8 decimal places.');
-            } else {
-                setFormError('Custom network fee rate is outside the supported range.');
-            }
-            return;
-        }
         setFormError(null);
         if (singleEncode) { openConfirmScreen(); return; }
         setStage('review');

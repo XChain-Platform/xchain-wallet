@@ -371,9 +371,9 @@ describe('publish forms replace file state safely', () => {
     });
 
     it.each([
-        ['', 'Custom fee rate must be greater than zero.'],
+        ['', 'Enter a custom fee rate.'],
         ['1.123456789', 'Custom fee rate can have at most 8 decimal places.'],
-        ['999999999999999999999', 'Custom fee rate is outside the supported range.'],
+        ['999999999999999999999', 'Enter a rate no higher than 1,000 sat/vB.'],
     ])('refuses the public custom fee %j before review', async (rate, message) => {
         const client = messaging();
         client.getSettings.mockResolvedValue({ walletMode: 'watcher' });

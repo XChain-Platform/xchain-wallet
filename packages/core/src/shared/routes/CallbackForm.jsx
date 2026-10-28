@@ -42,6 +42,7 @@ import {
     customFeeEstimate,
     displayRateToSettingsCustom,
 } from '../../flows/feeEstimate.js';
+import { customFeeReviewStop } from '../../flows/feeEstimate.js';
 import { OwnAddressPickerScreen } from '../components/OwnAddressPickerScreen.jsx';
 import styles from './IssueTokenForm.module.css';
 import { submitFailureMessage } from '../utils/submitFailureMessage.js';
@@ -62,12 +63,6 @@ const PROTOCOL_COIN_TICKER = {
 
 const WHOLE_NUMBER_RE = /^\d+$/;
 const POSITIVE_DECIMAL_RE = /^\d+(?:\.\d+)?$/;
-
-function decimalPlaces(value) {
-    const text = String(value ?? '').toLowerCase();
-    const [mantissa, exponentText] = text.split('e');
-    return Math.max(0, (mantissa.split('.')[1]?.length || 0) - Number(exponentText || 0));
-}
 
 export function callbackTermsError(info, payoutDivisibility = null) {
     const callbackTick = String(info?.callbackTick || '').trim();
@@ -91,18 +86,6 @@ export function callbackTermsError(info, payoutDivisibility = null) {
     if (!WHOLE_NUMBER_RE.test(callbackBlock)
         || !Number.isSafeInteger(Number(callbackBlock))) {
         return 'Callback block must be a whole block height within the supported range.';
-    }
-    return null;
-}
-
-export function callbackFeeError(feePick, feeEstimate) {
-    if (feePick?.mode !== 'custom') return null;
-    const rate = Number(feePick.customRate);
-    if (!Number.isFinite(rate) || rate <= 0) {
-        return 'Enter a custom fee rate greater than zero.';
-    }
-    if (decimalPlaces(feePick.customRate) > 8 || !feeEstimate) {
-        return 'Custom fee rate can have at most 8 decimal places.';
     }
     return null;
 }
@@ -511,11 +494,6 @@ export function CallbackForm({ walletId, onBack, initialChainId, initialTick, in
             setFormError(memoTooLong);
             return false;
         }
-        const feeError = callbackFeeError(feePick, feeEstimate);
-        if (feeError) {
-            setFormError(feeError);
-            return false;
-        }
         return true;
     }
 
@@ -611,6 +589,8 @@ export function CallbackForm({ walletId, onBack, initialChainId, initialTick, in
 
     async function handleReview(event) {
         event.preventDefault();
+        const feeStop = customFeeReviewStop({ feePick, tiers: feeTiers, estimate: feeCustomEstimate });
+        if (feeStop) { setFormError(feeStop.formError); return; }
         if (refreshing || !guardBeforeSign()) return;
         setFormError(null);
         setRefreshing(true);

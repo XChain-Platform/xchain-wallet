@@ -9,7 +9,7 @@
 // contact legal@dankest.llc.
 
 import { useId, useMemo, useState } from 'react';
-import { customFeeRateBoundsError, isPerKbUnit } from '../flows/feeEstimate.js';
+import { customFeeRateBoundsError, customFeeRateDecimalsError, isPerKbUnit } from '../flows/feeEstimate.js';
 import {
     formatWithThousands,
     normalizeLocalizedDecimal,
@@ -290,6 +290,9 @@ export function FeeSelector({
         customFeedbackTone = 'error';
     } else if (isCustom && rangeError) {
         customFeedback = rangeError;
+        customFeedbackTone = 'error';
+    } else if (isCustom && customFeeRateDecimalsError(customRateCanonical)) {
+        customFeedback = customFeeRateDecimalsError(customRateCanonical);
         customFeedbackTone = 'error';
     } else if (isCustom && fastPresetRate !== null
         && customRateNumber > fastPresetRate * HIGH_FEE_MULTIPLIER) {

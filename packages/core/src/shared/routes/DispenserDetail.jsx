@@ -36,6 +36,7 @@ import {
     customFeeEstimate,
     displayRateToSettingsCustom,
 } from '../../flows/feeEstimate.js';
+import { customFeeReviewStop } from '../../flows/feeEstimate.js';
 import { coinToFiatExact } from '../../flows/priceLookup.js';
 import { formatFiatAmount } from '../utils/fiatAmountFormat.js';
 import { useFiatRate } from '../hooks/useFiatRate.js';
@@ -1367,6 +1368,8 @@ export function DispenserDetail({ walletId, chainId, actionIndex, onBack, onCanc
 
     async function handleRefill(event) {
         event.preventDefault();
+        const feeStop = customFeeReviewStop({ feePick, tiers: feeTiers, estimate: feeCustomEstimate });
+        if (feeStop) { setRefillError(feeStop.formError); return; }
         if (refillStage === 'submitting' || !ownerAddress) return;
         const amt = refillAmount.trim();
         if (!/^\d+(?:\.\d+)?$/.test(amt) || compareAmounts(amt, '0') !== 1) {
@@ -1414,6 +1417,8 @@ export function DispenserDetail({ walletId, chainId, actionIndex, onBack, onCanc
 
     async function handleEdit(event) {
         event.preventDefault();
+        const feeStop = customFeeReviewStop({ feePick, tiers: feeTiers, estimate: feeCustomEstimate });
+        if (feeStop) { setEditError(feeStop.formError); return; }
         if (editStage === 'submitting' || !ownerAddress) return;
 
         // Assemble only the fields the owner filled in; a blank field is
@@ -1464,6 +1469,8 @@ export function DispenserDetail({ walletId, chainId, actionIndex, onBack, onCanc
 
     async function handleCancel(event) {
         event.preventDefault();
+        const feeStop = customFeeReviewStop({ feePick, tiers: feeTiers, estimate: feeCustomEstimate });
+        if (feeStop) { setCancelError(feeStop.formError); return; }
         if (cancelStage === 'submitting' || !ownerAddress) return;
         if (!await verifyOwnerActionOpen(setCancelError, 'close')) return;
         await runOwnerAction({

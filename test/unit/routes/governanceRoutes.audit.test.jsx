@@ -419,21 +419,21 @@ describe('governance route audit', () => {
 
         fireEvent.change(screen.getByLabelText(/Custom fee rate/), { target: { value: '' } });
         fireEvent.click(screen.getByRole('button', { name: 'Delegate votes' }));
-        expect(await screen.findByText('Enter a custom network fee rate greater than zero.')).toBeTruthy();
+        expect(await screen.findAllByText('Enter a custom fee rate.')).toHaveLength(1);
 
         for (const rate of ['0', '-1']) {
             fireEvent.change(screen.getByLabelText(/Custom fee rate/), { target: { value: rate } });
             fireEvent.click(screen.getByRole('button', { name: 'Delegate votes' }));
-            expect(await screen.findByText('Enter a custom network fee rate greater than zero.')).toBeTruthy();
+            expect(await screen.findAllByText('Custom fee rate must be greater than zero.')).toHaveLength(1);
         }
 
         fireEvent.change(screen.getByLabelText(/Custom fee rate/), { target: { value: '1.123456789' } });
         fireEvent.click(screen.getByRole('button', { name: 'Delegate votes' }));
-        expect(await screen.findByText('Custom network fee rate can have at most 8 decimal places.')).toBeTruthy();
+        expect(await screen.findAllByText('Custom fee rate can have at most 8 decimal places.')).toHaveLength(1);
 
         fireEvent.change(screen.getByLabelText(/Custom fee rate/), { target: { value: '1001' } });
         fireEvent.click(screen.getByRole('button', { name: 'Delegate votes' }));
-        expect((await screen.findAllByText('Enter a rate no higher than 1,000 sat/vB.')).length).toBeGreaterThan(0);
+        expect(await screen.findAllByText('Enter a rate no higher than 1,000 sat/vB.')).toHaveLength(1);
         expect(messaging.composeVoteForConfirm).not.toHaveBeenCalled();
     });
 

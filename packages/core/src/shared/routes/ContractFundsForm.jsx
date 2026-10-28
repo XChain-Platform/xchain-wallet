@@ -39,6 +39,7 @@ import {
     customFeeEstimate,
     displayRateToSettingsCustom,
 } from '../../flows/feeEstimate.js';
+import { customFeeReviewStop } from '../../flows/feeEstimate.js';
 import styles from './IssueTokenForm.module.css';
 import { QueuedResultPanel } from '../components/QueuedResultPanel.jsx';
 import { useTokenInfo } from '../hooks/useTokenInfo.js';
@@ -290,6 +291,8 @@ export function ContractFundsForm({ mode, walletId, chainId, contractActionIndex
 
     function handleReview(event) {
         event.preventDefault();
+        const feeStop = customFeeReviewStop({ feePick, tiers: feeTiers, estimate: feeCustomEstimate });
+        if (feeStop) { setFormError(feeStop.formError); return; }
         // The refusal line is already on screen above the fields.
         if (withdrawRefused) return;
         if (!fromAddress) {

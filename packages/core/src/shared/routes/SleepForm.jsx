@@ -40,6 +40,7 @@ import {
     customFeeEstimate,
     displayRateToSettingsCustom,
 } from '../../flows/feeEstimate.js';
+import { customFeeReviewStop } from '../../flows/feeEstimate.js';
 import { blockDateEstimateText } from '../utils/blockDateEstimate.js';
 import { OwnAddressPickerScreen } from '../components/OwnAddressPickerScreen.jsx';
 import styles from './IssueTokenForm.module.css';
@@ -315,10 +316,6 @@ export function SleepForm({ walletId, onBack, mode, initialChainId, initialTick,
         if (m.includes('|') || m.includes(';')) return 'Memo cannot contain "|" or ";".';
         const tooLong = memoLengthError(m);
         if (tooLong) return tooLong;
-        if (feePick.mode === 'custom'
-            && (!Number.isFinite(feePick.customRate) || Number(feePick.customRate) <= 0)) {
-            return 'Enter a custom network fee rate greater than zero.';
-        }
         return null;
     }
 
@@ -425,6 +422,8 @@ export function SleepForm({ walletId, onBack, mode, initialChainId, initialTick,
 
     async function handleReview(event) {
         event.preventDefault();
+        const feeStop = customFeeReviewStop({ feePick, tiers: feeTiers, estimate: feeCustomEstimate });
+        if (feeStop) { setFormError(feeStop.formError); return; }
         if (reviewInFlightRef.current) return;
         reviewInFlightRef.current = true;
         try {

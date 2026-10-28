@@ -32,6 +32,7 @@ import {
     customFeeEstimate,
     displayRateToSettingsCustom,
 } from '../../flows/feeEstimate.js';
+import { customFeeReviewStop } from '../../flows/feeEstimate.js';
 import styles from './IssueTokenForm.module.css';
 import { preferredSourceId } from '../addressSelection.js';
 import { pickDefaultChainId } from '../chainSelection.js';
@@ -423,13 +424,6 @@ export function ListCreateForm({ walletId, chainId: initialChainId, initialType,
 
     function validate() {
         if (!fromAddress) { setFormError('No signing address available on this network.'); return false; }
-        if (feePick.mode === 'custom' && feePerKb === null) {
-            const rate = Number(feePick.customRate);
-            setFormError(rate > 0
-                ? 'Custom fee rate can have no more than 8 decimal places.'
-                : 'Custom fee rate must be greater than zero.');
-            return false;
-        }
         // Verify no pipe or semicolon in MEMO (both are protocol delimiters)
         if (/[|;]/.test(memo)) { setFormError('Memo cannot contain | or ; characters.'); return false; }
         // Verify MEMO fits the chain's length limit, measured as sent (trimmed)
@@ -457,6 +451,8 @@ export function ListCreateForm({ walletId, chainId: initialChainId, initialType,
 
     function handleReview(event) {
         event.preventDefault();
+        const feeStop = customFeeReviewStop({ feePick, tiers: feeTiers, estimate: feeCustomEstimate });
+        if (feeStop) { setFormError(feeStop.formError); return; }
         if (!validate()) return;
         setFormError(null);
         if (singleEncode) { openConfirmScreen(); return; }
