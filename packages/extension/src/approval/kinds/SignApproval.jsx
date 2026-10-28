@@ -806,7 +806,7 @@ export function SignApproval({ id, kind, payload, onReject }) {
             footer={
                 <div className={shared.footer}>
                     <Button
-                        variant="danger"
+                        variant="secondary"
                         block
                         icon={<Icon.ThumbsDownIcon />}
                         onClick={onReject}
@@ -817,7 +817,7 @@ export function SignApproval({ id, kind, payload, onReject }) {
                     {!signingUnavailable ? (
                         <Button
                             type="button"
-                            variant="primary"
+                            variant="success"
                             block
                             icon={<Icon.ThumbsUpIcon />}
                             loading={busy}
