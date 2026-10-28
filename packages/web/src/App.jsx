@@ -70,6 +70,7 @@ import {
 import { NOTIFICATION_EVENT } from './notifications/webNotifyAdapter.js';
 import { createNotificationToastGate } from './notifications/notificationToastGate.js';
 import { ReachabilityBanner } from '@xchain-wallet/core/shared/components/ReachabilityBanner.jsx';
+import { useWaitingLinkDropped } from '@xchain-wallet/core/shared/components/WaitingLinkDroppedNotice.jsx';
 // §6 / D4. Renders nothing unless a shell installed a direct-update
 // provider, which only a sideloaded Android APK does; see flows/directUpdate.js.
 import { UpdateNoticeBanner } from '@xchain-wallet/core/shared/components/UpdateNoticeBanner.jsx';
@@ -921,6 +922,8 @@ function AppInner() {
     // strips a query param, while this one must stay subscribed for as long
     // as the app is open, since a tap can arrive at any moment.
     useEffect(() => subscribeToNativeDeepLinks(applyUriIntent), [applyUriIntent]);
+    const waitingLinkDropped = useWaitingLinkDropped(unlockedView);
+    const showWaitingLinkDropped = waitingLinkDropped.show;
     // The waiting link opens only when the user left Send by Back or Done on
     // the result; any other route drops it and says so on the screen chosen.
     const holdSendLinks = useCallback((held, release) => {
@@ -933,9 +936,9 @@ function AppInner() {
         if (release?.open) {
             applyUriIntent(raw);
         } else {
-            showToast({ message: t('shell.waitingLinkDropped'), variant: 'default' });
+            showWaitingLinkDropped();
         }
-    }, [applyUriIntent, showToast]);
+    }, [applyUriIntent, showWaitingLinkDropped]);
 
     // No auto-unlock: the password is never persisted to Web API
     // storage, so a page reload always re-locks the wallet and the
@@ -3196,6 +3199,7 @@ function AppInner() {
                     notices={
                         activeWalletId ? (
                             <>
+                                {waitingLinkDropped.node}
                                 <QueuedBroadcastBanner walletId={activeWalletId} />
                                 {/* Demo data is fixture data and never stale, so no reachability notice. */}
                                 {isDemoWallet(activeWalletId) ? null : <ReachabilityBanner />}
@@ -3274,8 +3278,8 @@ function AppInner() {
                                                 // over an open Send form remounts it like a link
                                                 // does (the earlier form is kept as a draft).
                                                 // The scan is newer than any link waiting on an
-                                                // approved payment, so that link is dropped.
-                                                heldLinkRef.current = null;
+                                                // approved payment; the remount releases that
+                                                // link as dropped and Send says so.
                                                 setSendLinkSeq((n) => n + 1);
                                                 setUnlockedView('send');
                                             }

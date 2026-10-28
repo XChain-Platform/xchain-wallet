@@ -159,6 +159,7 @@ import { loadDisplayBalances } from '@xchain-wallet/core/shared/utils/displayBal
 import { useKeyboardShortcuts } from '@xchain-wallet/core/shared/keyboard/useKeyboardShortcuts.js';
 import { ShortcutHelp } from '@xchain-wallet/core/shared/keyboard/ShortcutHelp.jsx';
 import { BottomTabBar } from '@xchain-wallet/core/shared/components/BottomTabBar.jsx';
+import { useWaitingLinkDropped } from '@xchain-wallet/core/shared/components/WaitingLinkDroppedNotice.jsx';
 import { QueuedBroadcastBanner } from '@xchain-wallet/core/shared/components/QueuedBroadcastBanner.jsx';
 import { ReachabilityBanner } from '@xchain-wallet/core/shared/components/ReachabilityBanner.jsx';
 import { ToastHost, useClearToastsOnLock, useToast } from '@xchain-wallet/core/shared/components/ToastHost.jsx';
@@ -979,6 +980,9 @@ function AppInner() {
         skip: isDetachedWindow.current,
     });
 
+    // A scan carries the notice on to the Send form it opens.
+    const waitingLinkDropped = useWaitingLinkDropped(unlockedView, { scan: 'send' });
+
     // OS deep links, applied after unlock and after the resume above. A
     // detached window neither claims nor applies one: it keeps its pinned view.
     const waitingLink = useDeepLinks({
@@ -1097,7 +1101,7 @@ function AppInner() {
                             // any other route drops it and says so.
                             if (held || release?.open) return;
                             if (waitingLink.waiting) {
-                                showToast({ message: t('shell.waitingLinkDropped'), variant: 'default' });
+                                waitingLinkDropped.show();
                             }
                             waitingLink.drop();
                         }}
@@ -3029,6 +3033,7 @@ function AppInner() {
                     notices={
                         activeWalletId ? (
                             <>
+                                {waitingLinkDropped.node}
                                 <QueuedBroadcastBanner walletId={activeWalletId} />
                                 {/* Demo data is fixture data and never stale, so no reachability notice. */}
                                 {isDemoWallet(activeWalletId) ? null : <ReachabilityBanner />}

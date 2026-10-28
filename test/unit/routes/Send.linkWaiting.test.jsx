@@ -156,6 +156,22 @@ describe('Send release tells the shell how the user left', () => {
 describe('desktop intake reports the waiting link and drops it on request', () => {
     const registry = registryLib.defaultRegistry();
 
+    it('opens the waiting link when the hold is released without a drop', async () => {
+        const bridge = {
+            takePending: vi.fn().mockResolvedValue({ raw: `bitcoin:${OTHER}?amount=0.5` }),
+            onUri: vi.fn(() => () => {}),
+        };
+        const apply = vi.fn();
+        const props = { bridge, detached: false, chainRegistry: registry, unlocked: true, walletId: 'w', held: true, apply };
+        const { result, rerender } = renderHook((p) => useDeepLinks(p), { initialProps: props });
+        await waitFor(() => expect(result.current.waiting).toBe(true));
+        expect(apply).not.toHaveBeenCalled();
+        rerender({ ...props, held: false });
+        await waitFor(() => expect(apply).toHaveBeenCalledTimes(1));
+        expect(apply.mock.calls[0][0].sendPrefill).toMatchObject({ address: OTHER });
+        expect(result.current.waiting).toBe(false);
+    });
+
     it('waiting is true only while held, and drop discards the link', async () => {
         const bridge = {
             takePending: vi.fn().mockResolvedValue({ raw: `bitcoin:${OTHER}?amount=0.5` }),

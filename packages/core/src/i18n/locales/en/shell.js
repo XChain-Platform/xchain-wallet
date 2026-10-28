@@ -21,6 +21,7 @@ const messages = {
     'shell.messageSent': 'Message sent',
     'shell.cannotOpenLink': "Can't open link",
     'shell.waitingLinkDropped': 'The waiting payment link was dropped.',
+    'shell.dismiss': 'Dismiss notice',
     'shell.unknownState': 'unknown state "{state}"',
 
     // Copy moved out of JSX literals by the i18n sweep.
