@@ -362,6 +362,39 @@ export function psbtSighashError(decomposed, signingAddress) {
     return null;
 }
 
+/**
+ * Warn about a network fee that is unusually large for what the transaction
+ * sends, on the same terms the Send form uses: a fee above 10% of the amount
+ * sent. The amount sent is what leaves the wallet (outputs to addresses the
+ * wallet does not own); a self transfer with no such output is measured against
+ * its total output. A PSBT arrives already built, so the review is the only
+ * place the signer sees that a fee takes most of the inputs. The warning never
+ * changes the transaction; an unverifiable fee is left to psbtReviewError.
+ *
+ * @param {{ inputs?: Array<{ value?: number|string|null }>, outputs?: Array<{ value?: number|string|null, address?: string|null }> } | null} decomposed
+ * @param {Set<string>} ownAddresses
+ * @returns {string[]}
+ */
+export function psbtFeeShareWarnings(decomposed, ownAddresses) {
+    const feeValue = exactNetworkFeeSats(decomposed);
+    if (feeValue === null) return [];
+    const fee = BigInt(feeValue);
+    if (fee === 0n) return [];
+    const totalIn = sumExactSats(decomposed.inputs.map((input) => input?.value));
+    const totalOut = sumExactSats(decomposed.outputs.map((output) => output?.value));
+    if (totalIn === null || totalOut === null || totalIn === 0n) return [];
+    const own = ownAddresses instanceof Set ? ownAddresses : new Set();
+    const external = sumExactSats(decomposed.outputs
+        .filter((output) => output?.address && !own.has(output.address))
+        .map((output) => output.value));
+    const sent = external !== null && external > 0n ? external : totalOut;
+    if (fee * 10n <= sent) return [];
+    const lines = ['The network fee is more than 10% of the amount this transaction sends.'];
+    lines.push(`The network fee is ${(fee * 100n) / totalIn}% of the coins this transaction spends.`);
+    if (fee > totalOut) lines.push('The network fee is more than the total this transaction sends.');
+    return lines;
+}
+
 function nativeAmountLabel(value, descriptor) {
     const amount = exactSats(value);
     if (amount === null || !descriptor) return null;
@@ -886,6 +919,11 @@ export function PsbtSignForm({ walletId, onBack, initialPsbt }) {
         return sumExactSats(decomposed.outputs.map((output) => output.value));
     }, [decomposed]);
     const fee = exactNetworkFeeSats(decomposed);
+    // A transaction this screen refuses to sign shows its one refusal, not a fee warning beside it.
+    const feeShareWarnings = useMemo(
+        () => (decomposed && !importEligibilityError ? psbtFeeShareWarnings(decomposed, ownAddressSet) : []),
+        [decomposed, ownAddressSet, importEligibilityError],
+    );
     const chainDescriptor = chainRegistry.get(chainId);
 
     // §5.6 slice 3: software signing goes through the shared confirm
@@ -1242,6 +1280,13 @@ export function PsbtSignForm({ walletId, onBack, initialPsbt }) {
                 <strong>Network fee:</strong>{' '}
                 {fee != null ? nativeAmountLabel(fee, chainDescriptor) : 'unavailable'}
             </div>
+            {feeShareWarnings.length > 0 ? (
+                <StatusMessage variant="warning" role="alert" testId="psbt-fee-share-warning">
+                    {feeShareWarnings.map((line) => (
+                        <p key={line}>{line}</p>
+                    ))}
+                </StatusMessage>
+            ) : null}
             <div>
                 <strong>Inputs this address signs:</strong> {ownedInputCount} of {decomposed.inputs.length}
             </div>
