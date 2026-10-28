@@ -12,6 +12,7 @@ import { MessagingContext } from '../../../packages/core/src/shared/MessagingCon
 import { ActionConfirmScreen } from '../../../packages/core/src/shared/components/ActionConfirmScreen.jsx';
 import { ActionIntentSummary } from '../../../packages/core/src/shared/components/ActionIntentSummary.jsx';
 import { ActivityRow } from '../../../packages/core/src/shared/components/ActivityRow.jsx';
+import { AddressDiscoveryNotice } from '../../../packages/core/src/shared/components/AddressDiscoveryNotice.jsx';
 import { AdsNotice } from '../../../packages/core/src/shared/components/AdsNotice.jsx';
 import { AlertsOverlay } from '../../../packages/core/src/shared/components/AlertsOverlay.jsx';
 import { AmountField } from '../../../packages/core/src/shared/components/AmountField.jsx';
@@ -132,6 +133,30 @@ const fixtures = [
             </li>
         </ul>
     )],
+    // A finished scan with an unread chain shows its warning line and the Try again control.
+    ['AddressDiscoveryNotice', () => (
+        <MessagingContext.Provider
+            value={{
+                shell: 'web',
+                messaging: {
+                    ...messaging,
+                    addressDiscoveryStatus: vi.fn().mockResolvedValue({
+                        id: 1,
+                        status: 'done',
+                        chainsDone: 2,
+                        chainsTotal: 3,
+                        found: 1,
+                        failedChains: ['bitcoin-mainnet'],
+                        walletIds: ['wallet-1'],
+                    }),
+                    addressDiscoveryDismiss: vi.fn().mockResolvedValue(undefined),
+                    discoverAddresses: vi.fn().mockResolvedValue(undefined),
+                },
+            }}
+        >
+            <AddressDiscoveryNotice />
+        </MessagingContext.Provider>
+    ), () => screen.findByTestId('address-discovery-status')],
     ['AdsNotice', () => <AdsNotice onContinue={noop} />],
     ['AlertsOverlay', () => (
         <AlertsOverlay
