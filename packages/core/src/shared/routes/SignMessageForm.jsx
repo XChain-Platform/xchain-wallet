@@ -72,6 +72,12 @@ export function messageRefusalReason(message) {
     return null;
 }
 
+// Only the message is typed; the chain and address start on defaults, so a
+// draft without message text holds nothing the user would want back.
+function hasMessageDraft(values) {
+    return typeof values?.message === 'string' && values.message.trim().length > 0;
+}
+
 /**
  * @param {object} props
  * @param {string} props.walletId
@@ -114,14 +120,18 @@ export function SignMessageForm({ walletId, onBack }) {
     const draft = useFormDraft({ view: 'sign-message', walletId, network: draftNetwork, ttlMs: formDraftTtlMs });
     // draftPending is true once the form may autosave: a fresh form saves at
     // once, a stored draft waits for an explicit Restore or Discard.
-    const [draftPending, setDraftPending] = useState(() => !draft.hasDraft());
+    const [draftPending, setDraftPending] = useState(() => !hasMessageDraft(draft.load()));
     // Settings resolve after the first render; once the network is known a draft
     // from another network reads as absent, so the form saves from then on.
     useEffect(() => {
-        if (draftNetwork && !draft.hasDraft()) setDraftPending(true);
+        if (draftNetwork && !hasMessageDraft(draft.load())) setDraftPending(true);
     }, [draftNetwork]); // eslint-disable-line react-hooks/exhaustive-deps
     useEffect(() => {
         if (signedResult || !draftPending) return;
+        if (!hasMessageDraft({ message })) {
+            draft.clear();
+            return;
+        }
         draft.save({ chainId, addressId, message });
     }, [signedResult, draftPending, draft, chainId, addressId, message]);
     const restoreDraft = useCallback(() => {

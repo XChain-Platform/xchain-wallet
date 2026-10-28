@@ -108,3 +108,43 @@ describe('autoLockState arm/stamp/clear', () => {
         expect(shouldAutoLock(s, 9_999_999)).toBe(false);
     });
 });
+
+describe('autoLockState when session storage refuses a write', () => {
+    let store;
+    let refuse;
+    beforeEach(() => {
+        store = installSessionArea();
+        refuse = false;
+        const area = globalThis.chrome.storage.session;
+        const set = area.set;
+        const remove = area.remove;
+        area.set = async (obj) => { if (refuse) throw new Error('quota exceeded'); return set(obj); };
+        area.remove = async (key) => { if (refuse) throw new Error('quota exceeded'); return remove(key); };
+    });
+
+    it('a refused arm still locks once the idle window passes', async () => {
+        refuse = true;
+        await applyAutoLockSignal({ armed: true, idleMs: 60_000 }, 1000);
+        expect(store.has('xchain:autolock')).toBe(false);
+        expect(shouldAutoLock(await readAutoLockState(), 61_000)).toBe(true);
+    });
+
+    it('a refused activity stamp keeps the newer stamp', async () => {
+        await applyAutoLockSignal({ armed: true, idleMs: 60_000 }, 1000);
+        refuse = true;
+        await stampAutoLockActivity(50_000);
+        expect(shouldAutoLock(await readAutoLockState(), 61_000)).toBe(false);
+        expect(shouldAutoLock(await readAutoLockState(), 110_000)).toBe(true);
+    });
+
+    it('a refused clear hides the earlier deadline, and a later saved arm reads from storage', async () => {
+        await applyAutoLockSignal({ armed: true, idleMs: 60_000 }, 1000);
+        refuse = true;
+        await clearAutoLockState();
+        expect(await readAutoLockState()).toBeNull();
+        refuse = false;
+        await applyAutoLockSignal({ armed: true, idleMs: 120_000 }, 200_000);
+        expect(store.get('xchain:autolock')).toEqual({ armed: true, idleMs: 120_000, lastActivity: 200_000 });
+        expect(await readAutoLockState()).toEqual({ armed: true, idleMs: 120_000, lastActivity: 200_000 });
+    });
+});

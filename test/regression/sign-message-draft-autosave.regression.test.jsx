@@ -84,6 +84,31 @@ describe('Sign message draft autosave', () => {
         });
     });
 
+    it('stores nothing for a form left without message text', async () => {
+        mountForm();
+        const field = await screen.findByLabelText('Message');
+        await waitFor(() => expect(screen.getByRole('button', { name: 'Sign message' })).toBeInTheDocument());
+        await new Promise((resolve) => setTimeout(resolve, 50));
+        expect(localStorage.getItem(KEY)).toBeNull();
+        fireEvent.change(field, { target: { value: 'typed' } });
+        await waitFor(() => expect(localStorage.getItem(KEY)).toContain('typed'));
+        fireEvent.change(field, { target: { value: '   ' } });
+        await waitFor(() => expect(localStorage.getItem(KEY)).toBeNull());
+    });
+
+    it('offers no Restore for a stored draft without message text', async () => {
+        localStorage.setItem(KEY, JSON.stringify({
+            savedAt: Date.now(),
+            network: 'mainnet',
+            values: { chainId: CHAIN_ID, addressId: SOURCE.id, message: '' },
+        }));
+        mountForm();
+        await screen.findByLabelText('Message');
+        await new Promise((resolve) => setTimeout(resolve, 50));
+        expect(screen.queryByRole('button', { name: 'Restore' })).toBeNull();
+        expect(screen.queryByText('You have an unfinished message draft.')).toBeNull();
+    });
+
     it('keeps saving after the stored draft is discarded', async () => {
         localStorage.setItem(KEY, JSON.stringify({
             savedAt: Date.now(),

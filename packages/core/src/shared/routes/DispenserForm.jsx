@@ -161,6 +161,18 @@ function outsideAddressError(address, descriptor) {
     return `This is not a valid ${chainName} address. Check it for typos.`;
 }
 
+// Fields the user fills in. Chain, source, fee and the mode toggles start on
+// defaults, so a draft with none of these filled holds nothing to restore.
+const DISPENSER_DRAFT_TEXT_FIELDS = [
+    'ticker', 'giveAmount', 'escrow', 'triggerPrice', 'oracleAddress', 'fiatAmount',
+    'getTick', 'getTokenAmount', 'expInput', 'allowListIdx', 'blockListIdx', 'outsideAddress',
+];
+
+function hasDispenserDraft(values) {
+    if (!values || typeof values !== 'object') return false;
+    return DISPENSER_DRAFT_TEXT_FIELDS.some((field) => String(values[field] ?? '').trim().length > 0);
+}
+
 /**
  * Dispenser authoring form (§40.7.1).
  *
@@ -358,11 +370,11 @@ export function DispenserForm({ walletId, activeAccountId, onBack, initialChainI
     const draft = useFormDraft({ view: 'dispenser', walletId, network: draftNetwork, ttlMs: formDraftTtlMs });
     // A stored draft waits for an explicit Restore. A fresh form starts
     // saving immediately so an auto-lock unmount cannot erase typed values.
-    const [draftPending, setDraftPending] = useState(() => !draft.hasDraft());
+    const [draftPending, setDraftPending] = useState(() => !hasDispenserDraft(draft.load()));
     // Settings resolve after the first render; once the network is known a draft
     // from another network reads as absent, so the form saves from then on.
     useEffect(() => {
-        if (draftNetwork && !draft.hasDraft()) setDraftPending(true);
+        if (draftNetwork && !hasDispenserDraft(draft.load())) setDraftPending(true);
     }, [draftNetwork]); // eslint-disable-line react-hooks/exhaustive-deps
     // A confirmed "Discard and leave" drops the saved draft and stops the
     // autosave, so no render between the confirm and the unmount can write
@@ -374,6 +386,13 @@ export function DispenserForm({ walletId, activeAccountId, onBack, initialChainI
     }, [draft]);
     useEffect(() => {
         if (stage !== 'form' || !draftPending || draftDiscardedRef.current) return;
+        if (!hasDispenserDraft({
+            ticker, giveAmount, escrow, triggerPrice, oracleAddress, fiatAmount,
+            getTick, getTokenAmount, expInput, allowListIdx, blockListIdx, outsideAddress,
+        })) {
+            draft.clear();
+            return;
+        }
         draft.save({
             chainId, fromAddressId, ticker, giveAmount, escrow,
             triggerPrice, oracleAddress, fiatCode, fiatAmount,

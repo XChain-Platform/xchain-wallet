@@ -45,8 +45,17 @@ function sessionArea() {
  * @property {number} lastActivity    ms epoch of the last observed UI activity
  */
 
+// The state this worker last set that storage refused to take, or undefined
+// when storage holds everything this worker set. A refused arm would otherwise
+// leave the alarm reading no record and never locking, while the popup that
+// sent the arm believes the backstop is set. Kept per worker: a restart drops
+// it along with every other in-memory copy.
+/** @type {AutoLockState | null | undefined} */
+let unsavedState;
+
 /** @returns {Promise<AutoLockState | null>} */
 export async function readAutoLockState() {
+    if (unsavedState !== undefined) return unsavedState ? { ...unsavedState } : null;
     const area = sessionArea();
     if (!area) return null;
     try {
@@ -66,7 +75,12 @@ export async function readAutoLockState() {
 async function writeAutoLockState(next) {
     const area = sessionArea();
     if (!area) return;
-    try { await area.set({ [KEY]: next }); } catch { /* best-effort */ }
+    try {
+        await area.set({ [KEY]: next });
+        unsavedState = undefined;
+    } catch {
+        unsavedState = { ...next };
+    }
 }
 
 /**
@@ -114,7 +128,14 @@ export async function stampAutoLockActivity(now) {
 export async function clearAutoLockState() {
     const area = sessionArea();
     if (!area) return;
-    try { await area.remove(KEY); } catch { /* best-effort */ }
+    try {
+        await area.remove(KEY);
+        unsavedState = undefined;
+    } catch {
+        // Read as cleared, as asked: the earlier deadline left in storage
+        // would otherwise lock the next session the moment it unlocks.
+        unsavedState = null;
+    }
 }
 
 /**
