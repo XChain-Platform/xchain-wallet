@@ -229,6 +229,22 @@ function dropCachedSdk(sdkRegistry, chainId) {
 }
 
 /**
+ * Whether any stored address belongs to the descriptor's coin and network.
+ * A vault without an address store holds no wallet, so nothing is in use.
+ *
+ * @param {any} vault
+ * @param {{ coin?: string, networkKind?: string }} descriptor
+ * @returns {Promise<boolean>}
+ */
+async function networkHoldsAddresses(vault, descriptor) {
+    if (typeof vault?.addresses?.list !== 'function') return false;
+    const rows = await vault.addresses.list();
+    return Array.isArray(rows) && rows.some(
+        (a) => a?.chain === descriptor.coin && a?.network === descriptor.networkKind,
+    );
+}
+
+/**
  * @param {{ vault: any, chainRegistry: any, chainId: string, sdkRegistry?: any }} args
  * @returns {Promise<{ removed: boolean }>}
  */
@@ -244,6 +260,19 @@ export async function removeCustomChain({ vault, chainRegistry, chainId, sdkRegi
     const next = list.filter((d) => d?.id !== chainId);
     const persistedRemoved = next.length !== list.length;
     const live = chainRegistry?.get?.(chainId);
+    // Address records name a chain by coin and network, not by id, so a
+    // removed network would leave a wallet's accounts holding addresses no
+    // registered chain can show or spend. Refuse before anything is written.
+    // A bundled chain under this id stays registered, so a stale row of its id
+    // takes no addresses with it.
+    const owned = live
+        ? (live.isUserAdded ? live : null)
+        : list.find((d) => d?.id === chainId);
+    if (owned && await networkHoldsAddresses(vault, owned)) {
+        throw new Error(
+            `removeCustomChain: "${chainId}" still holds addresses in a wallet account, so it can't be removed. Its funds stay reachable while the network is installed.`,
+        );
+    }
     let persisted = settings;
     if (persistedRemoved) {
         persisted = withoutEndpointOverride({ ...settings, customChains: next }, chainId);
