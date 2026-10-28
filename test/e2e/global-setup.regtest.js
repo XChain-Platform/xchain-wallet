@@ -97,7 +97,7 @@ export default async function globalSetup(config) {
     // The run then fails at setup forever, and nothing in it can heal the venue.
     // The Bitcoin ISSUE does not need the price: the indexer exempts the gas
     // tick's ISSUE from the issuance fee, so it quotes valid at zero fee with
-    // no oracle round. Measured on test01 after the 2026-10-26 genesis reset:
+    // no oracle round. Measured on the regtest venue after a genesis reset:
     // this fixture issued XCHAIN on the unpriced venue and its MINT probe read
     // `present` before the hub's first XCHAIN/USD round. Off Bitcoin the token
     // arrives over a bridge from Bitcoin regtest, a path that was not
