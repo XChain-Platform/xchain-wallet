@@ -638,6 +638,10 @@ export function CrossChainOrderForm({ walletId, onBack, initialChainId, initialF
             label="Create cross-chain order"
             onSubmit={handleReview}
             sectioned
+            // The review composes the terms as they stand at Review, so the
+            // fields hold still until the confirm page opens.
+            inert={confirmAction.composing ? '' : undefined}
+            aria-busy={confirmAction.composing ? 'true' : undefined}
             status={validationError || formError ? (
                 <>
                     {validationError ? <StatusMessage variant="error">{validationError}</StatusMessage> : null}

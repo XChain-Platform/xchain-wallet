@@ -631,6 +631,31 @@ describe('swap review editing', () => {
         expect(screen.getByLabelText('Receive at')).toHaveValue(LTC_ADDRESS.address);
     });
 
+    it('locks the cross-chain swap fields while the review composes', async () => {
+        let resolveCompose;
+        const composeForConfirm = vi.fn(() => new Promise((resolve) => { resolveCompose = resolve; }));
+        render(
+            <MessagingProvider shell="desktop" messaging={messaging({ walletMode: 'full', composeForConfirm })}>
+                <CrossChainSwapForm walletId="w" onBack={() => {}} />
+            </MessagingProvider>,
+        );
+        await waitFor(() => expect(screen.getByRole('button', { name: /Give token:/ })).toBeInTheDocument());
+        fireEvent.click(screen.getByRole('button', { name: /Give token:/ }));
+        fireEvent.click(screen.getByRole('button', { name: 'Choose Select give token' }));
+        fireEvent.click(screen.getByRole('button', { name: /Get token:/ }));
+        fireEvent.click(screen.getByRole('button', { name: 'Choose Select get token' }));
+        setAmount('Give amount (ALPHA)', '1');
+        setAmount('Get amount (BETA)', '2');
+        await waitFor(() => expect(screen.getByLabelText('Receive at')).toHaveValue(BTC_ADDRESS.address));
+        const review = screen.getByRole('button', { name: 'Review' });
+        fireEvent.click(review);
+
+        await waitFor(() => expect(composeForConfirm).toHaveBeenCalledTimes(1));
+        expect(review.closest('form')).toHaveAttribute('inert');
+        expect(review.closest('form')).toHaveAttribute('aria-busy', 'true');
+        await act(async () => { resolveCompose(null); });
+    });
+
     it('dispatches one watcher build when the review form is submitted twice in one turn', async () => {
         let resolveBuild;
         const build = new Promise((resolve) => { resolveBuild = resolve; });

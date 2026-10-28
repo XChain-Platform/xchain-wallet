@@ -908,6 +908,10 @@ export function CrossChainSwapForm({ walletId, onBack }) {
             label="Cross-chain swap"
             onSubmit={handleReview}
             sectioned
+            // The review composes the terms as they stand at Review, so the
+            // fields hold still until the confirm page opens.
+            inert={actionConfirm.composing ? '' : undefined}
+            aria-busy={actionConfirm.composing ? 'true' : undefined}
             status={(validationError || feeError || formError) ? (
                 <>
                     {validationError ? (

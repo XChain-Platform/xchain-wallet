@@ -922,7 +922,22 @@ export function SwapForm({ walletId, onBack, initialChainId, initialGiveTick, in
                 <ChainPicker
                     label="Give and get network"
                     value={chainId}
-                    onChange={setChainId}
+                    onChange={(cid) => {
+                        if (cid === chainId) return;
+                        // Tokens, the receive address and list IDs name things on
+                        // one chain; a list ID on another chain is a different list.
+                        setChainId(cid);
+                        setGiveTick('');
+                        setGiveAmount('');
+                        setGiveOwnership(false);
+                        setGetTick('');
+                        setGetAmount('');
+                        setGetOwnership(false);
+                        setGetAddress('');
+                        setAllowListIdx('');
+                        setBlockListIdx('');
+                        setFormError(null);
+                    }}
                     chainIds={chainIds}
                     chainRegistry={chainRegistry}
                     hideNetworkKind

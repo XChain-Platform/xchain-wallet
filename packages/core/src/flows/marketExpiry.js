@@ -136,12 +136,30 @@ function rowWithExpiryStatus(row, kind, expiryStatus) {
     };
 }
 
+// Hydration reads one detail per row, so a list of hundreds of offers runs a
+// few reads at a time instead of all at once into the explorer's rate limit.
+const ROW_MAP_CONCURRENCY = 6;
+
+async function mapRowsBounded(rows, mapRow) {
+    const out = new Array(rows.length);
+    let next = 0;
+    const worker = async () => {
+        while (next < rows.length) {
+            const index = next;
+            next += 1;
+            out[index] = await mapRow(rows[index]);
+        }
+    };
+    await Promise.all(Array.from({ length: Math.min(ROW_MAP_CONCURRENCY, rows.length) }, worker));
+    return out;
+}
+
 async function mapResponseRows(response, mapRow) {
-    if (Array.isArray(response)) return Promise.all(response.map(mapRow));
+    if (Array.isArray(response)) return mapRowsBounded(response, mapRow);
     if (!response || typeof response !== 'object') return response;
     for (const key of ['data', 'rows', 'orders', 'swaps', 'dispensers']) {
         if (Array.isArray(response[key])) {
-            return { ...response, [key]: await Promise.all(response[key].map(mapRow)) };
+            return { ...response, [key]: await mapRowsBounded(response[key], mapRow) };
         }
     }
     if (response.data && typeof response.data === 'object') {
@@ -170,6 +188,9 @@ export async function withMarketExpiry(sdk, response, kind, { hydrate = false } 
 }
 
 const ORDER_CLOSED_STATUSES = new Set(['filled', 'complete', 'cancelled']);
+// The indexer writes 'complete' on a match; 'filled' and 'settled' are the
+// other spellings My swaps reads as settled.
+const SWAP_CLOSED_STATUSES = new Set(['complete', 'filled', 'settled', 'cancelled']);
 
 const ACTION_REFERENCE = Object.freeze({
     ORDER: { kind: 'order', field: 'ORDER_ACTION_INDEX' },
@@ -209,6 +230,13 @@ export async function assertReferencedOfferActionable({ sdkRegistry, chainId, ac
         throw offerRefusal(lifecycle === 'cancelled'
             ? 'This order has already been cancelled.'
             : 'This order has already been filled.');
+    }
+    // A SWAP cancel or edit is invalid unless the swap is open, and the fee
+    // is kept the same way.
+    if (ref.kind === 'swap' && SWAP_CLOSED_STATUSES.has(lifecycle)) {
+        throw offerRefusal(lifecycle === 'cancelled'
+            ? 'This swap has already been cancelled.'
+            : 'This swap has already been completed.');
     }
 
     const expiration = marketExpirationOf(detail);

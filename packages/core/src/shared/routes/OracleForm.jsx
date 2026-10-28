@@ -380,10 +380,14 @@ export function OracleForm({ walletId, onBack, initialChainId, initialFromAddres
     const hwSignerInfo = useSignerInfo({ walletId, signerId: isHwSource ? fromAddress?.signerId : null });
 
     // Watcher lane only: encode an unsigned PRICE for a Signer-mode wallet.
+    // The stage updates a render late, so the ref stops a second submit in
+    // the same turn from building a second unsigned publish.
+    const watcherSubmitRef = useRef(false);
     async function handleSubmit(event) {
         event.preventDefault();
-        if (stage === 'submitting') return;
+        if (stage === 'submitting' || watcherSubmitRef.current) return;
         if (!typedConfirmOk) return;
+        watcherSubmitRef.current = true;
         setStage('submitting');
         setSubmitError(null);
         try {
@@ -408,6 +412,8 @@ export function OracleForm({ walletId, onBack, initialChainId, initialFromAddres
                 coinTicker, mandatory: nativeFee.mandatory, fallback: err?.message || 'Publishing the price failed.',
             }));
             setStage('review');
+        } finally {
+            watcherSubmitRef.current = false;
         }
     }
 

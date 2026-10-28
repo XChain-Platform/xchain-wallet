@@ -310,6 +310,26 @@ describe('CrossChainOrderForm', () => {
         });
     });
 
+    it('locks the order fields while the review composes, so the terms cannot change under it', async () => {
+        let rejectCompose;
+        const pending = new Promise((resolve, reject) => { rejectCompose = reject; });
+        const { utils } = await mount({ initialChainId: DOGE }, { composeForConfirm: () => pending });
+        await fillPair(utils);
+        const form = utils.getByRole('button', { name: 'Place order' }).closest('form');
+        await domAct(async () => {
+            form.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
+            await drainMicrotasks();
+        });
+        expect(form).toHaveAttribute('inert');
+        expect(form).toHaveAttribute('aria-busy', 'true');
+
+        await domAct(async () => {
+            rejectCompose(Object.assign(new Error('cancelled'), { reason: 'user-rejected' }));
+            await drainMicrotasks();
+        });
+        expect(utils.getByRole('button', { name: 'Place order' }).closest('form')).not.toHaveAttribute('inert');
+    });
+
     it('ignores a duplicate full-wallet submit while compose is pending', async () => {
         let composes = 0;
         let rejectCompose;

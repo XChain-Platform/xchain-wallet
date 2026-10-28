@@ -17,6 +17,9 @@
 // state varies, especially for newer markets).
 
 import { withMarketExpiry } from './marketExpiry.js';
+// My orders and My swaps show every offer an address placed and close the
+// ones its cancels name, so the four address-scoped feeds follow every page.
+import { readAllPages } from './stakingQueries.js';
 
 /**
  * @typedef {{ sdkRegistry: import('../sdk/SDKRegistry.js').SDKRegistry, chainId: string }} SdkCtx
@@ -132,7 +135,7 @@ export async function ordersForAddress({ sdkRegistry, chainId, address, opts }) 
     if (!chainId) throw new Error('ordersForAddress: chainId is required');
     if (!address) throw new Error('ordersForAddress: address is required');
     const sdk = sdkRegistry.get(chainId);
-    return withMarketExpiry(sdk, await sdk.getOrders(address, 'address', opts), 'order', { hydrate: true });
+    return withMarketExpiry(sdk, await readAllPages((o) => sdk.getOrders(address, 'address', o), opts), 'order', { hydrate: true });
 }
 
 /**
@@ -151,7 +154,7 @@ export async function orderCancelsForAddress({ sdkRegistry, chainId, address, op
     if (!chainId) throw new Error('orderCancelsForAddress: chainId is required');
     if (!address) throw new Error('orderCancelsForAddress: address is required');
     const sdk = sdkRegistry.get(chainId);
-    return sdk.getOrderCancels(address, 'address', opts);
+    return readAllPages((o) => sdk.getOrderCancels(address, 'address', o), opts);
 }
 
 /**
@@ -202,7 +205,7 @@ export async function swapsForAddress({ sdkRegistry, chainId, address, opts }) {
     if (!chainId) throw new Error('swapsForAddress: chainId is required');
     if (!address) throw new Error('swapsForAddress: address is required');
     const sdk = sdkRegistry.get(chainId);
-    return withMarketExpiry(sdk, await sdk.getSwaps(address, 'address', opts), 'swap', { hydrate: true });
+    return withMarketExpiry(sdk, await readAllPages((o) => sdk.getSwaps(address, 'address', o), opts), 'swap', { hydrate: true });
 }
 
 /**
@@ -216,7 +219,7 @@ export async function swapCancelsForAddress({ sdkRegistry, chainId, address, opt
     if (!chainId) throw new Error('swapCancelsForAddress: chainId is required');
     if (!address) throw new Error('swapCancelsForAddress: address is required');
     const sdk = sdkRegistry.get(chainId);
-    return sdk.getSwapCancels(address, 'address', opts);
+    return readAllPages((o) => sdk.getSwapCancels(address, 'address', o), opts);
 }
 
 /**
