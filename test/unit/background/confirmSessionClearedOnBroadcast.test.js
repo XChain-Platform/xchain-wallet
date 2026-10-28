@@ -158,6 +158,28 @@ describe('a stored confirm is dropped when its PSBT is broadcast', () => {
         expect(await storedIds(call)).toEqual(kept);
     });
 
+    // A popup closed mid-broadcast and reopened before the send returns must
+    // not see its own approved payment offered as "not sent yet".
+    it.each([
+        ['action.send', 'sendToken'],
+        ['action.createList', 'createList'],
+        ['action.airdrop', 'airdropAction'],
+    ])('leaves out the session %s is still sending and lists it again if the send fails', async (type, flow) => {
+        const call = await makeHost();
+        await putSession(call, 'cs:sent', 'psbt-sent');
+        await putSession(call, 'cs:other', 'psbt-other');
+        let finish;
+        stubs[flow].mockImplementationOnce(() => new Promise((_resolve, reject) => { finish = reject; }));
+
+        const pending = call(type, { walletId: W, chainId: CHAIN, prebuiltPsbt: { psbtHex: 'psbt-sent' } });
+        await vi.waitFor(() => expect(finish).toBeTypeOf('function'));
+        expect(await storedIds(call)).toEqual(['cs:other']);
+
+        finish(new Error('ECONNREFUSED'));
+        expect((await pending).ok).toBe(false);
+        expect(await storedIds(call)).toEqual(['cs:sent', 'cs:other']);
+    });
+
     it('keeps the session when the send fails, so the confirm stays resumable', async () => {
         const call = await makeHost();
         await putSession(call, 'cs:sent', 'psbt-sent');

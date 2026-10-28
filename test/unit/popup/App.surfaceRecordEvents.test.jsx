@@ -21,9 +21,12 @@ import { SURFACE_STATE_STORAGE_KEY } from '../../../packages/extension/src/share
 // in progress; the tests below set it directly.
 let reviewOpen = false;
 const reviewEndListeners = new Set();
+// Whether that review's Approve is signing or broadcasting.
+let approving = false;
 vi.mock('../../../packages/core/src/shared/hooks/useConfirmAction.js', async (importOriginal) => ({
     ...(await importOriginal()),
     isConfirmActive: () => reviewOpen,
+    isConfirmApproving: () => approving,
     subscribeConfirmEnd: (listener) => {
         reviewEndListeners.add(listener);
         return () => { reviewEndListeners.delete(listener); };
@@ -45,6 +48,7 @@ beforeEach(() => {
 afterEach(() => {
     reviewOpen = false;
     reviewEndListeners.clear();
+    approving = false;
     cleanup();
     localStorage.clear();
     vi.unstubAllGlobals();
@@ -368,5 +372,35 @@ describe('an open review survives record changes made in another surface', () =>
         const before = mounts(sent);
         await emit('network', { settings: { activeNetwork: 'testnet' } });
         await waitFor(() => expect(mounts(sent)).toBeGreaterThan(before));
+    });
+
+    it('keeps the screen of a send signing from a wallet another surface removes, until the next navigation', async () => {
+        const { state, sent, heading, emit } = await twoWallets();
+        reviewOpen = true;
+        approving = true;
+        state.wallets = [{ id: 'w2', name: 'Bravo' }];
+        const sessionReads = count(sent, 'session.status');
+        await emit('wallets', { change: 'removed', walletId: 'w1' });
+        await act(async () => { await new Promise((resolve) => setTimeout(resolve, 50)); });
+        expect(heading.isConnected).toBe(true);
+        expect(screen.getByText('Wallet: Alpha')).toBeInTheDocument();
+        expect(count(sent, 'session.status')).toBe(sessionReads);
+
+        // The send settles and the person moves on: the session reloads then.
+        approving = false;
+        reviewOpen = false;
+        const history = screen.getAllByRole('button', { name: /^History\b/ })[0];
+        await act(async () => { history.click(); });
+        await waitFor(() => expect(count(sent, 'session.status')).toBeGreaterThan(sessionReads));
+        expect(await screen.findByText('Wallet: Bravo')).toBeInTheDocument();
+    });
+
+    it('closes a review not yet approved when another surface removes its wallet', async () => {
+        const { state, sent, emit } = await twoWallets();
+        reviewOpen = true;
+        state.wallets = [{ id: 'w2', name: 'Bravo' }];
+        const sessionReads = count(sent, 'session.status');
+        await emit('wallets', { change: 'removed', walletId: 'w1' });
+        await waitFor(() => expect(count(sent, 'session.status')).toBeGreaterThan(sessionReads));
     });
 });

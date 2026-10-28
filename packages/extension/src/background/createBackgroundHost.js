@@ -1117,24 +1117,35 @@ export function createBackgroundHost(deps) {
         } catch { /* the popup's own clear still runs when it is open */ }
     }
 
+    // PSBTs of stored confirms that a surface approved and the host is signing
+    // or broadcasting now. A surface that closes and reopens in that window
+    // would otherwise read the stored confirm and offer the payment as not sent.
+    const confirmsInFlight = new Set();
+
     // LIST and AIRDROP are resumable as well (RESUMABLE_DISPATCH_METHODS), so
     // a broadcast of either drops its stored confirm the same way a send does.
     // A queued broadcast (the signed bytes sit in the broadcast queue) and a
     // permanent refusal (re-signing is forbidden) end the confirm too. Only an
     // unsaved transient failure keeps it, since it is then the one way back.
     async function finishStoredConfirm(psbtHex, run) {
-        let result;
+        const tracked = typeof psbtHex === 'string' && psbtHex.length > 0 && !confirmsInFlight.has(psbtHex);
+        if (tracked) confirmsInFlight.add(psbtHex);
         try {
-            result = await run();
-        } catch (err) {
-            if (err?.name === flows.BROADCAST_FAILED_TRANSIENT_NAME
-                || err?.name === flows.BROADCAST_FAILED_PERMANENT_NAME) {
-                await dropConfirmSessionsForPsbt(psbtHex);
+            let result;
+            try {
+                result = await run();
+            } catch (err) {
+                if (err?.name === flows.BROADCAST_FAILED_TRANSIENT_NAME
+                    || err?.name === flows.BROADCAST_FAILED_PERMANENT_NAME) {
+                    await dropConfirmSessionsForPsbt(psbtHex);
+                }
+                throw err;
             }
-            throw err;
+            await dropConfirmSessionsForPsbt(psbtHex);
+            return result;
+        } finally {
+            if (tracked) confirmsInFlight.delete(psbtHex);
         }
-        await dropConfirmSessionsForPsbt(psbtHex);
-        return result;
     }
 
     async function sendWithHold(req, flowDeps) {
@@ -3212,7 +3223,12 @@ export function createBackgroundHost(deps) {
     host.register('action.confirmSession.list', async () => {
         if (!confirmSessionStorage) return { supported: false, sessions: [] };
         const all = await confirmSessionStorage.loadSessions();
-        return { supported: true, sessions: Object.values(all || {}) };
+        // A confirm whose approval is still signing or broadcasting is not a
+        // payment to finish; it leaves the list once it settles or comes back
+        // when it fails in the one way that keeps it.
+        const sessions = Object.values(all || {})
+            .filter((session) => !confirmsInFlight.has(session?.composed?.psbt));
+        return { supported: true, sessions };
     });
 
     // Called on EVERY terminal state (approved, rejected, errored). A session

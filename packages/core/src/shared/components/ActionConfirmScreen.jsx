@@ -144,7 +144,7 @@ function useSourceIdentity(address, chainId, walletId) {
  */
 export function ActionConfirmScreen({
     confirmAction,
-    walletId = readActiveWallet(),
+    walletId: walletIdProp = null,
     screenVariant = 'small',
     chainLabel,
     feeText,
@@ -172,6 +172,11 @@ export function ActionConfirmScreen({
     formatProtocolFee,
     totalText,
 }) {
+    // The popup and side panel share the stored active wallet, so a switch in
+    // one rewrites it under a review open in the other. The review names the
+    // wallet that was active when it opened, which is the wallet it signs for.
+    const [walletAtOpen] = useState(readActiveWallet);
+    const walletId = walletIdProp || walletAtOpen;
     // A hardware signer has no password to type: readiness is the device being
     // connected, unlocked and on the right app - plus the §18.5 cross-check
     // tick when the risk classifier demands one. Approve stays disabled until

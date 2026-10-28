@@ -143,6 +143,63 @@ describe('wallet identity surfaces', () => {
         });
     });
 
+    it('keeps naming the wallet a review opened on when another surface switches wallet', async () => {
+        writeActiveWallet('wallet-main');
+        const messaging = { listWallets: async () => wallets };
+        const screenFor = (confirmAction) => (
+            <MessagingContext.Provider value={{ messaging, shell: 'popup' }}>
+                <ActionConfirmScreen
+                    confirmAction={confirmAction}
+                    chainLabel="Bitcoin"
+                    signerReady
+                    password=""
+                    onPasswordChange={() => {}}
+                />
+            </MessagingContext.Provider>
+        );
+        const { rerender } = render(screenFor(readyConfirm()));
+        await waitFor(() => {
+            expect(screen.getByTestId('wallet-identity')).toHaveTextContent('Main Wallet');
+        });
+
+        // The side panel picks another wallet while this review signs.
+        writeActiveWallet('wallet-cold');
+        rerender(screenFor({ ...readyConfirm(), phase: 'signing', canApprove: false }));
+        await new Promise((resolve) => { setTimeout(resolve, 20); });
+
+        const identity = screen.getByTestId('wallet-identity');
+        expect(identity).toHaveTextContent('Main Wallet');
+        expect(identity).not.toHaveTextContent('Cold Reserve');
+    });
+
+    it('keeps naming the wallet a message review opened on when another surface switches wallet', async () => {
+        writeActiveWallet('wallet-main');
+        const messaging = { listWallets: async () => wallets };
+        const screenFor = (confirmAction) => (
+            <MessagingContext.Provider value={{ messaging, shell: 'popup' }}>
+                <MessageConfirmScreen
+                    confirmAction={confirmAction}
+                    message="Authorize this session"
+                    chainLabel="Bitcoin"
+                    signingAddress="bc1qsigningaddress"
+                    signerReady
+                    password=""
+                    onPasswordChange={() => {}}
+                />
+            </MessagingContext.Provider>
+        );
+        const { rerender } = render(screenFor(readyConfirm()));
+        await waitFor(() => {
+            expect(screen.getByTestId('wallet-identity')).toHaveTextContent('Main Wallet');
+        });
+
+        writeActiveWallet('wallet-cold');
+        rerender(screenFor({ ...readyConfirm(), phase: 'signing', canApprove: false }));
+        await new Promise((resolve) => { setTimeout(resolve, 20); });
+
+        expect(screen.getByTestId('wallet-identity')).toHaveTextContent('Main Wallet');
+    });
+
     it('renders wallet names containing markup as text in the wallet list', async () => {
         const name = '<script>globalThis.walletExecuted = true</script>';
         const messaging = { listWallets: async () => [{ id: 'markup-wallet', name, format: 'bip39' }] };

@@ -55,7 +55,10 @@ const chainRegistry = defaultRegistry();
 
 function useSigningWallet(wallet) {
     const messaging = useContext(MessagingContext)?.messaging;
-    const walletId = wallet ? null : readActiveWallet();
+    // Read once: a wallet switch in another surface rewrites the stored active
+    // wallet, and this screen still signs for the wallet it opened on.
+    const [walletAtOpen] = useState(readActiveWallet);
+    const walletId = wallet ? null : walletAtOpen;
     const [resolution, setResolution] = useState(null);
 
     useEffect(() => {

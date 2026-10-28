@@ -51,7 +51,7 @@ const RECORD_LIST_VIEWS = new Set([
 ]);
 import { useAutoLockPolicy } from '@xchain-wallet/core/shared/hooks/useAutoLockPolicy.js';
 import { useLastView } from '@xchain-wallet/core/shared/hooks/useLastView.js';
-import { isConfirmActive } from '@xchain-wallet/core/shared/hooks/useConfirmAction.js';
+import { isConfirmActive, isConfirmApproving } from '@xchain-wallet/core/shared/hooks/useConfirmAction.js';
 import { useHeldWalletSwitch } from '@xchain-wallet/core/shared/hooks/useHeldWalletSwitch.js';
 import { useDocumentTitle } from '@xchain-wallet/core/shared/hooks/useDocumentTitle.js';
 import { useScannedPsbt } from '@xchain-wallet/core/shared/hooks/useScannedPsbt.js';
@@ -736,6 +736,18 @@ function AppInner({ canOpenInTab, titleEnabled }) {
         if (!navigated) setUnlockedView('home');
     });
 
+    // The shown wallet was removed in another surface while a send from it
+    // signed or broadcast here; the session reloads at the next navigation,
+    // and a switch held for that review goes with it.
+    const refreshAfterApproval = useRef(false);
+    const clearHeldWalletSwitch = heldWalletSwitch.clear;
+    useEffect(() => {
+        if (!refreshAfterApproval.current) return;
+        refreshAfterApproval.current = false;
+        clearHeldWalletSwitch();
+        refresh();
+    }, [unlockedView, refresh, clearHeldWalletSwitch]);
+
     // Why the background locked the wallet, shown once on the Locked screen.
     const [lockReason, setLockReason] = useState(/** @type {'auto-lock-unsaved' | null} */ (null));
     const noteAutoLockUnsaved = useCallback(() => {
@@ -763,6 +775,13 @@ function AppInner({ canOpenInTab, titleEnabled }) {
                 heldWalletSwitch.drop(walletId);
                 if (readActiveWallet() === walletId) clearActiveWallet();
                 if (shownWalletIds.current.includes(walletId) || chosenWalletId.current === walletId) {
+                    // A send approved here is signing or broadcasting from this
+                    // wallet, and the network may take it whatever happens to the
+                    // record. Its result stays on screen until the next navigation.
+                    if (isConfirmApproving()) {
+                        refreshAfterApproval.current = true;
+                        return;
+                    }
                     refresh();
                     return;
                 }

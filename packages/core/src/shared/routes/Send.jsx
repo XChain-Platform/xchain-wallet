@@ -3272,6 +3272,7 @@ export function Send({ walletId, accountId, onBack, prefill = null, onDone, onCh
         return (
             <ActionConfirmScreen
                 confirmAction={confirmAction}
+                walletId={walletId}
                 screenVariant={variant}
                 chainLabel={descriptor?.displayName || chainId}
                 // Fallback only: the composed PSBT's exact fee wins (§5.2.5).

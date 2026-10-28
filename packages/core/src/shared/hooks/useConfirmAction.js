@@ -124,6 +124,18 @@ export function subscribeConfirmEnd(listener) {
     return () => { confirmEndListeners.delete(listener); };
 }
 
+// The confirmation in this window whose Approve is signing or broadcasting.
+let approvingInstanceId = null;
+
+/**
+ * Is an approved confirmation in this window still signing or broadcasting?
+ * Its result is the person's only word on what left the wallet, so a shell
+ * that would leave the screen for another surface's change waits for it.
+ */
+export function isConfirmApproving() {
+    return approvingInstanceId !== null;
+}
+
 export function useConfirmAction() {
     const instanceId = useRef(Symbol('confirm-action')).current;
     // Names this window in reservation ids. A Symbol's description is the same text in
@@ -406,6 +418,7 @@ export function useConfirmAction() {
         if (!args || !built) return;
         if (approveInFlightRef.current) return;
         approveInFlightRef.current = true;
+        approvingInstanceId = instanceId;
         const settleUnmountedInterruption = (err = new UserRejectedError()) => {
             // Every interruption returns before anything was signed or sent, so the
             // reservation is the user's again: Reject and leaving the page must
@@ -631,6 +644,7 @@ export function useConfirmAction() {
         }
         } finally {
             approveInFlightRef.current = false;
+            if (approvingInstanceId === instanceId) approvingInstanceId = null;
             releaseAutoLock();
         }
     }, [
