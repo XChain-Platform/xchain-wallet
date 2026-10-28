@@ -56,6 +56,29 @@ describe('useScreenShortcuts', () => {
         expect(evt.defaultPrevented).toBe(false);
     });
 
+    it('stays inert while a modal dialog covers the screen', () => {
+        const e = vi.fn();
+        const submit = vi.fn();
+        render(<Harness keys={{ e, 'mod+enter': submit }} />);
+        const dialog = document.createElement('div');
+        dialog.setAttribute('role', 'dialog');
+        dialog.setAttribute('aria-modal', 'true');
+        const close = document.createElement('button');
+        dialog.append(close);
+        document.body.append(dialog);
+        try {
+            close.focus();
+            fireEvent.keyDown(close, { key: 'Enter', ctrlKey: true });
+            fireEvent.keyDown(close, { key: 'e' });
+            expect(submit).not.toHaveBeenCalled();
+            expect(e).not.toHaveBeenCalled();
+        } finally {
+            dialog.remove();
+        }
+        press({ key: 'Enter', ctrlKey: true });
+        expect(submit).toHaveBeenCalledOnce();
+    });
+
     it('is inert when disabled and ignores modified keys it does not own', () => {
         const e = vi.fn();
         const question = vi.fn();

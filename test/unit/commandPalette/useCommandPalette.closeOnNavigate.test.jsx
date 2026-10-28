@@ -30,6 +30,20 @@ describe('useCommandPalette closes on navigation', () => {
         expect(result.current.open).toBe(true);
     });
 
+    it('keeps Cmd/Ctrl+K when the stored binding is one the rebinding rules refuse', () => {
+        const { result } = renderHook(() => useCommandPalette({ binding: 'mod+c' }));
+
+        act(() => window.dispatchEvent(new KeyboardEvent('keydown', {
+            key: 'c', ctrlKey: true, bubbles: true,
+        })));
+        expect(result.current.open).toBe(false);
+
+        act(() => window.dispatchEvent(new KeyboardEvent('keydown', {
+            key: 'k', ctrlKey: true, bubbles: true,
+        })));
+        expect(result.current.open).toBe(true);
+    });
+
     it('does not toggle while the user types in an input', () => {
         const { result } = renderHook(() => useCommandPalette());
         const input = document.createElement('input');

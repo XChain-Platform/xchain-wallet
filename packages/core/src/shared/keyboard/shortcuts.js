@@ -59,6 +59,12 @@ export const SHORTCUT_GROUPS = /** @type {const} */ (['General', 'Go to', 'Balan
 
 // ---- §34.1 rebinding ------------------------------------------------------
 
+// Select-all and the clipboard combos stay the platform's own. A wallet
+// shortcut on one of them takes the keypress on every non-editable target, so
+// copying an address from a page (or pasting, which users do with the native
+// shortcut) would lock the wallet or navigate instead.
+const RESERVED_COMBO_KEYS = new Set(['a', 'c', 'v', 'x']);
+
 /**
  * True for entries the Settings → Keyboard UI may rebind: the globally
  * dispatched set plus the palette combo (whose listener lives in
@@ -86,6 +92,7 @@ export function isValidBinding(binding, kind) {
         const key = binding.slice(4);
         // One printable key, or a named key like Enter. Never bare 'mod+'.
         if (!/^[a-z0-9,./;'[\]\\`=-]$/.test(key) && !/^(enter|escape|backspace|tab|space)$/.test(key)) return false;
+        if (RESERVED_COMBO_KEYS.has(key)) return false;
         return !kind || kind === 'combo';
     }
     if (/^[a-z0-9] [a-z0-9]$/.test(binding)) return !kind || kind === 'leader';
@@ -115,6 +122,26 @@ export function resolveBindings(overrides) {
 }
 
 /**
+ * True when two bindings claim the same keypress. Besides an exact match, a
+ * single key collides with a leader sequence that starts on it: the dispatcher
+ * arms the leader on that key, so the single-key shortcut would never fire,
+ * and a screen's single key (History 'e', Balances 'h') would fire alongside
+ * the armed leader.
+ *
+ * @param {string} a
+ * @param {string} b
+ * @returns {boolean}
+ */
+function bindingsCollide(a, b) {
+    if (a === b) return true;
+    const pa = parseBinding(a);
+    const pb = parseBinding(b);
+    if (pa.kind === 'leader' && pb.kind === 'single') return pa.lead === pb.key.toLowerCase();
+    if (pa.kind === 'single' && pb.kind === 'leader') return pb.lead === pa.key.toLowerCase();
+    return false;
+}
+
+/**
  * Find the id of another shortcut whose effective binding collides with
  * `binding`, or null. Used by the rebinding UI to refuse conflicts.
  *
@@ -126,7 +153,7 @@ export function resolveBindings(overrides) {
 export function findBindingConflict(id, binding, overrides) {
     for (const s of resolveBindings(overrides)) {
         if (s.id === id) continue;
-        if (s.binding === binding || s.altBinding === binding) return s.id;
+        if ([s.binding, s.altBinding].some((other) => other && bindingsCollide(other, binding))) return s.id;
     }
     return null;
 }

@@ -20,12 +20,14 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import { canHandleGlobalShortcut } from '../keyboard/useKeyboardShortcuts.js';
+import { isValidBinding } from '../keyboard/shortcuts.js';
 
 /**
  * @param {object} [opts]
  * @param {boolean} [opts.enabled=true]  install the global shortcut listener
  * @param {string} [opts.binding='mod+k']  §34.1: the (rebindable) combo that
- *        toggles the palette; only 'mod+<key>' shapes are honored.
+ *        toggles the palette; a binding isValidBinding refuses as a combo
+ *        falls back to 'mod+k', as the help modal and Settings show it.
  * @param {(view: string) => void} [opts.navigate]  shell route setter
  * @param {string} [opts.currentView]  the view the shell shows now; when it
  *        changes the palette closes
@@ -33,7 +35,7 @@ import { canHandleGlobalShortcut } from '../keyboard/useKeyboardShortcuts.js';
  */
 export function useCommandPalette(opts = {}) {
     const { enabled = true, binding = 'mod+k', navigate: setRoute, currentView } = opts;
-    const comboKey = binding.startsWith('mod+') ? binding.slice(4).toLowerCase() : 'k';
+    const comboKey = isValidBinding(binding, 'combo') ? binding.slice(4).toLowerCase() : 'k';
     const [open, setOpen] = useState(false);
     const [navigationKey, setNavigationKey] = useState(0);
 

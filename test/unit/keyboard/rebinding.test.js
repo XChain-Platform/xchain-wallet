@@ -41,6 +41,15 @@ describe('isValidBinding', () => {
         expect(isValidBinding('mod+k', 'single')).toBe(false);
     });
 
+    it('leaves select-all and the clipboard combos to the platform', () => {
+        for (const key of ['a', 'c', 'v', 'x']) {
+            expect(isValidBinding(`mod+${key}`, 'combo'), key).toBe(false);
+        }
+        // A stored override on one of them falls back to the default.
+        expect(resolveBindings({ lock: 'mod+c' }).find((s) => s.id === 'lock').binding).toBe('mod+l');
+        expect(isValidBinding('mod+j', 'combo')).toBe(true);
+    });
+
     it('rejects junk', () => {
         expect(isValidBinding('', 'combo')).toBe(false);
         expect(isValidBinding('mod+', 'combo')).toBe(false);
@@ -90,6 +99,17 @@ describe('findBindingConflict', () => {
 
     it('never reports the shortcut against itself', () => {
         expect(findBindingConflict('lock', 'mod+l', null)).toBe(null);
+    });
+
+    it('flags a single key that a leader sequence starts on, in both directions', () => {
+        // The dispatcher arms the g leader first, so help on g would never open.
+        expect(findBindingConflict('shortcut-help', 'g', null)).toBe('go-balances');
+        // A leader starting on Balances' h would arm while h hides a token.
+        expect(findBindingConflict('go-history', 'h h', null)).toBe('balances-hide');
+        expect(findBindingConflict('go-history', 'e x', null)).toBe('history-export');
+        // A single key rebound away frees its letter for a leader.
+        expect(findBindingConflict('go-history', 'x h', { 'shortcut-help': 'x' })).toBe('shortcut-help');
+        expect(findBindingConflict('go-history', 't h', null)).toBe(null);
     });
 });
 

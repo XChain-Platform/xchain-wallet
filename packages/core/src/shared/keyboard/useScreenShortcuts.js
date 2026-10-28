@@ -14,12 +14,16 @@
 // entries for these live in shortcuts.js with dispatch: false, so the help
 // modal lists them while dispatch stays local to the screen.
 //
-// Focus rules mirror useKeyboardShortcuts: every shortcut is suppressed while
-// an editable element has focus. Handlers may return false to decline the key
-// (e.g. no row focused), letting the event proceed untouched.
+// Focus rules are the global dispatcher's (canHandleGlobalShortcut): every
+// shortcut is suppressed while an editable element has focus or a modal dialog
+// is open, so a key pressed in the palette or the shortcut help never acts on
+// the screen behind it (Send's mod+enter composing a send under the help
+// modal), and `mod` is the platform's primary modifier only. Handlers may
+// return false to decline the key (e.g. no row focused), letting the event
+// proceed untouched.
 
 import { useEffect, useRef } from 'react';
-import { isEditableTarget } from './shortcuts.js';
+import { canHandleGlobalShortcut } from './useKeyboardShortcuts.js';
 
 /**
  * @param {object} opts
@@ -34,7 +38,7 @@ export function useScreenShortcuts({ enabled = true, keys }) {
     useEffect(() => {
         if (!enabled || typeof window === 'undefined') return undefined;
         const onKey = (e) => {
-            if (isEditableTarget(e.target)) return;
+            if (!canHandleGlobalShortcut(e)) return;
             const map = keysRef.current || {};
             const mod = e.metaKey || e.ctrlKey;
             if (mod && !e.altKey && !e.shiftKey) {
