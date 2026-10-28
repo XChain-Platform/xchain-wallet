@@ -99,6 +99,10 @@ export function AddressPreferencesForm({ walletId, chainId: initialChainId, addr
     const [requireMemo, setRequireMemo] = useState(false);
     const [dispPref, setDispPref] = useState(/** @type {'1' | '2'} */ ('1'));
     const [memo, setMemo] = useState('');
+    // Review awaits a baseline read; the memo can change during that wait, so
+    // the post-read check reads the latest text here, not the click-time copy.
+    const memoRef = useRef(memo);
+    memoRef.current = memo;
 
     // Current on-chain values: loaded for the form prefill, then RE-FETCHED
     // at review entry (the confirm-time baseline the review compares against).
@@ -188,23 +192,32 @@ export function AddressPreferencesForm({ walletId, chainId: initialChainId, addr
 
     // Review entry re-fetches the on-chain baseline so the "unchanged" rows
     // shown are the truth at sign time, not the load-time snapshot.
+    // Shows the error and returns true for a memo Review refuses. | and ; are
+    // the action line's field delimiters: a memo carrying one composes extra
+    // fields into the ADDRESS write.
+    function refuseMemo(value) {
+        const trimmedMemo = value.trim();
+        if (trimmedMemo.includes('|') || trimmedMemo.includes(';')) {
+            setFormError('Memo cannot contain "|" or ";".');
+            return true;
+        }
+        const memoError = memoLengthError(trimmedMemo);
+        if (memoError) { setFormError(memoError); return true; }
+        return false;
+    }
+
     async function handleReview(event) {
         event.preventDefault();
         const feeStop = customFeeReviewStop({ feePick, tiers: feeTiers, estimate: feeCustomEstimate });
         if (feeStop) { setFormError(feeStop.formError); return; }
         setFormError(null);
-        // | and ; are the action line's field delimiters: a memo carrying one
-        // composes extra fields into the ADDRESS write, so Review refuses it.
-        const trimmedMemo = memo.trim();
-        if (trimmedMemo.includes('|') || trimmedMemo.includes(';')) {
-            setFormError('Memo cannot contain "|" or ";".');
-            return;
-        }
-        const memoError = memoLengthError(trimmedMemo);
-        if (memoError) { setFormError(memoError); return; }
+        if (refuseMemo(memo)) return;
         initialPrefillOpen.current = false;
         try {
             const fresh = await messaging.getAddressPreferences({ chainId, address });
+            // The memo stays editable during the read, so Review checks the
+            // text the write carries, which is the latest one.
+            if (refuseMemo(memoRef.current)) return;
             // Every ADDRESS write carries all three values. Refresh fields the
             // user did not touch so an external update is preserved.
             if (!touched.current.fee) {
