@@ -104,9 +104,13 @@ assert.match(
     /offersEscape && wipeOpen/,
     'the wipe panel is gated on the declared escape kinds',
 );
+const lockedSrc = read('packages', 'core', 'src', 'shared', 'routes', 'Locked.jsx');
+const WIPE_GATE = /function isWipeConfirmed\(text\) \{\s*return text\.trim\(\)\.toUpperCase\(\)\.replace\(\/İ\/g, 'I'\) === 'WIPE';\s*\}/;
+assert.match(screenSrc, WIPE_GATE, 'the wipe compares the typed word with the type-WIPE gate');
+assert.match(lockedSrc, WIPE_GATE, 'the Locked screen holds the same type-WIPE gate');
 assert.match(
     screenSrc,
-    /confirmText\.trim\(\)\.toUpperCase\(\) !== 'WIPE'/,
+    /if \(!isWipeConfirmed\(confirmText\)\) return;/,
     'the wipe stays behind the same type-WIPE gate the Locked screen uses',
 );
 
