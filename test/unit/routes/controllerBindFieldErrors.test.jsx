@@ -13,11 +13,22 @@
 
 import { describe, it, expect } from 'vitest';
 import React from 'react';
-import { render, screen, waitFor, fireEvent } from '@testing-library/react';
+import { act, render, screen, waitFor, fireEvent } from '@testing-library/react';
 import { ControllerBindForm } from '../../../packages/core/src/shared/routes/ControllerBindForm.jsx';
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
 
+// The form refuses Review with a status message until the action classes for
+// the chosen network have loaded, so a test that clicks Review waits for that
+// read to answer first.
+let actionClassesServedFor = null;
+
+async function actionClassesLoaded() {
+    await waitFor(() => expect(actionClassesServedFor).toBe('litecoin-regtest'));
+    await act(async () => {});
+}
+
 function mount() {
+    actionClassesServedFor = null;
     const messaging = {
         getAddressesByChain: async () => ({
             'litecoin-regtest': [{
@@ -28,9 +39,10 @@ function mount() {
                 source: 'hd',
             }],
         }),
-        getControllerActionClasses: async () => ({
-            actionClasses: ['transfer', 'trade', 'burn', 'mint', 'stake', 'ownership', 'all'],
-        }),
+        getControllerActionClasses: async ({ chainId }) => {
+            actionClassesServedFor = chainId;
+            return { actionClasses: ['transfer', 'trade', 'burn', 'mint', 'stake', 'ownership', 'all'] };
+        },
         getSignerStatus: async () => ({ status: 'unavailable' }),
     };
     return render(
@@ -48,6 +60,7 @@ describe('ControllerBindForm field errors', () => {
         const field = await screen.findByLabelText('Guard contract');
         const submit = document.querySelector('form button[type="submit"]');
         await waitFor(() => expect(submit.disabled).toBe(false));
+        await actionClassesLoaded();
         fireEvent.click(submit);
 
         await waitFor(() => expect(field).toHaveAttribute('aria-invalid', 'true'));
@@ -64,6 +77,7 @@ describe('ControllerBindForm field errors', () => {
         fireEvent.change(cooldown, { target: { value: 'x1' } });
         const submit = document.querySelector('form button[type="submit"]');
         await waitFor(() => expect(submit.disabled).toBe(false));
+        await actionClassesLoaded();
         fireEvent.click(submit);
 
         await waitFor(() => expect(cooldown).toHaveAttribute('aria-invalid', 'true'));
