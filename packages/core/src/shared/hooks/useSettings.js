@@ -42,6 +42,14 @@ const SETTINGS_CHANGED_EVENT = 'xc:settings-changed';
 // every instance listens and re-reads so gated UI reappears post-unlock.
 const SESSION_CHANGED_EVENT = 'xc:session-changed';
 
+// The host applies writes in the order they are issued but can answer them
+// out of order (the desktop host answers a privacy write only after its
+// routing hook runs). Each answer carries the whole record as of that
+// write, so a late answer to an earlier write would roll back a newer one
+// in every instance through the broadcast. The ticket is shared across
+// instances because the newer write can come from a different section.
+let latestWriteTicket = 0;
+
 /**
  * @returns {{
  *   settings: import('../../schemas/settings.js').Settings | null,
@@ -104,6 +112,8 @@ export function useSettings({ reportsOwnError = false } = {}) {
         if (typeof messaging?.updateSettings !== 'function') {
             throw new Error('messaging.updateSettings is not available in this shell');
         }
+        latestWriteTicket += 1;
+        const ticket = latestWriteTicket;
         let next;
         try {
             next = await messaging.updateSettings(patch);
@@ -123,6 +133,9 @@ export function useSettings({ reportsOwnError = false } = {}) {
             throw err;
         }
         const effective = normalizeDisplayCurrency(next);
+        // A newer write is in flight or answered: its record supersedes this
+        // one, so only the caller hears this answer.
+        if (ticket !== latestWriteTicket) return effective.settings;
         if (aliveRef.current) {
             requestRef.current += 1;
             setSettings(effective.settings);
