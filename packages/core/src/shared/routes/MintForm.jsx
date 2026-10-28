@@ -33,8 +33,9 @@ import {
 } from '../utils/mintHeadroom.js';
 import { amountEntryProblem, formatWithThousands, tokenAmountPrecisionError } from '../utils/amountFormat.js';
 import {
-    TOKEN_RECORD_GATE_KEYS, tokenRecordChangedMessage, tokenRecordChangedSince,
+    TOKEN_RECORD_GATE_KEYS, tokenRecordChangedMessage, tokenRecordChangedSince, tokenRecordsDiffer,
 } from '../utils/tokenRecordDrift.js';
+import { invalidateTokenInfo } from '../utils/tokenInfoCache.js';
 import { LockedTokenContext } from '../components/LockedTokenContext.jsx';
 import { SignCredentials } from '../components/SignCredentials.jsx';
 import { ResultScreen } from '../components/ResultScreen.jsx';
@@ -316,6 +317,9 @@ export function MintForm({ walletId, onBack, initialChainId, initialTick, initia
         const from = buildFrom();
         if (!chainId || !from) return;
         setSubmitError(null);
+        // The record the user reviewed the mint against.
+        const reviewedRecord = tokenInfo;
+        const reviewedTick = ticker.trim();
         try {
             const res = await confirmAction.confirm({
                 chainId,
@@ -355,6 +359,29 @@ export function MintForm({ walletId, onBack, initialChainId, initialTick, initia
                 requoteNativeFee: ({ actionString, source }) => messaging.requoteNativeFee({
                     chainId, actionString, source,
                 }),
+                // Read the token once more at Approve. The confirm page can sit
+                // open while the issuer locks minting, closes the window or
+                // another mint uses the headroom, and a MINT signed against the
+                // reviewed record pays its fees for a refusal. A read that fails
+                // proceeds, as at Review: the pre-flight is the backstop, and an
+                // explorer hiccup must not block every mint.
+                recheckBeforeSign: async () => {
+                    if (!reviewedRecord || typeof messaging.getTokenInfo !== 'function') return null;
+                    let fresh = null;
+                    try {
+                        fresh = await messaging.getTokenInfo({
+                            chainId, tick: reviewedTick, demo: false, fresh: true,
+                        });
+                    } catch {
+                        return null;
+                    }
+                    if (!fresh || fresh.loadError) return null;
+                    if (!tokenRecordsDiffer(reviewedRecord, fresh, [...TOKEN_RECORD_GATE_KEYS, 'totalSupply'])) {
+                        return null;
+                    }
+                    invalidateTokenInfo(chainId, reviewedTick);
+                    return tokenRecordChangedMessage(reviewedTick);
+                },
                 onApprove: (_creds, composed) => submit({
                     params: actionParams,
                     password: passwordValueRef.current,
