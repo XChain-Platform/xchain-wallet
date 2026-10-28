@@ -112,7 +112,9 @@ export default defineConfig({
             },
         },
     ],
-    webServer: {
+    // The sweep runner owns and records its server process group, so Playwright
+    // connects to that listener instead of starting an untracked second server.
+    webServer: process.env.XCHAIN_SWEEP_EXTERNAL_SERVER === '1' ? undefined : {
         command: `pnpm -C ../../packages/web dev --port ${PORT} --strictPort --host 127.0.0.1`,
         url: BASE_URL,
         reuseExistingServer: false,
