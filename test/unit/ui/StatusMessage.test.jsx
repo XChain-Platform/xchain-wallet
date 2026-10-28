@@ -111,6 +111,18 @@ describe('<StatusMessage>', () => {
         expect(lead.closest('[data-variant]')).toHaveTextContent('Locking is permanent. Each flag is a one-way switch.');
     });
 
+    it('names a loading notice and marks it busy', () => {
+        render(<StatusMessage label="Loading markets" busy>Loading markets</StatusMessage>);
+        expect(screen.getByRole('status', { name: 'Loading markets' })).toHaveAttribute('aria-busy', 'true');
+    });
+
+    it('leaves the name and busy state off by default', () => {
+        render(<StatusMessage>Saved</StatusMessage>);
+        const notice = screen.getByRole('status');
+        expect(notice).not.toHaveAttribute('aria-label');
+        expect(notice).not.toHaveAttribute('aria-busy');
+    });
+
     it.each([null, undefined, ''])('renders nothing for empty content %#', (children) => {
         const { container } = render(<StatusMessage>{children}</StatusMessage>);
         expect(container).toBeEmptyDOMElement();
