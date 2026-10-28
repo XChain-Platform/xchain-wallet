@@ -12,6 +12,7 @@ const controls = vi.hoisted(() => ({
     applyLayoutMode: vi.fn(async () => {}),
     attachLayoutModeListener: vi.fn(),
     keepaliveTick: vi.fn(async () => {}),
+    maybeAutoLock: vi.fn(async () => 'skipped'),
     openPopup: vi.fn(async () => 'popup-opened'),
     openSidePanel: vi.fn(async () => 'side-panel-opened'),
     readLayoutMode: vi.fn(async () => controls.layoutMode),
@@ -84,7 +85,7 @@ vi.mock('../../../packages/extension/src/background/walletLock.js', () => ({
     createKeepaliveTick: vi.fn(() => controls.keepaliveTick),
     createLockBackstop: vi.fn(() => ({
         lockWalletNow: vi.fn(async () => {}),
-        maybeAutoLock: vi.fn(async () => 'skipped'),
+        maybeAutoLock: controls.maybeAutoLock,
         noteUnlocked: vi.fn(),
         onLocked: vi.fn(),
     })),
@@ -161,6 +162,11 @@ describe('extension background entrypoint', () => {
         await expect(controls.commandOptions.openWallet({ windowId: 7 }))
             .resolves.toBe('popup-opened');
         expect(controls.openPopup).toHaveBeenCalledOnce();
+    });
+
+    it('checks the idle deadline once at boot, before any keepalive alarm', async () => {
+        await vi.waitFor(() => expect(controls.maybeAutoLock).toHaveBeenCalledOnce());
+        expect(controls.keepaliveTick).not.toHaveBeenCalled();
     });
 
     it('runs the keepalive only for the named alarm', () => {

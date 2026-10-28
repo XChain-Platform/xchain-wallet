@@ -42,6 +42,21 @@ import {
 // than inferred so a future shell has to opt in deliberately.
 export const AUTO_LOCK_SHELLS = /** @type {const} */ (['popup', 'web', 'desktop']);
 
+// The backstop's reply reason when storage refused the arm and the shell
+// locked the wallet instead (extension background/autoLockState.js).
+export const AUTO_LOCK_UNSAVED = 'auto-lock-unsaved';
+
+/**
+ * Whether a backstop reply says the arm was refused and the wallet locked.
+ *
+ * @param {unknown} reply
+ * @returns {boolean}
+ */
+export function isAutoLockArmRefused(reply) {
+    const r = /** @type {any} */ (reply);
+    return Boolean(r) && r.ok === false && r.reason === AUTO_LOCK_UNSAVED;
+}
+
 /**
  * Normalise the stored `autolockMinutes` into a usable timeout.
  *
@@ -81,9 +96,11 @@ export function resolveAutoLockMinutes(raw) {
  *   Given, an idle lock runs it in place of `lockWallet` + `onLocked`, so the
  *   unlocked screen and its transient route and prefill state go before the
  *   host round-trip, exactly as they do when the user presses Lock.
+ * @param {(() => void) | undefined} [opts.onArmRefused] run when the backstop
+ *   could not save the arm and locked the wallet, so the shell can say why.
  * @returns {{ armed: boolean, idleMs: number, minutes: number, checkNow: () => boolean }}
  */
-export function useAutoLockPolicy({ sessionState, activeWalletId, onLocked, lock: shellLock } = {}) {
+export function useAutoLockPolicy({ sessionState, activeWalletId, onLocked, lock: shellLock, onArmRefused } = {}) {
     const { messaging, shell } = useMessaging();
     const { settings } = useSettings();
     const { showToast } = useToast();
@@ -92,6 +109,8 @@ export function useAutoLockPolicy({ sessionState, activeWalletId, onLocked, lock
     onLockedRef.current = onLocked;
     const shellLockRef = useRef(shellLock);
     shellLockRef.current = shellLock;
+    const onArmRefusedRef = useRef(onArmRefused);
+    onArmRefusedRef.current = onArmRefused;
     // Re-entrancy guard. A ref, not state: nothing renders from it, and
     // this hook sits above the whole shell tree where an extra render is
     // expensive.
@@ -178,6 +197,9 @@ export function useAutoLockPolicy({ sessionState, activeWalletId, onLocked, lock
         if (typeof messaging?.reportAutoLock !== 'function') return;
         Promise.resolve()
             .then(() => messaging.reportAutoLock({ armed, idleMs }))
+            .then((reply) => {
+                if (isAutoLockArmRefused(reply)) onArmRefusedRef.current?.();
+            })
             .catch(() => { /* best-effort */ });
     }, [messaging, sessionState, armed, idleMs]);
 

@@ -48,7 +48,7 @@ import {
     notifyDisconnectedSites,
     notifyNetworkChanged,
 } from '../bridge/bridgeEvents.js';
-import { applyAutoLockSignal } from './autoLockState.js';
+import { AUTO_LOCK_UNSAVED, applyAutoLockSignal } from './autoLockState.js';
 import * as signerBridge from './signerBridge.js';
 import { createBroadcastQueueStorage } from './broadcastQueueStorage.js';
 import { createBroadcastQueueStore } from './broadcastQueueStore.js';
@@ -1047,6 +1047,9 @@ export function createBackgroundHost(deps) {
         // One host-level send hold shared by beforeBroadcast and the cancel route.
         // Injectable so timer and cancellation behavior can be tested without delays.
         sendHold: injectedSendHold,
+        // Locks the wallet when storage refuses the auto-lock arm (the
+        // session.autolock route). The extension passes its lock backstop.
+        onAutoLockArmRefused,
         ...hostDeps
     } = deps ?? {};
     const host = new MessageHost(hostDeps);
@@ -1901,12 +1904,21 @@ export function createBackgroundHost(deps) {
     // extension UI by the transport (not a `bridge.*` type).
     // Forward the foreground `activity` flag: an activity report restarts the
     // idle window and can never re-arm a disarmed record.
+    // An arm storage refuses locks the wallet: a worker restart would find no
+    // record and leave the session open for good. The reply tells the surface
+    // that armed it, so it can say why the wallet locked.
     host.register('session.autolock', async (req) => {
-        await applyAutoLockSignal(
+        const { saved } = await applyAutoLockSignal(
             { armed: req?.armed === true, idleMs: req?.idleMs, activity: req?.activity === true },
             Date.now(),
         );
-        return { ok: true };
+        if (saved) return { ok: true };
+        try {
+            await onAutoLockArmRefused?.();
+        } catch (err) {
+            console.error('[xchain] lock after a refused auto-lock arm failed:', err);
+        }
+        return { ok: false, reason: AUTO_LOCK_UNSAVED };
     });
 
     // §19.6: dry-run restore. Derive the first N addresses per active
@@ -3352,7 +3364,7 @@ export function createBackgroundHost(deps) {
         discardQueuedBroadcast: (args) => flows.discardQueuedBroadcast(args),
     });
     void ensureQueueLoaded();
-    host.register('broadcast.queue.list', async (req, { vault, chainRegistry }) => {
+    host.register('broadcast.queue.list', async (req, { vault, chainRegistry, sdkRegistry }) => {
         await ensureQueueLoaded();
         // The queued-broadcast banner lists on mount, which is the first moment
         // after an unlock at which an owed write has a vault to land in.
@@ -3363,7 +3375,7 @@ export function createBackgroundHost(deps) {
             // read rather than as the refused write left it. Restoring runs last
             // because it only ADDS records reading 'queued' or 'broadcasting',
             // the two statuses the reconcile keeps anyway.
-            await reconcileRestoredEntries(vault, req.walletId);
+            await reconcileRestoredEntries(vault, req.walletId, sdkRegistry);
             await restoreQueueFromVault(vault, chainRegistry, req.walletId);
         }
         return [...getQueue(req?.walletId)];

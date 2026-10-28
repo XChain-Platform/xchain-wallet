@@ -16,6 +16,7 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import {
     readAutoLockState,
+    AutoLockStateUnreadableError,
     applyAutoLockSignal,
     stampAutoLockActivity,
     clearAutoLockState,
@@ -129,6 +130,19 @@ describe('autoLockState when session storage refuses a write', () => {
         expect(shouldAutoLock(await readAutoLockState(), 61_000)).toBe(true);
     });
 
+    it('reports a refused arm as unsaved, and a saved one as saved', async () => {
+        expect(await applyAutoLockSignal({ armed: true, idleMs: 60_000 }, 1000)).toEqual({ saved: true });
+        refuse = true;
+        expect(await applyAutoLockSignal({ armed: true, idleMs: 30_000 }, 2000)).toEqual({ saved: false });
+    });
+
+    it('reports a refused activity stamp or disarm as saved, since neither delays a lock', async () => {
+        await applyAutoLockSignal({ armed: true, idleMs: 60_000 }, 1000);
+        refuse = true;
+        expect(await applyAutoLockSignal({ armed: true, idleMs: 60_000, activity: true }, 2000)).toEqual({ saved: true });
+        expect(await applyAutoLockSignal({ armed: false }, 3000)).toEqual({ saved: true });
+    });
+
     it('a refused activity stamp keeps the newer stamp', async () => {
         await applyAutoLockSignal({ armed: true, idleMs: 60_000 }, 1000);
         refuse = true;
@@ -146,5 +160,23 @@ describe('autoLockState when session storage refuses a write', () => {
         await applyAutoLockSignal({ armed: true, idleMs: 120_000 }, 200_000);
         expect(store.get('xchain:autolock')).toEqual({ armed: true, idleMs: 120_000, lastActivity: 200_000 });
         expect(await readAutoLockState()).toEqual({ armed: true, idleMs: 120_000, lastActivity: 200_000 });
+    });
+});
+
+describe('autoLockState when session storage refuses a read', () => {
+    beforeEach(async () => {
+        installSessionArea();
+        // A saved write drops any copy an earlier refusal left in this worker,
+        // the state a freshly restarted worker starts from.
+        await clearAutoLockState();
+        globalThis.chrome.storage.session.get = async () => { throw new Error('storage unavailable'); };
+    });
+
+    it('throws rather than reading the record as absent', async () => {
+        await expect(readAutoLockState()).rejects.toBeInstanceOf(AutoLockStateUnreadableError);
+    });
+
+    it('still arms over an unreadable record with a full idle window', async () => {
+        expect(await applyAutoLockSignal({ armed: true, idleMs: 60_000 }, 5000)).toEqual({ saved: true });
     });
 });

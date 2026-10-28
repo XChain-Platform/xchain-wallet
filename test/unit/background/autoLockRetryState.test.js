@@ -235,15 +235,38 @@ describe('auto-lock retry after an incomplete lock', () => {
         expect(await readAutoLockState()).toBeNull();
     });
 
-    it('survives an unreadable auto-lock record instead of locking blind', async () => {
+    it('locks a session whose auto-lock record storage cannot read', async () => {
         const sessionBackend = flakyBackend(0);
         const { sw, backstop } = shell(sessionBackend, flakyBackend(0));
-        // A read that throws must not be read as "idle".
+        // A restarted worker holds no in-memory copy, so the unreadable record
+        // is a deadline it cannot enforce.
         globalThis.chrome.storage.session.get = vi.fn(async () => { throw new Error('nope'); });
 
-        expect(await backstop.maybeAutoLock()).toBe('skipped');
-        expect(sessionBackend.clears).toBe(0);
-        expect(sw.teardowns).toBe(0);
+        expect(await backstop.maybeAutoLock()).toBe('locked');
+        expect(sessionBackend.clears).toBe(1);
+        expect(sw.teardowns).toBe(1);
+    });
+
+    it('waits for an active request before locking on an unreadable record', async () => {
+        const sessionBackend = flakyBackend(0);
+        let active = true;
+        const sw = { host: {}, vault: {}, teardowns: 0 };
+        const backstop = createLockBackstop({
+            lockDeps: () => ({ sessionBackend, signingSecretBackend: flakyBackend(0) }),
+            tearDownHost: () => { sw.host = null; sw.vault = null; sw.teardowns += 1; },
+            isUnlocked: () => Boolean(sw.host && sw.vault),
+            isRequestActive: () => active,
+            readAutoLockState,
+            clearAutoLockState,
+            shouldAutoLock,
+            logger: { log() { }, error() { } },
+        });
+        globalThis.chrome.storage.session.get = vi.fn(async () => { throw new Error('nope'); });
+
+        expect(await backstop.maybeAutoLock()).toBe('deferred');
+        active = false;
+        expect(await backstop.maybeAutoLock()).toBe('locked');
+        expect(sw.teardowns).toBe(1);
     });
 });
 

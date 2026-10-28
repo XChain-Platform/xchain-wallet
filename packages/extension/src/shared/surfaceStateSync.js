@@ -91,6 +91,49 @@ export function attachSurfaceStateListener(onEvent, storageChanges) {
     return () => changes.removeListener(listener);
 }
 
+// Sent over chrome.runtime rather than storage: the background sends it when
+// chrome.storage.session refused the auto-lock arm, so the storage broadcast
+// above can be refused too.
+export const AUTO_LOCK_UNSAVED_MESSAGE = 'xchain.autoLockUnsaved';
+
+/**
+ * Tell every open trusted extension surface that the wallet locked because
+ * its auto-lock timer could not be saved.
+ *
+ * @param {{ sendMessage?: Function }} [runtime]
+ * @returns {Promise<void>}
+ */
+export async function announceAutoLockUnsaved(runtime) {
+    const rt = runtime ?? /** @type {any} */ (globalThis.chrome?.runtime);
+    if (typeof rt?.sendMessage !== 'function') return;
+    try {
+        // No surface open means no receiver, which rejects; nothing is owed.
+        await rt.sendMessage({ type: AUTO_LOCK_UNSAVED_MESSAGE });
+    } catch { /* no surface is listening */ }
+}
+
+/**
+ * @param {() => void} onUnsaved
+ * @param {{ addListener: Function, removeListener: Function }} [onMessage]
+ * @returns {() => void}
+ */
+export function attachAutoLockUnsavedListener(onUnsaved, onMessage) {
+    const events = onMessage ?? /** @type {any} */ (globalThis.chrome?.runtime?.onMessage);
+    if (typeof onUnsaved !== 'function' || typeof events?.addListener !== 'function') {
+        return () => {};
+    }
+    const listener = (message, sender) => {
+        if (message?.type !== AUTO_LOCK_UNSAVED_MESSAGE) return undefined;
+        // Only this extension's own background may say the wallet locked.
+        const ownId = globalThis.chrome?.runtime?.id;
+        if (ownId && sender?.id !== ownId) return undefined;
+        onUnsaved();
+        return undefined;
+    };
+    events.addListener(listener);
+    return () => events.removeListener(listener);
+}
+
 /**
  * Apply a validated background event to one popup or side-panel realm.
  * Callers inject React setters so this small state machine stays unit-testable.

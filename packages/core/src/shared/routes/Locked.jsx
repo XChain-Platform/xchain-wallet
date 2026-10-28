@@ -76,8 +76,10 @@ const BIOMETRIC_PASSWORD_FALLBACK = 'Biometric unlock is unavailable. Use your w
  *
  * @param {object} props
  * @param {() => void} [props.onUnlocked]
+ * @param {'auto-lock-unsaved' | null} [props.lockReason] why the shell locked
+ *   the wallet, when the reason is one the user should be told
  */
-export function Locked({ onUnlocked }) {
+export function Locked({ onUnlocked, lockReason = null }) {
     // S4: The unlock screen: a recording of it is a recording of the password
     // being typed.
     // No-op on every shell that installs no screen guard (web, extension,
@@ -579,12 +581,19 @@ export function Locked({ onUnlocked }) {
         </StatusMessage>
     ) : null;
 
+    const lockReasonNotice = lockReason === 'auto-lock-unsaved' ? (
+        <StatusMessage key="lock-reason" variant="warning" className={styles.lockoutBanner}>
+            {t('locked.autoLockUnsaved')}
+        </StatusMessage>
+    ) : null;
+
     const form = (
         <FormPage
             label={t('locked.unlockWallet')}
             className={styles.unlockForm}
             onSubmit={handleSubmit}
             status={[
+                lockReasonNotice,
                 busy && !inCaptureStep && showUnlockingNote ? (
                     <p key="unlocking" className={styles.unlockingNote} aria-live="polite">
                         {t('locked.unlockingYourWalletSecurelyThis')}

@@ -192,6 +192,7 @@ import {
 import {
     applySurfaceStateEvent,
     attachSurfaceStateListener,
+    attachAutoLockUnsavedListener,
 } from '../shared/surfaceStateSync.js';
 import {
     createLaunchRouteState,
@@ -713,6 +714,14 @@ function AppInner({ canOpenInTab, titleEnabled }) {
         if (!isConfirmActive()) setSurfaceStateRevision((value) => value + 1);
     };
 
+    // Why the background locked the wallet, shown once on the Locked screen.
+    const [lockReason, setLockReason] = useState(/** @type {'auto-lock-unsaved' | null} */ (null));
+    const noteAutoLockUnsaved = useCallback(() => {
+        setLockReason('auto-lock-unsaved');
+        refresh();
+    }, [refresh]);
+    useEffect(() => attachAutoLockUnsavedListener(noteAutoLockUnsaved), [noteAutoLockUnsaved]);
+
     useEffect(() => attachSurfaceStateListener((event) => {
         const remountRecordLists = () => {
             setRecordRevision((value) => value + 1);
@@ -1103,6 +1112,7 @@ function AppInner({ canOpenInTab, titleEnabled }) {
         activeWalletId,
         onLocked: refresh,
         lock: handleLock,
+        onArmRefused: noteAutoLockUnsaved,
     });
 
     switch (status.state) {
@@ -1175,7 +1185,12 @@ function AppInner({ canOpenInTab, titleEnabled }) {
                 />
             );
         case 'locked':
-            return <Locked onUnlocked={refresh} />;
+            return (
+                <Locked
+                    lockReason={lockReason}
+                    onUnlocked={() => { setLockReason(null); refresh(); }}
+                />
+            );
         case 'unlocked': {
             // §33: the palette must overlay whatever route is showing, so the
             // route tree is computed in an IIFE and the case returns it beside

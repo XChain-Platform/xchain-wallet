@@ -27,8 +27,17 @@
 // State lives in chrome.storage.session: it survives service-worker eviction
 // within the browser session (so the alarm keeps working across SW restarts)
 // but is cleared on browser close, the same lifetime as the session key.
+//
+// The backstop fails closed. A record storage cannot read is an unknown
+// deadline, so the read throws AutoLockStateUnreadableError and the alarm
+// locks; an arm storage refuses reports `saved: false` so the route locks,
+// since a restarted worker would find no record and never lock.
 
 const KEY = 'xchain:autolock';
+
+// The session.autolock reply reason for an arm storage refused; the shared
+// useAutoLockPolicy hook reads the same literal.
+export const AUTO_LOCK_UNSAVED = 'auto-lock-unsaved';
 
 // Ordinary clock corrections (NTP steps, a second device syncing) stay well
 // inside this; anything larger is treated as a clock set backwards.
@@ -53,33 +62,62 @@ function sessionArea() {
 /** @type {AutoLockState | null | undefined} */
 let unsavedState;
 
-/** @returns {Promise<AutoLockState | null>} */
+/** Storage refused the read, so the armed deadline is unknown. */
+export class AutoLockStateUnreadableError extends Error {
+    constructor(cause) {
+        super('auto-lock record could not be read');
+        this.name = 'AutoLockStateUnreadableError';
+        this.cause = cause;
+    }
+}
+
+/**
+ * Null means no record. A read storage refuses throws
+ * AutoLockStateUnreadableError rather than reading as no record, which would
+ * leave a restarted worker with no deadline to enforce.
+ *
+ * @returns {Promise<AutoLockState | null>}
+ */
 export async function readAutoLockState() {
     if (unsavedState !== undefined) return unsavedState ? { ...unsavedState } : null;
     const area = sessionArea();
     if (!area) return null;
+    let got;
     try {
-        const got = await area.get(KEY);
-        const v = got?.[KEY];
-        if (!v || typeof v !== 'object') return null;
-        return {
-            armed: v.armed === true,
-            idleMs: typeof v.idleMs === 'number' ? v.idleMs : 0,
-            lastActivity: typeof v.lastActivity === 'number' ? v.lastActivity : 0,
-        };
+        got = await area.get(KEY);
+    } catch (err) {
+        throw new AutoLockStateUnreadableError(err);
+    }
+    const v = got?.[KEY];
+    if (!v || typeof v !== 'object') return null;
+    return {
+        armed: v.armed === true,
+        idleMs: typeof v.idleMs === 'number' ? v.idleMs : 0,
+        lastActivity: typeof v.lastActivity === 'number' ? v.lastActivity : 0,
+    };
+}
+
+// The read the writers below start from; an unreadable record reads as absent
+// there, since each of them writes a whole record anyway.
+async function readForUpdate() {
+    try {
+        return await readAutoLockState();
     } catch {
         return null;
     }
 }
 
+/** @returns {Promise<boolean>} whether storage took the record */
 async function writeAutoLockState(next) {
     const area = sessionArea();
-    if (!area) return;
+    if (!area) return true;
     try {
         await area.set({ [KEY]: next });
         unsavedState = undefined;
+        return true;
     } catch {
         unsavedState = { ...next };
+        return false;
     }
 }
 
@@ -88,27 +126,33 @@ async function writeAutoLockState(next) {
  * Updating an armed session keeps its activity stamp so a shorter timeout
  * takes effect against idle time that has already elapsed.
  *
+ * Resolves `saved: false` only for an arm storage refused. A refused
+ * disarm or activity stamp stays in this worker's memory: the record left in
+ * storage then locks a restarted worker sooner, never later.
+ *
  * @param {{ armed: boolean, idleMs?: number, activity?: boolean }} signal
  * @param {number} now
+ * @returns {Promise<{ saved: boolean }>}
  */
 export async function applyAutoLockSignal(signal, now) {
     if (!signal || signal.armed !== true) {
         // Disarm: keep the record but flip armed off so the alarm no-ops.
         await writeAutoLockState({ armed: false, idleMs: 0, lastActivity: now });
-        return;
+        return { saved: true };
     }
     const idleMs = Number(signal.idleMs);
-    const current = await readAutoLockState();
-    if (signal.activity === true && !current?.armed) return;
+    const current = await readForUpdate();
+    if (signal.activity === true && !current?.armed) return { saved: true };
     let lastActivity = now;
     if (signal.activity !== true && current?.armed && current.lastActivity > 0) {
         lastActivity = current.lastActivity;
     }
-    await writeAutoLockState({
+    const written = await writeAutoLockState({
         armed: true,
         idleMs: Number.isFinite(idleMs) && idleMs > 0 ? idleMs : 0,
         lastActivity,
     });
+    return { saved: written || signal.activity === true };
 }
 
 /**
@@ -119,7 +163,7 @@ export async function applyAutoLockSignal(signal, now) {
  * @param {number} now
  */
 export async function stampAutoLockActivity(now) {
-    const state = await readAutoLockState();
+    const state = await readForUpdate();
     if (!state || !state.armed) return;
     await writeAutoLockState({ ...state, lastActivity: now });
 }

@@ -177,10 +177,15 @@ export function createLockBackstop(deps) {
         // behind and is waiting on this alarm to retry the clear.
         if (!deps.isUnlocked() && !cleanupPending) return 'skipped';
         if (deps.isRequestActive?.()) return 'deferred';
+        // A record storage cannot read is a deadline this worker cannot
+        // enforce, so it locks rather than leaving the session open for good.
+        let unreadable = false;
         let state;
-        try { state = await deps.readAutoLockState(); } catch { return 'skipped'; }
-        if (!deps.shouldAutoLock(state, now())) return 'skipped';
-        logger.log('[xchain] auto-lock: idle timeout reached, locking wallet');
+        try { state = await deps.readAutoLockState(); } catch { unreadable = true; }
+        if (!unreadable && !deps.shouldAutoLock(state, now())) return 'skipped';
+        logger.log(unreadable
+            ? '[xchain] auto-lock: record unreadable, locking wallet'
+            : '[xchain] auto-lock: idle timeout reached, locking wallet');
         try {
             await lockWalletNow();
             return 'locked';

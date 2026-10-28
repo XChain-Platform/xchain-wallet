@@ -18,6 +18,7 @@ const messages = {
     'locked.unlockWallet': 'Unlock wallet',
     'locked.tooManyIncorrectPasswordsOn': 'Too many incorrect passwords on this device. Wait',
     'locked.beforeTryingAgainChangingNetworks': "before trying again. Changing networks won't skip the wait.",
+    'locked.autoLockUnsaved': "The wallet locked because its auto-lock timer couldn't be saved.",
     'locked.unlockingYourWalletSecurelyThis': 'Unlocking your wallet securely. This may take a moment.',
     'locked.unlockWallet2': 'Unlock Wallet',
     'locked.useBiometrics': 'Use biometrics',

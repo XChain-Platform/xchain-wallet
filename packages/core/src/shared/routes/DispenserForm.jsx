@@ -162,14 +162,18 @@ function outsideAddressError(address, descriptor) {
 }
 
 // Fields the user fills in. Chain, source, fee and the mode toggles start on
-// defaults, so a draft with none of these filled holds nothing to restore.
+// defaults, so a draft with none of these filled holds nothing to restore. A
+// token the caller filled in (initialTick) is not typed either, so a ticker
+// equal to it counts as unfilled.
 const DISPENSER_DRAFT_TEXT_FIELDS = [
-    'ticker', 'giveAmount', 'escrow', 'triggerPrice', 'oracleAddress', 'fiatAmount',
+    'giveAmount', 'escrow', 'triggerPrice', 'oracleAddress', 'fiatAmount',
     'getTick', 'getTokenAmount', 'expInput', 'allowListIdx', 'blockListIdx', 'outsideAddress',
 ];
 
-function hasDispenserDraft(values) {
+function hasDispenserDraft(values, initialTick) {
     if (!values || typeof values !== 'object') return false;
+    const ticker = String(values.ticker ?? '').trim();
+    if (ticker && ticker !== String(initialTick ?? '').trim()) return true;
     return DISPENSER_DRAFT_TEXT_FIELDS.some((field) => String(values[field] ?? '').trim().length > 0);
 }
 
@@ -370,11 +374,11 @@ export function DispenserForm({ walletId, activeAccountId, onBack, initialChainI
     const draft = useFormDraft({ view: 'dispenser', walletId, network: draftNetwork, ttlMs: formDraftTtlMs });
     // A stored draft waits for an explicit Restore. A fresh form starts
     // saving immediately so an auto-lock unmount cannot erase typed values.
-    const [draftPending, setDraftPending] = useState(() => !hasDispenserDraft(draft.load()));
+    const [draftPending, setDraftPending] = useState(() => !hasDispenserDraft(draft.load(), initialTick));
     // Settings resolve after the first render; once the network is known a draft
     // from another network reads as absent, so the form saves from then on.
     useEffect(() => {
-        if (draftNetwork && !hasDispenserDraft(draft.load())) setDraftPending(true);
+        if (draftNetwork && !hasDispenserDraft(draft.load(), initialTick)) setDraftPending(true);
     }, [draftNetwork]); // eslint-disable-line react-hooks/exhaustive-deps
     // A confirmed "Discard and leave" drops the saved draft and stops the
     // autosave, so no render between the confirm and the unmount can write
@@ -389,7 +393,7 @@ export function DispenserForm({ walletId, activeAccountId, onBack, initialChainI
         if (!hasDispenserDraft({
             ticker, giveAmount, escrow, triggerPrice, oracleAddress, fiatAmount,
             getTick, getTokenAmount, expInput, allowListIdx, blockListIdx, outsideAddress,
-        })) {
+        }, initialTick)) {
             draft.clear();
             return;
         }

@@ -283,6 +283,11 @@ const SHELL_ONLY = {
             kind: 'known-gap',
             reason: 'Web and extension loading screens do not yet expose the desktop recovery action.',
         },
+        'Locked.lockReason': {
+            shells: ['extension'],
+            kind: 'intended',
+            reason: 'Only the extension service worker locks the wallet when storage refuses its auto-lock record, so only its Locked screen says why.',
+        },
         'VaultUnavailable.onRetry': {
             shells: ['desktop'],
             kind: 'known-gap',

@@ -89,7 +89,8 @@ import {
 import { attachExtensionCommandListener } from './background/extensionCommands.js';
 import { restoreLabelSyncBestEffort } from './background/walletCreate.js';
 import { startLabelSyncRestoreTask } from './background/labelSyncRestoreTasks.js';
-import { createSurfaceStateBroadcaster } from './shared/surfaceStateSync.js';
+import { announceAutoLockUnsaved, createSurfaceStateBroadcaster } from './shared/surfaceStateSync.js';
+import { attachApprovalWatchListener } from './shared/approvalWatch.js';
 import { createChromeNotifier } from './background/chromeNotifications.js';
 import { createRestartStringSetStorage } from './background/restartStateStorage.js';
 
@@ -393,6 +394,14 @@ async function buildHost() {
         broadcastQueueStore,
         approvals: approvalBroker,
         surfaceStateEvents,
+        // §26: an auto-lock arm storage refused locks at once (fail closed).
+        onAutoLockArmRefused: async () => {
+            try {
+                await lockBackstop.lockWalletNow();
+            } finally {
+                void announceAutoLockUnsaved();
+            }
+        },
         // §43.2 / Cluster F FOLLOWUP 1: fan-out for bridge events so
         // dApps subscribed via provider.on(...) get accountsChanged /
         // chainChanged / disconnect when the wallet mutates connected
@@ -790,6 +799,10 @@ attachSignerBridgeListener();
 // arms it from the Locked screen with the vault still shut.
 attachPanicStateListener({ flows: flowsLib, isTrustedSender: isTrustedExtensionSender });
 
+// Approval windows hold a port here; its close tells them this worker, and
+// every request it held, is gone.
+attachApprovalWatchListener();
+
 // "Wipe wallet data": always on, and pre-host on purpose. The escapes that
 // reach it (Locked "Forgot password", the corrupt-vault WIPE, demo exit)
 // all run with the vault CLOSED, so it cannot live behind ensureHost. The
@@ -831,8 +844,15 @@ attachBridgeBootGate({
         : sendResponse(WALLET_LOCKED_ENVELOPE)),
 });
 
-ensureHost().catch((err) => {
-    console.error('[xchain] background init failed:', err);
-});
+// A restarted worker checks its idle deadline at once rather than at the
+// first keepalive alarm, so a record it cannot read locks before any request.
+ensureHost()
+    .catch((err) => {
+        console.error('[xchain] background init failed:', err);
+    })
+    .then(() => maybeAutoLock())
+    .catch((err) => {
+        console.error('[xchain] boot auto-lock check failed:', err);
+    });
 
 console.log('[xchain] background service worker ready');

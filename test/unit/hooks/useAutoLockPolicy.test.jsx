@@ -415,6 +415,39 @@ describe('useAutoLockPolicy', () => {
         });
     });
 
+    it('tells the shell when the backstop could not save the arm and locked', async () => {
+        const reportAutoLock = vi.fn(async () => ({ ok: false, reason: 'auto-lock-unsaved' }));
+        const messaging = makeMessaging({ autolockMinutes: 5, reportAutoLock });
+        const onArmRefused = vi.fn();
+        function RefusedShell() {
+            useAutoLockPolicy({ sessionState: 'unlocked', activeWalletId: 'w1', onArmRefused });
+            return <div />;
+        }
+        renderShell(<RefusedShell />, { messaging, shell: 'popup' });
+        await settle();
+        await act(async () => { await Promise.resolve(); });
+        // Each refused arm reports (the default timeout, then the loaded one).
+        expect(onArmRefused).toHaveBeenCalledTimes(reportAutoLock.mock.calls.length);
+        expect(onArmRefused).toHaveBeenCalled();
+    });
+
+    it('reads a saved arm and the desktop reply as no refusal', async () => {
+        for (const reply of [{ ok: true }, { armed: true }, undefined]) {
+            const reportAutoLock = vi.fn(async () => reply);
+            const messaging = makeMessaging({ autolockMinutes: 5, reportAutoLock });
+            const onArmRefused = vi.fn();
+            function SavedShell() {
+                useAutoLockPolicy({ sessionState: 'unlocked', activeWalletId: 'w1', onArmRefused });
+                return <div />;
+            }
+            renderShell(<SavedShell />, { messaging, shell: 'popup' });
+            await settle();
+            await act(async () => { await Promise.resolve(); });
+            expect(onArmRefused).not.toHaveBeenCalled();
+            cleanup();
+        }
+    });
+
     it('withholds a premature disarm while the session status is still resolving', async () => {
         const reportAutoLock = vi.fn(async () => ({ ok: true }));
         const messaging = makeMessaging({ autolockMinutes: 5, reportAutoLock });

@@ -12,6 +12,8 @@
 // store: rehydrate, merge, persist, settlement journal, vault rebuild and
 // reconcile, seal and prune. The host registers the routes and calls these.
 
+import { probeTxInclusion } from '@xchain-wallet/core/flows/txInclusionProbe.js';
+import { rawTxid } from '@xchain-wallet/core/signers/verifySignedTx.js';
 import {
     OWED_SETTLEMENT_LIMIT,
     owedRecordKey,
@@ -639,6 +641,45 @@ export function createBroadcastQueueEngine({ store: queueStore, importedAddressI
         for (const owed of queueStore.owed) held.add(owed.pendingTxId);
         return held;
     }
+    /**
+     * Ids of the entries whose transaction a block already carries. Only a
+     * positive answer counts: a lookup that fails or finds nothing keeps the
+     * entry. A two-phase entry is never judged, since its txid is the commit
+     * and the reveal it carries may still be unsent.
+     *
+     * @param {any[]} entries
+     * @param {{ get: (chainId: string) => any } | undefined} sdkRegistry
+     * @returns {Promise<Set<string>>}
+     */
+    async function entriesOnChain(entries, sdkRegistry) {
+        /** @type {Set<string>} */
+        const known = new Set();
+        if (entries.length === 0 || typeof sdkRegistry?.get !== 'function') return known;
+        /** @type {Map<string, Array<{ id: string, txid: string }>>} */
+        const byChain = new Map();
+        for (const entry of entries) {
+            if (!entry || typeof entry.id !== 'string' || typeof entry.chainId !== 'string') continue;
+            if (typeof entry.revealTxHex === 'string' && entry.revealTxHex) continue;
+            let txid = typeof entry.txid === 'string' ? entry.txid.trim().toLowerCase() : '';
+            if (!txid && typeof entry.signedTxHex === 'string' && entry.signedTxHex) {
+                try { txid = rawTxid(entry.signedTxHex); } catch { txid = ''; }
+            }
+            if (!/^[0-9a-f]{64}$/.test(txid)) continue;
+            const list = byChain.get(entry.chainId) ?? [];
+            list.push({ id: entry.id, txid });
+            byChain.set(entry.chainId, list);
+        }
+        for (const [chainId, list] of byChain) {
+            let found;
+            try {
+                found = await probeTxInclusion({ sdk: sdkRegistry.get(chainId), txids: list.map((x) => x.txid) });
+            } catch {
+                continue;
+            }
+            for (const x of list) if (found.has(x.txid)) known.add(x.id);
+        }
+        return known;
+    }
     // Wallets whose rehydrated entries this process has already judged against
     // the durable half. Left un-latched when the vault could not answer, so the
     // next list retries against an open one.
@@ -679,20 +720,23 @@ export function createBroadcastQueueEngine({ store: queueStore, importedAddressI
      * never cleared here: a record back at 'queued' after a resumed retry may
      * still describe an attempt that landed.
      *
+     * An entry that names no PendingTx (a raw signed transaction the renderer
+     * queued) has no durable half to judge it, so its own txid is asked of the
+     * chain instead: one a block already carries was sent, and its removal is
+     * what a refused save lost. It leaves the queue rather than coming back as
+     * unsent and offering a second send.
+     *
      * @param {any} vault
      * @param {string} walletId
+     * @param {{ get: (chainId: string) => any }} [sdkRegistry]
      */
-    async function reconcileRestoredEntries(vault, walletId) {
+    async function reconcileRestoredEntries(vault, walletId, sdkRegistry) {
         if (!queueStore.loaded || reconciledWallets.has(walletId)) return;
         // A vault with no pendingTxs collection cannot answer, and an absent
         // reader must read as "cannot judge", never as "no record exists".
         if (typeof vault?.pendingTxs?.get !== 'function') return;
         const live = getQueue(walletId);
         const owning = live.filter((e) => typeof e?.pendingTxId === 'string' && e.pendingTxId);
-        if (owning.length === 0) {
-            reconciledWallets.add(walletId);
-            return;
-        }
         /** @type {Set<string>} */
         const retired = new Set();
         let relabelled = false;
@@ -720,6 +764,8 @@ export function createBroadcastQueueEngine({ store: queueStore, importedAddressI
                 relabelled = true;
             }
         }
+        const unowned = live.filter((e) => !(typeof e?.pendingTxId === 'string' && e.pendingTxId));
+        for (const id of await entriesOnChain(unowned, sdkRegistry)) retired.add(id);
         reconciledWallets.add(walletId);
         if (retired.size === 0 && !relabelled) return;
         for (let i = live.length - 1; i >= 0; i -= 1) {
