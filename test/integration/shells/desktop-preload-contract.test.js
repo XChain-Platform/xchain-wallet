@@ -174,6 +174,9 @@ const BRIDGE_WORLDS = [
     'xchainWalletUpdater',
     // OS deep links: main parks a link and nudges, the renderer claims it.
     'xchainWalletDeepLink',
+    // §40.12: the Trezor Connect relay. Main owns the bridge window on the
+    // isolated no-HID session; the renderer gets call and close only.
+    'xchainWalletTrezorBridge',
 ];
 
 beforeEach(() => {
@@ -271,6 +274,10 @@ describe('desktop preload: the renderer sandbox surface', () => {
         // The deep-link claim is walked for the same reason: a take on a
         // channel main never answers would leave every parked link unclaimed.
         await pre.worlds.get('xchainWalletDeepLink').takePending();
+        // The Trezor relay is walked so a call or close on a channel main
+        // never answers fails here rather than as a pairing that never ends.
+        await pre.worlds.get('xchainWalletTrezorBridge').call('getFeatures');
+        await pre.worlds.get('xchainWalletTrezorBridge').close();
 
         const used = new Set([
             ...pre.invokes.map(([channel]) => channel),
@@ -278,7 +285,7 @@ describe('desktop preload: the renderer sandbox surface', () => {
         ]);
         // Sanity: the walk above must actually have produced traffic, or the
         // agreement checks below are vacuously true.
-        expect(used.size).toBe(9);
+        expect(used.size).toBe(12);
 
         const registered = mainRegisteredChannels();
         for (const channel of used) {

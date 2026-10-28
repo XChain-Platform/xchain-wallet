@@ -53,6 +53,7 @@ const expectedSurface = {
     xchainWalletDeepLink: ['onUri', 'takePending'],
     xchainWalletRegistry: ['getRemoteDescriptors'],
     xchainWalletSignerBridge: ['onMessage', 'postMessage'],
+    xchainWalletTrezorBridge: ['call', 'close'],
     xchainWalletUpdater: ['getState', 'install', 'onEvent'],
     xchainWalletWindow: ['onStateChange', 'openDetached', 'setScreenProtected'],
 };

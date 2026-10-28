@@ -118,17 +118,15 @@
 // could reach the picker; `isAppHidSelect` now also requires a TOP-LEVEL
 // frame, which `details.frame.parent` states directly.
 //
-// §40.12: the hosted Trezor Connect script itself has since
-// moved out of this app's own renderer origin, into a dedicated Electron
-// session opened on demand by index.js (see
-// security.js#isTrezorConnectBridgeWindowOpen) that is never passed to
-// attachHidPermissions below and is instead wired to `attachHidDenial`,
-// which refuses `hid` explicitly through every handler Electron offers.
-// That session structurally cannot be granted `hid` for anything it
-// hosts, so the residual this comment used to flag (a compromised
-// connect.trezor.io script running as first-party code in the
-// HID-granted session) is closed there, not by this module. This
-// module's own guard is unchanged and was never what held that path shut.
+// §40.12: the hosted Trezor Connect script runs outside this app's own
+// renderer origin, in a window main builds on a dedicated Electron
+// session (index.js#getTrezorConnectSession, trezorBridgeWindow.js) that
+// is never passed to attachHidPermissions below and is instead wired to
+// `attachHidDenial`, which refuses `hid` explicitly through every handler
+// Electron offers. That session structurally cannot be granted `hid` for
+// anything it hosts, so a compromised connect.trezor.io script cannot run
+// as first-party code in the HID-granted session. This module's own guard
+// is not what holds that path shut.
 // The main renderer CSP (renderer/index.html) admits no remote origin:
 // `script-src 'self'` and `frame-src 'none'`.
 //
@@ -356,7 +354,7 @@ export function attachHidPermissions(session, opts) {
  * Wire an explicit, blanket HID denial onto an Electron session that must
  * never be able to reach a paired Ledger or Trezor: the isolated Trezor
  * Connect bridge session built in `index.js`
- * (`getTrezorConnectSession`/`TREZOR_CONNECT_BRIDGE_WINDOW_NAME`).
+ * (`getTrezorConnectSession`), which trezorBridgeWindow.js builds its window on.
  *
  * This is deliberately NOT the same posture as simply never calling
  * `attachHidPermissions` on a session. Electron documents no default for

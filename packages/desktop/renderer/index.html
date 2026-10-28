@@ -10,12 +10,10 @@
               script. Trezor Connect's hosted global build (no bundled
               Trezor npm package; tools/build-reproduce/check-no-trezor-dist.sh
               enforces that at build time) loads only inside the bridge
-              window renderer/signerFactories/trezorFactory.js opens: a
-              data: document with its own tight CSP, which main/index.js
-              puts on a dedicated preload-free session wired to
-              attachHidDenial. The two talk over postMessage only. A
-              window.open popup is not governed by this document's
-              frame-src or script-src.
+              window main/trezorBridgeWindow.js builds: a packaged
+              local document with its own tight CSP, on a dedicated
+              session wired to attachHidDenial. The two talk only through
+              main's narrow relay, never directly.
             - `frame-src 'none'` - the packaged renderer embeds no iframe,
               the same premise main/permissions.js's subframe guard
               latches on. Declared rather than omitted, since an omitted

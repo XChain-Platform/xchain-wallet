@@ -705,7 +705,7 @@ for (const [name, sources] of Object.entries(EXPECTED_RENDERER_CSP)) {
 // than as whatever the file happened to say: this window holds the preload
 // bridges and the WebHID grant, so it admits no remote script or frame. The
 // hosted Trezor Connect build (no bundled @trezor/*) runs only in the bridge
-// window trezorFactory.js opens on its own preload-free session, and
+// window main/trezorBridgeWindow.js builds on its own no-HID session, and
 // frame-src 'none' is what keeps the subframe guard's no-iframe premise true.
 
 // --- 8. The desktop reproducible-build recipe -------------------------

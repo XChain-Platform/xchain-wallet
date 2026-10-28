@@ -63,16 +63,24 @@ function clearSharedTransport() {
     return transport;
 }
 
+/**
+ * Cache a transport until it reports disconnect. An unplugged Ledger closes its
+ * WebHID device for good, so a kept transport would fail every pairing after
+ * the device is plugged back in until the extension restarts. @ledgerhq's
+ * Transport offers on and off but no once, so the listener removes itself.
+ */
 function cacheTransport(transport) {
     sharedTransport = transport;
-    if (typeof transport?.once !== 'function') return;
+    if (typeof transport?.on !== 'function') return;
     const onDisconnect = () => {
+        const remove = transport.off ?? transport.removeListener;
+        if (typeof remove === 'function') remove.call(transport, 'disconnect', onDisconnect);
         if (sharedTransport !== transport) return;
         sharedTransport = null;
         sharedDisconnectHandler = null;
     };
     sharedDisconnectHandler = onDisconnect;
-    transport.once('disconnect', onDisconnect);
+    transport.on('disconnect', onDisconnect);
 }
 
 /**

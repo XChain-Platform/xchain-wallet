@@ -20,15 +20,6 @@ const {
     resetTrezorConnect,
 } = await import('../../../packages/desktop/renderer/signerFactories/trezorFactory.js');
 
-function emitMessage(source, data) {
-    const event = new Event('message');
-    Object.defineProperties(event, {
-        source: { value: source },
-        data: { value: data },
-    });
-    window.dispatchEvent(event);
-}
-
 beforeEach(() => {
     resetTrezorConnect();
     makeTrezorFactory.mockReset();
@@ -77,27 +68,12 @@ describe('desktop Trezor factory wrapper', () => {
         expect(pair).toHaveBeenCalledOnce();
     });
 
-    it('opens the isolated bridge and proxies only the Connect method surface', async () => {
-        const bridgeWindow = {
-            closed: false,
-            postMessage: vi.fn(),
-            close: vi.fn(),
-        };
-        const open = vi.spyOn(window, 'open').mockReturnValue(bridgeWindow);
+    it('proxies only the Connect method surface through the preload relay', async () => {
+        const call = vi.fn(async () => ({ ok: true, result: { success: true, payload: { address: 'bc1qexample' } } }));
+        window.xchainWalletTrezorBridge = { call, close: vi.fn() };
+        const open = vi.spyOn(window, 'open');
 
-        const connectPromise = getTrezorConnect();
-        expect(open).toHaveBeenCalledOnce();
-        const [dataUrl, windowName] = open.mock.calls[0];
-        expect(windowName).toBe('xchain-trezor-connect-bridge');
-        expect(dataUrl).toMatch(/^data:text\/html;base64,/);
-
-        emitMessage(bridgeWindow, { type: 'xchain-trezor-bridge-ready' });
-        await vi.waitFor(() => expect(bridgeWindow.postMessage).toHaveBeenCalledOnce());
-        const initRequest = bridgeWindow.postMessage.mock.calls[0][0];
-        expect(initRequest).toMatchObject({ method: 'init', args: { lazyLoad: true } });
-        emitMessage(bridgeWindow, { id: initRequest.id, ok: true, result: undefined });
-
-        const connect = await connectPromise;
+        const connect = await getTrezorConnect();
         expect(Object.keys(connect).sort()).toEqual([
             'getAddress',
             'getFeatures',
@@ -105,56 +81,21 @@ describe('desktop Trezor factory wrapper', () => {
             'signMessage',
             'signTransaction',
         ]);
+        expect(call).not.toHaveBeenCalled();
 
-        const addressPromise = connect.getAddress({ path: "m/84'/0'/0'/0/0" });
-        const addressRequest = bridgeWindow.postMessage.mock.calls.at(-1)[0];
-        expect(addressRequest).toMatchObject({
-            method: 'getAddress',
-            args: { path: "m/84'/0'/0'/0/0" },
-        });
-        emitMessage(bridgeWindow, {
-            id: addressRequest.id,
-            ok: true,
-            result: { success: true, payload: { address: 'bc1qexample' } },
-        });
-        await expect(addressPromise).resolves.toEqual({
+        await expect(connect.getAddress({ path: "m/84'/0'/0'/0/0" })).resolves.toEqual({
             success: true,
             payload: { address: 'bc1qexample' },
         });
+        expect(call).toHaveBeenCalledExactlyOnceWith('getAddress', { path: "m/84'/0'/0'/0/0" });
+        expect(open).not.toHaveBeenCalled();
+        delete window.xchainWalletTrezorBridge;
     });
 
-    it('reports a refused bridge window', async () => {
-        vi.spyOn(window, 'open').mockReturnValue(null);
-
-        await expect(getTrezorConnect()).rejects.toThrow('bridge window was refused');
-    });
-
-    it('removes bridge message listeners when the bridge is reset', async () => {
-        const addEventListener = vi.spyOn(window, 'addEventListener');
-        const removeEventListener = vi.spyOn(window, 'removeEventListener');
-        const bridgeWindow = {
-            closed: false,
-            postMessage: vi.fn(),
-            close: vi.fn(),
-        };
-        vi.spyOn(window, 'open').mockReturnValue(bridgeWindow);
-
-        const connectPromise = getTrezorConnect();
-        const listeners = addEventListener.mock.calls
-            .filter(([type]) => type === 'message')
-            .map(([, listener]) => listener);
-        expect(listeners).toHaveLength(2);
-
-        emitMessage(bridgeWindow, { type: 'xchain-trezor-bridge-ready' });
-        await vi.waitFor(() => expect(bridgeWindow.postMessage).toHaveBeenCalledOnce());
-        const initRequest = bridgeWindow.postMessage.mock.calls[0][0];
-        emitMessage(bridgeWindow, { id: initRequest.id, ok: true, result: undefined });
-        await connectPromise;
-
-        resetTrezorConnect();
-
-        for (const listener of listeners) {
-            expect(removeEventListener).toHaveBeenCalledWith('message', listener);
-        }
+    it('keeps the injected-loader manifest equal to the bridge window\'s', async () => {
+        const { TREZOR_CONNECT_MANIFEST } = await import('../../../packages/desktop/main/trezorBridgeWindow.js');
+        const connect = { init: vi.fn().mockResolvedValue(undefined) };
+        await getTrezorConnect(async () => connect);
+        expect(connect.init.mock.calls[0][0].manifest).toEqual({ ...TREZOR_CONNECT_MANIFEST });
     });
 });

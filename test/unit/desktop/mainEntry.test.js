@@ -43,7 +43,10 @@ const electron = vi.hoisted(() => {
                 isDestroyed: vi.fn(() => false),
                 reload: vi.fn(),
                 reloadIgnoringCache: vi.fn(),
+                ipc: { on: vi.fn() },
+                bridgeListeners: new Map(),
             };
+            this.webContents.on = vi.fn((name, listener) => { this.webContents.bridgeListeners.set(name, listener); });
             this.loadFile = vi.fn(() => state.loadFileError
                 ? Promise.reject(state.loadFileError)
                 : undefined);
@@ -1144,7 +1147,7 @@ describe('desktop main entry point', () => {
         }
     });
 
-    it('allows only the marked Trezor bridge in an isolated no-HID session', async () => {
+    it('denies every window.open, the Trezor bridge window name included', async () => {
         await import('../../../packages/desktop/main/index.js');
         let openHandler;
         const contents = {
@@ -1154,24 +1157,57 @@ describe('desktop main entry point', () => {
             on: vi.fn(),
         };
         electron.appListeners.get('web-contents-created')({}, contents);
+        const before = electron.browserWindowOptions.length;
 
-        const result = openHandler({
-            url: 'https://connect.trezor.io/',
-            frameName: 'xchain-trezor-connect-bridge',
-        });
+        for (const [url, frameName] of [
+            ['data:text/html;base64,PGh0bWw+', 'xchain-trezor-connect-bridge'],
+            ['https://connect.trezor.io/9/popup.html', 'xchain-trezor-connect-bridge'],
+            ['about:blank', ''],
+        ]) {
+            expect(openHandler({ url, frameName })).toEqual({ action: 'deny' });
+        }
+        expect(electron.browserWindowOptions).toHaveLength(before);
+        expect(electron.session.fromPartition).not.toHaveBeenCalled();
+    });
 
-        expect(result.action).toBe('allow');
-        expect(result.overrideBrowserWindowOptions.webPreferences).toMatchObject({
-            session: electron.isolatedSession,
+    it('builds the Trezor bridge window in main on the isolated no-HID session', async () => {
+        electron.app.whenReady.mockResolvedValueOnce();
+        await import('../../../packages/desktop/main/index.js');
+        await vi.waitFor(() => expect(electron.ipcHandlers.has('xchain:trezor-bridge-call')).toBe(true));
+        const handler = electron.ipcHandlers.get('xchain:trezor-bridge-call');
+        const before = electron.browserWindowOptions.length;
+
+        await expect(handler({
+            senderFrame: { url: 'https://connect.trezor.io/9/iframe.html' },
+            sender: { getURL: () => 'https://connect.trezor.io/9/iframe.html' },
+        }, { method: 'getFeatures' })).resolves.toEqual({ ok: false, error: 'trezor-bridge: rejected from untrusted frame' });
+        expect(electron.browserWindowOptions).toHaveLength(before);
+
+        const trusted = { senderFrame: { url: appIndex }, sender: { getURL: () => appIndex } };
+        void handler(trusted, { method: 'getFeatures' });
+        await vi.waitFor(() => expect(electron.browserWindowOptions).toHaveLength(before + 1));
+        const options = electron.browserWindowOptions.at(-1);
+        const win = electron.BrowserWindow.instances.at(-1);
+
+        expect(options.webPreferences.session).toBe(electron.isolatedSession);
+        expect(options.webPreferences).toMatchObject({
             contextIsolation: true,
             nodeIntegration: false,
             sandbox: true,
             webSecurity: true,
             devTools: false,
         });
-        expect(result.overrideBrowserWindowOptions.webPreferences).not.toHaveProperty('preload');
+        expect(options.webPreferences.preload).toMatch(/[\\/]main[\\/]trezorBridge[\\/]preload\.cjs$/);
+        expect(win.loadFile).toHaveBeenCalledExactlyOnceWith(expect.stringMatching(/[\\/]main[\\/]trezorBridge[\\/]connect\.html$/));
         expect(electron.session.fromPartition).toHaveBeenCalledExactlyOnceWith('trezor-connect-isolated');
         expect(permissions.attachHidDenial).toHaveBeenCalledExactlyOnceWith(electron.isolatedSession);
+        expect(permissions.attachHidPermissions).not.toHaveBeenCalledWith(electron.isolatedSession);
+
+        const close = electron.ipcHandlers.get('xchain:trezor-bridge-close');
+        await expect(close(trusted, 'extra')).resolves.toEqual({ ok: false });
+        win.close = vi.fn();
+        await expect(close(trusted)).resolves.toEqual({ ok: true });
+        expect(win.close).toHaveBeenCalledOnce();
     });
 
     it('turns an IPC rejection into a logged generic response', async () => {

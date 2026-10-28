@@ -90,6 +90,14 @@
 //     nudge, so a link clicked while the app was closed is applied once.
 //     Links are attacker-controlled input: the renderer only ever turns
 //     one into a prefilled form the user still has to act on.
+//
+//   - `xchainWalletTrezorBridge.{call,close}`: the renderer's half of the
+//     Trezor Connect relay (§40.12). `call(method, args)` asks main to run
+//     one Connect method the signer uses in the bridge window main owns on
+//     the isolated no-HID session, and resolves to `{ ok, result }` or
+//     `{ ok: false, error }`. `close()` closes that window, settling any
+//     waiting call. The renderer never gets a handle to the window, its
+//     session or the hosted script.
 
 // CommonJS on purpose: Electron loads sandboxed preloads (webPreferences
 // sandbox: true) through its CJS wrapper, so an ESM `import` here throws
@@ -112,6 +120,11 @@ const UPDATER_STATE_CHANNEL = 'xchain:updater-state';
 const DEEP_LINK_CHANNEL = 'xchain:uri';
 const DEEP_LINK_TAKE_CHANNEL = 'xchain:deep-link-take';
 const SCREEN_PROTECTION_CHANNEL = 'xchain:screen-protection';
+const TREZOR_BRIDGE_CALL_CHANNEL = 'xchain:trezor-bridge-call';
+const TREZOR_BRIDGE_CLOSE_CHANNEL = 'xchain:trezor-bridge-close';
+// Matches main/trezorBridgeWindow.js CONNECT_METHODS: a call main refuses
+// throws here instead.
+const TREZOR_CONNECT_METHODS = ['getFeatures', 'getAddress', 'getPublicKey', 'signTransaction', 'signMessage'];
 
 function assertArgumentCount(method, args, expected) {
     if (args.length !== expected) {
@@ -172,6 +185,15 @@ function validateOpenDetached(args) {
         throw new TypeError(`${method}: initialView or initialContext is required`);
     }
     return options;
+}
+
+function validateTrezorCall(args) {
+    const method = 'xchainWalletTrezorBridge.call';
+    if (args.length !== 1 && args.length !== 2) throw new TypeError(`${method}: expected 1 or 2 arguments`);
+    const [name, request] = args;
+    if (!TREZOR_CONNECT_METHODS.includes(name)) throw new TypeError(`${method}: unsupported Connect method`);
+    if (request !== undefined) assertRecord(method, request);
+    return request === undefined ? { method: name } : { method: name, args: request };
 }
 
 // The frame rules match main/security.js isValidSignerBridgeMessage exactly: a
@@ -405,6 +427,26 @@ contextBridge.exposeInMainWorld('xchainWalletRegistry', {
     getRemoteDescriptors() {
         assertNoArguments('xchainWalletRegistry.getRemoteDescriptors', arguments);
         return ipcRenderer.invoke(CHAIN_REGISTRY_CHANNEL);
+    },
+});
+
+contextBridge.exposeInMainWorld('xchainWalletTrezorBridge', {
+    /**
+     * Run one Connect method in main's Trezor Connect bridge window.
+     * @param {string} method
+     * @param {object} [args]
+     * @returns {Promise<{ ok: true, result: unknown } | { ok: false, error: string }>}
+     */
+    call(method, args) {
+        return ipcRenderer.invoke(TREZOR_BRIDGE_CALL_CHANNEL, validateTrezorCall(arguments));
+    },
+    /**
+     * Close the bridge window; any waiting call settles as closed.
+     * @returns {Promise<{ ok: boolean }>}
+     */
+    close() {
+        assertNoArguments('xchainWalletTrezorBridge.close', arguments);
+        return ipcRenderer.invoke(TREZOR_BRIDGE_CLOSE_CHANNEL);
     },
 });
 

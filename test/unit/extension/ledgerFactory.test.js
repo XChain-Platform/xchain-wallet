@@ -7,12 +7,21 @@
 // General Public License v3.0 or later; see LICENSE.md.
 
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { createRequire } from 'node:module';
+import { join } from 'node:path';
 
 vi.mock('../../../packages/core/src/signerFactories/index.js', () => ({
     makeLedgerFactory: vi.fn(),
     walletOnlyRegistry: vi.fn(),
 }));
 vi.mock('xchain-sdk/src/wallet.js', () => ({ default: {} }));
+
+// The Transport class TransportWebHID extends. It offers on, off and emit,
+// and no once, so a fake that carries once can pass where the real
+// transport does not.
+const fromWebHid = createRequire(createRequire(join(process.cwd(), 'packages', 'extension', 'package.json'))
+    .resolve('@ledgerhq/hw-transport-webhid'));
+const LedgerTransport = fromWebHid('@ledgerhq/hw-transport').default;
 
 import {
     getLedgerTransport,
@@ -49,7 +58,7 @@ describe('extension Ledger transport cache', () => {
     it('evicts a disconnected transport', async () => {
         let disconnect;
         const first = {
-            once: vi.fn((event, handler) => { disconnect = handler; }),
+            on: vi.fn((event, handler) => { disconnect = handler; }),
             off: vi.fn(),
             close: vi.fn(async () => {}),
         };
@@ -66,16 +75,35 @@ describe('extension Ledger transport cache', () => {
         expect(create).toHaveBeenCalledTimes(2);
     });
 
+    it('opens a fresh transport once a @ledgerhq transport reports disconnect', async () => {
+        const made = [];
+        const create = vi.fn(async () => {
+            const transport = new LedgerTransport();
+            made.push(transport);
+            return transport;
+        });
+        const loader = vi.fn(async () => ({ create }));
+
+        const first = await getLedgerTransport(loader);
+        expect(typeof first.once).toBe('undefined');
+        first.emit('disconnect');
+        const second = await getLedgerTransport(loader);
+        expect(second).not.toBe(first);
+        expect(made).toHaveLength(2);
+        first.emit('disconnect');
+        await expect(getLedgerTransport(loader)).resolves.toBe(second);
+    });
+
     it('removes the disconnect listener and closes the transport on reset', async () => {
         const transport = {
-            once: vi.fn(),
+            on: vi.fn(),
             off: vi.fn(),
             close: vi.fn(async () => {}),
         };
         const loader = vi.fn(async () => ({ create: vi.fn(async () => transport) }));
 
         await getLedgerTransport(loader);
-        const handler = transport.once.mock.calls[0][1];
+        const handler = transport.on.mock.calls[0][1];
         await resetLedgerTransport();
 
         expect(transport.off).toHaveBeenCalledWith('disconnect', handler);

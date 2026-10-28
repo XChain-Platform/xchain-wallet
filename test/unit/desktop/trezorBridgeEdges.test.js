@@ -12,99 +12,63 @@ const {
     resetTrezorConnect,
 } = await import('../../../packages/desktop/renderer/signerFactories/trezorFactory.js');
 
-function emitMessage(source, data) {
-    const event = new Event('message');
-    Object.defineProperties(event, {
-        source: { value: source },
-        data: { value: data },
-    });
-    window.dispatchEvent(event);
-}
-
-function openBridge() {
-    const bridgeWindow = {
-        closed: false,
-        postMessage: vi.fn(),
-        close: vi.fn(),
-    };
-    vi.spyOn(window, 'open').mockReturnValue(bridgeWindow);
-    return bridgeWindow;
-}
-
-async function connectBridge(bridgeWindow) {
-    const connection = getTrezorConnect();
-    emitMessage(bridgeWindow, { type: 'xchain-trezor-bridge-ready' });
-    await vi.waitFor(() => expect(bridgeWindow.postMessage).toHaveBeenCalledOnce());
-    const init = bridgeWindow.postMessage.mock.calls[0][0];
-    emitMessage(bridgeWindow, { id: init.id, ok: true, result: undefined });
-    return connection;
-}
-
 beforeEach(() => {
     resetTrezorConnect();
 });
 
 afterEach(() => {
-    resetTrezorConnect();
-    vi.restoreAllMocks();
     vi.unstubAllGlobals();
+    resetTrezorConnect();
+    delete window.xchainWalletTrezorBridge;
+    vi.restoreAllMocks();
 });
 
 describe('desktop Trezor bridge edges', () => {
-    it('ignores ready messages from any window except the isolated bridge', async () => {
-        const bridgeWindow = openBridge();
-        const connection = getTrezorConnect();
-
-        emitMessage({}, { type: 'xchain-trezor-bridge-ready' });
-        emitMessage(bridgeWindow, { type: 'unrelated' });
-        await Promise.resolve();
-        expect(bridgeWindow.postMessage).not.toHaveBeenCalled();
-
-        emitMessage(bridgeWindow, { type: 'xchain-trezor-bridge-ready' });
-        await vi.waitFor(() => expect(bridgeWindow.postMessage).toHaveBeenCalledOnce());
-        const init = bridgeWindow.postMessage.mock.calls[0][0];
-        emitMessage(bridgeWindow, { id: init.id, ok: true, result: undefined });
-        await expect(connection).resolves.toBeTruthy();
+    it('refuses the production bridge in a window with no relay world', async () => {
+        await expect(getTrezorConnect()).rejects.toThrow('Trezor Connect bridge is not available in this window');
+        window.xchainWalletTrezorBridge = {};
+        await expect(getTrezorConnect()).rejects.toThrow('Trezor Connect bridge is not available in this window');
     });
 
-    it('surfaces a bridge refusal and its constant fallback message', async () => {
-        const bridgeWindow = openBridge();
-        const connection = getTrezorConnect();
-        emitMessage(bridgeWindow, { type: 'xchain-trezor-bridge-ready' });
-        await vi.waitFor(() => expect(bridgeWindow.postMessage).toHaveBeenCalledOnce());
-        const init = bridgeWindow.postMessage.mock.calls[0][0];
+    it('surfaces a relay refusal and its constant fallback message', async () => {
+        window.xchainWalletTrezorBridge = { call: vi.fn(), close: vi.fn() };
+        const proxy = await getTrezorConnect();
 
-        emitMessage(bridgeWindow, { id: 'unknown', ok: false, error: 'ignore me' });
-        emitMessage(bridgeWindow, { id: init.id, ok: false });
-
-        await expect(connection).rejects.toThrow('desktop trezorFactory: bridge call failed');
+        window.xchainWalletTrezorBridge.call.mockResolvedValueOnce({ ok: false, error: 'Device disconnected' });
+        await expect(proxy.getFeatures()).rejects.toThrow('Device disconnected');
+        for (const reply of [{ ok: false }, { ok: false, error: '' }, null, undefined, { ok: 'true', result: 1 }]) {
+            window.xchainWalletTrezorBridge.call.mockResolvedValueOnce(reply);
+            await expect(proxy.getFeatures()).rejects.toThrow('desktop trezorFactory: bridge call failed');
+        }
     });
 
-    it('refuses a proxy call as a disconnect when the replacement bridge also closes', async () => {
-        const bridgeWindow = openBridge();
-        const connect = await connectBridge(bridgeWindow);
-        bridgeWindow.closed = true;
-
-        await expect(connect.signMessage({ path: "m/84'/0'/0'", message: 'exact message' }))
-            .rejects.toThrow('Trezor Connect transport disconnected');
-        expect(bridgeWindow.postMessage).toHaveBeenCalledTimes(1);
+    it('passes each proxy method and its argument to the relay unchanged', async () => {
+        const call = vi.fn(async (method, args) => ({ ok: true, result: { method, args } }));
+        window.xchainWalletTrezorBridge = { call, close: vi.fn() };
+        const proxy = await getTrezorConnect();
+        const args = { path: "m/84'/0'/0'", message: 'exact message' };
+        await expect(proxy.signMessage(args)).resolves.toEqual({ method: 'signMessage', args });
+        expect(call).toHaveBeenCalledExactlyOnceWith('signMessage', args);
     });
 
-    it('rejects pending bridge work on reset even when closing the window throws', async () => {
-        const bridgeWindow = openBridge();
-        bridgeWindow.close.mockImplementation(() => { throw new Error('already gone'); });
-        const connection = getTrezorConnect();
-        emitMessage(bridgeWindow, { type: 'xchain-trezor-bridge-ready' });
-        await vi.waitFor(() => expect(bridgeWindow.postMessage).toHaveBeenCalledOnce());
-        const rejection = expect(connection).rejects.toThrow('Trezor Connect bridge was reset');
-
+    it('does not throw on reset when the relay close rejects or throws', async () => {
+        window.xchainWalletTrezorBridge = {
+            call: vi.fn(),
+            close: vi.fn(() => { throw new Error('already gone'); }),
+        };
+        await getTrezorConnect();
         expect(() => resetTrezorConnect()).not.toThrow();
-        await rejection;
+        await vi.waitFor(() => expect(window.xchainWalletTrezorBridge.close).toHaveBeenCalledOnce());
+
+        window.xchainWalletTrezorBridge.close = vi.fn(async () => { throw new Error('gone'); });
+        expect(() => resetTrezorConnect()).not.toThrow();
+        await vi.waitFor(() => expect(window.xchainWalletTrezorBridge.close).toHaveBeenCalledOnce());
     });
 
     it('refuses the production bridge outside a renderer realm', async () => {
         vi.stubGlobal('window', undefined);
 
-        await expect(getTrezorConnect()).rejects.toThrow('no window available');
+        await expect(getTrezorConnect()).rejects.toThrow('not available in this window');
+        expect(() => resetTrezorConnect()).not.toThrow();
     });
 });

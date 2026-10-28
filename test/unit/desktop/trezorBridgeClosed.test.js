@@ -9,8 +9,9 @@
 // contact legal@dankest.llc.
 
 // The desktop Trezor Connect bridge is a separate window the user can close.
-// A call a closed bridge cannot answer settles as a retryable disconnect, and the
-// next call opens a fresh bridge instead of failing until the app restarts.
+// Main settles a call the closed window cannot answer as a retryable
+// disconnect, and the renderer surfaces that refusal unchanged, so the
+// confirm screen offers a retry and the next call goes to a fresh window.
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -25,113 +26,59 @@ const {
 
 // The pattern useConfirmAction reads as "reconnect and Approve again".
 const RETRYABLE_DISCONNECT = /transport.*(?:disconnected|unavailable|missing)/i;
+// main/trezorBridgeWindow.js BRIDGE_CLOSED_MESSAGE, as main's relay answers it.
+const CLOSED = 'desktop trezorFactory: the Trezor Connect transport disconnected because its '
+    + 'window closed before the device answered. Nothing was broadcast.';
 
-function emitMessage(source, data) {
-    const event = new Event('message');
-    Object.defineProperties(event, { source: { value: source }, data: { value: data } });
-    window.dispatchEvent(event);
-}
-
-function makeBridgeWindow() {
-    return { closed: false, postMessage: vi.fn(), close: vi.fn() };
-}
-
-// Answers ready and init for a bridge window the factory has just opened.
-async function bringUp(win) {
-    await vi.waitFor(() => expect(window.open).toHaveBeenCalled());
-    emitMessage(win, { type: 'xchain-trezor-bridge-ready' });
-    await vi.waitFor(() => expect(win.postMessage).toHaveBeenCalledOnce());
-    const init = win.postMessage.mock.calls[0][0];
-    expect(init.method).toBe('init');
-    emitMessage(win, { id: init.id, ok: true, result: undefined });
+function installRelay(call) {
+    const world = { call: vi.fn(call), close: vi.fn(async () => ({ ok: true })) };
+    window.xchainWalletTrezorBridge = world;
+    return world;
 }
 
 beforeEach(() => resetTrezorConnect());
 afterEach(() => {
     resetTrezorConnect();
+    delete window.xchainWalletTrezorBridge;
     vi.restoreAllMocks();
 });
 
 describe('desktop Trezor bridge window closed', () => {
-    it('settles a sign in flight as a retryable disconnect when the bridge closes', async () => {
-        const win = makeBridgeWindow();
-        vi.spyOn(window, 'open').mockReturnValue(win);
-        const connecting = getTrezorConnect();
-        await bringUp(win);
-        const proxy = await connecting;
+    it('settles a sign in flight as a retryable disconnect when main reports the bridge closed', async () => {
+        installRelay(async () => ({ ok: false, error: CLOSED }));
+        const proxy = await getTrezorConnect();
 
-        const sign = proxy.signTransaction({ inputs: [] });
-        const settled = sign.then(() => 'resolved', (err) => err);
-        await vi.waitFor(() => expect(win.postMessage).toHaveBeenCalledTimes(2));
-        win.closed = true;
-
-        const err = await vi.waitFor(async () => {
-            const value = await Promise.race([settled, Promise.resolve('pending')]);
-            if (value === 'pending') throw new Error('still pending');
-            return value;
-        }, { timeout: 3000, interval: 50 });
+        const err = await proxy.signTransaction({ inputs: [] }).then(() => null, (e) => e);
         expect(err).toBeInstanceOf(Error);
         expect(err.message).toMatch(RETRYABLE_DISCONNECT);
         expect(err.message).toMatch(/Nothing was broadcast/);
     });
 
-    it('opens a fresh bridge for the next call after the window closed', async () => {
-        const first = makeBridgeWindow();
-        const second = makeBridgeWindow();
-        vi.spyOn(window, 'open').mockReturnValueOnce(first).mockReturnValueOnce(second);
-        const connecting = getTrezorConnect();
-        await bringUp(first);
-        const proxy = await connecting;
-        first.closed = true;
+    it('sends the next call through the relay again after a close', async () => {
+        const relay = installRelay(async () => ({ ok: false, error: CLOSED }));
+        const proxy = await getTrezorConnect();
+        await expect(proxy.getFeatures()).rejects.toThrow(RETRYABLE_DISCONNECT);
 
-        const features = proxy.getFeatures();
-        await vi.waitFor(() => expect(window.open).toHaveBeenCalledTimes(2));
-        await bringUp(second);
-        await vi.waitFor(() => expect(second.postMessage).toHaveBeenCalledTimes(2));
-        const call = second.postMessage.mock.calls[1][0];
-        expect(call.method).toBe('getFeatures');
-        emitMessage(second, { id: call.id, ok: true, result: { success: true, payload: { device_id: 'd1' } } });
-        await expect(features).resolves.toEqual({ success: true, payload: { device_id: 'd1' } });
-        expect(first.postMessage).toHaveBeenCalledOnce();
+        relay.call.mockImplementation(async () => ({ ok: true, result: { success: true, payload: { device_id: 'd1' } } }));
+        await expect(proxy.getFeatures()).resolves.toEqual({ success: true, payload: { device_id: 'd1' } });
+        expect(relay.call.mock.calls.map(([method]) => method)).toEqual(['getFeatures', 'getFeatures']);
     });
 
-    it('retries a failed init on the next connect instead of caching the failure', async () => {
-        const first = makeBridgeWindow();
-        const second = makeBridgeWindow();
-        vi.spyOn(window, 'open').mockReturnValueOnce(first).mockReturnValueOnce(second);
-        const failing = getTrezorConnect();
-        emitMessage(first, { type: 'xchain-trezor-bridge-ready' });
-        await vi.waitFor(() => expect(first.postMessage).toHaveBeenCalledOnce());
-        emitMessage(first, { id: first.postMessage.mock.calls[0][0].id, ok: false, error: 'Init failed' });
-        await expect(failing).rejects.toThrow('Init failed');
-        expect(first.close).toHaveBeenCalled();
-
-        const retry = getTrezorConnect();
-        await bringUp(second);
-        await expect(retry).resolves.toBeTruthy();
+    it('opens no window of its own and posts no message', async () => {
+        const open = vi.spyOn(window, 'open');
+        const post = vi.spyOn(window, 'postMessage');
+        installRelay(async () => ({ ok: true, result: { success: true } }));
+        const proxy = await getTrezorConnect();
+        await proxy.getFeatures();
+        expect(open).not.toHaveBeenCalled();
+        expect(post).not.toHaveBeenCalled();
     });
 
-    it('ignores a reply that arrives from a closed bridge after the call settled', async () => {
-        const first = makeBridgeWindow();
-        const second = makeBridgeWindow();
-        vi.spyOn(window, 'open').mockReturnValueOnce(first).mockReturnValueOnce(second);
-        const connecting = getTrezorConnect();
-        await bringUp(first);
-        const proxy = await connecting;
-        const sign = proxy.signTransaction({ inputs: [] });
-        await vi.waitFor(() => expect(first.postMessage).toHaveBeenCalledTimes(2));
-        const staleId = first.postMessage.mock.calls[1][0].id;
-        first.closed = true;
-        await expect(sign).rejects.toThrow(RETRYABLE_DISCONNECT);
-
-        const retry = proxy.signTransaction({ inputs: [] });
-        await bringUp(second);
-        await vi.waitFor(() => expect(second.postMessage).toHaveBeenCalledTimes(2));
-        emitMessage(first, { id: staleId, ok: true, result: { success: true, payload: { serializedTx: 'stale' } } });
-        emitMessage(second, { id: staleId, ok: true, result: { success: true, payload: { serializedTx: 'stale' } } });
-        const live = second.postMessage.mock.calls[1][0];
-        expect(live.id).not.toBe(staleId);
-        emitMessage(second, { id: live.id, ok: true, result: { success: true, payload: { serializedTx: 'fresh' } } });
-        await expect(retry).resolves.toEqual({ success: true, payload: { serializedTx: 'fresh' } });
+    it('asks main to close the bridge on reset', async () => {
+        const relay = installRelay(async () => ({ ok: true, result: undefined }));
+        await getTrezorConnect();
+        resetTrezorConnect();
+        await vi.waitFor(() => expect(relay.close).toHaveBeenCalledOnce());
+        expect(relay.close).toHaveBeenCalledWith();
     });
 });

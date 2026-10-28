@@ -285,11 +285,12 @@ assert.ok(
     /@xchain-wallet\/core\/signerFactories|\.\.\/\.\.\/\.\.\/core\/src\/signerFactories/.test(dTrezorSrc),
     'desktop trezorFactory imports core (workspace package or correct relative path)',
 );
-// T-RSL: desktop does NOT bundle @trezor/connect-web; it loads Trezor
-// Connect at runtime from the hosted global build instead.
+// T-RSL: desktop does NOT bundle @trezor/connect-web; the bridge window
+// main builds loads Trezor Connect at runtime from the hosted global build.
+const dBridgeDoc = readFileSync(join(desktop, 'main', 'trezorBridge', 'connect.html'), 'utf8');
 assert.ok(
-    /connect\.trezor\.io\/9\/trezor-connect\.js/.test(dTrezorSrc),
-    'desktop trezorFactory loads Trezor Connect from the hosted global build (connect.trezor.io/9)',
+    /<script src="https:\/\/connect\.trezor\.io\/9\/trezor-connect\.js"><\/script>/.test(dBridgeDoc),
+    'the desktop Trezor bridge document loads Trezor Connect from the hosted global build (connect.trezor.io/9)',
 );
 assert.ok(
     !/import\(\s*['"]@trezor\/connect-web['"]\s*\)/.test(dTrezorSrc)

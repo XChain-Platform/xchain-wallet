@@ -8,103 +8,139 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// Smoke for the one window.open the desktop shell allows: the isolated
-// Trezor Connect bridge window, which hosts third-party script.
+// Smoke for the Trezor Connect bridge window, the one desktop window that
+// hosts third-party script (§40.12).
 //
-// That allow path is safe only while four things hold together: the opener
-// predicate admits the app's own renderer and nothing else, the override
-// carries no preload, the window lives on the dedicated in-memory session,
-// and that session is wired to `attachHidDenial`. The predicate and the
-// denial are driven as real functions; index.js imports Electron, so its
-// allow branch and session factory are pinned by scoped source slices with
+// That window is safe only while five things hold together: index.js denies
+// every window.open (a window.open child keeps its opener's session, so the
+// bridge cannot be one), main builds the bridge itself with the isolated
+// session, sandbox, context isolation and only the bridge preload, it loads
+// a packaged file rather than a data: URL, the session is the dedicated
+// in-memory partition, and that partition is wired to `attachHidDenial`.
+// The options builder and the denial are driven as real functions; index.js
+// imports Electron, so its wiring is pinned by scoped source slices with
 // mutation probes that prove each slice check can fail.
 
 import { strict as assert } from 'node:assert';
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
-import { fileURLToPath, pathToFileURL } from 'node:url';
+import { fileURLToPath } from 'node:url';
 
 import { attachHidDenial } from '../../../packages/desktop/main/permissions.js';
-import {
-    TREZOR_CONNECT_BRIDGE_WINDOW_NAME,
-    isTrezorConnectBridgeWindowOpen,
-} from '../../../packages/desktop/main/security.js';
+import * as security from '../../../packages/desktop/main/security.js';
+import { bridgeWindowOptions } from '../../../packages/desktop/main/trezorBridgeWindow.js';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const desktop = join(here, '..', '..', '..', 'packages', 'desktop');
-const APP_ROOT = join(desktop, 'renderer', 'dist');
-const appIndexUrl = pathToFileURL(join(APP_ROOT, 'index.html')).href;
-const siblingDirUrl = pathToFileURL(join(`${APP_ROOT}-evil`, 'index.html')).href;
-const NAME = TREZOR_CONNECT_BRIDGE_WINDOW_NAME;
 
 const mainIndex = readFileSync(join(desktop, 'main', 'index.js'), 'utf8');
+const bridgeModule = readFileSync(join(desktop, 'main', 'trezorBridgeWindow.js'), 'utf8');
 const trezorFactory = readFileSync(join(desktop, 'renderer', 'signerFactories', 'trezorFactory.js'), 'utf8');
 
-// --- 1. The opener predicate admits only the app's own renderer --------
+// --- 1. No window.open reaches a window, the bridge included ----------
 {
-    // Check the app's own window may open the bridge, with or without a route.
-    for (const opener of [appIndexUrl, `${appIndexUrl}?xc-init-route=eyJ2IjoxfQ%3D%3D`, `${appIndexUrl}#/send`]) {
-        assert.equal(isTrezorConnectBridgeWindowOpen(NAME, opener, APP_ROOT), true, `the app opener ${opener} opens the bridge`);
-    }
-    // Check the bridge itself (a data: URL) and every non-app opener are refused.
-    for (const opener of [
-        'data:text/html;base64,PGh0bWw+',
-        'https://connect.trezor.io/9/iframe.html',
-        'file:///tmp/evil.html',
-        siblingDirUrl,
-        '',
-        undefined,
-    ]) {
-        assert.equal(isTrezorConnectBridgeWindowOpen(NAME, opener, APP_ROOT), false, `opener ${String(opener)} cannot open the bridge`);
-    }
-    // Check a missing app root trusts nothing.
-    assert.equal(isTrezorConnectBridgeWindowOpen(NAME, appIndexUrl, undefined), false, 'no app root means no bridge');
-    // Check any other window name stays on the deny path, even from the app.
-    for (const name of ['', 'other', undefined, NAME.toUpperCase(), `${NAME} `]) {
-        assert.equal(isTrezorConnectBridgeWindowOpen(name, appIndexUrl, APP_ROOT), false, `window name ${JSON.stringify(name)} is not the bridge`);
+    // Check the window.open exception is gone from the trust predicates.
+    assert.equal(Object.hasOwn(security, 'isTrezorConnectBridgeWindowOpen'), false, 'security.js exports no window.open exception');
+    assert.equal(Object.hasOwn(security, 'TREZOR_CONNECT_BRIDGE_WINDOW_NAME'), false, 'security.js exports no bridge window name');
+    // Check the renderer opens no window and builds no data: document.
+    assert.ok(!/window\.open\(/.test(trezorFactory), 'the renderer factory calls no window.open');
+    assert.ok(!/data:text\/html/.test(trezorFactory), 'the renderer factory builds no data: document');
+    assert.ok(!/postMessage\(/.test(trezorFactory), 'the renderer factory posts no cross-window message');
+}
+
+/** Slice the window-open handler, from its registration to the next listener; null when an anchor moved. */
+function openHandlerSlice(src) {
+    const start = src.indexOf('contents.setWindowOpenHandler(');
+    const end = start === -1 ? -1 : src.indexOf("contents.on('will-navigate'", start);
+    return end === -1 ? null : src.slice(start, end);
+}
+
+/** List window-open failures in src; fails closed on a missing anchor. */
+function openHandlerFailures(src) {
+    const slice = openHandlerSlice(src);
+    if (slice === null) return ['window-open handler anchors not found'];
+    const failures = [];
+    if (/action:\s*'allow'/.test(slice)) failures.push('the window-open handler allows a window');
+    if (/overrideBrowserWindowOptions/.test(slice)) failures.push('the window-open handler overrides window options');
+    if (!/return \{ action: 'deny' \};/.test(slice)) failures.push('the window-open handler does not deny');
+    return failures;
+}
+
+{
+    assert.deepEqual(openHandlerFailures(mainIndex), [], 'index.js denies every window.open');
+    const slice = openHandlerSlice(mainIndex);
+    const reopened = mainIndex.replace(slice, slice.replace(
+        '        return { action: \'deny\' };',
+        "        if (frameName === 'bridge') return { action: 'allow', overrideBrowserWindowOptions: {} };\n        return { action: 'deny' };",
+    ));
+    assert.notEqual(reopened, mainIndex, 'the window-open probe changed the source');
+    assert.ok(openHandlerFailures(reopened).length > 0, 'the window-open check catches a re-added allow branch');
+    assert.deepEqual(
+        openHandlerFailures(mainIndex.replace('contents.setWindowOpenHandler(', 'contents.setOpenHandler(')),
+        ['window-open handler anchors not found'],
+        'the window-open check fails closed when its anchor moves',
+    );
+}
+
+// --- 2. Main builds the bridge on the isolated session, from a file ----
+{
+    const session = { partition: 'trezor-connect-isolated' };
+    const options = bridgeWindowOptions({ session, preloadPath: '/bridge/preload.cjs' });
+    assert.equal(options.webPreferences.session, session, 'the bridge window takes the session main hands it');
+    assert.equal(options.webPreferences.sandbox, true, 'the bridge window is sandboxed');
+    assert.equal(options.webPreferences.contextIsolation, true, 'the bridge window isolates its preload world');
+    assert.equal(options.webPreferences.nodeIntegration, false, 'the bridge window has no Node');
+    assert.equal(options.webPreferences.webSecurity, true, 'the bridge window keeps web security');
+    assert.equal(options.webPreferences.devTools, false, 'the bridge window has no developer tools by default');
+    assert.equal(options.webPreferences.preload, '/bridge/preload.cjs', 'the bridge window carries the bridge preload');
+    assert.equal(options.show, false, 'the bridge window opens hidden and is shown through the focus policy');
+
+    // Check the module loads a file and never a URL.
+    assert.ok(/win\.loadFile\(documentPath\)/.test(bridgeModule), 'the bridge window loads its document with loadFile');
+    assert.ok(!/loadURL\(/.test(bridgeModule), 'the bridge window loads no URL');
+    assert.ok(/win\.webContents\.ipc\.on\(TREZOR_BRIDGE_REPLY_CHANNEL/.test(bridgeModule),
+        'the bridge reply listener is scoped to the bridge window\'s own IPC');
+    assert.ok(!/ipcMain/.test(bridgeModule), 'the bridge module registers nothing on the app-wide IPC');
+
+    // Check the packaged document and its preload exist where index.js points.
+    for (const rel of ['connect.html', 'responder.js', 'preload.cjs']) {
+        assert.ok(existsSync(join(desktop, 'main', 'trezorBridge', rel)), `main/trezorBridge/${rel} exists`);
     }
 }
 
-// --- 2. The renderer's copy of the window name matches main's ----------
-{
-    // Read the renderer literal, which is kept by hand because the bundle cannot import security.js.
-    const m = /const TREZOR_CONNECT_BRIDGE_WINDOW_NAME = '([^']+)';/.exec(trezorFactory);
-    assert.ok(m, 'trezorFactory.js still declares its bridge window name literal');
-    assert.equal(m[1], NAME, 'the renderer opens the bridge under the exact name main allows');
-}
-
-// --- 3. The allow branch and its session factory, pinned by slice ------
-
-const ALLOW_REQUIRED = [
-    /action:\s*'allow'/, /session:\s*getTrezorConnectSession\(\)/,
-    /contextIsolation:\s*true/, /nodeIntegration:\s*false/, /sandbox:\s*true/,
+const WIRING_REQUIRED = [
+    /BrowserWindow,/,
+    /getSession:\s*getTrezorConnectSession,/,
+    /preloadPath:\s*join\(here,\s*'trezorBridge',\s*'preload\.cjs'\),/,
+    /documentPath:\s*join\(here,\s*'trezorBridge',\s*'connect\.html'\),/,
 ];
-// Match the key with its colon: the branch's own comment says the bare word.
-const ALLOW_FORBIDDEN = [/\bpreload\s*:/, /session\.defaultSession/, /contextIsolation:\s*false/, /nodeIntegration:\s*true/, /sandbox:\s*false/];
+const WIRING_FORBIDDEN = [/session\.defaultSession/, /'\.\.',\s*'preload\.cjs'/, /data:/];
 
-/** Slice the bridge allow branch, from its predicate call to the deny that follows; null when an anchor moved. */
-function allowSlice(src) {
-    const start = src.indexOf('isTrezorConnectBridgeWindowOpen(frameName');
-    const end = start === -1 ? -1 : src.indexOf("action: 'deny'", start);
+/** Slice the createTrezorBridge call in index.js; null when an anchor moved. */
+function wiringSlice(src) {
+    const start = src.indexOf('const trezorBridge = createTrezorBridge({');
+    const end = start === -1 ? -1 : src.indexOf('});', start);
     return end === -1 ? null : src.slice(start, end);
 }
 
 /** Slice the bridge session factory body; null when an anchor moved. */
 function factorySlice(src) {
     const start = src.indexOf('function getTrezorConnectSession(');
-    const end = start === -1 ? -1 : src.indexOf('function hardenWebContents(', start);
+    const end = start === -1 ? -1 : src.indexOf('const trezorBridge = createTrezorBridge(', start);
     return end === -1 ? null : src.slice(start, end);
 }
 
-/** List every bridge hardening failure in src; fails closed on a missing anchor. */
+// --- 3. index.js wires the bridge to the isolated no-HID session ------
+
+/** List every bridge wiring failure in src; fails closed on a missing anchor. */
 function bridgeFailures(src) {
-    const allow = allowSlice(src);
+    const wiring = wiringSlice(src);
     const factory = factorySlice(src);
-    if (allow === null) return ['bridge allow branch anchors not found'];
+    if (wiring === null) return ['createTrezorBridge wiring anchors not found'];
     if (factory === null) return ['getTrezorConnectSession anchors not found'];
     const failures = [
-        ...ALLOW_REQUIRED.filter((re) => !re.test(allow)).map((re) => `allow branch missing ${re.source}`),
-        ...ALLOW_FORBIDDEN.filter((re) => re.test(allow)).map((re) => `allow branch contradicted by ${re.source}`),
+        ...WIRING_REQUIRED.filter((re) => !re.test(wiring)).map((re) => `bridge wiring missing ${re.source}`),
+        ...WIRING_FORBIDDEN.filter((re) => re.test(wiring)).map((re) => `bridge wiring contradicted by ${re.source}`),
     ];
     // Require the in-memory partition: a persist: name would keep remote state across launches.
     if (!/fromPartition\('trezor-connect-isolated'\)/.test(factory)) failures.push('factory partition is not trezor-connect-isolated');
@@ -124,13 +160,11 @@ function mutate(src, sliceOf, from, to) {
 }
 
 {
-    assert.deepEqual(bridgeFailures(mainIndex), [], 'the bridge allow branch and session factory hold every guard');
+    assert.deepEqual(bridgeFailures(mainIndex), [], 'the bridge wiring and session factory hold every guard');
     // Check each probe changes the source and is caught, so the slice checks cannot pass vacuously.
     for (const [sliceOf, from, to, why] of [
-        [allowSlice, 'sandbox: true,', "sandbox: true,\n                        preload: join(here, '..', 'preload.cjs'),", 'a preload added to the bridge'],
-        [allowSlice, 'session: getTrezorConnectSession(),', 'session: session.defaultSession,', 'the default HID-granted session swapped in'],
-        [allowSlice, /\n\s*sandbox:\s*true,/, '', 'a dropped sandbox flag'],
-        [allowSlice, 'nodeIntegration: false', 'nodeIntegration: true', 'nodeIntegration turned on'],
+        [wiringSlice, 'getSession: getTrezorConnectSession,', 'getSession: () => session.defaultSession,', 'the default HID-granted session swapped in'],
+        [wiringSlice, "preloadPath: join(here, 'trezorBridge', 'preload.cjs'),", "preloadPath: join(here, '..', 'preload.cjs'),", 'the app preload handed to the bridge'],
         [factorySlice, /\n\s*attachHidDenial\(trezorConnectSession\);/, '', 'the HID denial unwired'],
         [factorySlice, 'attachHidDenial(trezorConnectSession)', 'attachHidPermissions(trezorConnectSession)', 'the HID grant wired instead'],
         [factorySlice, "fromPartition('trezor-connect-isolated')", "fromPartition('persist:trezor-connect-isolated')", 'a persistent partition'],
@@ -143,8 +177,8 @@ function mutate(src, sliceOf, from, to) {
     assert.notEqual(unskipped, mainIndex, 'the frame-guard skip probe changed the source');
     assert.ok(bridgeFailures(unskipped).length > 0, 'the bridge check catches a dropped frame-guard skip');
     assert.deepEqual(
-        bridgeFailures(mainIndex.replace('isTrezorConnectBridgeWindowOpen(frameName', 'isBridgeOpen(frameName')),
-        ['bridge allow branch anchors not found'],
+        bridgeFailures(mainIndex.replace('const trezorBridge = createTrezorBridge({', 'const trezorBridge = makeBridge({')),
+        ['createTrezorBridge wiring anchors not found'],
         'the bridge check fails closed when its anchor moves',
     );
 }

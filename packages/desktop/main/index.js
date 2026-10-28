@@ -71,7 +71,6 @@ import {
     normalizeOpenWindowArgs,
     shouldBlockNavigation,
     isTrustedSenderEvent,
-    isTrezorConnectBridgeWindowOpen,
     shouldIgnoreBeforeUnload,
 } from './security.js';
 import { attachHidPermissions, attachHidDenial, observeHidFrames } from './permissions.js';
@@ -82,6 +81,7 @@ import {
     registerProtocolClients,
 } from './protocol.js';
 import { attachSignerBridgeListener } from './signerBridgeListener.js';
+import { createTrezorBridge } from './trezorBridgeWindow.js';
 import { attachUpdater } from './updater.js';
 import { applyTorRouting, applyProxyToSession } from './torRouting.js';
 import {
@@ -243,9 +243,8 @@ function kickChainRegistrySync() {
 // refuses `<webview>` embedding. See security.js for the pure predicates.
 //
 // §40.12: dedicated, non-default Electron session for the
-// hosted Trezor Connect script (see
-// security.js#isTrezorConnectBridgeWindowOpen and
-// renderer/signerFactories/trezorFactory.js). Created lazily on first
+// hosted Trezor Connect script (see trezorBridgeWindow.js, the window
+// main builds on it). Created lazily on first
 // pairing/sign attempt and explicitly wired to `attachHidDenial` below -
 // never to `attachHidPermissions` - so `hid` is refused through every
 // handler Electron offers, regardless of what origin the hosted script
@@ -262,6 +261,18 @@ function getTrezorConnectSession() {
     }
     return trezorConnectSession;
 }
+
+// §40.12: the Trezor Connect bridge window. Main builds it itself on the
+// session above, because a window.open child keeps its opener's session,
+// and relays the app renderer's Connect calls to it (see
+// trezorBridgeWindow.js and the xchain:trezor-bridge-* handlers below).
+const trezorBridge = createTrezorBridge({
+    BrowserWindow,
+    getSession: getTrezorConnectSession,
+    preloadPath: join(here, 'trezorBridge', 'preload.cjs'),
+    documentPath: join(here, 'trezorBridge', 'connect.html'),
+    devTools: !app.isPackaged,
+});
 
 function hardenWebContents(contents) {
     if (!contents || typeof contents.setWindowOpenHandler !== 'function') return;
@@ -282,37 +293,9 @@ function hardenWebContents(contents) {
             window: BrowserWindow.fromWebContents(contents) ?? undefined,
         });
     });
-    contents.setWindowOpenHandler(({ url, frameName }) => {
-        // §40.12: the one narrow exception to "deny every
-        // window.open". Only the app's own trusted renderer (never the
-        // bridge window itself; see isTrezorConnectBridgeWindowOpen) may
-        // open the isolated Trezor Connect bridge, and only into the
-        // dedicated no-HID session above, with no preload attached.
-        if (isTrezorConnectBridgeWindowOpen(frameName, contents.getURL(), APP_ROOT)) {
-            return {
-                action: 'allow',
-                overrideBrowserWindowOptions: {
-                    width: 420,
-                    height: 640,
-                    title: 'Trezor Connect',
-                    autoHideMenuBar: true,
-                    webPreferences: {
-                        session: getTrezorConnectSession(),
-                        contextIsolation: true,
-                        nodeIntegration: false,
-                        sandbox: true,
-                        webSecurity: true,
-                        devTools: !app.isPackaged,
-                        // No `preload` key. The default window.open child
-                        // would otherwise inherit this app's preload (and
-                        // therefore xchainWalletBridge /
-                        // xchainWalletSignerBridge) the same way any other
-                        // window.open child does; the hosted Trezor Connect
-                        // script gets a DOM and nothing else.
-                    },
-                },
-            };
-        }
+    contents.setWindowOpenHandler(({ url }) => {
+        // Every window.open is denied, the Trezor Connect bridge included:
+        // main builds that window itself (trezorBridgeWindow.js).
         // Open real external links in the user's browser, never in a
         // preload-bearing Electron window.
         const externalUrl = allowlistedExternalUrl(url);
@@ -1364,6 +1347,29 @@ void runMainTask(async () => {
             reportMainFailure('chain-registry IPC action', error);
             return { ok: false, reason: 'registry sync failed' };
         }
+    });
+
+    // §40.12: the app renderer's half of the Trezor Connect relay. Only the
+    // app's own frames may drive the bridge window; trezorBridge checks the
+    // call against the Connect methods the signer uses and always answers
+    // with an envelope.
+    ipcMain.handle('xchain:trezor-bridge-call', async (event, message, ...extraArgs) => {
+        if (!isTrustedSender(event)) {
+            return { ok: false, error: 'trezor-bridge: rejected from untrusted frame' };
+        }
+        if (extraArgs.length !== 0) return { ok: false, error: 'trezor-bridge: takes one message' };
+        try {
+            return await trezorBridge.call(message);
+        } catch (error) {
+            reportMainFailure('trezor-bridge IPC action', error);
+            return { ok: false, error: 'trezor-bridge: operation failed' };
+        }
+    });
+
+    ipcMain.handle('xchain:trezor-bridge-close', async (event, ...args) => {
+        if (!isTrustedSender(event)) return { ok: false };
+        if (!hasNoIpcArguments(args)) return { ok: false };
+        return trezorBridge.close();
     });
 
     // Hand the parked deep link to its selected primary renderer once. Same
