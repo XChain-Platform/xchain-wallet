@@ -46,6 +46,7 @@ function operatorMessaging() {
             action_format: 2, block_index: 107, message: 'BTC/USD', value: '42000', status: 'valid',
         }] }),
         getValidatorsForChain: vi.fn().mockResolvedValue([{
+            source: ADDRESS.address,
             signing_pubkey: '02abcdefabcdefabcdefabcdefabcdef', score: 98, votes: 22, missed: 1,
         }]),
         getIndexerWatermark: vi.fn().mockResolvedValue({ watermark: 200 }),

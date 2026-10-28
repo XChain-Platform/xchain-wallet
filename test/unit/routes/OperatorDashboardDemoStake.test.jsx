@@ -138,6 +138,7 @@ describe('OperatorDashboard demo wallet staking', () => {
             ]),
             getValidatorsForChain: vi.fn().mockResolvedValue([
                 {
+                    source: 'bcrt1qdemo',
                     signing_pubkey: signingPubkey,
                     uptime: { malformed: true },
                     score: `9${rlo}1`,

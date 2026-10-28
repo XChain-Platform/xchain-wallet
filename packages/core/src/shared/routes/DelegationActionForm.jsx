@@ -34,6 +34,7 @@ import styles from './IssueTokenForm.module.css';
 import { latestEffectiveStakingRow } from '../../flows/stakingDashboard.js';
 import { isValidAddressForChain } from '../utils/addressValidation.js';
 import { readFailureMessage } from '../utils/readFailureMessage.js';
+import { signingKeyRefusal } from '../../flows/signingKeyCheck.js';
 
 const chainRegistry = registryLib.defaultRegistry();
 
@@ -329,6 +330,9 @@ export function DelegationActionForm({ mode, walletId, chainId: initialChainId, 
             setFormError('Signing pubkey must be exactly 64 hex characters (Ed25519 public key).');
             return;
         }
+        // A revoke names a key already on chain, whatever it is; a new delegation must be able to sign.
+        const keyStop = isDelegate ? signingKeyRefusal(pk) : null;
+        if (keyStop) { setFormError(keyStop); return; }
         const feeStop = customFeeReviewStop({ feePick, tiers: feeTiers, estimate: feeCustomEstimate });
         if (feeStop) { setFormError(feeStop.formError); return; }
         setFormError(null);

@@ -27,6 +27,8 @@ import { submitAction } from './submitAction.js';
 import { normalizeSource } from './sendToken.js';
 import { fundingEncoderOpts } from '../util/funding_encoder_opts.js';
 import { assertValidatorLaneChain } from '../registry/actions.js';
+import { signingKeyRefusal } from './signingKeyCheck.js';
+import { assertDelegationActionable } from './delegationPreSign.js';
 
 /**
  * @typedef {Object} DelegateActionOpts
@@ -61,9 +63,16 @@ export async function delegateAction(opts) {
     if (!/^[0-9a-fA-F]{64}$/.test(opts.params.NEW_SIGNING_PUBKEY)) {
         throw new Error('delegateAction: NEW_SIGNING_PUBKEY must be 64 hex chars');
     }
+    const keyStop = signingKeyRefusal(opts.params.NEW_SIGNING_PUBKEY);
+    if (keyStop) throw new Error(keyStop);
     // Refuse a chain whose indexer rejects this validator-lane action.
     assertValidatorLaneChain(opts.chainRegistry, opts.chainId, 'delegateAction');
     const source = normalizeSource(opts.from, 'delegateAction');
+    // The indexed state can move while the review is open; read it again before signing.
+    await assertDelegationActionable({
+        sdkRegistry: opts.sdkRegistry, chainId: opts.chainId, source: source.address,
+        actionData: { action: 'DELEGATE', params: opts.params },
+    });
     const pendingTxMeta = opts.trackPendingTx === false ? undefined : {
         fromAddress: source.address,
         toAddress: null,
@@ -134,6 +143,10 @@ export async function revokeDelegationAction(opts) {
     // Refuse a chain whose indexer rejects this validator-lane action.
     assertValidatorLaneChain(opts.chainRegistry, opts.chainId, 'revokeDelegationAction');
     const source = normalizeSource(opts.from, 'revokeDelegationAction');
+    await assertDelegationActionable({
+        sdkRegistry: opts.sdkRegistry, chainId: opts.chainId, source: source.address,
+        actionData: { action: 'DELEGATE', params: { ...opts.params, VERSION: '2' } },
+    });
     const pendingTxMeta = opts.trackPendingTx === false ? undefined : {
         fromAddress: source.address,
         toAddress: null,

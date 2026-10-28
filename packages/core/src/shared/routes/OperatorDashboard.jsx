@@ -176,11 +176,14 @@ function OperatorDashboardView({ walletId, chainId, address, onBack }) {
     const ownValidator = useMemo(() => {
         if (!activePubkey) return null;
         const pk = String(activePubkey).toLowerCase();
+        // A roster row is this operator's only when it names both the key and this
+        // address; a row pairing the key with another address is someone else's record.
         return validators.rows.find((v) => {
             const vk = String(v?.signing_pubkey || v?.SIGNING_PUBKEY || '').toLowerCase();
-            return vk === pk;
+            const source = v?.source ?? v?.SOURCE ?? v?.address ?? v?.ADDRESS;
+            return vk === pk && source === address;
         }) || null;
-    }, [validators.rows, activePubkey]);
+    }, [validators.rows, activePubkey, address]);
 
     const { pending, lifetime } = useMemo(
         () => splitRewards(rewards.rows, rewardClaims.rows),
