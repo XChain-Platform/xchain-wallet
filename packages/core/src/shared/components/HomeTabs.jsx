@@ -416,7 +416,9 @@ export const HomeTabs = memo(function HomeTabs({ chainRegistry, balances, active
         }
         return oldest;
     }, [filteredRows]);
-    const hasHoldings = allRows.some((row) => hasNonZeroQuantity(row));
+    // A row whose balance read failed may hold funds, so it never reads as
+    // an empty wallet that needs its first funding.
+    const hasHoldings = allRows.some((row) => hasNonZeroQuantity(row) || Boolean(row?.unavailable));
     const showFirstFunding = networkFilter === 'all' && !tokenQueryTrim && !hasHoldings;
     // An empty tab while balances could not be checked proves nothing, so it
     // says that once (and the shell's stale-balances notice steps aside).

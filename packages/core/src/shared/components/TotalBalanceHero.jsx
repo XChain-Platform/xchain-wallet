@@ -225,17 +225,27 @@ export function TotalBalanceHero({ rows, walletId, networkFilter, lastSyncedAt, 
     const showMeta = !hidden && (testCoinsOnly
         ? hasUpdate
         : (hasChange || hasUnpriced || hasUpdate));
+    // A row whose balance read failed carries no number, so the headline
+    // cannot sum it as zero: with nothing else priced the total is unknown,
+    // and beside priced rows it is a floor, the way the row itself says.
+    const unreadRows = (rows || []).filter((row) => row?.unavailable === 'all' || row?.unavailable === 'partial');
+    const balanceUnread = unreadRows.length > 0 && Number(total) === 0;
+    const balanceFloor = unreadRows.length > 0 && !balanceUnread ? 'At least ' : '';
     const balanceDisplay = testCoinsOnly
         ? 'Test coins have no value'
-        : priceUnavailable
-            ? 'Price unavailable'
-            : formatFiatAmount(total, fiatCurrency, fiatLocale, true);
+        : balanceUnread
+            ? 'Balance unavailable'
+            : priceUnavailable
+                ? 'Price unavailable'
+                : `${balanceFloor}${formatFiatAmount(total, fiatCurrency, fiatLocale, true)}`;
     const balanceSpeech = testCoinsOnly
         ? 'Test coins have no value'
-        : priceUnavailable
-            ? 'Price unavailable'
-            : formatFiatAmountForSpeech(total, fiatCurrency, fiatLocale);
-    const balanceIsMessage = testCoinsOnly || priceUnavailable;
+        : balanceUnread
+            ? 'Balance unavailable'
+            : priceUnavailable
+                ? 'Price unavailable'
+                : `${balanceFloor}${formatFiatAmountForSpeech(total, fiatCurrency, fiatLocale)}`;
+    const balanceIsMessage = testCoinsOnly || priceUnavailable || balanceUnread;
     const actionItems = [
         typeof onRefresh === 'function' ? {
             id: 'refresh',
