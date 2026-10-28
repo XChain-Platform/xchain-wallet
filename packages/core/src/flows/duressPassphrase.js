@@ -48,7 +48,7 @@
 // passphrase is never persisted.
 
 import { sha256 } from '@noble/hashes/sha2';
-import { logConsole } from '../shared/utils/logConsole.js';
+import { __resetGuardStorageFailureForTests, noteGuardStorageFailure } from '../shared/utils/storageFailureNote.js';
 import { activatePanicMode, PANIC_ARMED_DURESS } from './panicMode.js';
 
 const STORAGE_KEY = 'xchain-wallet:duress';
@@ -58,7 +58,6 @@ export const DURESS_STORAGE_KEY = STORAGE_KEY;
 
 let memoryFallback = null;
 let memoryFallbackActive = false;
-let storageFailureLogged = false;
 
 // Whether the record this context answers from is the one storage holds. The
 // Safety row reads it so the user is told when a passphrase works only until
@@ -83,14 +82,10 @@ function keepMemoryFallback(record) {
     noteStorageFailure();
 }
 
+// The same line the lockout and panic records give (storageFailureNote.js),
+// so the log never names the duress passphrase.
 function noteStorageFailure() {
-    if (storageFailureLogged) return;
-    storageFailureLogged = true;
-    logConsole.record({
-        source: 'duress-passphrase',
-        level: 'warn',
-        message: 'local storage write failed; using in-memory state',
-    });
+    noteGuardStorageFailure();
 }
 
 // Injected async persistence (native shells: the Keychain/Keystore-backed
@@ -198,7 +193,7 @@ export function __resetDuressPersistenceForTests() {
     persistentStore = null;
     memoryFallback = null;
     memoryFallbackActive = false;
-    storageFailureLogged = false;
+    __resetGuardStorageFailureForTests();
     saveStatus = DURESS_SAVE_SAVED;
 }
 
@@ -346,6 +341,25 @@ export function isDuressMatch(candidate) {
     } catch (_err) {
         return false;
     }
+}
+
+/**
+ * The refusal every form gives when a wallet password it is about to set
+ * equals the duress passphrase. The Locked screen tries the real unlock
+ * before the duress check, so such a password opens the wallet when it is
+ * typed under duress and arms nothing.
+ */
+export const DURESS_PASSWORD_COLLISION_MESSAGE = 'Choose a password that differs from your duress passphrase.';
+
+/**
+ * Whether a wallet password about to be set (create, import, pair, migrate,
+ * change password) equals the configured duress passphrase.
+ *
+ * @param {string} password
+ * @returns {boolean}
+ */
+export function walletPasswordCollidesWithDuress(password) {
+    return isDuressMatch(password);
 }
 
 /**

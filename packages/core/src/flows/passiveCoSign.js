@@ -19,7 +19,8 @@
 // supplies the Vault-backed window store and the unlocked daemon key.
 //
 // Fail-closed everywhere a daemon can't safely proceed:
-//   - §26.5 panic-mode freeze    -> { approved:false, reason:'PANIC_MODE' }
+//   - §26.5 panic-mode freeze    -> { approved:false, reason:'PANIC_MODE' } when armed in
+//                                   Settings; a duress freeze throws the plain cover error
 //   - corrupt spending-window     -> { approved:false, reason:'WINDOW_STATE_CORRUPT' }
 //   - any policy / decode / output-gate denial comes straight from CoSigner.
 //
@@ -28,7 +29,12 @@
 // and loading the persisted agent-account record are wired by the caller /
 // the schema slice; this flow takes them as inputs so it stays pure.
 
-import { assertSigningAllowed, PanicModeActiveError } from './panicMode.js';
+import {
+    assertSigningAllowed,
+    isPanicFreezeSelfArmed,
+    panicCoverError,
+    PanicModeActiveError,
+} from './panicMode.js';
 
 // ── Exclusive bracket (G4) ──────────────────────────────────────────────
 //
@@ -176,6 +182,8 @@ export async function passiveCoSign(opts = {}) {
         assertSigningAllowed(now);
     } catch (e) {
         if (e instanceof PanicModeActiveError) {
+            // The requester only hears of a freeze the user armed in Settings.
+            if (!isPanicFreezeSelfArmed()) throw panicCoverError();
             return { approved: false, reason: 'PANIC_MODE', detail: { remainingMs: e.remainingMs ?? null } };
         }
         throw e;

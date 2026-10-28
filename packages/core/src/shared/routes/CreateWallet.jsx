@@ -26,6 +26,7 @@ import { NAME_MAX_LENGTH, hasVisibleText, nameLength } from '../../util/display_
 import { useBackHandler } from '../../ui/backStack.js';
 import { useDocumentTitleSection } from '../hooks/useDocumentTitle.js';
 import { useOwnWalletWriteHold } from '../hooks/useOwnWalletWriteHold.js';
+import { DURESS_PASSWORD_COLLISION_MESSAGE, walletPasswordCollidesWithDuress } from '../../flows/duressPassphrase.js';
 import styles from './CreateWallet.module.css';
 import { t } from '../../i18n/index.js';
 import '../../i18n/locales/en/adsNotice.js';
@@ -261,6 +262,10 @@ export function CreateWallet({ onBack, onCreated: handleCreated, mode = 'fresh',
         }
         if (password !== confirm) {
             setPasswordError('Passwords do not match.');
+            return;
+        }
+        if (walletPasswordCollidesWithDuress(password)) {
+            setPasswordError(DURESS_PASSWORD_COLLISION_MESSAGE);
             return;
         }
         // Same rule as the import screen: a checked box with nothing typed
@@ -594,7 +599,7 @@ export function CreateWallet({ onBack, onCreated: handleCreated, mode = 'fresh',
             : null;
     let passwordErrorTarget;
     if (/^Wallet name/i.test(passwordError || '')) passwordErrorTarget = { id: 'create-name', label: 'Wallet name' };
-    else if (/at least/i.test(passwordError || '')) passwordErrorTarget = { id: 'create-password', label: 'Password' };
+    else if (/at least/i.test(passwordError || '') || passwordError === DURESS_PASSWORD_COLLISION_MESSAGE) passwordErrorTarget = { id: 'create-password', label: 'Password' };
     else if (passwordError === 'Passwords do not match.') passwordErrorTarget = { id: 'create-confirm', label: 'Confirm password' };
     else if (/^Enter the BIP39/i.test(passwordError || '')) passwordErrorTarget = { id: 'create-bip39-passphrase', label: 'BIP39 passphrase' };
     else if (/BIP39 passphrases do not match/i.test(passwordError || '')) passwordErrorTarget = { id: 'create-bip39-confirm', label: 'Confirm passphrase' };

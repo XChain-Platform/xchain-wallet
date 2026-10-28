@@ -140,7 +140,7 @@ export function attachAutoLockUnsavedListener(onUnsaved, onMessage) {
  *
  * @param {{ kind: string, payload?: Record<string, unknown> }} event
  * @param {{
- *   refreshSession?: () => unknown,
+ *   refreshSession?: (payload?: Record<string, unknown>) => unknown,
  *   selectWallet?: (walletId: string) => unknown,
  *   refreshWallets?: () => unknown,
  *   remountScreens?: () => unknown,
@@ -152,7 +152,7 @@ export function attachAutoLockUnsavedListener(onUnsaved, onMessage) {
  */
 export function applySurfaceStateEvent(event, handlers) {
     if (event?.kind === 'session') {
-        return handlers.refreshSession?.();
+        return handlers.refreshSession?.(event.payload);
     }
     if (event?.kind === 'wallet') {
         const walletId = event.payload?.walletId;

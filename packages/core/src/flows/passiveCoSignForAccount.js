@@ -39,7 +39,12 @@ import { withUnlocked } from './unlockWallet.js';
 import { decodeWif } from '../crypto/wif.js';
 import { buildAccountWindowStore } from '../cosigner/vaultWindowPersistence.js';
 import { passiveCoSign } from './passiveCoSign.js';
-import { assertSigningAllowed, PanicModeActiveError } from './panicMode.js';
+import {
+    assertSigningAllowed,
+    isPanicFreezeSelfArmed,
+    panicCoverError,
+    PanicModeActiveError,
+} from './panicMode.js';
 import { withAccountLock } from '../cosigner/accountLock.js';
 
 export class CoSignerAccountNotFoundError extends Error {
@@ -134,6 +139,8 @@ async function decideForAccount({
         assertSigningAllowed(now);
     } catch (e) {
         if (e instanceof PanicModeActiveError) {
+            // The requester only hears of a freeze the user armed in Settings.
+            if (!isPanicFreezeSelfArmed()) throw panicCoverError();
             return { approved: false, reason: 'PANIC_MODE', detail: { remainingMs: e.remainingMs ?? null } };
         }
         throw e;

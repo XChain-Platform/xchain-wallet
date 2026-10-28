@@ -39,6 +39,7 @@ const explainParagraphStyle = {
 };
 import { registry as registryLib, crypto as cryptoLib, flows as flowsLib } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
+import { DURESS_PASSWORD_COLLISION_MESSAGE, walletPasswordCollidesWithDuress } from '../../flows/duressPassphrase.js';
 import { MnemonicGrid } from '../components/MnemonicGrid.jsx';
 import styles from './IssueTokenForm.module.css';
 import { externalIndexOf } from '../addressSelection.js';
@@ -244,6 +245,10 @@ export function MigrateToBip39({ legacyWalletId, onBack, onMigrated, onSweepChai
         }
         if (password !== confirm) {
             setError('Passwords do not match.');
+            return;
+        }
+        if (walletPasswordCollidesWithDuress(password)) {
+            setError(DURESS_PASSWORD_COLLISION_MESSAGE);
             return;
         }
         setError(null);

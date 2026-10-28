@@ -50,6 +50,7 @@ import { takeForgotPasswordRestoreLane } from '../utils/forgotPasswordRecovery.j
 import { useBackHandler } from '../../ui/backStack.js';
 import { useDocumentTitleSection } from '../hooks/useDocumentTitle.js';
 import { useOwnWalletWriteHold } from '../hooks/useOwnWalletWriteHold.js';
+import { DURESS_PASSWORD_COLLISION_MESSAGE, walletPasswordCollidesWithDuress } from '../../flows/duressPassphrase.js';
 // The three password fields, their hints, and the copy for every way
 // a restore can fail, all from one place so a message can never name a field
 // this screen does not show.
@@ -634,6 +635,10 @@ export function ImportWallet({
             setError('Passwords do not match.');
             return;
         }
+        if (walletPasswordCollidesWithDuress(password)) {
+            setError(DURESS_PASSWORD_COLLISION_MESSAGE);
+            return;
+        }
         // A checked box with an empty field used to collapse to "no
         // passphrase" and silently derive the passphrase-less wallet, the
         // same wrong addresses the user was ticking the box to avoid. The
@@ -743,6 +748,10 @@ export function ImportWallet({
         }
         if (password !== confirm) {
             setError('Passwords do not match.');
+            return;
+        }
+        if (walletPasswordCollidesWithDuress(password)) {
+            setError(DURESS_PASSWORD_COLLISION_MESSAGE);
             return;
         }
         if (!wifWarningAck) {
@@ -872,7 +881,7 @@ export function ImportWallet({
         importErrorTarget = { id: 'import-name', label: 'Wallet name' };
     } else if (/recovery phrase|expected .*word|mnemonic/i.test(error || '')) {
         importErrorTarget = { id: 'xc-mnemonic', label: 'Recovery phrase' };
-    } else if (/at least .* characters/i.test(error || '')) {
+    } else if (/at least .* characters/i.test(error || '') || error === DURESS_PASSWORD_COLLISION_MESSAGE) {
         importErrorTarget = { id: 'import-password', label: 'Password' };
     } else if (/Passwords do not match/i.test(error || '')) {
         importErrorTarget = { id: 'import-confirm', label: 'Confirm password' };

@@ -1844,8 +1844,8 @@ function bridgeError(code, detail) {
 // wallet cannot positively read as self-armed answers the page the way any
 // other failed sign does. Only a freeze the user armed in Settings is named.
 // The Developer Mode log line takes the same cover, since an onlooker can open
-// that too.
-const DURESS_COVER_MESSAGE = 'The wallet could not complete this request.';
+// that too. The co-sign flows throw the same cover (flows/panicMode.js).
+const DURESS_COVER_MESSAGE = flows.PANIC_COVER_MESSAGE;
 
 function isSelfArmedFreeze() {
     try {

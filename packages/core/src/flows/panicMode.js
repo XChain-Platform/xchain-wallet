@@ -47,7 +47,7 @@
 //   - The duress passphrase + decoy wallet flow (Step 6) layers on
 //     top of this; neither is required for the freeze to work.
 
-import { logConsole } from '../shared/utils/logConsole.js';
+import { __resetGuardStorageFailureForTests, noteGuardStorageFailure } from '../shared/utils/storageFailureNote.js';
 
 const STORAGE_KEY = 'xchain-wallet:panic';
 
@@ -72,12 +72,11 @@ export const MAX_DURATION_MS = 7 * 24 * 60 * 60 * 1000;     // 7d cap
 
 let memoryFallback = null;
 let memoryFallbackActive = false;
-let storageFailureLogged = false;
 
 function keepMemoryFallback(state) {
     memoryFallback = state.expiresAt === 0 ? null : { ...state };
     memoryFallbackActive = true;
-    noteStorageFailure('local storage write failed; using in-memory state');
+    noteGuardStorageFailure();
 }
 
 // Injected async persistence (extension: chrome.storage.local). When set, it
@@ -194,12 +193,6 @@ function stricterState(base, other) {
     return base;
 }
 
-function noteStorageFailure(message) {
-    if (storageFailureLogged) return;
-    storageFailureLogged = true;
-    logConsole.record({ source: 'panic-mode', level: 'warn', message });
-}
-
 /**
  * @typedef {Object} PanicModeState
  * @property {number} activatedAt   epoch-ms; 0 when inactive
@@ -207,6 +200,24 @@ function noteStorageFailure(message) {
  * @property {number} durationMs    duration the user picked at activation
  * @property {'self'|'duress'} [armedBy]   present only while active
  */
+
+// The duress passphrase arms the freeze while someone may be watching, and
+// any party that asks this wallet to sign (a dApp page, an agent or partner
+// asking for a co-signature) can be watched too. A freeze this context cannot
+// positively read as armed in Settings answers them the way any other failed
+// request does: no PANIC_MODE code, no error name, no panic sentence, no time
+// left.
+export const PANIC_COVER_MESSAGE = 'The wallet could not complete this request.';
+
+/** @returns {Error} the plain failure a party outside the wallet sees for a freeze it may not name */
+export function panicCoverError() {
+    return new Error(PANIC_COVER_MESSAGE);
+}
+
+/** Whether an active freeze may be named outside the wallet: only one the user armed in Settings. */
+export function isPanicFreezeSelfArmed() {
+    return getPanicArmedBy() === PANIC_ARMED_SELF;
+}
 
 export class PanicModeActiveError extends Error {
     constructor(remainingMs, message) {
@@ -356,7 +367,7 @@ function writeActiveState(state) {
                 if (token === writeToken) {
                     heldFreeze = { ...state };
                     setSaveStatus(PANIC_SAVE_UNSAVED);
-                    noteStorageFailure('panic-mode store refused the freeze; it is held in memory only');
+                    noteGuardStorageFailure();
                 }
                 return false;
             },
@@ -409,7 +420,7 @@ function writeClearedState() {
                 if (token === writeToken) {
                     if (prior.expiresAt !== 0) heldFreeze = { ...prior };
                     setSaveStatus(PANIC_SAVE_CLEAR_FAILED);
-                    noteStorageFailure('panic-mode store refused the deactivation; the freeze stays on');
+                    noteGuardStorageFailure();
                 }
                 return false;
             },
@@ -658,7 +669,7 @@ export function __resetPanicModePersistenceForTests() {
     persistentStore = null;
     memoryFallback = null;
     memoryFallbackActive = false;
-    storageFailureLogged = false;
+    __resetGuardStorageFailureForTests();
     awaitingHydration = false;
     heldFreeze = null;
     saveStatus = PANIC_SAVE_OK;

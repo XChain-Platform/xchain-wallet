@@ -657,7 +657,12 @@ function AppInner({ canOpenInTab, titleEnabled }) {
     useEffect(() => {
         if (onboardingStep !== 'create' || status.state !== 'no-wallet') setWalletElsewhere(false);
     }, [onboardingStep, status.state]);
-    const refreshUnlessOnboardingHolds = useCallback(() => {
+    const refreshUnlessOnboardingHolds = useCallback((payload) => {
+        // A password check in Settings (the duress passphrase, biometric
+        // enrolment) unlocks again, and the background announces it. A window
+        // that is already unlocked has nothing to reload, and a reload would
+        // throw it back to Home before the row can confirm what it saved.
+        if (payload?.state === 'unlocked' && statusStateRef.current === 'unlocked') return;
         if (statusStateRef.current === 'no-wallet') {
             if (ownWalletWrite.current) return;
             if (onboardingStepRef.current === 'create' && createHold.current === 'hold') {

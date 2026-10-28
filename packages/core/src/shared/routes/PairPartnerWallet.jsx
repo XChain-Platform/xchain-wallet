@@ -16,6 +16,7 @@ import {
 } from '@xchain-wallet/core/ui';
 import { flows as flowsLib } from '@xchain-wallet/core';
 import { useProtectedScreen } from '../utils/screenGuard.js';
+import { DURESS_PASSWORD_COLLISION_MESSAGE, walletPasswordCollidesWithDuress } from '../../flows/duressPassphrase.js';
 import {
     encodeXcwChunks,
     createXcwCollector,
@@ -266,6 +267,10 @@ export function PairPartnerWallet({ onBack, onPaired, walletId: existingWalletId
         }
         if (password !== confirm) {
             setError('Passwords do not match.');
+            return;
+        }
+        if (walletPasswordCollidesWithDuress(password)) {
+            setError(DURESS_PASSWORD_COLLISION_MESSAGE);
             return;
         }
         if (typeof messaging.importMnemonic !== 'function') {

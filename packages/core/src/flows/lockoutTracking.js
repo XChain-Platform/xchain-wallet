@@ -38,6 +38,8 @@
 // which follows this same schedule. Its unit test pins the two implementations
 // together at every step.
 
+import { __resetGuardStorageFailureForTests, noteGuardStorageFailure } from '../shared/utils/storageFailureNote.js';
+
 const STORAGE_KEY = 'xchain-wallet:lockout';
 
 /** The localStorage key, exported so the native shells can migrate off it. */
@@ -77,8 +79,11 @@ let persistenceGeneration = 0;
 
 function persistBestEffort(operation) {
     try {
-        void Promise.resolve(operation()).catch(() => {});
-    } catch (_err) { /* the synchronous cache remains authoritative */ }
+        void Promise.resolve(operation()).catch(() => { noteGuardStorageFailure(); });
+    } catch (_err) {
+        // The synchronous cache remains authoritative.
+        noteGuardStorageFailure();
+    }
 }
 
 function getStorage() {
@@ -211,6 +216,7 @@ function writeState(state) {
     const store = getStorage();
     if (!store) {
         memoryFallback = { ...state };
+        noteGuardStorageFailure();
         return;
     }
     try {
@@ -222,6 +228,7 @@ function writeState(state) {
         memoryFallback = null;
     } catch (_err) {
         memoryFallback = { ...state };
+        noteGuardStorageFailure();
     }
 }
 
@@ -295,4 +302,5 @@ export function __resetLockoutPersistenceForTests() {
     persistenceGeneration += 1;
     persistentStore = null;
     memoryFallback = null;
+    __resetGuardStorageFailureForTests();
 }
