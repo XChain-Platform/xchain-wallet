@@ -57,6 +57,7 @@ import {
     hardwareSigningError,
 } from '../../core/src/signers/Signer.js';
 import { assertSignedTxMatchesPsbt } from '../../core/src/signers/verifySignedTx.js';
+import { assertInputSignaturesVerify } from '../../core/src/signers/verifyInputSignatures.js';
 // Imported from validate.js rather than the registry barrel so this package
 // does not pull the bundled descriptors in behind it.
 import { FAMILY_MAINNET_COIN_TYPE_SLOT } from '../../core/src/registry/validate.js';
@@ -406,6 +407,9 @@ export class LedgerSigner extends Signer {
         // reply back to the PSBT before its txid escapes this method, because
         // every caller downstream treats txHex as the approved transaction.
         assertSignedTxMatchesPsbt({ txHex, decomposed, signerId: this._id });
+        // Matching fields prove where the money goes, not that the signatures
+        // spend it: verify each one against the prevout and amount the user approved.
+        assertInputSignaturesVerify({ txHex, decomposed, signerId: this._id });
         const txid = sdk.wallet.txidOf(txHex);
         return { signedPsbtHex: '', txHex, txid };
     }

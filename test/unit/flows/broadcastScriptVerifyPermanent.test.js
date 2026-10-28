@@ -17,6 +17,7 @@ import { describe, it, expect } from 'vitest';
 import { classifyBroadcastFailure } from '../../../packages/core/src/flows/broadcastPermanence.js';
 import { submitAction } from '../../../packages/core/src/flows/submitAction.js';
 import { TrezorSigner } from '../../../packages/signers-trezor/src/TrezorSigner.js';
+import { decomposedFor, signedReplyFor } from '../../helpers/hwSignedReply.js';
 
 // Bitcoin Core's script-check rejects across its naming generations.
 const SCRIPT_REJECTS = [
@@ -27,21 +28,13 @@ const SCRIPT_REJECTS = [
     'sendrawtransaction RPC error: {"code":-26,"message":"mandatory-script-verify-flag-failed (Witness program hash mismatch)"}',
 ];
 
-const IN = 'ab'.repeat(32);
-const JUNK_WITNESS_TX = `020000000001${'01'}${IN}0000000000fdffffff01905f010000000000160014${'cc'.repeat(20)}010100${'00000000'}`;
-
-const decomposed = {
-    txVersion: 2,
-    locktime: 0,
-    network: 'bitcoin-mainnet',
-    inputs: [{
-        prevTxHash: IN, prevTxIndex: 0, sequence: 0xfffffffd, value: 100_000,
-        scriptPubKeyHex: `0014${'bb'.repeat(20)}`, scriptType: 'p2wpkh', sighashType: null,
-        nonWitnessUtxoHex: null, witnessUtxoScriptHex: `0014${'bb'.repeat(20)}`,
-        redeemScriptHex: null, witnessScriptHex: null, address: 'bc1qin', prevTxInfo: null,
-    }],
-    outputs: [{ address: 'bc1qout', scriptPubKeyHex: `0014${'cc'.repeat(20)}`, scriptType: 'p2wpkh', value: 90_000 }],
-};
+// A reply whose signature verifies locally, so the refusal under test is the
+// node's: a script rule the wallet does not model refuses it on every retry.
+const decomposed = decomposedFor({
+    inputs: [{ scriptType: 'p2wpkh', txid: 'ab'.repeat(32), value: 100_000 }],
+    outputs: [{ address: 'bc1qout', scriptPubKeyHex: `0014${'cc'.repeat(20)}`, value: 90_000 }],
+});
+const SIGNED_TX = signedReplyFor(decomposed);
 
 function memCollection() {
     const m = new Map();
@@ -65,7 +58,7 @@ describe('script-check broadcast rejects', () => {
         const broadcasts = [];
         const connect = {
             getFeatures: async () => ({ success: true, payload: { device_id: 'dev1' } }),
-            signTransaction: async () => ({ success: true, payload: { serializedTx: JUNK_WITNESS_TX } }),
+            signTransaction: async () => ({ success: true, payload: { serializedTx: SIGNED_TX } }),
         };
         const sdk = {
             encoder: {
@@ -100,7 +93,7 @@ describe('script-check broadcast rejects', () => {
         } catch (err) {
             error = err;
         }
-        expect(broadcasts).toEqual([JUNK_WITNESS_TX]);
+        expect(broadcasts).toEqual([SIGNED_TX]);
         expect(error?.name).toBe('BroadcastFailedPermanentError');
         const rows = await pendingTxs.list();
         expect(rows.map((row) => row.status)).toEqual(['failed']);

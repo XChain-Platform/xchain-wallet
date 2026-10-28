@@ -19,6 +19,7 @@ import {
 } from '../../../packages/signers-ledger/src/LedgerSigner.js';
 import { Signer } from '../../../packages/core/src/signers/Signer.js';
 import { BUNDLED_DESCRIPTORS } from '../../../packages/core/src/registry/descriptors/index.js';
+import { decomposedFor, signedReplyFor } from '../../helpers/hwSignedReply.js';
 
 // coinTypeFor's SLIP-44 slots (bitcoin-mainnet=0', litecoin-mainnet=2',
 // dogecoin-mainnet=3') are a second, independently-hardcoded copy of the same
@@ -57,11 +58,21 @@ describe('coinTypeFor vs chain descriptor coin-type parity', () => {
 });
 
 // What a Ledger returns for the PSBT decomposition SIGNPSBT_DECOMPOSED below
-// describes: one input spending aaaa…:0, one 900-sat p2wpkh output. A real
-// device's reply is a real transaction, and signPsbt now compares it back to
-// the approved PSBT, so a placeholder string here would only be testing the
+// describes: one input spending aaaa…:0, one 900-sat p2wpkh output, signed with
+// a real key. signPsbt compares a device reply back to the approved PSBT and
+// verifies its signatures, so a placeholder here would only be testing the
 // refusal path by accident.
-const DEVICE_REPLY = '02000000000101aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa0000000000ffffffff018403000000000000160014cccccccccccccccccccccccccccccccccccccccc0228304502212222222222222222222222222222222222222222222222222222222222222222222222012102999999999999999999999999999999999999999999999999999999999999999900000000';
+const SIGNPSBT_DECOMPOSED = decomposedFor({
+    inputs: [{ scriptType: 'p2wpkh', txid: 'a'.repeat(64), value: 1000, sequence: 0xffffffff }],
+    outputs: [{ scriptPubKeyHex: '0014' + 'cc'.repeat(20), value: 900 }],
+});
+const KEY_SCRIPT = SIGNPSBT_DECOMPOSED.inputs[0].scriptPubKeyHex;
+const DEVICE_REPLY = signedReplyFor(SIGNPSBT_DECOMPOSED);
+// The same spend from the key's wrapped-segwit (p2sh-p2wpkh) address.
+const WRAPPED_DECOMPOSED = decomposedFor({
+    inputs: [{ scriptType: 'p2sh-p2wpkh', txid: 'a'.repeat(64), value: 1000, sequence: 0xffffffff }],
+    outputs: [{ scriptPubKeyHex: '0014' + 'cc'.repeat(20), value: 900 }],
+});
 
 function makeApp(overrides = {}) {
     // Only methods the real hw-app-btc `Btc` class ships. The device's
@@ -366,7 +377,7 @@ describe('LedgerSigner.signPsbt', () => {
     // which blew up inside the library as `additionals.includes is not a
     // function` on the first real signing attempt.
     const PREV_TX_HEX = '0100000001' + '00'.repeat(32) + 'ffffffff00ffffffff01e8030000'
-        + '00000000160014' + 'bb'.repeat(20) + '00000000';
+        + '0000000016' + KEY_SCRIPT + '00000000';
 
     /** The PSBT the user approved, as decomposePsbt reports it. */
     const signPsbtSdk = () => ({
@@ -378,7 +389,7 @@ describe('LedgerSigner.signPsbt', () => {
                     prevTxIndex: 0,
                     value: 1000,
                     sequence: 0xffffffff,
-                    witnessUtxoScriptHex: '0014' + 'bb'.repeat(20),
+                    witnessUtxoScriptHex: KEY_SCRIPT,
                     nonWitnessUtxoHex: PREV_TX_HEX,
                     redeemScriptHex: null,
                 }],
@@ -400,12 +411,19 @@ describe('LedgerSigner.signPsbt', () => {
         const mockSdk = signPsbtSdk();
         const [inp] = mockSdk.wallet.decomposePsbt().inputs;
         mockSdk.wallet.decomposePsbt.mockReturnValue({
-            inputs: [{ ...inp, scriptType: 'p2sh-p2wpkh', redeemScriptHex: '0014' + 'bb'.repeat(20) }],
+            inputs: [{
+                ...inp,
+                scriptType: 'p2sh-p2wpkh',
+                witnessUtxoScriptHex: WRAPPED_DECOMPOSED.inputs[0].scriptPubKeyHex,
+                redeemScriptHex: WRAPPED_DECOMPOSED.inputs[0].redeemScriptHex,
+            }],
             outputs: [{ value: 900, scriptPubKeyHex: '0014' + 'cc'.repeat(20) }],
             locktime: 0,
             txVersion: 2,
         });
-        const app = makeApp();
+        const app = makeApp({
+            createPaymentTransaction: vi.fn().mockResolvedValue(signedReplyFor(WRAPPED_DECOMPOSED)),
+        });
         const s = makeSigner(app, { sdkRegistry: { get: () => mockSdk } });
         await s.signPsbt({
             psbtHex: 'cafe',

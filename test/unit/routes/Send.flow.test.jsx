@@ -30,6 +30,7 @@ import {
 } from '../../../packages/desktop/renderer/deepLinkRoute.js';
 import { defaultRegistry } from '../../../packages/core/src/registry/index.js';
 import { userEvent } from '../../helpers/userEvent.js';
+import { decomposedFor, signedReplyFor } from '../../helpers/hwSignedReply.js';
 
 const CHAIN_ID = 'bitcoin-mainnet';
 const WALLET_ID = 'send-flow-wallet';
@@ -42,9 +43,16 @@ const AMOUNT = '0.01234567';
 const PASSWORD = 'correct horse battery staple';
 const PSBT = '70736274ff';
 const TXID = 'a1b2c3d4e5f60718293a4b5c6d7e8f90112233445566778899aabbccddeeff0';
-const DEVICE_TX = '02000000000101aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa0000000000ffffffff018403000000000000160014cccccccccccccccccccccccccccccccccccccccc0228304502212222222222222222222222222222222222222222222222222222222222222222222222012102999999999999999999999999999999999999999999999999999999999999999900000000';
+// The device's reply, signed with a real test key so its signature verifies
+// against the input the PSBT below spends from that key's address.
+const DEVICE_DECOMPOSED = decomposedFor({
+    inputs: [{ scriptType: 'p2wpkh', txid: 'a'.repeat(64), value: 1000, sequence: 0xffffffff }],
+    outputs: [{ address: TO, scriptPubKeyHex: '0014' + 'cc'.repeat(20), value: 900 }],
+});
+const KEY_SCRIPT = DEVICE_DECOMPOSED.inputs[0].scriptPubKeyHex;
+const DEVICE_TX = signedReplyFor(DEVICE_DECOMPOSED);
 const PREV_TX = '0100000001' + '00'.repeat(32) + 'ffffffff00ffffffff01e8030000'
-    + '00000000160014' + 'bb'.repeat(20) + '00000000';
+    + '0000000016' + KEY_SCRIPT + '00000000';
 
 function composedSend({ amount = AMOUNT, networkFeeSats = 1234, encoding = 'P2SH' } = {}) {
     return {
@@ -262,7 +270,7 @@ function signingSdkRegistry() {
                 prevTxIndex: 0,
                 value: 1000,
                 sequence: 0xffffffff,
-                witnessUtxoScriptHex: '0014' + 'bb'.repeat(20),
+                witnessUtxoScriptHex: KEY_SCRIPT,
                 nonWitnessUtxoHex: PREV_TX,
                 sighashType: null,
                 redeemScriptHex: null,

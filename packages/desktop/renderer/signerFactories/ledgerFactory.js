@@ -118,4 +118,9 @@ export function resetLedgerTransport() {
         const remove = transport.off ?? transport.removeListener;
         if (typeof remove === 'function') remove.call(transport, 'disconnect', handler);
     }
+    // Close the device as the extension and web shells do, so a lock or wallet
+    // switch ends the session rather than leaving the device open behind it.
+    if (typeof transport?.close === 'function') {
+        Promise.resolve().then(() => transport.close()).catch(() => {});
+    }
 }

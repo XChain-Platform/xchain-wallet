@@ -28,6 +28,7 @@ import { strict as assert } from 'node:assert';
 import { existsSync, readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { scriptsFor, signedReplyFor, TEST_KEYS } from '../../helpers/hwSignedReply.js';
 
 import {
     signers,
@@ -59,6 +60,9 @@ const {
  * Tests that need to vary responses override individual methods on
  * the returned object.
  */
+// Connect address and key calls across every mock, read by the getAddresses check.
+const calls = { getAddress: 0, getPublicKey: 0 };
+
 function makeMockConnect(overrides = {}) {
     return {
         async getFeatures() {
@@ -74,21 +78,21 @@ function makeMockConnect(overrides = {}) {
                 },
             };
         },
-        async getAddress({ path }) {
-            return {
-                success: true,
-                payload: { address: `mock-addr-for-${path}`, path },
-            };
+        // A `bundle` call is answered with one payload item per entry, as Connect does.
+        async getAddress(params) {
+            const one = ({ path }) => ({ address: `mock-addr-for-${path}`, path, serializedPath: path });
+            calls.getAddress += 1;
+            return { success: true, payload: params.bundle ? params.bundle.map(one) : one(params) };
         },
-        async getPublicKey({ path }) {
-            return {
-                success: true,
-                payload: {
-                    publicKey: `02mockpub${path.replace(/[^0-9]/g, '')}`,
-                    chainCode: 'mockchaincode',
-                    fingerprint: 0xdeadbeef,
-                },
-            };
+        async getPublicKey(params) {
+            const one = ({ path }) => ({
+                publicKey: `02mockpub${path.replace(/[^0-9]/g, '')}`,
+                chainCode: 'mockchaincode',
+                fingerprint: 0xdeadbeef,
+                serializedPath: path,
+            });
+            calls.getPublicKey += 1;
+            return { success: true, payload: params.bundle ? params.bundle.map(one) : one(params) };
         },
         async signTransaction() {
             return { success: true, payload: { serializedTx: 'mock-signed-tx', signatures: [] } };
@@ -213,6 +217,8 @@ assert.equal(
 
 // --- 4. getAddresses derives the right paths --------------------------
 
+calls.getAddress = 0;
+calls.getPublicKey = 0;
 const addrs = await signer.getAddresses({
     chainId: 'bitcoin-mainnet',
     accountIndex: 0,
@@ -222,6 +228,7 @@ const addrs = await signer.getAddresses({
     addressType: 'p2wpkh',
 });
 assert.equal(addrs.length, 3);
+assert.deepEqual(calls, { getAddress: 1, getPublicKey: 1 }, 'three addresses ride one bundled call per method');
 assert.equal(addrs[0].path, "m/84'/0'/0'/0/0", 'BIP84 purpose for p2wpkh');
 assert.equal(addrs[1].path, "m/84'/0'/0'/0/1");
 assert.equal(addrs[2].path, "m/84'/0'/0'/0/2");
@@ -319,9 +326,10 @@ function makeMockSdkRegistry({ decomposed }) {
 // (aa…aa:1, sequence fdffffff) paying the same 90,000 sats to 0014cc…cc.
 // signPsbt compares the reply back to the approved PSBT before returning a
 // txid, so a placeholder would exercise the refusal path instead of this one.
-// Segwit form with a two-item witness: a reply with no signature on an
-// input is refused before it reaches a caller.
-const DEVICE_TX = '02000000000101aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa0100000000fdffffff01905f010000000000160014cccccccccccccccccccccccccccccccccccccccc0201aa01bb00000000';
+// Signed with a real key: a reply whose signatures do not verify is refused
+// before it reaches a caller, so the input belongs to a real test key.
+const KEY_P2WPKH = scriptsFor('p2wpkh', TEST_KEYS[0]).scriptPubKeyHex;
+const KEY_P2PKH = scriptsFor('p2pkh', TEST_KEYS[0]).scriptPubKeyHex;
 
 const decomposedFixture = {
     txVersion: 2,
@@ -333,11 +341,11 @@ const decomposedFixture = {
             prevTxIndex: 1,
             sequence: 0xfffffffd,
             value: 100_000,
-            scriptPubKeyHex: '0014' + 'bb'.repeat(20),
+            scriptPubKeyHex: KEY_P2WPKH,
             scriptType: 'p2wpkh',
             sighashType: null,
             nonWitnessUtxoHex: null,
-            witnessUtxoScriptHex: '0014' + 'bb'.repeat(20),
+            witnessUtxoScriptHex: KEY_P2WPKH,
             redeemScriptHex: null,
             witnessScriptHex: null,
             address: 'bc1qmockinput',
@@ -353,6 +361,7 @@ const decomposedFixture = {
         },
     ],
 };
+const DEVICE_TX = signedReplyFor(decomposedFixture);
 
 let capturedSignTxArgs = null;
 const signConnect = makeMockConnect({
@@ -412,6 +421,7 @@ const legacyFixture = {
         {
             ...decomposedFixture.inputs[0],
             scriptType: 'p2pkh',
+            scriptPubKeyHex: KEY_P2PKH,
             nonWitnessUtxoHex: '0100000001aabb',
             witnessUtxoScriptHex: null,
             prevTxInfo: {
@@ -424,6 +434,7 @@ const legacyFixture = {
         },
     ],
 };
+const LEGACY_TX = signedReplyFor(legacyFixture);
 
 let legacyCaptured = null;
 const legacySigner = new TrezorSigner({
@@ -434,7 +445,7 @@ const legacySigner = new TrezorSigner({
     connect: makeMockConnect({
         async signTransaction(args) {
             legacyCaptured = args;
-            return { success: true, payload: { serializedTx: DEVICE_TX, signatures: [] } };
+            return { success: true, payload: { serializedTx: LEGACY_TX, signatures: [] } };
         },
     }),
     sdkRegistry: makeMockSdkRegistry({ decomposed: legacyFixture }),

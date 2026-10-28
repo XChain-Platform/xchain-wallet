@@ -162,6 +162,7 @@ import { ReachabilityBanner } from '@xchain-wallet/core/shared/components/Reacha
 import { ToastHost, useClearToastsOnLock, useToast } from '@xchain-wallet/core/shared/components/ToastHost.jsx';
 import { useDemoAutoWipe } from '@xchain-wallet/core/shared/hooks/useDemoAutoWipe.js';
 import { registerSigner as registerLocalSigner, unregisterSigner as unregisterLocalSigner } from './signerBridge.js';
+import { trackHardwareFactories, useHardwareSessionReset } from '@xchain-wallet/core/shared/hooks/useHardwareSessionReset.js';
 import { registry as registryLib } from '@xchain-wallet/core';
 import { isDemoWallet } from '@xchain-wallet/core/flows';
 import { useDeepLinks } from './deepLinkRoute.js';
@@ -204,10 +205,16 @@ const CoSignerProvision = lazyRoute(() => import('@xchain-wallet/core/shared/rou
 const CoSignerAccountDetail = lazyRoute(() => import('@xchain-wallet/core/shared/routes/CoSignerAccountDetail.jsx'), 'CoSignerAccountDetail');
 const PairSignerForm = lazyRoute(() => import('@xchain-wallet/core/shared/routes/PairSignerForm.jsx'), 'PairSignerForm');
 
-const pairTrezorSigner = (...args) => import('./signerFactories/trezorFactory.js')
+// Loaded on first pairing; a lock or wallet switch resets the loaded ones.
+const hardwareFactories = trackHardwareFactories({
+    trezor: () => import('./signerFactories/trezorFactory.js'),
+    ledger: () => import('./signerFactories/ledgerFactory.js'),
+});
+const pairTrezorSigner = (...args) => hardwareFactories.load('trezor')
     .then((module) => module.pairTrezorSigner(...args));
-const pairLedgerSigner = (...args) => import('./signerFactories/ledgerFactory.js')
+const pairLedgerSigner = (...args) => hardwareFactories.load('ledger')
     .then((module) => module.pairLedgerSigner(...args));
+const resetHardwareSessions = () => hardwareFactories.reset();
 
 // Same default chain registry the web shell uses: buildBalanceRows needs it
 // to resolve divisibility / display names for the palette's token rows.
@@ -364,6 +371,9 @@ function AppInner() {
     const [activeWalletId, setActiveWalletId] = useState(
         /** @type {string | null} */ (null),
     );
+    // A lock clears the active wallet and a switch replaces it; either ends
+    // the device session the previous wallet opened.
+    useHardwareSessionReset(activeWalletId, resetHardwareSessions);
     // §24 Cluster Y FOLLOWUP 3: track the resolved active-wallet record
     // for LeftNav / BottomTabBar wallet-switcher labelling and so the
     // 'settings' top-level view can pass `activeWallet` into Settings.

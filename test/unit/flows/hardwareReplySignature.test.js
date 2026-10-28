@@ -16,6 +16,7 @@ import { describe, it, expect } from 'vitest';
 import { submitAction } from '../../../packages/core/src/flows/submitAction.js';
 import { TrezorSigner } from '../../../packages/signers-trezor/src/TrezorSigner.js';
 import { assertSignedTxMatchesPsbt } from '../../../packages/core/src/signers/verifySignedTx.js';
+import { decomposedFor as signedDecomposedFor, signedReplyFor } from '../../helpers/hwSignedReply.js';
 
 const IN = 'ab'.repeat(32);
 const OUTPUTS = `01905f010000000000160014${'cc'.repeat(20)}`;
@@ -23,8 +24,12 @@ const OUTPUTS = `01905f010000000000160014${'cc'.repeat(20)}`;
 const UNSIGNED_TX = `0200000001${IN}0000000000fdffffff${OUTPUTS}00000000`;
 // The same transaction with a scriptSig but no witness on a p2wpkh input.
 const SCRIPTSIG_ONLY_TX = `0200000001${IN}000000000151fdffffff${OUTPUTS}00000000`;
-// The same transaction, segwit form, a two-item witness on the input.
-const SIGNED_TX = `020000000001${'01'}${IN}0000000000fdffffff${OUTPUTS}0201aa01bb00000000`;
+// The same transaction signed with a real key, so its witness verifies.
+const SIGNED_DECOMPOSED = signedDecomposedFor({
+    inputs: [{ scriptType: 'p2wpkh', txid: IN, value: 100_000 }],
+    outputs: [{ address: 'bc1qout', scriptPubKeyHex: `0014${'cc'.repeat(20)}`, value: 90_000 }],
+});
+const SIGNED_TX = signedReplyFor(SIGNED_DECOMPOSED);
 
 function decomposedFor(scriptType = 'p2wpkh') {
     return {
@@ -50,7 +55,7 @@ function memCollection() {
     };
 }
 
-async function sendThroughTrezor(serializedTx, nodeReject) {
+async function sendThroughTrezor(serializedTx, nodeReject, decomposed = decomposedFor()) {
     const broadcasts = [];
     const connect = {
         getFeatures: async () => ({ success: true, payload: { device_id: 'dev1' } }),
@@ -63,7 +68,7 @@ async function sendThroughTrezor(serializedTx, nodeReject) {
                 if (nodeReject) throw new Error(nodeReject);
             },
         },
-        wallet: { decomposePsbt: () => decomposedFor(), txidOf: () => 'f'.repeat(64) },
+        wallet: { decomposePsbt: () => decomposed, txidOf: () => 'f'.repeat(64) },
     };
     const sdkRegistry = { get: () => sdk };
     const signer = new TrezorSigner({
@@ -101,7 +106,7 @@ describe('hardware reply signature presence', () => {
     });
 
     it('broadcasts a reply that carries a witness', async () => {
-        const out = await sendThroughTrezor(SIGNED_TX, null);
+        const out = await sendThroughTrezor(SIGNED_TX, null, SIGNED_DECOMPOSED);
         expect(out.error).toBeNull();
         expect(out.broadcasts).toEqual([SIGNED_TX]);
     });

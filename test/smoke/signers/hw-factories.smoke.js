@@ -351,11 +351,15 @@ for (const dep of [
 
 const appSrc = readFileSync(join(desktop, 'renderer', 'App.jsx'), 'utf8');
 assert.ok(
-    /const\s+pairTrezorSigner\s*=\s*\([^)]*\)\s*=>\s*import\(\s*['"]\.\/signerFactories\/trezorFactory\.js['"]\s*\)/.test(appSrc),
+    // The import sits in the hardware-factory tracker, which resets it on lock.
+    /trezor:\s*\(\)\s*=>\s*import\(\s*['"]\.\/signerFactories\/trezorFactory\.js['"]\s*\)/.test(appSrc)
+        && /const\s+pairTrezorSigner\s*=\s*\([^)]*\)\s*=>\s*hardwareFactories\.load\('trezor'\)/.test(appSrc),
     'App.jsx lazy-loads pairTrezorSigner from desktop signerFactories',
 );
 assert.ok(
-    /const\s+pairLedgerSigner\s*=\s*\([^)]*\)\s*=>\s*import\(\s*['"]\.\/signerFactories\/ledgerFactory\.js['"]\s*\)/.test(appSrc),
+    // The import sits in the hardware-factory tracker, which resets it on lock.
+    /ledger:\s*\(\)\s*=>\s*import\(\s*['"]\.\/signerFactories\/ledgerFactory\.js['"]\s*\)/.test(appSrc)
+        && /const\s+pairLedgerSigner\s*=\s*\([^)]*\)\s*=>\s*hardwareFactories\.load\('ledger'\)/.test(appSrc),
     'App.jsx lazy-loads pairLedgerSigner from desktop signerFactories',
 );
 assert.ok(

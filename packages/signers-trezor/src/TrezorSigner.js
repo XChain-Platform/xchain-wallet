@@ -43,6 +43,7 @@ import {
     hardwareSigningError,
 } from '../../core/src/signers/Signer.js';
 import { assertSignedTxMatchesPsbt } from '../../core/src/signers/verifySignedTx.js';
+import { assertInputSignaturesVerify } from '../../core/src/signers/verifyInputSignatures.js';
 import { CHAIN_ID_TO_TREZOR_COIN, chainIdToTrezorCoin, toTrezorSignTransaction } from './trezorFormat.js';
 // Imported from validate.js rather than the registry barrel so this package
 // does not pull the bundled descriptors in behind it.
@@ -180,16 +181,55 @@ export class TrezorSigner extends Signer {
      */
     async getAddresses({ chainId, accountIndex, change, startIndex, count, addressType, verify }) {
         const coin = chainIdToTrezorCoin(chainId);
+        const pathAt = (index) => formatBip44Path({
+            purpose: bip44PurposeFor(addressType, coin),
+            coin,
+            accountIndex,
+            change,
+            index,
+        });
+        // More than one address goes to Connect as one bundled call per
+        // method, so a gap-limit scan costs two device round trips rather
+        // than two per address. The paths and their order are the same.
+        if (count > 1) {
+            const entries = Array.from({ length: count }, (_, i) => ({ index: startIndex + i, path: pathAt(startIndex + i) }));
+            const [addrRes, pkRes] = await Promise.all([
+                this._connect.getAddress({
+                    bundle: entries.map(({ path }) => ({ path, coin, showOnTrezor: !!verify })),
+                }),
+                this._connect.getPublicKey({ bundle: entries.map(({ path }) => ({ path, coin })) }),
+            ]);
+            if (!addrRes?.success) {
+                throw signerFailure(this._id, 'getAddress', addrRes);
+            }
+            if (!pkRes?.success) {
+                throw signerFailure(this._id, 'getPublicKey', pkRes);
+            }
+            const addresses = addrRes.payload;
+            const keys = pkRes.payload;
+            if (!Array.isArray(addresses) || addresses.length !== count
+                || !Array.isArray(keys) || keys.length !== count) {
+                throw new SignerStatusError(
+                    this._id, 'error', `getAddresses: Trezor answered a bundle of ${count} paths with a different count`,
+                );
+            }
+            return entries.map(({ index, path }, i) => {
+                // Connect echoes each item's path; one that names another path
+                // would file this address under the wrong index.
+                for (const item of [addresses[i], keys[i]]) {
+                    if (typeof item?.serializedPath === 'string' && item.serializedPath !== path) {
+                        throw new SignerStatusError(
+                            this._id, 'error', `getAddresses: Trezor answered ${item.serializedPath} for ${path}`,
+                        );
+                    }
+                }
+                return { index, address: addresses[i]?.address, publicKey: keys[i]?.publicKey, path };
+            });
+        }
         const out = [];
         for (let i = 0; i < count; i += 1) {
             const index = startIndex + i;
-            const path = formatBip44Path({
-                purpose: bip44PurposeFor(addressType, coin),
-                coin,
-                accountIndex,
-                change,
-                index,
-            });
+            const path = pathAt(index);
             // verify: display the address on the Trezor's trusted screen and
             // require the user to confirm it (defeats a compromised host/
             // transport substituting a receive address). Off = silent
@@ -281,6 +321,9 @@ export class TrezorSigner extends Signer {
         // Compare the reply back to the PSBT before its txid escapes this
         // method, because every caller downstream treats txHex as approved.
         assertSignedTxMatchesPsbt({ txHex, decomposed, signerId: this._id });
+        // Matching fields prove where the money goes, not that the signatures
+        // spend it: verify each one against the prevout and amount the user approved.
+        assertInputSignaturesVerify({ txHex, decomposed, signerId: this._id });
         const txid = sdk.wallet.txidOf(txHex);
         return { signedPsbtHex: '', txHex, txid };
     }

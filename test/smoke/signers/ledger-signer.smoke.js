@@ -21,6 +21,7 @@ import { existsSync, readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { webcrypto } from 'node:crypto';
+import { scriptsFor, signedReplyFor, TEST_KEYS } from '../../helpers/hwSignedReply.js';
 
 // deriveLedgerDeviceIdentifier uses crypto.subtle.digest. Node 18
 // exposes WebCrypto only on globalThis.crypto, matching setup.js.
@@ -232,6 +233,10 @@ function makeMockSdkRegistry({ decomposed }) {
 const MINIMAL_PREV_TX_HEX = '01000000010000000000000000000000000000000000000000000000000000000000000000'
     + 'ffffffff00ffffffff01a086010000000000160014' + 'bb'.repeat(20) + '00000000';
 
+// The input belongs to a real test key so the device reply's signature verifies.
+const KEY_P2WPKH = scriptsFor('p2wpkh', TEST_KEYS[0]).scriptPubKeyHex;
+const KEY_P2PKH = scriptsFor('p2pkh', TEST_KEYS[0]).scriptPubKeyHex;
+
 const segwitDecomposed = {
     txVersion: 2,
     locktime: 0,
@@ -242,7 +247,7 @@ const segwitDecomposed = {
             prevTxIndex: 0,
             sequence: 0xfffffffd,
             value: 100_000,
-            scriptPubKeyHex: '0014' + 'bb'.repeat(20),
+            scriptPubKeyHex: KEY_P2WPKH,
             scriptType: 'p2wpkh',
             sighashType: null,
             // A real previous transaction, because Ledger takes the outpoint
@@ -250,7 +255,7 @@ const segwitDecomposed = {
             // witnessUtxo is now REFUSED rather than signed against a
             // synthesized stand-in that hashes to a different txid.
             nonWitnessUtxoHex: MINIMAL_PREV_TX_HEX,
-            witnessUtxoScriptHex: '0014' + 'bb'.repeat(20),
+            witnessUtxoScriptHex: KEY_P2WPKH,
             redeemScriptHex: null,
             witnessScriptHex: null,
             address: 'bc1qmockinput',
@@ -272,9 +277,9 @@ const segwitDecomposed = {
 // 0014cc…cc. signPsbt compares the reply back to the approved PSBT before it
 // hands out a txid, so a placeholder here would exercise the refusal path
 // rather than the signing path.
-// Segwit form with a two-item witness: a reply with no signature on an
-// input is refused before it reaches a caller.
-const DEVICE_TX = '02000000000101abababababababababababababababababababababababababababababababab0000000000fdffffff01905f010000000000160014cccccccccccccccccccccccccccccccccccccccc0201aa01bb00000000';
+// Signed with a real key: a reply whose signatures do not verify is refused
+// before it reaches a caller.
+const DEVICE_TX = signedReplyFor(segwitDecomposed);
 
 let capturedCreateArgs = null;
 let capturedSplitCalls = [];
@@ -318,15 +323,17 @@ const legacyDecomposed = {
     inputs: [{
         ...segwitDecomposed.inputs[0],
         scriptType: 'p2pkh',
+        scriptPubKeyHex: KEY_P2PKH,
         witnessUtxoScriptHex: null,
         nonWitnessUtxoHex: '01000000deadbeef',
     }],
 };
+const LEGACY_TX = signedReplyFor(legacyDecomposed);
 let legacyCreate = null;
 let legacySplit = [];
 const legacyApp = makeMockApp({
     splitTransaction(rawTxHex) { legacySplit.push(rawTxHex); return {}; },
-    async createPaymentTransaction(args) { legacyCreate = args; return DEVICE_TX; },
+    async createPaymentTransaction(args) { legacyCreate = args; return LEGACY_TX; },
 });
 // A DOGE sign is refused unless the Dogecoin app is the one open.
 const legacySigner = new LedgerSigner({

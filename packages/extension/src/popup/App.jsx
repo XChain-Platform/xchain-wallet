@@ -182,6 +182,7 @@ import { useGovernanceAddressesPresent } from '@xchain-wallet/core/shared/hooks/
 // Ledger (WebHID) + software signing only. PairSignerForm renders the
 // Trezor option disabled when `pairTrezor` is null.
 import { registerSigner as registerLocalSigner, unregisterSigner as unregisterLocalSigner } from './signerBridge.js';
+import { trackHardwareFactories, useHardwareSessionReset } from '@xchain-wallet/core/shared/hooks/useHardwareSessionReset.js';
 import * as messaging from './messaging.js';
 import { getSessionStatus, listWallets, listAccounts } from './messaging.js';
 import {
@@ -247,8 +248,13 @@ const CoSignerProvision = lazyRoute(() => import('@xchain-wallet/core/shared/rou
 const CoSignerAccountDetail = lazyRoute(() => import('@xchain-wallet/core/shared/routes/CoSignerAccountDetail.jsx'), 'CoSignerAccountDetail');
 const PairSignerForm = lazyRoute(() => import('@xchain-wallet/core/shared/routes/PairSignerForm.jsx'), 'PairSignerForm');
 
-const pairLedgerSigner = (...args) => import('../signers/ledgerFactory.js')
+// Loaded on first pairing; a lock or wallet switch resets the loaded ones.
+const hardwareFactories = trackHardwareFactories({
+    ledger: () => import('../signers/ledgerFactory.js'),
+});
+const pairLedgerSigner = (...args) => hardwareFactories.load('ledger')
     .then((module) => module.pairLedgerSigner(...args));
+const resetHardwareSessions = () => hardwareFactories.reset();
 
 export function App() {
     const shell = shellForExtensionView();
@@ -507,6 +513,9 @@ function AppInner({ canOpenInTab, titleEnabled }) {
     const [activeWalletId, setActiveWalletId] = useState(
         /** @type {string | null} */ (null),
     );
+    // A lock clears the active wallet and a switch replaces it; either ends
+    // the device session the previous wallet opened.
+    useHardwareSessionReset(activeWalletId, resetHardwareSessions);
     // The wallet RECORDS, not just the active id. `<Settings>` renders
     // the wallet's name and gates its account row on the object, so an id
     // alone would show "No wallet" on a perfectly good wallet.

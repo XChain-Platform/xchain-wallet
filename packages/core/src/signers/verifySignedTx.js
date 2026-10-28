@@ -140,6 +140,19 @@ export function rawTxid(txHex) {
     return out;
 }
 
+/**
+ * Decode a raw transaction together with each input's scriptSig and witness
+ * stack, in input order. Throws for the same inputs parseRawTx refuses.
+ *
+ * @param {string} txHex
+ * @returns {{ tx: ReturnType<typeof parseRawTx>,
+ *   signatures: Array<{ scriptSigHex: string, witness: string[] }> }}
+ */
+export function readSignedRawTx(txHex) {
+    const { tx, signatures } = walkRawTx(txHex);
+    return { tx, signatures };
+}
+
 function walkRawTx(txHex) {
     const c = new Cursor(txHex);
     const version = Number(BigInt.asIntN(32, c.uintLE(4)));
@@ -156,7 +169,8 @@ function walkRawTx(txHex) {
     const bodyStart = c.pos;
 
     const inputs = [];
-    // Per input: how much signature material the reply carries (never its content).
+    // Per input: the reply's scriptSig and witness stack, read by the signature
+    // checks in verifyInputSignatures.js and counted for the presence check.
     const signatures = [];
     const inputCount = c.varint();
     if (inputCount === 0) throw new Error('parseRawTx: transaction has no inputs');
@@ -166,7 +180,7 @@ function walkRawTx(txHex) {
         const scriptSigHex = c.varSlice();              // the signature: present, never compared
         const sequence = Number(c.uintLE(4));
         inputs.push({ prevTxHash, prevTxIndex, sequence });
-        signatures.push({ scriptSigBytes: scriptSigHex.length / 2, witnessItems: 0 });
+        signatures.push({ scriptSigHex, scriptSigBytes: scriptSigHex.length / 2, witness: [], witnessItems: 0 });
     }
 
     const outputs = [];
@@ -177,13 +191,14 @@ function walkRawTx(txHex) {
     }
 
     const bodyEnd = c.pos;
-    // The witness stacks sit between the outputs and the locktime. Only the count
-    // of non-empty items per input is kept, for the signature-presence check.
+    // The witness stacks sit between the outputs and the locktime.
     if (segwit) {
         for (let i = 0; i < inputCount; i++) {
             const items = c.varint();
             for (let j = 0; j < items; j++) {
-                if (c.varSlice().length > 0) signatures[i].witnessItems += 1;
+                const item = c.varSlice();
+                signatures[i].witness.push(item);
+                if (item.length > 0) signatures[i].witnessItems += 1;
             }
         }
     }
