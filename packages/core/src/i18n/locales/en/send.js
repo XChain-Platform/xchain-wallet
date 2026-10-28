@@ -74,6 +74,7 @@ const messages = {
     'send.advanced.changeHint': 'Any leftover native coin returns here.',
     'send.advanced.availableCount': '{count} available',
     'send.advanced.selectAll': 'Select all',
+    'send.advanced.rowsCapped': 'Showing {shown} of {count} inputs. Select all includes every input.',
     'send.advanced.dust': 'Dust',
     'send.advanced.dustTitle': 'Below the {sats} sat dust threshold',
     'send.advanced.summaryLabel': 'Coin control summary',

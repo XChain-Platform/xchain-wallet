@@ -327,7 +327,7 @@ async function fetchAddressShape({ sdk, address, nativeTicker, opts }) {
         sdk.getBalances(address, opts).catch((e) => (e instanceof Error ? e : new Error(String(e)))),
         sdk.getAddress(address).catch((e) => (e instanceof Error ? e : new Error(String(e)))),
     ]);
-    return shapeFromReads({ balResp, addrResp, nativeTicker });
+    return shapeFromReads({ balResp, addrResp, nativeTicker, address });
 }
 
 /**
@@ -342,7 +342,7 @@ async function fetchAddressShape({ sdk, address, nativeTicker, opts }) {
  *
  * @param {{ balResp: unknown, addrResp: unknown, nativeTicker: string | null }} reads
  */
-function shapeFromReads({ balResp, addrResp, nativeTicker }) {
+function shapeFromReads({ balResp, addrResp, nativeTicker, address }) {
     const balOk = !(balResp instanceof Error);
     const addrOk = !(addrResp instanceof Error);
     if (!balOk && !addrOk) {
@@ -367,7 +367,7 @@ function shapeFromReads({ balResp, addrResp, nativeTicker }) {
     // "could not read": the number is unknown, not zero.
     const tokenResult = balOk ? tokenRowsFromBalances(balResp) : { rows: [], invalid: false };
     const balUnreadable = balOk && tokenResult.invalid;
-    const addrUnreadable = addrOk && nativeAnswerUnreadable(addrResp);
+    const addrUnreadable = addrOk && nativeAnswerUnreadable(addrResp, address);
     const unavailable = [
         ...(balOk && !balUnreadable ? [] : ['tokens']),
         ...(addrOk && !addrUnreadable ? [] : ['native']),
@@ -387,15 +387,31 @@ function shapeFromReads({ balResp, addrResp, nativeTicker }) {
     };
 }
 
+// Bech32 is case-insensitive, so an echo that differs from the query only in
+// case is the same address; base58 is not, so anything else must match exactly.
+function answersForAddress(echoed, queried) {
+    if (echoed == null || typeof queried !== 'string' || !queried) return true;
+    if (typeof echoed !== 'string') return false;
+    if (echoed === queried) return true;
+    return /^[a-z0-9]+1[a-z0-9]+$/i.test(queried) && echoed.toLowerCase() === queried.toLowerCase();
+}
+
 /** Reason shown when `/address/` answered but carried no coin balance. */
 export const NATIVE_BALANCE_UNREADABLE_REASON = 'balance service unavailable';
 
 // An `/address/` body that answered without a coin balance: the explorer's own
 // "tracker not answering" flag, or a confirmed amount that is missing. A body
 // whose confirmed amount is present (including "0") is a real reading.
-function nativeAnswerUnreadable(addrResp) {
+//
+// The explorer echoes the address it answered for. A body that names a
+// different address (another chain's, or another network's, from a replica
+// or cache keyed wrong) is a reading of someone else's coins, so it is "could
+// not read" too: crediting it would show, and let Max offer, coins this
+// address does not hold. A body without the field is judged on its amounts.
+function nativeAnswerUnreadable(addrResp, address) {
     if (!addrResp || typeof addrResp !== 'object') return true;
     if (addrResp.tracker_available === false) return true;
+    if (!answersForAddress(addrResp.address, address)) return true;
     const confirmed = addrResp.balances?.confirmed;
     return confirmed == null || !isExactNonnegativeDecimal(confirmed)
         || atomicFromHumanAmount(confirmed, 8) === null;
@@ -837,7 +853,7 @@ async function batchChunkEntries({ sdk, chunk, nativeTicker, opts }) {
             resp ? resp[addr.address] : null, addr.address,
         );
         try {
-            base.balances = shapeFromReads({ balResp, addrResp, nativeTicker });
+            base.balances = shapeFromReads({ balResp, addrResp, nativeTicker, address: addr.address });
         } catch (e) {
             applyFailure(base, e);
         }

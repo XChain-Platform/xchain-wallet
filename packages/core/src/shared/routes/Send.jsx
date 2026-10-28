@@ -279,6 +279,11 @@ const USER_CANCEL_RE = /cancel|reject|denied/i;
 
 // How long the first balance check may hold the Send form back.
 const FIRST_BALANCE_GATE_MS = 1500;
+
+// Coin control lists at most this many inputs. A tracker answer can carry
+// tens of thousands of rows, and one checkbox per row held the main thread
+// for seconds; Select all still takes every input, listed or not.
+export const COIN_CONTROL_ROW_LIMIT = 200;
 const chainRegistry = registryLib.defaultRegistry();
 
 // Descriptor.coin is the long-form coin name ('bitcoin' / 'litecoin' /
@@ -4401,7 +4406,7 @@ export function Send({ walletId, accountId, onBack, prefill = null, onDone, onCh
                         </div>
                         {availableUtxos.length > 0 ? (
                             <div className={styles.coinControlRows}>
-                                {availableUtxos.map((utxo) => {
+                                {availableUtxos.slice(0, COIN_CONTROL_ROW_LIMIT).map((utxo) => {
                                     const key = utxoKey(utxo);
                                     const valueSats = utxoValueSats(utxo);
                                     const dustFloor = dustThresholdForCoin(descriptor?.coin);
@@ -4441,6 +4446,14 @@ export function Send({ walletId, accountId, onBack, prefill = null, onDone, onCh
                         ) : (
                             <EmptyState title={t('send.advanced.noInputsTitle')} titleAs="p" body={t('send.advanced.noInputs')} />
                         )}
+                        {availableUtxos.length > COIN_CONTROL_ROW_LIMIT ? (
+                            <p>
+                                {t('send.advanced.rowsCapped', {
+                                    shown: COIN_CONTROL_ROW_LIMIT,
+                                    count: availableUtxos.length,
+                                })}
+                            </p>
+                        ) : null}
                         <dl
                             className={styles.coinControlSummary}
                             aria-label={t('send.advanced.summaryLabel')}

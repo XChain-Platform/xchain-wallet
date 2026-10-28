@@ -99,6 +99,15 @@ function placeDecimal(scaled, decimals) {
     return (neg ? '-' : '') + int + (frac ? '.' + frac : '');
 }
 
+function firstRowPerAddress() {
+    const seen = new Set();
+    return (r) => {
+        if (seen.has(r.address)) return false;
+        seen.add(r.address);
+        return true;
+    };
+}
+
 function rowsOf(resp) {
     if (!resp) return [];
     if (Array.isArray(resp)) return resp;
@@ -152,7 +161,12 @@ export async function tokenHolderSummary({
             address: typeof r?.address === 'string' ? r.address : null,
             amount: r?.amount != null ? String(r.amount) : '0',
         }))
-        .filter((r) => r.address && Number(r.amount) > 0);
+        .filter((r) => r.address && Number(r.amount) > 0)
+        // One holder is one balance. A reply that lists an address twice (a
+        // replica mid-page, a join that fans out) would count the holder twice,
+        // double their CALLBACK payout, and call a sole owner's token
+        // distributed; the first row stands for the address.
+        .filter(firstRowPerAddress());
     const total = Number(resp?.total);
     const ownerAddr = owner || null;
 
