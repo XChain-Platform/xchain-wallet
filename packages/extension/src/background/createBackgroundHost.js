@@ -2302,11 +2302,11 @@ export function createBackgroundHost(deps) {
         // Unlocked session: pull the vault master key from the pooled
         // signer so the UI does not have to re-prompt for the password.
         let sessionMasterKey = null;
-        if (!req?.password && signerPool && typeof signerPool.get === 'function') {
-            const pooled = signerPool.get(req?.walletId);
-            if (pooled && typeof pooled.getMasterKey === 'function') {
-                try { sessionMasterKey = pooled.getMasterKey(); } catch { /* locked: fall through */ }
-            }
+        const pooled = signerPool && typeof signerPool.get === 'function'
+            ? signerPool.get(req?.walletId)
+            : null;
+        if (!req?.password && pooled && typeof pooled.getMasterKey === 'function') {
+            try { sessionMasterKey = pooled.getMasterKey(); } catch { /* locked: fall through */ }
         }
         const r = await importWif({
             vault,
@@ -2320,6 +2320,13 @@ export function createBackgroundHost(deps) {
             chainRegistry,
             sdkRegistry,
         });
+        // The unlocked signer read its imported keys at unlock, so hand it
+        // the new one; otherwise every send or sweep from this address fails
+        // until a relock. A locked signer reads it from the vault at the next
+        // unlock, so a refusal here never fails an import the vault holds.
+        if (pooled && typeof pooled.addImportedWif === 'function' && r?.address?.id) {
+            try { pooled.addImportedWif(r.address.id, req.wif); } catch { /* locked: next unlock reads it */ }
+        }
         return { wallet: toSafeWallet(r.wallet), address: r.address };
     });
 
