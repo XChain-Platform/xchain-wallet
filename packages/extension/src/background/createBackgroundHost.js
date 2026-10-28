@@ -3287,6 +3287,18 @@ export function createBackgroundHost(deps) {
             throw new Error(`auth.signMessage: no chain id for chain "${address.chain}" and network "${address.network}"`);
         }
         const isHd = address.source === 'hd' && typeof address.derivationPath === 'string';
+        // The signer comes from the wallet and the path from the record, so an
+        // HD record of another wallet signs with this wallet's key at that path,
+        // from an address the review never showed. An imported key is looked up
+        // in the wallet's own key list and cannot cross wallets.
+        if (isHd) {
+            const account = typeof address.accountId === 'string' && address.accountId
+                ? await vault.accounts.get(address.accountId)
+                : null;
+            if (!account || account.walletId !== walletId) {
+                throw new Error(`auth.signMessage: address "${addressId}" is not in this wallet`);
+            }
+        }
         return signMessageFlow({
             vault,
             walletId,

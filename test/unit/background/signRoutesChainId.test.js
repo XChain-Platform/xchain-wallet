@@ -48,6 +48,7 @@ function makeHost({ network = 'regtest' } = {}) {
     };
     const vault = {
         addresses: { get: async (id) => (id === address.id ? address : null) },
+        accounts: { get: async (id) => (id === address.accountId ? { id, walletId: 'wallet-1' } : null) },
     };
     const host = createBackgroundHost({
         vault,

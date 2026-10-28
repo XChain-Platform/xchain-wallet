@@ -48,6 +48,7 @@ import { userFacingMessage } from '../utils/userFacingMessage.js';
 import { memoLengthError, MEMO_HINT } from '../utils/memoLimit.js';
 import { useTickBalance } from '../hooks/useTickBalance.js';
 import { compareDecimalStrings } from '../utils/amountFormat.js';
+import { OFFER_LIFECYCLE_REFUSAL } from '../../flows/marketExpiry.js';
 import {
     latestBallotRows,
     pollResultPercentages,
@@ -385,6 +386,42 @@ export function PollDetail({ walletId, chainId, pollIndex, onBack }) {
         };
     }
 
+    // The page judges "open" from its last read, and a poll can close while the
+    // review sits open: its end block passes or it is finalized. A ballot signed
+    // then pays the miner fee and the protocol fee and counts for nothing, and
+    // with pre-flight off or local nothing warns. So Approve reads the poll and
+    // the height again and refuses one that no longer takes votes. A failed read
+    // is unknown, never a refusal.
+    async function closedPollRefusal() {
+        let fresh;
+        let heightResponse = null;
+        try {
+            [fresh, heightResponse] = await Promise.all([
+                messaging.governancePoll({ chainId, pollIndex }),
+                typeof messaging.getIndexerWatermark === 'function'
+                    ? messaging.getIndexerWatermark({ chainId }).catch(() => null)
+                    : Promise.resolve(null),
+            ]);
+        } catch {
+            return null;
+        }
+        const row = pollRowForDisplay(extractPoll(fresh));
+        if (!row || !samePollIndex(row.action_index, pollIndex)) return null;
+        const height = heightResponse?.watermark == null || heightResponse.watermark === ''
+            ? null
+            : Number(heightResponse.watermark);
+        const usableHeight = Number.isFinite(height) ? height : null;
+        const lastBlock = row.end_block == null || row.end_block === '' ? Number.NaN : Number(row.end_block);
+        const terminal = Boolean(row.poll_status) && row.poll_status !== 'open';
+        const endPassed = Number.isFinite(lastBlock) && usableHeight !== null && usableHeight > lastBlock;
+        if (!terminal && !endPassed) return null;
+        setPoll(row);
+        if (usableHeight !== null) setCurrentHeight(usableHeight);
+        const err = new Error('This poll closed while the review was open. Nothing was sent.');
+        err.name = OFFER_LIFECYCLE_REFUSAL;
+        return err;
+    }
+
     // The wire params come from sdk.voting.castBallotParams, which lives
     // host-side, so compose goes through the VOTE-specific route rather than
     // re-implementing the ballot encoding here. A client-side mirror that
@@ -405,14 +442,18 @@ export function PollDetail({ walletId, chainId, pollIndex, onBack }) {
                     params: ballotParams(),
                     ...(feePerKb != null ? { feePerKb } : {}),
                 }),
-                onApprove: (prebuiltPsbt) => submitConfirmed({
-                    walletId,
-                    chainId,
-                    from,
-                    params: ballotParams(),
-                    ...(feePerKb != null ? { feePerKb } : {}),
-                    prebuiltPsbt,
-                }),
+                onApprove: async (prebuiltPsbt) => {
+                    const closed = await closedPollRefusal();
+                    if (closed) throw closed;
+                    return submitConfirmed({
+                        walletId,
+                        chainId,
+                        from,
+                        params: ballotParams(),
+                        ...(feePerKb != null ? { feePerKb } : {}),
+                        prebuiltPsbt,
+                    });
+                },
             });
             setResult(res);
             setPassword('');
@@ -470,6 +511,10 @@ export function PollDetail({ walletId, chainId, pollIndex, onBack }) {
                 source: fromAddress.source,
                 signerId: fromAddress.signerId,
             };
+            // The air-gapped signer signs and broadcasts what is built here, so
+            // the watcher build takes the same fresh read as Approve.
+            const closed = await closedPollRefusal();
+            if (closed) throw closed;
             let res;
             if (isWatcherMode) {
                 const wireBallot = isSplit

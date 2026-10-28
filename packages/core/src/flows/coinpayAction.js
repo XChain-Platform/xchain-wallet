@@ -35,7 +35,47 @@ import { submitAction } from './submitAction.js';
 import { buildActionPsbt } from './buildActionPsbt.js';
 import { assertValidDestination, normalizeSource } from './sendToken.js';
 import { verifyCoinpayObligation } from './coinpayQueries.js';
-import { hasAttemptedCoinpay } from '../market/coinpayPending.js';
+import { hasAttemptedCoinpay, pendingTxReferencesMatch } from '../market/coinpayPending.js';
+import { OFFER_LIFECYCLE_REFUSAL } from './marketExpiry.js';
+
+// PendingTx statuses of a payment that may still confirm. A failed or dropped
+// one cannot, and an indexed one has already settled or been judged, which the
+// obligation re-read sees for itself.
+const IN_FLIGHT_STATUSES = new Set(['signed', 'queued', 'broadcasting', 'broadcast']);
+
+/**
+ * Refuses a COINPAY for a match this wallet is already paying. The obligation
+ * reads `pending_coinpay` until the earlier payment confirms and indexes, so
+ * Payments due still offers Pay, and a second review (another window, or the
+ * same one after a lock) passes the re-read; a second payment sends the coin
+ * again and settles nothing. A list that cannot be read is unknown and does not
+ * refuse.
+ *
+ * @param {CoinpayActionOpts} opts
+ * @param {string} actionIndex
+ */
+async function assertNoPaymentInFlight(opts, actionIndex) {
+    const list = opts.vault?.pendingTxs?.list;
+    if (typeof list !== 'function') return;
+    const descriptor = opts.chainRegistry?.get?.(opts.chainId);
+    if (!descriptor) return;
+    let rows;
+    try {
+        rows = await opts.vault.pendingTxs.list();
+    } catch {
+        return;
+    }
+    const inFlight = (Array.isArray(rows) ? rows : []).some((tx) => tx
+        && IN_FLIGHT_STATUSES.has(tx.status)
+        && tx.chain === descriptor.coin
+        && tx.network === descriptor.networkKind
+        && pendingTxReferencesMatch(tx, actionIndex));
+    if (!inFlight) return;
+    const err = new Error('A payment for this match is already on its way. Nothing was sent: '
+        + 'paying again sends the coin a second time. Check History for the earlier payment.');
+    err.name = OFFER_LIFECYCLE_REFUSAL;
+    throw err;
+}
 
 /**
  * @typedef {Object} CoinpayActionOpts
@@ -155,6 +195,8 @@ async function prepareCoinpay(opts, fnName) {
     }
     const coinAmount = normalizeCoinAmount(opts.coinAmount, fnName);
     const source = normalizeSource(opts.from, fnName);
+
+    await assertNoPaymentInFlight(opts, actionIndex);
 
     const obligation = await verifyCoinpayObligation({
         sdkRegistry: opts.sdkRegistry,
