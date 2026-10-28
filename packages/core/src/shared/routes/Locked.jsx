@@ -211,6 +211,20 @@ export function Locked({ onUnlocked, lockReason = null }) {
         inputRef.current?.focus();
     }, []);
 
+    // A native shell dispatches `pause` on the document when the app goes to
+    // the background. Without this, typed text waits in the field until the
+    // app comes back, so whoever picks the device up next finds the password
+    // ready to submit. The web, extension and desktop shells never fire it.
+    useEffect(() => {
+        if (typeof document === 'undefined') return undefined;
+        const onPause = () => {
+            setPassword('');
+            setCaptureValue('');
+        };
+        document.addEventListener('pause', onPause);
+        return () => document.removeEventListener('pause', onPause);
+    }, []);
+
     // The wallet list is safe metadata, so it can restore the heading before
     // unlock when an older active-wallet entry contains only the wallet id.
     useEffect(() => {
