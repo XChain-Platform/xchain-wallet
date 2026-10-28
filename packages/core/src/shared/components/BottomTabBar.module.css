@@ -132,7 +132,11 @@
 .sheetItem:hover,
 .sheetItem:focus-visible {
     background: var(--xc-surface);
-    outline: none;
+}
+
+.sheetItem:focus-visible {
+    outline: 2px solid var(--xc-accent-primary, var(--xc-text));
+    outline-offset: -2px;
 }
 
 /* The rows-menu reset in tokens.css (:root [data-xc-menu-list="rows"] [data-xc-menu-item],
