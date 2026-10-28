@@ -14,6 +14,29 @@
 // actually broadcast, and (b) a confirmation flips the record to 'indexed',
 // keeping the tx-status timeline in sync with the live WS event.
 
+const ledgerWriteChains = new WeakMap();
+
+/**
+ * Keep PendingTx read-modify-write operations ordered for each vault. The
+ * recovery tail always resolves so one failed write does not block the next.
+ *
+ * @template T
+ * @param {import('../storage/Vault.js').Vault} vault
+ * @param {() => Promise<T>} write
+ * @returns {Promise<T>}
+ */
+async function serializeLedgerWrite(vault, write) {
+    const previous = ledgerWriteChains.get(vault) || Promise.resolve();
+    const current = previous.then(write);
+    const tail = current.catch(() => {});
+    ledgerWriteChains.set(vault, tail);
+    try {
+        return await current;
+    } finally {
+        if (ledgerWriteChains.get(vault) === tail) ledgerWriteChains.delete(vault);
+    }
+}
+
 /**
  * Set of txids the wallet broadcast and is still awaiting confirmation
  * (PendingTx.status === 'broadcast').
@@ -53,23 +76,25 @@ export async function markPendingTxIndexed(vault, txid, opts = {}) {
     const stamp = typeof opts.now === 'function' ? opts.now : () => new Date().toISOString();
     const inclusion = opts.inclusion && typeof opts.inclusion === 'object' ? opts.inclusion : null;
     const block = Number(inclusion?.blockIndex);
-    const matches = await vault.pendingTxs.findBy('txid', txid);
-    let changed = false;
-    for (const rec of matches) {
-        if (rec.status === 'indexed') continue;
-        await vault.pendingTxs.put({
-            ...rec,
-            status: 'indexed',
-            confirmedAt: rec.confirmedAt || stamp(),
-            ...(inclusion ? {
-                chainConfirmed: true,
-                confirmedBlockIndex: Number.isInteger(block) && block > 0 ? block : null,
-            } : {}),
-        });
-        changed = true;
-        await failSupersededReplacements(vault, rec);
-    }
-    return changed;
+    return serializeLedgerWrite(vault, async () => {
+        const matches = await vault.pendingTxs.findBy('txid', txid);
+        let changed = false;
+        for (const rec of matches) {
+            if (rec.status === 'indexed') continue;
+            await vault.pendingTxs.put({
+                ...rec,
+                status: 'indexed',
+                confirmedAt: rec.confirmedAt || stamp(),
+                ...(inclusion ? {
+                    chainConfirmed: true,
+                    confirmedBlockIndex: Number.isInteger(block) && block > 0 ? block : null,
+                } : {}),
+            });
+            changed = true;
+            await failSupersededReplacements(vault, rec);
+        }
+        return changed;
+    });
 }
 
 const REPLACEMENT_LOST_ERROR = 'The original transaction confirmed before this replacement did.';
@@ -124,13 +149,15 @@ async function failSupersededReplacements(vault, confirmed) {
 export async function markPendingTxMempoolSeen(vault, txid, opts = {}) {
     if (!vault || !txid) return false;
     const stamp = typeof opts.now === 'function' ? opts.now : () => new Date().toISOString();
-    const matches = await vault.pendingTxs.findBy('txid', txid);
-    let changed = false;
-    for (const rec of matches) {
-        if (rec.status === 'indexed') continue;
-        if (rec.mempoolSeenAt) continue;
-        await vault.pendingTxs.put({ ...rec, mempoolSeenAt: stamp() });
-        changed = true;
-    }
-    return changed;
+    return serializeLedgerWrite(vault, async () => {
+        const matches = await vault.pendingTxs.findBy('txid', txid);
+        let changed = false;
+        for (const rec of matches) {
+            if (rec.status === 'indexed') continue;
+            if (rec.mempoolSeenAt) continue;
+            await vault.pendingTxs.put({ ...rec, mempoolSeenAt: stamp() });
+            changed = true;
+        }
+        return changed;
+    });
 }

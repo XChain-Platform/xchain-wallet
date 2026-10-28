@@ -20,6 +20,7 @@
 
 import { describe, it, expect } from 'vitest';
 import {
+    markPendingTxIndexed,
     markPendingTxMempoolSeen,
 } from '../../../packages/core/src/notifications/pendingTxBridge.js';
 
@@ -120,5 +121,102 @@ describe('markPendingTxMempoolSeen', () => {
         const stamped = vault._store[0].mempoolSeenAt;
         expect(typeof stamped).toBe('string');
         expect(Number.isFinite(Date.parse(stamped))).toBe(true);
+    });
+
+    it('keeps indexed confirmation fields when indexed and mempool writes race in both orders', async () => {
+        const CONFIRMED = '2026-08-27T12:10:00.000Z';
+        const orders = [
+            ['indexed', 'mempool'],
+            ['mempool', 'indexed'],
+        ];
+
+        for (const order of orders) {
+            const vault = makeVault([
+                {
+                    id: '1',
+                    txid: 'a',
+                    status: 'broadcast',
+                    mempoolSeenAt: null,
+                    confirmedAt: null,
+                    chainConfirmed: false,
+                },
+            ]);
+            const findBy = vault.pendingTxs.findBy.bind(vault.pendingTxs);
+            let releaseFirstRead;
+            let signalFirstRead;
+            const firstRead = new Promise((resolve) => { signalFirstRead = resolve; });
+            const firstReadGate = new Promise((resolve) => { releaseFirstRead = resolve; });
+            let reads = 0;
+            vault.pendingTxs.findBy = async (...args) => {
+                const rows = await findBy(...args);
+                reads += 1;
+                if (reads === 1) {
+                    signalFirstRead();
+                    await firstReadGate;
+                }
+                return rows;
+            };
+            const writes = {
+                indexed: () => markPendingTxIndexed(vault, 'a', {
+                    now: () => CONFIRMED,
+                    inclusion: { blockIndex: 42 },
+                }),
+                mempool: () => markPendingTxMempoolSeen(vault, 'a', { now: () => FIRST }),
+            };
+
+            const first = writes[order[0]]();
+            await firstRead;
+            const second = writes[order[1]]();
+            releaseFirstRead();
+            await Promise.all([first, second]);
+
+            expect(vault._store[0], order.join(' then ')).toMatchObject({
+                status: 'indexed',
+                confirmedAt: CONFIRMED,
+                chainConfirmed: true,
+                confirmedBlockIndex: 42,
+            });
+        }
+    });
+
+    it('runs a later ledger write after an earlier write rejects', async () => {
+        const vault = makeVault([
+            { id: '1', txid: 'a', status: 'broadcast', mempoolSeenAt: null },
+            { id: '2', txid: 'b', status: 'broadcast', confirmedAt: null },
+        ]);
+        const put = vault.pendingTxs.put.bind(vault.pendingTxs);
+        let puts = 0;
+        vault.pendingTxs.put = async (record) => {
+            puts += 1;
+            if (puts === 1) throw new Error('injected write failure');
+            return put(record);
+        };
+
+        const rejected = markPendingTxMempoolSeen(vault, 'a', { now: () => FIRST });
+        const succeeded = markPendingTxIndexed(vault, 'b', { now: () => LATER });
+
+        await expect(rejected).rejects.toThrow('injected write failure');
+        await expect(succeeded).resolves.toBe(true);
+        expect(vault._store.find((r) => r.id === '2')).toMatchObject({
+            status: 'indexed',
+            confirmedAt: LATER,
+        });
+    });
+
+    it('does not write when either ledger writer receives an unknown txid', async () => {
+        const vault = makeVault([
+            { id: '1', txid: 'a', status: 'broadcast', mempoolSeenAt: null },
+        ]);
+        const put = vault.pendingTxs.put.bind(vault.pendingTxs);
+        let puts = 0;
+        vault.pendingTxs.put = async (record) => {
+            puts += 1;
+            return put(record);
+        };
+
+        await expect(markPendingTxIndexed(vault, 'missing')).resolves.toBe(false);
+        await expect(markPendingTxMempoolSeen(vault, 'missing')).resolves.toBe(false);
+        expect(puts).toBe(0);
+        expect(vault._store).toHaveLength(1);
     });
 });
