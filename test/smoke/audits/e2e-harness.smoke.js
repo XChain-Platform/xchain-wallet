@@ -154,11 +154,25 @@ assert.ok(
 const consentFn = fixture.slice(fixture.indexOf('export async function acknowledgeDonationNotice'));
 const consentBody = consentFn.slice(0, consentFn.indexOf('\n}\n') + 2);
 assert.ok(consentBody.length > 100, 'located acknowledgeDonationNotice in the fixture');
-// The race goes through createdWalletShell, which is the unlocked shell
-// itself unless a caller opts out of the balances wait for an offline venue.
+// Use two independent waits. A locator union followed by first() is not a
+// race: DOM order can select a hidden notice while the shell is already
+// visible, or select a hidden shell while the notice is already visible.
 assert.ok(
-    /\.or\(createdWalletShell\(page, waitForBalances\)\)/.test(consentBody),
-    'donation-notice wait races the notice heading against the created-wallet shell',
+    /Promise\.race\(\[/.test(consentBody),
+    'donation-notice wait uses an explicit promise race',
+);
+assert.ok(
+    /notice\.waitFor\(\{\s*state:\s*'visible',\s*timeout:\s*KDF_STEP_MS\s*\}\)/.test(consentBody),
+    'donation-notice race waits independently for the notice heading',
+);
+assert.ok(
+    /createdWalletShell\(page, waitForBalances\)\s*\.waitFor\(\{\s*state:\s*'visible',\s*timeout:\s*KDF_STEP_MS\s*\}\)/
+        .test(consentBody),
+    'donation-notice race waits independently for the created-wallet shell',
+);
+assert.ok(
+    /if \(outcome === 'shell'\) return false;/.test(consentBody),
+    'donation-notice race returns false only when the shell wins',
 );
 const shellFn = fixture.slice(fixture.indexOf('function createdWalletShell'));
 const shellBody = shellFn.slice(0, shellFn.indexOf('\n}\n') + 2);

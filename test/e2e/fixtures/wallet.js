@@ -644,10 +644,12 @@ export async function dismissIntroCarousel(page) {
  */
 export async function acknowledgeDonationNotice(page, ads = 'off', { waitForBalances = true } = {}) {
     const notice = page.getByRole('heading', { name: 'Automatic Donation System', exact: true });
-    await notice.or(createdWalletShell(page, waitForBalances)).first()
-        .waitFor({ state: 'visible', timeout: KDF_STEP_MS });
-    // The shell won the race, so there is no notice here to acknowledge.
-    if (!(await notice.isVisible())) return false;
+    const outcome = await Promise.race([
+        notice.waitFor({ state: 'visible', timeout: KDF_STEP_MS }).then(() => 'notice'),
+        createdWalletShell(page, waitForBalances)
+            .waitFor({ state: 'visible', timeout: KDF_STEP_MS }).then(() => 'shell'),
+    ]);
+    if (outcome === 'shell') return false;
     await page.getByRole('button', { name: 'Continue', exact: true }).click();
     if (ads === 'off') await turnOffDonations(page, { waitForBalances });
     return true;
