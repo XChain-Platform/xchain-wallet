@@ -6,36 +6,6 @@
                 "reason": "The chain name titling one per-chain amount card in the Ads settings sub-page; a card title inside a settings card, not a page group title."
             }
         },
-        "packages/core/src/shared/components/settings/BackupSection.jsx": {
-            "form": {
-                "count": 3,
-                "reason": "Inline forms inside settings cards (a field and its button in one row or block). FormPage draws its own card at 600px and up, so moving them onto it would put a card in a card; the Settings sub-page itself lays out through ListPage."
-            }
-        },
-        "packages/core/src/shared/components/settings/ConnectedSitesSection.jsx": {
-            "form": {
-                "count": 2,
-                "reason": "Inline forms inside settings cards (a field and its button in one row or block). FormPage draws its own card at 600px and up, so moving them onto it would put a card in a card; the Settings sub-page itself lays out through ListPage."
-            }
-        },
-        "packages/core/src/shared/components/settings/DeveloperModeSection.jsx": {
-            "form": {
-                "count": 3,
-                "reason": "Inline forms inside settings cards (a field and its button in one row or block). FormPage draws its own card at 600px and up, so moving them onto it would put a card in a card; the Settings sub-page itself lays out through ListPage."
-            }
-        },
-        "packages/core/src/shared/components/settings/DisplaySection.jsx": {
-            "form": {
-                "count": 1,
-                "reason": "Inline forms inside settings cards (a field and its button in one row or block). FormPage draws its own card at 600px and up, so moving them onto it would put a card in a card; the Settings sub-page itself lays out through ListPage."
-            }
-        },
-        "packages/core/src/shared/components/settings/ThisWalletSection.jsx": {
-            "form": {
-                "count": 2,
-                "reason": "Inline forms inside settings cards (a field and its button in one row or block). FormPage draws its own card at 600px and up, so moving them onto it would put a card in a card; the Settings sub-page itself lays out through ListPage."
-            }
-        },
         "packages/core/src/shared/routes/AddressPreferencesForm.jsx": {
             "heading": {
                 "count": 1,
