@@ -531,6 +531,7 @@ export {
     BackupPointerUnresolvedError,
     BackupSeedPasswordError,
     BackupSealDamagedError,
+    RestoreDevicePasswordError,
     BACKUP_PAYLOAD_VERSION,
     MIN_BACKUP_PASSWORD_LENGTH,
 } from './backupFile.js';

@@ -125,6 +125,22 @@ export class BackupSeedPasswordError extends Error {
 }
 
 /**
+ * A restore into an open vault re-seals the backed-up wallet under the
+ * device box, and that box held a password the open vault does not open with. Refused before anything is written: a
+ * wallet sealed under it would be skipped at every unlock and could not sign.
+ */
+export class RestoreDevicePasswordError extends Error {
+    constructor() {
+        super(
+            `That is not the password this app unlocks with. The "${RESTORE_PASSWORD_LABELS.device.add}" `
+            + 'field wants the password you already unlock this app with; the restored wallet is '
+            + 're-locked with it.',
+        );
+        this.name = 'RestoreDevicePasswordError';
+    }
+}
+
+/**
  * The backed-up wallet's own seal is damaged: not valid base64, or too short to
  * hold a ciphertext. No password opens it, so this must never read as the
  * wrong-password error above; only a GCM tag mismatch (`AeadAuthError`) means

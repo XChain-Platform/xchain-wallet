@@ -2187,7 +2187,8 @@ export function createBackgroundHost(deps) {
     // + conflict policy. Returns the imported walletId + write/skip
     // counts so the shell can surface "Imported wallet 'X' with N
     // addresses" copy.
-    host.register('wallet.importBackup', async (req, { vault }) => {
+    host.register('wallet.importBackup', async (req, { vault, vaultKeyring }) => {
+        await assertRestoreDevicePassword(req?.devicePassword, vault, vaultKeyring);
         const r = await importBackupFile({
             vault,
             fileContent: req?.fileContent,
@@ -2217,7 +2218,8 @@ export function createBackgroundHost(deps) {
     // locations are fetched; on-chain FILE references are a follow-up
     // that needs SDK wiring and are rejected explicitly rather than
     // silently ignored.
-    host.register('wallet.importBackupPointer', async (req, { vault }) => {
+    host.register('wallet.importBackupPointer', async (req, { vault, vaultKeyring }) => {
+        await assertRestoreDevicePassword(req?.devicePassword, vault, vaultKeyring);
         const r = await restoreFromBackupPointer({
             vault,
             pointer: req?.pointer,
@@ -5916,6 +5918,30 @@ export class PasswordChangeConflictError extends Error {
     constructor() {
         super('Your wallets changed while the password was being changed. Your password has not been changed; try again.');
         this.name = 'PasswordChangeConflictError';
+    }
+}
+
+/**
+ * A restore into an open vault re-seals the backed-up wallet under
+ * `devicePassword`, so that password has to be the one the vault opens with:
+ * any other leaves a wallet the unlock skips and that cannot sign. Checked
+ * against the vault key before the backup is read. An empty box is left to the
+ * flow, which names it; a shell with no keyring has nothing to check against.
+ *
+ * @param {unknown} devicePassword
+ * @param {import('@xchain-wallet/core').storage.Vault} vault
+ * @param {import('./vaultKeyring.js').VaultKeyring | undefined} keyring
+ */
+async function assertRestoreDevicePassword(devicePassword, vault, keyring) {
+    if (typeof devicePassword !== 'string' || devicePassword.length === 0) return;
+    if (typeof keyring?.kdfParams !== 'function' || typeof vault?.keyMatches !== 'function') return;
+    const kdfParams = await keyring.kdfParams();
+    if (!kdfParams) return;
+    const key = await coreCrypto.deriveMasterKeyAsync(devicePassword, kdfParams);
+    try {
+        if (!vault.keyMatches(key)) throw new flows.RestoreDevicePasswordError();
+    } finally {
+        key.fill(0);
     }
 }
 
