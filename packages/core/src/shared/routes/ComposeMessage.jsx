@@ -46,6 +46,9 @@ import { actionTextSafetyError } from '../utils/actionTextSafety.js';
 import { MAX_MESSAGE_BYTES, messageWireByteLength } from '../../flows/messageAction.js';
 import styles from './IssueTokenForm.module.css';
 
+const KEY_MISMATCH_MESSAGE =
+    "The encryption key found for this recipient doesn't belong to their address, so nothing was signed or sent. Check the address before trying again.";
+
 const chainRegistry = registryLib.defaultRegistry();
 
 // User-facing native ticker for a chain, used to label the network-fee
@@ -641,6 +644,11 @@ function ComposeMessageForm({
                 setSubmitError("The recipient's encryption key is no longer available. Refresh and try again.");
                 return;
             }
+            // Retrying cannot help: the key on offer would encrypt to someone else.
+            if (err?.name === 'PubkeyMismatchError') {
+                setSubmitError(KEY_MISMATCH_MESSAGE);
+                return;
+            }
             // submitFailureMessage owns the translation for the shapes the
             // encoder writes for a log ("no spendable UTXOs found for the
             // funding address"), since this is the screen a user reads. The
@@ -767,6 +775,8 @@ function ComposeMessageForm({
                 setSubmitError("The recipient's encryption key is no longer available. Refresh and try again.");
                 setPubkeyState('missing');
                 setPubkeyError(null);
+            } else if (name === 'PubkeyMismatchError') {
+                setSubmitError(KEY_MISMATCH_MESSAGE);
             } else {
                 // Same translation, and the same fallback, as the confirm path
                 // above. The helper's own header names this exact trap: a form

@@ -251,4 +251,31 @@ describe('SharedListDirectory', () => {
         expect(await screen.findByText('No shared lists yet')).toBeTruthy();
         expect(messaging.getSharedLists).toHaveBeenCalledTimes(2);
     });
+
+    it('neutralizes and caps the indexer text a directory row shows', async () => {
+        mount({
+            response: {
+                lists: [{
+                    kind: 'home',
+                    home_chain: 'BTC',
+                    home_list_index: '12\u202E21',
+                    type: 2,
+                    owner: 'bc1q\u202Elive',
+                    member_count: 1,
+                    share_block: 'x'.repeat(5000),
+                    bindTarget: 12,
+                    name: 'n'.repeat(100000),
+                }],
+                unavailable: [],
+            },
+        });
+
+        const row = await screen.findByRole('listitem', { name: 'Address list 12\u242621' });
+        const text = row.textContent;
+        expect(text).not.toMatch(/[\u202A-\u202E\u2066-\u2069]/);
+        expect(within(row).getByText('bc1q\u2426live')).toBeTruthy();
+        expect(within(row).getByText(`${'n'.repeat(63)}…`)).toBeTruthy();
+        expect(within(row).getByText(`${'x'.repeat(99)}…`)).toBeTruthy();
+        expect(text.length).toBeLessThan(1000);
+    });
 });

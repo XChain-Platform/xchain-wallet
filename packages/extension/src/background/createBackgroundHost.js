@@ -155,6 +155,7 @@ const {
     listContacts,
     findContactByAddress,
     saveContact,
+    saveContacts,
     deleteContact,
     dispensersForSource,
     dispensersForAddress,
@@ -4895,6 +4896,12 @@ export function createBackgroundHost(deps) {
         // an address-book edit makes the on-chain copy stale too. They
         // are vault-global, hence no walletId.
         noteLabelChange({ vault }, null);
+        return r;
+    });
+    // An import saves every record in one vault write; see saveContacts.
+    host.register('contacts.saveMany', async (req, { vault }) => {
+        const r = await saveContacts({ ...req, vault });
+        if (r.saved.length > 0) noteLabelChange({ vault }, null);
         return r;
     });
     host.register('contacts.delete', async (req, { vault }) => {

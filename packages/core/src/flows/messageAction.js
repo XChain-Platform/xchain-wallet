@@ -129,6 +129,9 @@ export function recipientPubkeyMatchesAddress(sdk, pubkeyHex, address, descripto
     if (typeof pubkeyHex !== 'string' || !/^[0-9a-fA-F]+$/.test(pubkeyHex)) {
         return false;
     }
+    // Hex decoding drops a trailing odd nibble, so the bytes that reach
+    // encryption would be a key this check never measured.
+    if (pubkeyHex.length % 2 !== 0) return false;
     const byteLen = pubkeyHex.length / 2;
     // Only standard compressed (33) / uncompressed (65) keys are derivable
     // here; anything else we cannot verify, so don't block on it.

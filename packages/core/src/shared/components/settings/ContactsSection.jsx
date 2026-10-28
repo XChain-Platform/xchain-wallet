@@ -160,21 +160,35 @@ export function ContactsSection() {
             });
             if (!confirmed) return;
             let imported = 0;
-            for (const { record, line } of rows) {
-                try {
-                    await messaging.saveContact({ record });
-                    imported += 1;
-                } catch (err) {
-                    const message = err instanceof Error
-                        ? err.message
-                        : (String(err || '') || 'The wallet returned no explanation.');
-                    if (isDuplicateFailure(message)) duplicates += 1;
-                    failures.push({
-                        subject: record?.name || record?.id || `Line ${line}`,
-                        message: `${csv ? `Line ${line}: ` : ''}${message}`,
-                    });
-                    // eslint-disable-next-line no-console
-                    console.warn('contacts.import: skipping invalid record:', err);
+            const recordFailure = ({ record, line }, message) => {
+                if (isDuplicateFailure(message)) duplicates += 1;
+                failures.push({
+                    subject: record?.name || record?.id || `Line ${line}`,
+                    message: `${csv ? `Line ${line}: ` : ''}${message}`,
+                });
+            };
+            if (typeof messaging.saveContacts === 'function') {
+                // One vault write for the whole file: saving record by record
+                // re-encrypts the vault once per contact.
+                const batch = await messaging.saveContacts({ records: rows.map(({ record }) => record) });
+                const failed = Array.isArray(batch?.failures) ? batch.failures : [];
+                imported = Array.isArray(batch?.saved) ? batch.saved.length : 0;
+                for (const { index, message } of failed) {
+                    if (rows[index]) recordFailure(rows[index], message || 'The wallet returned no explanation.');
+                }
+            } else {
+                for (const { record, line } of rows) {
+                    try {
+                        await messaging.saveContact({ record });
+                        imported += 1;
+                    } catch (err) {
+                        const message = err instanceof Error
+                            ? err.message
+                            : (String(err || '') || 'The wallet returned no explanation.');
+                        recordFailure({ record, line }, message);
+                        // eslint-disable-next-line no-console
+                        console.warn('contacts.import: skipping invalid record:', err);
+                    }
                 }
             }
             setImportResult({ imported, failures, duplicates });

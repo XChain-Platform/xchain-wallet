@@ -252,6 +252,27 @@ describe('settings form validation', () => {
         }));
     });
 
+    it('imports every contact in one batch save when the shell offers one', async () => {
+        messaging.saveContacts = vi.fn(async () => ({
+            saved: [{ id: 'contact-1', name: 'Alice' }],
+            failures: [{ index: 1, message: 'This address is already saved for Carol: bc1qcarol' }],
+        }));
+        render(<ContactsSection />);
+        await screen.findByText('0 contacts stored');
+
+        const records = [{ id: 'contact-1', name: 'Alice' }, { id: 'contact-2', name: 'Bob' }];
+        fireEvent.change(screen.getByLabelText('Import contacts JSON'), {
+            target: { files: [{ name: 'contacts.json', text: vi.fn(async () => JSON.stringify(records)) }] },
+        });
+        fireEvent.click(await screen.findByRole('button', { name: 'Import contacts' }));
+
+        expect(await screen.findByText('Imported 1 contact; 1 skipped; 1 duplicate.')).toBeInTheDocument();
+        expect(messaging.saveContacts).toHaveBeenCalledTimes(1);
+        expect(messaging.saveContacts).toHaveBeenCalledWith({ records });
+        expect(messaging.saveContact).not.toHaveBeenCalled();
+        expect(screen.getByText(/already saved for Carol: bc1qcarol/)).toBeInTheDocument();
+    });
+
     it('does not turn an empty test-send threshold into zero', () => {
         render(<SafetySection />);
         const input = screen.getByLabelText('Test-send warning threshold (sats)');

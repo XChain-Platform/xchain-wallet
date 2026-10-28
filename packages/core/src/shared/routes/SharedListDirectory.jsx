@@ -29,6 +29,8 @@ import {
     pickableSharedLists,
     platformBadgeText,
     shortOwner,
+    directoryText,
+    DIRECTORY_NAME_MAX_CHARS,
 } from '../utils/sharedListRows.js';
 import styles from './IssueTokenForm.module.css';
 import local from './SharedListDirectory.module.css';
@@ -73,7 +75,7 @@ function homeDescriptor(homeChain, viewingChainId) {
 }
 
 function valueOrUnknown(value) {
-    return value == null || value === '' ? '?' : String(value);
+    return value == null || value === '' ? '?' : directoryText(value);
 }
 
 /**
@@ -293,7 +295,7 @@ function SharedListRow({ entry, chainId, pickable, onSelect, onOpenList }) {
             {entry.name ? (
                 <>
                     <dt className={styles.detailsLabel}>Name</dt>
-                    <dd className={styles.detailsValue}>{neutralizeControlText(entry.name)}</dd>
+                    <dd className={styles.detailsValue}>{neutralizeControlText(entry.name, { maxLength: DIRECTORY_NAME_MAX_CHARS })}</dd>
                 </>
             ) : null}
             <dt className={styles.detailsLabel}>Home network</dt>

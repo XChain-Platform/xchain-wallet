@@ -560,6 +560,43 @@ function makeCollection(vault, collection, migrate, validate) {
             });
         },
 
+        /**
+         * Insert or replace several records in one write. Every record is
+         * validated first, so a bad record leaves the collection unchanged.
+         *
+         * @param {T[]} records
+         */
+        async putMany(records) {
+            vault._assertOpen();
+            if (!Array.isArray(records)) {
+                throw new VaultValidationError(collection, ['records must be an array']);
+            }
+            for (const record of records) {
+                if (!record || typeof record.id !== 'string' || !record.id) {
+                    throw new VaultValidationError(collection, ['record.id is required']);
+                }
+                const result = validate(record);
+                if (!result.ok) {
+                    throw new VaultValidationError(collection, result.errors);
+                }
+            }
+            if (records.length === 0) return;
+            await vault._mutate((document) => {
+                const arr = [...document[collection]];
+                const indexById = new Map(arr.map((r, idx) => [r.id, idx]));
+                for (const record of records) {
+                    const idx = indexById.get(record.id);
+                    if (idx === undefined) {
+                        indexById.set(record.id, arr.length);
+                        arr.push(record);
+                    } else {
+                        arr[idx] = record;
+                    }
+                }
+                return { document: { ...document, [collection]: arr } };
+            });
+        },
+
         async delete(id) {
             vault._assertOpen();
             return vault._mutate((document) => {

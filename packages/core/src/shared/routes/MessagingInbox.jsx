@@ -513,13 +513,14 @@ export function MessagingInbox({ walletId, activeAccountId, onCompose, onBack, i
     // most recent ECIES (1) / ECDH (2) message in the thread so an ECDH
     // conversation (where the sender can read their own sent messages) keeps
     // that property. A thread with no encrypted message is a plaintext (v3)
-    // conversation; AES (3) has no send surface, so it falls back to ECIES.
+    // conversation; AES (3) has no send surface, so it falls back to ECIES, as
+    // does an encrypted message whose method the inbox does not recognise.
     const threadEncryption = useMemo(() => {
         for (let i = thread.length - 1; i >= 0; i -= 1) {
             if (thread[i].method === 2) return 'ecdh';
             if (thread[i].method === 1) return 'ecies';
         }
-        return thread.some((m) => m.method === 3) ? 'ecies' : 'plaintext';
+        return thread.some((m) => m.method === 3 || m.encrypted === true) ? 'ecies' : 'plaintext';
     }, [thread]);
 
     // Interleave iMessage-style day separators: a single centered date header

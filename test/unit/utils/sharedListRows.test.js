@@ -16,7 +16,7 @@ function row(id, overrides = {}) {
         homeChain: 'bitcoin',
         homeListIndex: 1,
         type: 'token',
-        bindTarget: `mirror-${id}`,
+        bindTarget: '101',
         maintainedByPlatform: false,
         ...overrides,
     };
@@ -68,6 +68,21 @@ describe('shared list row helpers', () => {
             'earlier',
             'later',
         ]);
+    });
+
+    it('offers only entries whose bind target is a list action index', () => {
+        const entries = [
+            row('pipe', { bindTarget: '5|EVIL' }),
+            row('exponent', { bindTarget: '1e3' }),
+            row('zero', { bindTarget: 0 }),
+            row('negative', { bindTarget: -4 }),
+            row('fraction', { bindTarget: 2.5 }),
+            row('object', { bindTarget: {} }),
+            row('digits', { homeListIndex: 2, bindTarget: '2012' }),
+            row('number', { homeListIndex: 3, bindTarget: 3012 }),
+        ];
+
+        expect(pickableSharedLists(entries, 'token').map(({ id }) => id)).toEqual(['digits', 'number']);
     });
 
     it('shortens long owners and preserves shorter text', () => {

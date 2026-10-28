@@ -223,4 +223,33 @@ describe('ListTransferForm', () => {
         expect(screen.getByLabelText('Type TRANSFER to confirm').disabled).toBe(true);
         expect(screen.getByRole('button', { name: 'Review' }).disabled).toBe(true);
     });
+
+    it('stops before signing when the list changed owner after the form opened', async () => {
+        const messaging = mount();
+        await fillTransfer();
+        messaging.getListByActionIndex.mockResolvedValueOnce({
+            action_index: 2700,
+            source: OWNER,
+            state: { owner: ACTIVE_RECORD.address },
+        });
+        fireEvent.click(screen.getByRole('button', { name: 'Review' }));
+
+        expect(await screen.findByText(
+            'This list has a different owner than when this screen opened. Review the owner and try again.',
+        )).toBeTruthy();
+        expect(messaging.composeForConfirm).not.toHaveBeenCalled();
+        expect(messaging.createList).not.toHaveBeenCalled();
+    });
+
+    it('stops before signing when the current owner cannot be read again', async () => {
+        const messaging = mount();
+        await fillTransfer();
+        messaging.getListByActionIndex.mockRejectedValueOnce(new Error('Explorer returned HTTP 502'));
+        fireEvent.click(screen.getByRole('button', { name: 'Review' }));
+
+        expect(await screen.findByText(
+            "Couldn't confirm this list's current owner. Check your connection and try again.",
+        )).toBeTruthy();
+        expect(messaging.composeForConfirm).not.toHaveBeenCalled();
+    });
 });

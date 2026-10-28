@@ -23,6 +23,17 @@ const ICONS = {
     addresses: { Component: ScanIcon, defaultLabel: 'Choose address' },
 };
 
+// A large address book would otherwise render every contact as an option
+// on focus and on each keystroke. Typing narrows the matches, and the
+// address book button reaches every contact. Recent sends keep their place
+// after the contacts; their number is already bounded upstream.
+const MAX_CONTACT_SUGGESTIONS = 50;
+
+function capContactSuggestions(matches) {
+    let contacts = 0;
+    return matches.filter((s) => s.source !== 'contact' || (contacts += 1) <= MAX_CONTACT_SUGGESTIONS);
+}
+
 /**
  * AddressCombobox: destination input for Send / authoring forms, with
  * autocomplete from contacts + recent send history. §29.4 + §21.6.
@@ -93,7 +104,7 @@ export const AddressCombobox = /* @__PURE__ */ forwardRef(function AddressCombob
     const containerRef = useRef(/** @type {HTMLDivElement | null} */ (null));
 
     const filtered = useMemo(
-        () => filterSuggestions(suggestions, value),
+        () => capContactSuggestions(filterSuggestions(suggestions, value)),
         [suggestions, value],
     );
 

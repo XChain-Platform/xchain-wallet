@@ -210,6 +210,7 @@ export {
     listContacts,
     findContactByAddress,
     saveContact,
+    saveContacts,
     deleteContact,
 } from './contacts.js';
 export {

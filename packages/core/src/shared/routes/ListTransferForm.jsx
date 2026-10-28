@@ -30,7 +30,7 @@ import { useSignerReady } from '../hooks/useSignerReady.js';
 import { useOwnerActionLane } from '../hooks/useOwnerActionLane.js';
 import { isUserRejection } from '../hooks/useActionConfirmFlow.js';
 import { listFormatSupport } from '../../flows/listFormatSupport.js';
-import { findListOwner } from '../../flows/listMembership.js';
+import { findListOwner, recheckListOwner } from '../../flows/listMembership.js';
 import { memoLengthError, MEMO_HINT } from '../utils/memoLimit.js';
 import { submitFailureMessage } from '../utils/submitFailureMessage.js';
 import { explorerReadFailure } from '../../sdk/explorerErrors.js';
@@ -190,6 +190,18 @@ function ListTransferFormScreen({ walletId, listRef, onBack, onDone = onBack }) 
             MEMO: trimmedMemo,
         };
         try {
+            if (typeof messaging.getListByActionIndex === 'function') {
+                const ownerCheck = await recheckListOwner({
+                    readList: (actionIndex) => messaging.getListByActionIndex({ chainId, actionIndex }),
+                    actionIndex: listActionIndex,
+                    owner,
+                });
+                if (!ownerCheck.ok) {
+                    setOwner(ownerCheck.owner);
+                    setFormError(ownerCheck.message);
+                    return;
+                }
+            }
             const next = await lane.run({
                 actionData: { action: 'LIST', params },
                 submitExtra: { params },

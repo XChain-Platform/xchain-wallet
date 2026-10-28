@@ -308,4 +308,20 @@ describe('ListShareForm', () => {
         expect(screen.getByLabelText('Pay protocol fee in BTC instead of XCHAIN').disabled).toBe(true);
         expect(screen.getByRole('button', { name: 'Review' }).disabled).toBe(true);
     });
+
+    it('stops before signing when the list changed owner after the form opened', async () => {
+        const messaging = mount();
+        fireEvent.change(await screen.findByLabelText('Type SHARE to confirm'), {
+            target: { value: 'SHARE' },
+        });
+        messaging.getListByActionIndex.mockResolvedValueOnce(baseDetail({
+            state: { owner: ROOT_OWNER, edit_resolution_active: true, current_list: ['bc1qmember'] },
+        }));
+        fireEvent.click(screen.getByRole('button', { name: 'Review' }));
+
+        expect(await screen.findByText(
+            'This list has a different owner than when this screen opened. Review the owner and try again.',
+        )).toBeTruthy();
+        expect(messaging.composeForConfirm).not.toHaveBeenCalled();
+    });
 });

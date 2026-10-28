@@ -2535,6 +2535,10 @@ export function findContactByAddress(req) {
 export function saveContact(opts) {
     return /** @type {any} */ (sendMessage('contacts.save', opts));
 }
+/** @param {{ records: object[] }} opts */
+export function saveContacts(opts) {
+    return /** @type {any} */ (sendMessage('contacts.saveMany', opts));
+}
 /** @param {{ id: string }} req */
 export function deleteContact(req) {
     return /** @type {any} */ (sendMessage('contacts.delete', req));

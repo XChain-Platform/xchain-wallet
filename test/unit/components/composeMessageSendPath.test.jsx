@@ -383,3 +383,23 @@ describe('the message is funded from the active address (issue #11)', () => {
             .toBe(ltcActive.id);
     });
 });
+
+describe('a recipient key that does not belong to the address', () => {
+    it('says the key does not match the address instead of offering a retry', async () => {
+        const mismatch = Object.assign(
+            new Error(`messageAction: the public key returned for ${RECIPIENT} does not derive to that address.`),
+            { name: 'PubkeyMismatchError', address: RECIPIENT },
+        );
+        const messaging = stubMessaging({
+            composeMessageForConfirm: vi.fn(() => Promise.reject(mismatch)),
+        });
+        const utils = await openFilledForm(messaging);
+
+        await pressSend(utils);
+
+        expect(messaging.composeMessageForConfirm).toHaveBeenCalledTimes(1);
+        expect(alertText(utils)).toMatch(/doesn't belong to their address, so nothing was signed or sent/);
+        expect(alertText(utils)).not.toMatch(/Something went wrong/);
+        expect(utils.queryByTestId('confirm-modal')).toBeNull();
+    });
+});

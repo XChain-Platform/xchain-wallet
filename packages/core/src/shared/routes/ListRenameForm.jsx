@@ -39,7 +39,7 @@ import {
     listMetaInputError,
     utf8ByteLength,
 } from '../../flows/listMetaInput.js';
-import { findListOwner } from '../../flows/listMembership.js';
+import { findListOwner, recheckListOwner } from '../../flows/listMembership.js';
 import { memoLengthError, MEMO_HINT } from '../utils/memoLimit.js';
 import { submitFailureMessage } from '../utils/submitFailureMessage.js';
 import { neutralizeControlText } from '../utils/textHardening.js';
@@ -261,6 +261,18 @@ function ListRenameFormScreen({ walletId, listRef, onBack, onDone = onBack }) {
             MEMO: trimmedMemo,
         };
         try {
+            if (typeof owner === 'string' && owner) {
+                const ownerCheck = await recheckListOwner({
+                    readList: (actionIndex) => messaging.getListByActionIndex({ chainId, actionIndex }),
+                    actionIndex: listActionIndex,
+                    owner,
+                });
+                if (!ownerCheck.ok) {
+                    setOwner(ownerCheck.owner);
+                    setFormError(ownerCheck.message);
+                    return;
+                }
+            }
             const next = await lane.run({
                 actionData: { action: 'LIST', params },
                 encoderOpts: { payFeeInNativeCoin: nativeFee.flag || undefined },
