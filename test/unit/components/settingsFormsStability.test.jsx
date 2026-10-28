@@ -184,7 +184,7 @@ describe('settings form validation', () => {
     it('uses shared wrapping rows and describes language and currency effects', () => {
         render(<LanguageRegionSection />);
 
-        const languageRow = screen.getByLabelText('Language').parentElement;
+        const languageRow = screen.getByLabelText('Language').closest('[data-settings-control]').parentElement;
         expect(languageRow.style.flexWrap).toBe('wrap');
         expect(screen.queryByText(/language used for wallet navigation/)).toBeNull();
         expect(screen.getByText('Changes estimates, not asset balances.')).toBeTruthy();

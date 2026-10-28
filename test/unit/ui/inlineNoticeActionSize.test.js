@@ -21,7 +21,9 @@ describe('inline actions read at the surrounding text size', () => {
         expect(rule(read('Button.module.css'), '.link')).toMatch(/font-size:\s*inherit/);
     });
 
-    it('sizes the notice recovery action at the notice text size', () => {
-        expect(rule(read('StatusMessage.module.css'), '.recovery')).toMatch(/font-size:\s*inherit/);
+    it('draws the notice recovery action as the small shared Button, not a hand-sized one', () => {
+        const jsx = read('StatusMessage.jsx');
+        expect((jsx.match(/size="sm"/g) || []).length).toBeGreaterThanOrEqual(2);
+        expect(rule(read('StatusMessage.module.css'), '.recovery')).not.toMatch(/font-size|min-height|padding|border/);
     });
 });

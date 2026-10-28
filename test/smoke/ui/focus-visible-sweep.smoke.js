@@ -81,7 +81,6 @@ const targets = [
     [join(components, 'QueuedBroadcastBanner.module.css'), 'broadcastBtn'],
     [join(components, 'QueuedBroadcastBanner.module.css'), 'discardBtn'],
     [join(components, 'RawPsbtViewer.module.css'), 'toggle'],
-    [join(components, 'RawPsbtViewer.module.css'), 'copyBtn'],
     [join(components, 'ReachabilityBanner.module.css'), 'detailsToggle'],
     [join(ui, 'FeeSelector.module.css'), 'slider'],
 ];

@@ -24,7 +24,7 @@
 // read fails or that has no members is left out.
 
 import { useEffect, useMemo, useState } from 'react';
-import { Button, EmptyState, ListPage, ListRow, PageHeader, Screen, StatusMessage } from '@xchain-wallet/core/ui';
+import { Button, EmptyState, Input, ListPage, ListRow, PageHeader, Screen, StatusMessage } from '@xchain-wallet/core/ui';
 import { contactsPickerStyles as styles } from './ContactsPickerScreen.jsx';
 import { currentListItems, currentListMemberCount } from '../../flows/listMembership.js';
 import { listLabel } from '../utils/listLabel.js';
@@ -232,8 +232,9 @@ export function ListPickerScreen({
     return (
         <Screen variant={variant} header={header}>
             <ListPage toolbar={(
-                <input
+                <Input
                     type="search"
+                    size="md"
                     enterKeyHint="search"
                     autoCapitalize="off"
                     role="textbox"

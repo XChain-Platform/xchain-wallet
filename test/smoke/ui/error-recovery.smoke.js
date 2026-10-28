@@ -36,8 +36,8 @@ assert.ok(/recovery\.label/.test(statusSrc),
     'StatusMessage reads recovery.label');
 assert.ok(/recovery\.onAction/.test(statusSrc),
     'StatusMessage reads recovery.onAction');
-assert.ok(/<button[\s\S]*?type="button"[\s\S]*?aria-label/.test(statusSrc),
-    'StatusMessage recovery renders a real <button> with aria-label');
+assert.ok(/<Button[\s\S]*?type="button"[\s\S]*?aria-label/.test(statusSrc),
+    'StatusMessage recovery renders the shared Button with aria-label');
 assert.ok(/Promise\.resolve\(recovery\.onAction\(\)\)\.catch/.test(statusSrc),
     'StatusMessage swallows recovery.onAction rejections so the message stays visible');
 

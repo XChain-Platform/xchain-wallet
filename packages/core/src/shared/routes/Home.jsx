@@ -1572,12 +1572,13 @@ export function Home({ onLocked, onResumeConfirm, onSend, onReceive, onSwap, onE
                 <div className={styles.actionsFull}>
                     <Button
                         variant="secondary"
+                        className={styles.quickAction}
                         block={!isFull}
                         onClick={() => runNetworkAction('Creating a token', onCreateToken)}
                         disabled={!onCreateToken}
                         aria-disabled={!networkActionsAvailable ? 'true' : undefined}
                         title={!networkActionsAvailable ? t('home.createTokenOffline') : undefined}
-                        icon={<Icon.TokenIcon />}
+                        icon={<span className={styles.quickActionIcon}><Icon.TokenIcon /></span>}
                     >
                         {t('home.createToken')}
                     </Button>
@@ -1586,19 +1587,21 @@ export function Home({ onLocked, onResumeConfirm, onSend, onReceive, onSwap, onE
                     {onMarkets ? (
                         <Button
                             variant="secondary"
+                            className={styles.quickAction}
                             block={!isFull}
                             onClick={onMarkets}
-                            icon={<Icon.MarketIcon />}
+                            icon={<span className={styles.quickActionIcon}><Icon.MarketIcon /></span>}
                         >
                             {t('home.markets')}
                         </Button>
                     ) : null}
                     <Button
                         variant="secondary"
+                        className={styles.quickAction}
                         block={!isFull}
                         onClick={onMessaging}
                         disabled={!onMessaging}
-                        icon={<Icon.MessageIcon />}
+                        icon={<span className={styles.quickActionIcon}><Icon.MessageIcon /></span>}
                     >
                         {t('home.messaging')}
                         {messagingUnread > 0 ? (
@@ -1620,28 +1623,31 @@ export function Home({ onLocked, onResumeConfirm, onSend, onReceive, onSwap, onE
                     </Button>
                     <Button
                         variant="secondary"
+                        className={styles.quickAction}
                         block={!isFull}
                         onClick={onHistory}
                         disabled={!onHistory}
-                        icon={<Icon.HistoryIcon />}
+                        icon={<span className={styles.quickActionIcon}><Icon.HistoryIcon /></span>}
                     >
                         {t('history.title')}
                     </Button>
                     <Button
                         variant="secondary"
+                        className={styles.quickAction}
                         block={!isFull}
                         onClick={onAddresses}
                         disabled={!onAddresses}
-                        icon={<Icon.AddressIcon />}
+                        icon={<span className={styles.quickActionIcon}><Icon.AddressIcon /></span>}
                     >
                         {t('home.addresses')}
                     </Button>
                     {onContracts ? (
                         <Button
                             variant="secondary"
+                            className={styles.quickAction}
                             block={!isFull}
                             onClick={onContracts}
-                            icon={<Icon.ContractIcon />}
+                            icon={<span className={styles.quickActionIcon}><Icon.ContractIcon /></span>}
                         >
                             {t('home.contracts')}
                         </Button>
@@ -1649,19 +1655,21 @@ export function Home({ onLocked, onResumeConfirm, onSend, onReceive, onSwap, onE
                     {onStaking ? (
                         <Button
                             variant="secondary"
+                            className={styles.quickAction}
                             block={!isFull}
                             onClick={onStaking}
-                            icon={<Icon.StakeIcon />}
+                            icon={<span className={styles.quickActionIcon}><Icon.StakeIcon /></span>}
                         >
                             {t('home.staking')}
                         </Button>
                     ) : null}
                     <Button
                         variant="secondary"
+                        className={styles.quickAction}
                         block={!isFull}
                         onClick={onActions}
                         disabled={!onActions}
-                        icon={<Icon.MoreIcon />}
+                        icon={<span className={styles.quickActionIcon}><Icon.MoreIcon /></span>}
                     >
                         {t('actionsMenu.more')}
                     </Button>

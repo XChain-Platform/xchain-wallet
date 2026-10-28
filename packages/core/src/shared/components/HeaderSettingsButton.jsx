@@ -10,7 +10,7 @@
 
 import { Suspense, lazy, useCallback, useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { Button, Icon, Spinner } from '@xchain-wallet/core/ui';
+import { Button, Icon, Select, Spinner } from '@xchain-wallet/core/ui';
 // The popover and its confirm open only after a click, so they load on demand.
 import {
     ConfirmModalOnDemand as ConfirmModal,
@@ -305,7 +305,8 @@ export function HeaderSettingsButton({
 
                     {showActiveNetwork ? (
                         <Section title={t('settings.network.label')}>
-                            <select
+                            <Select
+                                size="sm"
                                 className={styles.networkSelect}
                                 value={currentNetwork}
                                 disabled={switchingNetwork || Boolean(confirmDialog.request)}
@@ -315,7 +316,7 @@ export function HeaderSettingsButton({
                                 {networkOptions.map((option) => (
                                     <option key={option.value} value={option.value}>{option.label}</option>
                                 ))}
-                            </select>
+                            </Select>
                             {switchingNetwork ? (
                                 <Spinner size="sm" label={t('settings.network.switching')} />
                             ) : null}

@@ -9,6 +9,7 @@
 // contact legal@dankest.llc.
 
 import { useEffect, useRef, useState } from 'react';
+import { Button, Textarea } from '@xchain-wallet/core/ui';
 import { copyText } from '../clipboard.js';
 import styles from './RawPsbtViewer.module.css';
 import { useHapticFeedback } from '../hooks/useHaptic.js';
@@ -121,7 +122,7 @@ export function RawPsbtViewer({ developerMode, psbtHex, actionFields }) {
                 {hasPsbt ? (
                     <section className={styles.section} aria-label={t('components.watcherResultPanel.unsignedTransactionHex2')}>
                         <p className={styles.label}>{t('components.watcherResultPanel.unsignedTransactionHex2')}</p>
-                        <textarea
+                        <Textarea
                             className={styles.hex}
                             readOnly
                             value={psbtHex}
@@ -129,14 +130,17 @@ export function RawPsbtViewer({ developerMode, psbtHex, actionFields }) {
                             spellCheck={false}
                             aria-label={t('components.watcherResultPanel.unsignedTransactionHex2')}
                         />
-                        <button
+                        <Button
                             type="button"
+                            variant="secondary"
+                            size="sm"
+                            icon={null}
                             className={styles.copyBtn}
                             onClick={() => handleCopy('psbt', psbtHex)}
                             aria-live="polite"
                         >
                             {copyLabel('psbt', 'unsigned transaction hex')}
-                        </button>
+                        </Button>
                     </section>
                 ) : null}
 
@@ -144,14 +148,17 @@ export function RawPsbtViewer({ developerMode, psbtHex, actionFields }) {
                     <section className={styles.section} aria-label={t('components.rawPsbtViewer.actionFields')}>
                         <p className={styles.label}>{t('components.rawPsbtViewer.actionFields')}</p>
                         <pre className={styles.json}>{fieldsJson}</pre>
-                        <button
+                        <Button
                             type="button"
+                            variant="secondary"
+                            size="sm"
+                            icon={null}
                             className={styles.copyBtn}
                             onClick={() => handleCopy('fields', fieldsJson)}
                             aria-live="polite"
                         >
                             {copyLabel('fields', 'action fields')}
-                        </button>
+                        </Button>
                     </section>
                 ) : null}
 

@@ -20,16 +20,15 @@
 //
 
 import { useState } from 'react';
+import { Input, Select } from '@xchain-wallet/core/ui';
 import { useSettings } from '../../hooks/useSettings.js';
 import { isNativeShell } from '../../nativeShell.js';
 import { useMessaging } from '../../useMessaging.js';
 import {
-    INPUT,
     ROW,
     ROW_HINT,
     ROW_TITLE,
     ROW_LABEL,
-    SELECT,
     STACK,
     SettingsLoadError,
     Status,
@@ -83,21 +82,22 @@ export function SafetySection() {
             <PanicSaveNotice />
             <div style={ROW}>
                 <span style={ROW_TITLE}>{t('settings.safety.autoLockTimeout')}</span>
-                <select
-                    value={String(autolockValue)}
-                    onChange={(e) => onAutolockChange(e.target.value)}
-                    aria-label={t('settings.safety.autoLockTimeout')}
-                    style={SELECT}
-                >
-                    {AUTOLOCK_OPTIONS.map((o) => (
-                        <option key={o.value} value={String(o.value)}>{autolockOptionLabel(o, shell)}</option>
-                    ))}
-                    {!AUTOLOCK_OPTIONS.some((o) => o.value === settings.autolockMinutes) ? (
-                        <option value={String(settings.autolockMinutes)}>
-                            {t('settings.safety.minutesCustom', { autolockMinutes: settings.autolockMinutes })}
-                        </option>
-                    ) : null}
-                </select>
+                <div data-settings-control="">
+                    <Select
+                        value={String(autolockValue)}
+                        onChange={(e) => onAutolockChange(e.target.value)}
+                        aria-label={t('settings.safety.autoLockTimeout')}
+                    >
+                        {AUTOLOCK_OPTIONS.map((o) => (
+                            <option key={o.value} value={String(o.value)}>{autolockOptionLabel(o, shell)}</option>
+                        ))}
+                        {!AUTOLOCK_OPTIONS.some((o) => o.value === settings.autolockMinutes) ? (
+                            <option value={String(settings.autolockMinutes)}>
+                                {t('settings.safety.minutesCustom', { autolockMinutes: settings.autolockMinutes })}
+                            </option>
+                        ) : null}
+                    </Select>
+                </div>
             </div>
             <div style={ROW}>
                 <div style={{ display: 'flex', flexDirection: 'column', flex: 1, minWidth: 0 }}>
@@ -106,36 +106,38 @@ export function SafetySection() {
                         {t('settings.safety.forNativeCoinSendsAbove')}
                     </span>
                 </div>
-                <input
-                    key={String(settings.grace.testSendThresholdSats)}
-                    type="text"
-                    inputMode="numeric"
-                    enterKeyHint="done"
-                    autoComplete="off"
-                    defaultValue={settings.grace.testSendThresholdSats}
-                    onBlur={(e) => {
-                        const raw = e.target.value.trim();
-                        if (!/^\d+$/.test(raw)) {
-                            setThresholdError('Enter a whole number of sats. Use 0 to turn the warning off.');
-                            return;
-                        }
-                        setThresholdError(null);
-                        const threshold = raw.replace(/^0+(?=\d)/, '');
-                        update({ grace: { testSendThresholdSats: threshold } }).catch((err) => {
-                            setThresholdError('Could not save the test-send warning threshold. Try again.');
-                            // eslint-disable-next-line no-console
-                            console.error('grace.testSendThresholdSats update failed:', err);
-                        });
-                    }}
-                    onKeyDown={(e) => { if (e.key === 'Enter') e.currentTarget.blur(); }}
-                    placeholder={t('settings.safety.0NoWarning')}
-                    aria-label={t('settings.safety.testSendWarningThresholdSats')}
-                    aria-invalid={thresholdError ? 'true' : undefined}
-                    aria-describedby={thresholdError
-                        ? 'test-send-threshold-hint test-send-threshold-error'
-                        : 'test-send-threshold-hint'}
-                    style={{ ...INPUT, width: 140, textAlign: 'right' }}
-                />
+                <div data-settings-control="">
+                    <Input
+                        key={String(settings.grace.testSendThresholdSats)}
+                        type="text"
+                        inputMode="numeric"
+                        enterKeyHint="done"
+                        autoComplete="off"
+                        defaultValue={settings.grace.testSendThresholdSats}
+                        onBlur={(e) => {
+                            const raw = e.target.value.trim();
+                            if (!/^\d+$/.test(raw)) {
+                                setThresholdError('Enter a whole number of sats. Use 0 to turn the warning off.');
+                                return;
+                            }
+                            setThresholdError(null);
+                            const threshold = raw.replace(/^0+(?=\d)/, '');
+                            update({ grace: { testSendThresholdSats: threshold } }).catch((err) => {
+                                setThresholdError('Could not save the test-send warning threshold. Try again.');
+                                // eslint-disable-next-line no-console
+                                console.error('grace.testSendThresholdSats update failed:', err);
+                            });
+                        }}
+                        onKeyDown={(e) => { if (e.key === 'Enter') e.currentTarget.blur(); }}
+                        placeholder={t('settings.safety.0NoWarning')}
+                        aria-label={t('settings.safety.testSendWarningThresholdSats')}
+                        aria-invalid={thresholdError ? 'true' : undefined}
+                        aria-describedby={thresholdError
+                            ? 'test-send-threshold-hint test-send-threshold-error'
+                            : 'test-send-threshold-hint'}
+                        style={{ width: 140, textAlign: 'right' }}
+                    />
+                </div>
             </div>
             {thresholdError ? (
                 <Status id="test-send-threshold-error" text={thresholdError} tone="error" />

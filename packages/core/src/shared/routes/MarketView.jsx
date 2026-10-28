@@ -320,7 +320,7 @@ export function MarketView({ walletId, chainId, tick1, tick2, onBack, onSwap }) 
                 className={receivePickerStyles.kindSegments}
                 role="tablist"
                 aria-label={t('market.panels')}
-                style={{ width: '100%', flexShrink: 1 }}
+                style={{ width: '100%' }}
             >
                 {[
                     { id: 'book',    label: 'Book' },

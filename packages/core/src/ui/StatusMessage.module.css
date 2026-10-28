@@ -7,7 +7,7 @@
     gap: var(--xc-space-2);
     margin: var(--xc-space-2) 0;
     padding: var(--xc-space-2) var(--xc-space-3);
-    border-radius: var(--xc-radius-sm);
+    border-radius: var(--xc-card-radius);
     font-size: var(--xc-text-sm);
     line-height: 1.4;
 }
@@ -66,53 +66,11 @@
     max-width: none;
 }
 
+/* The action is the kit secondary Button (size sm); the notice only places it. */
 .recovery {
     flex: 0 0 auto;
     margin-inline-start: auto;
-    background: transparent;
-    color: inherit;
-    border: 1px solid currentColor;
-    border-radius: var(--xc-radius-sm);
-    padding: 2px var(--xc-space-2);
-    /* The action reads at the notice text size, not a step below it. */
-    font-size: inherit;
-    font-weight: 600;
-    cursor: pointer;
-    line-height: 1.2;
     white-space: nowrap;
-    /* State the WCAG 2.2 AA 2.5.8 pointer-target floor instead of
-       inheriting it from whichever line box the platform font produces. */
-    min-height: var(--xc-tap-min);
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    position: relative;
-}
-
-/* The notice action keeps its look. On a touch screen a transparent layer grows the tap area to 44px, centred on the control, without changing its painted size (the Button .sm pattern). */
-@media (pointer: coarse), (hover: none) {
-    .recovery::before {
-        content: '';
-        position: absolute;
-        inset-block-start: min(0px, calc(50% - var(--xc-control-hit-min, 24px) / 2));
-        inset-inline-start: min(0px, calc(50% - var(--xc-control-hit-min, 24px) / 2));
-        width: max(100%, var(--xc-control-hit-min, 24px));
-        height: max(100%, var(--xc-control-hit-min, 24px));
-    }
-}
-
-.recovery:disabled {
-    cursor: wait;
-    opacity: 0.7;
-}
-
-/* A light overlay on a dark notice drags the label below 4.5:1, so the
-   hover tint is a faint share of the label's own colour instead. */
-.recovery:hover,
-.recovery:focus-visible {
-    background: color-mix(in srgb, currentColor 8%, transparent);
-    outline: 2px solid currentColor;
-    outline-offset: 1px;
 }
 
 /* The variant selectors are compound (.row.error, not .error) on purpose.

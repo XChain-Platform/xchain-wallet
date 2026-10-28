@@ -32,7 +32,7 @@
 
 import { useEffect, useMemo, useRef, useState } from 'react';
 import {
-    Button, ChainPicker, EmptyState, FormPage, Icon, PageHeader, Screen, StatusMessage,
+    Button, ChainPicker, EmptyState, FormPage, Icon, Input, PageHeader, Screen, Select, StatusMessage,
 } from '@xchain-wallet/core/ui';
 import { registry as registryLib, flows as flowsLib } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
@@ -258,64 +258,52 @@ export function AddAddressModal({ walletId, accountId, chainIds, onClose, onGene
                             hideNetworkKind
                             disabled={busy}
                         />
-                        <label className={styles.field}>
-                            <span className={styles.label}>Type</span>
-                            <select
-                                className={styles.select}
-                                value={effectiveAddressType}
-                                onChange={(e) => { setAddressType(e.target.value); setError(null); }}
-                                disabled={busy || !selected}
-                            >
-                                {offeredTypes.map((t) => {
-                                    const hint = addressTypeHint(selected, t);
-                                    return (
-                                        <option key={t} value={t}>
-                                            {t.toUpperCase()}{hint ? ` (starts with ${hint})` : ''}
-                                        </option>
-                                    );
-                                })}
-                            </select>
-                        </label>
+                        <Select
+                            label="Type"
+                            value={effectiveAddressType}
+                            onChange={(e) => { setAddressType(e.target.value); setError(null); }}
+                            disabled={busy || !selected}
+                        >
+                            {offeredTypes.map((t) => {
+                                const hint = addressTypeHint(selected, t);
+                                return (
+                                    <option key={t} value={t}>
+                                        {t.toUpperCase()}{hint ? ` (starts with ${hint})` : ''}
+                                    </option>
+                                );
+                            })}
+                        </Select>
                         {typeof messaging.generateDispenserAddress === 'function' ? (
-                            <label className={styles.field}>
-                                <span className={styles.label}>Purpose</span>
-                                <select
-                                    className={styles.select}
-                                    value={purpose}
-                                    onChange={(e) => {
-                                        setPurpose(/** @type {'receive' | 'dispenser'} */ (e.target.value));
-                                        setError(null);
-                                    }}
-                                    disabled={busy}
-                                    data-testid="add-address-purpose"
-                                >
-                                    <option value="receive">Receive</option>
-                                    <option value="dispenser">Dispenser</option>
-                                </select>
-                                {purpose === 'dispenser' ? (
-                                    <span className={styles.hint}>
-                                        Listed under Misc on the Addresses page and offered when opening a dispenser.
-                                    </span>
-                                ) : null}
-                            </label>
-                        ) : null}
-                        <label className={styles.field}>
-                            <span className={styles.label}>Number of addresses</span>
-                            <input
-                                className={styles.select}
-                                type="number"
-                                inputMode="numeric"
-                                enterKeyHint="go"
-                                autoComplete="off"
-                                aria-label="Number of addresses"
-                                min={1}
-                                max={MAX_ADDRESSES}
-                                value={count}
-                                onChange={(e) => { setCount(e.target.value); setError(null); }}
-                                onWheel={blurNumberInputOnWheel}
+                            <Select
+                                label="Purpose"
+                                value={purpose}
+                                onChange={(e) => {
+                                    setPurpose(/** @type {'receive' | 'dispenser'} */ (e.target.value));
+                                    setError(null);
+                                }}
                                 disabled={busy}
-                            />
-                        </label>
+                                data-testid="add-address-purpose"
+                                hint={purpose === 'dispenser'
+                                    ? 'Listed under Misc on the Addresses page and offered when opening a dispenser.'
+                                    : undefined}
+                            >
+                                <option value="receive">Receive</option>
+                                <option value="dispenser">Dispenser</option>
+                            </Select>
+                        ) : null}
+                        <Input
+                            label="Number of addresses"
+                            type="number"
+                            inputMode="numeric"
+                            enterKeyHint="go"
+                            autoComplete="off"
+                            min={1}
+                            max={MAX_ADDRESSES}
+                            value={count}
+                            onChange={(e) => { setCount(e.target.value); setError(null); }}
+                            onWheel={blurNumberInputOnWheel}
+                            disabled={busy}
+                        />
                 </FormPage>
             )}
         </Screen>

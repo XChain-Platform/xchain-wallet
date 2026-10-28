@@ -73,11 +73,11 @@ describe('Chrome 102 shared form inputs', () => {
     });
 
     it('classifies native integer, amount, and fee-rate keyboards', () => {
-        // The Ads settings fields moved to the kit Input, which forwards the
+        // The Ads, Fees, Safety, Privacy and undo-send fields moved to the kit Input, which forwards the
         // same keyboard attributes, so that file's kit Inputs count as well.
         const ADS = 'packages/core/src/shared/components/settings/AdsSection.jsx';
         const classified = controls.filter(({ file, tag, attributes }) => (
-            (tag === 'input' || (tag === 'Input' && file.endsWith(ADS)))
+            (tag === 'input' || (tag === 'Input' && (file.endsWith(ADS) || /\/settings\/(?:Fees|Safety|Privacy)Section\.jsx$|\/settings\/UndoSendRow\.jsx$/.test(file))))
             && ['numeric', 'decimal'].includes(attributes.inputMode)
         ));
         const modesByFile = Object.groupBy(classified, ({ file }) => file);
@@ -93,7 +93,7 @@ describe('Chrome 102 shared form inputs', () => {
         expect(inputModes('packages/core/src/ui/FeeSelector.jsx'))
             .toEqual(['decimal', 'decimal']);
 
-        expect(classified).toHaveLength(8);
+        expect(classified).toHaveLength(7);
         for (const { file, attributes } of classified) {
             expect(attributes.autoComplete, `${file}: autocomplete`).toBe('off');
             expect(['done', 'go'], `${file}: enterKeyHint`).toContain(attributes.enterKeyHint);

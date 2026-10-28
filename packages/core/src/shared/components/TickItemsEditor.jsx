@@ -9,7 +9,7 @@
 // contact legal@dankest.llc.
 
 import { useEffect, useId, useMemo, useRef, useState } from 'react';
-import { Button, StatusMessage } from '@xchain-wallet/core/ui';
+import { Button, Select, StatusMessage, Textarea } from '@xchain-wallet/core/ui';
 import { registry as registryLib } from '@xchain-wallet/core';
 import { fetchTokenInfo } from '../hooks/useTokenInfo.js';
 import { tickLookupVerdict } from '../utils/listTickItems.js';
@@ -214,10 +214,9 @@ export function TickItemsEditor({
 
     return (
         <>
-            <label className={styles.pickerLabel} htmlFor={controlId}>{t('components.tickItemsEditor.tokensOnePerLine')}</label>
-            <textarea
+            <Textarea
                 id={controlId}
-                className={styles.picker}
+                label={t('components.tickItemsEditor.tokensOnePerLine')}
                 value={value}
                 onChange={(e) => onChange(e.target.value)}
                 rows={6}
@@ -259,7 +258,8 @@ export function TickItemsEditor({
                             >
                                 <code className={styles.tickItemName}>{rest}</code>
                                 {coinQualified ? (
-                                    <select
+                                    <Select
+                                        size="sm"
                                         className={styles.tickItemCoin}
                                         aria-label={t('components.tickItemsEditor.coinFor', { accessibleItem })}
                                         value={coin}
@@ -268,7 +268,7 @@ export function TickItemsEditor({
                                         {LIST_TICK_COINS.map((option) => (
                                             <option key={option} value={option}>{option}</option>
                                         ))}
-                                    </select>
+                                    </Select>
                                 ) : null}
                                 <div className={styles.tickItemActions}>
                                     <Button

@@ -23,6 +23,7 @@
 //   - RBF-by-default toggle.
 
 import { useState } from 'react';
+import { Input, Select } from '@xchain-wallet/core/ui';
 import { flows as flowsLib, registry as registryLib } from '@xchain-wallet/core';
 import { resolveFeeConfig } from '../../../schemas/settings.js';
 import {
@@ -38,8 +39,6 @@ import {
     normalizeLocalizedDecimal,
 } from '../../utils/amountFormat.js';
 import {
-    INPUT,
-    SELECT,
     STACK,
     SettingsFieldRow,
     SettingsLoadError,
@@ -140,19 +139,18 @@ export function FeesSection() {
                             hint={index === 0 ? t('settings.fees.chooseTheBalanceBetweenConfirmation') : undefined}
                             embedded
                         >
-                            <select
+                            <Select
                                 value={fees.strategy}
                                 onChange={(e) => onPatch(chainId, {
                                     strategy: e.target.value,
                                     customSatsPerKb: e.target.value === 'custom' ? (fees.customSatsPerKb ?? seedRate) : null,
                                 })}
                                 aria-label={t('settings.fees.feeStrategy2', { displayName })}
-                                style={SELECT}
                             >
                                 {STRATEGIES.map((s) => (
                                     <option key={s.value} value={s.value}>{s.label}</option>
                                 ))}
-                            </select>
+                            </Select>
                         </SettingsFieldRow>
 
                         {fees.strategy === 'custom' ? (
@@ -161,7 +159,7 @@ export function FeesSection() {
                                 hint={t('settings.fees.enterTheRateIn', { unit })}
                                 embedded
                             >
-                                <input
+                                <Input
                                     id={`fee-rate-${chainId}`}
                                     type="text"
                                     inputMode="decimal"
@@ -238,7 +236,7 @@ export function FeesSection() {
                                     aria-invalid={rateErrors[chainId] ? 'true' : undefined}
                                     aria-errormessage={rateErrors[chainId] ? rateErrorId : undefined}
                                     aria-describedby={rateErrors[chainId] ? rateErrorId : undefined}
-                                    style={{ ...INPUT, width: 120, textAlign: 'right' }}
+                                    style={{ width: 120, textAlign: 'right' }}
                                 />
                             </SettingsFieldRow>
                         ) : null}

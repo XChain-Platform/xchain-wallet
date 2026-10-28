@@ -22,6 +22,7 @@
 // the cheapest robust path to a fully consistent post-switch UI.
 
 import { useState } from 'react';
+import { Select } from '@xchain-wallet/core/ui';
 import { useSettings } from '../../hooks/useSettings.js';
 import { useConfirmModal } from '../../hooks/useConfirmModal.js';
 import { useMessaging } from '../../useMessaging.js';
@@ -32,7 +33,7 @@ import {
     persistActiveNetwork,
 } from '../../utils/activeNetworkSwitch.js';
 import { userFacingMessage } from '../../utils/userFacingMessage.js';
-import { ROW, SELECT, SettingsLoadError, Status } from './_settingsPrimitives.jsx';
+import { ROW, SettingsLoadError, Status } from './_settingsPrimitives.jsx';
 import { ConfirmModal } from '../ConfirmModal.jsx';
 import { t } from '../../../i18n/index.js';
 import '../../../i18n/locales/en/settings.js';
@@ -87,17 +88,18 @@ export function NetworkSection({ activeWallet, reload = reloadPage } = {}) {
         <>
             <div style={ROW}>
                 <span style={{ color: 'var(--xc-text-muted)' }}>{t('settings.network.label')}</span>
-                <select
-                    value={current}
-                    onChange={(e) => onChange(e.target.value)}
-                    aria-label={t('settings.network.activeLabel')}
-                    style={SELECT}
-                    disabled={switching || Boolean(confirmDialog.request)}
-                >
-                    {options.map((opt) => (
-                        <option key={opt.value} value={opt.value}>{opt.label}</option>
-                    ))}
-                </select>
+                <div data-settings-control="">
+                    <Select
+                        value={current}
+                        onChange={(e) => onChange(e.target.value)}
+                        aria-label={t('settings.network.activeLabel')}
+                        disabled={switching || Boolean(confirmDialog.request)}
+                    >
+                        {options.map((opt) => (
+                            <option key={opt.value} value={opt.value}>{opt.label}</option>
+                        ))}
+                    </Select>
+                </div>
             </div>
             {switching ? <Status text={t('settings.network.switching')} /> : null}
             {switchError ? <Status text={switchError} tone="error" /> : null}

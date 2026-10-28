@@ -14,6 +14,7 @@ import {
     FieldNote,
     FormPage,
     FormSection,
+    Select,
     StatusMessage,
 } from '@xchain-wallet/core/ui';
 import { t } from '../../i18n/index.js';
@@ -100,21 +101,18 @@ export function MultisigCosignerShare({ walletId, addresses, networkKind }) {
             <p className={styles.hint} style={{ textAlign: 'left', margin: 'var(--xc-space-2) 0' }}>
                 {t('multisig.share.availability')}
             </p>
-            <label className={styles.pickerLabel}>
-                <span>{t('multisig.share.address')}</span>
-                <select
-                    className={styles.picker}
-                    value={addressId}
-                    onChange={(e) => setAddressId(e.target.value)}
-                >
-                    <option value="">{t('multisig.share.selectAddress')}</option>
-                    {addresses.map((a) => (
-                        <option key={a.id} value={a.id} disabled={!canShareAddress(a)}>
-                            {a.address} {a.label ? `· ${a.label}` : ''}{unavailableAddressLabel(a)}
-                        </option>
-                    ))}
-                </select>
-            </label>
+            <Select
+                label={t('multisig.share.address')}
+                value={addressId}
+                onChange={(e) => setAddressId(e.target.value)}
+            >
+                <option value="">{t('multisig.share.selectAddress')}</option>
+                {addresses.map((a) => (
+                    <option key={a.id} value={a.id} disabled={!canShareAddress(a)}>
+                        {a.address} {a.label ? `· ${a.label}` : ''}{unavailableAddressLabel(a)}
+                    </option>
+                ))}
+            </Select>
             {error ? <FieldNote variant="error">{error}</FieldNote> : null}
             {selectedInfo ? (
                 <>

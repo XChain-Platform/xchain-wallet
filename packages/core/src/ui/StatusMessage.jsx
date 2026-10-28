@@ -11,6 +11,7 @@
 import { useContext } from 'react';
 import { ShellNoticesContext } from '../shared/components/noticesRoute.js';
 import { useHideReachabilityNotice } from '../shared/components/hideReachabilityNotice.js';
+import { Button } from './Button.jsx';
 import styles from './StatusMessage.module.css';
 import { t } from '../i18n/index.js';
 
@@ -101,8 +102,11 @@ export function StatusMessage({ variant = 'status', id, children, className, det
                 ) : null}
             </div>
             {recovery && recovery.label && typeof recovery.onAction === 'function' ? (
-                <button
+                <Button
                     type="button"
+                    variant="secondary"
+                    size="sm"
+                    icon={null}
                     className={styles.recovery}
                     aria-label={recovery.ariaLabel || recovery.label}
                     disabled={recovery.disabled}
@@ -113,7 +117,7 @@ export function StatusMessage({ variant = 'status', id, children, className, det
                     }}
                 >
                     {recovery.label}
-                </button>
+                </Button>
             ) : null}
         </div>
     );
@@ -169,8 +173,11 @@ export function StatusMessageGroup({ entries }) {
                         ) : null}
                     </div>
                     {entry.recovery && entry.recovery.label && typeof entry.recovery.onAction === 'function' ? (
-                        <button
+                        <Button
                             type="button"
+                            variant="secondary"
+                            size="sm"
+                            icon={null}
                             className={styles.recovery}
                             aria-label={entry.recovery.ariaLabel || entry.recovery.label}
                             disabled={entry.recovery.disabled}
@@ -181,7 +188,7 @@ export function StatusMessageGroup({ entries }) {
                             }}
                         >
                             {entry.recovery.label}
-                        </button>
+                        </Button>
                     ) : null}
                 </div>
             ))}

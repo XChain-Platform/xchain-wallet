@@ -29,7 +29,7 @@
 // blowing up MarketView.
 
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Skeleton, StatusMessage } from '@xchain-wallet/core/ui';
+import { Select, Skeleton, StatusMessage } from '@xchain-wallet/core/ui';
 import { bucketizeMatches, PERIODS, DEFAULT_PERIOD_ID } from '../../market/bucketize.js';
 import { useMessaging } from '../useMessaging.js';
 import { sampleMatchesFor } from '../../market/sampleMarketData.js';
@@ -273,16 +273,16 @@ export function MarketChart({ chainId, tick1, tick2, demo = false, height = '120
                 <span style={{ fontSize: 'var(--xc-text-xs)', color: 'var(--xc-text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
                     {t('components.marketChart.timeframe')}
                 </span>
-                <select
+                <Select
+                    size="sm"
                     value={periodId}
                     onChange={(e) => setPeriodId(e.target.value)}
                     aria-label={t('components.marketChart.chartTimeframe')}
-                    style={{ maxWidth: '100%' }}
                 >
                     {PERIODS.map((p) => (
                         <option key={p.id} value={p.id}>{p.label}</option>
                     ))}
-                </select>
+                </Select>
             </div>
             <div
                 ref={containerRef}

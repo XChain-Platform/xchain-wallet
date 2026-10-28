@@ -17,11 +17,11 @@ const read = (file) => readFileSync(join(process.cwd(), file), 'utf8');
 // Hover and focus states that lightened a dark surface dropped their labels
 // below 4.5:1, and a kit hover fill out-ranked a route's own hover rule.
 describe('dark palette hover states', () => {
-    it('tints the notice recovery action with its own colour instead of white', () => {
+    it('draws the notice recovery action with the shared secondary Button', () => {
+        const jsx = read('packages/core/src/ui/StatusMessage.jsx');
         const css = read('packages/core/src/ui/StatusMessage.module.css');
-        const recovery = css.slice(css.indexOf('.recovery {'), css.indexOf('.recovery:hover'));
-        expect(recovery).not.toMatch(/rgba\(255,\s*255,\s*255/);
-        expect(css).toMatch(/\.recovery:focus-visible\s*\{\s*background:\s*color-mix\(in srgb, currentColor 8%, transparent\)/);
+        expect((jsx.match(/variant="secondary"/g) || []).length).toBeGreaterThanOrEqual(2);
+        expect(css).not.toMatch(/\.recovery[^{]*\{[^}]*(?:background|border|color):/);
     });
 
     it('keeps the link button free of a hover fill', () => {

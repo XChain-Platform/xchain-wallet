@@ -9,7 +9,7 @@
 // contact legal@dankest.llc.
 
 import { useState } from 'react';
-import { StatusMessage } from '@xchain-wallet/core/ui';
+import { Button, StatusMessage } from '@xchain-wallet/core/ui';
 import { t } from '../../../core/src/i18n/index.js';
 import { useExtensionWallet } from '../useExtensionWallet.js';
 import styles from './ExtensionBanner.module.css';
@@ -69,13 +69,14 @@ export function ExtensionBanner() {
                     <strong>{t('extensionBanner.activeTitle')}</strong>
                     {' '}{t('extensionBanner.activeBody')}
                 </span>
-                <button
-                    type="button"
-                    className={styles.dismiss}
+                <Button
+                    variant="secondary"
+                    size="sm"
+                    icon={null}
                     onClick={disable}
                 >
                     {t('extensionBanner.switchBack')}
-                </button>
+                </Button>
             </div>
         );
     }
@@ -91,24 +92,26 @@ export function ExtensionBanner() {
                 {' '}{t('extensionBanner.detectedBody')}
             </span>
             <span className={styles.actions}>
-                <button
-                    type="button"
-                    className={styles.accept}
+                <Button
+                    variant="primary"
+                    size="sm"
+                    icon={null}
                     onClick={enable}
                     disabled={connecting}
                 >
                     {connecting
                         ? t('extensionBanner.connecting')
                         : t('extensionBanner.useExtension')}
-                </button>
-                <button
-                    type="button"
-                    className={styles.dismiss}
+                </Button>
+                <Button
+                    variant="secondary"
+                    size="sm"
+                    icon={null}
                     onClick={dismiss}
                     aria-label={t('extensionBanner.dismissLabel')}
                 >
                     {t('extensionBanner.notNow')}
-                </button>
+                </Button>
             </span>
             {/* Its own full-width row, so the failure is not squeezed into the
                 text column beside the buttons on a phone. */}

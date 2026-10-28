@@ -23,15 +23,14 @@
 // Both fields exist on the v1 Settings schema; no migration needed.
 
 import { useRef, useState } from 'react';
+import { Input, Select } from '@xchain-wallet/core/ui';
 import { useSettings } from '../../hooks/useSettings.js';
 import { useBackHandler } from '../../../ui/backStack.js';
 import {
-    INPUT,
     ROW,
     ROW_COPY,
     ROW_HINT,
     ROW_VALUE,
-    SELECT,
     SettingsLoadError,
     STACK,
     Status,
@@ -92,12 +91,8 @@ const CONTROLS = {
     position: 'relative',
     display: 'flex',
     flexDirection: 'column',
-    alignItems: 'center',
+    alignItems: 'stretch',
     width: 'min(100%, 280px)',
-};
-const CURRENCY_INPUT = {
-    ...INPUT,
-    width: '100%',
 };
 const CURRENCY_LIST = {
     position: 'absolute',
@@ -138,7 +133,7 @@ export function LanguageRegionSection() {
     const closeCurrencyPicker = () => {
         const input = pickerInputRef.current;
         const active = document.activeElement;
-        const focusInList = Boolean(input && active && active !== input && input.parentElement?.contains(active));
+        const focusInList = Boolean(input && active && active !== input && input.closest('[data-settings-fill]')?.contains(active));
         setCurrencyPickerOpen(false);
         if (focusInList) {
             skipOpenOnFocusRef.current = true;
@@ -192,16 +187,17 @@ export function LanguageRegionSection() {
                 <div style={ROW_COPY}>
                     <span style={ROW_VALUE}>{t('settings.languageRegion.language')}</span>
                 </div>
-                <select
-                    value={settings.language}
-                    onChange={(e) => onLanguageChange(e.target.value)}
-                    aria-label={t('settings.languageRegion.language')}
-                    style={SELECT}
-                >
-                    {LANGUAGES.map((l) => (
-                        <option key={l.value} value={l.value}>{l.label}</option>
-                    ))}
-                </select>
+                <div data-settings-control="">
+                    <Select
+                        value={settings.language}
+                        onChange={(e) => onLanguageChange(e.target.value)}
+                        aria-label={t('settings.languageRegion.language')}
+                    >
+                        {LANGUAGES.map((l) => (
+                            <option key={l.value} value={l.value}>{l.label}</option>
+                        ))}
+                    </Select>
+                </div>
             </div>
             <div style={ROW}>
                 <div style={ROW_COPY}>
@@ -210,7 +206,7 @@ export function LanguageRegionSection() {
                 </div>
                 {/* Tabbing out of the field or out of any option closes the list; otherwise it stays open over the rows the focus moved to. */}
                 <div data-settings-fill="" style={CONTROLS} onBlur={closeCurrencyPickerOnFocusLeave}>
-                    <input
+                    <Input
                         ref={pickerInputRef}
                         type="search"
                         role="combobox"
@@ -243,7 +239,6 @@ export function LanguageRegionSection() {
                                 onCurrencySelect(filteredCurrencies[0].code);
                             }
                         }}
-                        style={CURRENCY_INPUT}
                     />
                     {currencyPickerOpen ? (
                         <div id="fiat-currency-options" role="listbox" aria-label={t('settings.languageRegion.supportedFiatCurrencies')} style={CURRENCY_LIST}>

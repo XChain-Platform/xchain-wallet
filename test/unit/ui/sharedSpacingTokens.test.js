@@ -457,10 +457,10 @@ it('keeps the audited component geometry on shared design tokens', () => {
         'calc(100vw - var(--xc-space-3) - var(--xc-space-3))',
     );
     expect(cssByFile['PortfolioChart.module.css']).toContain(
-        'padding: var(--xc-space-1) var(--xc-control-pad-x);',
+        'padding-inline: var(--xc-control-pad-x-sm);',
     );
     expect(cssByFile['PortfolioChart.module.css']).toContain(
-        'border-radius: var(--xc-radius-pill);',
+        'border-radius: var(--xc-control-radius);',
     );
     expect(statusModalModules.flatMap((file) => (
         undocumentedPixelGeometry(file, cssByFile[file])

@@ -46,20 +46,20 @@
     background: transparent;
     /* A visible boundary so an unselected range is recognisably a button. */
     border: 1px solid var(--xc-control-border);
-    padding: var(--xc-space-1) var(--xc-control-pad-x);
-    /* The tap-min floor keeps the compact uppercase pill accessible. */
+    padding-block: 0;
+    padding-inline: var(--xc-control-pad-x-sm);
     display: inline-flex;
     align-items: center;
     justify-content: center;
     min-width: var(--xc-tap-min);
     min-height: var(--xc-tap-min);
-    font-size: var(--xc-text-xs);
-    font-weight: 700;
-    letter-spacing: 0.04em;
+    height: var(--xc-control-h-sm);
+    font-size: var(--xc-control-font-sm);
+    font-weight: 600;
     text-transform: uppercase;
     color: var(--xc-text-muted);
     cursor: pointer;
-    border-radius: var(--xc-radius-pill);
+    border-radius: var(--xc-control-radius);
     transition: color var(--xc-transition), background var(--xc-transition);
 }
 

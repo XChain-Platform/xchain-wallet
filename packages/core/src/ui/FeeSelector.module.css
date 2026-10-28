@@ -104,6 +104,8 @@
 
 .sliderTick {
     position: absolute;
+    inset-block-start: 0;
+    block-size: 100%;
     /* `left` is set inline per stop to the thumb-center position; the
        transform centers the label on it. First/last clamp to the edges
        so they don't overflow the track. */
@@ -134,7 +136,7 @@
 }
 
 .sliderTickEta {
-    font-size: 0.6875rem;
+    font-size: var(--xc-text-xs);
     font-weight: 400;
     color: var(--xc-text-muted);
 }
@@ -163,6 +165,7 @@
 }
 
 .sliderReadout {
+    font-size: var(--xc-text-sm);
     display: flex;
     align-items: baseline;
     justify-content: space-between;
@@ -207,12 +210,15 @@
 
 .customInput {
     width: 6ch;
-    padding: 1px 4px;
-    border: 1px solid var(--xc-border);
-    border-radius: var(--xc-radius-sm);
-    background: var(--xc-bg);
+    box-sizing: border-box;
+    height: var(--xc-control-h-sm);
+    padding-block: 0;
+    padding-inline: var(--xc-control-pad-x-sm);
+    border: 1px solid var(--xc-control-border);
+    border-radius: var(--xc-control-radius);
+    background: var(--xc-surface);
     color: var(--xc-text);
-    font-size: var(--xc-text-xs);
+    font-size: var(--xc-control-font-sm);
     text-align: end;
     direction: ltr;
 }
@@ -278,7 +284,6 @@
    coin-scale decimal (e.g. 0.02500000). */
 .feeInput {
     width: 12ch;
-    font-size: var(--xc-text-sm);
 }
 
 .customUnit {

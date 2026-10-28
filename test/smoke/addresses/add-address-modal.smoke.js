@@ -27,9 +27,9 @@ const modal = readFileSync(modalPath, 'utf8');
 // of addresses.
 assert.ok(/<ChainPicker\b/.test(modal) && /label="Coin"/.test(modal),
     'modal has a Coin field rendered via ChainPicker (shows coin icons)');
-assert.ok(/>Type</.test(modal), 'modal has a Type field');
-assert.ok(/>Purpose</.test(modal), 'modal has a Purpose field');
-assert.ok(/>Number of addresses</.test(modal), 'modal has a count field');
+assert.ok(/label="Type"/.test(modal), 'modal has a Type field');
+assert.ok(/label="Purpose"/.test(modal), 'modal has a Purpose field');
+assert.ok(/label="Number of addresses"/.test(modal), 'modal has a count field');
 
 // Purpose offers receive (default) and dispenser, and only renders when
 // the shell's messaging exposes generateDispenserAddress.

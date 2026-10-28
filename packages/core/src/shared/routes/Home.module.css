@@ -33,6 +33,7 @@
 
 /* Two classes so the tile look outranks the kit Button variant whatever
    order the bundler emits the stylesheets in. */
+.actionsFull .quickAction,
 .quickActions .quickAction {
     appearance: none;
     background: var(--xc-surface-raised);
@@ -55,6 +56,7 @@
     text-align: center;
 }
 
+.actionsFull .quickAction > span:last-child,
 .quickActions .quickAction > span:last-child {
     max-width: 100%;
     overflow-wrap: anywhere;
@@ -73,15 +75,18 @@
     }
 }
 
+.actionsFull .quickAction:hover:not(:disabled),
 .quickActions .quickAction:hover:not(:disabled) {
     background: var(--xc-bg-muted);
 }
 
+.actionsFull .quickAction:focus-visible,
 .quickActions .quickAction:focus-visible {
     outline: 2px solid var(--xc-focus-ring);
     outline-offset: calc(var(--xc-space-1) / 2);
 }
 
+.actionsFull .quickAction:disabled,
 .quickActions .quickAction:disabled {
     opacity: 0.4;
     cursor: not-allowed;

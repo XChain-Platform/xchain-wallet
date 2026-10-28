@@ -17,7 +17,7 @@
 // reads on every shell, so a privacy control here always governs something.
 
 import { useState } from 'react';
-import { Button } from '@xchain-wallet/core/ui';
+import { Button, Input, Select } from '@xchain-wallet/core/ui';
 import { useSettings } from '../../hooks/useSettings.js';
 import { shellCapabilities } from '../../shellCapabilities.js';
 import { isNativeShell } from '../../nativeShell.js';
@@ -33,11 +33,9 @@ import {
     CLIPBOARD_AUTO_CLEAR_MIN,
 } from '../../../schemas/settings.js';
 import {
-    INPUT,
     ROW,
     ROW_HINT,
     ROW_VALUE,
-    SELECT,
     ToggleRow,
     SettingsLoadError,
     Status,
@@ -230,21 +228,23 @@ function ClipboardAutoClearRow({ settings, update }) {
                     {t('settings.privacy.setTo0ToKeep')}
                 </span>
             </div>
-            <input
-                type="number"
-                inputMode="numeric"
-                enterKeyHint="done"
-                autoComplete="off"
-                min={CLIPBOARD_AUTO_CLEAR_MIN}
-                max={CLIPBOARD_AUTO_CLEAR_MAX}
-                step="1"
-                value={typed ?? current}
-                onChange={onChange}
-                onBlur={() => { setTyped(null); setInputError(false); }}
-                onWheel={blurNumberInputOnWheel}
-                aria-label={t('settings.privacy.clipboardAutoClearSeconds')}
-                style={{ ...INPUT, width: '6rem' }}
-            />
+            <div data-settings-control="">
+                <Input
+                    type="number"
+                    inputMode="numeric"
+                    enterKeyHint="done"
+                    autoComplete="off"
+                    min={CLIPBOARD_AUTO_CLEAR_MIN}
+                    max={CLIPBOARD_AUTO_CLEAR_MAX}
+                    step="1"
+                    value={typed ?? current}
+                    onChange={onChange}
+                    onBlur={() => { setTyped(null); setInputError(false); }}
+                    onWheel={blurNumberInputOnWheel}
+                    aria-label={t('settings.privacy.clipboardAutoClearSeconds')}
+                    style={{ width: '6rem' }}
+                />
+            </div>
             {inputError ? (
                 <Status
                     text={t('settings.privacy.enterAWholeNumberFrom', { min: CLIPBOARD_AUTO_CLEAR_MIN, max: CLIPBOARD_AUTO_CLEAR_MAX })}
@@ -285,20 +285,19 @@ function FormDraftTtlRow({ settings, update }) {
                     {t('settings.privacy.keepInProgressSendAnd')}
                 </span>
             </div>
-            <select
-                value={current}
-                onChange={onChange}
-                aria-label={t('settings.privacy.formDraftRetention')}
-                style={{
-                    ...SELECT,
-                    width: '7.5rem',
-                }}
-            >
-                <option value={FORM_DRAFT_TTL_OFF}>{t('settings.privacy.off')}</option>
-                <option value={FORM_DRAFT_TTL_1H}>{t('settings.developer.1Hour')}</option>
-                <option value={FORM_DRAFT_TTL_24H}>{t('settings.privacy.24Hours')}</option>
-                <option value={FORM_DRAFT_TTL_7D}>{t('history.filters.last7Days')}</option>
-            </select>
+            <div data-settings-control="">
+                <Select
+                    value={current}
+                    onChange={onChange}
+                    aria-label={t('settings.privacy.formDraftRetention')}
+                    style={{ width: '7.5rem' }}
+                >
+                    <option value={FORM_DRAFT_TTL_OFF}>{t('settings.privacy.off')}</option>
+                    <option value={FORM_DRAFT_TTL_1H}>{t('settings.developer.1Hour')}</option>
+                    <option value={FORM_DRAFT_TTL_24H}>{t('settings.privacy.24Hours')}</option>
+                    <option value={FORM_DRAFT_TTL_7D}>{t('history.filters.last7Days')}</option>
+                </Select>
+            </div>
             <PrivacySaveError visible={saveError} />
         </div>
     );
