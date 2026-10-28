@@ -13,7 +13,7 @@
 // gets a plain message in the chart's place and no range tabs.
 
 import { describe, it, expect, vi, afterEach, beforeEach, beforeAll, afterAll } from 'vitest';
-import { act, render, screen, fireEvent, cleanup } from '@testing-library/react';
+import { act, render, screen, fireEvent, cleanup, within } from '@testing-library/react';
 import React from 'react';
 
 const widgetFailure = vi.hoisted(() => ({ current: null }));
@@ -291,7 +291,8 @@ describe('TokenDetail price history', () => {
     it('uses the selected currency for balances, market values, and price requests', async () => {
         const messaging = renderNativeDetail();
 
-        expect(await screen.findAllByText(/€100\.00/)).not.toHaveLength(0);
+        // 2 BTC at the live €40,000 price; the carried rate of 50 only stands in.
+        expect(await screen.findAllByText(/€80,000\.00/)).not.toHaveLength(0);
         expect(await screen.findByText('€40,000.00')).toBeTruthy();
         expect(await screen.findByText('€1.20B')).toBeTruthy();
         expect(screen.queryByText('$40,000.00')).toBeNull();
@@ -300,6 +301,16 @@ describe('TokenDetail price history', () => {
             includeSparkline: true,
             fiatCurrency: 'EUR',
         });
+    });
+
+    it('values a native holding at the live price rather than a carried or restored rate', async () => {
+        // A reload restores the route with the rate the balance row had then.
+        renderNativeDetail();
+        const hero = await screen.findByRole('region', { name: 'BTC balance' });
+
+        await screen.findByText('€40,000.00');
+        expect(within(hero).getByText(/€80,000\.00/)).toBeTruthy();
+        expect(within(hero).queryByText(/€100\.00/)).toBeNull();
     });
 
     it('shows a message and no synthesized line for a real wallet', async () => {
@@ -312,6 +323,18 @@ describe('TokenDetail price history', () => {
         expect(balance.textContent).not.toContain('USD');
         expect(screen.queryByRole('img', { name: /^Price trend/ })).toBeNull();
         expect(screen.queryByRole('tablist', { name: 'Chart range' })).toBeNull();
+    });
+
+    it('prints a small DEX price as a decimal and still derives the market cap', async () => {
+        // The token record carries the price as a number, and a small one
+        // stringifies in exponent form.
+        renderDetail('real-wallet', {
+            assetInfo: { creator: 'bcrt1qx', marketPrice: 1.5384615384615385e-9, totalSupply: '1000000' },
+        });
+
+        expect(await screen.findByText('0.0000000015384615 BTC')).toBeTruthy();
+        expect(screen.getByText('Market cap').nextElementSibling).toHaveTextContent('0.0015 BTC');
+        expect(screen.queryByText(/e-9/)).toBeNull();
     });
 
     it('draws selectable synthesized ranges only for the demo wallet', async () => {

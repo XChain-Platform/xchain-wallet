@@ -916,11 +916,15 @@ function AppInner({ canOpenInTab, titleEnabled }) {
     // so the nav rails and the command palette drop both entries.
     const { isSignerMode, isWatcherMode } = useWalletMode();
 
+    const { settings } = useSettings();
+
     // §24 / G055: resume the user's last view on unlock (persisted
     // per-wallet in localStorage). Deep views carry their validated route
     // params so reload, Back, and Forward can prime the selected item first.
     useLastView({
         walletId: activeWalletId,
+        // An unset network is mainnet, the same default the header reads.
+        network: settings ? (settings.activeNetwork || 'mainnet') : undefined,
         sessionActive: status.state === 'unlocked',
         currentView: unlockedView,
         currentParams: unlockedView === 'token-detail' ? tokenDetailRef
@@ -945,7 +949,8 @@ function AppInner({ canOpenInTab, titleEnabled }) {
     // load lazily the first time it opens.
     // Custom keybindings (if the user rebound anything) come from settings;
     // absent settings just fall back to the built-in defaults inside each hook.
-    const { settings } = useSettings();
+    // The settings read itself sits above the route-memory hook, which needs
+    // the active network.
     useEffect(() => {
         setMarketsAsset((current) => syncDexAssetToNetwork(current, settings?.activeNetwork));
     }, [settings?.activeNetwork]);

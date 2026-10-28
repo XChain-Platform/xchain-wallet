@@ -60,6 +60,20 @@ describe('TokenDetail balance that is not known', () => {
         expect(screen.getByRole('region', { name: /balance/i }).textContent).not.toMatch(/(^|\D)0(\D|$)/);
     });
 
+    it('says the balance is unavailable when one address on the chain failed to read', async () => {
+        // getWalletBalances resolves and marks the failed address; the other
+        // address alone is not the balance.
+        renderDetail(vi.fn().mockResolvedValue({
+            [CHAIN]: [
+                { address: 'bcrt1qfail', balances: null, error: 'explorer unreachable' },
+                { address: 'bcrt1qok', error: null, balances: { native: null, tokens: [] } },
+            ],
+        }));
+        expect(await screen.findByText('Balance is unavailable.')).toBeTruthy();
+        expect(screen.queryByText('No balance to send.')).toBeNull();
+        expect(screen.getByRole('region', { name: /balance/i }).textContent).not.toMatch(/(^|\D)0(\D|$)/);
+    });
+
     it('says the balance is loading while the read is pending', async () => {
         renderDetail(vi.fn(() => new Promise(() => {})));
         expect(await screen.findByText('Loading balance…')).toBeTruthy();

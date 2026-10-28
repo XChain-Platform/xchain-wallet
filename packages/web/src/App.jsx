@@ -1064,6 +1064,7 @@ function AppInner() {
     // params so reload, Back, and Forward can prime the selected item first.
     useLastView({
         walletId: activeWalletId,
+        network: activeNetwork,
         sessionActive: status.state === 'unlocked',
         currentView: unlockedView,
         currentParams: unlockedView === 'token-detail' ? tokenDetailRef

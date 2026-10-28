@@ -64,6 +64,26 @@ export function sumTickOnChain(byChain, chainId, tick, opts = {}) {
     return total.toString();
 }
 
+/**
+ * True when the balance read failed for any address the sum above covers, so
+ * its total misses that address's holdings and must not be shown as the
+ * balance. getWalletBalances reports a failed address as an entry carrying an
+ * `error` instead of rejecting the whole read.
+ *
+ * @param {Record<string, Array<any>> | null | undefined} byChain  getWalletBalances' result
+ * @param {string} chainId
+ * @param {{ address?: string | null }} [opts]           restrict to a single address
+ * @returns {boolean}
+ */
+export function chainReadFailed(byChain, chainId, opts = {}) {
+    if (!byChain || typeof byChain !== 'object' || !chainId) return false;
+    const entries = Array.isArray(byChain[chainId]) ? byChain[chainId] : [];
+    const only = opts.address || null;
+    return entries.some((entry) => Boolean(entry && typeof entry === 'object'
+        && (!only || entry.address === only)
+        && entry.error));
+}
+
 /** @param {any} v */
 function safeBigInt(v) {
     if (v === null || v === undefined) return 0n;

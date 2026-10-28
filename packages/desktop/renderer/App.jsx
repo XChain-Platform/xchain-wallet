@@ -815,6 +815,8 @@ function AppInner() {
     // the user's primary window.
     useLastView({
         walletId: activeWalletId,
+        // An unset network is mainnet, the same default the header reads.
+        network: settings ? (settings.activeNetwork || 'mainnet') : undefined,
         sessionActive: status.state === 'unlocked',
         currentView: unlockedView,
         currentParams: unlockedView === 'token-detail' ? tokenDetailRef

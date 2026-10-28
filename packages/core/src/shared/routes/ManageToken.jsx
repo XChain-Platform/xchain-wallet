@@ -25,7 +25,7 @@ import { RANGES as CHART_RANGES } from '../components/PortfolioChart.jsx';
 import portfolioChartStyles from '../components/PortfolioChart.module.css';
 import { extractHolderRows } from '../utils/holderRows.js';
 import { readFailureMessage } from '../utils/readFailureMessage.js';
-import { sumTickOnChain } from '../utils/walletBalanceShape.js';
+import { chainReadFailed, sumTickOnChain } from '../utils/walletBalanceShape.js';
 import { useOracleFeeds } from '../hooks/useOracleFeeds.js';
 import {
     dispenserRateLabel,
@@ -224,9 +224,11 @@ export function ManageToken({
                 // atomic quantities - never the flat row array this used to
                 // parse for, which is why "You hold" read 0 for every token
                 // (D-75). sumTickOnChain owns that shape for every reader.
-                setYourBalance(sumTickOnChain(byChain, chainId, tick));
+                // A failed read, whole or for one address, leaves the holding
+                // unknown rather than reading as zero.
+                setYourBalance(chainReadFailed(byChain, chainId) ? null : sumTickOnChain(byChain, chainId, tick));
             })
-            .catch(() => { if (!cancelled) setYourBalance('0'); });
+            .catch(() => { if (!cancelled) setYourBalance(null); });
         return () => { cancelled = true; };
     }, [messaging, walletId, chainId, tick]);
 

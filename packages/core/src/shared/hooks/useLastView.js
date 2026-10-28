@@ -42,6 +42,26 @@ const RESUMABLE_SET = new Set(RESUMABLE_VIEWS);
 const SECRET_HISTORY_VIEWS = new Set(['view-private-key', 'migrate-bip39', 'add-wallet']);
 
 /**
+ * A session-history entry for a route, stamped with the network it was made on.
+ * @param {string} walletId
+ * @param {string | null} network
+ * @param {{ view: string, params: object | null }} route
+ */
+function routeSnapshot(walletId, network, route) {
+    return network ? { walletId, network, ...route } : { walletId, ...route };
+}
+
+/**
+ * An entry made before the network was known, or read before it is known,
+ * passes: the check only refuses an entry that names another network.
+ * @param {unknown} entryNetwork
+ * @param {string | null} network
+ */
+function sameNetwork(entryNetwork, network) {
+    return typeof entryNetwork !== 'string' || !entryNetwork || !network || entryNetwork === network;
+}
+
+/**
  * @param {object} args
  * @param {string | null | undefined} args.walletId   Active wallet id.
  * @param {string} args.currentView                   The shell's current `unlockedView`.
@@ -54,6 +74,12 @@ const SECRET_HISTORY_VIEWS = new Set(['view-private-key', 'migrate-bip39', 'add-
  *                                pinned target rather than the user's last resumed view.
  *                                The persist effect still runs so navigation inside the
  *                                detached window survives a refresh.
+ * @param {string | null} [args.network]  Active network ('mainnet' | 'testnet' | 'regtest').
+ *                                Each session-history entry records it, and Back or Forward
+ *                                ignores an entry from another network: a network switch
+ *                                reloads the page but keeps its history, and an entry from
+ *                                the network the user left would open its token detail with
+ *                                a zero balance and a receive address for that network.
  */
 export function useLastView({
     walletId,
@@ -63,11 +89,14 @@ export function useLastView({
     onResumeParams,
     sessionActive = true,
     skip = false,
+    network = null,
 }) {
     const lastResumedFor = useRef(/** @type {string | null} */ (null));
     const lastPersistedFor = useRef(/** @type {string | null} */ (null));
     const onResumeRef = useRef(onResume);
     const onResumeParamsRef = useRef(onResumeParams);
+    const networkRef = useRef(network);
+    networkRef.current = typeof network === 'string' && network ? network : null;
     const pendingPopKey = useRef(/** @type {string | null} */ (null));
     const historyKey = useRef(/** @type {string | null} */ (null));
     const historyWallet = useRef(/** @type {string | null} */ (null));
@@ -124,6 +153,7 @@ export function useLastView({
         const onPop = (event) => {
             const snapshot = event.state?.xcRoute;
             if (!snapshot || snapshot.walletId !== walletId || !RESUMABLE_SET.has(snapshot.view)) return;
+            if (!sameNetwork(snapshot.network, networkRef.current)) return;
             const params = normalizeRouteParams(snapshot.view, snapshot.params);
             if (PARAM_VIEWS.has(snapshot.view) && !params) return;
             const next = { view: snapshot.view, params };
@@ -150,6 +180,7 @@ export function useLastView({
                 ? normalizeRouteParams(currentSnapshot.view, currentSnapshot.params)
                 : null;
             const currentIsSafe = currentSnapshot?.walletId === walletId
+                && sameNetwork(currentSnapshot.network, networkRef.current)
                 && RESUMABLE_SET.has(currentSnapshot.view)
                 && (!PARAM_VIEWS.has(currentSnapshot.view) || currentParams !== null);
             const safeRoute = currentIsSafe
@@ -157,7 +188,7 @@ export function useLastView({
                 : { view: 'home', params: null };
             const state = {
                 ...(window.history.state || {}),
-                xcRoute: { walletId, ...safeRoute },
+                xcRoute: routeSnapshot(walletId, networkRef.current, safeRoute),
             };
             window.history.replaceState(state, '');
             historyKey.current = JSON.stringify(safeRoute);
@@ -169,7 +200,10 @@ export function useLastView({
             return;
         }
         if (historyKey.current === routeKey) return;
-        const state = { ...(window.history.state || {}), xcRoute: { walletId, ...route } };
+        const state = {
+            ...(window.history.state || {}),
+            xcRoute: routeSnapshot(walletId, networkRef.current, route),
+        };
         if (historyKey.current === null) window.history.replaceState(state, '');
         else window.history.pushState(state, '');
         historyKey.current = routeKey;

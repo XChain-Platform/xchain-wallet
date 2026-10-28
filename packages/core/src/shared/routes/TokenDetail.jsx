@@ -51,7 +51,7 @@ import { explorerPage, uniqueRows } from '../utils/pagedRows.js';
 import { percentChangeDisplay } from '../utils/percentFormat.js';
 import { safeHttpUrl } from '../utils/externalUrl.js';
 import { readActiveAccount } from '../utils/activeAccountMemory.js';
-import { sumTickOnChain } from '../utils/walletBalanceShape.js';
+import { chainReadFailed, sumTickOnChain } from '../utils/walletBalanceShape.js';
 import styles from './TokenDetail.module.css';
 
 const chainRegistry = registryLib.defaultRegistry();
@@ -155,7 +155,10 @@ function TokenDetailContent({
         let cancelled = false;
         messaging.getWalletBalances(walletId, readActiveAccount(walletId) || undefined)
             .then((byChain) => {
-                if (!cancelled) setResolvedQuantity(sumTickOnChain(byChain, chainId, tick));
+                if (cancelled) return;
+                // A failed address leaves the total short, so the amount is unknown.
+                if (chainReadFailed(byChain, chainId)) setBalanceFailed(true);
+                else setResolvedQuantity(sumTickOnChain(byChain, chainId, tick));
             })
             .catch(() => {
                 if (!cancelled) setBalanceFailed(true);
@@ -372,10 +375,17 @@ function TokenDetailContent({
         return () => { cancelled = true; };
     }, [holdersOpen, isNative, tick, chainId, messaging, isDemo]);
 
+    // A native coin's holding is valued at the live price the stats strip
+    // shows. The rate carried in from the balance row, or restored with the
+    // route after a reload, only stands in until that price answers, so the
+    // hero never prices the holding at an older rate than the screen quotes.
+    const liveNativeRate = isNative ? positiveFiniteNumber(nativePrice.entry?.priceFiat) : null;
+    const holdingFiatRate = liveNativeRate ?? displayFiatRate;
+    const showStaleFiatRate = liveNativeRate === null && Number.isFinite(staleFiatRateAsOf);
     const fiat = useMemo(() => {
-        if (typeof displayFiatRate !== 'number' || !isFinite(displayFiatRate)) return null;
-        return fiatValue(quantity, resolvedDivisibility, displayFiatRate);
-    }, [quantity, resolvedDivisibility, displayFiatRate]);
+        if (typeof holdingFiatRate !== 'number' || !isFinite(holdingFiatRate)) return null;
+        return fiatValue(quantity, resolvedDivisibility, holdingFiatRate);
+    }, [quantity, resolvedDivisibility, holdingFiatRate]);
 
     // Header icon picks the smallest representation available: a TIS
     // `icon`-typed image first, then any other TIS image, then the
@@ -600,7 +610,7 @@ function TokenDetailContent({
                                         {hasDexPrice ? ' · DEX price' : ''}
                                     </AutoShrinkText>
                                 </span>
-                                {Number.isFinite(staleFiatRateAsOf) ? (
+                                {showStaleFiatRate ? (
                                     <StalenessLabel
                                         lastSyncedAt={staleFiatRateAsOf}
                                         className={styles.balanceHeroStaleness}
@@ -1156,10 +1166,14 @@ function MarketPanel({ isNative, nativePrice, isDemo, assetInfo, tick, chainId, 
     const marketPriceNum = assetInfo?.marketPrice != null ? Number(assetInfo.marketPrice) : null;
     if (marketPriceNum != null && Number.isFinite(marketPriceNum) && marketPriceNum > 0) {
         priceLabel = 'Price (DEX)';
-        priceCell = `${assetInfo.marketPrice} ${nativeTick}`;
+        // The record carries the price as a number, which prints a small one in
+        // exponent form (1.5e-9) and leaves the decimal product below without
+        // a market cap, so both read the expanded decimal.
+        const marketPriceText = expandDecimalNotation(String(assetInfo.marketPrice));
+        priceCell = `${formatDecimalAmount(marketPriceText, undefined, priceDigits(marketPriceText))} ${nativeTick}`;
         if (assetInfo.totalSupply != null) {
             const supply = String(assetInfo.totalSupply).replace(/[,_]/g, '');
-            const marketCap = multiplyDecimalStrings(assetInfo.marketPrice, supply);
+            const marketCap = multiplyDecimalStrings(marketPriceText, supply);
             if (marketCap !== null) {
                 const formatted = formatDecimalAmount(marketCap, undefined, {
                     minimumFractionDigits: 0,
@@ -2640,6 +2654,19 @@ function formatCompactFiat(value, currency) {
     if (abs >= 1e6) return `${formatFiat(value / 1e6, currency)}M`;
     if (abs >= 1e3) return `${formatFiat(value / 1e3, currency)}K`;
     return formatFiat(value, currency);
+}
+
+/**
+ * Fraction digits for a coin-denominated price: eight significant digits
+ * past its leading zeros, so a small price keeps its value and its unit
+ * fits the stats cell.
+ * @param {string} decimal  expanded decimal text
+ */
+function priceDigits(decimal) {
+    const fraction = /\.(\d+)$/.exec(decimal)?.[1] || '';
+    const leadingZeros = /^-?0\./.test(decimal) ? /^0*/.exec(fraction)[0].length : 0;
+    const digits = Math.min(fraction.length, leadingZeros + 8);
+    return { minimumFractionDigits: 0, maximumFractionDigits: digits };
 }
 
 function positiveFiniteNumber(value) {
