@@ -40,13 +40,24 @@
 //      "already known" answer settles it as delivered rather than failed.
 
 import { describe, it, expect, vi } from 'vitest';
+import { networks } from 'bitcoinjs-lib';
 import { createBackgroundHost } from '../../../packages/extension/src/background/createBackgroundHost.js';
 import { createBroadcastQueueStorage } from '../../../packages/extension/src/background/broadcastQueueStorage.js';
 import { submitAction } from '../../../packages/core/src/flows/submitAction.js';
 import { legNotIndexedError, legMayBeOnChain } from '../../../packages/core/src/flows/deployLegWait.js';
+import { SIGNATURE_MISMATCH_MESSAGE } from '../../../packages/core/src/signers/verifyInputSignatures.js';
+import { signedTxFor, trackerFor } from '../../helpers/signedTx.js';
 
 const CHAIN = 'bitcoin-regtest';
 const W = 'w1';
+// Queue routes accept signed bytes from outside the active signing flow, so
+// their fixtures spend a coin the stand-in tracker can establish and verify.
+const SIGNED = signedTxFor({ inputs: [{ type: 'p2wpkh' }] });
+const TX_HEX = SIGNED.txHex;
+const TX_HEX_ALT = signedTxFor({
+    inputs: [{ type: 'p2wpkh' }],
+    outputs: [{ script: `0014${'dd'.repeat(20)}`, value: 89_000 }],
+}).txHex;
 
 function memCollection() {
     const m = new Map();
@@ -111,7 +122,11 @@ function makeHost({
         save: async (snapshot) => { saved.push(JSON.parse(JSON.stringify(snapshot))); },
         clear: async () => {},
     };
-    const sdk = { encoder: { broadcastTx } };
+    const tracker = trackerFor(SIGNED.prevouts, networks.regtest);
+    const sdk = {
+        encoder: { broadcastTx, getUTXOs: tracker.getUTXOs },
+        wallet: { getBitcoinNetwork: () => networks.regtest },
+    };
     const host = createBackgroundHost({
         vault,
         chainRegistry: {
@@ -133,7 +148,50 @@ function makeHost({
     return { host, vault, call, list, saved, ads: () => current.ads.perChain[CHAIN] };
 }
 
-const entry = (id, extra = {}) => ({ id, chainId: CHAIN, signedTxHex: `hex-${id}`, summary: id, signedAt: 1, ...extra });
+const entry = (id, extra = {}) => ({ id, chainId: CHAIN, signedTxHex: TX_HEX, summary: id, signedAt: 1, ...extra });
+
+describe('broadcast.queue verifies externally supplied signed bytes', () => {
+    const UNVERIFIABLE = signedTxFor({
+        inputs: [{ type: 'p2wpkh' }],
+        tamper: { input: 0, kind: 'flip' },
+    }).txHex;
+
+    it('refuses an unverifiable transaction before enqueue persists anything', async () => {
+        const broadcastTx = vi.fn();
+        const h = makeHost({ broadcastTx });
+
+        const response = await h.call('broadcast.queue.enqueue', {
+            walletId: W,
+            chainId: CHAIN,
+            signedTxHex: UNVERIFIABLE,
+        });
+
+        expect(response.ok).toBe(false);
+        expect(response.error).toMatchObject({
+            name: 'SignatureMismatchError',
+            message: SIGNATURE_MISMATCH_MESSAGE,
+        });
+        expect(await h.list()).toEqual([]);
+        expect(h.saved).toEqual([]);
+        expect(broadcastTx).not.toHaveBeenCalled();
+    });
+
+    it('refuses an unverifiable persisted entry without broadcasting or removing it', async () => {
+        const broadcastTx = vi.fn();
+        const bad = entry('bad', { signedTxHex: UNVERIFIABLE });
+        const h = makeHost({ entries: [bad], broadcastTx });
+
+        const response = await h.call('broadcast.queue.broadcast', { walletId: W, id: bad.id });
+
+        expect(response.ok).toBe(false);
+        expect(response.error).toMatchObject({
+            name: 'SignatureMismatchError',
+            message: SIGNATURE_MISMATCH_MESSAGE,
+        });
+        expect(broadcastTx).not.toHaveBeenCalled();
+        expect(await h.list()).toEqual([bad]);
+    });
+});
 
 describe('broadcast.queue.broadcast removes by identity after the network await', () => {
     it('a discard of a lower entry during the broadcast removes the broadcast entry, not its neighbour', async () => {
@@ -570,7 +628,11 @@ describe('a failed rehydrate never lets the next mutation erase the persisted qu
             },
             clear: async () => { backing = {}; },
         };
-        const sdk = { encoder: { broadcastTx: vi.fn() } };
+        const tracker = trackerFor(SIGNED.prevouts, networks.regtest);
+        const sdk = {
+            encoder: { broadcastTx: vi.fn(), getUTXOs: tracker.getUTXOs },
+            wallet: { getBitcoinNetwork: () => networks.regtest },
+        };
         const host = createBackgroundHost({
             vault: {
                 pendingTxs: memCollection(),
@@ -605,7 +667,7 @@ describe('a failed rehydrate never lets the next mutation erase the persisted qu
         await h.settle();
 
         const res = await h.call('broadcast.queue.enqueue', {
-            walletId: 'w2', chainId: CHAIN, signedTxHex: 'hex-B1', summary: 'B1',
+            walletId: 'w2', chainId: CHAIN, signedTxHex: TX_HEX, summary: 'B1',
         });
         expect(res.ok).toBe(true);
         await h.settle();
@@ -623,7 +685,7 @@ describe('a failed rehydrate never lets the next mutation erase the persisted qu
         const h = makeTwoWalletHost();
         await h.settle();
         await h.call('broadcast.queue.enqueue', {
-            walletId: 'w2', chainId: CHAIN, signedTxHex: 'hex-B1', summary: 'B1',
+            walletId: 'w2', chainId: CHAIN, signedTxHex: TX_HEX, summary: 'B1',
         });
         await h.settle();
 
@@ -633,13 +695,13 @@ describe('a failed rehydrate never lets the next mutation erase the persisted qu
 
         // The next mutation now writes a snapshot holding BOTH wallets.
         await h.call('broadcast.queue.enqueue', {
-            walletId: 'w2', chainId: CHAIN, signedTxHex: 'hex-B2', summary: 'B2',
+            walletId: 'w2', chainId: CHAIN, signedTxHex: TX_HEX_ALT, summary: 'B2',
         });
         await h.settle();
         expect(h.saves.length).toBeGreaterThan(0);
         const last = h.saves[h.saves.length - 1];
         expect(last.w1).toEqual([entry('A1')]);
-        expect(last.w2.map((e) => e.signedTxHex)).toEqual(['hex-B1', 'hex-B2']);
+        expect(last.w2.map((e) => e.signedTxHex)).toEqual([TX_HEX, TX_HEX_ALT]);
     });
 
     it('retries the load on the next access instead of latching the dead read', async () => {
@@ -911,7 +973,7 @@ describe('a reload rebuilds the queue from the durable PendingTx half', () => {
         action: 'SEND',
         actionSummary: `Send from ${fromAddress}`,
         status: 'queued',
-        txHex: `hex-${id}`,
+        txHex: TX_HEX,
         txid: null,
         error: 'ECONNREFUSED',
         createdAt: '2026-01-01T00:00:00.000Z',
@@ -949,7 +1011,7 @@ describe('a reload rebuilds the queue from the durable PendingTx half', () => {
         expect(listed).toHaveLength(1);
         expect(listed[0]).toMatchObject({
             chainId: CHAIN,
-            signedTxHex: 'hex-p1',
+            signedTxHex: TX_HEX,
             pendingTxId: 'p1',
             summary: `Send from ${A_ADDR}`,
         });
@@ -964,11 +1026,11 @@ describe('a reload rebuilds the queue from the durable PendingTx half', () => {
 
         const mine = await h.list();
         expect(mine.map((e) => e.pendingTxId)).toEqual(['p1']);
-        expect(mine.map((e) => e.signedTxHex)).toEqual(['hex-p1']);
+        expect(mine.map((e) => e.signedTxHex)).toEqual([TX_HEX]);
 
         const theirs = (await h.call('broadcast.queue.list', { walletId: W2 })).result;
         expect(theirs.map((e) => e.pendingTxId)).toEqual(['p2']);
-        expect(theirs.map((e) => e.signedTxHex)).toEqual(['hex-p2']);
+        expect(theirs.map((e) => e.signedTxHex)).toEqual([TX_HEX]);
     });
 
     it('restores nothing from a vault whose address tables it cannot read', async () => {
@@ -1151,7 +1213,7 @@ describe('a reload rebuilds the queue from the durable PendingTx half', () => {
         const [restored] = await h.list();
         const res = await h.call('broadcast.queue.broadcast', { walletId: W, id: restored.id });
         expect(res.ok, JSON.stringify(res.error ?? {})).toBe(true);
-        expect(broadcastTx).toHaveBeenCalledWith('hex-p1');
+        expect(broadcastTx).toHaveBeenCalledWith(TX_HEX);
         expect(await records.get('p1')).toMatchObject({ status: 'broadcast', txid: 'tx-p1' });
         expect(await h.list()).toEqual([]);
     });

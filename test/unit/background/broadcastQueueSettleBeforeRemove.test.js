@@ -18,14 +18,17 @@
 // and comes back as a row for a transaction that already landed or was discarded.
 
 import { describe, it, expect, vi, afterEach } from 'vitest';
+import { networks } from 'bitcoinjs-lib';
 import { createBackgroundHost } from '../../../packages/extension/src/background/createBackgroundHost.js';
 import { createBroadcastQueueStorage } from '../../../packages/extension/src/background/broadcastQueueStorage.js';
 import { createBroadcastQueueStore } from '../../../packages/extension/src/background/broadcastQueueStore.js';
+import { signedTxFor, trackerFor } from '../../helpers/signedTx.js';
 
 const CHAIN = 'bitcoin-regtest';
 const W = 'w1';
 const KEY = 'xchain.broadcastQueue';
 const ADDR = 'bcrt1qowned';
+const SIGNED = signedTxFor({ inputs: [{ type: 'p2wpkh' }] });
 
 const settle = async () => { for (let i = 0; i < 8; i++) await new Promise((r) => setTimeout(r, 0)); };
 
@@ -123,7 +126,11 @@ function openVault(table, holdClaimedRead = null) {
 }
 
 function makeHost({ vault, broadcastTx, store }) {
-    const sdk = { encoder: { broadcastTx } };
+    const tracker = trackerFor(SIGNED.prevouts, networks.regtest);
+    const sdk = {
+        encoder: { broadcastTx, getUTXOs: tracker.getUTXOs },
+        wallet: { getBitcoinNetwork: () => networks.regtest },
+    };
     const host = createBackgroundHost({
         vault,
         chainRegistry: { get: () => ({ id: CHAIN, coin: 'bitcoin', networkKind: 'regtest' }), list: () => [], chainIdFor: () => CHAIN },
@@ -144,11 +151,11 @@ async function lockWithEQueued({ broadcastTx = vi.fn() } = {}) {
     const chrome = stubChrome();
     const table = pendingTxTable();
     chrome.store[KEY] = {
-        queues: { [W]: [{ id: 'q-E', chainId: CHAIN, signedTxHex: 'hex-E', summary: 'E', signedAt: 1, pendingTxId: 'p-E' }] },
+        queues: { [W]: [{ id: 'q-E', chainId: CHAIN, signedTxHex: SIGNED.txHex, summary: 'E', signedAt: 1, pendingTxId: 'p-E' }] },
         settlements: [],
     };
     table.rows.set('p-E', {
-        id: 'p-E', status: 'queued', txHex: 'hex-E', txid: null, fromAddress: ADDR,
+        id: 'p-E', status: 'queued', txHex: SIGNED.txHex, txid: null, fromAddress: ADDR,
         chain: 'bitcoin', network: 'regtest', createdAt: '2026-01-01T00:00:00.000Z',
     });
     const store = createBroadcastQueueStore({ storage: createBroadcastQueueStorage() });

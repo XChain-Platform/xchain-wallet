@@ -3553,7 +3553,7 @@ export function createBackgroundHost(deps) {
     // Cluster G FOLLOWUP 1: explicit enqueue endpoint. Renderer-side
     // callers (e.g. PsbtSignForm, future RBF replace lanes) can park a
     // signed hex on the queue without going through the action.* path.
-    host.register('broadcast.queue.enqueue', async (req) => {
+    host.register('broadcast.queue.enqueue', async (req, { sdkRegistry }) => {
         await ensureQueueLoaded();
         const walletId = req?.walletId;
         const chainId = req?.chainId;
@@ -3567,6 +3567,15 @@ export function createBackgroundHost(deps) {
         if (typeof signedTxHex !== 'string' || !signedTxHex) {
             throw new Error('broadcast.queue.enqueue: signedTxHex is required');
         }
+        const sdk = sdkRegistry.get(chainId);
+        // Explicit callers hand this route signed bytes the wallet did not
+        // produce in this flow. Establish every spent coin through the tracker
+        // and verify its signature before the bytes enter durable queue state.
+        await assertBroadcastSignaturesVerify({
+            sdk,
+            txHex: signedTxHex,
+            signerId: 'broadcast.queue.enqueue',
+        });
         const stored = pushQueueEntry(walletId, {
             chainId,
             signedTxHex,
@@ -3965,6 +3974,15 @@ export function createBackgroundHost(deps) {
             // maintains its own queue and bypasses core drainQueuedBroadcast (which
             // already gates), so the same assertion is applied here at the new call site.
             flows.assertSigningAllowed();
+            // Queue storage is not a trust boundary: bytes may have survived an
+            // older build or changed outside this process. Resolve the spent
+            // scripts and amounts again immediately before any durable claim or
+            // network call, so a refusal leaves the entry queued and unsent.
+            await assertBroadcastSignaturesVerify({
+                sdk,
+                txHex: entry.signedTxHex,
+                signerId: 'broadcast.queue.broadcast',
+            });
             // Claim the durable half before the bytes go out, the same write
             // core's drain makes at the same point. A record reading 'queued'
             // is what the reload recovery treats as proof that its transaction

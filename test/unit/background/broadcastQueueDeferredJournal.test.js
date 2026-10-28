@@ -25,6 +25,8 @@
 // storage, not signing.
 
 import { describe, it, expect, vi } from 'vitest';
+import { networks } from 'bitcoinjs-lib';
+import { signedTxFor, trackerFor } from '../../helpers/signedTx.js';
 
 const stubs = vi.hoisted(() => ({ sendToken: vi.fn() }));
 
@@ -42,6 +44,7 @@ const { createBackgroundHost } = await import(
 
 const CHAIN = 'bitcoin-regtest';
 const W = 'w1';
+const SIGNED = signedTxFor({ inputs: [{ type: 'p2wpkh' }] });
 
 function memCollection() {
     const m = new Map();
@@ -100,7 +103,11 @@ function makeJournalHost({ withJournal = true, seedSettlements = [], journalOnly
         ...memCollection(),
         get: async () => { throw new Error('VaultStateError: vault is closed'); },
     };
-    const sdk = { encoder: { broadcastTx: vi.fn(async () => 'tx-A') } };
+    const tracker = trackerFor(SIGNED.prevouts, networks.regtest);
+    const sdk = {
+        encoder: { broadcastTx: vi.fn(async () => 'tx-A'), getUTXOs: tracker.getUTXOs },
+        wallet: { getBitcoinNetwork: () => networks.regtest },
+    };
     const host = createBackgroundHost({
         vault: {
             pendingTxs,
@@ -140,7 +147,7 @@ function makeJournalHost({ withJournal = true, seedSettlements = [], journalOnly
 async function queueThroughFailedSend(h, { pendingTxId = 'p1' } = {}) {
     stubs.sendToken.mockImplementationOnce(async (opts) => {
         await opts.onBroadcastFailure({
-            chainId: CHAIN, signedTxHex: 'hex-A', summary: 'A', signedAt: 1, pendingTxId,
+            chainId: CHAIN, signedTxHex: SIGNED.txHex, summary: 'A', signedAt: 1, pendingTxId,
         });
         throw new Error('ECONNREFUSED');
     });

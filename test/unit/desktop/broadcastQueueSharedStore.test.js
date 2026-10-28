@@ -21,12 +21,15 @@
 // in-flight claims at every lock, and the next host started empty.
 
 import { describe, it, expect } from 'vitest';
+import { networks } from 'bitcoinjs-lib';
 
 import { createRuntime, ensureHost, tearDownHost, wipeRuntimeStores, handleIpcMessage } from '../../../packages/desktop/main/runtime.js';
 import { ChainRegistry } from '../../../packages/core/src/registry/index.js';
+import { signedTxFor, trackerFor } from '../../helpers/signedTx.js';
 
 const W = 'wallet-1';
 const CHAIN = 'bitcoin-testnet';
+const SIGNED = signedTxFor({ inputs: [{ type: 'p2wpkh' }] });
 
 /** In-memory byte backend with the load/save/clear shape the runtime takes. */
 function memoryBackend(initial = null) {
@@ -40,12 +43,22 @@ function memoryBackend(initial = null) {
 
 /** A runtime whose session key is cached, so ensureHost opens a real vault. */
 function unlockableRuntime() {
+    const tracker = trackerFor(SIGNED.prevouts, networks.testnet);
+    const sdk = {
+        encoder: { broadcastTx: async () => ({ txid: 'test-txid' }), getUTXOs: tracker.getUTXOs },
+        wallet: { getBitcoinNetwork: () => networks.testnet },
+    };
     return createRuntime({
         storageBackend: memoryBackend(),
         sessionBackend: memoryBackend(new Uint8Array(32).fill(7)),
         metaBackend: memoryBackend(),
         chainRegistry: new ChainRegistry(),
-        sdkRegistry: { async getSdk() { throw new Error('offline'); }, async has() { return false; }, async listChainIds() { return []; } },
+        sdkRegistry: {
+            get: () => sdk,
+            async getSdk() { return sdk; },
+            async has() { return true; },
+            async listChainIds() { return [CHAIN]; },
+        },
     });
 }
 
@@ -57,7 +70,7 @@ describe('desktop runtime shares one broadcast-queue store across hosts', () => 
         const runtime = unlockableRuntime();
         const store = runtime.broadcastQueueStore;
         await ensureHost(runtime);
-        const enq = await call(runtime, 'broadcast.queue.enqueue', { walletId: W, chainId: CHAIN, signedTxHex: 'hex-A', summary: 'A' });
+        const enq = await call(runtime, 'broadcast.queue.enqueue', { walletId: W, chainId: CHAIN, signedTxHex: SIGNED.txHex, summary: 'A' });
         expect(enq.ok).toBe(true);
         const firstHost = runtime.host;
 
@@ -66,7 +79,7 @@ describe('desktop runtime shares one broadcast-queue store across hosts', () => 
 
         expect(runtime.host).not.toBe(firstHost);
         expect(runtime.broadcastQueueStore).toBe(store);
-        expect(await listedHexes(runtime)).toEqual(['hex-A']);
+        expect(await listedHexes(runtime)).toEqual([SIGNED.txHex]);
     });
 
     it('keeps an in-flight claim visible to the host built after an unlock', async () => {
@@ -81,7 +94,7 @@ describe('desktop runtime shares one broadcast-queue store across hosts', () => 
     it('seals the store on wipe and hands the next unlock a fresh one', async () => {
         const runtime = unlockableRuntime();
         await ensureHost(runtime);
-        await call(runtime, 'broadcast.queue.enqueue', { walletId: W, chainId: CHAIN, signedTxHex: 'hex-B' });
+        await call(runtime, 'broadcast.queue.enqueue', { walletId: W, chainId: CHAIN, signedTxHex: SIGNED.txHex });
         const sealed = runtime.broadcastQueueStore;
 
         await wipeRuntimeStores(runtime);

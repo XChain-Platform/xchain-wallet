@@ -15,14 +15,21 @@
 // which spends its coin into a script that nothing opens.
 
 import { describe, it, expect, vi } from 'vitest';
+import { networks } from 'bitcoinjs-lib';
 import { createBackgroundHost } from '../../../packages/extension/src/background/createBackgroundHost.js';
 import { submitAction } from '../../../packages/core/src/flows/submitAction.js';
 import { createBroadcastQueueEngine } from '../../../packages/extension/src/background/broadcastQueueEngine.js';
 import { createBroadcastQueueStore } from '../../../packages/extension/src/background/broadcastQueueStore.js';
+import { signedTxFor, trackerFor } from '../../helpers/signedTx.js';
 
 const CHAIN = 'litecoin-regtest';
 const W = 'w1';
 const ADDR = 'rltc1qsrc';
+const COMMIT = signedTxFor({ inputs: [{ type: 'p2wpkh' }] });
+const REVEAL = signedTxFor({
+    inputs: [{ type: 'p2wpkh' }],
+    outputs: [{ script: `0014${'dd'.repeat(20)}`, value: 89_000 }],
+});
 
 function memCollection() {
     const m = new Map();
@@ -52,7 +59,11 @@ function bootHost({ pendingTxs, broadcastTx, entries = [] }) {
         addresses: { list: async () => [{ id: 'addr-a', accountId: `acct-${W}`, address: ADDR }] },
         settings: { get: vi.fn(async () => ({})), put: vi.fn(async () => {}) },
     };
-    const sdk = { encoder: { broadcastTx: vi.fn(broadcastTx) } };
+    const tracker = trackerFor([...COMMIT.prevouts, ...REVEAL.prevouts], networks.regtest);
+    const sdk = {
+        encoder: { broadcastTx: vi.fn(broadcastTx), getUTXOs: tracker.getUTXOs },
+        wallet: { getBitcoinNetwork: () => networks.regtest },
+    };
     const host = createBackgroundHost({
         vault,
         chainRegistry,
@@ -105,7 +116,9 @@ function submitTwoPhase({ encoding, pendingTxs, broadcastTx, onBroadcastFailure 
         signer: {
             kind: 'software',
             signPsbt: async ({ psbtHex }) => ({
-                signedPsbtHex: `SIGNED(${psbtHex})`, txHex: `TX(${psbtHex})`, txid: `txid-${psbtHex}`,
+                signedPsbtHex: `SIGNED(${psbtHex})`,
+                txHex: psbtHex === 'PHASE2' ? REVEAL.txHex : COMMIT.txHex,
+                txid: `txid-${psbtHex}`,
             }),
         },
         pendingTxMeta: { fromAddress: ADDR, toAddress: null, actionSummary: 'Deploy' },
@@ -121,33 +134,33 @@ describe.each(['P2SH', 'P2WSH'])('the host queue resumes a %s submit interrupted
         const pendingTxs = memCollection();
         // The worker dies while the reveal's broadcast is in flight.
         const s = submitTwoPhase({
-            encoding, pendingTxs, broadcastTx: async (hex) => (hex === 'TX(PHASE2)' ? never() : {}),
+            encoding, pendingTxs, broadcastTx: async (hex) => (hex === REVEAL.txHex ? never() : {}),
         });
         void s.run.catch(() => {});
-        await vi.waitFor(() => expect(s.encoder.broadcastTx).toHaveBeenCalledWith('TX(PHASE2)'));
+        await vi.waitFor(() => expect(s.encoder.broadcastTx).toHaveBeenCalledWith(REVEAL.txHex));
         const [row] = await pendingTxs.list();
-        expect(row).toMatchObject({ status: 'broadcasting', txHex: 'TX(PHASE1)', revealTxHex: 'TX(PHASE2)' });
+        expect(row).toMatchObject({ status: 'broadcasting', txHex: COMMIT.txHex, revealTxHex: REVEAL.txHex });
 
         // A wait of a millisecond or more keeps the record older than the next boot.
         await new Promise((resolve) => { setTimeout(resolve, 5); });
         const h = bootHost({
             pendingTxs,
             broadcastTx: async (hex) => {
-                if (hex === 'TX(PHASE1)') throw new Error('txn-already-in-mempool');
+                if (hex === COMMIT.txHex) throw new Error('txn-already-in-mempool');
                 return { txid: 'txid-PHASE2' };
             },
         });
         const listed = await h.list();
         expect(listed).toHaveLength(1);
         expect(listed[0]).toMatchObject({
-            pendingTxId: row.id, signedTxHex: 'TX(PHASE1)', txid: 'txid-PHASE1',
-            revealTxHex: 'TX(PHASE2)', revealTxid: 'txid-PHASE2', resumedClaim: true,
+            pendingTxId: row.id, signedTxHex: COMMIT.txHex, txid: 'txid-PHASE1',
+            revealTxHex: REVEAL.txHex, revealTxid: 'txid-PHASE2', resumedClaim: true,
         });
 
         const res = await h.call('broadcast.queue.broadcast', { walletId: W, id: listed[0].id });
 
         expect(res.ok).toBe(true);
-        expect(h.sent()).toEqual(['TX(PHASE1)', 'TX(PHASE2)']);
+        expect(h.sent()).toEqual([COMMIT.txHex, REVEAL.txHex]);
         expect(await pendingTxs.get(row.id)).toMatchObject({
             status: 'broadcast', txid: 'txid-PHASE2', commitLanded: true, commitTxid: 'txid-PHASE1',
         });
@@ -157,12 +170,12 @@ describe.each(['P2SH', 'P2WSH'])('the host queue resumes a %s submit interrupted
 
 describe('the host queue sends a two-phase entry as commit then reveal', () => {
     const pair = {
-        id: 'A', chainId: CHAIN, signedTxHex: 'TX(PHASE1)', txid: 'txid-PHASE1', summary: 'Deploy',
-        signedAt: 1, pendingTxId: 'p1', revealTxHex: 'TX(PHASE2)', revealTxid: 'txid-PHASE2',
+        id: 'A', chainId: CHAIN, signedTxHex: COMMIT.txHex, txid: 'txid-PHASE1', summary: 'Deploy',
+        signedAt: 1, pendingTxId: 'p1', revealTxHex: REVEAL.txHex, revealTxid: 'txid-PHASE2',
     };
     const record = (extra = {}) => ({
         id: 'p1', chain: 'litecoin', network: 'regtest', fromAddress: ADDR, status: 'queued',
-        txHex: 'TX(PHASE1)', txid: 'txid-PHASE1', revealTxHex: 'TX(PHASE2)', revealTxid: 'txid-PHASE2',
+        txHex: COMMIT.txHex, txid: 'txid-PHASE1', revealTxHex: REVEAL.txHex, revealTxid: 'txid-PHASE2',
         createdAt: '2026-01-01T00:00:00.000Z', ...extra,
     });
 
@@ -174,9 +187,9 @@ describe('the host queue sends a two-phase entry as commit then reveal', () => {
         const res = await h.call('broadcast.queue.broadcast', { walletId: W, id: 'A' });
 
         expect(res.ok).toBe(false);
-        expect(h.sent()).toEqual(['TX(PHASE1)']);
-        expect(await pendingTxs.get('p1')).toMatchObject({ status: 'queued', txHex: 'TX(PHASE1)', revealTxHex: 'TX(PHASE2)' });
-        expect((await h.list())[0]).toMatchObject({ signedTxHex: 'TX(PHASE1)', revealTxHex: 'TX(PHASE2)' });
+        expect(h.sent()).toEqual([COMMIT.txHex]);
+        expect(await pendingTxs.get('p1')).toMatchObject({ status: 'queued', txHex: COMMIT.txHex, revealTxHex: REVEAL.txHex });
+        expect((await h.list())[0]).toMatchObject({ signedTxHex: COMMIT.txHex, revealTxHex: REVEAL.txHex });
     });
 
     it('turns the entry into its reveal, commit-landed, when only the reveal is refused', async () => {
@@ -187,21 +200,21 @@ describe('the host queue sends a two-phase entry as commit then reveal', () => {
             pendingTxs,
             entries: [pair],
             broadcastTx: async (hex) => {
-                if (hex === 'TX(PHASE2)' && !revealUp) throw new Error('ETIMEDOUT');
-                return { txid: hex === 'TX(PHASE2)' ? 'txid-PHASE2' : 'txid-PHASE1' };
+                if (hex === REVEAL.txHex && !revealUp) throw new Error('ETIMEDOUT');
+                return { txid: hex === REVEAL.txHex ? 'txid-PHASE2' : 'txid-PHASE1' };
             },
         });
 
         const first = await h.call('broadcast.queue.broadcast', { walletId: W, id: 'A' });
         expect(first.ok).toBe(false);
-        expect(h.sent()).toEqual(['TX(PHASE1)', 'TX(PHASE2)']);
+        expect(h.sent()).toEqual([COMMIT.txHex, REVEAL.txHex]);
         const [entry] = await h.list();
         expect(entry).toMatchObject({
-            id: 'A', signedTxHex: 'TX(PHASE2)', txid: 'txid-PHASE2', commitLanded: true, commitTxid: 'txid-PHASE1',
+            id: 'A', signedTxHex: REVEAL.txHex, txid: 'txid-PHASE2', commitLanded: true, commitTxid: 'txid-PHASE1',
         });
         expect(entry.revealTxHex).toBeUndefined();
         expect(await pendingTxs.get('p1')).toMatchObject({
-            status: 'queued', txHex: 'TX(PHASE2)', txid: 'txid-PHASE2', commitLanded: true, commitTxid: 'txid-PHASE1',
+            status: 'queued', txHex: REVEAL.txHex, txid: 'txid-PHASE2', commitLanded: true, commitTxid: 'txid-PHASE1',
         });
 
         // The retry, past its backoff, sends the reveal alone.
@@ -214,7 +227,7 @@ describe('the host queue sends a two-phase entry as commit then reveal', () => {
         } finally {
             clock.mockRestore();
         }
-        expect(h.sent()).toEqual(['TX(PHASE1)', 'TX(PHASE2)', 'TX(PHASE2)']);
+        expect(h.sent()).toEqual([COMMIT.txHex, REVEAL.txHex, REVEAL.txHex]);
         expect(await pendingTxs.get('p1')).toMatchObject({ status: 'broadcast', txid: 'txid-PHASE2' });
         expect(await h.list()).toEqual([]);
     });
@@ -247,7 +260,7 @@ describe('the host queue sends a two-phase entry as commit then reveal', () => {
         const res = await h.call('broadcast.queue.broadcast', { walletId: W, id: 'A' });
 
         expect(res.ok).toBe(true);
-        expect(h.sent()).toEqual(['TX(PHASE1)']);
+        expect(h.sent()).toEqual([COMMIT.txHex]);
         const after = await pendingTxs.get('p1');
         expect(after).toMatchObject({ status: 'broadcast', txid: 'txid-PHASE1' });
         expect(after.commitLanded).toBeUndefined();
@@ -273,7 +286,7 @@ describe.each(['P2SH', 'P2WSH'])('a %s commit refused by a temporary broadcast f
         const queued = engine.getQueue(W);
         expect(queued).toHaveLength(1);
         expect(queued[0]).toMatchObject({
-            signedTxHex: 'TX(PHASE1)', txid: 'txid-PHASE1', revealTxHex: 'TX(PHASE2)', revealTxid: 'txid-PHASE2',
+            signedTxHex: COMMIT.txHex, txid: 'txid-PHASE1', revealTxHex: REVEAL.txHex, revealTxid: 'txid-PHASE2',
         });
 
         // The persisted entry, as the next host to serve the queue reads it.
@@ -281,7 +294,7 @@ describe.each(['P2SH', 'P2WSH'])('a %s commit refused by a temporary broadcast f
         const res = await h.call('broadcast.queue.broadcast', { walletId: W, id: queued[0].id });
 
         expect(res.ok).toBe(true);
-        expect(h.sent()).toEqual(['TX(PHASE1)', 'TX(PHASE2)']);
+        expect(h.sent()).toEqual([COMMIT.txHex, REVEAL.txHex]);
         expect(await pendingTxs.get(queued[0].pendingTxId)).toMatchObject({
             status: 'broadcast', txid: 'txid-PHASE2', commitLanded: true, commitTxid: 'txid-PHASE1',
         });

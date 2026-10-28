@@ -19,12 +19,19 @@
 //      nothing back, and collapses into the blob copy once the read recovers.
 
 import { describe, it, expect, vi } from 'vitest';
+import { networks } from 'bitcoinjs-lib';
 import { createBackgroundHost } from '../../../packages/extension/src/background/createBackgroundHost.js';
 import { createBroadcastQueueStore } from '../../../packages/extension/src/background/broadcastQueueStore.js';
+import { signedTxFor, trackerFor } from '../../helpers/signedTx.js';
 
 const CHAIN = 'bitcoin-regtest';
 const W = 'w1';
 const A_ADDR = 'bcrt1qwallet-a';
+const SIGNED = signedTxFor({ inputs: [{ type: 'p2wpkh' }] });
+const SIGNED_ALT = signedTxFor({
+    inputs: [{ type: 'p2wpkh' }],
+    outputs: [{ script: `0014${'dd'.repeat(20)}`, value: 89_000 }],
+});
 
 function memCollection() {
     const m = new Map();
@@ -54,7 +61,7 @@ const record = (id, extra = {}) => ({
     action: 'SEND',
     actionSummary: `Send ${id}`,
     status: 'queued',
-    txHex: `hex-${id}`,
+    txHex: SIGNED.txHex,
     txid: `tx-${id}`,
     error: 'ECONNREFUSED',
     createdAt: '2026-01-01T00:00:00.000Z',
@@ -63,7 +70,11 @@ const record = (id, extra = {}) => ({
 
 /** A host whose vault can attribute A_ADDR to wallet W. */
 function makeHost({ storage, pendingTxs = memCollection(), broadcastTx = vi.fn(), vault, queueStore } = {}) {
-    const sdk = { encoder: { broadcastTx } };
+    const tracker = trackerFor(SIGNED.prevouts, networks.regtest);
+    const sdk = {
+        encoder: { broadcastTx, getUTXOs: tracker.getUTXOs },
+        wallet: { getBitcoinNetwork: () => networks.regtest },
+    };
     const host = createBackgroundHost({
         vault: vault ?? {
             pendingTxs,
@@ -128,17 +139,17 @@ describe('a renderer enqueue replies after its only durable copy is written', ()
 
         let replied = false;
         const pending = h.call('broadcast.queue.enqueue', {
-            walletId: W, chainId: CHAIN, signedTxHex: 'hex-R', summary: 'R',
+            walletId: W, chainId: CHAIN, signedTxHex: SIGNED.txHex, summary: 'R',
         }).then((res) => { replied = true; return res; });
         await settle();
 
-        expect(saves.at(-1)[W].map((e) => e.signedTxHex)).toEqual(['hex-R']);
+        expect(saves.at(-1)[W].map((e) => e.signedTxHex)).toEqual([SIGNED.txHex]);
         expect(replied).toBe(false);
 
         gate.resolve();
         const res = await pending;
         expect(res.ok).toBe(true);
-        expect(res.result.signedTxHex).toBe('hex-R');
+        expect(res.result.signedTxHex).toBe(SIGNED.txHex);
         expect(res.result.persisted).toBe(true);
     });
 
@@ -152,11 +163,11 @@ describe('a renderer enqueue replies after its only durable copy is written', ()
         await settle();
 
         const res = await h.call('broadcast.queue.enqueue', {
-            walletId: W, chainId: CHAIN, signedTxHex: 'hex-R', summary: 'R',
+            walletId: W, chainId: CHAIN, signedTxHex: SIGNED.txHex, summary: 'R',
         });
         expect(res.ok).toBe(true);
         expect(res.result.persisted).toBe(false);
-        expect((await h.list()).map((e) => e.signedTxHex)).toEqual(['hex-R']);
+        expect((await h.list()).map((e) => e.signedTxHex)).toEqual([SIGNED.txHex]);
     });
 
     it('never writes the persisted flag into the stored entry', async () => {
@@ -169,8 +180,8 @@ describe('a renderer enqueue replies after its only durable copy is written', ()
         const h = makeHost({ storage });
         await settle();
 
-        await h.call('broadcast.queue.enqueue', { walletId: W, chainId: CHAIN, signedTxHex: 'hex-R', summary: 'R' });
-        await h.call('broadcast.queue.enqueue', { walletId: W, chainId: CHAIN, signedTxHex: 'hex-S', summary: 'S' });
+        await h.call('broadcast.queue.enqueue', { walletId: W, chainId: CHAIN, signedTxHex: SIGNED.txHex, summary: 'R' });
+        await h.call('broadcast.queue.enqueue', { walletId: W, chainId: CHAIN, signedTxHex: SIGNED_ALT.txHex, summary: 'S' });
         expect(saves.length).toBeGreaterThan(0);
         for (const entry of saves.at(-1)[W]) expect(entry).not.toHaveProperty('persisted');
         for (const entry of await h.list()) expect(entry).not.toHaveProperty('persisted');
@@ -237,7 +248,7 @@ describe('the vault rebuild runs while the queue blob is unreadable', () => {
     const blobTwin = (extra = {}) => ({
         id: 'blob-1',
         chainId: CHAIN,
-        signedTxHex: 'hex-p1',
+        signedTxHex: SIGNED.txHex,
         summary: 'Send p1',
         signedAt: 1,
         pendingTxId: 'p1',
@@ -289,14 +300,14 @@ describe('the vault rebuild runs while the queue blob is unreadable', () => {
     it('still merges a blob entry with no PendingTx by id alone', async () => {
         const records = memCollection();
         await records.put(record('p1'));
-        const psbtLane = { id: 'psbt-1', chainId: CHAIN, signedTxHex: 'hex-psbt', summary: 'PSBT', signedAt: 1 };
+        const psbtLane = { id: 'psbt-1', chainId: CHAIN, signedTxHex: SIGNED_ALT.txHex, summary: 'PSBT', signedAt: 1 };
         const store = flakyStorage({ [W]: [psbtLane, blobTwin()] });
         const h = makeHost({ storage: store.adapter, pendingTxs: records });
         await h.list();
 
         store.recover();
         const ids = (await h.list()).map((e) => e.signedTxHex).sort();
-        expect(ids).toEqual(['hex-p1', 'hex-psbt']);
+        expect(ids).toEqual([SIGNED.txHex, SIGNED_ALT.txHex].sort());
     });
 });
 
@@ -304,7 +315,7 @@ describe('a readable blob entry whose record reads broadcasting reloads as a res
     const blobEntry = {
         id: 'blob-1',
         chainId: CHAIN,
-        signedTxHex: 'hex-p1',
+        signedTxHex: SIGNED.txHex,
         summary: 'Send p1',
         signedAt: 1,
         pendingTxId: 'p1',
@@ -384,7 +395,7 @@ describe('a readable blob entry whose record reads broadcasting reloads as a res
 
 describe('a wallet removed while the queue blob is unreadable stays removed', () => {
     const GONE = 'w-gone';
-    const queued = (id) => ({ id, chainId: CHAIN, signedTxHex: `hex-${id}`, summary: id, signedAt: 1 });
+    const queued = (id) => ({ id, chainId: CHAIN, signedTxHex: SIGNED.txHex, summary: id, signedAt: 1 });
 
     /** A vault `removeWallet` can walk, holding wallets W and GONE. */
     async function removableVault() {
@@ -426,7 +437,7 @@ describe('a wallet removed while the queue blob is unreadable stays removed', ()
         const store = flakyStorage({ [GONE]: [queued('G')], [W]: [queued('K')] });
         const h = makeHost({ storage: store.adapter, vault: await removableVault() });
         await h.call('wallet.remove', { walletId: GONE });
-        const parked = await h.call('broadcast.queue.enqueue', { walletId: W, chainId: CHAIN, signedTxHex: 'hex-new' });
+        const parked = await h.call('broadcast.queue.enqueue', { walletId: W, chainId: CHAIN, signedTxHex: SIGNED_ALT.txHex });
         expect(parked.result.persisted).toBe(false);
 
         store.recover();
@@ -434,7 +445,7 @@ describe('a wallet removed while the queue blob is unreadable stays removed', ()
         await settle();
         const saved = store.saves.at(-1);
         expect(Object.keys(saved)).toEqual([W]);
-        expect(saved[W].map((e) => e.signedTxHex)).toEqual(['hex-K', 'hex-new']);
+        expect(saved[W].map((e) => e.signedTxHex)).toEqual([SIGNED.txHex, SIGNED_ALT.txHex]);
     });
 
     it('drops the removed wallet from the recovered journal', async () => {
