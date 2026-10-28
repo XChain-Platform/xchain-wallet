@@ -28,8 +28,16 @@ import '../../i18n/locales/en/flows.js';
 import '../../i18n/locales/en/settings.js';
 import { userFacingMessage } from '../utils/userFacingMessage.js';
 import { useDocumentTitleSection } from '../hooks/useDocumentTitle.js';
+import { NAME_MAX_LENGTH, hasVisibleText, nameLength } from '../../util/display_name.js';
+import { useOwnWalletWriteHold } from '../hooks/useOwnWalletWriteHold.js';
 
 const MIN_PASSWORD_LENGTH = 8;
+
+// The vault refuses a first wallet over an existing one with a named error; a
+// shell that passes errors across a message boundary keeps only the message.
+function isWalletExistsError(err) {
+    return err?.name === 'WalletExistsError' || /^A wallet already exists\b/.test(String(err?.message || ''));
+}
 const ACCEPTED_WORD_COUNTS = [12, 15, 18, 21, 24];
 const INVALID_PARTNER_CODE = 'That pairing code is invalid or incomplete. '
     + 'Paste or scan the complete code from the other wallet.';
@@ -74,8 +82,9 @@ const MAX_QR_CHARS = 1200;
  * @param {() => void} [props.onPaired]        fires once the pairing persists; caller refreshes App state
  * @param {string} [props.walletId]            existing wallet to pair (Settings entry point). Absent = onboarding, which imports the shared phrase first.
  * @param {'watcher' | 'signer'} [props.initialMode]   preselects the role stage
+ * @param {{ report: (holding: boolean) => void }} [props.ownWriteGuard]   told while this lane imports the shared phrase and until it hands back
  */
-export function PairPartnerWallet({ onBack, onPaired, walletId: existingWalletId, initialMode }) {
+export function PairPartnerWallet({ onBack, onPaired, walletId: existingWalletId, initialMode, ownWriteGuard }) {
     const { messaging, shell } = useMessaging();
     const variant = screenVariantFor(shell);
 
@@ -107,10 +116,16 @@ export function PairPartnerWallet({ onBack, onPaired, walletId: existingWalletId
     const [verification, setVerification] = useState(/** @type {any} */ (null));
 
     const [error, setError] = useState(/** @type {string | null} */ (null));
+    // Another window or tab made this device's wallet first: the shared phrase
+    // was not imported here, and the way on is that wallet's lock screen.
+    const [walletElsewhere, setWalletElsewhere] = useState(false);
     const [partnerCodeError, setPartnerCodeError] = useState(/** @type {string | null} */ (null));
     const [busy, setBusy] = useState(false);
 
     const lane = flowsLib.describePairingLane(walletMode);
+    // The code exchange follows the lane's own import of the shared phrase, so
+    // the lane holds the screen from that import until Finish or Back.
+    useOwnWalletWriteHold(ownWriteGuard, !existingWalletId && (walletId !== null || (stage === 'seed' && busy)));
 
     // On entering the exchange stage, ask the host for this wallet's
     // pairing code. The password is still in hand from the seed stage;
@@ -227,6 +242,17 @@ export function PairPartnerWallet({ onBack, onPaired, walletId: existingWalletId
             setError('Recovery phrase is required.');
             return;
         }
+        // A blank name takes the default; a name that draws no mark or runs past
+        // the cap would read as nothing in every list, as on Create and Import.
+        const typedName = name.trim();
+        if (typedName.length > 0 && !hasVisibleText(typedName)) {
+            setError('Wallet name must include a visible character.');
+            return;
+        }
+        if (nameLength(typedName) > NAME_MAX_LENGTH) {
+            setError(`Wallet name must be ${NAME_MAX_LENGTH} characters or fewer.`);
+            return;
+        }
         const wordCount = trimmed.split(' ').length;
         if (!ACCEPTED_WORD_COUNTS.includes(wordCount)) {
             // Copy stays inline until this screen moves to the dictionary; the
@@ -261,7 +287,17 @@ export function PairPartnerWallet({ onBack, onPaired, walletId: existingWalletId
             setWalletId(id);
             setStage('exchange');
         } catch (err) {
-            setError(userFacingMessage(err, 'Could not import the recovery phrase.'));
+            if (isWalletExistsError(err)) {
+                // The phrase and password typed here cannot be used on this
+                // device any more, so they leave the screen.
+                setMnemonic('');
+                setPassword('');
+                setConfirm('');
+                setWalletElsewhere(true);
+                setError('This device already has a wallet, so the shared phrase was not imported here. Unlock that wallet to continue.');
+            } else {
+                setError(userFacingMessage(err, 'Could not import the recovery phrase.'));
+            }
         } finally {
             setBusy(false);
         }
@@ -310,8 +346,18 @@ export function PairPartnerWallet({ onBack, onPaired, walletId: existingWalletId
     // welcome screen would offer create and import against it and fail at the last
     // step. The completion callback re-reads shell state and lands on unlock.
     function handleBack() {
-        if (!existingWalletId && walletId && typeof onPaired === 'function') {
+        if (!existingWalletId && (walletId || walletElsewhere) && typeof onPaired === 'function') {
             onPaired();
+            return;
+        }
+        // Back from the phrase step returns to the role step the indicator
+        // counts as step 1, and the typed secrets leave the screen with it.
+        if (stage === 'seed' && !initialMode) {
+            setMnemonic('');
+            setPassword('');
+            setConfirm('');
+            setError(null);
+            setStage('role');
             return;
         }
         onBack?.();
@@ -363,7 +409,17 @@ export function PairPartnerWallet({ onBack, onPaired, walletId: existingWalletId
                 <FormPage
                     label="Pairing setup"
                     onSubmit={handleSeedSubmit}
-                    status={error ? <StatusMessage variant="error">{error}</StatusMessage> : null}
+                    status={error ? (
+                        <StatusMessage
+                            variant="error"
+                            recovery={walletElsewhere && typeof onPaired === 'function' ? {
+                                label: 'Unlock',
+                                onAction: onPaired,
+                            } : undefined}
+                        >
+                            {error}
+                        </StatusMessage>
+                    ) : null}
                     actions={(
                         <Button type="submit" variant="primary" loading={busy} disabled={busy}>
                             Continue

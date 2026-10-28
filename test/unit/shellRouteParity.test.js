@@ -363,6 +363,16 @@ const SHELL_ONLY = {
             kind: 'intended',
             reason: 'Only the extension popup can move wallet import into a full browser tab.',
         },
+        'ImportWallet.ownWriteGuard': {
+            shells: ['extension'],
+            kind: 'intended',
+            reason: 'Only the extension background announces an unlock to the window whose own import caused it.',
+        },
+        'PairPartnerWallet.ownWriteGuard': {
+            shells: ['extension'],
+            kind: 'intended',
+            reason: 'Only the extension background announces an unlock to the window whose own import caused it.',
+        },
         'PairSignerForm.onOpenInTab': {
             shells: ['extension'],
             kind: 'intended',

@@ -47,6 +47,7 @@ import { NAME_MAX_LENGTH, hasVisibleText, nameLength } from '../../util/display_
 import { takeForgotPasswordRestoreLane } from '../utils/forgotPasswordRecovery.js';
 import { useBackHandler } from '../../ui/backStack.js';
 import { useDocumentTitleSection } from '../hooks/useDocumentTitle.js';
+import { useOwnWalletWriteHold } from '../hooks/useOwnWalletWriteHold.js';
 // The three password fields, their hints, and the copy for every way
 // a restore can fail, all from one place so a message can never name a field
 // this screen does not show.
@@ -152,6 +153,7 @@ function labelSyncRestoredMessage(labelSync) {
  * @param {'fresh' | 'add'} [props.mode]   'fresh' → first wallet (pre-host `wallet.import`); 'add' → adds to an open vault (`wallet.add.import`). Defaults to 'fresh'.
  * @param {'mnemonic' | 'backup'} [props.initialLane]
  * @param {(state: { lane: 'mnemonic' | 'backup' }) => void} [props.onOpenInTab]
+ * @param {{ report: (holding: boolean) => void }} [props.ownWriteGuard]   told while this lane's own first-wallet write runs or its notice shows
  */
 export function ImportWallet({
     onBack,
@@ -160,6 +162,7 @@ export function ImportWallet({
     mode = 'fresh',
     initialLane = 'mnemonic',
     onOpenInTab,
+    ownWriteGuard,
 }) {
     // S4: The phrase is TYPED here, and a keyboard-visible screen recording is
     // as good as a screenshot of it.
@@ -227,6 +230,7 @@ export function ImportWallet({
     // §36.1: an import ends on the same ADS notice a created wallet does,
     // and only its Continue hands control back to App.
     const [adsNotice, setAdsNotice] = useState(false);
+    useOwnWalletWriteHold(ownWriteGuard, mode === 'fresh' && (busy || adsNotice));
     const [scanning, setScanning] = useState(false);
     const [dragOver, setDragOver] = useState(false);
     const textareaRef = useRef(/** @type {HTMLTextAreaElement | null} */ (null));

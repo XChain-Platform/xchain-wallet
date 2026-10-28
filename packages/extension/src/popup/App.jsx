@@ -603,28 +603,40 @@ function AppInner({ canOpenInTab, titleEnabled }) {
     }, [extensionHandoff]);
     useDemoAutoWipe(activeWalletId, refresh);
 
-    // Another window creating the wallet moves this one to Home, which would
-    // drop a recovery phrase this window is still showing. The create screen
-    // reports whether it holds one; a held phrase turns the move into a
-    // lasting notice on that screen, and a wallet write in flight waits for
-    // its own result.
+    // The background announces every unlock to every surface, this one
+    // included, and a session refresh moves a no-wallet window to Home. Two
+    // onboarding holds keep this window where it is:
+    // - an import or pairing lane writing the first wallet, or still showing
+    //   what follows its own write (the donation notice, the pairing code
+    //   exchange), refreshes by itself when it hands back;
+    // - the create screen reports whether it holds a recovery phrase or is
+    //   writing the wallet. A wallet made in another window while a phrase is
+    //   held turns into a lasting notice on that screen, and a write in
+    //   flight waits for its own result.
+    const statusStateRef = useRef('loading');
+    statusStateRef.current = status.state;
+    const ownWalletWrite = useRef(false);
+    const ownWriteGuard = useMemo(() => ({
+        report: (holding) => { ownWalletWrite.current = holding === true; },
+    }), []);
     const createHold = useRef('idle');
-    const statusState = useRef('loading');
     const onboardingStepRef = useRef('welcome');
+    onboardingStepRef.current = onboardingStep;
     const [walletElsewhere, setWalletElsewhere] = useState(false);
     const createGuard = useMemo(() => ({
         elsewhere: walletElsewhere,
         report: (hold) => { createHold.current = hold; },
     }), [walletElsewhere]);
-    statusState.current = status.state;
-    onboardingStepRef.current = onboardingStep;
     useEffect(() => {
         if (onboardingStep !== 'create' || status.state !== 'no-wallet') setWalletElsewhere(false);
     }, [onboardingStep, status.state]);
-    const refreshUnlessCreating = useCallback(() => {
-        if (statusState.current === 'no-wallet' && onboardingStepRef.current === 'create') {
-            if (createHold.current === 'hold') { setWalletElsewhere(true); return; }
-            if (createHold.current === 'persisting') return;
+    const refreshUnlessOnboardingHolds = useCallback(() => {
+        if (statusStateRef.current === 'no-wallet') {
+            if (ownWalletWrite.current) return;
+            if (onboardingStepRef.current === 'create') {
+                if (createHold.current === 'hold') { setWalletElsewhere(true); return; }
+                if (createHold.current === 'persisting') return;
+            }
         }
         refresh();
     }, [refresh]);
@@ -679,7 +691,7 @@ function AppInner({ canOpenInTab, titleEnabled }) {
 
     useEffect(() => attachSurfaceStateListener((event) => {
         applySurfaceStateEvent(event, {
-            refreshSession: refreshUnlessCreating,
+            refreshSession: refreshUnlessOnboardingHolds,
             refreshWallets: () => {
                 listWallets()
                     .then((list) => { if (Array.isArray(list) && list.length) setWallets(list); })
@@ -727,7 +739,7 @@ function AppInner({ canOpenInTab, titleEnabled }) {
             // Screens that load wallet or account rows on mount read them again.
             remountScreens: () => setSurfaceStateRevision((value) => value + 1),
         });
-    }), [refresh, refreshUnlessCreating]);
+    }), [refresh, refreshUnlessOnboardingHolds]);
 
     // §47 / Cluster L FOLLOWUP 2: consume `?uri=` from popup.html's
     // location.search when the popup boots. Manifest's
@@ -1075,6 +1087,7 @@ function AppInner({ canOpenInTab, titleEnabled }) {
                     <ImportWallet
                         onBack={() => setOnboardingStep('welcome')}
                         onImported={refresh}
+                        ownWriteGuard={ownWriteGuard}
                         initialLane={extensionHandoff?.flow === 'import' ? extensionHandoff.lane : undefined}
                         onOpenInTab={canOpenInTab ? ({ lane }) => openInTab({
                             flow: 'import', mode: 'fresh', variant: 'default', lane,
@@ -1088,6 +1101,7 @@ function AppInner({ canOpenInTab, titleEnabled }) {
                         variant="freewallet"
                         onBack={() => setOnboardingStep('welcome')}
                         onImported={refresh}
+                        ownWriteGuard={ownWriteGuard}
                         onOpenInTab={canOpenInTab ? ({ lane }) => openInTab({
                             flow: 'import', mode: 'fresh', variant: 'freewallet', lane,
                         }) : undefined}
@@ -1102,6 +1116,7 @@ function AppInner({ canOpenInTab, titleEnabled }) {
                     <PairPartnerWallet
                         onBack={() => setOnboardingStep('welcome')}
                         onPaired={refresh}
+                        ownWriteGuard={ownWriteGuard}
                     />
                 );
             }

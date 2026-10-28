@@ -231,6 +231,67 @@ describe('PairPartnerWallet: seed stage', () => {
         );
     });
 
+    it.each([
+        ['a named refusal', Object.assign(new Error('A wallet already exists. Unlock or reset first.'), { name: 'WalletExistsError' })],
+        ['a refusal passed as its message', new Error('A wallet already exists. Unlock or reset first.')],
+    ])('offers the existing wallet\'s unlock and clears the typed secrets after %s', async (_label, refusal) => {
+        const messaging = mkMessaging({ importMnemonic: vi.fn(async () => { throw refusal; }) });
+        const onBack = vi.fn();
+        const onPaired = vi.fn();
+        mount(messaging, { onBack, onPaired });
+        fireEvent.click(screen.getByRole('button', { name: /pair a signer/i }));
+        fill(/Shared recovery phrase/i, PHRASE);
+        fill(/^Password for this device$/i, PASSWORD);
+        fill(/Confirm password/i, PASSWORD);
+        await act(async () => {
+            fireEvent.click(screen.getByRole('button', { name: /Continue/i }));
+        });
+
+        expect(screen.getByRole('alert')).toHaveTextContent('This device already has a wallet');
+        expect(screen.getByLabelText(/Shared recovery phrase/i)).toHaveValue('');
+        expect(screen.getByLabelText(/^Password for this device$/i)).toHaveValue('');
+        expect(screen.getByLabelText(/Confirm password/i)).toHaveValue('');
+        expect(messaging.pairingPayloadRequest).not.toHaveBeenCalled();
+
+        fireEvent.click(screen.getByRole('button', { name: 'Unlock' }));
+        expect(onPaired).toHaveBeenCalledOnce();
+        fireEvent.click(screen.getByRole('button', { name: /back/i }));
+        expect(onPaired).toHaveBeenCalledTimes(2);
+        expect(onBack).not.toHaveBeenCalled();
+    });
+
+    it.each([
+        ['an invisible name', '​​​', 'Wallet name must include a visible character.'],
+        ['an over-long name', 'N'.repeat(65), 'Wallet name must be 64 characters or fewer.'],
+    ])('refuses %s before importing the shared phrase', async (_label, typed, message) => {
+        const messaging = mkMessaging();
+        mount(messaging);
+        fireEvent.click(screen.getByRole('button', { name: /pair a signer/i }));
+        fill(/Wallet name/i, typed);
+        fill(/Shared recovery phrase/i, PHRASE);
+        fill(/^Password for this device$/i, PASSWORD);
+        fill(/Confirm password/i, PASSWORD);
+        await act(async () => {
+            fireEvent.click(screen.getByRole('button', { name: /Continue/i }));
+        });
+        expect(screen.getByRole('alert')).toHaveTextContent(message);
+        expect(messaging.importMnemonic).not.toHaveBeenCalled();
+    });
+
+    it('imports a name of exactly 64 characters', async () => {
+        const messaging = mkMessaging();
+        mount(messaging);
+        fireEvent.click(screen.getByRole('button', { name: /pair a signer/i }));
+        fill(/Wallet name/i, 'N'.repeat(64));
+        fill(/Shared recovery phrase/i, PHRASE);
+        fill(/^Password for this device$/i, PASSWORD);
+        fill(/Confirm password/i, PASSWORD);
+        await act(async () => {
+            fireEvent.click(screen.getByRole('button', { name: /Continue/i }));
+        });
+        expect(messaging.importMnemonic).toHaveBeenCalledWith(expect.objectContaining({ name: 'N'.repeat(64) }));
+    });
+
     it('refuses to continue when the shell returns no wallet id', async () => {
         const messaging = mkMessaging({ importMnemonic: vi.fn(async () => ({})) });
         await reachExchange(messaging);
@@ -428,6 +489,26 @@ describe('PairPartnerWallet: exchange stage', () => {
         });
         fireEvent.click(screen.getByRole('button', { name: 'Finish' }));
         expect(onPaired).toHaveBeenCalled();
+    });
+
+    it('steps Back from the phrase step to the role step and clears the typed secrets', () => {
+        const onBack = vi.fn();
+        mount(mkMessaging(), { onBack });
+        fireEvent.click(screen.getByRole('button', { name: /pair a signer/i }));
+        fill(/Shared recovery phrase/i, PHRASE);
+        fill(/^Password for this device$/i, PASSWORD);
+        fill(/Confirm password/i, PASSWORD);
+        fireEvent.click(screen.getByRole('button', { name: /back/i }));
+
+        expect(onBack).not.toHaveBeenCalled();
+        expect(screen.getByText('Step 1 of 4')).toBeInTheDocument();
+        fireEvent.click(screen.getByRole('button', { name: /pair a watcher/i }));
+        expect(screen.getByLabelText(/Shared recovery phrase/i)).toHaveValue('');
+        expect(screen.getByLabelText(/^Password for this device$/i)).toHaveValue('');
+        expect(screen.getByLabelText(/Confirm password/i)).toHaveValue('');
+        fireEvent.click(screen.getByRole('button', { name: /back/i }));
+        fireEvent.click(screen.getByRole('button', { name: /back/i }));
+        expect(onBack).toHaveBeenCalledOnce();
     });
 
     it('returns through onBack when no completion callback is provided', async () => {
