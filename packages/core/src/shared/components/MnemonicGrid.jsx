@@ -60,6 +60,7 @@ export function MnemonicGrid({ mnemonic, variant = 'full' }) {
                     <ol
                         className={gridClass}
                         aria-label={t('importWallet.recoveryPhrase')}
+                        data-secret=""
                         onCopy={(event) => event.preventDefault()}
                     >
                         {words.map((word, i) => (

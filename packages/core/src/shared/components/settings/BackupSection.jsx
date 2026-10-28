@@ -844,11 +844,13 @@ function RevealedMnemonic({
         >
             <div className={styles.sheetMeta} data-xc-recovery-sheet>{t('settings.backup.wallet')} {walletName}</div>
             {/* The words and the passphrase refuse a copy: the only way out of
-                this sheet is paper or the print path. */}
+                this sheet is paper or the print path. data-secret marks both
+                for every screenshot mask. */}
             <Button
                 variant="ghost"
                 block
                 icon={null}
+                data-secret=""
                 onCopy={blockSecretCopy}
                 onClick={onToggle}
                 aria-label={hidden ? t('settings.backup.revealRecoveryPhrase') : t('settings.backup.hideRecoveryPhrase')}
@@ -881,6 +883,7 @@ function RevealedMnemonic({
                         variant="ghost"
                         block
                         icon={null}
+                        data-secret=""
                         onCopy={blockSecretCopy}
                         onClick={onToggle}
                         aria-label={hidden ? t('settings.backup.revealPassphrase') : t('common.hidePassphrase')}
