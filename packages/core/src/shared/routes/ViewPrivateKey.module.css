@@ -17,13 +17,6 @@
     margin-bottom: var(--xc-space-2);
 }
 
-.infoTitle {
-    font-size: var(--xc-text-lg);
-    font-weight: 700;
-    color: var(--xc-text);
-    margin: 0 0 var(--xc-space-3);
-}
-
 .paragraph {
     font-size: var(--xc-text-sm);
     color: var(--xc-text);

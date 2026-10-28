@@ -22,7 +22,7 @@
 // read-only: they dispatch inside their route, not from the settings table.
 
 import { useEffect, useId, useMemo, useState } from 'react';
-import { Button } from '@xchain-wallet/core/ui';
+import { Button, SectionHeader } from '@xchain-wallet/core/ui';
 import { useSettings } from '../../hooks/useSettings.js';
 import { useBackHandler } from '../../../ui/backStack.js';
 import {
@@ -40,13 +40,9 @@ import { ROW, ROW_LABEL, STACK, SettingsLoadError, Status } from './_settingsPri
 import { t } from '../../../i18n/index.js';
 import '../../../i18n/locales/en/settings.js';
 
-const GROUP_HEADER = {
-    fontSize: 'var(--xc-type-section-title-size)',
-    fontWeight: 'var(--xc-type-section-title-weight)',
-    color: 'var(--xc-text)',
-    marginTop: 'var(--xc-space-3)',
-    marginBottom: 0,
-};
+// Each group is a region named by its SectionHeader. The space above a group
+// sits on the section, so the title and the rows under it keep their places.
+const GROUP = { ...STACK, marginTop: 'var(--xc-space-3)' };
 const INTRO = { ...ROW_LABEL, color: 'var(--xc-text-muted)', margin: 0 };
 const SHORTCUT_ROW = {
     ...ROW,
@@ -206,9 +202,9 @@ export function KeyboardSection() {
                 {t('settings.keyboard.selectRebindThenPressThe')}
             </p>
             {status ? <Status text={status.text} tone={status.kind === 'error' ? 'error' : 'muted'} /> : null}
-            {SHORTCUT_GROUPS.map((group) => (
-                <section key={group} style={STACK}>
-                    <h2 style={GROUP_HEADER}>{group}</h2>
+            {SHORTCUT_GROUPS.map((group, index) => (
+                <section key={group} style={GROUP} aria-labelledby={`${labelPrefix}-group-${index}`}>
+                    <SectionHeader id={`${labelPrefix}-group-${index}`} title={group} />
                     {shortcuts.filter((s) => s.group === group).map((s) => {
                         const capturing = capturingId === s.id;
                         const availability = s.id === 'balances-pin' && settings.showPinAffordance !== true
@@ -258,8 +254,8 @@ export function KeyboardSection() {
                     })}
                 </section>
             ))}
-            <section style={STACK}>
-                <h3 style={GROUP_HEADER}>{t('settings.display.defaults')}</h3>
+            <section style={GROUP} aria-labelledby={`${labelPrefix}-group-defaults`}>
+                <SectionHeader as="h3" id={`${labelPrefix}-group-defaults`} title={t('settings.display.defaults')} />
                 <div style={ROW}>
                     <span style={ROW_LABEL}>{t('settings.keyboard.restoreEveryCustomShortcutTo')}</span>
                     <Button

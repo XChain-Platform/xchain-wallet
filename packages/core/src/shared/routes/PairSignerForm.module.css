@@ -137,14 +137,12 @@
     color: var(--xc-success);
 }
 
+/* The section title sits the header gap above the paired rows. */
 .pairedSection {
+    display: flex;
+    flex-direction: column;
+    gap: var(--xc-section-header-gap);
     margin: 0 0 var(--xc-space-4);
-}
-
-.pairedHeading {
-    color: var(--xc-text);
-    font-size: var(--xc-text-sm);
-    margin: 0 0 var(--xc-space-2);
 }
 
 .pairedList {

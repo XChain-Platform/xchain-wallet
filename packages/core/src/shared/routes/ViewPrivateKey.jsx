@@ -10,7 +10,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useProtectedScreen } from '../utils/screenGuard.js';
-import { AddressText, Button, CopyButton, Icon, Input, ListPage, PageHeader, Screen } from '@xchain-wallet/core/ui';
+import { AddressText, Button, CopyButton, FormPage, Icon, Input, ListPage, PageHeader, Screen, SectionHeader, StatusMessage } from '@xchain-wallet/core/ui';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { useSettings } from '../hooks/useSettings.js';
 import { configureClipboardAutoClear } from '../clipboard.js';
@@ -167,7 +167,7 @@ export function ViewPrivateKey({ walletId, address, renderQR, onBack }) {
     if (sourceInfo.kind === 'hardware') {
         return wrap(
             <>
-                <h2 className={styles.infoTitle}>Private key is on your hardware device</h2>
+                <SectionHeader title="Private key is on your hardware device" />
                 <p className={styles.paragraph}>
                     The private key for this address lives on your {sourceInfo.deviceLabel}.
                     The wallet never sees or stores it.
@@ -191,7 +191,7 @@ export function ViewPrivateKey({ walletId, address, renderQR, onBack }) {
     if (sourceInfo.kind === 'watch-only') {
         return wrap(
             <>
-                <h2 className={styles.infoTitle}>No private key for this address</h2>
+                <SectionHeader title="No private key for this address" />
                 <p className={styles.paragraph}>
                     This is a watch-only address. The wallet only observes it; no
                     private key is stored here and nothing can be signed from it.
@@ -242,37 +242,42 @@ export function ViewPrivateKey({ walletId, address, renderQR, onBack }) {
         );
     }
 
+    // The password step is a form, so it lays out through FormPage: bare on a
+    // phone, one card when wide, the submit button closing the form. A refused
+    // password or a failed load is the form notice, the first item on the page.
     if (stage === 'password' || stage === 'submitting') {
-        return wrap(
-            <form onSubmit={handleSubmit} noValidate>
-                <p className={styles.paragraph}>
-                    Confirm your wallet password. The key stays hidden until you tap to reveal it.
-                </p>
-                <Input
-                    ref={passwordRef}
-                    type="password"
-                    label="Wallet password"
-                    hint="Required every time you view a private key."
-                    value={password}
-                    onChange={(event) => {
-                        setPassword(event.target.value);
-                        if (submitError) setSubmitError(null);
-                    }}
-                    autoComplete="current-password"
-                    disabled={stage === 'submitting'}
-                    error={submitError || undefined}
-                />
-                <div className={styles.actions}>
-                    <Button
-                        type="submit"
-                        variant="primary"
-                        loading={stage === 'submitting'}
-                        disabled={stage === 'submitting' || password.length === 0}
-                    >
-                        Confirm password
-                    </Button>
-                </div>
-            </form>,
+        return (
+            <Screen variant={variant} header={header}>
+                <FormPage
+                    onSubmit={handleSubmit}
+                    status={submitError ? <StatusMessage variant="error">{submitError}</StatusMessage> : null}
+                    intro="Confirm your wallet password. The key stays hidden until you tap to reveal it."
+                    actions={(
+                        <Button
+                            type="submit"
+                            variant="primary"
+                            loading={stage === 'submitting'}
+                            disabled={stage === 'submitting' || password.length === 0}
+                        >
+                            Confirm password
+                        </Button>
+                    )}
+                >
+                    <Input
+                        ref={passwordRef}
+                        type="password"
+                        label="Wallet password"
+                        hint="Required every time you view a private key."
+                        value={password}
+                        onChange={(event) => {
+                            setPassword(event.target.value);
+                            if (submitError) setSubmitError(null);
+                        }}
+                        autoComplete="current-password"
+                        disabled={stage === 'submitting'}
+                    />
+                </FormPage>
+            </Screen>
         );
     }
 

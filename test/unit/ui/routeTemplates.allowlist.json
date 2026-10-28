@@ -1,0 +1,230 @@
+{
+    "files": {
+        "packages/core/src/shared/components/settings/AdsSection.jsx": {
+            "heading": {
+                "count": 1,
+                "reason": "The chain name titling one per-chain amount card in the Ads settings sub-page; a card title inside a settings card, not a page group title."
+            }
+        },
+        "packages/core/src/shared/components/settings/BackupSection.jsx": {
+            "form": {
+                "count": 3,
+                "reason": "Inline forms inside settings cards (a field and its button in one row or block). FormPage draws its own card at 600px and up, so moving them onto it would put a card in a card; the Settings sub-page itself lays out through ListPage."
+            }
+        },
+        "packages/core/src/shared/components/settings/ConnectedSitesSection.jsx": {
+            "form": {
+                "count": 2,
+                "reason": "Inline forms inside settings cards (a field and its button in one row or block). FormPage draws its own card at 600px and up, so moving them onto it would put a card in a card; the Settings sub-page itself lays out through ListPage."
+            }
+        },
+        "packages/core/src/shared/components/settings/DeveloperModeSection.jsx": {
+            "form": {
+                "count": 3,
+                "reason": "Inline forms inside settings cards (a field and its button in one row or block). FormPage draws its own card at 600px and up, so moving them onto it would put a card in a card; the Settings sub-page itself lays out through ListPage."
+            }
+        },
+        "packages/core/src/shared/components/settings/DisplaySection.jsx": {
+            "form": {
+                "count": 1,
+                "reason": "Inline forms inside settings cards (a field and its button in one row or block). FormPage draws its own card at 600px and up, so moving them onto it would put a card in a card; the Settings sub-page itself lays out through ListPage."
+            }
+        },
+        "packages/core/src/shared/components/settings/ThisWalletSection.jsx": {
+            "form": {
+                "count": 2,
+                "reason": "Inline forms inside settings cards (a field and its button in one row or block). FormPage draws its own card at 600px and up, so moving them onto it would put a card in a card; the Settings sub-page itself lays out through ListPage."
+            }
+        },
+        "packages/core/src/shared/routes/AddressPreferencesForm.jsx": {
+            "heading": {
+                "count": 1,
+                "reason": "Result-screen titles (the successTitle heading, and the watcher-mode refusal title where the form has one) inside the result screen of an action (its FormPage or ListPage). One result pattern shared by every action, not a group title; moving it onto SectionHeader changes its type scale for all of them at once, which is a design call."
+            }
+        },
+        "packages/core/src/shared/routes/AdvancedActionsForm.jsx": {
+            "heading": {
+                "count": 1,
+                "reason": "Result-screen titles (the successTitle heading, and the watcher-mode refusal title where the form has one) inside the result screen of an action (its FormPage or ListPage). One result pattern shared by every action, not a group title; moving it onto SectionHeader changes its type scale for all of them at once, which is a design call."
+            }
+        },
+        "packages/core/src/shared/routes/AirdropForm.jsx": {
+            "heading": {
+                "count": 2,
+                "reason": "Result-screen titles (the successTitle heading, and the watcher-mode refusal title where the form has one) inside the result screen of an action (its FormPage or ListPage). One result pattern shared by every action, not a group title; moving it onto SectionHeader changes its type scale for all of them at once, which is a design call."
+            }
+        },
+        "packages/core/src/shared/routes/AttachContentForm.jsx": {
+            "heading": {
+                "count": 4,
+                "reason": "Result-screen titles (the successTitle heading, and the watcher-mode refusal title where the form has one) inside the result screen of an action (its FormPage or ListPage). One result pattern shared by every action, not a group title; moving it onto SectionHeader changes its type scale for all of them at once, which is a design call."
+            }
+        },
+        "packages/core/src/shared/routes/BatchComposerForm.jsx": {
+            "heading": {
+                "count": 1,
+                "reason": "Result-screen titles (the successTitle heading, and the watcher-mode refusal title where the form has one) inside the result screen of an action (its FormPage or ListPage). One result pattern shared by every action, not a group title; moving it onto SectionHeader changes its type scale for all of them at once, which is a design call."
+            }
+        },
+        "packages/core/src/shared/routes/BroadcastForm.jsx": {
+            "heading": {
+                "count": 2,
+                "reason": "Result-screen titles (the successTitle heading, and the watcher-mode refusal title where the form has one) inside the result screen of an action (its FormPage or ListPage). One result pattern shared by every action, not a group title; moving it onto SectionHeader changes its type scale for all of them at once, which is a design call."
+            }
+        },
+        "packages/core/src/shared/routes/CallbackForm.jsx": {
+            "heading": {
+                "count": 1,
+                "reason": "Result-screen titles (the successTitle heading, and the watcher-mode refusal title where the form has one) inside the result screen of an action (its FormPage or ListPage). One result pattern shared by every action, not a group title; moving it onto SectionHeader changes its type scale for all of them at once, which is a design call."
+            }
+        },
+        "packages/core/src/shared/routes/CreateOrderForm.jsx": {
+            "heading": {
+                "count": 1,
+                "reason": "Result-screen titles (the successTitle heading, and the watcher-mode refusal title where the form has one) inside the result screen of an action (its FormPage or ListPage). One result pattern shared by every action, not a group title; moving it onto SectionHeader changes its type scale for all of them at once, which is a design call."
+            }
+        },
+        "packages/core/src/shared/routes/DestroyForm.jsx": {
+            "heading": {
+                "count": 1,
+                "reason": "Result-screen titles (the successTitle heading, and the watcher-mode refusal title where the form has one) inside the result screen of an action (its FormPage or ListPage). One result pattern shared by every action, not a group title; moving it onto SectionHeader changes its type scale for all of them at once, which is a design call."
+            }
+        },
+        "packages/core/src/shared/routes/DispenserDetail.jsx": {
+            "heading": {
+                "count": 4,
+                "reason": "Result-screen titles (the successTitle heading, and the watcher-mode refusal title where the form has one) inside the result screen of an action (its FormPage or ListPage). One result pattern shared by every action, not a group title; moving it onto SectionHeader changes its type scale for all of them at once, which is a design call."
+            }
+        },
+        "packages/core/src/shared/routes/DispenserForm.jsx": {
+            "heading": {
+                "count": 1,
+                "reason": "Result-screen titles (the successTitle heading, and the watcher-mode refusal title where the form has one) inside the result screen of an action (its FormPage or ListPage). One result pattern shared by every action, not a group title; moving it onto SectionHeader changes its type scale for all of them at once, which is a design call."
+            }
+        },
+        "packages/core/src/shared/routes/DividendForm.jsx": {
+            "heading": {
+                "count": 1,
+                "reason": "Result-screen titles (the successTitle heading, and the watcher-mode refusal title where the form has one) inside the result screen of an action (its FormPage or ListPage). One result pattern shared by every action, not a group title; moving it onto SectionHeader changes its type scale for all of them at once, which is a design call."
+            }
+        },
+        "packages/core/src/shared/routes/IssueTokenForm.jsx": {
+            "heading": {
+                "count": 1,
+                "reason": "Result-screen titles (the successTitle heading, and the watcher-mode refusal title where the form has one) inside the result screen of an action (its FormPage or ListPage). One result pattern shared by every action, not a group title; moving it onto SectionHeader changes its type scale for all of them at once, which is a design call."
+            }
+        },
+        "packages/core/src/shared/routes/ListCreateForm.jsx": {
+            "heading": {
+                "count": 1,
+                "reason": "Result-screen titles (the successTitle heading, and the watcher-mode refusal title where the form has one) inside the result screen of an action (its FormPage or ListPage). One result pattern shared by every action, not a group title; moving it onto SectionHeader changes its type scale for all of them at once, which is a design call."
+            }
+        },
+        "packages/core/src/shared/routes/ListForkForm.jsx": {
+            "heading": {
+                "count": 3,
+                "reason": "Result-screen title and the result screen's 'Now referenced by' label inside the fork result FormPage, plus the watcher-mode refusal title. One result pattern shared by every action form, not a group title; restyling it is a design call."
+            }
+        },
+        "packages/core/src/shared/routes/Loading.jsx": {
+            "screen": {
+                "count": 1,
+                "reason": "The boot and unlock spinner screen: a centred progress line and a retry button, with no form or list to lay out through a template."
+            }
+        },
+        "packages/core/src/shared/routes/ManageToken.jsx": {
+            "heading": {
+                "count": 1,
+                "reason": "The token ticker headline in the issuer hero, beside the token icon and the lock badges; the page identity, not a group title."
+            }
+        },
+        "packages/core/src/shared/routes/MessagingInbox.jsx": {
+            "form": {
+                "count": 1,
+                "reason": "The message composer bar under an open thread: one field and a send button below a list page, not a page form."
+            }
+        },
+        "packages/core/src/shared/routes/MintForm.jsx": {
+            "heading": {
+                "count": 1,
+                "reason": "Result-screen titles (the successTitle heading, and the watcher-mode refusal title where the form has one) inside the result screen of an action (its FormPage or ListPage). One result pattern shared by every action, not a group title; moving it onto SectionHeader changes its type scale for all of them at once, which is a design call."
+            }
+        },
+        "packages/core/src/shared/routes/MyOrdersView.jsx": {
+            "heading": {
+                "count": 1,
+                "reason": "Result-screen titles (the successTitle heading, and the watcher-mode refusal title where the form has one) inside the result screen of an action (its FormPage or ListPage). One result pattern shared by every action, not a group title; moving it onto SectionHeader changes its type scale for all of them at once, which is a design call."
+            }
+        },
+        "packages/core/src/shared/routes/MySwapsView.jsx": {
+            "heading": {
+                "count": 1,
+                "reason": "Result-screen titles (the successTitle heading, and the watcher-mode refusal title where the form has one) inside the result screen of an action (its FormPage or ListPage). One result pattern shared by every action, not a group title; moving it onto SectionHeader changes its type scale for all of them at once, which is a design call."
+            }
+        },
+        "packages/core/src/shared/routes/OracleForm.jsx": {
+            "heading": {
+                "count": 1,
+                "reason": "Result-screen titles (the successTitle heading, and the watcher-mode refusal title where the form has one) inside the result screen of an action (its FormPage or ListPage). One result pattern shared by every action, not a group title; moving it onto SectionHeader changes its type scale for all of them at once, which is a design call."
+            }
+        },
+        "packages/core/src/shared/routes/PairSignerForm.jsx": {
+            "heading": {
+                "count": 1,
+                "reason": "Result-screen titles (the successTitle heading, and the watcher-mode refusal title where the form has one) inside the result screen of an action (its FormPage or ListPage). One result pattern shared by every action, not a group title; moving it onto SectionHeader changes its type scale for all of them at once, which is a design call."
+            }
+        },
+        "packages/core/src/shared/routes/ProjectRosterForm.jsx": {
+            "heading": {
+                "count": 3,
+                "reason": "Result-screen titles (the successTitle heading, and the watcher-mode refusal title where the form has one) inside the result screen of an action (its FormPage or ListPage). One result pattern shared by every action, not a group title; moving it onto SectionHeader changes its type scale for all of them at once, which is a design call."
+            }
+        },
+        "packages/core/src/shared/routes/PublishFileForm.jsx": {
+            "heading": {
+                "count": 1,
+                "reason": "Result-screen titles (the successTitle heading, and the watcher-mode refusal title where the form has one) inside the result screen of an action (its FormPage or ListPage). One result pattern shared by every action, not a group title; moving it onto SectionHeader changes its type scale for all of them at once, which is a design call."
+            }
+        },
+        "packages/core/src/shared/routes/Send.jsx": {
+            "form": {
+                "count": 1,
+                "reason": "The one-field save-recipient form under the Send result card. It is an inline follow-up inside the result screen; drawing it as a FormPage card at 600px and up changes the result layout, which is a design call."
+            },
+            "heading": {
+                "count": 1,
+                "reason": "Result-screen titles (the successTitle heading, and the watcher-mode refusal title where the form has one) inside the result screen of an action (its FormPage or ListPage). One result pattern shared by every action, not a group title; moving it onto SectionHeader changes its type scale for all of them at once, which is a design call."
+            }
+        },
+        "packages/core/src/shared/routes/SleepForm.jsx": {
+            "heading": {
+                "count": 1,
+                "reason": "Result-screen titles (the successTitle heading, and the watcher-mode refusal title where the form has one) inside the result screen of an action (its FormPage or ListPage). One result pattern shared by every action, not a group title; moving it onto SectionHeader changes its type scale for all of them at once, which is a design call."
+            }
+        },
+        "packages/core/src/shared/routes/SweepForm.jsx": {
+            "heading": {
+                "count": 1,
+                "reason": "Result-screen titles (the successTitle heading, and the watcher-mode refusal title where the form has one) inside the result screen of an action (its FormPage or ListPage). One result pattern shared by every action, not a group title; moving it onto SectionHeader changes its type scale for all of them at once, which is a design call."
+            }
+        },
+        "packages/core/src/shared/routes/TokenAdminForm.jsx": {
+            "heading": {
+                "count": 1,
+                "reason": "Result-screen titles (the successTitle heading, and the watcher-mode refusal title where the form has one) inside the result screen of an action (its FormPage or ListPage). One result pattern shared by every action, not a group title; moving it onto SectionHeader changes its type scale for all of them at once, which is a design call."
+            }
+        },
+        "packages/core/src/shared/routes/TokenDetail.jsx": {
+            "form": {
+                "count": 1,
+                "reason": "The inline password prompt that unlocks a gated file inside the token detail files panel; a field under the file list, not a page form."
+            }
+        },
+        "packages/core/src/shared/routes/ViewPrivateKey.jsx": {
+            "heading": {
+                "count": 1,
+                "reason": "The danger-tone 'Before you continue' headline over the private key warning list. SectionHeader has no danger tone, so moving it drops the warning colour; that is a design call."
+            }
+        }
+    }
+}

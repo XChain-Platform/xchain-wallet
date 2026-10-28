@@ -16,6 +16,7 @@ import {
     FormPage,
     Input,
     Icon,
+    SectionHeader,
     StatusMessage,
 } from '@xchain-wallet/core/ui';
 import {
@@ -490,7 +491,7 @@ function FirmwareBanner({ verdict, vendor }) {
 function PairedDeviceList({ records, unpairingId, onUnpair }) {
     return (
         <section className={styles.pairedSection} aria-labelledby="paired-devices-heading">
-            <h2 id="paired-devices-heading" className={styles.pairedHeading}>Paired devices</h2>
+            <SectionHeader id="paired-devices-heading" title="Paired devices" />
             <ul className={styles.pairedList}>
                 {records.map((record) => (
                     <li key={record.id} className={styles.pairedRow}>
