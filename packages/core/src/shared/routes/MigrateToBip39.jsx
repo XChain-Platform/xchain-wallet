@@ -44,6 +44,14 @@ import styles from './IssueTokenForm.module.css';
 import { externalIndexOf } from '../addressSelection.js';
 import { pickQuizPositions } from '../utils/pickQuizPositions.js';
 import { nextPaint } from '../utils/nextPaint.js';
+import {
+    dismissMigrationSweeps,
+    pendingMigrationSweeps,
+    readMigrationSweeps,
+    recordMigration,
+    setMigrationRows,
+    subscribeMigrationSweeps,
+} from '../../flows/migrationSweeps.js';
 
 const chainRegistry = registryLib.defaultRegistry();
 const MIN_PASSWORD_LENGTH = 8;
@@ -64,14 +72,20 @@ const DEFAULT_WALLET_NAME = 'XChain BIP39 Wallet';
  * Stage machine: explain → create → backup → verify → submitting
  * → done (with per-chain sweep links).
  *
+ * The done list is kept per legacy wallet (flows/migrationSweeps.js), so the
+ * wizard opens straight on it while any row is unswept: Back or Done from a
+ * sweep, or a Continue migration entry, lands on the same list with swept
+ * rows marked instead of starting another upgrade.
+ *
  * @param {object} props
  * @param {string} props.legacyWalletId       source wallet (counterwallet-legacy)
  * @param {() => void} props.onBack
  * @param {(newWalletId: string) => void} [props.onMigrated]  refreshes App.jsx
  * @param {(sweep: { legacyWalletId: string, newWalletId: string, chainId: string, fromAddress: string, toAddress: string }) => void} [props.onSweepChain]
  *        Opens the SweepForm for one chain row (App wires the view + props).
+ * @param {boolean} [props.resumeList]  open on the kept list even when every row is swept (the return from a sweep)
  */
-export function MigrateToBip39({ legacyWalletId, onBack, onMigrated, onSweepChain }) {
+export function MigrateToBip39({ legacyWalletId, onBack, onMigrated, onSweepChain, resumeList = false }) {
     // S4: Shows the new recovery phrase during migration.
     // No-op on every shell that installs no screen guard (web, extension,
     // desktop): a browser tab cannot stop a screenshot and must not pretend to.
@@ -80,8 +94,13 @@ export function MigrateToBip39({ legacyWalletId, onBack, onMigrated, onSweepChai
     const { messaging, shell } = useMessaging();
     const variant = screenVariantFor(shell);
 
+    // A kept list reopens the done stage for the wallet pair it names. It
+    // holds no phrase, so nothing secret comes back with it.
+    const [resumed] = useState(() => (resumeList
+        ? readMigrationSweeps(legacyWalletId)
+        : pendingMigrationSweeps(legacyWalletId)));
     const [stage, setStage] = useState(
-        /** @type {'explain' | 'create' | 'backup' | 'verify' | 'submitting' | 'done'} */ ('explain'),
+        /** @type {'explain' | 'create' | 'backup' | 'verify' | 'submitting' | 'done'} */ (resumed ? 'done' : 'explain'),
     );
     const [name, setName] = useState(DEFAULT_WALLET_NAME);
     const [password, setPassword] = useState('');
@@ -91,7 +110,8 @@ export function MigrateToBip39({ legacyWalletId, onBack, onMigrated, onSweepChai
         /** @type {Record<string, any[]> | null} */ (null),
     );
     const [legacyAddressError, setLegacyAddressError] = useState(false);
-    const [newWalletId, setNewWalletId] = useState(/** @type {string | null} */ (null));
+    const [newWalletId, setNewWalletId] = useState(/** @type {string | null} */ (resumed?.newWalletId || null));
+    const [sweeps, setSweeps] = useState(() => readMigrationSweeps(legacyWalletId));
     // The phrase stays in memory until the user proves their written copy and
     // the encrypted wallet is saved. No sweep path exists before that point.
     const [mnemonic, setMnemonic] = useState(/** @type {string | null} */ (null));
@@ -167,6 +187,50 @@ export function MigrateToBip39({ legacyWalletId, onBack, onMigrated, onSweepChai
     const addressLoadFailed = legacyAddressError || newAddressError;
     const addressesReady = !addressLoadFailed && legacyAddrs !== null && newAddrs !== null;
 
+    // Sweeps run on their own screen and mark their row as they broadcast;
+    // the list follows those writes.
+    useEffect(() => {
+        setSweeps(readMigrationSweeps(legacyWalletId));
+        return subscribeMigrationSweeps(() => setSweeps(readMigrationSweeps(legacyWalletId)));
+    }, [legacyWalletId]);
+
+    // Keep the list the user sees, so it survives leaving this screen.
+    useEffect(() => {
+        if (!addressesReady || !newWalletId || !legacyWalletId) return;
+        setMigrationRows(legacyWalletId, newWalletId, perChainPairs.flatMap((row) => (
+            row.legacy.map((fromAddress) => ({ chainId: row.chainId, fromAddress, toAddress: row.next }))
+        )));
+    }, [addressesReady, perChainPairs, legacyWalletId, newWalletId]);
+
+    // A kept list whose destination wallet is missing from this device has
+    // nothing to sweep into, so it goes and the upgrade starts over.
+    useEffect(() => {
+        if (!resumed || typeof messaging.listWallets !== 'function') return;
+        let cancelled = false;
+        messaging.listWallets()
+            .then((list) => {
+                if (cancelled || !Array.isArray(list)) return;
+                if (list.some((w) => w?.id === resumed.newWalletId)) return;
+                dismissMigrationSweeps(legacyWalletId);
+                setNewWalletId(null);
+                setStage('explain');
+            })
+            .catch(() => { /* the address load reports its own failure */ });
+        return () => { cancelled = true; };
+    }, [resumed, messaging, legacyWalletId]);
+
+    const sweptTxids = useMemo(() => {
+        const map = new Map();
+        if (!sweeps || sweeps.newWalletId !== newWalletId) return map;
+        for (const row of sweeps.rows) {
+            if (row.swept) map.set(`${row.chainId}\n${row.fromAddress}`, row.txid || '');
+        }
+        return map;
+    }, [sweeps, newWalletId]);
+    const unsweptCount = perChainPairs.reduce((total, row) => (
+        total + row.legacy.filter((address) => !sweptTxids.has(`${row.chainId}\n${address}`)).length
+    ), 0);
+
     function handleCreate(event) {
         event.preventDefault();
         if (stage === 'submitting') return;
@@ -232,6 +296,7 @@ export function MigrateToBip39({ legacyWalletId, onBack, onMigrated, onSweepChai
             const id = result?.walletId || result?.id || result?.wallet?.id;
             // Warn against a blind retry: the save may have stored the wallet even without returning its id
             if (!id) throw new Error('The new wallet could not be confirmed. Check your wallet list before trying again.');
+            recordMigration(legacyWalletId, id);
             setNewWalletId(id);
             try { flowsLib.markBackupVerified(id); } catch { /* best-effort reminder metadata */ }
             setPassword('');
@@ -259,6 +324,14 @@ export function MigrateToBip39({ legacyWalletId, onBack, onMigrated, onSweepChai
     }
 
     function handleDone() {
+        // A finished list has nothing left to offer from the legacy wallet.
+        if (addressesReady && unsweptCount === 0) dismissMigrationSweeps(legacyWalletId);
+        if (newWalletId && onMigrated) onMigrated(newWalletId);
+        onBack();
+    }
+
+    function handleDismiss() {
+        dismissMigrationSweeps(legacyWalletId);
         if (newWalletId && onMigrated) onMigrated(newWalletId);
         onBack();
     }
@@ -456,7 +529,10 @@ export function MigrateToBip39({ legacyWalletId, onBack, onMigrated, onSweepChai
                                         {d ? <ChainBadge descriptor={d} size="sm" showName={false} /> : 'Network'}
                                     </dt>
                                     <dd className={styles.detailsValue}>
-                                        {row.legacy.length > 0 ? row.legacy.map((legacyAddress) => (
+                                        {row.legacy.length > 0 ? row.legacy.map((legacyAddress) => {
+                                            const sweptTxid = sweptTxids.get(`${row.chainId}\n${legacyAddress}`);
+                                            const swept = sweptTxid !== undefined;
+                                            return (
                                             <div key={legacyAddress}>
                                                 <div>
                                                     <strong>Legacy address</strong>{' '}
@@ -468,7 +544,13 @@ export function MigrateToBip39({ legacyWalletId, onBack, onMigrated, onSweepChai
                                                         ? <AddressText address={row.next} />
                                                         : <em>Unavailable</em>}
                                                 </div>
-                                                {row.next && onSweepChain && newWalletId ? (
+                                                {swept ? (
+                                                    <div>
+                                                        <strong>Swept</strong>{' '}
+                                                        {sweptTxid ? <code className={styles.txid}>{sweptTxid}</code> : null}
+                                                    </div>
+                                                ) : null}
+                                                {!swept && row.next && onSweepChain && newWalletId ? (
                                                     <Button
                                                         variant="secondary"
                                                         onClick={() => onSweepChain({
@@ -483,7 +565,8 @@ export function MigrateToBip39({ legacyWalletId, onBack, onMigrated, onSweepChai
                                                     </Button>
                                                 ) : null}
                                             </div>
-                                        )) : (
+                                            );
+                                        }) : (
                                             <em>No legacy address on this network.</em>
                                         )}
                                     </dd>
@@ -493,6 +576,9 @@ export function MigrateToBip39({ legacyWalletId, onBack, onMigrated, onSweepChai
                     </dl>
                 ) : null}
                 <div className={styles.actions}>
+                    {addressesReady && unsweptCount > 0 ? (
+                        <Button variant="secondary" onClick={handleDismiss}>Dismiss list</Button>
+                    ) : null}
                     <Button variant="primary" onClick={handleDone}>Finish</Button>
                 </div>
             </ListPage>,

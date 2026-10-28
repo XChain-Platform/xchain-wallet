@@ -437,6 +437,9 @@ function AppInner() {
         /** @type {'home' | 'settings'} */ ('home'),
     );
     const [migrateLegacyWalletId, setMigrateLegacyWalletId] = useState(/** @type {string | null} */ (null));
+    // Set on the way back from a migration sweep, so the wizard reopens on its
+    // kept list even when that sweep was the last one.
+    const [migrateResume, setMigrateResume] = useState(false);
     // PC-34: SweepForm context. Free-entry sweeps leave it null (form
     // defaults to the active wallet); the migrate lane prefills the
     // legacy wallet + locked destination.
@@ -786,6 +789,7 @@ function AppInner() {
 
     function clearTransientActionState() {
         setUnlockedView('home');
+        setMigrateResume(false);
         setFormReturnView(null);
         setTokenAdminInitialPicker(null);
         setTokenDetailRef(null);
@@ -1393,8 +1397,12 @@ function AppInner() {
                         walletId={sweepCtx?.walletId || activeWalletId}
                         onBack={() => {
                             setSweepCtx(null);
-                            if (fromMigrate) setUnlockedView('home');
-                            else formBack();
+                            if (fromMigrate) {
+                                // Back to the migration list, which marks the swept row
+                                // and still offers the others.
+                                setMigrateResume(true);
+                                setUnlockedView('migrate-bip39');
+                            } else formBack();
                         }}
                         initialChainId={sweepCtx?.chainId || prefillChainId}
                         initialFromAddress={sweepCtx?.fromAddress || prefillFromAddress}
@@ -1749,6 +1757,7 @@ function AppInner() {
                 return (
                     <MigrateToBip39
                         legacyWalletId={targetId}
+                        resumeList={migrateResume}
                         onBack={() => {
                             // Refresh on the way OUT, not on creation: refresh()
                             // resets unlockedView to home, which would abandon
@@ -1756,6 +1765,7 @@ function AppInner() {
                             // below wins, so the intended destination stands.
                             refresh();
                             setMigrateLegacyWalletId(null);
+                            setMigrateResume(false);
                             setUnlockedView(migrateLegacyWalletId ? 'wallet-details' : 'home');
                         }}
                         onMigrated={() => {

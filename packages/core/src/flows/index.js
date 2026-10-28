@@ -710,6 +710,16 @@ export {
     computeBackupReminderState,
 } from './backupReminder.js';
 export {
+    readMigrationSweeps,
+    pendingMigrationSweeps,
+    recordMigration,
+    setMigrationRows,
+    markMigrationSwept,
+    dismissMigrationSweeps,
+    clearMigrationSweeps,
+    subscribeMigrationSweeps,
+} from './migrationSweeps.js';
+export {
     entriesToCsv,
     entriesToJson,
     buildExportFilename,

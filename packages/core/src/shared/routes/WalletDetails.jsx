@@ -22,6 +22,7 @@ import '../../i18n/locales/en/walletDetails.js';
 import { walletOriginLabel } from '../utils/walletOriginLabel.js';
 import styles from './ActionsMenu.module.css';
 import pickerStyles from './WalletPicker.module.css';
+import { pendingMigrationSweeps } from '../../flows/migrationSweeps.js';
 
 // Re-exported for the callers and tests that reached for it here before
 // the demo-exit primitives were pulled into one module.
@@ -210,7 +211,9 @@ export function WalletDetails({ walletId, onBack, onRename, onMigrateToBip39, on
                             disabled={exitBusy}
                             icon={<Icon.MigrateIcon />}
                         >
-                            {t('walletDetails.upgradeRecovery')}
+                            {pendingMigrationSweeps(wallet.id)
+                                ? t('walletDetails.continueMigration')
+                                : t('walletDetails.upgradeRecovery')}
                         </Button>
                     </div>
                 ) : null}

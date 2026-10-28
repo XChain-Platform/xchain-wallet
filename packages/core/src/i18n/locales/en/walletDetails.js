@@ -32,6 +32,7 @@ const messages = {
     'walletDetails.demoWallet': 'Demo wallet (throwaway)',
     'walletDetails.id': 'ID',
     'walletDetails.upgradeRecovery': 'Upgrade recovery phrase',
+    'walletDetails.continueMigration': 'Continue migration',
 };
 
 addEnglish(messages);

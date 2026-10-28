@@ -48,6 +48,7 @@ import styles from './IssueTokenForm.module.css';
 import { submitFailureMessage } from '../utils/submitFailureMessage.js';
 import { QueuedResultPanel } from '../components/QueuedResultPanel.jsx';
 import { memoLengthError } from '../utils/memoLimit.js';
+import { markMigrationSwept } from '../../flows/migrationSweeps.js';
 
 const chainRegistry = registryLib.defaultRegistry();
 
@@ -445,6 +446,21 @@ export function SweepForm({
         });
     }, [stage, confirmModalOpen, actionParams, chainId]);
 
+    // The migration list marks this legacy address once its sweep is on the
+    // network. A queued or unsigned result has not moved anything yet.
+    function noteMigrationSweep(res) {
+        const sweptTxid = res?.txid || res?.broadcast?.txid;
+        if (!migrateLane || !sweptTxid || res?.queued) return;
+        try {
+            markMigrationSwept(walletId, {
+                newWalletId: migrateTo.walletId,
+                chainId,
+                fromAddress: fromAddress?.address,
+                txid: sweptTxid,
+            });
+        } catch { /* best-effort list metadata */ }
+    }
+
     async function openConfirmModal() {
         const from = buildFrom();
         if (!chainId || !from) return;
@@ -500,6 +516,7 @@ export function SweepForm({
             });
             setResult(res);
             setPassword('');
+            noteMigrationSweep(res);
             setStage('done');
         } catch (err) {
             if (err && (err.reason === 'user-rejected' || err.name === 'UserRejectedError')) return;
@@ -582,6 +599,7 @@ export function SweepForm({
             });
             setResult(res);
             setPassword('');
+            noteMigrationSweep(res);
             setStage('done');
         } catch (err) {
             const isBadPassword = err?.name === 'InvalidPasswordError';

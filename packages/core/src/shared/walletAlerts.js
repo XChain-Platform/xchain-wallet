@@ -14,6 +14,8 @@
 // A shell surfaces an alert by passing its handler and hides it by passing
 // nothing, the same contract as the Actions menu (actionEntries.js).
 
+import { pendingMigrationSweeps } from '../flows/migrationSweeps.js';
+
 /**
  * @typedef {Object} WalletAlert
  * @property {string} id              stable alert id, also the list key
@@ -46,7 +48,20 @@ export function buildWalletAlerts({ activeWallet = null, messagingUnread = 0 } =
         });
     }
     // Offer the BIP39 upgrade only for a legacy-format wallet the shell can migrate.
-    if (activeWallet?.format === 'counterwallet-legacy' && typeof onMigrateToBip39 === 'function') {
+    // An upgrade with legacy addresses still to sweep offers its list instead,
+    // since a second upgrade would make another phrase and another wallet.
+    const migrationOpen = activeWallet?.format === 'counterwallet-legacy'
+        && typeof onMigrateToBip39 === 'function'
+        && pendingMigrationSweeps(activeWallet?.id) !== null;
+    if (migrationOpen) {
+        alerts.push({
+            id: 'migration-sweeps',
+            severity: 'info',
+            title: 'Migration in progress',
+            message: 'Some addresses of this wallet have not been swept into your new BIP39 wallet yet.',
+            action: { label: 'Continue migration', onSelect: onMigrateToBip39 },
+        });
+    } else if (activeWallet?.format === 'counterwallet-legacy' && typeof onMigrateToBip39 === 'function') {
         alerts.push({
             id: 'legacy-format',
             severity: 'info',

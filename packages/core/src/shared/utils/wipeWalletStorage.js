@@ -12,6 +12,7 @@ import { clearLockoutState } from '../../flows/lockoutTracking.js';
 import { clearDuressPassphrase } from '../../flows/duressPassphrase.js';
 import { clearPanicModeState } from '../../flows/panicMode.js';
 import { clearBackupReminderState } from '../../flows/backupReminder.js';
+import { clearMigrationSweeps } from '../../flows/migrationSweeps.js';
 import { clearBalanceCache } from './balanceCache.js';
 import { HISTORY_CACHE_PREFIX } from './historyCache.js';
 
@@ -156,6 +157,7 @@ export async function wipeWalletStorage() {
     clearPanicModeState();
     clearDuressPassphrase();
     clearBackupReminderState();
+    clearMigrationSweeps();
 }
 
 /**
@@ -188,6 +190,9 @@ export function clearRemovedWalletStorage(walletId) {
     if (typeof walletId !== 'string' || walletId.length === 0) return;
     clearBalanceCache(walletId);
     clearBackupReminderState(walletId);
+    // A migration list names the legacy wallet and its sweep destination;
+    // either one leaving makes the list meaningless.
+    clearMigrationSweeps(walletId);
     try {
         const store = globalThis.localStorage;
         if (!store) return;
