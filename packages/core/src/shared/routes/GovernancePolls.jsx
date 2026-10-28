@@ -155,7 +155,7 @@ export function GovernancePolls({ walletId, onOpenPoll, onCreate, onDelegate, on
     if (!chainId && !error) {
         return wrap(
             <ListPage notices={(
-                <StatusMessage variant="status">{t('governance.loadingAddresses')}</StatusMessage>
+                <StatusMessage variant="status" label={t('governance.loadingAddressesLabel')} busy>{t('governance.loadingAddresses')}</StatusMessage>
             )} />,
         );
     }
@@ -182,7 +182,7 @@ export function GovernancePolls({ walletId, onOpenPoll, onCreate, onDelegate, on
                     {pollError}
                 </StatusMessage>
             ) : !rows ? (
-                <StatusMessage variant="status">{t('governance.loadingPolls')}</StatusMessage>
+                <StatusMessage variant="status" label={t('governance.loadingPollsLabel')} busy>{t('governance.loadingPolls')}</StatusMessage>
             ) : null}
             toolbar={(
             <>

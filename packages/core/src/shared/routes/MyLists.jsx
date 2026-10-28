@@ -262,7 +262,7 @@ function MyListsScreen({ walletId, activeAccountId, onOpenList, onCreateList, on
         return wrap(
             <div aria-hidden="true"><Skeleton.List rows={5} /></div>,
             undefined,
-            { notices: <StatusMessage variant="status">{t('routes.myLists.loading')}</StatusMessage> },
+            { notices: <StatusMessage variant="status" label={t('routes.myLists.loading')} busy>{t('routes.myLists.loading')}</StatusMessage> },
         );
     }
     if (Object.keys(addressesByChain).length === 0) {
@@ -300,7 +300,7 @@ function MyListsScreen({ walletId, activeAccountId, onOpenList, onCreateList, on
             Couldn't load your lists for {loadErrors.join(', ')}. Try again in a moment.
         </StatusMessage>
     ) : loadingNotice ? (
-        <StatusMessage variant="status">{t('routes.myLists.loading')}</StatusMessage>
+        <StatusMessage variant="status" label={t('routes.myLists.loading')} busy>{t('routes.myLists.loading')}</StatusMessage>
     ) : null;
     const emptyOffersCreate = !anyLoading && loadErrors.length === 0 && allRows.length === 0;
 

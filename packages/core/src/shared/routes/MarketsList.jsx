@@ -310,7 +310,7 @@ export function MarketsList({
                         {loadError}
                     </StatusMessage>
                 ) : showLoading ? (
-                    <StatusMessage variant="status">{t('routes.marketsList.loading')}</StatusMessage>
+                    <StatusMessage variant="status" label={t('routes.marketsList.loading')} busy>{t('routes.marketsList.loading')}</StatusMessage>
                 ) : null}
                 toolbar={(
                     <div style={{ width: '100%' }}>

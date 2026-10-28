@@ -51,6 +51,8 @@ import { t } from '../i18n/index.js';
  *   not a live region at all. The look always follows the variant, so one tone keeps one style.
  * @param {string} [props.testId]                             data-testid for tests that find the message by hook
  * @param {string} [props.lead]                               bold lead-in sentence before the text, such as "Destroy is irreversible."
+ * @param {string} [props.label]                              accessible name for the live region, for a notice found by name such as "Loading markets"
+ * @param {boolean} [props.busy]                             marks a loading notice aria-busy while its content loads
  *
  * Children may be several block elements (one `<p>` per line of a multi-line
  * warning, or a `<ul>`): they stay one box and one announcement.
@@ -64,7 +66,7 @@ import { t } from '../i18n/index.js';
  *
  * @param {boolean} [props.keepsShellNotice]
  */
-export function StatusMessage({ variant = 'status', id, children, className, details, recovery, role: roleOverride, testId, lead, keepsShellNotice = false }) {
+export function StatusMessage({ variant = 'status', id, children, className, details, recovery, role: roleOverride, testId, lead, label, busy = false, keepsShellNotice = false }) {
     const presentation = STATUS_PRESENTATION[variant] || STATUS_PRESENTATION.status;
     const empty = children === null || children === undefined || children === '';
     const inShell = Boolean(useContext(ShellNoticesContext));
@@ -83,6 +85,8 @@ export function StatusMessage({ variant = 'status', id, children, className, det
             role={role}
             aria-live={live}
             aria-atomic={live ? 'true' : undefined}
+            aria-label={label || undefined}
+            aria-busy={busy ? 'true' : undefined}
             id={id}
             className={classNames}
             data-variant={presentation.tone}
