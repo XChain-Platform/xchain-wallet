@@ -46,11 +46,9 @@ import { actionTextSafetyError } from '../utils/actionTextSafety.js';
 import { MAX_MESSAGE_BYTES, messageWireByteLength } from '../../flows/messageAction.js';
 import styles from './IssueTokenForm.module.css';
 import { t } from '../../i18n/index.js';
-import '../../i18n/locales/en/components.js';
 import '../../i18n/locales/en/composeMessage.js';
 import '../../i18n/locales/en/gatedPublish.js';
 import '../../i18n/locales/en/send.js';
-import '../../i18n/locales/en/settings.js';
 import '../../i18n/locales/en/verifySignature.js';
 
 const KEY_MISMATCH_MESSAGE =
