@@ -462,6 +462,33 @@ export function TokenAdminForm({ walletId, mode, onBack, initialChainId, initial
         setListsPrefilled(true);
     }, [mode, assetInfo, listsPrefilled]);
 
+    // The once-only prefills above belong to one token. When the owner moves
+    // from one chosen token to another, the next token's record prefills
+    // afresh: list bindings, the edited-block-list mark and the mint and
+    // callback fields from the first token never carry into an action
+    // composed for the second, where they would read as changes to it.
+    const prefillSelection = useRef(/** @type {string | null} */ (null));
+    useEffect(() => {
+        const selection = chainId && ticker ? `${chainId}:${ticker}` : null;
+        const previous = prefillSelection.current;
+        prefillSelection.current = selection;
+        if (!previous || previous === selection) return;
+        blockListTouched.current = false;
+        setAllowListIdx(null);
+        setBlockListIdx(null);
+        setSharedBlockListLabel(null);
+        setListsPrefilled(false);
+        setMaxMint('');
+        setMintAddressMax('');
+        setMintStartBlock('');
+        setMintStopBlock('');
+        setMintPrefilled(false);
+        setCallbackBlock('');
+        setCallbackTick('');
+        setCallbackAmount('');
+        setCallbackPrefilled(false);
+    }, [chainId, ticker]);
+
     // Member counts for whichever allow/block lists are currently set
     // (display only; one detail read each, tolerant of failure).
     useEffect(() => {
