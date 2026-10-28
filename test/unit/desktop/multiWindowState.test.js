@@ -37,6 +37,14 @@ describe('desktop multi-window state notifications', () => {
         },
     );
 
+    it.each(['wallet.add.import', 'wallet.importBackup', 'wallet.importBackupPointer', 'wallet.rename', 'wallet.remove'])(
+        'tells sibling windows to re-read their wallet list after a successful %s',
+        (type) => {
+            expect(stateChangeForMessage({ type }, { ok: true })).toEqual({ kind: 'wallets' });
+            expect(stateChangeForMessage({ type }, { ok: false })).toBeNull();
+        },
+    );
+
     it('broadcasts a validated active wallet selection', () => {
         expect(stateChangeForMessage(
             { type: 'wallet.setActive', request: { walletId: 'wallet-2' } },

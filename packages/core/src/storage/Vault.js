@@ -360,6 +360,37 @@ export class Vault {
     }
 
     /**
+     * Put several records, across collections and singletons, in ONE document
+     * save: either every record lands or none does.
+     *
+     * A flow that adds a group of records which only make sense together (a
+     * restored wallet with its accounts and addresses) writes them here, so a
+     * storage refusal or a page closing part-way leaves the vault exactly as it
+     * was rather than holding a wallet with none of its accounts. Every record is
+     * validated before anything changes, and a failed save restores the
+     * in-memory document the same way a single put does.
+     *
+     * @param {Array<{ store: { _prepare: Function }, record: object }>} entries
+     *   `store` is one of this vault's handles (`vault.wallets`, `vault.settings`, ...)
+     * @returns {Promise<void>}
+     */
+    async putMany(entries) {
+        this._assertOpen();
+        if (!Array.isArray(entries)) throw new TypeError('Vault.putMany: entries must be an array');
+        const steps = entries.map((entry) => {
+            const store = entry?.store;
+            if (!store || store._vault !== this || typeof store._prepare !== 'function') {
+                throw new TypeError('Vault.putMany: every entry needs a store from this vault');
+            }
+            return store._prepare(entry.record);
+        });
+        if (steps.length === 0) return;
+        await this._mutate((document) => ({
+            document: steps.reduce((next, apply) => apply(next), document),
+        }));
+    }
+
+    /**
      * Whether `candidate` is the key this vault is sealed under, compared in
      * constant time. Lets a password change ask "does the old password open
      * the vault?" without decrypting the blob a second time.
@@ -544,6 +575,12 @@ function makeCollection(vault, collection, migrate, validate) {
 
         async put(record) {
             vault._assertOpen();
+            const apply = vault[collection]._prepare(record);
+            await vault._mutate((document) => ({ document: apply(document) }));
+        },
+
+        /** Validate `record` and return the document step that stores it (see Vault.putMany). */
+        _prepare(record) {
             if (!record || typeof record.id !== 'string' || !record.id) {
                 throw new VaultValidationError(collection, ['record.id is required']);
             }
@@ -551,13 +588,13 @@ function makeCollection(vault, collection, migrate, validate) {
             if (!result.ok) {
                 throw new VaultValidationError(collection, result.errors);
             }
-            await vault._mutate((document) => {
+            return (document) => {
                 const arr = [...document[collection]];
                 const idx = arr.findIndex((r) => r.id === record.id);
                 if (idx >= 0) arr[idx] = record;
                 else arr.push(record);
-                return { document: { ...document, [collection]: arr } };
-            });
+                return { ...document, [collection]: arr };
+            };
         },
 
         /**
@@ -596,6 +633,8 @@ function makeCollection(vault, collection, migrate, validate) {
                 return { document: { ...document, [collection]: arr } };
             });
         },
+
+        _vault: vault,
 
         async delete(id) {
             vault._assertOpen();
@@ -649,19 +688,23 @@ function makeSingleton(vault, key, migrate, validate, { inflate, deflate } = {})
 
         async put(record) {
             vault._assertOpen();
+            const apply = vault[key]._prepare(record);
+            await vault._mutate((document) => ({ document: apply(document) }));
+        },
+
+        /** Validate `record` and return the document step that stores it (see Vault.putMany). */
+        _prepare(record) {
             // Validation runs on the full (reader-form) record; only the
             // storage form is reduced.
             const result = validate(record);
             if (!result.ok) {
                 throw new VaultValidationError(key, result.errors);
             }
-            await vault._mutate((document) => ({
-                document: {
-                    ...document,
-                    [key]: deflate ? deflate(record) : record,
-                },
-            }));
+            const stored = deflate ? deflate(record) : record;
+            return (document) => ({ ...document, [key]: stored });
         },
+
+        _vault: vault,
 
         async clear() {
             vault._assertOpen();

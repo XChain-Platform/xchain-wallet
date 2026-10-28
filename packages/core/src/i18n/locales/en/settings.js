@@ -96,6 +96,16 @@ const messages = {
         'Encryption is taking longer than expected. Cancel and try again. If it repeats, close other memory-heavy apps before retrying.',
     'settings.backup.exporting': 'Exporting…',
     'settings.backup.backupFileSaved': 'Backup file saved',
+    'settings.backup.theFileIsWhereYouChose':
+        "The file is where you chose to save it. Keep a copy somewhere safe and recoverable. The password isn't in the file and can't be recovered.",
+    'settings.backup.confirmTheBackupFile': 'Confirm the backup file',
+    'settings.backup.checkThatTheFileIsInYourDownloads': 'Check that the file is in your downloads, then confirm.',
+    'settings.backup.iSavedTheFile': 'I saved the file',
+    'settings.backup.theBackupFileWasNotSaved': "The backup file wasn't saved. Export again and choose where to save it.",
+    'settings.backup.couldNotSaveTheBackupFile': "Couldn't save the backup file. Try again, or choose another location.",
+    'settings.backup.walletBackupFileType': 'Wallet backup',
+    'settings.backup.chooseAPasswordThenWhere':
+        'Choose a password of at least {MIN_BACKUP_PASSWORD_LENGTH} characters to encrypt this file separately from your wallet password. You choose where the file is saved.',
     'settings.backup.yourBrowserSentThisFile':
         "Your browser sent this file to its configured download location, usually the Downloads folder. Move it somewhere safe and recoverable. The password isn't in the file and can't be recovered.",
     'settings.backup.optionalBackupPointerQr': 'Optional backup pointer QR',

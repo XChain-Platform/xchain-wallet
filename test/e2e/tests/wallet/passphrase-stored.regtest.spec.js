@@ -221,6 +221,8 @@ async function exportEnvelope(page, walletName) {
 
     await page.getByLabel('Backup password', { exact: true }).fill(BACKUP_PASSWORD);
     await page.getByLabel('Confirm backup password').fill(BACKUP_PASSWORD);
+    // Take the download route: a headless browser cannot answer the save picker.
+    await page.evaluate(() => { window.showSaveFilePicker = undefined; });
     const [download] = await Promise.all([
         page.waitForEvent('download', { timeout: 120_000 }),
         page.getByRole('button', { name: 'Export', exact: true }).click(),

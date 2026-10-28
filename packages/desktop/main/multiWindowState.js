@@ -16,6 +16,16 @@ const SESSION_CHANGE_TYPES = new Set([
     'wallet.unlock',
 ]);
 
+// Messages that add, rename or remove a wallet record in the open vault. A
+// sibling window re-reads its wallet list so its switcher and pickers match.
+const WALLET_RECORD_CHANGE_TYPES = new Set([
+    'wallet.add.import',
+    'wallet.importBackup',
+    'wallet.importBackupPointer',
+    'wallet.rename',
+    'wallet.remove',
+]);
+
 /**
  * Describe the process-wide UI state changed by a successful renderer
  * message. Read-only and failed messages produce no notification.
@@ -26,12 +36,13 @@ const SESSION_CHANGE_TYPES = new Set([
  *
  * @param {{ type?: unknown, request?: unknown }} message
  * @param {{ ok?: unknown, result?: unknown }} response
- * @returns {{ kind: 'session' } | { kind: 'active-wallet', walletId: string }
+ * @returns {{ kind: 'session' } | { kind: 'wallets' } | { kind: 'active-wallet', walletId: string }
  *   | { kind: 'settings' | 'network', settings: Record<string, unknown> } | null}
  */
 export function stateChangeForMessage(message, response) {
     if (response?.ok !== true || typeof message?.type !== 'string') return null;
     if (SESSION_CHANGE_TYPES.has(message.type)) return { kind: 'session' };
+    if (WALLET_RECORD_CHANGE_TYPES.has(message.type)) return { kind: 'wallets' };
     if (message.type === 'settings.update') return settingsChange(message.request, response.result);
     if (message.type === 'settings.setActiveNetwork') {
         const settings = /** @type {any} */ (response.result)?.settings;

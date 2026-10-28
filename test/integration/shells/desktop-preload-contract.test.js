@@ -253,6 +253,7 @@ describe('desktop preload: the renderer sandbox surface', () => {
 
         await bridge.sendMessage({ type: 'session.status' });
         await bridge.wipeStorage();
+        await bridge.saveBackupFile({ fileName: 'w-backup.xchain-wallet', content: '{}' });
         await win.openDetached({ initialView: 'history' });
         await registry.getRemoteDescriptors();
         signer.postMessage({ kind: 'register', signerIds: [] });
@@ -276,7 +277,7 @@ describe('desktop preload: the renderer sandbox surface', () => {
         ]);
         // Sanity: the walk above must actually have produced traffic, or the
         // agreement checks below are vacuously true.
-        expect(used.size).toBe(8);
+        expect(used.size).toBe(9);
 
         const registered = mainRegisteredChannels();
         for (const channel of used) {

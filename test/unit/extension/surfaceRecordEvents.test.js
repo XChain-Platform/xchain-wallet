@@ -14,6 +14,11 @@
 
 import { describe, expect, it, vi } from 'vitest';
 import { createBackgroundHost } from '../../../packages/extension/src/background/createBackgroundHost.js';
+import { deriveMasterKey, makeFreshKdfParams } from '../../../packages/core/src/crypto/kdf.js';
+import { encryptWalletSeed } from '../../../packages/core/src/crypto/walletBlob.js';
+import { InMemoryBackend, Vault } from '../../../packages/core/src/storage/index.js';
+import { createWallet } from '../../../packages/core/src/schemas/wallet.js';
+import { exportBackupFile } from '../../../packages/core/src/flows/backupFile.js';
 import {
     applySurfaceStateEvent,
     attachSurfaceStateListener,
@@ -97,6 +102,72 @@ function openSurface(bus) {
     attachSurfaceStateListener((event) => applySurfaceStateEvent(event, calls), bus.onChanged);
     return calls;
 }
+
+async function backupFileContent() {
+    const kdfParams = makeFreshKdfParams({ iterations: 1, memory: 8 * 1024 });
+    const source = new Vault({ backend: new InMemoryBackend(), masterKey: deriveMasterKey('device-pass-1', kdfParams) });
+    await source.open();
+    const sealed = await encryptWalletSeed({
+        password: 'device-pass-1',
+        seed: new TextEncoder().encode('seed bytes for a restored wallet'),
+        kdfParams,
+    });
+    await source.wallets.put({
+        ...createWallet({
+            name: 'Restored', origin: 'created', format: 'bip39', passphraseEnabled: false,
+            encryptedSeed: sealed.encryptedSeed, kdfParams: sealed.kdfParams,
+        }),
+        id: 'src',
+    });
+    const { fileContent } = await exportBackupFile({
+        vault: source, walletId: 'src', password: 'file-pass-1', kdfParams: makeFreshKdfParams({ iterations: 1, memory: 8 * 1024 }),
+    });
+    return fileContent;
+}
+
+describe('an added wallet reaches every open surface', () => {
+    it('publishes a wallets event after a backup restore adds a wallet to the open vault', async () => {
+        const { host, surfaceStateEvents } = makeHost();
+        const response = await host.handle({
+            type: 'wallet.importBackup',
+            request: {
+                fileContent: await backupFileContent(),
+                password: 'file-pass-1',
+                walletPassword: 'device-pass-1',
+                devicePassword: 'device-pass-1',
+                mode: 'add',
+            },
+        });
+        expect(response.ok, JSON.stringify(response.error ?? {})).toBe(true);
+        expect(surfaceStateEvents.publish).toHaveBeenCalledWith('wallets', {
+            change: 'added',
+            walletId: response.result.walletId,
+        });
+    }, 60_000);
+
+    it('publishes nothing when the restore is refused', async () => {
+        const { host, surfaceStateEvents } = makeHost();
+        const response = await host.handle({
+            type: 'wallet.importBackup',
+            request: { fileContent: await backupFileContent(), password: 'wrong-pass-1', mode: 'add' },
+        });
+        expect(response.ok).toBe(false);
+        expect(surfaceStateEvents.publish).not.toHaveBeenCalled();
+    }, 60_000);
+
+    it('reloads the wallet list on the popup and the side panel without remounting the open screen', async () => {
+        const bus = sessionStorageBus();
+        const popup = openSurface(bus);
+        const sidePanel = openSurface(bus);
+        const events = createSurfaceStateBroadcaster({ storageArea: bus.storageArea, runtime: {}, now: () => 1 });
+        await events.publish('wallets', { change: 'added', walletId: 'w3' });
+        for (const surface of [popup, sidePanel]) {
+            expect(surface.refreshWallets).toHaveBeenCalledTimes(1);
+            expect(surface.remountScreens).not.toHaveBeenCalled();
+            expect(surface.walletRemoved).not.toHaveBeenCalled();
+        }
+    });
+});
 
 describe('wallet rename reaches every open surface', () => {
     it('publishes a wallets event after the rename commits', async () => {

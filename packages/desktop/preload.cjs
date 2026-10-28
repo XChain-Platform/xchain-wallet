@@ -32,6 +32,13 @@
 //     "wipe", main decides what that means, so a compromised renderer
 //     cannot aim it at an arbitrary path.
 //
+//   - `xchainWalletBridge.saveBackupFile({ fileName, content })`. Saves
+//     an encrypted wallet backup through the native save dialog and
+//     answers with the written path or "not saved", so the backup counts
+//     as done only for a file that exists. Same shape of trust as
+//     `wipeStorage`: the renderer offers a file and a name, main shows
+//     the dialog and writes where the user chose; no path crosses in.
+//
 //   - `xchainWalletSignerBridge.{postMessage,onMessage}`:
 //     duplex port for the hardware-signer RPC. Renderer-hosted
 //     Trezor/Ledger signers expose their status + sign methods back
@@ -93,6 +100,7 @@ const SIGNER_BRIDGE_CHANNEL = 'xchain-wallet:signer-bridge';
 const OPEN_WINDOW_CHANNEL = 'xchain:open-window';
 const STATE_CHANGE_CHANNEL = 'xchain:state-changed';
 const WIPE_STORAGE_CHANNEL = 'xchain:wipe-storage';
+const SAVE_BACKUP_CHANNEL = 'xchain:save-backup';
 const CHAIN_REGISTRY_CHANNEL = 'xchain:chain-registry';
 const UPDATER_EVENT_CHANNEL = 'xchain:updater';
 const UPDATER_INSTALL_CHANNEL = 'xchain:updater-install';
@@ -231,6 +239,23 @@ contextBridge.exposeInMainWorld('xchainWalletBridge', {
         assertNoArguments('xchainWalletBridge.wipeStorage', arguments);
         return ipcRenderer.invoke(WIPE_STORAGE_CHANNEL);
     },
+    /**
+     * Save an encrypted backup through the native save dialog.
+     * `{ ok: true, saved: true, path }` means the file is written there;
+     * `{ ok: true, saved: false }` means the user cancelled.
+     * @param {{ fileName: string, content: string }} request
+     * @returns {Promise<{ ok: true, saved: true, path: string } | { ok: true, saved: false } | { ok: false, error: string }>}
+     */
+    saveBackupFile(request) {
+        const method = 'xchainWalletBridge.saveBackupFile';
+        assertArgumentCount(method, arguments, 1);
+        assertRecord(method, request);
+        assertAllowedKeys(method, request, ['fileName', 'content']);
+        if (typeof request.fileName !== 'string' || typeof request.content !== 'string') {
+            throw new TypeError(`${method}: fileName and content must be strings`);
+        }
+        return ipcRenderer.invoke(SAVE_BACKUP_CHANNEL, { fileName: request.fileName, content: request.content });
+    },
 });
 
 contextBridge.exposeInMainWorld('xchainWalletWindow', {
@@ -245,9 +270,9 @@ contextBridge.exposeInMainWorld('xchainWalletWindow', {
         return ipcRenderer.invoke(OPEN_WINDOW_CHANNEL, validateOpenDetached(arguments));
     },
     /**
-     * Subscribe to process-wide session, active-wallet, settings and network
-     * changes made by a sibling window. Returns an unsubscribe function.
-     * @param {(change: { kind: 'session' } | { kind: 'active-wallet', walletId: string }
+     * Subscribe to process-wide session, wallet-list, active-wallet, settings
+     * and network changes made by a sibling window. Returns an unsubscribe function.
+     * @param {(change: { kind: 'session' } | { kind: 'wallets' } | { kind: 'active-wallet', walletId: string }
      *   | { kind: 'settings' | 'network', settings: Record<string, unknown> }) => void} listener
      * @returns {() => void}
      */

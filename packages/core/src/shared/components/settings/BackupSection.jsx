@@ -72,6 +72,15 @@ import { ADDRESS_TYPE_LABEL } from '../../utils/addressTypeLabel.js';
 import { RECOVERY_PHRASE_WARNING } from '../../utils/securityMomentCopy.js';
 import { blurNumberInputOnWheel } from '../../utils/formInput.js';
 import { useProtectedScreen } from '../../utils/screenGuard.js';
+import {
+    backupFileName,
+    backupSaveRoute,
+    isSaveCancel,
+    pickBackupFile,
+    saveBackupThroughShell,
+    startBackupDownload,
+    writeBackupFile,
+} from '../../utils/backupFileSave.js';
 import { submitOnlyFromLastField } from '../../../ui/formEnter.js';
 import { ROW_HINT, STACK, SettingsActionRow, SettingsInlineForm, Status } from './_settingsPrimitives.jsx';
 import cardStyles from '../../../ui/Card.module.css';
@@ -121,15 +130,19 @@ function publishStepFailure(err, chainId) {
 /**
  * @param {object} props
  * @param {{ id: string, name: string } | null} [props.activeWallet]
+ * @param {() => void} [props.onExportInTab]   set in the extension's toolbar popup, which closes when
+ *   a download or dialog takes focus: the export runs in a full extension tab instead
  */
-export function BackupSection({ activeWallet }) {
+export function BackupSection({ activeWallet, onExportInTab }) {
     const { messaging, shell } = useMessaging();
     const signerReady = useSignerReady(activeWallet?.id);
     const actionConfirm = useActionConfirmFlow({ messaging, walletId: activeWallet?.id || '' });
     const [exporting, setExporting] = useState(false);
     const [exportError, setExportError] = useState(/** @type {string | null} */ (null));
     const [pendingPassword, setPendingPassword] = useState(/** @type {string | null} */ (null));
-    const [exportResult, setExportResult] = useState(/** @type {{ fileName: string, walletName: string } | null} */ (null));
+    const [exportResult, setExportResult] = useState(
+        /** @type {{ fileName: string, walletName: string, walletId: string, route: 'desktop' | 'picker' | 'download', confirmed: boolean } | null} */ (null),
+    );
     const exportAttemptRef = useRef(0);
     const exportTime = useLongOperationStatus(exporting, { timeoutMs: 30_000 });
 
@@ -234,27 +247,81 @@ export function BackupSection({ activeWallet }) {
             setExportError('No active wallet to back up.');
             return;
         }
+        const walletId = activeWallet.id;
         const attempt = ++exportAttemptRef.current;
         setExporting(true);
         setExportError(null);
+        let route = backupSaveRoute();
+        let handle = null;
+        if (route === 'picker') {
+            // The picker opens inside this click, before encryption, because it
+            // needs the click's user activation and Argon2id can outlast it.
+            try {
+                handle = await pickBackupFile(
+                    backupFileName(activeWallet.name || walletId),
+                    t('settings.backup.walletBackupFileType'),
+                );
+            } catch (err) {
+                if (attempt !== exportAttemptRef.current) return;
+                if (isSaveCancel(err)) {
+                    setExporting(false);
+                    setExportError(t('settings.backup.theBackupFileWasNotSaved'));
+                    return;
+                }
+                route = 'download';
+            }
+            if (attempt !== exportAttemptRef.current) return;
+        }
+        let stage = 'export';
         try {
             const { fileContent } = await messaging.exportBackupFile({
-                walletId: activeWallet.id,
+                walletId,
                 password,
             });
             if (attempt !== exportAttemptRef.current) return;
-            const saved = triggerDownload(activeWallet.name || activeWallet.id, fileContent);
-            // §19.7 / G034: successful encrypted-backup export counts as
-            // a fresh backup verification for reminder purposes.
-            try { flowsLib.markBackupVerified(activeWallet.id); } catch { /* best-effort */ }
-            setExportResult(saved);
+            const backup = describeBackup(activeWallet.name || walletId, fileContent);
+            stage = 'save';
+            if (route === 'download') {
+                // A download reports nothing back, so the backup counts as
+                // done only when the user confirms the file arrived.
+                startBackupDownload(backup.fileName, fileContent);
+                setExportResult({ ...backup, walletId, route, confirmed: false });
+                setPendingPassword(null);
+                return;
+            }
+            let location = backup.fileName;
+            if (route === 'desktop') {
+                const saved = await saveBackupThroughShell(backup.fileName, fileContent);
+                if (attempt !== exportAttemptRef.current) return;
+                if (!saved.saved) {
+                    setExportError(t('settings.backup.theBackupFileWasNotSaved'));
+                    return;
+                }
+                location = saved.path;
+            } else {
+                await writeBackupFile(handle, fileContent);
+                if (attempt !== exportAttemptRef.current) return;
+                if (typeof handle?.name === 'string' && handle.name) location = handle.name;
+            }
+            // §19.7 / G034: a backup file written where the user chose counts
+            // as a fresh backup verification for reminder purposes.
+            try { flowsLib.markBackupVerified(walletId); } catch { /* best-effort */ }
+            setExportResult({ ...backup, fileName: location, walletId, route, confirmed: true });
             setPendingPassword(null);
         } catch (err) {
             if (attempt !== exportAttemptRef.current) return;
-            setExportError(userFacingMessage(err, 'Could not export the backup. Try again.'));
+            setExportError(stage === 'save'
+                ? t('settings.backup.couldNotSaveTheBackupFile')
+                : userFacingMessage(err, 'Could not export the backup. Try again.'));
         } finally {
             if (attempt === exportAttemptRef.current) setExporting(false);
         }
+    };
+
+    const confirmDownloadedBackup = () => {
+        if (!exportResult) return;
+        try { flowsLib.markBackupVerified(exportResult.walletId); } catch { /* best-effort */ }
+        setExportResult({ ...exportResult, confirmed: true });
     };
 
     const cancelExport = () => {
@@ -488,7 +555,13 @@ export function BackupSection({ activeWallet }) {
 
     return (
         <div style={STACK}>
-            {exportResult ? (
+            {exportResult && !exportResult.confirmed ? (
+                <BackupDownloadConfirm
+                    fileName={exportResult.fileName}
+                    onConfirm={confirmDownloadedBackup}
+                    onCancel={() => setExportResult(null)}
+                />
+            ) : exportResult ? (
                 <BackupExportResult
                     result={exportResult}
                     onDone={() => setExportResult(null)}
@@ -496,7 +569,9 @@ export function BackupSection({ activeWallet }) {
             ) : pendingPassword !== null ? (
                 <PasswordPrompt
                     label={t('settings.backup.backupPassword')}
-                    hint={t('settings.backup.chooseAPasswordOfAt', { MIN_BACKUP_PASSWORD_LENGTH: flowsLib.MIN_BACKUP_PASSWORD_LENGTH })}
+                    hint={backupSaveRoute() === 'download'
+                        ? t('settings.backup.chooseAPasswordOfAt', { MIN_BACKUP_PASSWORD_LENGTH: flowsLib.MIN_BACKUP_PASSWORD_LENGTH })
+                        : t('settings.backup.chooseAPasswordThenWhere', { MIN_BACKUP_PASSWORD_LENGTH: flowsLib.MIN_BACKUP_PASSWORD_LENGTH })}
                     busy={exporting}
                     operationTime={exportTime}
                     onCancel={cancelExport}
@@ -510,7 +585,9 @@ export function BackupSection({ activeWallet }) {
                     hint={t('settings.backup.saveTheWalletAddressesLabels')}
                     actionLabel={t('history.export.open')}
                     disabled={!activeWallet}
-                    onClick={() => { setPendingPassword(''); setExportError(null); setExportResult(null); }}
+                    onClick={onExportInTab
+                        ? onExportInTab
+                        : () => { setPendingPassword(''); setExportError(null); setExportResult(null); }}
                 />
             )}
 
@@ -1153,7 +1230,9 @@ function BackupExportResult({ result, onDone }) {
         <FormSection title={t('settings.backup.backupFileSaved')} className={cardStyles.card}>
             <Status text={result.fileName} />
             <div style={ROW_HINT}>
-                {t('settings.backup.yourBrowserSentThisFile')}
+                {result.route === 'download'
+                    ? t('settings.backup.yourBrowserSentThisFile')
+                    : t('settings.backup.theFileIsWhereYouChose')}
             </div>
             <SectionHeader
                 as="h3"
@@ -1183,6 +1262,23 @@ function BackupExportResult({ result, onDone }) {
     );
 }
 
+/**
+ * A download reports nothing back, so the backup is not done until the user
+ * says the file arrived: the reminder stays until then.
+ */
+function BackupDownloadConfirm({ fileName, onConfirm, onCancel }) {
+    return (
+        <FormSection title={t('settings.backup.confirmTheBackupFile')} className={cardStyles.card}>
+            <Status text={fileName} />
+            <div style={ROW_HINT}>{t('settings.backup.checkThatTheFileIsInYourDownloads')}</div>
+            <div className={styles.actions}>
+                <Button variant="ghost" size="sm" onClick={onCancel}>{t('common.cancel')}</Button>
+                <Button size="sm" onClick={onConfirm}>{t('settings.backup.iSavedTheFile')}</Button>
+            </div>
+        </FormSection>
+    );
+}
+
 function printRecoverySheet() {
     document.body.classList.add('xc-print-recovery-sheet');
     try {
@@ -1192,7 +1288,14 @@ function printRecoverySheet() {
     }
 }
 
-function triggerDownload(fallbackWalletName, fileContent) {
+/**
+ * Check the export reply is a backup envelope and name its file.
+ *
+ * @param {string} fallbackWalletName
+ * @param {unknown} fileContent
+ * @returns {{ fileName: string, walletName: string }}
+ */
+function describeBackup(fallbackWalletName, fileContent) {
     if (typeof fileContent !== 'string') {
         throw new Error('Backup export returned no file contents.');
     }
@@ -1205,26 +1308,10 @@ function triggerDownload(fallbackWalletName, fileContent) {
     const walletName = typeof envelope.walletName === 'string' && envelope.walletName.length > 0
         ? envelope.walletName
         : fallbackWalletName;
-    const safeName = String(walletName || 'wallet')
-        .replace(/[^a-zA-Z0-9._-]+/g, '-')
-        .replace(/^[._-]+|[._-]+$/g, '')
-        .slice(0, 60)
-        .replace(/[._-]+$/g, '') || 'wallet';
-    const createdAt = new Date(envelope.createdAt);
-    const stamp = Number.isNaN(createdAt.getTime())
-        ? new Date().toISOString().slice(0, 10)
-        : createdAt.toISOString().slice(0, 10);
-    const fileName = `${safeName}-backup-${stamp}.xchain-wallet`;
-    const blob = new Blob([fileContent], { type: 'application/json' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = fileName;
-    document.body.appendChild(a);
-    a.click();
-    a.remove();
-    setTimeout(() => URL.revokeObjectURL(url), 1000);
-    return { fileName, walletName: String(walletName || 'wallet') };
+    return {
+        fileName: backupFileName(walletName, envelope.createdAt),
+        walletName: String(walletName || 'wallet'),
+    };
 }
 
 /**

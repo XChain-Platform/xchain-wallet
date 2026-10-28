@@ -90,6 +90,8 @@ import {
     runMainTask,
 } from './errorBoundary.js';
 import { stateChangeForMessage } from './multiWindowState.js';
+import { saveBackupFile } from './backupSave.js';
+import { writeFile as writeFileAsync } from 'node:fs/promises';
 import { createQuitDeferral, isQuitDeferringMessage } from './quitGuard.js';
 import {
     applyTestMockKeychain,
@@ -1291,6 +1293,30 @@ void runMainTask(async () => {
         } catch (err) {
             reportMainFailure('wipe-storage IPC action', err);
             return { ok: false, error: 'wipe-storage: operation failed' };
+        }
+    });
+
+    // Save an encrypted backup through the native dialog. The renderer hands
+    // the file and a suggested name; main picks nothing itself and answers
+    // with the written path or "not saved", which is what lets the backup
+    // reminder clear only for a file that exists. Same trusted-sender gate.
+    ipcMain.handle('xchain:save-backup', async (event, ...args) => {
+        if (!isTrustedSender(event)) {
+            return { ok: false, error: 'save-backup: rejected from untrusted frame' };
+        }
+        if (args.length !== 1) {
+            return { ok: false, error: 'save-backup: expected one argument' };
+        }
+        try {
+            return await saveBackupFile(args[0], {
+                dialog,
+                writeFile: writeFileAsync,
+                window: BrowserWindow.fromWebContents(event.sender) ?? undefined,
+                defaultDir: app.getPath('documents'),
+            });
+        } catch (err) {
+            reportMainFailure('save-backup IPC action', err);
+            return { ok: false, error: 'save-backup: the file could not be written' };
         }
     });
 

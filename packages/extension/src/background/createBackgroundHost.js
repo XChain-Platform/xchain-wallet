@@ -1518,6 +1518,7 @@ export function createBackgroundHost(deps) {
                     onConflict: 'preserve',
                 }),
             });
+        await publishSurfaceState('wallets', { change: 'added', walletId: r.wallet.id });
         return {
             format: r.format,
             wallet: toSafeWallet(r.wallet),
@@ -2267,6 +2268,7 @@ export function createBackgroundHost(deps) {
             onConflict: req?.onConflict,
             mode: req?.mode,
         });
+        await publishSurfaceState('wallets', { change: 'added', walletId: r.walletId });
         return {
             walletId: r.walletId,
             writes: r.writes,
@@ -2296,6 +2298,7 @@ export function createBackgroundHost(deps) {
             mode: req?.mode,
             resolveBackupContent: resolveBackupPointerContent,
         });
+        await publishSurfaceState('wallets', { change: 'added', walletId: r.walletId });
         return {
             walletId: r.walletId,
             writes: r.writes,

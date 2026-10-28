@@ -380,6 +380,8 @@ function AppInner() {
     const [walletList, setWalletList] = useState(/** @type {Array<{ id: string, name: string }>} */ ([]));
     // Bumped when a sibling window moves the active network, so chain-scoped routes remount.
     const [networkRevision, setNetworkRevision] = useState(0);
+    // Bumped when a sibling window adds, renames or removes a wallet.
+    const [walletsRevision, setWalletsRevision] = useState(0);
     const statusStateRef = useRef(status.state);
     const walletListRef = useRef(walletList);
     const pendingActiveWalletId = useRef(/** @type {string | null} */ (null));
@@ -652,6 +654,10 @@ function AppInner() {
                 refresh();
                 return;
             }
+            if (change?.kind === 'wallets') {
+                if (statusStateRef.current === 'unlocked') setWalletsRevision((value) => value + 1);
+                return;
+            }
             // A sibling's settings write reaches this window's useSettings the way its own does.
             if (change?.kind === 'settings' || change?.kind === 'network') {
                 const settings = change.settings;
@@ -725,6 +731,37 @@ function AppInner() {
             .catch(() => { /* Home surfaces load errors */ });
         return () => { cancelled = true; };
     }, [status.state]);
+
+    // A sibling window added, renamed or removed a wallet: re-read the list so
+    // this window's switcher matches, take a selection that named a wallet
+    // this list did not hold yet, and leave a wallet that is gone.
+    useEffect(() => {
+        if (walletsRevision === 0 || statusStateRef.current !== 'unlocked') return undefined;
+        let cancelled = false;
+        listWallets()
+            .then((list) => {
+                if (cancelled) return;
+                const arr = Array.isArray(list) ? list : [];
+                walletListRef.current = arr;
+                setWalletList(arr);
+                const pendingWalletId = pendingActiveWalletId.current;
+                if (pendingWalletId && arr.some((w) => w.id === pendingWalletId)) {
+                    pendingActiveWalletId.current = null;
+                    setActiveAccountId(null);
+                    setActiveWalletId(pendingWalletId);
+                    writeActiveWallet(pendingWalletId);
+                    setUnlockedView('home');
+                    return;
+                }
+                setActiveWalletId((current) => {
+                    if (current && arr.some((w) => w.id === current)) return current;
+                    setActiveAccountId(null);
+                    return arr[0]?.id ?? null;
+                });
+            })
+            .catch(() => { /* the next change or unlock reloads the list */ });
+        return () => { cancelled = true; };
+    }, [walletsRevision]);
 
     // §24.6 / Cluster Y FOLLOWUP 4: apply the initialView once
     // unlock settles. Route + context-state both flip in lockstep

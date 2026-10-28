@@ -431,7 +431,7 @@ export function Settings({
             keywords: 'backup password wallet password export encrypted file reveal back up seed recovery phrase mnemonic test dry run restore publish labels on chain contacts',
             kind: 'internal-drill',
             Component: BackupSection,
-            props: { activeWallet, reload },
+            props: { activeWallet, reload, onExportInTab: onOpenBackupInTab },
             summary: t('settings.page.encryptedFileExport'),
         },
         {

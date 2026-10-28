@@ -44,7 +44,7 @@
 // holding a v1 account or a v1 address was refused partway down the list -
 // after the wallet had been written and auto-saved, leaving a restored wallet
 // with no addresses under it. The migrator is a required argument of
-// `applyCollection` rather than an optional one, so a collection added later
+// `stageCollection` rather than an optional one, so a collection added later
 // cannot quietly inherit the raw path.
 
 import {
@@ -441,15 +441,19 @@ export async function importBackupFile({
         settings: false,
     };
 
-    // `decoded.wallet` was already migrated above, before the re-key rewrote it
-    // in place; migrateWallet here is the same no-op it is for any current
-    // record, and keeps every collection on one path.
-    await applyCollection(vault.wallets, [decoded.wallet], onConflict, writes, skipped, 'wallets', migrateWallet);
-    await applyCollection(vault.accounts, decoded.accounts ?? [], onConflict, writes, skipped, 'accounts', migrateAccount);
-    await applyCollection(vault.addresses, decoded.addresses ?? [], onConflict, writes, skipped, 'addresses', migrateAddress);
-    await applyCollection(vault.contacts, decoded.contacts ?? [], onConflict, writes, skipped, 'contacts', migrateContact);
-    await applyCollection(vault.connectedSites, decoded.connectedSites ?? [], onConflict, writes, skipped, 'connectedSites', migrateConnectedSite);
-    await applyCollection(vault.pendingTxs, decoded.pendingTxs ?? [], onConflict, writes, skipped, 'pendingTxs', migratePendingTx);
+    // Every record is staged first and written together at the end, so a
+    // storage refusal or a closed page part-way through leaves the vault as it
+    // was: never a wallet with none of its accounts, which a retry would then
+    // duplicate. `decoded.wallet` was already migrated above, before the re-key
+    // rewrote it in place; migrateWallet here is the same no-op it is for any
+    // current record, and keeps every collection on one path.
+    const staged = [];
+    await stageCollection(vault.wallets, [decoded.wallet], onConflict, writes, skipped, 'wallets', migrateWallet, staged);
+    await stageCollection(vault.accounts, decoded.accounts ?? [], onConflict, writes, skipped, 'accounts', migrateAccount, staged);
+    await stageCollection(vault.addresses, decoded.addresses ?? [], onConflict, writes, skipped, 'addresses', migrateAddress, staged);
+    await stageCollection(vault.contacts, decoded.contacts ?? [], onConflict, writes, skipped, 'contacts', migrateContact, staged);
+    await stageCollection(vault.connectedSites, decoded.connectedSites ?? [], onConflict, writes, skipped, 'connectedSites', migrateConnectedSite, staged);
+    await stageCollection(vault.pendingTxs, decoded.pendingTxs ?? [], onConflict, writes, skipped, 'pendingTxs', migratePendingTx, staged);
 
     // Settings is a singleton; overwrite/preserve decisions apply to
     // the whole record. In 'add' mode the vault's own settings win even
@@ -463,12 +467,14 @@ export async function importBackupFile({
             // A backup can carry an older schema (e.g. a v2 record whose
             // per-chain values are frozen copies of that release's
             // defaults); migrate before put or validation rejects it.
-            await vault.settings.put(migrateSettings(decoded.settings));
+            staged.push({ store: vault.settings, record: migrateSettings(decoded.settings), previous: existing });
             writes.settings = true;
         } else {
             skipped.settings = true;
         }
     }
+
+    await writeStaged(vault, staged);
 
     return {
         payload: decoded,
@@ -826,9 +832,9 @@ export async function rekeyWalletRecord(wallet, { walletPassword, devicePassword
     }
 }
 
-async function applyCollection(collection, records, onConflict, writes, skipped, name, migrateRecord) {
+async function stageCollection(collection, records, onConflict, writes, skipped, name, migrateRecord, staged) {
     if (typeof migrateRecord !== 'function') {
-        throw new Error(`applyCollection: a migrator is required for "${name}"`);
+        throw new Error(`stageCollection: a migrator is required for "${name}"`);
     }
     for (const rec of records) {
         if (!rec || typeof rec.id !== 'string' || !rec.id) continue;
@@ -843,8 +849,37 @@ async function applyCollection(collection, records, onConflict, writes, skipped,
         // that is a better error than the validator's field-by-field one, and
         // the honest outcome either way, since this build cannot know the
         // fields that release added.
-        await collection.put(migrateRecord(rec));
+        staged.push({ store: collection, record: migrateRecord(rec), previous: existing });
         writes[name] += 1;
+    }
+}
+
+/**
+ * Write the staged restore records as one unit. The core Vault saves them in
+ * a single document write; a vault without `putMany` gets them one at a time,
+ * and a failure part-way puts back what the earlier writes replaced and
+ * removes what they added before the error goes on.
+ */
+async function writeStaged(vault, staged) {
+    if (staged.length === 0) return;
+    if (typeof vault.putMany === 'function') {
+        await vault.putMany(staged.map(({ store, record }) => ({ store, record })));
+        return;
+    }
+    const done = [];
+    try {
+        for (const entry of staged) {
+            await entry.store.put(entry.record);
+            done.push(entry);
+        }
+    } catch (err) {
+        for (const entry of done.reverse()) {
+            try {
+                if (entry.previous) await entry.store.put(entry.previous);
+                else if (typeof entry.store.delete === 'function') await entry.store.delete(entry.record.id);
+            } catch { /* the original error is the one to report */ }
+        }
+        throw err;
     }
 }
 

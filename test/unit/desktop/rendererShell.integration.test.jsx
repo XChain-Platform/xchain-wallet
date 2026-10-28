@@ -295,6 +295,39 @@ describe('desktop renderer shell', () => {
         });
     });
 
+    it('re-reads the wallet list when a sibling window adds a wallet, then follows its selection', async () => {
+        let wallets = [{ id: 'wallet-1', name: 'Primary wallet' }];
+        const sendMessage = vi.fn(async ({ type, request }) => {
+            if (type === 'session.status') {
+                return { ok: true, result: { state: 'unlocked', hasWallet: true, hasSession: true } };
+            }
+            if (type === 'wallet.list') return { ok: true, result: wallets };
+            if (type === 'account.list') return { ok: true, result: [{ id: `${request.walletId}-account`, index: 0 }] };
+            throw new Error(`unexpected renderer IPC call: ${type}`);
+        });
+        window.xchainWalletBridge = { sendMessage };
+
+        render(<App />);
+        await waitFor(() => {
+            expect(sendMessage).toHaveBeenCalledWith({ type: 'account.list', request: { walletId: 'wallet-1' } });
+        });
+        const listCalls = () => sendMessage.mock.calls.filter(([m]) => m.type === 'wallet.list').length;
+        const before = listCalls();
+        const onStateChange = window.xchainWalletWindow.onStateChange.mock.calls[0][0];
+
+        // The sibling restored a wallet, then made it active there.
+        wallets = [...wallets, { id: 'wallet-2', name: 'Restored wallet' }];
+        act(() => {
+            onStateChange({ kind: 'wallets' });
+            onStateChange({ kind: 'active-wallet', walletId: 'wallet-2' });
+        });
+
+        await waitFor(() => { expect(listCalls()).toBe(before + 1); });
+        await waitFor(() => {
+            expect(sendMessage).toHaveBeenCalledWith({ type: 'account.list', request: { walletId: 'wallet-2' } });
+        });
+    });
+
     it('folds a sibling window settings change into this window and remounts on a network change', async () => {
         const sendMessage = vi.fn(async ({ type, request }) => {
             if (type === 'session.status') {

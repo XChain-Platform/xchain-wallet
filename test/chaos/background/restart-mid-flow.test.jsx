@@ -282,6 +282,8 @@ describe('chaos/background/restart-mid-flow', () => {
             expect(URL.createObjectURL).not.toHaveBeenCalled();
 
             fireEvent.click(screen.getByRole('button', { name: 'Export' }));
+            expect(await screen.findByText('Confirm the backup file')).toBeInTheDocument();
+            fireEvent.click(screen.getByRole('button', { name: 'I saved the file' }));
             expect(await screen.findByText('Backup file saved')).toBeInTheDocument();
             expect(exportBackupFile).toHaveBeenCalledTimes(2);
             expect(URL.createObjectURL).toHaveBeenCalledOnce();

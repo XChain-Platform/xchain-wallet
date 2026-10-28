@@ -49,7 +49,7 @@ function loadPreload() {
 }
 
 const expectedSurface = {
-    xchainWalletBridge: ['sendMessage', 'wipeStorage'],
+    xchainWalletBridge: ['saveBackupFile', 'sendMessage', 'wipeStorage'],
     xchainWalletDeepLink: ['onUri', 'takePending'],
     xchainWalletRegistry: ['getRemoteDescriptors'],
     xchainWalletSignerBridge: ['onMessage', 'postMessage'],
@@ -84,6 +84,7 @@ describe('desktop preload API', () => {
 
         await bridge.sendMessage({ type: 'wallet.list', request: undefined });
         await bridge.wipeStorage();
+        await bridge.saveBackupFile({ fileName: 'w-backup.xchain-wallet', content: '{}' });
         await win.openDetached({ initialView: 'history', initialContext: { walletId: 'w1' } });
         await updater.getState();
         await updater.install();
@@ -94,6 +95,7 @@ describe('desktop preload API', () => {
         expect(ipcRenderer.invoke.mock.calls).toEqual([
             ['xchain-wallet:message', { type: 'wallet.list', request: undefined }],
             ['xchain:wipe-storage'],
+            ['xchain:save-backup', { fileName: 'w-backup.xchain-wallet', content: '{}' }],
             ['xchain:open-window', { initialView: 'history', initialContext: { walletId: 'w1' } }],
             ['xchain:updater-state'],
             ['xchain:updater-install', 'download'],
@@ -118,6 +120,9 @@ describe('desktop preload API', () => {
         const invalidCalls = [
             () => bridge.sendMessage(null),
             () => bridge.wipeStorage('path'),
+            () => bridge.saveBackupFile({ fileName: 'a.xchain-wallet', content: '{}', path: '/etc' }),
+            () => bridge.saveBackupFile({ fileName: 'a.xchain-wallet' }),
+            () => bridge.saveBackupFile(),
             () => win.openDetached({}),
             () => win.onStateChange(null),
             () => updater.onEvent('listener'),

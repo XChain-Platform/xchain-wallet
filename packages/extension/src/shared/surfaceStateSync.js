@@ -16,8 +16,8 @@
 export const SURFACE_STATE_STORAGE_KEY = 'xchain:surface-state-event';
 
 // 'wallet' names the newly active wallet; 'wallets' reports a change to the
-// wallet records themselves (rename, removal) and 'accounts' one to a wallet's
-// accounts.
+// wallet records themselves (an added, renamed or removed wallet) and
+// 'accounts' one to a wallet's accounts.
 const KINDS = new Set(['session', 'wallet', 'wallets', 'accounts', 'settings', 'network']);
 
 /**
@@ -165,6 +165,13 @@ export function applySurfaceStateEvent(event, handlers) {
         return undefined;
     }
     if (event?.kind === 'wallets') {
+        if (event.payload?.change === 'added') {
+            // A wallet created, imported or restored in another surface joins
+            // this one's wallet list. No remount: the surface that made the
+            // add hears this too, and a remount would wipe the result or
+            // notice step its add flow is still showing.
+            return handlers.refreshWallets?.();
+        }
         if (event.payload?.change === 'renamed') {
             // Screens that fetched their own wallet rows (picker, details) keep
             // the old name until they mount again.
