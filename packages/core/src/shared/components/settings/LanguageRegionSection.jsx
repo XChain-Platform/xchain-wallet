@@ -124,6 +124,10 @@ export function LanguageRegionSection() {
     const [currencyPickerOpen, setCurrencyPickerOpen] = useState(false);
     const [currencyQuery, setCurrencyQuery] = useState('');
     const [currencyError, setCurrencyError] = useState(/** @type {string | null} */ (null));
+    const [languageError, setLanguageError] = useState(/** @type {string | null} */ (null));
+    // Counts picker choices so only the newest one may report a failed load:
+    // an older choice that a newer pick supersedes is not an error.
+    const languagePickRef = useRef(0);
 
     const pickerInputRef = useRef(/** @type {HTMLInputElement | null} */ (null));
     const skipOpenOnFocusRef = useRef(false);
@@ -160,13 +164,21 @@ export function LanguageRegionSection() {
     const LANGUAGES = buildLanguageOptions(settings.developerMode === true);
 
     const onLanguageChange = async (next) => {
+        const pick = ++languagePickRef.current;
+        setLanguageError(null);
         try {
             if (!availableLocales().includes(next)) return;
             // Registered locales apply synchronously. Lazy locale chunks
             // finish loading before persistence so a failed chunk cannot
             // become the next launch's saved language.
             const applied = await setI18nLocale(next);
-            if (applied !== next) return;
+            if (pick !== languagePickRef.current) return;
+            if (applied !== next) {
+                // The chunk fails to load (offline or a failed fetch): the
+                // previous language stays live and a new pick retries it.
+                setLanguageError(t('settings.languageRegion.languageUnavailable'));
+                return;
+            }
             await update({ language: next });
         } catch (_err) { /* never bubble */ }
     };
@@ -192,6 +204,8 @@ export function LanguageRegionSection() {
                         value={settings.language}
                         onChange={(e) => onLanguageChange(e.target.value)}
                         aria-label={t('settings.languageRegion.language')}
+                        aria-invalid={languageError ? 'true' : undefined}
+                        aria-describedby={languageError ? 'language-error' : undefined}
                     >
                         {LANGUAGES.map((l) => (
                             <option key={l.value} value={l.value}>{l.label}</option>
@@ -262,6 +276,7 @@ export function LanguageRegionSection() {
                     ) : null}
                 </div>
             </div>
+            {languageError ? <Status id="language-error" text={languageError} tone="error" /> : null}
             {currencyError ? <Status id="fiat-currency-error" text={currencyError} tone="error" /> : null}
             {unsupportedFiatCurrency ? (
                 <Status

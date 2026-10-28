@@ -541,6 +541,7 @@ const messages = {
         "URL format is checked here, but the host isn't contacted until the wallet uses it. If it's unreachable, this network's balances, history and transactions may be unavailable.",
     'settings.endpoints.resetToDefault': 'Reset to default',
     'settings.languageRegion.language': 'Language',
+    'settings.languageRegion.languageUnavailable': "This language can't load right now. Check the connection and pick it again.",
     'settings.languageRegion.fiatCurrency': 'Fiat currency',
     'settings.languageRegion.showEstimatedWalletValuesIn': 'Changes estimates, not asset balances.',
     'settings.languageRegion.currencyNotSupported': "{currency} isn't supported. Values are shown in USD.",
