@@ -10,7 +10,7 @@
 
 import { t } from '../../i18n/index.js';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { AddressField, AddressText, Button, ChainBadge, ChainPicker, Checkbox, FeeSelector, FormNotice, FormPage, Input, PageHeader, Screen, StatusMessage } from '@xchain-wallet/core/ui';
+import { AddressField, AddressText, Button, ChainBadge, ChainPicker, Checkbox, FeeSelector, FormErrorSummary, FormNotice, FormPage, Input, PageHeader, Screen, StatusMessage } from '@xchain-wallet/core/ui';
 import {
     registry as registryLib,
     decoder as decoderLib,
@@ -253,6 +253,8 @@ export function TokenAdminForm({ walletId, mode, onBack, initialChainId, initial
         /** @type {'form' | 'review' | 'submitting' | 'done'} */ ('form'),
     );
     const [formError, setFormError] = useState(/** @type {string | null} */ (null));
+    // Counts Review presses, so the refusal a press raises takes focus.
+    const [reviewAttempt, setReviewAttempt] = useState(0);
     const [submitError, setSubmitError] = useState(/** @type {string | null} */ (null));
     const [result, setResult] = useState(/** @type {any | null} */ (null));
     const passwordRef = useRef(/** @type {HTMLInputElement | null} */ (null));
@@ -548,9 +550,11 @@ export function TokenAdminForm({ walletId, mode, onBack, initialChainId, initial
         () => (currentBridgeChains || []).filter(isReachableBridgeChain),
         [currentBridgeChains],
     );
+    // Compared as sets: the boxes emit the networks in the form's order, so a
+    // stored list in another order or with a repeat opens the same networks.
     const bridgeChanged = mode === 'bridge-settings' && (
         bridgeLock
-        || pickedBridgeChains.join(',') !== reachableBridgeChains.join(',')
+        || [...new Set(pickedBridgeChains)].sort().join(',') !== [...new Set(reachableBridgeChains)].sort().join(',')
         || String(bridgeMinDepth).trim() !== String(assetInfo?.minDepth ?? assetInfo?.min_depth ?? '')
     );
 
@@ -679,6 +683,7 @@ export function TokenAdminForm({ walletId, mode, onBack, initialChainId, initial
         const feeStop = customFeeReviewStop({ feePick, tiers: feeTiers, estimate: feeCustomEstimate });
         if (feeStop) { setFormError(feeStop.formError); return; }
         if (reviewInFlightRef.current) return;
+        setReviewAttempt((n) => n + 1);
         if (!chainId || !fromAddress) {
             setFormError('Pick a source address first.');
             return;
@@ -1379,7 +1384,10 @@ export function TokenAdminForm({ walletId, mode, onBack, initialChainId, initial
             demoGuard={demoGuard}
             label={MODE_LABEL[mode]}
             onSubmit={handleReview}
-            status={formError || eligibilityError ? (
+            status={formError && reviewAttempt > 0 ? (
+                // Leads the page, far above the button on a phone: it takes focus.
+                <FormErrorSummary errors={[{ message: formError }]} focusKey={reviewAttempt} />
+            ) : formError || eligibilityError ? (
                 <StatusMessage variant="error">
                     {formError || eligibilityError}
                 </StatusMessage>

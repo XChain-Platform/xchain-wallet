@@ -668,6 +668,7 @@ export {
     isAlreadyOnNetworkRejection,
     BROADCAST_FAILED_PERMANENT_NAME,
     BROADCAST_FAILED_TRANSIENT_NAME,
+    QUEUED_BROADCAST_IN_FLIGHT_NAME,
 } from './broadcastPermanence.js';
 // §4.6 input liveness. The host route owns the utxo fetch; the comparison and
 // the "which addresses do I have to ask" question are pure, so both live here

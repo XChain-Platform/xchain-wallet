@@ -9,7 +9,7 @@
 // contact legal@dankest.llc.
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { AddressField, AddressText, Button, ChainBadge, ChainPicker, FeeSelector, FormNotice, FormPage, Input, PageHeader, Screen, StatusMessage } from '@xchain-wallet/core/ui';
+import { AddressField, AddressText, Button, ChainBadge, ChainPicker, FeeSelector, FormErrorSummary, FormNotice, FormPage, Input, PageHeader, Screen, StatusMessage } from '@xchain-wallet/core/ui';
 import { registry as registryLib } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { useDemoGuard } from '../hooks/useDemoGuard.jsx';
@@ -136,6 +136,8 @@ export function BridgeMoveForm({ walletId, accountId, initialChainId, initialTic
 
     const [formError, setFormError] = useState(/** @type {string | null} */ (null));
     const [submitError, setSubmitError] = useState(/** @type {string | null} */ (null));
+    // Counts Review presses, so the refusal a press raises takes focus.
+    const [reviewAttempt, setReviewAttempt] = useState(0);
     const [result, setResult] = useState(/** @type {any | null} */ (null));
     const [stage, setStage] = useState(/** @type {'form' | 'submitting' | 'done'} */ ('form'));
     const [hwStatus, setHwStatus] = useState('idle');
@@ -395,6 +397,17 @@ export function BridgeMoveForm({ walletId, accountId, initialChainId, initialTic
         || memoError
         || null;
 
+    // A refusal from a Review press describes the values it was pressed on; a
+    // changed field or fee makes it stale, so the page states the live one.
+    useEffect(() => {
+        setFormError(null);
+        setSubmitError(null);
+    }, [actionParams, fromAddressId, feePerKb, nativeFee.flag]);
+    // One refusal at a time: the live check of the current values first, then
+    // the last Review press.
+    const pressError = formError || submitError || null;
+    const pageError = blockingError || pressError;
+
     const actionConfirm = useActionConfirmFlow({ messaging, walletId });
     const passwordValueRef = useRef('');
     passwordValueRef.current = password;
@@ -462,6 +475,7 @@ export function BridgeMoveForm({ walletId, accountId, initialChainId, initialTic
         const feeStop = customFeeReviewStop({ feePick, tiers: feeTiers, estimate: feeCustomEstimate });
         if (feeStop) { setFormError(feeStop.formError); return; }
         if (stage === 'submitting') return;
+        setReviewAttempt((n) => n + 1);
         if (!fromAddress || !sourceChainId) {
             setFormError('No usable source address is available. Choose another source address.');
             return;
@@ -666,7 +680,7 @@ export function BridgeMoveForm({ walletId, accountId, initialChainId, initialTic
             demoGuard={demoGuard}
             label="Move across networks"
             onSubmit={handleSubmit}
-            status={(feeWarning || blockingError || formError || submitError) ? (
+            status={(feeWarning || pageError) ? (
                 <>
                     {/* A warning, not a refusal: base D13 ruled there is NO dust floor in
                         consensus, so a below-fee move is legal and the user may have a
@@ -678,12 +692,9 @@ export function BridgeMoveForm({ walletId, accountId, initialChainId, initialTic
                     ) : null}
                     {blockingError ? (
                         <StatusMessage variant="error">{blockingError}</StatusMessage>
-                    ) : null}
-                    {formError ? (
-                        <StatusMessage variant="error">{formError}</StatusMessage>
-                    ) : null}
-                    {submitError ? (
-                        <StatusMessage variant="error">{submitError}</StatusMessage>
+                    ) : pressError ? (
+                        // Leads the page, far above the button on a phone: it takes focus.
+                        <FormErrorSummary errors={[{ message: pressError }]} focusKey={reviewAttempt} />
                     ) : null}
                 </>
             ) : null}

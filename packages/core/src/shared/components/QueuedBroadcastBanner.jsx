@@ -31,7 +31,7 @@ import { useMessaging } from '../useMessaging.js';
 import { useReachability } from '../hooks/useReachability.js';
 import { withAutoLockHold } from '../hooks/autoLockGuard.js';
 import { useToast } from './ToastHost.jsx';
-import { broadcastFailureKindFromError } from '../../flows/broadcastPermanence.js';
+import { broadcastFailureKindFromError, QUEUED_BROADCAST_IN_FLIGHT_NAME } from '../../flows/broadcastPermanence.js';
 import styles from './QueuedBroadcastBanner.module.css';
 import { t } from '../../i18n/index.js';
 
@@ -343,6 +343,12 @@ export function queuedBroadcastFailure(err, list, id) {
             removed,
             message: 'This transaction is no longer in the queue and was not sent this time. '
                 + 'Check your activity to see what happened to it.',
+        };
+    }
+    if (listed !== false && /** @type {any} */ (err)?.name === QUEUED_BROADCAST_IN_FLIGHT_NAME) {
+        return {
+            removed: false,
+            message: 'This transaction is being sent from another window. Wait for that send to finish.',
         };
     }
     if (kind === 'transient') {

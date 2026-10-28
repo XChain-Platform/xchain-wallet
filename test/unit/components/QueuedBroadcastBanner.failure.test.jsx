@@ -148,6 +148,19 @@ describe('QueuedBroadcastBanner after a failed broadcast', () => {
         expect(toasts[0].message).not.toMatch(/broadcast\.queue:|compose/i);
     });
 
+    it('says the send is underway in another window instead of asking for a retry', async () => {
+        await renderWith([entry('a', 'Deploy contract')]);
+        broadcastImpl = async () => {
+            throw named('QueuedBroadcastInFlightError', 'broadcast.queue: entry "a" is already being broadcast');
+        };
+        pressBroadcast();
+        const alert = await screen.findByRole('alert');
+        expect(alert.textContent).toMatch(/being sent from another window/);
+        expect(alert.textContent).not.toMatch(/Try again/);
+        expect(alert.textContent).not.toMatch(/broadcast\.queue/);
+        expect(screen.getByText('Deploy contract')).toBeTruthy();
+    });
+
     it('hides an unrelated host error while the row is still waiting to send', async () => {
         await renderWith([entry('a', 'Send 1 XCP')]);
         broadcastImpl = async () => { throw new Error('boom'); };

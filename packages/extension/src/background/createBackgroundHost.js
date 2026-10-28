@@ -3751,7 +3751,9 @@ export function createBackgroundHost(deps) {
         const id = req?.id;
         const claim = `${walletId}:${id}`;
         if (inFlightQueueBroadcasts.has(claim)) {
-            throw new Error(`broadcast.queue: entry "${id}" is already being broadcast`);
+            const inFlight = new Error(`broadcast.queue: entry "${id}" is already being broadcast`);
+            inFlight.name = flows.QUEUED_BROADCAST_IN_FLIGHT_NAME;
+            throw inFlight;
         }
         inFlightQueueBroadcasts.add(claim);
         try {

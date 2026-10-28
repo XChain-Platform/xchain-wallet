@@ -97,6 +97,19 @@ describe('TokenAdminForm bridge settings: the opt-in', () => {
         await waitFor(() => expect(applyButton()).not.toBeDisabled(), WAIT);
     });
 
+    // The boxes emit the networks in the form's own order, so a stored list in
+    // another order, or with a repeat, names the same networks and is no change.
+    it.each(['LTC,BTC', 'BTC,LTC,BTC'])('treats the untouched form over a stored %s as unchanged', async (bridgeChains) => {
+        mountAdmin({
+            chainId: DOGE, tick: 'FUFU', locks: {}, bridgeChains,
+        });
+        await waitFor(() => expect(screen.getByLabelText('Litecoin')).toBeChecked(), WAIT);
+        expect(screen.getByLabelText('Bitcoin')).toBeChecked();
+        expect(applyButton()).toBeDisabled();
+        fireEvent.click(screen.getByLabelText('Litecoin'));
+        await waitFor(() => expect(applyButton()).not.toBeDisabled(), WAIT);
+    });
+
     it('says plainly that closing a network never strands existing holders', async () => {
         mountAdmin({ chainId: DOGE, tick: 'FUFU', locks: {} });
         const note = await screen.findByText(/closes the door to NEW transfers/i, {}, WAIT);
@@ -171,5 +184,20 @@ describe('IssueTokenForm: the bridgeability disclosure', () => {
         expect(note.textContent).toContain('Manage Token');
         const listNote = screen.getByText(/can't be bridged, and a bound list can never be cleared/i);
         expect(listNote).toBeInTheDocument();
+    });
+});
+
+// The refusal leads the page, above the network boxes, the depth field and the
+// credentials, so the Review press that raised it moves focus there.
+describe('TokenAdminForm bridge settings: a Review refusal takes focus', () => {
+    it('focuses the depth refusal raised by the Review press', async () => {
+        mountAdmin({ chainId: DOGE, tick: 'FUFU', locks: {}, bridgeChains: 'BTC' });
+        const depth = await screen.findByLabelText(/Minimum confirmations/i, {}, WAIT);
+        fireEvent.change(depth, { target: { value: 'six' } });
+        await waitFor(() => expect(applyButton()).not.toBeDisabled(), WAIT);
+        applyButton().focus();
+        fireEvent.click(applyButton());
+        const refusal = await screen.findByText('Minimum confirmations must be a whole number of blocks.', {}, WAIT);
+        await waitFor(() => expect(document.activeElement?.contains(refusal)).toBe(true), WAIT);
     });
 });

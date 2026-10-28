@@ -104,6 +104,8 @@ const TRANSIENT_PATTERNS = [
 export const BROADCAST_FAILED_PERMANENT_NAME = 'BroadcastFailedPermanentError';
 export const BROADCAST_FAILED_TRANSIENT_NAME = 'BroadcastFailedTransientError';
 export const BROADCAST_FAILED_TRANSIENT_UNSAVED_NAME = 'BroadcastFailedTransientUnsavedError';
+// A queued entry another window is sending right now: nothing failed, so no retry is due.
+export const QUEUED_BROADCAST_IN_FLIGHT_NAME = 'QueuedBroadcastInFlightError';
 
 /**
  * Recover the broadcast-failure permanence from an error that may have

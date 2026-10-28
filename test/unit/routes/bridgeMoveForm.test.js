@@ -625,10 +625,10 @@ describe('BridgeMoveForm: invalid action fields', () => {
     });
 
     it('refuses review when fresh bridge settings differ from the displayed route', async () => {
+        // Only the depth moves, so the route stays open and the refresh notice is the one message.
         const getTokenInfo = vi.fn()
             .mockResolvedValueOnce({ bridgeChains: 'DOGE', minDepth: '6' })
-            .mockResolvedValueOnce({ bridgeChains: 'LTC', minDepth: '12' })
-            .mockResolvedValue({ bridgeChains: 'LTC', minDepth: '12' });
+            .mockResolvedValue({ bridgeChains: 'DOGE', minDepth: '12' });
         const messaging = mount({
             initialTick: 'FUFU',
             balances: { FUFU: '10' },
@@ -656,5 +656,67 @@ describe('BridgeMoveForm: invalid action fields', () => {
         const alert = await screen.findByRole('alert', {}, WAIT);
         expect(alert).toHaveTextContent("Couldn't complete this; something went wrong. Try again.");
         expect(alert).not.toHaveTextContent(/composer\.internal/);
+    });
+});
+
+// One message per state: a refusal from an earlier Review press describes a
+// form that no longer exists once a field changes, and the live refusal for
+// the current values is the one the page states.
+describe('BridgeMoveForm: one message for the current state', () => {
+    it('drops the empty-amount refusal once an amount is typed', async () => {
+        mount({ balances: { XCHAIN: '10' } });
+        await waitFor(
+            () => expect(screen.getByText(/10 XCHAIN available/i)).toBeInTheDocument(),
+            WAIT,
+        );
+        fireEvent.click(moveButton());
+        expect(await screen.findByText('Enter an amount to move.', {}, WAIT)).toBeInTheDocument();
+
+        fireEvent.change(amountInput(), { target: { value: '11' } });
+        await screen.findByText(/You hold 10 XCHAIN at the source address/i, {}, WAIT);
+        expect(screen.queryByText('Enter an amount to move.')).toBeNull();
+    });
+
+    it('states only the refreshed route refusal after the bridge settings change under the form', async () => {
+        const getTokenInfo = vi.fn()
+            .mockResolvedValueOnce({ bridgeChains: 'DOGE', minDepth: '6' })
+            .mockResolvedValue({ bridgeChains: 'LTC', minDepth: '12' });
+        mount({ initialTick: 'FUFU', balances: { FUFU: '10' }, getTokenInfo });
+        await waitFor(() => expect(screen.getByText(/at least 6 confirmations/i)).toBeInTheDocument(), WAIT);
+        fireEvent.change(amountInput(), { target: { value: '1' } });
+        fireEvent.click(moveButton());
+
+        await screen.findByText('This token cannot move to the selected destination network.', {}, WAIT);
+        expect(screen.queryByText(/bridge settings changed/i)).toBeNull();
+    });
+});
+
+// The refusal leads the page, far above the Review button on a phone, so the
+// press that raised it moves focus there and the user sees why nothing opened.
+describe('BridgeMoveForm: a Review refusal takes focus', () => {
+    it('focuses the empty-amount refusal raised by the Review press', async () => {
+        mount();
+        await waitFor(
+            () => expect(screen.getByLabelText('Receive at')).toHaveValue(DOGE_ADDRESS.address),
+            WAIT,
+        );
+        moveButton().focus();
+        fireEvent.click(moveButton());
+        const refusal = await screen.findByText('Enter an amount to move.', {}, WAIT);
+        await waitFor(() => expect(document.activeElement?.contains(refusal)).toBe(true), WAIT);
+    });
+
+    it('focuses a compose failure that arrives after the press', async () => {
+        const composeForConfirm = vi.fn().mockRejectedValue(new Error('Insufficient funds for fee'));
+        mount({ composeForConfirm });
+        await waitFor(
+            () => expect(screen.getByLabelText('Receive at')).toHaveValue(DOGE_ADDRESS.address),
+            WAIT,
+        );
+        fireEvent.change(amountInput(), { target: { value: '1' } });
+        moveButton().focus();
+        fireEvent.click(moveButton());
+        const alert = await screen.findByRole('alert', {}, WAIT);
+        await waitFor(() => expect(document.activeElement).toBe(alert), WAIT);
     });
 });

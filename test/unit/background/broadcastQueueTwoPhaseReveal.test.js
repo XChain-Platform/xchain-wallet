@@ -219,6 +219,22 @@ describe('the host queue sends a two-phase entry as commit then reveal', () => {
         expect(await h.list()).toEqual([]);
     });
 
+    // Two windows press Send now on one entry: the second is refused by name, so
+    // its banner can say the send is underway instead of asking for a retry.
+    it('refuses a second send of an entry another window is sending, by a named error', async () => {
+        const pendingTxs = memCollection();
+        await pendingTxs.put(record());
+        const h = bootHost({ pendingTxs, entries: [pair], broadcastTx: never });
+
+        void h.call('broadcast.queue.broadcast', { walletId: W, id: 'A' });
+        await vi.waitFor(() => expect(h.sent()).toEqual(['TX(PHASE1)']));
+        const second = await h.call('broadcast.queue.broadcast', { walletId: W, id: 'A' });
+
+        expect(second.ok).toBe(false);
+        expect(second.error).toMatchObject({ name: 'QueuedBroadcastInFlightError' });
+        expect(h.sent()).toEqual(['TX(PHASE1)']);
+    });
+
     it('sends an entry written before the reveal field as the one transaction it names', async () => {
         const pendingTxs = memCollection();
         const old = record();
