@@ -23,6 +23,7 @@
 }
 
 .control {
+    composes: btn from "../../ui/Button.module.css";
     /* The pointer target never drops below the WCAG 2.5.8 floor; a later
        min-height or height here may raise it. */
     min-block-size: var(--xc-tap-min);
@@ -42,6 +43,9 @@
     border-radius: var(--xc-control-radius);
     cursor: pointer;
     text-align: start;
+    justify-content: flex-start;
+    font-weight: 400;
+    white-space: nowrap;
     transition: border-color var(--xc-transition), box-shadow var(--xc-transition);
 }
 
