@@ -676,7 +676,7 @@ export {
 // §4.6 input liveness. The host route owns the utxo fetch; the comparison and
 // the "which addresses do I have to ask" question are pure, so both live here
 // and are unit-testable without a chain.
-export { checkInputLiveness, inputAddresses, livenessMessage } from './inputLiveness.js';
+export { INPUTS_ALREADY_SPENT_NAME, checkInputLiveness, inputAddresses, livenessMessage } from './inputLiveness.js';
 // Which transaction carries the native-coin protocol fee.
 export {
     nativeFeeOutputOf,

@@ -29,6 +29,7 @@
 
 const REQUEST_KEY = 'xchain.confirmAction';
 const RESERVATION_KEY = 'xchain.reservationLedger';
+const OWN_SPENDS_KEY = 'xchain.ownSpends';
 
 /**
  * One stored confirm, exactly as the `action.confirmSession.put` route in
@@ -52,6 +53,8 @@ const RESERVATION_KEY = 'xchain.reservationLedger';
  * @property {(id: string) => Promise<void>} removeSession
  * @property {() => Promise<Array<object>>} loadReservations
  * @property {(entries: Array<object>) => Promise<void>} saveReservations
+ * @property {() => Promise<Array<object>>} loadOwnSpends
+ * @property {(entries: Array<object>) => Promise<void>} saveOwnSpends
  */
 
 /**
@@ -106,6 +109,13 @@ export function createConfirmActionSessionStorage() {
         async saveReservations(entries) {
             await set(RESERVATION_KEY, Array.isArray(entries) ? entries : []);
         },
+        async loadOwnSpends() {
+            const v = await get(OWN_SPENDS_KEY);
+            return Array.isArray(v) ? v : [];
+        },
+        async saveOwnSpends(entries) {
+            await set(OWN_SPENDS_KEY, Array.isArray(entries) ? entries : []);
+        },
     };
 }
 
@@ -121,5 +131,19 @@ export function reservationStoreFrom(storage) {
     return {
         load: () => storage.loadReservations(),
         save: (entries) => storage.saveReservations(entries),
+    };
+}
+
+/**
+ * The OwnSpendStore createOwnSpendLedger accepts, backed by this session
+ * storage, so the coins a send claimed stay claimed across a worker restart.
+ *
+ * @param {ConfirmActionSessionStorage} storage
+ * @returns {{ load: () => Promise<Array<object>>, save: (e: Array<object>) => Promise<void> }}
+ */
+export function ownSpendStoreFrom(storage) {
+    return {
+        load: () => storage.loadOwnSpends(),
+        save: (entries) => storage.saveOwnSpends(entries),
     };
 }

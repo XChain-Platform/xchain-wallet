@@ -106,6 +106,12 @@ export function inputAddresses(inputs) {
 }
 
 /**
+ * Error name for a send refused before signing because another send from this
+ * wallet is spending its inputs. Its message is the `livenessMessage` sentence.
+ */
+export const INPUTS_ALREADY_SPENT_NAME = 'InputsAlreadySpentError';
+
+/**
  * User-facing sentence for a `spent` verdict. The re-compose instruction is
  * part of the message rather than a separate hint because §5.3.4 forbids
  * re-signing this PSBT: the only way forward is a new one.

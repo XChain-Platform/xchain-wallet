@@ -52,6 +52,7 @@ import { knownSdkErrorMessage, unknownSdkErrorCode } from '../../sdk/sdkErrorMes
 import { validationErrorMessage } from '../../sdk/validationErrors.js';
 import { broadcastFailureKindFromError } from '../../flows/broadcastPermanence.js';
 import { OFFER_LIFECYCLE_REFUSAL } from '../../flows/marketExpiry.js';
+import { INPUTS_ALREADY_SPENT_NAME } from '../../flows/inputLiveness.js';
 import { humanizeError } from './humanizeError.js';
 import { actionDisplayLabel } from './actionDisplayLabel.js';
 import { CHUNK_LANE_OPENER_RE } from './chunkLaneCopy.js';
@@ -360,6 +361,12 @@ export function submitFailureMessage(
     // the tail treats as raw wire text and would replace with the generic line.
     if (/** @type {any} */ (err)?.name === OFFER_LIFECYCLE_REFUSAL) {
         return userFacingMessage(String(/** @type {any} */ (err).message || '').trim(), generic);
+    }
+    // Another send from this wallet is spending these inputs, so the background
+    // refused this one before signing. The sentence is the wallet's own and
+    // names the way forward; the tail would read it as wire text.
+    if (/** @type {any} */ (err)?.name === INPUTS_ALREADY_SPENT_NAME) {
+        return userFacingMessage(`${String(/** @type {any} */ (err).message || '').trim()} Nothing was signed.`, generic);
     }
     if (isCommitFeeTooLowBroadcast(err)) return NETWORK_FEE_TOO_LOW_MESSAGE;
     const broadcastKind = broadcastFailureKindFromError(err);

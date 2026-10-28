@@ -57,10 +57,12 @@ import {
     createHoldBeforeBroadcast,
     createSendHoldRegistry,
 } from './sendHold.js';
+import { createOwnSpendLedger, psbtOutpoints } from './ownSpends.js';
 import { createSignThrottleStorage } from './signThrottleStorage.js';
 import { createLogConsoleStorage } from './logConsoleStorage.js';
 import {
     createConfirmActionSessionStorage,
+    ownSpendStoreFrom,
     reservationStoreFrom,
 } from './confirmActionSessionStorage.js';
 import { DEFAULT_ACTIVE_CHAIN_IDS } from './walletCreate.js';
@@ -1145,7 +1147,16 @@ export function createBackgroundHost(deps) {
             throw err;
         }
         activeSendIntents.add(intentKey);
+        let claim = '';
+        let broadcast = false;
         try {
+            // A review built before another send from this wallet went out can
+            // name the same coins; refuse it here, before anything is signed.
+            claim = await ownSpends.claim(
+                req?.chainId,
+                // The hardware lane passes its deps inside req.
+                psbtOutpoints((flowDeps ?? req)?.sdkRegistry?.get?.(req?.chainId), req?.prebuiltPsbt?.psbtHex),
+            );
             const opts = { ...req, ...flowDeps };
             const holdBeforeBroadcast = createHoldBeforeBroadcast({
                 sendHold,
@@ -1158,12 +1169,17 @@ export function createBackgroundHost(deps) {
                 if (holdBeforeBroadcast) await holdBeforeBroadcast(...args);
                 await assertActiveSendNetwork(opts);
             };
-            return await finishStoredConfirm(
+            const result = await finishStoredConfirm(
                 opts.prebuiltPsbt?.psbtHex,
                 () => sendToken({ ...opts, beforeBroadcast }),
             );
+            // Only a transaction the network took holds its coins; a queued or unsent one frees them.
+            broadcast = Boolean(result?.txid) && !result?.queued;
+            return result;
         } finally {
             activeSendIntents.delete(intentKey);
+            if (broadcast) await ownSpends.keep(claim);
+            else await ownSpends.release(claim);
         }
     }
 
@@ -1188,6 +1204,10 @@ export function createBackgroundHost(deps) {
     const confirmSessionStorage = createConfirmActionSessionStorage();
     const reservationLedger = createReservationLedger(
         confirmSessionStorage ? { store: reservationStoreFrom(confirmSessionStorage) } : undefined,
+    );
+    // Different sends over the same coins stay exclusive too (see ownSpends.js).
+    const ownSpends = createOwnSpendLedger(
+        confirmSessionStorage ? { store: ownSpendStoreFrom(confirmSessionStorage) } : undefined,
     );
 
     // Cluster Q FOLLOWUP 5: hydrate + start mirroring as early as
