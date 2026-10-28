@@ -278,14 +278,14 @@ export function psbtInputError(raw) {
     const compact = raw.replace(/\s+/g, '');
     if (HEX_RE.test(compact)) {
         if (compact.length % 2 !== 0) {
-            return 'Transaction hex must contain complete byte pairs.';
+            return 'Transaction code must contain complete byte pairs.';
         }
-        return `This hex is not a PSBT. A PSBT starts with ${PSBT_MAGIC_HEX}.`;
+        return `This code is not a PSBT. A PSBT starts with ${PSBT_MAGIC_HEX}.`;
     }
     if (compact.startsWith(BASE64_PSBT_PREFIX)) {
         return 'Transaction base64 is incomplete or malformed.';
     }
-    return 'Paste a PSBT as hex or base64, or import a .psbt file.';
+    return 'Paste a PSBT transaction code, or import a .psbt file.';
 }
 
 /**
@@ -671,13 +671,13 @@ export function PsbtSignForm({ walletId, onBack, initialPsbt }) {
         onError: (message) => {
             setError(message.startsWith('File is too large')
                 ? 'This transaction file is too large. Choose a .psbt file smaller than 2 MB.'
-                : 'Could not read that transaction file. Choose a .psbt file in binary, hex, or base64 form.');
+                : 'Could not read that transaction file. Choose a .psbt file saved as a binary file or as text code.');
         },
         disabled: busy,
         onFile: ({ content }) => {
             const hex = normalizePsbtFile(content);
             if (!hex) {
-                setError('This file does not contain a valid PSBT in binary, hex, or base64 form.');
+                setError('This file does not contain a valid PSBT, either as a binary file or as text code.');
                 return;
             }
             setPasted(hex);
@@ -954,7 +954,7 @@ export function PsbtSignForm({ walletId, onBack, initialPsbt }) {
         setError(null);
         if (!chainId) { setError('Pick a network.'); return; }
         if (!addressId) { setError('Pick a signing address.'); return; }
-        if (!psbtHex) { setError('Paste a valid transaction (hex or base64).'); return; }
+        if (!psbtHex) { setError('Paste a valid transaction code.'); return; }
         if (!decomposed) { setError('Transaction could not be parsed for this network.'); return; }
         if (importEligibilityError) return;
         if (ownedInputCount === 0) {
@@ -1074,7 +1074,7 @@ export function PsbtSignForm({ walletId, onBack, initialPsbt }) {
                     under a label naming the artifact that was not there. */}
                 {signedPsbtHex ? (
                     <ArtifactBlock
-                        label="Signed PSBT (hex)"
+                        label="Signed PSBT (code)"
                         copyLabel="Copy signed PSBT"
                         value={signedPsbtHex}
                         testId="signed-psbt-hex"
@@ -1082,7 +1082,7 @@ export function PsbtSignForm({ walletId, onBack, initialPsbt }) {
                 ) : null}
                 {signedTxHex ? (
                     <ArtifactBlock
-                        label="Signed transaction (raw hex)"
+                        label="Signed transaction (code)"
                         copyLabel="Copy signed transaction"
                         value={signedTxHex}
                         testId="signed-tx-hex"
@@ -1138,7 +1138,7 @@ export function PsbtSignForm({ walletId, onBack, initialPsbt }) {
                     // result of this screen cannot support.
                     <p style={{ color: 'var(--xc-text-muted)', fontSize: 'var(--xc-text-sm)' }}>
                         This transaction is fully signed. Broadcast it directly from this
-                        wallet, or hand the raw hex to any other broadcaster.
+                        wallet, or hand the signed transaction code to any other broadcaster.
                     </p>
                 )}
                 <div style={{ display: 'flex', flexWrap: 'wrap', gap: 'var(--xc-space-2)' }}>
@@ -1389,12 +1389,12 @@ export function PsbtSignForm({ walletId, onBack, initialPsbt }) {
                 >
                     <Textarea
                         id="psbt-sign-paste"
-                        label="Unsigned transaction (hex or base64)"
+                        label="Unsigned transaction code"
                         value={pasted}
                         onChange={(e) => { setPasted(e.target.value); if (error) setError(null); }}
-                        placeholder="Paste transaction hex (70736274ff…) or base64 (cHNid…), or drop a .psbt file"
+                        placeholder="Paste the transaction code (it starts with 70736274ff or cHNid), or drop a .psbt file"
                         rows={6}
-                        aria-label="Unsigned transaction (hex or base64)"
+                        aria-label="Unsigned transaction code"
                         style={{
                             width: '100%',
                             background: 'var(--xc-bg)',

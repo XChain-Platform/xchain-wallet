@@ -323,7 +323,7 @@ describe('BroadcastForm validates decimal fields before compose', () => {
 describe('BroadcastForm broadcasts a pasted signed transaction safely', () => {
     async function openRawTransaction(raw) {
         fireEvent.click(await screen.findByRole('radio', { name: 'Signed transaction' }));
-        fireEvent.change(screen.getByLabelText('Signed transaction hex'), { target: { value: raw } });
+        fireEvent.change(screen.getByLabelText('Signed transaction code'), { target: { value: raw } });
         fireEvent.click(screen.getByRole('button', { name: 'Preview transaction' }));
     }
 
@@ -369,14 +369,14 @@ describe('BroadcastForm broadcasts a pasted signed transaction safely', () => {
         fireEvent.click(back);
         expect(back.isConnected).toBe(false);
 
-        const field = await screen.findByLabelText('Signed transaction hex');
+        const field = await screen.findByLabelText('Signed transaction code');
         expect(field).toHaveValue(LEGACY_TX);
         expect(screen.queryByText(/spends 1 input and creates 2 outputs/)).toBeNull();
         expect(screen.getByRole('button', { name: 'Preview transaction' })).toBeTruthy();
     });
 
     it.each([
-        ['non-hex data', '00zz', /hexadecimal characters only/],
+        ['non-hex data', '00zz', /must contain only the digits 0 to 9 and the letters a to f/],
         ['an incomplete byte', 'abc', /complete bytes/],
         ['a truncated transaction', LEGACY_TX.slice(0, -8), /not a complete signed transaction/],
     ])('rejects %s before broadcast', async (_case, raw, message) => {

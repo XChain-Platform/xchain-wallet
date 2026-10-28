@@ -77,8 +77,8 @@ function normalizeRawTransaction(raw) {
     // A 0x prefix is the usual way to write hex; it is not part of the bytes.
     const compact = String(raw || '').replace(/\s+/g, '').replace(/^0x/i, '');
     if (!compact) throw new Error('Paste a signed transaction first.');
-    if (!HEX_ONLY.test(compact)) throw new Error('Transaction data must contain hexadecimal characters only.');
-    if (compact.length % 2 !== 0) throw new Error('Transaction data must contain complete bytes (two hexadecimal characters per byte).');
+    if (!HEX_ONLY.test(compact)) throw new Error('Transaction code must contain only the digits 0 to 9 and the letters a to f.');
+    if (compact.length % 2 !== 0) throw new Error('Transaction code must contain complete bytes (two characters per byte).');
     try {
         return { txHex: compact.toLowerCase(), decoded: parseRawTx(compact) };
     } catch {
@@ -361,8 +361,8 @@ function RawTransactionBroadcast({
             <BroadcastKindPicker value="transaction" onChange={onKindChange} />
             <ChainPicker label="Network" value={chainId} onChange={setChainId} chainIds={chainIds} chainRegistry={chainRegistry} hideNetworkKind />
             <Textarea
-                label="Signed transaction hex"
-                hint="Spaces and line breaks are ignored. Only complete hexadecimal bytes are accepted."
+                label="Signed transaction code"
+                hint="Spaces and line breaks are ignored. The code uses only the digits 0 to 9 and the letters a to f, two characters per byte."
                 value={raw}
                 onChange={(event) => {
                     setRaw(event.target.value);

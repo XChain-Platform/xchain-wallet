@@ -293,7 +293,7 @@ const ALL_FORMS = [
         label: 'Sign transaction unreadable paste',
         open: (page) => palette(page, 'Sign a transaction'),
         trigger: async (page) => {
-            const field = page.getByRole('main').getByLabel('Unsigned transaction (hex or base64)', { exact: true });
+            const field = page.getByRole('main').getByLabel('Unsigned transaction code', { exact: true });
             await field.fill('deadbeef');
             await field.press('Tab');
         },

@@ -80,7 +80,7 @@ async function signPanelFacing(frames) {
     // format types.
     await openPaletteCommand(page, 'psbt', { option: /^Sign a transaction/ });
 
-    const box = page.getByLabel('Unsigned transaction (hex or base64)');
+    const box = page.getByLabel('Unsigned transaction code');
     await expect(box, 'the Sign panel did not open').toBeVisible({ timeout: 30_000 });
     return { page, box, close: () => browser.close() };
 }

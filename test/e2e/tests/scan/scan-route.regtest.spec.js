@@ -351,7 +351,7 @@ test.describe('scan and classify (§24.3)', () => {
             await openScan(page);
             expect(await classifyPaste(page, PSBT_HEX), 'a PSBT hex was not routed').toBe('routed');
 
-            const box = page.getByLabel('Unsigned transaction (hex or base64)');
+            const box = page.getByLabel('Unsigned transaction code');
             await expect(box, 'a scanned PSBT did not open the Sign panel')
                 .toBeVisible({ timeout: 30_000 });
             // Compared as a boolean so a failure cannot dump a transaction into the

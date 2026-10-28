@@ -58,7 +58,7 @@ function mountForm(props = {}) {
 
 async function openRawTransaction(raw) {
     fireEvent.click(await screen.findByRole('radio', { name: 'Signed transaction' }));
-    fireEvent.change(screen.getByLabelText('Signed transaction hex'), { target: { value: raw } });
+    fireEvent.change(screen.getByLabelText('Signed transaction code'), { target: { value: raw } });
     fireEvent.click(screen.getByRole('button', { name: 'Preview transaction' }));
 }
 
@@ -74,7 +74,7 @@ describe('raw transaction broadcast', () => {
         fireEvent.click(screen.getByRole('button', { name: 'Broadcast transaction' }));
         fireEvent.click(await screen.findByRole('button', { name: 'Done' }));
         expect(onDone).toHaveBeenCalledTimes(1);
-        expect(screen.queryByLabelText('Signed transaction hex')).toBeNull();
+        expect(screen.queryByLabelText('Signed transaction code')).toBeNull();
     });
 
     it('accepts a 0x prefix on the pasted hex', async () => {

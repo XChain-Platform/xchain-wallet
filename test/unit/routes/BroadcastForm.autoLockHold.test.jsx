@@ -73,7 +73,7 @@ describe('raw broadcast and auto-lock', () => {
             </MessagingProvider>,
         );
         fireEvent.click(await screen.findByRole('radio', { name: 'Signed transaction' }));
-        fireEvent.change(screen.getByLabelText('Signed transaction hex'), { target: { value: LEGACY_TX } });
+        fireEvent.change(screen.getByLabelText('Signed transaction code'), { target: { value: LEGACY_TX } });
         fireEvent.click(screen.getByRole('button', { name: 'Preview transaction' }));
         await screen.findByText(/spends 1 input/);
         fireEvent.click(screen.getByRole('button', { name: 'Broadcast transaction' }));

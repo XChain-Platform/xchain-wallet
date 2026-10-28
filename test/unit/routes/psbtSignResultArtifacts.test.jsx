@@ -163,7 +163,7 @@ describe('PSBT signing result screen renders the artifact the lane produced', ()
         expect(rawBlock.textContent).toBe('cc22');
         // No PSBT was produced, so no PSBT block and no copy button over ''.
         expect(utils.queryByTestId('signed-psbt-hex')).toBe(null);
-        expect(utils.container.textContent).toContain('Signed transaction (raw hex)');
+        expect(utils.container.textContent).toContain('Signed transaction (code)');
         // A device-signed transaction is complete; there is no next cosigner.
         expect(utils.container.textContent).not.toContain('next cosigner');
     });
@@ -179,7 +179,7 @@ describe('PSBT signing result screen renders the artifact the lane produced', ()
         expect(psbtBlock).toBeTruthy();
         expect(psbtBlock.textContent).toBe('bb11');
         expect(utils.queryByTestId('signed-tx-hex')).toBe(null);
-        expect(utils.container.textContent).toContain('Signed PSBT (hex)');
+        expect(utils.container.textContent).toContain('Signed PSBT (code)');
         expect(utils.container.textContent).toContain('next cosigner');
     });
 
@@ -190,7 +190,7 @@ describe('PSBT signing result screen renders the artifact the lane produced', ()
         });
         expect(utils.queryByTestId('signed-psbt-hex').textContent).toBe('bb11');
         expect(utils.queryByTestId('signed-tx-hex').textContent).toBe('cc22');
-        expect(utils.container.textContent).toContain('Signed PSBT (hex)');
-        expect(utils.container.textContent).toContain('Signed transaction (raw hex)');
+        expect(utils.container.textContent).toContain('Signed PSBT (code)');
+        expect(utils.container.textContent).toContain('Signed transaction (code)');
     });
 });

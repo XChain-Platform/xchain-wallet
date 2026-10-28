@@ -139,7 +139,7 @@ export function RawPsbtViewer({ developerMode, psbtHex, actionFields }) {
                             onClick={() => handleCopy('psbt', psbtHex)}
                             aria-live="polite"
                         >
-                            {copyLabel('psbt', 'unsigned transaction hex')}
+                            {copyLabel('psbt', 'unsigned transaction code')}
                         </Button>
                     </section>
                 ) : null}
