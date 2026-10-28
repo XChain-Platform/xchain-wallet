@@ -97,8 +97,8 @@ test('a request scanned over an approved payment wins over a link waiting behind
     await expect(page.getByTestId('confirm-modal')).toBeVisible();
     await page.getByTestId('confirm-approve').click();
     await page.evaluate((url) => globalThis.__deliverLink(url), `bitcoin:${SECOND}?amount=0.002`);
-    // The dev SDK cannot broadcast, so the approved payment ends on its failure notice.
-    await expect(main.getByText("Couldn't send.", { exact: false })).toBeVisible();
+    // The dev SDK cannot sign, so the approved payment ends on its refusal notice.
+    await expect(main.getByText('This development build cannot sign.', { exact: false })).toBeVisible();
 
     await openScanner(page);
     await page.getByLabel('Or paste it here').fill(`bitcoin:${THIRD}?amount=0.3`);

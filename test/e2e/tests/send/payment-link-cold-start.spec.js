@@ -79,9 +79,9 @@ test('a link delivered after Approve waits until the user leaves the outcome', a
     await page.getByTestId('confirm-approve').click();
     await page.evaluate((url) => globalThis.__deliverLink(url), `bitcoin:${OTHER}?amount=2`);
 
-    // The dev SDK cannot broadcast, so the approved payment ends on its failure
+    // The dev SDK cannot sign, so the approved payment ends on its refusal
     // notice. The second link must not replace it.
-    await expect(main.getByText("Couldn't send.", { exact: false })).toBeVisible();
+    await expect(main.getByText('This development build cannot sign.', { exact: false })).toBeVisible();
     await expect(page.locator('#send-destination')).toHaveValue(ADDRESS);
     await expect(page.locator('#send-amount')).toHaveValue('0.001');
 
