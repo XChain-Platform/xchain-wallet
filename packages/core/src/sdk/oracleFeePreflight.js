@@ -135,13 +135,24 @@ export async function applyOracleFeePreflight({ sdk, actionData, encoderOpts = {
         throw new OracleFeeUnpayableError({ reason: 'unquotable', quote: quote || null });
     }
 
+    // The fee always goes to the oracle the user named. A reply that names a different
+    // oracle is either priced for another oracle or tries to redirect the payment, so it
+    // is refused rather than trusted.
+    const quotedOracle = quote.oracleAddress == null ? '' : String(quote.oracleAddress).trim();
+    if (quotedOracle && quotedOracle !== ctx.oracleAddress) {
+        throw new OracleFeeUnpayableError({
+            reason: 'unquotable',
+            quote: { ...quote, error: 'quote names an oracle address other than ORACLE_ADDRESS' },
+        });
+    }
+
     const outs = Array.isArray(rest.customOutputs) ? rest.customOutputs.slice() : [];
     const sats = satsResponseAmount(quote.requiredFeeSats, {
         source: 'oracle fee quote',
         field: 'requiredFeeSats',
     });
     if (!quote.belowDust && sats > 0) {
-        outs.push({ address: quote.oracleAddress || ctx.oracleAddress, value: sats });
+        outs.push({ address: ctx.oracleAddress, value: sats });
     }
 
     if (typeof onProgress === 'function') onProgress('oracle_fee_quoted', { quote });
