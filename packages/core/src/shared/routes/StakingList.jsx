@@ -38,6 +38,8 @@ import {
 import styles from './ActionsMenu.module.css';
 import local from './StakingList.module.css';
 import { readFailureMessage } from '../utils/readFailureMessage.js';
+import { useNetworkOffline } from '../hooks/useNetworkOffline.js';
+import { OfflineEmptyState } from '../components/OfflineEmptyState.jsx';
 
 const chainRegistry = registryLib.defaultRegistry();
 
@@ -126,6 +128,12 @@ export function StakingList({ walletId, activeAccountId, onOpenStake, onNewStake
     const [query, setQuery] = useState('');
     const [network, setNetwork] = useState('all');
 
+    // Offline the explorer reads cannot finish, and each one waits out its
+    // client retries before failing, so the page would sit on a skeleton for
+    // a minute. It shows its offline state instead and reads once the
+    // connection returns.
+    const { offline, recheck } = useNetworkOffline({ walletId });
+
     useEffect(() => {
         let cancelled = false;
         setAddressesByChain(null);
@@ -192,6 +200,7 @@ export function StakingList({ walletId, activeAccountId, onOpenStake, onNewStake
             setStateByChain(demoState);
             return;
         }
+        if (offline) return;
 
         const initial = {};
         for (const cid of chainsWithAddresses) {
@@ -301,7 +310,7 @@ export function StakingList({ walletId, activeAccountId, onOpenStake, onNewStake
                 });
         }
         return () => { cancelled = true; };
-    }, [chainsWithAddresses, validatorChainIds, addressesByChain, messaging, walletId, stakingReload]);
+    }, [chainsWithAddresses, validatorChainIds, addressesByChain, messaging, walletId, stakingReload, offline]);
 
     // PC-47: chain tip per chain, for the cooldown countdown. One cheap read
     // per chain; a failure leaves the height null and every countdown falls
@@ -451,6 +460,14 @@ export function StakingList({ walletId, activeAccountId, onOpenStake, onNewStake
                 body="Contract staking supports Bitcoin, Litecoin, and Dogecoin; validator staking supports Bitcoin."
                 titleAs="p"
             />,
+        );
+    }
+
+    // Offline with nothing loaded, the page says so once in place of a
+    // skeleton waiting on reads that cannot run.
+    if (offline && allRows.length === 0) {
+        return wrap(
+            <OfflineEmptyState body="Staking positions load when the connection returns." onRetry={recheck} />,
         );
     }
 

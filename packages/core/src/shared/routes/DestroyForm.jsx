@@ -169,6 +169,15 @@ export function DestroyForm({ walletId, onBack, initialChainId, initialTick, ini
         /** @type {'form' | 'review' | 'submitting' | 'done'} */ ('form'),
     );
     const [formError, setFormError] = useState(/** @type {string | null} */ (null));
+    // An amount refusal shows under the Amount field, which takes focus, so a
+    // phone shows it beside the value to fix instead of above the fold.
+    const [amountError, setAmountError] = useState(/** @type {string | null} */ (null));
+    const amountInputRef = useRef(/** @type {HTMLInputElement | null} */ (null));
+    const refuseAmount = (message) => {
+        setFormError(null);
+        setAmountError(message);
+        amountInputRef.current?.focus();
+    };
     const [submitError, setSubmitError] = useState(/** @type {string | null} */ (null));
     const [result, setResult] = useState(/** @type {any | null} */ (null));
     const passwordRef = useRef(/** @type {HTMLInputElement | null} */ (null));
@@ -308,11 +317,11 @@ export function DestroyForm({ walletId, onBack, initialChainId, initialTick, ini
         // Digits, not a float: Number('.') is NaN and slips past a <= 0 test.
         const amountProblem = amountEntryProblem(amt);
         if (amountProblem === 'shape') {
-            setFormError('Write the amount with digits on both sides of the decimal point, such as 0.5.');
+            refuseAmount('Write the amount with digits on both sides of the decimal point, such as 0.5.');
             return;
         }
         if (amountProblem) {
-            setFormError('Amount must be a positive number.');
+            refuseAmount('Amount must be a positive number.');
             return;
         }
         // Keep the burn within the token's on-chain decimal scale.
@@ -321,13 +330,14 @@ export function DestroyForm({ walletId, onBack, initialChainId, initialTick, ini
             tick: ticker,
         });
         if (precisionError) {
-            setFormError(precisionError);
+            refuseAmount(precisionError);
             return;
         }
+        setAmountError(null);
         // Refuse a burn the selected source address cannot fund.
         if (exceedsBalance(amt, tickAmtBalance)) {
             const TICK = ticker.trim();
-            setFormError(
+            refuseAmount(
                 `This address holds only ${formatWithThousands(tickAmtBalance)} ${TICK}. `
                 + 'Enter an amount at or below that balance.',
             );
@@ -694,13 +704,16 @@ export function DestroyForm({ walletId, onBack, initialChainId, initialTick, ini
                 hint="How much to destroy."
                 amount={amount}
                 tick={ticker}
+                inputRef={amountInputRef}
+                error={amountError || undefined}
                 onAmountFieldChange={(rawValue) => {
                     const stripped = String(rawValue).replace(/,/g, '');
                     if (stripped !== '' && !/^\d*\.?\d*$/.test(stripped)) return;
                     setAmount(stripped);
+                    setAmountError(null);
                 }}
                 onMax={tickAmtBalance && Number(tickAmtBalance) > 0
-                    ? () => setAmount(tickAmtBalance)
+                    ? () => { setAmount(tickAmtBalance); setAmountError(null); }
                     : undefined}
                 maxDisabled={!tickAmtBalance}
                 balanceText={tickAmtBalance != null && (ticker)

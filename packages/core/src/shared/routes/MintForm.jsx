@@ -248,6 +248,15 @@ export function MintForm({ walletId, onBack, initialChainId, initialTick, initia
         /** @type {'form' | 'review' | 'submitting' | 'done'} */ ('form'),
     );
     const [formError, setFormError] = useState(/** @type {string | null} */ (null));
+    // An amount refusal shows under the Amount field, which takes focus, so a
+    // phone shows it beside the value to fix instead of above the fold.
+    const [amountError, setAmountError] = useState(/** @type {string | null} */ (null));
+    const amountInputRef = useRef(/** @type {HTMLInputElement | null} */ (null));
+    const refuseAmount = (message) => {
+        setFormError(null);
+        setAmountError(message);
+        amountInputRef.current?.focus();
+    };
     const [submitError, setSubmitError] = useState(/** @type {string | null} */ (null));
     const [result, setResult] = useState(/** @type {any | null} */ (null));
     const passwordRef = useRef(/** @type {HTMLInputElement | null} */ (null));
@@ -392,11 +401,11 @@ export function MintForm({ walletId, onBack, initialChainId, initialTick, initia
         // Digits, not a float: Number('.') is NaN and slips past a <= 0 test.
         const amountProblem = amountEntryProblem(amt);
         if (amountProblem === 'shape') {
-            setFormError('Write the amount with digits on both sides of the decimal point, such as 0.5.');
+            refuseAmount('Write the amount with digits on both sides of the decimal point, such as 0.5.');
             return;
         }
         if (amountProblem) {
-            setFormError('Amount must be a positive number.');
+            refuseAmount('Amount must be a positive number.');
             return;
         }
         // Keep the amount within the token's on-chain decimal scale.
@@ -405,9 +414,10 @@ export function MintForm({ walletId, onBack, initialChainId, initialTick, initia
             tick: ticker,
         });
         if (precisionError) {
-            setFormError(precisionError);
+            refuseAmount(precisionError);
             return;
         }
+        setAmountError(null);
         if (destination.trim() && !isValidAddressForChain(
             destination.trim(), descriptor?.coin, descriptor?.networkKind,
         )) {
@@ -804,13 +814,16 @@ export function MintForm({ walletId, onBack, initialChainId, initialTick, initia
                 hint="How much to mint."
                 amount={amount}
                 tick={ticker}
+                inputRef={amountInputRef}
+                error={amountError || undefined}
                 onAmountFieldChange={(rawValue) => {
                     const stripped = String(rawValue).replace(/,/g, '');
                     if (stripped !== '' && !/^\d*\.?\d*$/.test(stripped)) return;
                     setAmount(stripped);
+                    setAmountError(null);
                 }}
                 onMax={!mintBlocked && headroom !== null && Number(headroom) > 0
-                    ? () => { setAmount(headroom); setFormError(null); }
+                    ? () => { setAmount(headroom); setFormError(null); setAmountError(null); }
                     : undefined}
                 maxDisabled={mintBlocked || headroom === null || Number(headroom) <= 0}
                 // D-164: the window outranks the quantity. "10 available to
