@@ -138,7 +138,9 @@ async function expectAboveFold(locator, label) {
 test.describe('responsive: one interface at every width', () => {
     test('the lock screen keeps its identity and controls reachable above a phone keyboard', async ({ page }) => {
         await createWallet(page, { password: PASSWORD, name: 'Responsive wallet' });
-        await page.keyboard.press('ControlOrMeta+l');
+        // G then L locks; Cmd/Ctrl+L belongs to the browser address bar.
+        await page.keyboard.press('g');
+        await page.keyboard.press('l');
         await expect(page.getByRole('button', { name: 'Unlock Wallet' })).toBeVisible();
 
         for (const viewport of LOCK_VIEWPORTS) {
