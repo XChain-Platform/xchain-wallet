@@ -46,6 +46,7 @@ import { LearnNote } from '../../../packages/core/src/shared/components/LearnNot
 import { LeftNav } from '../../../packages/core/src/shared/components/LeftNav.jsx';
 import { ListToolbar } from '../../../packages/core/src/shared/components/ListToolbar.jsx';
 import { ListPickerScreen } from '../../../packages/core/src/shared/components/ListPickerScreen.jsx';
+import { LockedSendOutcomeNotice } from '../../../packages/core/src/shared/components/LockedSendOutcomeNotice.jsx';
 import { LockedTokenContext } from '../../../packages/core/src/shared/components/LockedTokenContext.jsx';
 import { LogConsole } from '../../../packages/core/src/shared/components/LogConsole.jsx';
 import { expectNoSeriousAxeViolations } from '../helpers/axe.js';
@@ -363,6 +364,24 @@ const fixtures = [
     ['ListToolbar', () => (
         <ListToolbar query="" onQueryChange={noop} searchLabel="Search items" />
     )],
+    // One send that went out and one that did not while the wallet was locked.
+    ['LockedSendOutcomeNotice', () => (
+        <MessagingContext.Provider
+            value={{
+                shell: 'web',
+                messaging: {
+                    ...messaging,
+                    listLockedSendOutcomes: vi.fn().mockResolvedValue([
+                        { id: 'p1', kind: 'sent', txid: 'ab'.repeat(32), amount: '0.0003', tick: 'BTC', summary: 'Send 0.0003 BTC' },
+                        { id: 'p2', kind: 'unsent', txid: null, amount: '0.0002', tick: 'BTC', summary: null },
+                    ]),
+                    clearLockedSendOutcomes: vi.fn().mockResolvedValue({ cleared: 2 }),
+                },
+            }}
+        >
+            <LockedSendOutcomeNotice walletId="wallet-1" routeKey="home" />
+        </MessagingContext.Provider>
+    ), () => screen.findByTestId('locked-send-outcome')],
     ['LockedTokenContext', () => <LockedTokenContext chainId="bitcoin-mainnet" tick="XCHAIN" />],
     ['LogConsole', () => <LogConsole />],
 ];
