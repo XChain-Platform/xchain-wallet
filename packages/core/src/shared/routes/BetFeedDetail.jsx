@@ -429,6 +429,11 @@ export function BetFeedDetail({ walletId, chainId, feedIndex, onOpenOracle, onSe
                     // approves and the tamper check verifies.
                     payFeeInNativeCoin: nativeFee.flag,
                 }),
+                // The market can close while the review is on screen, and a
+                // bet is judged by the block it lands in: signing then pays
+                // both fees for a bet that joins no pool. Approve reads the
+                // market once more and stops before the signature.
+                recheckBeforeSign: closedMarketRefusal,
                 onApprove: (prebuiltPsbt) => submitConfirmed({
                     walletId, chainId, from, params: betParams(), prebuiltPsbt,
                     payFeeInNativeCoin: nativeFee.flag,

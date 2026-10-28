@@ -156,7 +156,9 @@ for (const f of BET_FORMS) {
     // a fee output it never pays for, or pay for one nobody previewed.
     const composeIdx = src.indexOf('messaging.composeBetForConfirm({');
     assert.ok(composeIdx !== -1, `${f} composes through the BET route`);
-    const both = src.slice(composeIdx, composeIdx + 900);
+    // The window spans the compose call and the submit beside it; BetFeedDetail
+    // re-reads the market between them, so the submit sits about 950 characters on.
+    const both = src.slice(composeIdx, composeIdx + 1400);
     assert.equal(
         (both.match(/payFeeInNativeCoin: nativeFee\.flag/g) || []).length, 2,
         `${f} threads the flag into BOTH compose and submit`,

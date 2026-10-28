@@ -77,8 +77,9 @@ beforeEach(() => { vi.useRealTimers(); });
 /**
  * @param {object} opts
  * @param {string[]} [opts.feedStatuses] one status per betFeed() call (page
- *   open, the re-read before compose, the reload after submit), so the RELOAD
- *   that follows a submit can answer differently from the first two reads.
+ *   open, the re-read before compose, the re-read at Approve, the reload after
+ *   submit), so the RELOAD that follows a submit can answer differently from
+ *   the first three reads.
  *   That is the race: the market closes between compose and reload.
  */
 function harness({ feedStatuses = ['open'], submitResult = { txid: 'cafebabe' }, submitThrows = null } = {}) {
@@ -172,7 +173,7 @@ describe('BetFeedDetail reports the outcome of a bet the market has outlived', (
         // First read: open, so the form is there to bet from. The reload after
         // the submit answers `closed` - the deadline passed while the user was
         // on the confirm page, which is the whole race.
-        const { messaging, calls } = harness({ feedStatuses: ['open', 'open', 'closed'] });
+        const { messaging, calls } = harness({ feedStatuses: ['open', 'open', 'open', 'closed'] });
         let utils;
         await domAct(async () => {
             utils = mount(BetFeedDetail, messaging, { chainId: CHAIN, feedIndex: '1198' });
@@ -233,7 +234,7 @@ describe('BetFeedDetail reports the outcome of a bet the market has outlived', (
 
     it('shows a failed submit even when the market has stopped taking bets', async () => {
         const { messaging } = harness({
-            feedStatuses: ['open', 'open', 'closed'],
+            feedStatuses: ['open', 'open', 'open', 'closed'],
             submitThrows: Object.assign(new Error('Encoder RPC error: Broadcast refused by the node.'), {
                 name: 'SDKEncoderError',
                 code: 'ENCODER_RPC_ERROR',
