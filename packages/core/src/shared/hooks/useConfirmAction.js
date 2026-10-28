@@ -55,6 +55,20 @@ export class UserRejectedError extends Error {
     constructor() { super('User rejected the action.'); this.name = 'UserRejectedError'; this.reason = 'user-rejected'; }
 }
 
+/**
+ * Mark an error an onApprove callback throws before it signs anything, such as
+ * an Approve-time re-read that finds the reviewed terms changed. Approve then
+ * hands the encoder's reserved inputs back, so the fresh review the refusal
+ * asks for can compose instead of finding every input held for minutes.
+ *
+ * @template {Error} E
+ * @param {E} err
+ * @returns {E}
+ */
+export function refusedBeforeSigning(err) {
+    return Object.assign(err, { refusedBeforeSigning: true });
+}
+
 /** @typedef {'idle'|'composing'|'preflighting'|'ready'|'signing'|'rechecking'|'done'|'error'|'signed-not-broadcast'} ConfirmPhase */
 
 const STALENESS_MS = 30000;
@@ -571,6 +585,13 @@ export function useConfirmAction() {
                 });
                 settleReject(err);
                 return undefined;
+            }
+
+            // The caller refused before signing, so nothing can spend the
+            // reserved inputs: hand them back like a Reject would.
+            if (err?.refusedBeforeSigning === true) {
+                approvalBeganRef.current = false;
+                releaseUnlessApproving(built);
             }
 
             // Everything else is terminal.

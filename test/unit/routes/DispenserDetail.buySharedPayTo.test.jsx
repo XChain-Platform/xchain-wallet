@@ -51,6 +51,7 @@ const UNRELATED = { ...TOKEN_PAID, action_index: '902', get_tick: 'XCHAIN' };
 const COMPOSED = {
     psbt: '70736274ff', encoding: 'P2SH', actionString: 'SEND|1|MEMEVALID', version: 1,
     decoded: { summary: 'Send payment', details: [], warnings: [] },
+    releaseEncoderInputsToken: 'reservation-token-1',
 };
 
 async function mount({ destinationRows = [TOKEN_PAID] } = {}) {
@@ -77,6 +78,7 @@ async function mount({ destinationRows = [TOKEN_PAID] } = {}) {
         releaseReservation: vi.fn().mockResolvedValue(null),
         checkInputLiveness: vi.fn().mockResolvedValue({ verdict: 'live', spent: [] }),
         requoteNativeFee: vi.fn().mockResolvedValue(null),
+        releaseEncoderInputs: vi.fn().mockResolvedValue({ released: 1 }),
         sendToken: vi.fn().mockResolvedValue({ txid: 'deadbeef' }),
         sendAssetHw: vi.fn(),
     };
@@ -128,6 +130,29 @@ describe('dispenser buy re-reads the dispensers behind its pay-to', () => {
         messaging.getDispensersForAddress.mockResolvedValue({ data: [TOKEN_PAID, NEIGHBOUR] });
         await approve();
         expect(await screen.findByText(/Another open dispenser at this address \(#901\)/)).toBeInTheDocument();
+        expect(messaging.sendToken).not.toHaveBeenCalled();
+    });
+
+    // The refusal asks for a fresh review, which composes again; inputs the
+    // encoder still holds for the refused compose would leave it nothing to spend.
+    it('hands the reserved inputs back when approval stops on a new dispenser', async () => {
+        const messaging = await mount();
+        await openReview();
+        messaging.getDispensersForAddress.mockResolvedValue({ data: [TOKEN_PAID, NEIGHBOUR] });
+        await approve();
+        expect(await screen.findByText(/Another open dispenser at this address \(#901\)/)).toBeInTheDocument();
+        await waitFor(() => expect(messaging.releaseEncoderInputs).toHaveBeenCalledWith({ token: 'reservation-token-1' }));
+        expect(messaging.releaseEncoderInputs).toHaveBeenCalledTimes(1);
+        expect(messaging.sendToken).not.toHaveBeenCalled();
+    });
+
+    it('hands the reserved inputs back when the dispenser closes under an open review', async () => {
+        const messaging = await mount();
+        await openReview();
+        messaging.getDispenserByActionIndex.mockResolvedValue({ ...TOKEN_PAID, status: 'closed', current_status: 'closed' });
+        await approve();
+        await waitFor(() => expect(messaging.releaseEncoderInputs).toHaveBeenCalledWith({ token: 'reservation-token-1' }));
+        await waitFor(() => expect(document.body.textContent).toMatch(/This dispenser was closed/));
         expect(messaging.sendToken).not.toHaveBeenCalled();
     });
 

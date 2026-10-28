@@ -82,6 +82,7 @@ import { useToast } from '../components/ToastHost.jsx';
 import { useDemoGuard } from '../hooks/useDemoGuard.jsx';
 import { useOwnerActionLane } from '../hooks/useOwnerActionLane.js';
 import { isUserRejection, useActionConfirmFlow, useConfirmSubmit } from '../hooks/useActionConfirmFlow.js';
+import { refusedBeforeSigning } from '../hooks/useConfirmAction.js';
 import {
     dispenserDestinationNotice,
     openDispensersPaidBy,
@@ -1305,7 +1306,7 @@ export function DispenserDetail({ walletId, chainId, actionIndex, onBack, onCanc
                         if (closedRefusal) {
                             const refused = new Error(closedRefusal);
                             refused.name = BUYER_ACCESS_REFUSED;
-                            throw refused;
+                            throw refusedBeforeSigning(refused);
                         }
                         // Recheck at approval because list edits can land while Confirm is open.
                         if (await refreshBuyerEligibility(expectedIdentity)) {
@@ -1313,7 +1314,7 @@ export function DispenserDetail({ walletId, chainId, actionIndex, onBack, onCanc
                                 'The selected paying address or dispenser address is refused by a current access list.',
                             );
                             refused.name = BUYER_ACCESS_REFUSED;
-                            throw refused;
+                            throw refusedBeforeSigning(refused);
                         }
                         return submitConfirmedBuy({ ...buyRequest, prebuiltPsbt });
                     },
