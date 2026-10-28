@@ -19,8 +19,12 @@ import { enterDemoWallet } from '../../fixtures/responsive.js';
 
 const VIEWPORTS = [
     { width: 360, height: 640, gutter: 12 },
-    { width: 768, height: 1024, gutter: 12 },
-    { width: 1440, height: 900, gutter: 12 },
+    { width: 639, height: 900, gutter: 12 },
+    { width: 640, height: 900, gutter: 16 },
+    { width: 768, height: 1024, gutter: 16 },
+    { width: 899, height: 900, gutter: 16 },
+    { width: 900, height: 900, gutter: 24 },
+    { width: 1440, height: 900, gutter: 24 },
 ];
 
 const ROUTES = [
