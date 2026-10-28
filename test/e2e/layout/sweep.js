@@ -197,9 +197,11 @@ export function measureInPage(opts = {}) {
         const scrollbarLeft = mr.right - borderR - scrollbarWidth;
         const contentLeft = frameLeft + padL;
         const contentRight = frameLeft + main.clientWidth - padR;
-        // One 12px page gutter at every width (--xc-page-gutter); kept in
-        // step with PAGE_GUTTER_PX by hand, since this body runs in the page.
-        const expectedGutter = 12;
+        // The tiered page gutter (--xc-page-gutter): 12px below 640px, 16px
+        // from 640px, 24px from 900px. Kept in step with pageGutterForWidth by
+        // hand, since this body runs in the page.
+        const vwNow = window.innerWidth;
+        const expectedGutter = vwNow >= 900 ? 24 : vwNow >= 640 ? 16 : 12;
         const visible = (el) => {
             const cs = getComputedStyle(el);
             const r = el.getBoundingClientRect();
@@ -634,10 +636,17 @@ export function rootFontFailure({ label, rootFontPx, expectedRootFontPx: expecte
 }
 
 /**
- * The gutter every route keeps between its content and the window edge: one
- * 12px gutter at every width, the --xc-page-gutter token.
+ * The compact page gutter, the --xc-page-gutter token below 640px (also the
+ * extension popup and side panel).
  */
 export const PAGE_GUTTER_PX = 12;
+
+/** The tiered --xc-page-gutter for a viewport width: 12px, 16px from 640px, 24px from 900px. */
+export function pageGutterForWidth(width) {
+    if (width >= 900) return 24;
+    if (width >= 640) return 16;
+    return PAGE_GUTTER_PX;
+}
 
 /**
  * The layout keys the page gutter contract owns. The other keys
@@ -674,7 +683,7 @@ export function layoutSweepFindings(screens) {
             add('gutter', label, `${label}: missing #xc-main layout measurement`);
             continue;
         }
-        const gutter = PAGE_GUTTER_PX;
+        const gutter = pageGutterForWidth(vw);
         const { first } = layout;
         if (!close(layout.contentLeft, gutter)) {
             add('gutter', label, `${label}: content left ${layout.contentLeft}px, expected ${gutter}px`);

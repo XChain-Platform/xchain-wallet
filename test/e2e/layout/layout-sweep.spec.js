@@ -20,7 +20,7 @@ import { fileURLToPath } from 'node:url';
 import { expect, test } from '../fixtures/wallet.js';
 import {
     GUTTER_CONTRACT_KEYS, createSweep, layoutSweepFailures, layoutSweepFindings, measureHeaderPinned, measureInPage,
-    measureRulings,
+    measureRulings, pageGutterForWidth,
 } from './sweep.js';
 
 const DARK = process.env.LAYOUT_SCHEME === 'dark';
@@ -41,29 +41,31 @@ test('layout gutter assertion contract', () => {
         'lost scale: root font size 16px, expected 24px',
         'unread: root font size unread, expected 20.8px',
     ]);
-    // One 12px page gutter at every width.
+    // The tiered page gutter: 12px below 640px, 16px from 640px, 24px from 900px.
     expect(layoutSweepFailures([
         { label: 'compact', vw: 639, layout: layout(12) },
-        { label: 'rail', vw: 834, layout: layout(12) },
-        { label: 'full', vw: 1280, layout: layout(12) },
+        { label: 'rail', vw: 834, layout: layout(16) },
+        { label: 'full', vw: 1280, layout: layout(24) },
     ])).toEqual([]);
     expect(layoutSweepFailures([
-        { label: 'old rail gutter', vw: 834, layout: layout(16) },
+        { label: 'compact gutter on rail', vw: 834, layout: layout(12) },
     ])).toEqual([
-        'old rail gutter: content left 16px, expected 12px',
-        'old rail gutter: header left 16px, expected 12px',
-        'old rail gutter: first content left 16px, expected 12px',
+        'compact gutter on rail: content left 12px, expected 16px',
+        'compact gutter on rail: content right gap 12px, expected at least 16px',
+        'compact gutter on rail: header left 12px, expected 16px',
+        'compact gutter on rail: first content left 12px, expected 16px',
+        'compact gutter on rail: first content right gap 12px, expected at least 16px',
     ]);
     // A wide step that centres its column passes; one pushed off-centre does not.
-    const column = (left, rightGap) => ({
-        contentLeft: 12, contentRightGap: 12, headerLeft: null, first: { kind: 'list', left, rightGap, topGap: 12 },
+    const column = (left, rightGap, gutter = 16) => ({
+        contentLeft: gutter, contentRightGap: gutter, headerLeft: null, first: { kind: 'list', left, rightGap, topGap: 12 },
     });
     expect(layoutSweepFailures([
         { label: 'centred', vw: 834, layout: column(177, 177) },
         { label: 'off centre', vw: 834, layout: column(177, 60) },
-        { label: 'narrow centred', vw: 411, layout: column(40, 40) },
+        { label: 'narrow centred', vw: 411, layout: column(40, 40, 12) },
     ])).toEqual([
-        'off centre: first content left 177px, expected 12px',
+        'off centre: first content left 177px, expected 16px',
         'narrow centred: first content left 40px, expected 12px',
     ]);
     expect(layoutSweepFailures([
@@ -71,38 +73,55 @@ test('layout gutter assertion contract', () => {
             label: 'activity',
             vw: 768,
             layout: {
-                contentLeft: 12,
-                contentRightGap: 9,
-                headerLeft: 18,
-                first: { kind: 'list', left: 9, rightGap: 8, topGap: 12 },
+                contentLeft: 16,
+                contentRightGap: 13,
+                headerLeft: 22,
+                first: { kind: 'list', left: 13, rightGap: 12, topGap: 12 },
             },
         },
         {
             label: 'send',
             vw: 768,
             layout: {
-                contentLeft: 12,
-                contentRightGap: 12,
-                headerLeft: 12,
+                contentLeft: 16,
+                contentRightGap: 16,
+                headerLeft: 16,
                 first: { kind: 'form', left: 104, rightGap: 104, topGap: 16 },
             },
         },
     ])).toEqual([
-        'activity: content right gap 9px, expected at least 12px',
-        'activity: header left 18px, expected 12px',
-        'activity: first content left 9px, expected 12px',
-        'activity: first content right gap 8px, expected at least 12px',
+        'activity: content right gap 13px, expected at least 16px',
+        'activity: header left 22px, expected 16px',
+        'activity: first content left 13px, expected 16px',
+        'activity: first content right gap 12px, expected at least 16px',
         'form top gaps [16] do not match list top gaps [12]',
     ]);
 });
 
+test('in-page expected gutter matches pageGutterForWidth at each tier boundary', async ({ page }) => {
+    // measureInPage runs in the page and carries its own copy of the gutter
+    // tiers; this keeps that copy and pageGutterForWidth in step.
+    expect([639, 640, 899, 900].map(pageGutterForWidth)).toEqual([12, 16, 16, 24]);
+    await page.setContent(`
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+        <style>html, body { margin: 0; overflow: hidden; }</style>
+        <main id="xc-main"><p>content</p></main>
+    `);
+    for (const width of [639, 640, 899, 900]) {
+        await page.setViewportSize({ width, height: 700 });
+        const { vw, layout } = await page.evaluate(measureInPage, {});
+        expect(vw, `viewport ${width}`).toBe(width);
+        expect(layout?.expectedGutter, `viewport ${width}`).toBe(pageGutterForWidth(width));
+    }
+});
+
 test('top gaps compare form and list only inside one shell', () => {
     const layout = (kind, topGap, tier) => ({
-        contentLeft: 12,
-        contentRightGap: 12,
-        headerLeft: 12,
+        contentLeft: 16,
+        contentRightGap: 16,
+        headerLeft: 16,
         tier,
-        first: { kind, left: 12, rightGap: 12, topGap },
+        first: { kind, left: 16, rightGap: 16, topGap },
     });
     // Onboarding sits outside the sidebar layout, which adds its own top gap.
     expect(layoutSweepFailures([
