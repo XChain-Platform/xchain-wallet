@@ -44,4 +44,21 @@ describe('ChromeStorageBackend', () => {
         );
         await expect(backend.load()).rejects.toBeInstanceOf(VaultCorruptError);
     });
+
+    it('compares the shared value before replacing it', async () => {
+        let stored = 'AQI=';
+        const chromeStorage = {
+            get: vi.fn(async () => ({ vault: stored })),
+            set: vi.fn(async ({ vault }) => { stored = vault; }),
+            remove: vi.fn(async () => { stored = null; }),
+        };
+        const backend = new ChromeStorageBackend({ key: 'vault', chromeStorage });
+
+        await backend.save(new Uint8Array([3]), { expected: new Uint8Array([1, 2]) });
+        await expect(backend.save(new Uint8Array([4]), { expected: new Uint8Array([1, 2]) }))
+            .rejects.toMatchObject({ name: 'VaultConflictError' });
+
+        expect(stored).toBe('Aw==');
+        expect(chromeStorage.set).toHaveBeenCalledTimes(1);
+    });
 });

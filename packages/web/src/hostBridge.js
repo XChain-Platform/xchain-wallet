@@ -42,7 +42,7 @@ import { isDevMockAddress, mockDeriveAddress } from '../../core/src/sdk/devMockA
 import { devMockSigningError } from '../../core/src/sdk/devMockErrors.js';
 import { SignerPool } from '../../core/src/signers/SignerPool.js';
 import { Vault } from '../../core/src/storage/Vault.js';
-import { VaultEvictedError, VaultIncompleteError } from '../../core/src/storage/backend.js';
+import { VaultConflictError, VaultEvictedError, VaultIncompleteError } from '../../core/src/storage/backend.js';
 import { configureFiatRateSource } from '../../core/src/flows/priceLookup.js';
 import { PassphraseMismatchError } from '../../core/src/flows/unlockWallet.js';
 import { NotificationService } from '../../core/src/notifications/NotificationService.js';
@@ -1403,9 +1403,12 @@ function tearDownFailedOnboarding({ openedVault, ownPool, ownHost }) {
  *
  * @param {{ clear: () => Promise<void> } | null} ownStorage
  * @param {{ clear?: () => Promise<void> }} meta
+ * @param {unknown} err  A conflict means another create on this page stored its
+ *   vault first, so the stored blob is that wallet and stays.
  */
-async function discardPartialVault(ownStorage, meta) {
+async function discardPartialVault(ownStorage, meta, err) {
     if (!ownStorage) return;
+    if (err instanceof VaultConflictError) return;
     for (const backend of [ownStorage, meta]) {
         try {
             if (typeof backend?.clear === 'function') await backend.clear();
@@ -1506,7 +1509,7 @@ export async function createWalletLocal(req) {
     } catch (err) {
         if (!sessionStarted) {
             tearDownFailedOnboarding({ openedVault, ownPool, ownHost });
-            await discardPartialVault(ownStorage, meta);
+            await discardPartialVault(ownStorage, meta, err);
         }
         throw err;
     } finally {
@@ -1679,7 +1682,7 @@ export async function importMnemonicLocal(req) {
     } catch (err) {
         if (!sessionStarted) {
             tearDownFailedOnboarding({ openedVault, ownPool, ownHost });
-            await discardPartialVault(ownStorage, meta);
+            await discardPartialVault(ownStorage, meta, err);
         }
         throw err;
     } finally {
@@ -1853,7 +1856,7 @@ export async function importBackupLocal(req) {
     } catch (err) {
         if (!sessionStarted) {
             tearDownFailedOnboarding({ openedVault, ownPool, ownHost });
-            await discardPartialVault(ownStorage, meta);
+            await discardPartialVault(ownStorage, meta, err);
         }
         throw err;
     } finally {

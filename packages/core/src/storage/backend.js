@@ -23,6 +23,25 @@ export class AbstractBackendMethodError extends Error {
     }
 }
 
+/** A conditional save found a different blob than the caller last observed. */
+export class VaultConflictError extends Error {
+    /** @param {string} [collection] */
+    constructor(collection = 'storage') {
+        super(`Vault: ${collection} changed while this write was being prepared`);
+        this.name = 'VaultConflictError';
+        this.collection = collection;
+    }
+}
+
+/** @param {Uint8Array | null} left @param {Uint8Array | null} right */
+export function vaultBlobsEqual(left, right) {
+    if (left === null || right === null) return left === right;
+    if (left.length !== right.length) return false;
+    let difference = 0;
+    for (let i = 0; i < left.length; i += 1) difference |= left[i] ^ right[i];
+    return difference === 0;
+}
+
 // The three ways a load can fail to produce a blob that ISN'T "there is no
 // wallet here". `load()` returning null is a factual claim about the device -
 // the shells turn it straight into the create-a-wallet screen - so a backend
@@ -147,8 +166,11 @@ export class StorageBackend {
         throw new AbstractBackendMethodError('load');
     }
 
-    /** @param {Uint8Array} _blob */
-    async save(_blob) {
+    /**
+     * @param {Uint8Array} _blob
+     * @param {{ expected?: Uint8Array | null }} [_options]
+     */
+    async save(_blob, _options) {
         throw new AbstractBackendMethodError('save');
     }
 
@@ -173,9 +195,16 @@ export class InMemoryBackend extends StorageBackend {
         return this._blob ? new Uint8Array(this._blob) : null;
     }
 
-    async save(blob) {
+    async save(blob, options = {}) {
         if (!(blob instanceof Uint8Array)) {
             throw new Error('InMemoryBackend.save: blob must be a Uint8Array');
+        }
+        if (Object.hasOwn(options, 'expected')) {
+            const expected = options.expected ?? null;
+            if (expected !== null && !(expected instanceof Uint8Array)) {
+                throw new TypeError('InMemoryBackend.save: expected must be a Uint8Array or null');
+            }
+            if (!vaultBlobsEqual(this._blob, expected)) throw new VaultConflictError();
         }
         this._blob = new Uint8Array(blob);
     }

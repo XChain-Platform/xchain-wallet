@@ -12,6 +12,8 @@ export {
     StorageBackend,
     InMemoryBackend,
     AbstractBackendMethodError,
+    VaultConflictError,
+    vaultBlobsEqual,
     VaultUnavailableError,
     VaultLockedError,
     VaultCorruptError,
@@ -27,4 +29,4 @@ export {
     decodeDocument,
 } from './codec.js';
 
-export { Vault, VaultConflictError, VaultStateError, VaultValidationError } from './Vault.js';
+export { Vault, VaultStateError, VaultValidationError } from './Vault.js';

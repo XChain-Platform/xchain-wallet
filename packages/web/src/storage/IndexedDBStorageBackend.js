@@ -26,7 +26,7 @@
 
 import { storage as coreStorage, crypto as coreCrypto } from '@xchain-wallet/core';
 
-const { StorageBackend } = coreStorage;
+const { StorageBackend, VaultConflictError } = coreStorage;
 const { bytesToBase64, base64ToBytes } = coreCrypto;
 
 export const DEFAULT_DB_NAME = 'xchain-wallet';
@@ -38,6 +38,7 @@ export const DEFAULT_STORAGE_KEY = 'wallet-vault';
  * @property {(key: string) => Promise<unknown>} get
  * @property {(key: string, value: unknown) => Promise<void>} set
  * @property {(key: string) => Promise<void>} delete
+ * @property {(key: string, expected: string | null, value: string) => Promise<boolean>} [compareAndSet]
  */
 
 /**
@@ -89,6 +90,7 @@ export class IndexedDBStorageBackend extends StorageBackend {
             get: (k) => idbRequest(db, storeName, 'readonly', (s) => s.get(k)),
             set: (k, v) => idbRequest(db, storeName, 'readwrite', (s) => s.put(v, k)),
             delete: (k) => idbRequest(db, storeName, 'readwrite', (s) => s.delete(k)),
+            compareAndSet: (k, expected, value) => idbCompareAndSet(db, storeName, k, expected, value),
         };
     }
 
@@ -104,12 +106,25 @@ export class IndexedDBStorageBackend extends StorageBackend {
         return base64ToBytes(value);
     }
 
-    async save(blob) {
+    async save(blob, options = {}) {
         if (!(blob instanceof Uint8Array)) {
             throw new Error('IndexedDBStorageBackend.save: blob must be a Uint8Array');
         }
         const store = await this._getStore();
-        await store.set(this._key, bytesToBase64(blob));
+        const encoded = bytesToBase64(blob);
+        if (!Object.hasOwn(options, 'expected')) {
+            await store.set(this._key, encoded);
+            return;
+        }
+        const expected = options.expected ?? null;
+        if (expected !== null && !(expected instanceof Uint8Array)) {
+            throw new TypeError('IndexedDBStorageBackend.save: expected must be a Uint8Array or null');
+        }
+        const encodedExpected = expected === null ? null : bytesToBase64(expected);
+        const saved = store.compareAndSet
+            ? await store.compareAndSet(this._key, encodedExpected, encoded)
+            : await compareAndSetAdapter(store, this._key, encodedExpected, encoded);
+        if (!saved) throw new VaultConflictError();
     }
 
     async clear() {
@@ -183,4 +198,40 @@ function idbRequest(db, storeName, mode, fn) {
         // could drop the write (settings silently reverting on next unlock).
         tx.oncomplete = () => resolve(result);
     });
+}
+
+/**
+ * Compare and write before the readwrite transaction releases its key lock.
+ * @param {IDBDatabase} db
+ * @param {string} storeName
+ * @param {string} key
+ * @param {string | null} expected
+ * @param {string} value
+ */
+function idbCompareAndSet(db, storeName, key, expected, value) {
+    return new Promise((resolve, reject) => {
+        const tx = db.transaction(storeName, 'readwrite');
+        const store = tx.objectStore(storeName);
+        const request = store.get(key);
+        let matched = false;
+        tx.onabort = () => reject(tx.error ?? new Error('tx aborted'));
+        tx.onerror = () => reject(tx.error);
+        request.onerror = () => reject(request.error);
+        request.onsuccess = () => {
+            const current = request.result == null ? null : request.result;
+            if (current !== expected) return;
+            matched = true;
+            const put = store.put(value, key);
+            put.onerror = () => reject(put.error);
+        };
+        tx.oncomplete = () => resolve(matched);
+    });
+}
+
+/** The injectable adapter is for tests; production uses the atomic transaction above. */
+async function compareAndSetAdapter(store, key, expected, value) {
+    const current = await store.get(key);
+    if ((current == null ? null : current) !== expected) return false;
+    await store.set(key, value);
+    return true;
 }

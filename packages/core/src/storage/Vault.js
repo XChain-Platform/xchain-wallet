@@ -71,6 +71,9 @@ import { validateAutopayOrder } from '../schemas/autopayOrder.js';
 import { validateAutopayLease } from '../schemas/autopayLease.js';
 import { validatePriceAlert } from '../schemas/priceAlert.js';
 import { logConsole } from '../shared/utils/logConsole.js';
+import { VaultConflictError } from './backend.js';
+
+export { VaultConflictError } from './backend.js';
 
 export const STORAGE_QUOTA_MESSAGE = 'Storage is full. Free some space, then try again.';
 
@@ -165,16 +168,6 @@ export class VaultValidationError extends Error {
     }
 }
 
-/** A guarded write found the records it was prepared from already replaced. */
-export class VaultConflictError extends Error {
-    /** @param {string} collection */
-    constructor(collection) {
-        super(`Vault: ${collection} changed while this write was being prepared`);
-        this.name = 'VaultConflictError';
-        this.collection = collection;
-    }
-}
-
 /**
  * @typedef {Object} VaultOpts
  * @property {import('./backend.js').StorageBackend} backend
@@ -196,6 +189,10 @@ export class Vault {
         this._autoSave = autoSave;
         /** @type {import('./codec.js').VaultDocument | null} */
         this._doc = null;
+        /** @type {Uint8Array | null} */
+        this._persistedBlob = null;
+        /** @type {import('./codec.js').VaultDocument | null} */
+        this._persistedDocument = null;
         this._opened = false;
         /** @type {Promise<void> | null} */
         this._opening = null;
@@ -309,6 +306,8 @@ export class Vault {
                 this._doc = blob
                     ? await decodeDocument(this._masterKey, blob, this._aad)
                     : emptyDocument();
+                this._persistedBlob = blob ? new Uint8Array(blob) : null;
+                this._persistedDocument = this._doc;
                 this._opened = true;
                 logConsole.record({
                     source: 'vault',
@@ -340,10 +339,70 @@ export class Vault {
         return this._enqueueWrite(() => this._saveNow());
     }
 
-    async _saveNow() {
+    async _saveNow(retryOnConflict = undefined) {
         this._assertOpen();
-        const blob = await encodeDocument(this._masterKey, this._doc, this._aad);
-        await persistWithQuotaRecovery(() => this._backend.save(blob));
+        if (retryOnConflict === undefined) {
+            retryOnConflict = makeConflictReplay(this._persistedDocument, this._doc);
+        }
+        let blob = await encodeDocument(this._masterKey, this._doc, this._aad);
+        try {
+            await this._saveBlob(blob, this._doc);
+            return;
+        } catch (err) {
+            if (!(err instanceof VaultConflictError) && err?.name !== 'VaultConflictError') throw err;
+        }
+
+        const reloaded = await this._reloadAfterConflict();
+        if (!reloaded || !retryOnConflict) throw new VaultConflictError();
+        const retried = retryOnConflict(reloaded);
+        if (!retried) throw new VaultConflictError();
+        blob = await encodeDocument(this._masterKey, retried, this._aad);
+        try {
+            await this._saveBlob(blob, retried);
+        } catch (err) {
+            if (err instanceof VaultConflictError || err?.name === 'VaultConflictError') {
+                await this._reloadAfterConflict();
+            }
+            // Any other refusal leaves the reloaded document in memory, so the
+            // change the caller is told failed cannot ride out on a later save.
+            throw err;
+        }
+        // Adopt the merge only once it is stored; a lock that landed meanwhile owns the state.
+        if (this._masterKey) this._doc = retried;
+    }
+
+    async _saveBlob(blob, document) {
+        const expected = this._persistedBlob;
+        await persistWithQuotaRecovery(() => this._backend.save(blob, { expected }));
+        // A lock that landed while the backend settled zeroed this handle; keep no document behind it.
+        if (!this._masterKey) return;
+        this._persistedBlob = new Uint8Array(blob);
+        this._persistedDocument = document;
+    }
+
+    async _reloadAfterConflict() {
+        if (!this._masterKey) return null;
+        const blob = await this._backend.load();
+        if (!this._masterKey) return null;
+        if (!blob) {
+            this.close();
+            return null;
+        }
+        let document;
+        try {
+            document = await decodeDocument(this._masterKey, blob, this._aad);
+        } catch {
+            // Another context sealed the vault under a different key (a password
+            // change) or a format this build cannot read. This handle can never
+            // match the stored blob again, so lock it the way a wipe does.
+            this.close();
+            return null;
+        }
+        if (!this._masterKey) return null;
+        this._doc = document;
+        this._persistedBlob = new Uint8Array(blob);
+        this._persistedDocument = document;
+        return document;
     }
 
     /**
@@ -354,6 +413,8 @@ export class Vault {
         return this._enqueueWrite(async () => {
             await this._backend.clear();
             this._doc = null;
+            this._persistedBlob = null;
+            this._persistedDocument = null;
             this._opened = false;
             logConsole.record({ source: 'vault', level: 'info', message: 'clear' });
         });
@@ -471,9 +532,15 @@ export class Vault {
             const nextKey = masterKey ? new Uint8Array(masterKey) : null;
             try {
                 const blob = await encodeDocument(nextKey ?? this._masterKey, next, this._aad);
-                await persistWithQuotaRecovery(() => this._backend.save(blob));
+                await this._saveBlob(blob, next);
             } catch (err) {
-                if (nextKey) nextKey.fill(0);
+                try {
+                    if (err instanceof VaultConflictError || err?.name === 'VaultConflictError') {
+                        await this._reloadAfterConflict();
+                    }
+                } finally {
+                    if (nextKey) nextKey.fill(0);
+                }
                 throw err;
             }
             // A close or clear that landed while the backend settled owns the
@@ -502,6 +569,8 @@ export class Vault {
         if (this._masterKey) this._masterKey.fill(0);
         this._masterKey = null;
         this._doc = null;
+        this._persistedBlob = null;
+        this._persistedDocument = null;
         this._opened = false;
         logConsole.record({ source: 'vault', level: 'info', message: 'close' });
     }
@@ -531,9 +600,10 @@ export class Vault {
             this._assertOpen();
             const previous = this._doc;
             const { document, result, persist = true } = buildNext(previous);
+            const retryOnConflict = makeConflictReplay(previous, document);
             this._doc = document;
             try {
-                if (this._autoSave && persist) await this._saveNow();
+                if (this._autoSave && persist) await this._saveNow(retryOnConflict);
                 return result;
             } catch (err) {
                 // A close or clear may replace the document while the backend
@@ -543,6 +613,73 @@ export class Vault {
             }
         });
     }
+}
+
+const DOCUMENT_ARRAY_KEYS = Object.keys(emptyDocument())
+    .filter((key) => Array.isArray(emptyDocument()[key]));
+
+/** @param {unknown} left @param {unknown} right */
+function recordsEqual(left, right) {
+    return JSON.stringify(left) === JSON.stringify(right);
+}
+
+/** Return a single-use merge for safe wallet additions or a name-only wallet rename. */
+function makeConflictReplay(previous, next) {
+    if (!previous || !next) return null;
+    const additions = {};
+    let addedWallets = 0;
+    let changedWallet = null;
+
+    for (const key of DOCUMENT_ARRAY_KEYS) {
+        const before = previous[key];
+        const after = next[key];
+        const beforeById = new Map(before.map((record) => [record.id, record]));
+        const afterById = new Map(after.map((record) => [record.id, record]));
+        if (before.length > after.length) return null;
+        for (const record of before) {
+            const replacement = afterById.get(record.id);
+            if (!replacement) return null;
+            if (record !== replacement && !recordsEqual(record, replacement)) {
+                if (key !== 'wallets' || changedWallet) return null;
+                const { name: beforeName, ...beforeRest } = record;
+                const { name: afterName, ...afterRest } = replacement;
+                if (beforeName === afterName || !recordsEqual(beforeRest, afterRest)) return null;
+                changedWallet = { before: record, after: replacement };
+            }
+        }
+        additions[key] = after.filter((record) => !beforeById.has(record.id));
+        if (key === 'wallets') addedWallets = additions[key].length;
+    }
+
+    for (const key of Object.keys(previous)) {
+        if (!DOCUMENT_ARRAY_KEYS.includes(key) && !recordsEqual(previous[key], next[key])) return null;
+    }
+
+    const totalAdditions = Object.values(additions).reduce((total, records) => total + records.length, 0);
+    if (addedWallets === 1 && !changedWallet) {
+        return (reloaded) => {
+            for (const key of DOCUMENT_ARRAY_KEYS) {
+                const ids = new Set(reloaded[key].map((record) => record.id));
+                if (additions[key].some((record) => ids.has(record.id))) return null;
+            }
+            const merged = { ...reloaded };
+            for (const key of DOCUMENT_ARRAY_KEYS) {
+                if (additions[key].length > 0) merged[key] = [...reloaded[key], ...additions[key]];
+            }
+            return merged;
+        };
+    }
+
+    if (changedWallet && totalAdditions === 0) {
+        return (reloaded) => {
+            const index = reloaded.wallets.findIndex((record) => record.id === changedWallet.before.id);
+            if (index < 0 || !recordsEqual(reloaded.wallets[index], changedWallet.before)) return null;
+            const wallets = [...reloaded.wallets];
+            wallets[index] = changedWallet.after;
+            return { ...reloaded, wallets };
+        };
+    }
+    return null;
 }
 
 /**

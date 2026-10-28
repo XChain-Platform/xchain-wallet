@@ -48,8 +48,12 @@ export class CapacitorStorageBackend extends StorageBackend {
         return decodeReadReply(await callNativeVault('loadVault'), 'vault');
     }
 
-    /** @param {Uint8Array} blob */
-    async save(blob) {
+    /**
+     * Native vault writes have one app-owned WebView writer, so expected is intentionally ignored.
+     * @param {Uint8Array} blob
+     * @param {{ expected?: Uint8Array | null }} [_options]
+     */
+    async save(blob, _options) {
         if (!isBytes(blob)) {
             throw new Error('CapacitorStorageBackend.save: blob must be a Uint8Array');
         }
