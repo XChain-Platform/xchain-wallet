@@ -47,7 +47,7 @@ import {
 } from '../../flows/addressPreferences.js';
 import styles from './IssueTokenForm.module.css';
 import { submitFailureMessage } from '../utils/submitFailureMessage.js';
-import { memoLengthError } from '../utils/memoLimit.js';
+import { MEMO_HINT, memoLengthError } from '../utils/memoLimit.js';
 
 const PROTOCOL_COIN_TICKER = { bitcoin: 'BTC', litecoin: 'LTC', dogecoin: 'DOGE' };
 const chainRegistry = registryLib.defaultRegistry();
@@ -193,7 +193,14 @@ export function AddressPreferencesForm({ walletId, chainId: initialChainId, addr
         const feeStop = customFeeReviewStop({ feePick, tiers: feeTiers, estimate: feeCustomEstimate });
         if (feeStop) { setFormError(feeStop.formError); return; }
         setFormError(null);
-        const memoError = memoLengthError(memo.trim());
+        // | and ; are the action line's field delimiters: a memo carrying one
+        // composes extra fields into the ADDRESS write, so Review refuses it.
+        const trimmedMemo = memo.trim();
+        if (trimmedMemo.includes('|') || trimmedMemo.includes(';')) {
+            setFormError('Memo cannot contain "|" or ";".');
+            return;
+        }
+        const memoError = memoLengthError(trimmedMemo);
         if (memoError) { setFormError(memoError); return; }
         initialPrefillOpen.current = false;
         try {
@@ -448,6 +455,7 @@ export function AddressPreferencesForm({ walletId, chainId: initialChainId, addr
                 />
                 <Input
                     label="Memo (optional)"
+                    hint={MEMO_HINT}
                     value={memo}
                     onChange={(e) => setMemo(e.target.value)}
                     autoComplete="off"
