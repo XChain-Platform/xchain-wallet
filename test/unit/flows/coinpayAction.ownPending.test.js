@@ -71,19 +71,30 @@ describe('coinpayAction: a payment already in flight stops a second one', () => 
         'refuses while the earlier payment is %s',
         async (status) => {
             await expect(coinpayAction(opts([inFlight({ status })])))
-                .rejects.toThrow(/already in flight/);
+                .rejects.toThrow(/already on its way/);
         },
     );
 
     it('refuses the watcher PSBT build too', async () => {
         await expect(buildCoinpayPsbtRequest(opts([inFlight()])))
-            .rejects.toThrow(/already in flight/);
+            .rejects.toThrow(/already on its way/);
     });
 
     it('matches on the params snapshot when the summary differs', async () => {
         await expect(coinpayAction(opts([inFlight({
             actionSummary: 'something else', params: { ORDER_MATCH_ACTION_INDEX: '4242' },
-        })]))).rejects.toThrow(/already in flight/);
+        })]))).rejects.toThrow(/already on its way/);
+    });
+
+    it('reads the pending list once for one action', async () => {
+        let reads = 0;
+        const o = opts([]);
+        o.vault.pendingTxs.list = async () => {
+            reads += 1;
+            return [inFlight({ status: 'indexed' })];
+        };
+        await expect(coinpayAction(o)).rejects.toThrow(/already on its way/);
+        expect(reads).toBe(1);
     });
 
     it('ignores a failed earlier payment, another match and another payer', async () => {
@@ -93,7 +104,7 @@ describe('coinpayAction: a payment already in flight stops a second one', () => 
             inFlight({ fromAddress: OTHER }),
         ]) {
             const err = await coinpayAction(opts([tx])).catch((e) => e);
-            expect(err.message).not.toMatch(/already in flight/);
+            expect(err.message).not.toMatch(/already on its way/);
         }
     });
 });

@@ -24,6 +24,7 @@ import { OFFER_LIFECYCLE_REFUSAL } from '../../../packages/core/src/flows/market
 
 const PAYER = 'mipcBbFg9gMiCh81Kj8tqqdgoZub1ZJRfn';
 const PAYEE = 'n2eMqTT929pb1RDNuqEnxdaLau1rxy3efi';
+const OTHER = 'mzBc4XEFSdzCDcTxAgf6EZXgsZWpztRhef';
 
 const OBLIGATION = {
     action_index: '4242',
@@ -97,6 +98,11 @@ describe('COINPAY: a match with a payment in flight is not paid again', () => {
         expect(err?.message).toMatch(IN_FLIGHT);
     });
 
+    it('refuses a same-network match when its source metadata differs', async () => {
+        const err = await coinpayAction(opts([pending({ fromAddress: OTHER })])).catch((e) => e);
+        expect(err?.message).toMatch(IN_FLIGHT);
+    });
+
     it('matches the auto-pay summary wording and a params snapshot', async () => {
         const auto = pending({ actionSummary: 'Auto-paid match #4242 for order #77' });
         const snap = pending({ actionSummary: 'Pay', params: { ORDER_MATCH_ACTION_INDEX: '4242' } });
@@ -111,8 +117,8 @@ describe('COINPAY: a match with a payment in flight is not paid again', () => {
             pending({ status: 'failed' }),
             pending({ status: 'dropped' }),
             pending({ actionSummary: 'Pay 0.0025 BTC for match #42420' }),
-            pending({ network: 'mainnet' }),
-            pending({ chain: 'litecoin' }),
+            pending({ network: 'mainnet', fromAddress: OTHER }),
+            pending({ chain: 'litecoin', fromAddress: OTHER }),
             pending({ action: 'SEND' }),
         ];
         const err = await coinpayAction(opts(rows)).catch((e) => e);

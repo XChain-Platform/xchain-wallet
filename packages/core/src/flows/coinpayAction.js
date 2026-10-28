@@ -37,6 +37,8 @@ import { assertValidDestination, normalizeSource } from './sendToken.js';
 import { verifyCoinpayObligation } from './coinpayQueries.js';
 import { hasAttemptedCoinpay, pendingTxReferencesMatch } from '../market/coinpayPending.js';
 import { OFFER_LIFECYCLE_REFUSAL } from './marketExpiry.js';
+import { t } from '../i18n/index.js';
+import '../i18n/locales/en/flows.js';
 
 // PendingTx statuses of a payment that may still confirm. A failed or dropped
 // one cannot, and an indexed one has already settled or been judged, which the
@@ -48,31 +50,37 @@ const IN_FLIGHT_STATUSES = new Set(['signed', 'queued', 'broadcasting', 'broadca
  * reads `pending_coinpay` until the earlier payment confirms and indexes, so
  * Payments due still offers Pay, and a second review (another window, or the
  * same one after a lock) passes the re-read; a second payment sends the coin
- * again and settles nothing. A list that cannot be read is unknown and does not
+ * again and settles nothing. The network match catches a payment without useful
+ * source metadata, while the source match catches an attempted payment without
+ * useful network metadata. A list that cannot be read is unknown and does not
  * refuse.
  *
  * @param {CoinpayActionOpts} opts
  * @param {string} actionIndex
+ * @param {string} sourceAddress
  */
-async function assertNoPaymentInFlight(opts, actionIndex) {
+async function assertNoPaymentInFlight(opts, actionIndex, sourceAddress) {
     const list = opts.vault?.pendingTxs?.list;
     if (typeof list !== 'function') return;
     const descriptor = opts.chainRegistry?.get?.(opts.chainId);
-    if (!descriptor) return;
     let rows;
     try {
         rows = await opts.vault.pendingTxs.list();
     } catch {
         return;
     }
-    const inFlight = (Array.isArray(rows) ? rows : []).some((tx) => tx
+    const pendingTxs = Array.isArray(rows) ? rows : [];
+    const sameNetwork = descriptor && pendingTxs.some((tx) => tx
         && IN_FLIGHT_STATUSES.has(tx.status)
         && tx.chain === descriptor.coin
         && tx.network === descriptor.networkKind
         && pendingTxReferencesMatch(tx, actionIndex));
-    if (!inFlight) return;
-    const err = new Error('A payment for this match is already on its way. Nothing was sent: '
-        + 'paying again sends the coin a second time. Check History for the earlier payment.');
+    const sameSource = hasAttemptedCoinpay(
+        pendingTxs.filter((tx) => !tx?.fromAddress || tx.fromAddress === sourceAddress),
+        actionIndex,
+    );
+    if (!sameNetwork && !sameSource) return;
+    const err = new Error(t('flows.coinpay.paymentInFlight'));
     err.name = OFFER_LIFECYCLE_REFUSAL;
     throw err;
 }
@@ -196,7 +204,7 @@ async function prepareCoinpay(opts, fnName) {
     const coinAmount = normalizeCoinAmount(opts.coinAmount, fnName);
     const source = normalizeSource(opts.from, fnName);
 
-    await assertNoPaymentInFlight(opts, actionIndex);
+    await assertNoPaymentInFlight(opts, actionIndex, source.address);
 
     const obligation = await verifyCoinpayObligation({
         sdkRegistry: opts.sdkRegistry,
@@ -206,20 +214,6 @@ async function prepareCoinpay(opts, fnName) {
         payeeAddress: opts.payeeAddress,
         coinAmount,
     });
-
-    // The explorer lists the obligation as pending until the payment confirms,
-    // so a payment this vault already signed or broadcast for the same match
-    // still reads as owed. A second one is burned: the protocol settles a match
-    // once.
-    const ownPendingTxs = typeof opts.vault?.pendingTxs?.list === 'function'
-        ? await opts.vault.pendingTxs.list()
-        : [];
-    if (hasAttemptedCoinpay(
-        ownPendingTxs.filter((tx) => !tx?.fromAddress || tx.fromAddress === source.address),
-        actionIndex,
-    )) {
-        throw new Error(`${fnName}: a payment for ORDER_MATCH #${actionIndex} is already in flight from this wallet; wait for it to confirm`);
-    }
 
     // Build from the obligation the chain vouches for, not from the request.
     // verifyCoinpayObligation has already proven these equal, so this is belt
