@@ -15,7 +15,7 @@
 
 import { useState } from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { act, cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { clearPanicModeState } from '../../../packages/core/src/flows/panicMode.js';
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
 import { BackupSection } from '../../../packages/core/src/shared/components/settings/BackupSection.jsx';
@@ -105,7 +105,7 @@ describe('Backup forms keyboard use', () => {
 });
 
 describe('PanicModeRow keyboard use', () => {
-    it('focuses Cancel in the confirmation, returns to Activate on Escape and follows the swap to Deactivate and back', () => {
+    it('focuses Cancel in the confirmation, returns to Activate on Escape and follows the swap to Deactivate and back', async () => {
         render(<main><PanicModeRow /></main>);
         activate(screen.getByRole('button', { name: 'Activate' }));
         expect(screen.getByRole('button', { name: 'Cancel' })).toHaveFocus();
@@ -117,7 +117,8 @@ describe('PanicModeRow keyboard use', () => {
         activate(screen.getByRole('button', { name: 'Confirm 24-hour freeze' }));
         expect(screen.getByRole('button', { name: 'Deactivate' }), 'the cursor follows the swap').toHaveFocus();
 
+        // Deactivate waits for the cleared state to be saved before the row swaps.
         activate(screen.getByRole('button', { name: 'Deactivate' }));
-        expect(screen.getByRole('button', { name: 'Activate' })).toHaveFocus();
+        await waitFor(() => expect(screen.getByRole('button', { name: 'Activate' })).toHaveFocus());
     });
 });
