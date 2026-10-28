@@ -90,9 +90,15 @@ describe('an unlock announcement in an unlocked extension window', () => {
         const { sent, emit } = boot();
         render(<App />);
         await screen.findByRole('heading', { name: 'Home', level: 1 }, { timeout: 15_000 });
-        fireEvent.click(screen.getByRole('button', { name: 'More actions' }));
-        // The actions screen loads lazily; a loaded suite run takes longer than the default wait.
-        await screen.findByRole('button', { name: 'Back to home' }, { timeout: 15_000 });
+        // Home renders before the popup finishes loading the wallet, and the
+        // end of that load can draw Home again over a screen opened during it,
+        // so open the actions screen until it stays open.
+        await waitFor(() => {
+            if (screen.queryByRole('button', { name: 'Back to home' })) return;
+            const more = screen.queryByRole('button', { name: 'More actions' });
+            if (more) fireEvent.click(more);
+            throw new Error('actions screen not open yet');
+        }, { timeout: 15_000 });
         const before = count(sent, 'session.status');
 
         await emit('session', { state: 'unlocked' });
