@@ -940,6 +940,9 @@ export function PsbtSignForm({ walletId, onBack, initialPsbt }) {
             setPassword('');
         } catch (err) {
             if (isUserRejection(err)) return;
+            // A second Sign press lands while the first press's review is still
+            // composing; that review owns the screen, so the repeat press says nothing.
+            if (err?.name === 'ConfirmActionBusyError') return;
             setError(
                 err?.name === 'InvalidPasswordError'
                     ? 'Incorrect password.'
