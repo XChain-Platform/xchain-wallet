@@ -623,13 +623,12 @@ function AppInner({ canOpenInTab, titleEnabled }) {
     // The background announces every unlock to every surface, this one
     // included, and a session refresh moves a no-wallet window to Home. Two
     // onboarding holds keep this window where it is:
-    // - an import or pairing lane writing the first wallet, or still showing
-    //   what follows its own write (the donation notice, the pairing code
-    //   exchange), refreshes by itself when it hands back;
-    // - the create screen reports whether it holds a recovery phrase or is
-    //   writing the wallet. A wallet made in another window while a phrase is
-    //   held turns into a lasting notice on that screen, and a write in
-    //   flight waits for its own result.
+    // - a create, import or pairing lane writing the first wallet, or still
+    //   showing what follows its own write (the donation notice, the pairing
+    //   code exchange), refreshes by itself when it hands back;
+    // - the create screen reports whether it holds a recovery phrase. A
+    //   wallet made in another window while a phrase is held turns into a
+    //   lasting notice on that screen.
     const statusStateRef = useRef('loading');
     statusStateRef.current = status.state;
     const ownWalletWrite = useRef(false);
@@ -650,9 +649,9 @@ function AppInner({ canOpenInTab, titleEnabled }) {
     const refreshUnlessOnboardingHolds = useCallback(() => {
         if (statusStateRef.current === 'no-wallet') {
             if (ownWalletWrite.current) return;
-            if (onboardingStepRef.current === 'create') {
-                if (createHold.current === 'hold') { setWalletElsewhere(true); return; }
-                if (createHold.current === 'persisting') return;
+            if (onboardingStepRef.current === 'create' && createHold.current === 'hold') {
+                setWalletElsewhere(true);
+                return;
             }
         }
         refresh();
@@ -1137,6 +1136,7 @@ function AppInner({ canOpenInTab, titleEnabled }) {
                         onBack={() => setOnboardingStep('welcome')}
                         onCreated={refresh}
                         staleGuard={createGuard}
+                        ownWriteGuard={ownWriteGuard}
                     />
                 );
             }

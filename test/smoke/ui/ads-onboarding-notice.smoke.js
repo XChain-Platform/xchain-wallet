@@ -91,11 +91,23 @@ assert.match(
 // The notice Continue marks itself consumed before it calls onImported. A
 // completed background label restore safely invokes it only after that mark,
 // so late labels refresh Home without skipping the notice or leaking a rejection.
+// A window that finds a wallet made elsewhere imports nothing, and its Unlock
+// hands back through onImported without passing the notice.
 const importedCalls = imp.match(/\bonImported\b/g) || [];
 assert.equal(
     importedCalls.length,
-    5,
-    'onImported appears only in the prop contract, wallet-forwarding wrapper, guarded label refresh and notice Continue',
+    6,
+    'onImported appears only in the prop contract, wallet-forwarding wrapper, guarded label refresh, notice Continue and the existing-wallet unlock',
+);
+assert.match(
+    imp,
+    /function openExistingWallet\(\) \{[\s\S]{0,60}onImported\(\)/,
+    'the existing-wallet unlock hands back through onImported',
+);
+assert.match(
+    imp,
+    /function takeWalletElsewhere\(err\) \{\s*if \(mode !== 'fresh' \|\| !isWalletExistsError\(err\)\) return false;/,
+    'only a fresh import refused over an existing wallet skips the notice',
 );
 assert.match(
     imp,

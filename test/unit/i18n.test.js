@@ -480,6 +480,8 @@ describe('translations', () => {
             // The History status filter header and the parallel composer's status-pill label prefix.
             ['history.filters.statusHeader', 'parallelComposer.statusPrefix'],
             ['home.receive', 'uri.intent.receive'],
+            // Unlocking a wallet another window made, from a stale import form, and unlocking the demo.
+            ['importWallet.unlockExisting', 'onboarding.demo.unlock'],
             // The Send form's network field and the Settings network row.
             ['send.fields.chain', 'settings.network.label'],
             ['send.title', 'uri.intent.send'],

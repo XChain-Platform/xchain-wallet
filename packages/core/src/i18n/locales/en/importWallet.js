@@ -82,6 +82,8 @@ const messages = {
     'importWallet.passphrase.hint': 'Required to derive the same addresses as the original wallet.',
     'importWallet.backToSetup': 'Back to wallet setup',
     'importWallet.openInTab': 'Open in tab',
+    'importWallet.walletElsewhere': 'This device already has a wallet, so nothing was imported here. Unlock that wallet to continue.',
+    'importWallet.unlockExisting': 'Unlock',
 };
 
 addEnglish(messages);

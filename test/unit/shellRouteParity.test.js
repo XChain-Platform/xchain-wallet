@@ -58,6 +58,11 @@ const SHELL_ONLY = {
             kind: 'intended',
             reason: 'Only the extension popup shares one vault across live windows, so only it can find that another window created the wallet.',
         },
+        'CreateWallet.ownWriteGuard': {
+            shells: ['extension'],
+            kind: 'intended',
+            reason: 'Only the extension background announces an unlock to the window whose own create caused it.',
+        },
         'AddressList.networkFilter': {
             shells: ['web'],
             kind: 'intended',

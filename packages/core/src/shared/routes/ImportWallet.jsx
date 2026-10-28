@@ -43,6 +43,7 @@ import {
 // ("importMnemonic: mnemonic is required"), and `|| fallback` only fires on an
 // EMPTY message, so those reached the recovery screen verbatim.
 import { userFacingMessage } from '../utils/userFacingMessage.js';
+import { isWalletExistsError } from '../utils/walletExistsError.js';
 import { NAME_MAX_LENGTH, hasVisibleText, nameLength } from '../../util/display_name.js';
 import { takeForgotPasswordRestoreLane } from '../utils/forgotPasswordRecovery.js';
 import { useBackHandler } from '../../ui/backStack.js';
@@ -230,6 +231,10 @@ export function ImportWallet({
     // §36.1: an import ends on the same ADS notice a created wallet does,
     // and only its Continue hands control back to App.
     const [adsNotice, setAdsNotice] = useState(false);
+    // Another window or tab made this device's first wallet while this one
+    // was filled in: nothing typed here can be imported any more, and the way
+    // on is that wallet's lock screen.
+    const [walletElsewhere, setWalletElsewhere] = useState(false);
     useOwnWalletWriteHold(ownWriteGuard, mode === 'fresh' && (busy || adsNotice));
     const [scanning, setScanning] = useState(false);
     const [dragOver, setDragOver] = useState(false);
@@ -329,7 +334,31 @@ export function ImportWallet({
         invalidatePendingInput();
         clearSensitiveState();
         setError(null);
+        if (walletElsewhere) {
+            openExistingWallet();
+            return;
+        }
         onBack();
+    }
+
+    // A fresh import refused because a wallet now exists drops what was typed
+    // and offers that wallet instead. Returns whether it took the refusal.
+    function takeWalletElsewhere(err) {
+        if (mode !== 'fresh' || !isWalletExistsError(err)) return false;
+        invalidatePendingInput();
+        clearSensitiveState();
+        setError(null);
+        setWalletElsewhere(true);
+        endBusy();
+        return true;
+    }
+
+    function openExistingWallet() {
+        try {
+            void onImported().catch(() => { /* Unlock or Back tries again */ });
+        } catch {
+            // Unlock or Back tries again.
+        }
     }
 
     function handleQrFrame(text) {
@@ -498,6 +527,7 @@ export function ImportWallet({
             }
             finishWalletImport(result);
         } catch (err) {
+            if (takeWalletElsewhere(err)) return;
             // A restore has three passwords in play, so "wrong
             // password" is never an answer. Whatever came back, the screen
             // says which of the three boxes it is talking about.
@@ -673,6 +703,7 @@ export function ImportWallet({
                 showRestoredLabels(result?.labelSync);
             }
         } catch (err) {
+            if (takeWalletElsewhere(err)) return;
             setError(userFacingMessage(
                 err,
                 'Could not import the wallet. Check the recovery phrase and try again.',
@@ -747,6 +778,7 @@ export function ImportWallet({
             });
             finishWalletImport(result);
         } catch (err) {
+            if (takeWalletElsewhere(err)) return;
             setError(userFacingMessage(
                 err,
                 'Could not import that private key. Check the key and the network, then try again.',
@@ -865,7 +897,15 @@ export function ImportWallet({
     // The summary links field errors after a submit attempt. An error raised
     // before any submit (a rejected scan, an unreadable file or drop) has no
     // attempt to anchor to, so it shows as a plain error message instead.
-    const formStatus = error && validationAttempt === 0 ? (
+    // The refusal follows a submit, so the notice takes focus like any other
+    // submit error: the form is often scrolled down to its Import button.
+    const formStatus = walletElsewhere ? (
+        <FormErrorSummary
+            errors={[{ message: t('importWallet.walletElsewhere') }]}
+            focusKey={validationAttempt || 1}
+            recovery={{ label: t('importWallet.unlockExisting'), onAction: openExistingWallet }}
+        />
+    ) : error && validationAttempt === 0 ? (
         <StatusMessage variant="error">{error}</StatusMessage>
     ) : error ? (
         <FormErrorSummary

@@ -25,6 +25,7 @@ import { writeActiveWallet } from '../utils/activeWalletMemory.js';
 import { NAME_MAX_LENGTH, hasVisibleText, nameLength } from '../../util/display_name.js';
 import { useBackHandler } from '../../ui/backStack.js';
 import { useDocumentTitleSection } from '../hooks/useDocumentTitle.js';
+import { useOwnWalletWriteHold } from '../hooks/useOwnWalletWriteHold.js';
 import styles from './CreateWallet.module.css';
 import { t } from '../../i18n/index.js';
 import '../../i18n/locales/en/adsNotice.js';
@@ -66,12 +67,16 @@ function numberedWalletName(wallets) {
  *
  * `staleGuard` is passed by a shell whose windows share one vault (the
  * extension popup): `report(hold)` says whether this window holds a phrase
- * ('hold'), is writing the wallet ('persisting') or neither ('idle'), and
- * `elsewhere` turns true when another window created the wallet. A window
- * holding a phrase then stays on a lasting notice instead of following the
- * session to Home, because the phrase it showed belongs to no wallet.
+ * ('hold') or not ('idle'), and `elsewhere` turns true when another window
+ * created the wallet. A window holding a phrase then stays on a lasting
+ * notice instead of following the session to Home, because the phrase it
+ * showed belongs to no wallet.
+ *
+ * `ownWriteGuard` is told while this window writes the first wallet and
+ * until its donation notice hands back, so the unlock its own write
+ * announces does not move the window to Home first.
  */
-export function CreateWallet({ onBack, onCreated: handleCreated, mode = 'fresh', staleGuard }) {
+export function CreateWallet({ onBack, onCreated: handleCreated, mode = 'fresh', staleGuard, ownWriteGuard }) {
     // S4: The recovery phrase is displayed here. A screenshot of it, or the
     // recents snapshot Android persists, is a copy of the wallet.
     // No-op on every shell that installs no screen guard (web, extension,
@@ -192,13 +197,12 @@ export function CreateWallet({ onBack, onCreated: handleCreated, mode = 'fresh',
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [staleGuard?.elsewhere, stage]);
 
-    const holdState = stage === 'persisting'
-        ? 'persisting'
-        : (stage === 'mnemonic' || stage === 'verify' || stage === 'stale') ? 'hold' : 'idle';
+    const holdState = (stage === 'mnemonic' || stage === 'verify' || stage === 'stale') ? 'hold' : 'idle';
     const reportHold = staleGuard?.report;
     useEffect(() => {
         reportHold?.(holdState);
     }, [holdState, reportHold]);
+    useOwnWalletWriteHold(ownWriteGuard, mode === 'fresh' && (stage === 'persisting' || stage === 'ads-notice'));
 
     function onCreated() {
         handleCreated(createdWalletRef.current || undefined);
