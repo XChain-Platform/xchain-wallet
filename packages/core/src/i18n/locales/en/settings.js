@@ -480,6 +480,10 @@ const messages = {
     'settings.duress.aSecondPasswordThatIf':
         'A second password that, if entered on the unlock screen, silently arms panic mode (24-hour signing freeze) without giving the observer any visible cue.',
     'settings.duress.set': 'Set',
+    'settings.duress.notSaved':
+        'This device did not save the duress passphrase. It works until the app closes and is gone after that. Try again to keep it.',
+    'settings.duress.couldNotRemove':
+        'This device did not remove the duress passphrase, so it stays set. Try again to remove it.',
     'settings.safety.autoLockTimeout': 'Auto-lock timeout',
     'settings.safety.neverUntilAppCloses': 'Never (until the app closes)',
     'settings.safety.minutesCustom': '{autolockMinutes} minutes (custom)',

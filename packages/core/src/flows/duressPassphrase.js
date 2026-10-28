@@ -60,9 +60,30 @@ let memoryFallback = null;
 let memoryFallbackActive = false;
 let storageFailureLogged = false;
 
+// Whether the record this context answers from is the one storage holds. The
+// Safety row reads it so the user is told when a passphrase works only until
+// the app closes, or when removing it was refused and it stays armed:
+//   saved          storage agrees with what isDuressMatch answers
+//   unsaved        storage refused the record; it lives in memory only and a
+//                  restart drops it without a word
+//   clear-failed   storage refused the removal; the passphrase stays armed
+export const DURESS_SAVE_SAVED = 'saved';
+export const DURESS_SAVE_UNSAVED = 'unsaved';
+export const DURESS_SAVE_CLEAR_FAILED = 'clear-failed';
+let saveStatus = DURESS_SAVE_SAVED;
+
+/** @returns {'saved'|'unsaved'|'clear-failed'} */
+export function getDuressSaveStatus() {
+    return saveStatus;
+}
+
 function keepMemoryFallback(record) {
     memoryFallback = record ? { ...record } : null;
     memoryFallbackActive = true;
+    noteStorageFailure();
+}
+
+function noteStorageFailure() {
     if (storageFailureLogged) return;
     storageFailureLogged = true;
     logConsole.record({
@@ -145,6 +166,7 @@ export async function configureDuressPersistence(store) {
     persistentStore = store || null;
     memoryFallback = null;
     memoryFallbackActive = false;
+    saveStatus = DURESS_SAVE_SAVED;
     if (!persistentStore) return;
     const configuredStore = persistentStore;
     try {
@@ -177,6 +199,7 @@ export function __resetDuressPersistenceForTests() {
     memoryFallback = null;
     memoryFallbackActive = false;
     storageFailureLogged = false;
+    saveStatus = DURESS_SAVE_SAVED;
 }
 
 function readRecord() {
@@ -199,11 +222,13 @@ function writeRecord(record) {
         memoryFallback = record ? { ...record } : null;
         const store = persistentStore;
         persistBestEffort(() => (record === null ? store.clear() : store.save({ ...record })));
+        saveStatus = DURESS_SAVE_SAVED;
         return;
     }
     const store = getStorage();
     if (!store) {
         keepMemoryFallback(record);
+        saveStatus = record === null ? DURESS_SAVE_SAVED : DURESS_SAVE_UNSAVED;
         return;
     }
     try {
@@ -214,9 +239,32 @@ function writeRecord(record) {
         }
         memoryFallback = null;
         memoryFallbackActive = false;
+        saveStatus = DURESS_SAVE_SAVED;
     } catch (_err) {
+        if (record === null) {
+            // The stored record survives a refused removal, so this context
+            // keeps answering from it too: a passphrase that reads as removed
+            // here and armed after a restart is the half state to avoid.
+            noteStorageFailure();
+            saveStatus = DURESS_SAVE_CLEAR_FAILED;
+            return;
+        }
         keepMemoryFallback(record);
+        saveStatus = DURESS_SAVE_UNSAVED;
     }
+}
+
+/**
+ * Write the record this context holds again after storage refused it: the
+ * in-memory salt and hash for an unsaved passphrase, or the removal that was
+ * refused. The plaintext is never needed.
+ *
+ * @returns {'saved'|'unsaved'|'clear-failed'}
+ */
+export function retryDuressSave() {
+    if (saveStatus === DURESS_SAVE_UNSAVED) writeRecord(readRecord());
+    else if (saveStatus === DURESS_SAVE_CLEAR_FAILED) writeRecord(null);
+    return saveStatus;
 }
 
 function bytesToBase64(bytes) {

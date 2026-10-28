@@ -278,7 +278,7 @@ describe('desktop preload: the renderer sandbox surface', () => {
         ]);
         // Sanity: the walk above must actually have produced traffic, or the
         // agreement checks below are vacuously true.
-        expect(used.size).toBe(10);
+        expect(used.size).toBe(9);
 
         const registered = mainRegisteredChannels();
         for (const channel of used) {

@@ -26,6 +26,12 @@
 //   error            an error message (role="alert") above the form card, via
 //                    SettingsInlineForm, with a one-click "Try again" recovery on storage-write failure.
 //
+//   not saved        storage refused the record or its removal. The row says
+//                    which, above the row, with a "Try again" that writes the
+//                    held salt and hash (or the removal) again, so the screen
+//                    never reads Configured for a passphrase a restart drops,
+//                    or Not configured for one a restart brings back.
+//
 // Setup verifies the current wallet password so a duress passphrase cannot
 // equal it. Disable remains available to the unlocked session.
 
@@ -36,6 +42,10 @@ import {
     isDuressConfigured,
     setDuressPassphrase,
     clearDuressPassphrase,
+    getDuressSaveStatus,
+    retryDuressSave,
+    DURESS_SAVE_UNSAVED,
+    DURESS_SAVE_CLEAR_FAILED,
 } from '../../../flows/duressPassphrase.js';
 import { ROW, ROW_HINT, SettingsInlineForm, useFocusAfterSwap } from './_settingsPrimitives.jsx';
 import { t } from '../../../i18n/index.js';
@@ -46,6 +56,7 @@ import '../../../i18n/locales/en/verifySignature.js';
 export function DuressPassphraseRow() {
     const { messaging } = useMessaging();
     const [configured, setConfigured] = useState(isDuressConfigured());
+    const [saveStatus, setSaveStatus] = useState(getDuressSaveStatus);
     const [showForm, setShowForm] = useState(false);
     const [currentPassword, setCurrentPassword] = useState('');
     const [pass, setPass] = useState('');
@@ -82,6 +93,7 @@ export function DuressPassphraseRow() {
         try {
             await messaging.unlockWallet(currentPassword);
             setDuressPassphrase(pass);
+            setSaveStatus(getDuressSaveStatus());
             swap.request();
             setConfigured(true);
             setShowForm(false);
@@ -107,8 +119,18 @@ export function DuressPassphraseRow() {
 
     function handleClear() {
         clearDuressPassphrase();
-        swap.request();
-        setConfigured(false);
+        setSaveStatus(getDuressSaveStatus());
+        const stillConfigured = isDuressConfigured();
+        if (!stillConfigured) swap.request();
+        setConfigured(stillConfigured);
+    }
+
+    function retrySave() {
+        const status = retryDuressSave();
+        setSaveStatus(status);
+        const stillConfigured = isDuressConfigured();
+        if (stillConfigured !== configured) swap.request();
+        setConfigured(stillConfigured);
     }
 
     function cancelForm() {
@@ -121,18 +143,28 @@ export function DuressPassphraseRow() {
 
     const labelStyle = { color: 'var(--xc-text)', fontWeight: 500 };
     if (configured) {
+        const saveNotice = saveStatus === DURESS_SAVE_UNSAVED
+            ? t('settings.duress.notSaved')
+            : saveStatus === DURESS_SAVE_CLEAR_FAILED
+                ? t('settings.duress.couldNotRemove')
+                : null;
         return (
-            <div style={ROW}>
-                <div style={{ display: 'flex', flexDirection: 'column', flex: 1, minWidth: 0 }}>
-                    <span style={labelStyle}>{t('settings.duress.duressPassphrase')}</span>
-                    <span style={ROW_HINT}>
-                        {t('settings.duress.configuredEnteringThisPassphraseOn')}
-                    </span>
+            <SettingsInlineForm
+                error={saveNotice}
+                recovery={saveNotice ? { label: t('common.tryAgain'), onAction: retrySave } : undefined}
+            >
+                <div style={ROW}>
+                    <div style={{ display: 'flex', flexDirection: 'column', flex: 1, minWidth: 0 }}>
+                        <span style={labelStyle}>{t('settings.duress.duressPassphrase')}</span>
+                        <span style={ROW_HINT}>
+                            {t('settings.duress.configuredEnteringThisPassphraseOn')}
+                        </span>
+                    </div>
+                    <Button ref={swap.target} type="button" size="sm" variant="ghost" icon={null} onClick={handleClear}>
+                        {t('settings.biometric.disable')}
+                    </Button>
                 </div>
-                <Button ref={swap.target} type="button" size="sm" variant="ghost" icon={null} onClick={handleClear}>
-                    {t('settings.biometric.disable')}
-                </Button>
-            </div>
+            </SettingsInlineForm>
         );
     }
 

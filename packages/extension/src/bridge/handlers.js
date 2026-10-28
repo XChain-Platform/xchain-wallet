@@ -175,7 +175,8 @@ export function registerBridgeHandlers(host, opts = {}) {
                     message: '← ok',
                 });
                 return result;
-            } catch (err) {
+            } catch (caught) {
+                const err = withoutDuressCue(caught);
                 const code = err?.internalCode ?? err?.code ?? err?.name ?? 'Error';
                 logConsole.record({
                     source: `bridge:${name}`,
@@ -681,6 +682,11 @@ export function registerBridgeHandlers(host, opts = {}) {
         if (!validCoSignOutcome(outcome)) {
             throw bridgeError('UNREACHABLE', 'coSign returned an invalid outcome');
         }
+        // The flow answers a freeze as a PANIC_MODE refusal with the time left.
+        // A duress-armed freeze leaves the page an ordinary failure instead.
+        if (!outcome.approved && outcome.reason === 'PANIC_MODE' && !isSelfArmedFreeze()) {
+            throw duressCoverError();
+        }
         // Both CoSignApprovedSuccess and CoSignRefused are `ok: true`: a policy
         // refusal is a well-formed answer to a well-formed request, distinct
         // from a BridgeErrorResult, so the flow's own `approved` flag carries
@@ -763,7 +769,7 @@ export function registerBridgeHandlers(host, opts = {}) {
                 // Same translation the register() wrapper applies to a
                 // single-action throw, applied per slot: a batch entry must
                 // carry a published BridgeErrorCode too.
-                results.push(bridgeErrorResult(err));
+                results.push(bridgeErrorResult(withoutDuressCue(err)));
             }
         }
         return results;
@@ -1830,6 +1836,32 @@ class BridgeError extends Error {
 
 function bridgeError(code, detail) {
     return new BridgeError(code, detail);
+}
+
+// The duress passphrase arms the signing freeze while someone may be watching,
+// and a dApp page is a screen they can watch. Its PANIC_MODE code, its error
+// name, its sentence and its time left all name the freeze, so a freeze this
+// wallet cannot positively read as self-armed answers the page the way any
+// other failed sign does. Only a freeze the user armed in Settings is named.
+// The Developer Mode log line takes the same cover, since an onlooker can open
+// that too.
+const DURESS_COVER_MESSAGE = 'The wallet could not complete this request.';
+
+function isSelfArmedFreeze() {
+    try {
+        return flows.getPanicArmedBy() === flows.PANIC_ARMED_SELF;
+    } catch (_err) {
+        return false;
+    }
+}
+
+function duressCoverError() {
+    return new Error(DURESS_COVER_MESSAGE);
+}
+
+function withoutDuressCue(err) {
+    if (/** @type {any} */ (err)?.name !== 'PanicModeActiveError') return err;
+    return isSelfArmedFreeze() ? err : duressCoverError();
 }
 
 // Narrow any thrown value to something whose `code` is a published

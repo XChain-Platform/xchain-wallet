@@ -36,6 +36,10 @@ vi.mock('../../../packages/core/src/flows/duressPassphrase.js', () => ({
     isDuressConfigured: () => duress.configured,
     setDuressPassphrase: duress.set,
     clearDuressPassphrase: duress.clear,
+    getDuressSaveStatus: () => 'saved',
+    retryDuressSave: () => 'saved',
+    DURESS_SAVE_UNSAVED: 'unsaved',
+    DURESS_SAVE_CLEAR_FAILED: 'clear-failed',
 }));
 vi.mock('../../../packages/core/src/flows/panicMode.js', () => ({
     activatePanicMode: panic.activate,
