@@ -130,7 +130,7 @@ export function AccountPicker({ walletId, activeAccountId, onSwitch, onAddAccoun
                         <div key={a.id} className={pickerStyles.rowWrap}>
                             <ListRow
                                 className={`${styles.entry} ${active ? pickerStyles.rowCurrent : ''}`}
-                                style={{ width: '100%', paddingRight: '56px' }}
+                                style={{ width: '100%', paddingInlineEnd: '56px' }}
                                 onClick={() => {
                                     if (!active) runRouteAction(onSwitch, a.id);
                                     runRouteAction(onBack);

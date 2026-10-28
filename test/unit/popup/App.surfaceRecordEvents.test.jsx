@@ -267,6 +267,44 @@ describe('an open review survives record changes made in another surface', () =>
         await waitFor(() => expect(mounts(sent)).toBeGreaterThan(before));
     });
 
+    async function twoWallets() {
+        const env = boot({ wallets: [{ id: 'w1', name: 'Alpha' }, { id: 'w2', name: 'Bravo' }] });
+        localStorage.setItem('xchain.activeWallet', 'w1');
+        const { container } = render(<App />);
+        await screen.findByRole('heading', { name: 'Home', level: 1 });
+        await screen.findByText('Wallet: Alpha');
+        await act(async () => { await new Promise((resolve) => setTimeout(resolve, 50)); });
+        return { ...env, heading: container.querySelector('h1') };
+    }
+
+    it('keeps the open screen and its wallet when another surface switches wallet during a review', async () => {
+        const { heading, emit } = await twoWallets();
+        reviewOpen = true;
+        localStorage.setItem('xchain.activeWallet', 'w2');
+        await emit('wallet', { walletId: 'w2' });
+        await act(async () => { await new Promise((resolve) => setTimeout(resolve, 50)); });
+        expect(heading.isConnected).toBe(true);
+        expect(screen.getByText('Wallet: Alpha')).toBeInTheDocument();
+    });
+
+    it('takes the wallet another surface chose during a review at the next navigation', async () => {
+        const { emit } = await twoWallets();
+        reviewOpen = true;
+        localStorage.setItem('xchain.activeWallet', 'w2');
+        await emit('wallet', { walletId: 'w2' });
+        reviewOpen = false;
+        const history = screen.getAllByRole('button', { name: /^History\b/ })[0];
+        await act(async () => { history.click(); });
+        expect(await screen.findByText('Wallet: Bravo')).toBeInTheDocument();
+    });
+
+    it('switches at once when another surface switches wallet with no review open', async () => {
+        const { emit } = await twoWallets();
+        localStorage.setItem('xchain.activeWallet', 'w2');
+        await emit('wallet', { walletId: 'w2' });
+        expect(await screen.findByText('Wallet: Bravo')).toBeInTheDocument();
+    });
+
     it('reloads the open screen for a network change while a review is open', async () => {
         const { sent, emit } = await shown();
         reviewOpen = true;

@@ -131,7 +131,7 @@ export function WalletPicker({
                         <div key={`${w.id}:${index}`} className={pickerStyles.rowWrap}>
                             <ListRow
                                 className={`${styles.entry} ${active ? pickerStyles.rowCurrent : ''}`}
-                                style={{ width: '100%', paddingRight: '56px' }}
+                                style={{ width: '100%', paddingInlineEnd: '56px' }}
                                 onClick={() => handleSelect(w.id, active)}
                                 disabled={switching}
                                 aria-busy={switchingWalletId === w.id ? 'true' : undefined}

@@ -30,8 +30,9 @@ import { readActiveWallet, writeActiveWallet } from '../utils/activeWalletMemory
  * @param {string} [props.initialName]   pre-fill the input with the current name
  * @param {() => void} props.onBack
  * @param {(wallet: any) => void} props.onRenamed   refresh callers and return to the previous screen
+ * @param {unknown} [props.refreshKey]   changes when another window changes wallet records, so the names are read again
  */
-export function RenameWalletForm({ walletId, initialName = '', onBack, onRenamed }) {
+export function RenameWalletForm({ walletId, initialName = '', onBack, onRenamed, refreshKey }) {
     const { messaging, shell } = useMessaging();
     const variant = screenVariantFor(shell);
 
@@ -40,6 +41,11 @@ export function RenameWalletForm({ walletId, initialName = '', onBack, onRenamed
     const [walletLoadError, setWalletLoadError] = useState(/** @type {string | null} */ (null));
     const [error, setError] = useState(/** @type {string | null} */ (null));
     const [busy, setBusy] = useState(false);
+    // A rename made in another window reaches this screen as a fresh read of
+    // the records (refreshKey). Until the user types, the field follows it, so
+    // Save does not put back the name this screen opened with.
+    const edited = useRef(false);
+    const firstRead = useRef(true);
     const nameRef = useRef(/** @type {HTMLInputElement | null} */ (null));
     const formRef = useRef(/** @type {HTMLFormElement | null} */ (null));
 
@@ -58,13 +64,18 @@ export function RenameWalletForm({ walletId, initialName = '', onBack, onRenamed
         }
         messaging.listWallets()
             .then((list) => {
-                if (!cancelled) setWallets(Array.isArray(list) ? list : []);
+                if (cancelled) return;
+                const rows = Array.isArray(list) ? list : [];
+                setWallets(rows);
+                const stored = rows.find((wallet) => wallet?.id === walletId)?.name;
+                if (!firstRead.current && !edited.current && typeof stored === 'string' && stored) setName(stored);
+                firstRead.current = false;
             })
             .catch(() => {
                 if (!cancelled) setWalletLoadError('Wallet names could not be checked.');
             });
         return () => { cancelled = true; };
-    }, [messaging]);
+    }, [messaging, walletId, refreshKey]);
 
     async function handleSubmit(event) {
         if (event && typeof event.preventDefault === 'function') event.preventDefault();
@@ -142,6 +153,7 @@ export function RenameWalletForm({ walletId, initialName = '', onBack, onRenamed
                 value={name}
                 onChange={(e) => {
                     const nextName = e.target.value;
+                    edited.current = true;
                     setName(nextName);
                     setError(nameLength(nextName.trim()) > NAME_MAX_LENGTH
                         ? `Wallet name must be ${NAME_MAX_LENGTH} characters or fewer.`

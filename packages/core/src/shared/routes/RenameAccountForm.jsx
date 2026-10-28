@@ -32,8 +32,9 @@ import { NAME_MAX_LENGTH, hasVisibleText, nameKey, nameLength } from '../../util
  * @param {string} [props.initialName]   pre-fill the input with the current name
  * @param {() => void} props.onBack
  * @param {(account: any) => void} props.onRenamed   refresh callers and return to the previous screen
+ * @param {unknown} [props.refreshKey]   changes when another window changes account records, so the names are read again
  */
-export function RenameAccountForm({ accountId, walletId, initialName = '', onBack, onRenamed }) {
+export function RenameAccountForm({ accountId, walletId, initialName = '', onBack, onRenamed, refreshKey }) {
     const { messaging, shell } = useMessaging();
     const variant = screenVariantFor(shell);
 
@@ -41,6 +42,11 @@ export function RenameAccountForm({ accountId, walletId, initialName = '', onBac
     const [accounts, setAccounts] = useState(/** @type {any[]} */ ([]));
     const [error, setError] = useState(/** @type {string | null} */ (null));
     const [busy, setBusy] = useState(false);
+    // A rename made in another window reaches this screen as a fresh read of
+    // the records (refreshKey). Until the user types, the field follows it, so
+    // Save does not put back the name this screen opened with.
+    const edited = useRef(false);
+    const firstRead = useRef(true);
     const nameRef = useRef(/** @type {HTMLInputElement | null} */ (null));
     const formRef = useRef(/** @type {HTMLFormElement | null} */ (null));
 
@@ -56,11 +62,16 @@ export function RenameAccountForm({ accountId, walletId, initialName = '', onBac
         if (!walletId || typeof messaging.listAccounts !== 'function') return undefined;
         messaging.listAccounts(walletId)
             .then((list) => {
-                if (!cancelled) setAccounts(Array.isArray(list) ? list : []);
+                if (cancelled) return;
+                const rows = Array.isArray(list) ? list : [];
+                setAccounts(rows);
+                const stored = rows.find((account) => account?.id === accountId)?.name;
+                if (!firstRead.current && !edited.current && typeof stored === 'string' && stored) setName(stored);
+                firstRead.current = false;
             })
             .catch(() => { /* the rename flow performs the authoritative check */ });
         return () => { cancelled = true; };
-    }, [walletId, messaging]);
+    }, [walletId, accountId, messaging, refreshKey]);
 
     async function handleSubmit(event) {
         if (event && typeof event.preventDefault === 'function') event.preventDefault();
@@ -122,6 +133,7 @@ export function RenameAccountForm({ accountId, walletId, initialName = '', onBac
                 value={name}
                 onChange={(e) => {
                     const nextName = e.target.value;
+                    edited.current = true;
                     setName(nextName);
                     setError(nameLength(nextName.trim()) > NAME_MAX_LENGTH
                         ? `Account name must be ${NAME_MAX_LENGTH} characters or fewer.`

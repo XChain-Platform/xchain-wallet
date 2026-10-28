@@ -243,6 +243,16 @@ const SHELL_ONLY = {
             kind: 'intended',
             reason: 'The web receive picker shares the compact-layout asset filters.',
         },
+        'RenameAccountForm.refreshKey': {
+            shells: ['extension'],
+            kind: 'intended',
+            reason: 'Only the extension hears record changes from its other surface, so only it reads the names again on an open rename screen.',
+        },
+        'RenameWalletForm.refreshKey': {
+            shells: ['extension'],
+            kind: 'intended',
+            reason: 'Only the extension hears record changes from its other surface, so only it reads the names again on an open rename screen.',
+        },
         'ScanRoute.embedded': {
             shells: ['web'],
             kind: 'intended',
