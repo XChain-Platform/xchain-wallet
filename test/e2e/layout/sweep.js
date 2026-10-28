@@ -1172,8 +1172,12 @@ export function measureRulings() {
     probe.remove();
     void root;
     const NOT_CARD = 'button, input, select, textarea, [role="button"], [role="tab"], [role="switch"], [role="checkbox"], [role="radio"], [role="dialog"], [role="menu"], [role="listbox"], header, nav, img, svg';
+    const NOTICE = '[role="status"], [role="alert"], [data-variant]';
     for (const el of document.querySelectorAll('body *')) {
         if (!visible(el)) continue;
+        // U15 governs notice placement. A StatusMessage keeps data-variant when
+        // a static page notice deliberately has no live-region role.
+        if (el.closest(NOTICE)) continue;
         const cs = getComputedStyle(el);
         const sides = ['Top', 'Right', 'Bottom', 'Left'];
         const styled = sides.filter((s) => parseFloat(cs[`border${s}Width`]) > 0);
