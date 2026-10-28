@@ -25,6 +25,7 @@
 import { useState } from 'react';
 import { Input, Select } from '@xchain-wallet/core/ui';
 import { flows as flowsLib, registry as registryLib } from '@xchain-wallet/core';
+import { EmptyState } from '@xchain-wallet/core/ui';
 import { resolveFeeConfig } from '../../../schemas/settings.js';
 import {
     defaultCustomSettingsRate,
@@ -89,8 +90,9 @@ export function FeesSection() {
     ).sort();
     if (chainIds.length === 0) {
         return (
-            <Status
-                text={t('settings.fees.noChainFeeProfilesYet')}
+            <EmptyState
+                title={t('settings.fees.noChainFeeProfilesYet')}
+                titleAs="p"
             />
         );
     }

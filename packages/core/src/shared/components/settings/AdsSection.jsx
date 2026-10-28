@@ -24,7 +24,7 @@
 
 import { useId } from 'react';
 import { flows as flowsLib, registry as registryLib } from '@xchain-wallet/core';
-import { InfoTip, Input, Select } from '@xchain-wallet/core/ui';
+import { EmptyState, InfoTip, Input, Select } from '@xchain-wallet/core/ui';
 import { useSettings } from '../../hooks/useSettings.js';
 import {
     ADS_DEFAULT_DONATION_ADDRESS_ROLE,
@@ -216,7 +216,7 @@ export function AdsSection() {
             ) : null}
 
             {chainIds.length === 0 ? (
-                <Status text={t('settings.ads.noChainsSetUpFor')} />
+                <EmptyState title={t('settings.ads.noChainsSetUpFor')} titleAs="p" />
             ) : null}
 
             {chainIds.map((chainId) => {
