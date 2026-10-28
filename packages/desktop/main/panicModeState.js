@@ -99,28 +99,30 @@ export function panicModeStatePathFor(userDataDir) {
  * Answer one renderer panic-state message against main's freeze.
  *
  * A save from the renderer is applied to main's cache first, so the very
- * next signing call in main sees it, and then written to the file. A clear
- * does the same in reverse. A load answers main's current state, which is
- * what the renderer's notice and Settings row show.
+ * next signing call in main sees it, and then written to the file; a refused
+ * file write rejects to the renderer while main stays frozen. A clear goes the
+ * other way: the file first, and main lifts the freeze only once the file no
+ * longer holds it, so a refused clear leaves main frozen. A load answers
+ * main's current state, which is what the renderer's notice and Settings row
+ * show.
  *
  * @param {{ flows: any, store: { save: (s: unknown) => Promise<void>, clear: () => Promise<void> } | null }} deps
  * @param {string} type
  * @param {unknown} request
  */
 export async function handlePanicStateMessage({ flows, store }, type, request) {
+    const clearFreeze = async () => {
+        if (store) await store.clear();
+        flows.applyExternalPanicModeState(null);
+        return flows.getPanicModeState();
+    };
     if (type === PANIC_STATE_SAVE_TYPE) {
+        if (!flows.isSigningFrozen(request)) return clearFreeze();
         flows.applyExternalPanicModeState(request);
         const state = flows.getPanicModeState();
-        if (store) {
-            if (state.expiresAt === 0) await store.clear();
-            else await store.save(state);
-        }
+        if (store) await store.save(state);
         return state;
     }
-    if (type === PANIC_STATE_CLEAR_TYPE) {
-        flows.applyExternalPanicModeState(null);
-        if (store) await store.clear();
-        return flows.getPanicModeState();
-    }
+    if (type === PANIC_STATE_CLEAR_TYPE) return clearFreeze();
     return flows.getPanicModeState();
 }

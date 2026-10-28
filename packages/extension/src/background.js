@@ -59,7 +59,8 @@ import {
     SIGNING_SECRET_SESSION_KEY,
     loadSigningCredentials,
 } from './background/signingSecretSession.js';
-import { initPanicModePersistence } from './background/panicModeStorage.js';
+import { attachPanicStateListener, initPanicModePersistence } from './background/panicModeStorage.js';
+import { isTrustedExtensionSender } from './bridge/publicSurface.js';
 import { attachBridgeBootGate, WALLET_LOCKED_ENVELOPE } from './background/bridgeBootGate.js';
 import { createBroadcastQueueStorage } from './background/broadcastQueueStorage.js';
 import { createBroadcastQueueStore, sealBroadcastQueueStore } from './background/broadcastQueueStore.js';
@@ -782,6 +783,12 @@ attachSessionMetaListener({
 // `signerBridge` so `action.send.hw` / `signer.status` handlers can
 // route sign requests to the renderer-hosted signer.
 attachSignerBridgeListener();
+
+// §26.5 panic mode: always on, and pre-host on purpose. The popup and side
+// panel tell the worker about a freeze directly, so signing stops here even
+// when chrome.storage.local refuses the record, and the duress passphrase
+// arms it from the Locked screen with the vault still shut.
+attachPanicStateListener({ flows: flowsLib, isTrustedSender: isTrustedExtensionSender });
 
 // "Wipe wallet data": always on, and pre-host on purpose. The escapes that
 // reach it (Locked "Forgot password", the corrupt-vault WIPE, demo exit)

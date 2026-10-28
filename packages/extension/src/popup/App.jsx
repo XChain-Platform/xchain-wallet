@@ -53,6 +53,7 @@ import { useAutoLockPolicy } from '@xchain-wallet/core/shared/hooks/useAutoLockP
 import { useLastView } from '@xchain-wallet/core/shared/hooks/useLastView.js';
 import { isConfirmActive } from '@xchain-wallet/core/shared/hooks/useConfirmAction.js';
 import { useDocumentTitle } from '@xchain-wallet/core/shared/hooks/useDocumentTitle.js';
+import { useScannedPsbt } from '@xchain-wallet/core/shared/hooks/useScannedPsbt.js';
 import { MessagingProvider } from '@xchain-wallet/core/shared/MessagingProvider.jsx';
 import { Loading } from '@xchain-wallet/core/shared/routes/Loading.jsx';
 import { VaultUnavailable } from '@xchain-wallet/core/shared/routes/VaultUnavailable.jsx';
@@ -481,7 +482,7 @@ function AppInner({ canOpenInTab, titleEnabled }) {
     // The transaction a scan just produced, handed to the Sign panel so
     // the scan delivers its payload rather than only its destination. Mirrors
     // `sendPrefill` above, which is what the send outcome has always done.
-    const [scannedPsbt, setScannedPsbt] = useState(/** @type {string | null} */ (null));
+    const [scannedPsbt, setScannedPsbt] = useScannedPsbt(unlockedView);
     // Deep-link prefill for contract EXECUTE (explorer Write-tab links,
     // xchain:{COIN}/execute?...). Mirrors `sendPrefill`; consumed by the
     // 'contract-execute' route and cleared when the user backs out.

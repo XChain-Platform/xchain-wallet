@@ -36,6 +36,7 @@ import {
 } from './_settingsPrimitives.jsx';
 import { BiometricRow } from './BiometricRow.jsx';
 import { PanicModeRow } from './PanicModeRow.jsx';
+import { PanicSaveNotice } from './PanicSaveNotice.jsx';
 import { UndoSendRow } from './UndoSendRow.jsx';
 import { DuressPassphraseRow } from './DuressPassphraseRow.jsx';
 import { t } from '../../../i18n/index.js';
@@ -79,6 +80,7 @@ export function SafetySection() {
 
     return (
         <div style={STACK}>
+            <PanicSaveNotice />
             <div style={ROW}>
                 <span style={ROW_TITLE}>{t('settings.safety.autoLockTimeout')}</span>
                 <select

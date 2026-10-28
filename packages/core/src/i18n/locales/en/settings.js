@@ -560,6 +560,11 @@ const messages = {
         'Freeze all signing for 24 hours? Balances and history remain readable, and you can deactivate the freeze from this setting.',
     'settings.panic.confirm24HourFreeze': 'Confirm 24-hour freeze',
     'settings.panic.panicMode': 'Panic mode',
+    'settings.panic.notSaved': 'Panic mode is on, but it couldn\'t be saved.',
+    'settings.panic.notSavedDetail':
+        'Signing is frozen for now. The freeze ends if the browser or app restarts, so turn panic mode on again after a restart.',
+    'settings.panic.couldNotTurnOff': 'Panic mode couldn\'t be turned off.',
+    'settings.panic.couldNotTurnOffDetail': 'The change couldn\'t be saved, so signing stays frozen. Try again.',
     'settings.panic.activateToFreezeAllSigning':
         'Activate to freeze ALL signing for 24 hours. Balances and history stay readable; new sends, multisig contributions, and message signatures will refuse until the timer expires or you deactivate.',
     'settings.contacts.contactsInThisWallet': 'Contacts in this wallet',

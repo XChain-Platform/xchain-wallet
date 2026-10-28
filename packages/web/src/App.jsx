@@ -34,6 +34,7 @@ import { useSupportedChains } from '@xchain-wallet/core/shared/hooks/useSupporte
 import { useAutoLockPolicy } from '@xchain-wallet/core/shared/hooks/useAutoLockPolicy.js';
 import { useLastView } from '@xchain-wallet/core/shared/hooks/useLastView.js';
 import { useDocumentTitle } from '@xchain-wallet/core/shared/hooks/useDocumentTitle.js';
+import { useScannedPsbt } from '@xchain-wallet/core/shared/hooks/useScannedPsbt.js';
 import { subscribeVaultWipe } from '@xchain-wallet/core/shared/utils/wipeWalletStorage.js';
 import { MessagingProvider } from '@xchain-wallet/core/shared/MessagingProvider.jsx';
 import { useSettings } from '@xchain-wallet/core/shared/hooks/useSettings.js';
@@ -706,7 +707,7 @@ function AppInner() {
     // The transaction a scan just produced, handed to the Sign panel so
     // the scan delivers its payload rather than only its destination. Mirrors
     // `sendPrefill` above, which is what the send outcome has always done.
-    const [scannedPsbt, setScannedPsbt] = useState(/** @type {string | null} */ (null));
+    const [scannedPsbt, setScannedPsbt] = useScannedPsbt(unlockedView);
     // Which view Send should return to when the user hits Back. Defaults
     // to 'home'. The asset picker is a step of Send and leaves it alone, so
     // Send's Back still returns to whatever opened Send.

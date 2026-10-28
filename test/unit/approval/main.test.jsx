@@ -62,7 +62,11 @@ describe('approval entrypoint', () => {
 
         const registry = { id: 'registry' };
         expect(mocks.installWipeHook).toHaveBeenCalledOnce();
-        expect(mocks.initPanicModePersistence).toHaveBeenCalledWith(mocks.flows);
+        // The page tells the service worker about a freeze directly as well.
+        expect(mocks.initPanicModePersistence).toHaveBeenCalledWith(
+            mocks.flows,
+            { notifyWorker: expect.any(Function) },
+        );
         expect(mocks.syncRegistry).toHaveBeenCalledWith({ registry });
         expect(mocks.hydrateCustomChains).toHaveBeenCalledWith(
             registry,

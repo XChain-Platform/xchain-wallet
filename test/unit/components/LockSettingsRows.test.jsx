@@ -44,6 +44,7 @@ vi.mock('../../../packages/core/src/flows/panicMode.js', () => ({
         ? { active: true, expiresAt: Date.now() + 24 * 60 * 60 * 1000 }
         : { active: false, expiresAt: 0 }),
     getPanicRemainingMs: (state) => (state?.active ? 24 * 60 * 60 * 1000 : 0),
+    subscribePanicModeSaveStatus: () => () => {},
 }));
 
 const { BiometricRow } = await import(

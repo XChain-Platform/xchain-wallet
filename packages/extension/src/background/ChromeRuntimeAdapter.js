@@ -32,6 +32,7 @@
 
 import { PRE_HOST_MESSAGE_TYPES } from './sessionMeta.js';
 import { WIPE_STORAGE_MESSAGE_TYPE } from './wipeExtensionStorage.js';
+import { PANIC_STATE_MESSAGE_TYPES } from './panicModeStorage.js';
 import {
     isMessageAllowedFromSender,
     isTrustedExtensionSender,
@@ -72,14 +73,16 @@ export function attachChromeRuntime(host, chromeRuntime, opts = {}) {
         // before the MessageHost's vault-backed handlers are registered:
         // sessionMeta.js owns session/unlock/create/import, and
         // wipeExtensionStorage.js owns the wipe (reached from the Locked
-        // screen, i.e. with the vault shut). Skip those here so no message
+        // screen, i.e. with the vault shut), and panicModeStorage.js owns the
+        // direct panic-freeze channel. Skip those here so no message
         // ever sees two sendResponses.
         if (
             message &&
             typeof message === 'object' &&
             typeof message.type === 'string' &&
             (PRE_HOST_MESSAGE_TYPES.has(message.type)
-                || message.type === WIPE_STORAGE_MESSAGE_TYPE)
+                || message.type === WIPE_STORAGE_MESSAGE_TYPE
+                || PANIC_STATE_MESSAGE_TYPES.has(message.type))
         ) {
             return false;
         }

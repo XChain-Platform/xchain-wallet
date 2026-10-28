@@ -26,6 +26,7 @@ const bg = vi.hoisted(() => ({
     attachSessionMetaListener: vi.fn(),
     attachSignerBridgeListener: vi.fn(),
     attachWipeStorageListener: vi.fn(),
+    attachPanicStateListener: vi.fn(),
     connectedTabsAttach: vi.fn(),
     ensureBuilds: vi.fn(),
     keepalive: vi.fn(async () => {}),
@@ -90,6 +91,7 @@ vi.mock('../../../packages/extension/src/background/signingSecretSession.js', ()
 }));
 vi.mock('../../../packages/extension/src/background/panicModeStorage.js', () => ({
     initPanicModePersistence: vi.fn(async () => {}),
+    attachPanicStateListener: bg.attachPanicStateListener,
 }));
 vi.mock('../../../packages/extension/src/background/broadcastQueueStorage.js', () => ({
     createBroadcastQueueStorage: vi.fn(() => ({})),
@@ -173,6 +175,7 @@ describe('extension service-worker entry', () => {
         expect(bg.attachSessionMetaListener).toHaveBeenCalledOnce();
         expect(bg.attachSignerBridgeListener).toHaveBeenCalledOnce();
         expect(bg.attachWipeStorageListener).toHaveBeenCalledOnce();
+        expect(bg.attachPanicStateListener).toHaveBeenCalledOnce();
         expect(bg.connectedTabsAttach).toHaveBeenCalledWith(chromeStub.tabs);
         expect(chromeStub.alarms.create).toHaveBeenCalledWith(
             'xchain-ws-keepalive',

@@ -64,6 +64,7 @@ vi.mock('../../../packages/extension/src/background/signingSecretSession.js', ()
 }));
 vi.mock('../../../packages/extension/src/background/panicModeStorage.js', () => ({
     initPanicModePersistence: vi.fn(async () => {}),
+    attachPanicStateListener: vi.fn(() => () => {}),
 }));
 vi.mock('../../../packages/extension/src/background/broadcastQueueStorage.js', () => ({
     createBroadcastQueueStorage: vi.fn(() => ({})),

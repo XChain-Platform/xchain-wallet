@@ -11,7 +11,8 @@
 // PanicModeRow (§26.5 / G068): Safety panel row. Distinct from the
 // `settings.panicMode.enabled` schema toggle (which gates whether the
 // feature is offered): this row owns the live runtime activation state
-// stored in localStorage via `flows/panicMode.js`.
+// kept by `flows/panicMode.js`. A refused save or clear is reported above
+// the page by PanicSaveNotice; this row shows what is enforced.
 //
 // States:
 //   inactive   "Activate panic mode" button. A second explicit action
@@ -32,6 +33,7 @@ import {
     deactivatePanicMode,
     getPanicModeState,
     getPanicRemainingMs,
+    subscribePanicModeSaveStatus,
 } from '../../../flows/panicMode.js';
 import { ROW, ROW_HINT, SettingsInlineForm, useFocusAfterSwap } from './_settingsPrimitives.jsx';
 import { t } from '../../../i18n/index.js';
@@ -57,6 +59,15 @@ export function PanicModeRow() {
         return () => window.clearInterval(handle);
     }, [state, remainingMs]);
 
+    // A refused write changes what this context enforces (a clear that did
+    // not land keeps the freeze; a freeze another context holds arrives late),
+    // so the row re-reads the state whenever the save status moves.
+    useEffect(() => subscribePanicModeSaveStatus(() => {
+        const next = getPanicModeState();
+        setState(next);
+        setRemainingMs(getPanicRemainingMs(next));
+    }), []);
+
     const isActive = remainingMs > 0;
     const swap = useFocusAfterSwap(isActive);
 
@@ -68,11 +79,12 @@ export function PanicModeRow() {
         setConfirming(false);
     }
 
-    function handleDeactivate() {
+    async function handleDeactivate() {
         swap.request();
-        deactivatePanicMode();
-        setState(getPanicModeState());
-        setRemainingMs(0);
+        await deactivatePanicMode();
+        const next = getPanicModeState();
+        setState(next);
+        setRemainingMs(getPanicRemainingMs(next));
     }
 
     const labelStyle = { color: 'var(--xc-text)', fontWeight: 500 };
