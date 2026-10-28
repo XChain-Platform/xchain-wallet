@@ -73,7 +73,7 @@ async function openCustom({ owner, holder }) {
         fireEvent.change(screen.getByLabelText('Send the initial mint to (optional)'), { target: { value: holder } });
     }
     fireEvent.click(screen.getByRole('button', { name: 'Review token' }));
-    fireEvent.click(screen.getByRole('button', { name: 'Continue to confirmation' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Continue to confirmation' }));
 }
 
 async function composedParams() {

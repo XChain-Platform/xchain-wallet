@@ -32,7 +32,10 @@ const ADDRESSES = {
     }],
 };
 
-async function review(getTokenInfo) {
+async function review(parentLookup) {
+    // The availability lookup for PARENT.CHILD answers 'not issued'; only
+    // the parent lookup takes the case's answer.
+    const getTokenInfo = vi.fn((req) => (req.tick === 'PARENT' ? parentLookup(req) : Promise.resolve({})));
     const messaging = {
         getAddressesByChain: vi.fn().mockResolvedValue(ADDRESSES),
         getSettings: vi.fn().mockResolvedValue({ walletMode: 'full' }),

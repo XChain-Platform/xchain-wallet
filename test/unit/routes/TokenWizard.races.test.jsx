@@ -131,7 +131,9 @@ describe('TokenWizard review and sign races', () => {
 
     it('does not jump to Review when the user leaves Details during the parent lookup', async () => {
         const lookup = deferred();
-        const getTokenInfo = vi.fn(() => lookup.promise);
+        // The PARENT.CHILD availability lookup answers 'not issued'; the
+        // parent ownership lookup is the one held open.
+        const getTokenInfo = vi.fn(({ tick }) => (tick === 'PARENT' ? lookup.promise : Promise.resolve({})));
         mountWizard({ getTokenInfo });
         fireEvent.click(await screen.findByText('Subtoken'));
         await screen.findByLabelText('Fee paid by');
@@ -140,7 +142,7 @@ describe('TokenWizard review and sign races', () => {
         fireEvent.change(screen.getByLabelText('Subtoken name'), { target: { value: 'CHILD' } });
         fireEvent.change(screen.getByLabelText('Supply'), { target: { value: '100' } });
         fireEvent.submit(screen.getByRole('form', { name: 'Token details' }));
-        await waitFor(() => expect(getTokenInfo).toHaveBeenCalledTimes(1));
+        await waitFor(() => expect(getTokenInfo).toHaveBeenCalledWith(expect.objectContaining({ tick: 'PARENT' })));
 
         // Back to Network while the parent is still being looked up.
         fireEvent.click(screen.getByRole('button', { name: 'Back to previous screen' }));
@@ -153,7 +155,7 @@ describe('TokenWizard review and sign races', () => {
 
     it('does not review a parent typed after the lookup started', async () => {
         const lookup = deferred();
-        const getTokenInfo = vi.fn(() => lookup.promise);
+        const getTokenInfo = vi.fn(({ tick }) => (tick === 'MINE' ? lookup.promise : Promise.resolve({})));
         mountWizard({ getTokenInfo });
         fireEvent.click(await screen.findByText('Subtoken'));
         await screen.findByLabelText('Fee paid by');

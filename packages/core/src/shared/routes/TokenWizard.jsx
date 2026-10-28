@@ -9,7 +9,7 @@
 // contact legal@dankest.llc.
 
 import { t } from '../../i18n/index.js';
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { AddressField, AddressText, Button, ChainBadge, ChainPicker, Checkbox, CopyButton, FormNotice, FormPage, FormSection, Input, ListPage, ListRow, PageHeader, Screen, SectionHeader, StatusMessage, Switch } from '@xchain-wallet/core/ui';
 import {
     registry as registryLib,
@@ -17,6 +17,7 @@ import {
     flows as flowsLib,
 } from '@xchain-wallet/core';
 import '../../i18n/locales/en/send.js';
+import '../../i18n/locales/en/issue.js';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { useDemoGuard } from '../hooks/useDemoGuard.jsx';
 import { useActionConfirmFlow, isUserRejection } from '../hooks/useActionConfirmFlow.js';
@@ -45,6 +46,7 @@ import {
     issueSupplyLimitError,
 } from '../utils/issueFieldValidation.js';
 import { actionTextSafetyError } from '../utils/actionTextSafety.js';
+import { tickLookupVerdict } from '../utils/listTickItems.js';
 import styles from './TokenWizard.module.css';
 import { useNativeFee } from '../hooks/useNativeFee.js';
 import {
@@ -61,6 +63,9 @@ import { isValidAddressForChain } from '../utils/addressValidation.js';
 import { estimateNativeSendFee } from '../../flows/feeEstimate.js';
 import { useFeeFiat } from '../hooks/useFeeFiat.js';
 import { useSettings } from '../hooks/useSettings.js';
+import { useFormDraft } from '../hooks/useFormDraft.js';
+import { getActiveNetwork } from '../../flows/effectiveNetwork.js';
+import { DraftDiscardButton } from '../components/DraftDiscardButton.jsx';
 import { useNetworkOffline } from '../hooks/useNetworkOffline.js';
 import { useHideReachabilityNotice } from '../components/hideReachabilityNotice.js';
 
@@ -68,6 +73,10 @@ const chainRegistry = registryLib.defaultRegistry();
 
 // Native coin ticker per protocol coin (label for the native-fee toggle).
 const PROTOCOL_COIN_TICKER = { bitcoin: 'BTC', litecoin: 'LTC', dogecoin: 'DOGE' };
+
+// How long the ticker availability lookup may run before the wizard stops
+// waiting on it and lets composition judge the name, as on Issue token.
+const TICKER_LOOKUP_TIMEOUT_MS = 8000;
 
 function isPositiveDecimal(value) {
     const text = String(value || '').trim();
@@ -214,6 +223,134 @@ export function TokenWizard({ walletId, onBack }) {
     const [result, setResult] = useState(/** @type {any | null} */ (null));
     const submitPendingRef = useRef(false);
     const parentCheckRef = useRef(false);
+
+    // The same resumable draft Issue token keeps: form values only, keyed to
+    // the wallet and the active network, never the password or the stage.
+    const formDraftTtlMs = Number.isFinite(settings?.privacy?.formDraftTtlMs)
+        ? Number(settings.privacy.formDraftTtlMs)
+        : undefined;
+    const draftNetwork = settings ? getActiveNetwork(settings) : null;
+    const draft = useFormDraft({ view: 'token-wizard', walletId, network: draftNetwork, ttlMs: formDraftTtlMs });
+    // A stored draft waits for an explicit Restore. A fresh wizard starts
+    // saving immediately so an auto-lock unmount cannot erase typed values.
+    const [draftPending, setDraftPending] = useState(() => !draft.hasDraft());
+    // Settings resolve after the first render; once the network is known a draft
+    // from another network reads as absent, so the wizard saves from then on.
+    useEffect(() => {
+        if (draftNetwork && !draft.hasDraft()) setDraftPending(true);
+    }, [draftNetwork]); // eslint-disable-line react-hooks/exhaustive-deps
+    const restoreDraft = useCallback(() => {
+        const v = draft.load();
+        if (!v) { setDraftPending(true); return; }
+        const text = (value, set) => { if (typeof value === 'string') set(value); };
+        const restoredTemplate = typeof v.template === 'string'
+            && TEMPLATE_FIELDS[resolveTemplate(v.template)]
+            ? resolveTemplate(v.template)
+            : null;
+        // Only a network this wallet can still sign on comes back, and only a
+        // signer the user chose by hand; otherwise the default pick stands.
+        const restoredChain = typeof v.chainId === 'string' && addressesByChain?.[v.chainId]
+            ? v.chainId
+            : null;
+        if (restoredTemplate) setTemplate(restoredTemplate);
+        if (restoredChain) {
+            setChainId(restoredChain);
+            if (v.sourceChosen === true && typeof v.fromAddressId === 'string'
+                && addressesByChain[restoredChain].some((a) => a.id === v.fromAddressId)) {
+                setFromAddressId(v.fromAddressId);
+                setSourceChosenFor(restoredChain);
+            }
+        }
+        text(v.name, setName);
+        text(v.displayName, setDisplayName);
+        text(v.supply, setSupply);
+        text(v.description, setDescription);
+        text(v.maxMint, setMaxMint);
+        text(v.transferTo, setTransferTo);
+        text(v.transferSupplyTo, setTransferSupplyTo);
+        text(v.imageUrl, setImageUrl);
+        text(v.parentToken, setParentToken);
+        text(v.perAddressMax, setPerAddressMax);
+        text(v.mintStartBlock, setMintStartBlock);
+        text(v.mintStopBlock, setMintStopBlock);
+        text(v.callbackTick, setCallbackTick);
+        text(v.callbackAmount, setCallbackAmount);
+        text(v.callbackBlock, setCallbackBlock);
+        if (typeof v.divisible === 'boolean') setDivisible(v.divisible);
+        if (typeof v.lockOnCreate === 'boolean') setLockOnCreate(v.lockOnCreate);
+        if (typeof v.showAdvanced === 'boolean') setShowAdvanced(v.showAdvanced);
+        if (typeof v.payFeeInNativeCoin === 'boolean') setPayFeeInNativeCoin(v.payFeeInNativeCoin);
+        if (v.lockChecks && typeof v.lockChecks === 'object') {
+            /** @type {Record<string, boolean>} */
+            const checks = {};
+            for (const flag of LOCK_FLAGS) {
+                if (v.lockChecks[flag.key] === true) checks[flag.key] = true;
+            }
+            setLockChecks(checks);
+        }
+        const list = (idx, count, listName) => [
+            typeof idx === 'string' && idx ? idx : null,
+            Number.isFinite(count) ? count : null,
+            typeof listName === 'string' && listName ? listName : null,
+        ];
+        const [allowIdx, allowCount, allowName] = list(v.allowListIdx, v.allowListCount, v.allowListName);
+        setAllowListIdx(allowIdx);
+        setAllowListCount(allowIdx ? allowCount : null);
+        setAllowListName(allowIdx ? allowName : null);
+        const [blockIdx, blockCount, blockName] = list(v.blockListIdx, v.blockListCount, v.blockListName);
+        setBlockListIdx(blockIdx);
+        setBlockListCount(blockIdx ? blockCount : null);
+        setBlockListName(blockIdx ? blockName : null);
+        setFormError(null);
+        if (restoredTemplate) setStage(restoredChain ? 'details' : 'chain');
+        setDraftPending(true);
+    }, [draft, addressesByChain, setPayFeeInNativeCoin]);
+    const dismissDraft = useCallback(() => {
+        draft.clear();
+        setDraftPending(true);
+    }, [draft]);
+    const hasRealInput = useMemo(() => (
+        [name, displayName, supply, description, maxMint, transferTo, transferSupplyTo,
+            imageUrl, parentToken, perAddressMax, mintStartBlock, mintStopBlock,
+            callbackTick, callbackAmount, callbackBlock]
+            .some((value) => String(value || '').trim().length > 0)
+        || divisible
+        || lockOnCreate
+        || Object.values(lockChecks).some(Boolean)
+        || !!allowListIdx
+        || !!blockListIdx
+    ), [name, displayName, supply, description, maxMint, transferTo, transferSupplyTo,
+        imageUrl, parentToken, perAddressMax, mintStartBlock, mintStopBlock,
+        callbackTick, callbackAmount, callbackBlock, divisible, lockOnCreate,
+        lockChecks, allowListIdx, blockListIdx]);
+    // The template, network, signer and fee switch fill themselves in, so only
+    // what the user typed, turned on or chose makes a draft. A draft of
+    // defaults would come back as a Restore banner, and the wizard holds its
+    // autosave while that banner waits.
+    const draftEditable = stage === 'template' || stage === 'chain' || stage === 'details';
+    useEffect(() => {
+        if (!draftEditable || !draftPending) return;
+        if (!hasRealInput) {
+            draft.clear();
+            return;
+        }
+        draft.save({
+            template, chainId, fromAddressId, sourceChosen: sourceChosenFor === chainId,
+            name, displayName, supply, divisible, description, maxMint, lockOnCreate,
+            transferTo, transferSupplyTo, imageUrl, parentToken, perAddressMax,
+            mintStartBlock, mintStopBlock, showAdvanced, lockChecks, callbackTick,
+            callbackAmount, callbackBlock, allowListIdx, allowListCount, allowListName,
+            blockListIdx, blockListCount, blockListName, payFeeInNativeCoin,
+        });
+    }, [
+        draftEditable, draftPending, draft, hasRealInput,
+        template, chainId, fromAddressId, sourceChosenFor,
+        name, displayName, supply, divisible, description, maxMint, lockOnCreate,
+        transferTo, transferSupplyTo, imageUrl, parentToken, perAddressMax,
+        mintStartBlock, mintStopBlock, showAdvanced, lockChecks, callbackTick,
+        callbackAmount, callbackBlock, allowListIdx, allowListCount, allowListName,
+        blockListIdx, blockListCount, blockListName, payFeeInNativeCoin,
+    ]);
 
     // The active map and the settings read are best-effort: a host without
     // `getActiveAddresses` / `getSettings`, or one whose call fails, still
@@ -390,6 +527,70 @@ export function TokenWizard({ walletId, onBack }) {
         stage, chainId, fromAddress?.address || null, actionParams,
     ]);
 
+    // The same availability lookup Issue token runs while the name is typed.
+    // It checks the ticker the transaction carries, so a subtoken checks
+    // PARENT.CHILD, and only once the name (and a subtoken's parent) passes
+    // the grammar.
+    const tickerLookupSupported = Object.prototype.hasOwnProperty.call(messaging, 'getTokenInfo')
+        && typeof messaging.getTokenInfo === 'function';
+    const isSubtoken = resolveTemplate(template) === 'subtoken';
+    const lookupTick = tickerGrammarError(name, { noun: 'Token name' })
+        || (isSubtoken && tickerGrammarError(parentToken, { noun: 'Parent ticker', allowDot: true }))
+        ? ''
+        : String(actionParams.TICK || '').trim();
+    const [tickerCheck, setTickerCheck] = useState(
+        /** @type {{ ticker: string, status: 'idle' | 'checking' | 'available' | 'taken' | 'unknown' }} */
+        ({ ticker: '', status: 'idle' }),
+    );
+    // A late response for an earlier name never marks the current one taken:
+    // cleanup ties each debounced lookup to the exact ticker and network that
+    // started it. A failed or stalled lookup reads as 'unknown', which leaves
+    // the name to composition instead of trapping the wizard in an outage.
+    useEffect(() => {
+        setTickerCheck({ ticker: lookupTick, status: lookupTick ? 'checking' : 'idle' });
+        if (!chainId || !lookupTick || !tickerLookupSupported) {
+            setTickerCheck({ ticker: lookupTick, status: 'idle' });
+            return undefined;
+        }
+        let cancelled = false;
+        const timer = setTimeout(() => {
+            const lookup = Promise.resolve()
+                .then(() => messaging.getTokenInfo({ chainId, tick: lookupTick }));
+            const bound = new Promise((_, reject) => {
+                setTimeout(() => reject(new Error('ticker lookup timed out')), TICKER_LOOKUP_TIMEOUT_MS);
+            });
+            Promise.race([lookup, bound])
+                .then((info) => {
+                    if (cancelled) return;
+                    // The host answers an unknown tick with an all-empty
+                    // record, not null, so only a found record marks it taken.
+                    const verdict = tickLookupVerdict(info);
+                    setTickerCheck({
+                        ticker: lookupTick,
+                        status: verdict === 'found' ? 'taken'
+                            : verdict === 'missing' ? 'available' : 'unknown',
+                    });
+                })
+                .catch(() => {
+                    if (!cancelled) setTickerCheck({ ticker: lookupTick, status: 'unknown' });
+                });
+        }, 350);
+        return () => { cancelled = true; clearTimeout(timer); };
+    }, [chainId, lookupTick, messaging, tickerLookupSupported]);
+    const tickerTaken = !!lookupTick && tickerCheck.ticker === lookupTick && tickerCheck.status === 'taken';
+
+    // A Details submit inside the debounce or the lookup is held and replayed
+    // once the check settles. Editing the name or network, or leaving Details,
+    // drops it: the user is no longer asking to review that name.
+    const [reviewQueued, setReviewQueued] = useState(false);
+    useEffect(() => { setReviewQueued(false); }, [chainId, lookupTick, stage]);
+    useEffect(() => {
+        if (!reviewQueued || stage !== 'details') return;
+        if (tickerCheck.status === 'checking' || tickerCheck.ticker !== lookupTick) return;
+        setReviewQueued(false);
+        handleDetailsSubmit({ preventDefault() {} });
+    });
+
     async function handleDetailsSubmit(event) {
         event.preventDefault();
         if (parentCheckRef.current) return;
@@ -437,6 +638,16 @@ export function TokenWizard({ walletId, onBack }) {
                 setFormError(parentError);
                 return;
             }
+        }
+        if (tickerLookupSupported && lookupTick
+            && (tickerCheck.ticker !== lookupTick || tickerCheck.status === 'checking')) {
+            setFormError(null);
+            setReviewQueued(true);
+            return;
+        }
+        if (tickerTaken) {
+            setFormError(t('issue.tickerTaken', { ticker: lookupTick }));
+            return;
         }
         // Collectible's supply is hard-wired to 1 by the composer;
         // no user-facing supply field.
@@ -628,6 +839,8 @@ export function TokenWizard({ walletId, onBack }) {
                 });
                 setResult(res);
                 setStage('done');
+                draft.clear();
+                setDraftPending(false);
                 return;
             }
             const res = await actionConfirm.run({
@@ -648,6 +861,11 @@ export function TokenWizard({ walletId, onBack }) {
             setResult(res);
             setPassword('');
             setStage('done');
+            // The draft is the token this approval just created. Kept, it
+            // comes back as unfinished and invites a second ISSUE of the
+            // same ticker, which the chain refuses after the fee.
+            draft.clear();
+            setDraftPending(false);
         } catch (err) {
             if (isUserRejection(err)) return;
             // Same mapping as handleSign below: a native-fee refusal arrives as
@@ -683,12 +901,27 @@ export function TokenWizard({ walletId, onBack }) {
             title="Issue a token"
         />
     );
+    // Shown on every step that edits the draft, since the autosave holds while
+    // the banner waits for a choice.
+    const draftBanner = draftEditable && addressesByChain && chainId && !loadError
+        && draft.hasDraft() && !draftPending ? (
+            <StatusMessage
+                variant="status"
+                recovery={{ label: t('send.draft.restore'), onAction: restoreDraft }}
+            >
+                {t('issue.draft.unfinished')}
+                <DraftDiscardButton onClick={dismissDraft} label={t('send.draft.discardLabel')}>
+                    {t('send.draft.discard')}
+                </DraftDiscardButton>
+            </StatusMessage>
+        ) : null;
     const wrap = (children) => (
         <Screen variant={variant} header={header} restoreScroll={stage !== 'preview'}>
             {/* A load error is the page's one message; the offline note waits. */}
             {!networkAvailable && !loadError ? (
                 <StatusMessage variant="warning">Creating a token needs a network connection.</StatusMessage>
             ) : null}
+            {draftBanner}
             {children}
         </Screen>
     );
@@ -826,6 +1059,7 @@ export function TokenWizard({ walletId, onBack }) {
             demoGuard,
             template,
             name, setName,
+            nameError: tickerTaken ? t('issue.tickerTaken', { ticker: lookupTick }) : undefined,
             displayName, setDisplayName,
             supply, setSupply,
             divisible, setDivisible,
@@ -1374,7 +1608,7 @@ const TEMPLATE_FIELDS = {
 function renderDetailsStage({
     demoGuard,
     template,
-    name, setName,
+    name, setName, nameError,
     displayName, setDisplayName,
     supply, setSupply,
     divisible, setDivisible,
@@ -1434,6 +1668,7 @@ function renderDetailsStage({
                     autoComplete="off"
                     autoCorrect="off"
                     spellCheck={false}
+                    error={nameError}
                 />
             ) : null}
             {show.displayName ? (
