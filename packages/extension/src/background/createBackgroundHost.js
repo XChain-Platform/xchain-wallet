@@ -66,6 +66,7 @@ import {
     rawTxOutpoints,
     soldNames,
 } from './ownSpends.js';
+import { createLockedSendOutcomeStore, finishPatchFor } from './lockedSendOutcomes.js';
 import { createSignThrottleStorage } from './signThrottleStorage.js';
 import { createLogConsoleStorage } from './logConsoleStorage.js';
 import {
@@ -1073,9 +1074,105 @@ export function createBackgroundHost(deps) {
         // Locks the wallet when storage refuses the auto-lock arm (the
         // session.autolock route). The extension passes its lock backstop.
         onAutoLockArmRefused,
+        // Outcomes of sends that settled after a lock closed the vault. Every
+        // host in one process reads the same store (lockedSendOutcomes.js).
+        lockedSendOutcomes = createLockedSendOutcomeStore(),
         ...hostDeps
     } = deps ?? {};
     const host = new MessageHost(hostDeps);
+
+    // A lock closes the vault while an approved send is still signing or
+    // broadcasting; the send finishes and its last write to its pending record
+    // fails. Every action route is wrapped so that outcome is noted outside the
+    // vault, and the next host to open the vault finishes the record from it.
+    // The route's own result or error goes back untouched.
+    const registerRoute = host.register.bind(host);
+    host.register = (type, handler) => registerRoute(
+        type,
+        typeof type === 'string' && type.startsWith('action.') && typeof handler === 'function'
+            ? keepOutcomeAcrossLock(handler)
+            : handler,
+    );
+
+    function keepOutcomeAcrossLock(handler) {
+        return async (req, ctx) => {
+            let result;
+            try {
+                result = await handler(req, ctx);
+            } catch (err) {
+                await noteLockedOutcome(req, ctx?.vault, null, err);
+                throw err;
+            }
+            await noteLockedOutcome(req, ctx?.vault, result, null);
+            return result;
+        };
+    }
+
+    async function noteLockedOutcome(req, vault, result, err) {
+        try {
+            const settled = err ?? result;
+            if (!settled || typeof settled !== 'object' || !settled.pendingTxWriteError) return;
+            // A write refused for another reason (a full disk) has no unlock to wait for.
+            if (vault?.isOpen !== false) return;
+            const pendingTxId = settled.pendingTxId;
+            const walletId = req?.walletId;
+            if (typeof pendingTxId !== 'string' || !pendingTxId || typeof walletId !== 'string' || !walletId) return;
+            let kind = 'sent';
+            if (err) {
+                if (err.name === flows.BROADCAST_FAILED_TRANSIENT_NAME) kind = 'queued';
+                else if (err.name === flows.BROADCAST_FAILED_PERMANENT_NAME) kind = 'failed';
+                else kind = 'unsent';
+            } else if (result.queued) {
+                kind = 'queued';
+            }
+            const leg = Array.isArray(req?.legs) && req.legs.length === 1 ? req.legs[0] : req;
+            await lockedSendOutcomes.record({
+                id: pendingTxId,
+                pendingTxId,
+                walletId,
+                chainId: typeof req?.chainId === 'string' ? req.chainId : null,
+                txid: typeof settled.txid === 'string' ? settled.txid : null,
+                amount: leg?.amount == null ? null : String(leg.amount),
+                tick: typeof leg?.tick === 'string' ? leg.tick : null,
+                kind,
+                at: Date.now(),
+                finished: false,
+            });
+        } catch (noteErr) {
+            console.error('[xchain] could not keep a send outcome across the lock:', noteErr);
+        }
+    }
+
+    // Finish every pending record a locked send left behind, against this
+    // host's open vault. An outcome whose wallet is gone is dropped with it.
+    async function finishLockedSendOutcomes(vault) {
+        if (!vault || vault.isOpen === false) return;
+        await lockedSendOutcomes.update(async (entries) => {
+            const kept = [];
+            for (const entry of entries) {
+                if (entry.finished) { kept.push(entry); continue; }
+                try {
+                    const wallet = typeof vault.wallets?.get === 'function'
+                        ? await vault.wallets.get(entry.walletId)
+                        : null;
+                    if (!wallet) continue;
+                    const record = await vault.pendingTxs.get(entry.pendingTxId);
+                    let summary = null;
+                    if (record) {
+                        const patch = finishPatchFor(entry, record);
+                        if (patch) await vault.pendingTxs.put({ ...record, ...patch });
+                        summary = typeof record.actionSummary === 'string' ? record.actionSummary : null;
+                    }
+                    kept.push({ ...entry, finished: true, summary });
+                } catch {
+                    // The vault could not answer; the next list retries this one.
+                    kept.push(entry);
+                }
+            }
+            return kept;
+        });
+    }
+    let lockedOutcomesFinished = finishLockedSendOutcomes(hostDeps.vault).catch(() => {});
     const sendHold = injectedSendHold ?? createSendHoldRegistry();
     // Popup and side panel share this host. Matching semantic sends stay
     // exclusive through signing and broadcast while unrelated sends proceed.
@@ -3579,7 +3676,39 @@ export function createBackgroundHost(deps) {
         discardQueuedBroadcast: (args) => flows.discardQueuedBroadcast(args),
     });
     void ensureQueueLoaded();
+    // Sends that settled while the wallet was locked, for the unlocked shell to
+    // tell the person what happened. Each list first finishes any pending record
+    // still owed a write, so the outcome and the record agree.
+    host.register('send.lockedOutcomes.list', async (req, { vault }) => {
+        const walletId = req?.walletId;
+        if (typeof walletId !== 'string' || !walletId) return [];
+        await lockedOutcomesFinished;
+        lockedOutcomesFinished = finishLockedSendOutcomes(vault).catch(() => {});
+        await lockedOutcomesFinished;
+        const entries = await lockedSendOutcomes.list();
+        return entries
+            .filter((e) => e.finished && e.walletId === walletId)
+            .map((e) => ({
+                id: e.id,
+                kind: e.kind,
+                chainId: e.chainId,
+                txid: e.txid,
+                amount: e.amount,
+                tick: e.tick,
+                summary: e.summary ?? null,
+                at: e.at,
+            }));
+    });
+    host.register('send.lockedOutcomes.clear', async (req) => {
+        const ids = Array.isArray(req?.ids) ? req.ids.filter((id) => typeof id === 'string') : [];
+        if (ids.length > 0) await lockedSendOutcomes.remove(ids);
+        return { cleared: ids.length };
+    });
+
     host.register('broadcast.queue.list', async (req, { vault, chainRegistry, sdkRegistry }) => {
+        // A record a locked send left at 'broadcasting' is finished first, so
+        // the restore below never offers a send the network already took.
+        await lockedOutcomesFinished;
         await ensureQueueLoaded();
         // The queued-broadcast banner lists on mount, which is the first moment
         // after an unlock at which an owed write has a vault to land in.

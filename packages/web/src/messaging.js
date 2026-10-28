@@ -515,6 +515,14 @@ export function broadcastQueuedRequest(opts) {
 export function discardQueuedRequest(opts) {
     return /** @type {any} */ (sendMessage('broadcast.queue.discard', opts));
 }
+/** Sends of this wallet that settled while it was locked. @param {{ walletId: string }} opts */
+export function listLockedSendOutcomes(opts) {
+    return /** @type {any} */ (sendMessage('send.lockedOutcomes.list', opts));
+}
+/** @param {{ ids: string[] }} opts */
+export function clearLockedSendOutcomes(opts) {
+    return /** @type {any} */ (sendMessage('send.lockedOutcomes.clear', opts));
+}
 /**
  * Cluster G FOLLOWUP 1: push a signed-but-unbroadcast tx onto the
  * queue. Action handlers auto-enqueue on broadcast failure server-side;

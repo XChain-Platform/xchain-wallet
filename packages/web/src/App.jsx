@@ -120,6 +120,10 @@ const QueuedBroadcastBanner = onDemandComponent(
     () => import('@xchain-wallet/core/shared/components/QueuedBroadcastBanner.jsx'),
     'QueuedBroadcastBanner',
 );
+const LockedSendOutcomeNotice = onDemandComponent(
+    () => import('@xchain-wallet/core/shared/components/LockedSendOutcomeNotice.jsx'),
+    'LockedSendOutcomeNotice',
+);
 
 // Overlays opened by a key or a developer toggle, never needed for first
 // paint. App mounts each one the first time it opens, then keeps it mounted.
@@ -3200,6 +3204,7 @@ function AppInner() {
                         activeWalletId ? (
                             <>
                                 {waitingLinkDropped.node}
+                                <LockedSendOutcomeNotice walletId={activeWalletId} routeKey={unlockedView} />
                                 <QueuedBroadcastBanner walletId={activeWalletId} />
                                 {/* Demo data is fixture data and never stale, so no reachability notice. */}
                                 {isDemoWallet(activeWalletId) ? null : <ReachabilityBanner />}

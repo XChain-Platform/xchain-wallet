@@ -161,6 +161,7 @@ import { ShortcutHelp } from '@xchain-wallet/core/shared/keyboard/ShortcutHelp.j
 import { BottomTabBar } from '@xchain-wallet/core/shared/components/BottomTabBar.jsx';
 import { useWaitingLinkDropped } from '@xchain-wallet/core/shared/components/WaitingLinkDroppedNotice.jsx';
 import { QueuedBroadcastBanner } from '@xchain-wallet/core/shared/components/QueuedBroadcastBanner.jsx';
+import { LockedSendOutcomeNotice } from '@xchain-wallet/core/shared/components/LockedSendOutcomeNotice.jsx';
 import { ReachabilityBanner } from '@xchain-wallet/core/shared/components/ReachabilityBanner.jsx';
 import { ToastHost, useClearToastsOnLock, useToast } from '@xchain-wallet/core/shared/components/ToastHost.jsx';
 import { useDemoAutoWipe } from '@xchain-wallet/core/shared/hooks/useDemoAutoWipe.js';
@@ -3034,6 +3035,7 @@ function AppInner() {
                         activeWalletId ? (
                             <>
                                 {waitingLinkDropped.node}
+                                <LockedSendOutcomeNotice walletId={activeWalletId} routeKey={unlockedView} />
                                 <QueuedBroadcastBanner walletId={activeWalletId} />
                                 {/* Demo data is fixture data and never stale, so no reachability notice. */}
                                 {isDemoWallet(activeWalletId) ? null : <ReachabilityBanner />}

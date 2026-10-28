@@ -171,6 +171,7 @@ const REPEATABLE_READS = new Set([
     'broadcast.queue.list',
     'contacts.list',
     'reachability.check',
+    'send.lockedOutcomes.list',
     'session.autolock',
     'settings.get',
     'sites.list',

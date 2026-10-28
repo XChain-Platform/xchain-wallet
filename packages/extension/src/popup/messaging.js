@@ -628,6 +628,21 @@ export function discardQueuedRequest(opts) {
 }
 
 /**
+ * Sends of this wallet that settled while another window had locked it.
+ *
+ * @param {{ walletId: string }} opts
+ * @returns {Promise<Array<{ id: string, kind: 'sent' | 'queued' | 'failed' | 'unsent', txid: string | null, amount: string | null, tick: string | null, summary: string | null }>>}
+ */
+export function listLockedSendOutcomes(opts) {
+    return /** @type {any} */ (sendMessage('send.lockedOutcomes.list', opts));
+}
+
+/** @param {{ ids: string[] }} opts */
+export function clearLockedSendOutcomes(opts) {
+    return /** @type {any} */ (sendMessage('send.lockedOutcomes.clear', opts));
+}
+
+/**
  * Cluster G FOLLOWUP 1 : push a signed-but-unbroadcast tx onto the
  * per-walletId queue. Action handlers auto-enqueue on broadcast
  * failure server-side; this shim is for explicit caller use (e.g.

@@ -101,6 +101,17 @@ const messages = {
     'pending.amount.receiving': 'receiving {amounts}',
     'pending.amount.moving': 'moves {amounts}',
     'pending.amount.caveat': 'Pending, not yet validated by the service: {summary}',
+    // A send that settled while another window had locked the wallet.
+    'pending.lockedOutcome.sentLead': 'Sent while the wallet was locked.',
+    'pending.lockedOutcome.sent': '{summary}. Transaction ID {txid}.',
+    'pending.lockedOutcome.queuedLead': 'Not sent yet.',
+    'pending.lockedOutcome.queued':
+        "{summary}. The network couldn't be reached while the wallet was locked, so the signed send waits in the send queue.",
+    'pending.lockedOutcome.failedLead': 'Not sent.',
+    'pending.lockedOutcome.failed': '{summary}. The network refused it while the wallet was locked. Nothing left the wallet.',
+    'pending.lockedOutcome.unsent': '{summary}. The wallet locked before it was sent. Nothing left the wallet.',
+    'pending.lockedOutcome.amountSummary': 'A send of {amount} {tick}',
+    'pending.lockedOutcome.plainSummary': 'Your send',
 };
 
 addEnglish(messages);

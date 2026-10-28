@@ -210,10 +210,11 @@ describe('extension popup main screens at 360x600', () => {
 
         expect(appWrapper).not.toContain('<ReachabilityBanner');
         expect(popupApp).toMatch(
-            // The network and demo banners are gone by ruling; the reachability
-            // notice is the only one left in the layout's notice slot, and a
-            // demo wallet shows none.
-            /notices=\{isDemoWallet\(activeWalletId\) \? null : <ReachabilityBanner\s*\/>\}/,
+            // The network and demo banners are gone by ruling; the layout's
+            // notice slot holds the outcome of a send that settled while the
+            // wallet was locked, then the reachability notice, which a demo
+            // wallet does not show.
+            /notices=\{\(\s*<>\s*\{activeWalletId \? <LockedSendOutcomeNotice walletId=\{activeWalletId\} routeKey=\{unlockedView\} \/> : null\}\s*\{isDemoWallet\(activeWalletId\) \? null : <ReachabilityBanner\s*\/>\}\s*<\/>\s*\)\}/,
         );
         expect(css.popup).toMatch(
             /html\.xchain-toolbar-popup\s*\{[^}]*height:\s*600px;[^}]*overflow:\s*hidden;/,

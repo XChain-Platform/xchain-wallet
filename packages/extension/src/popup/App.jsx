@@ -103,6 +103,7 @@ import { TokenDetail } from '@xchain-wallet/core/shared/routes/TokenDetail.jsx';
 import { ToastHost, useClearToastsOnLock, useToast } from '@xchain-wallet/core/shared/components/ToastHost.jsx';
 import { ReachabilityBanner } from '@xchain-wallet/core/shared/components/ReachabilityBanner.jsx';
 import { QueuedBroadcastBanner } from '@xchain-wallet/core/shared/components/QueuedBroadcastBanner.jsx';
+import { LockedSendOutcomeNotice } from '@xchain-wallet/core/shared/components/LockedSendOutcomeNotice.jsx';
 import { BottomTabBar } from '@xchain-wallet/core/shared/components/BottomTabBar.jsx';
 import { FullLayoutWithNav } from '@xchain-wallet/core/shared/components/LeftNav.jsx';
 import { Receive } from '@xchain-wallet/core/shared/routes/Receive.jsx';
@@ -3086,7 +3087,12 @@ function AppInner({ canOpenInTab, titleEnabled }) {
                         />
                     )}
                     // Demo data is fixture data and never stale, so no reachability notice.
-                    notices={isDemoWallet(activeWalletId) ? null : <ReachabilityBanner />}
+                    notices={(
+                        <>
+                            {activeWalletId ? <LockedSendOutcomeNotice walletId={activeWalletId} routeKey={unlockedView} /> : null}
+                            {isDemoWallet(activeWalletId) ? null : <ReachabilityBanner />}
+                        </>
+                    )}
                     bottomBar={(
                         <BottomTabBar
                             currentView={unlockedView}

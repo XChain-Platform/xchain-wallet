@@ -227,6 +227,7 @@ export async function submitAction({
     // The tracker mutates a mutable record and writes through to the vault
     // on every transition; it also observes onProgress phase events.
     let pending = null;
+    let pendingReadable = false;
     if (pendingTxMeta) {
         // §4.7: record the single-tick debit this tx moves so a
         // concurrent approval window's pre-flight can net it (via the shared
@@ -248,18 +249,36 @@ export async function submitAction({
                 : (sendDelta ? [sendDelta] : []),
         });
         await vault.pendingTxs.put(pending);
+        // A store that reads back what it was given is one where a later miss
+        // means the record was deleted, not that the store keeps nothing.
+        if (typeof vault.pendingTxs.get === 'function') {
+            try {
+                pendingReadable = Boolean(await vault.pendingTxs.get(pending.id));
+            } catch {
+                pendingReadable = false;
+            }
+        }
     }
 
+    // Set when the record this flow created is gone from the vault mid-send.
+    let pendingRemoved = false;
     const writePending = async (patch) => {
-        if (!pending) return;
+        if (!pending || pendingRemoved) return;
         let next = { ...pending, ...patch };
         // The mempool and confirmation watchers write this same record while the
         // broadcast call is still returning. This copy is older than theirs, so a
         // blind write would turn a confirmed send back into a broadcast one (and
         // keep subtracting its spend), and erase the network sighting.
-        const stored = typeof vault.pendingTxs.get === 'function'
-            ? await vault.pendingTxs.get(pending.id)
-            : null;
+        const canRead = typeof vault.pendingTxs.get === 'function';
+        const stored = canRead ? await vault.pendingTxs.get(pending.id) : null;
+        // This flow put the record before any write reaches here, so a read that
+        // finds nothing means another surface deleted it, as removing the wallet
+        // does. Writing it back would leave a pending send on an address no
+        // wallet holds, so every later write of this send is skipped.
+        if (canRead && pendingReadable && (stored === null || stored === undefined)) {
+            pendingRemoved = true;
+            return;
+        }
         if (stored) {
             if (stored.mempoolSeenAt && !next.mempoolSeenAt) next.mempoolSeenAt = stored.mempoolSeenAt;
             if (stored.status === 'indexed' && next.status !== 'indexed') {
@@ -456,6 +475,9 @@ export async function submitAction({
             // storage. The failure rides on the error for diagnostics; `name`,
             // `message` and type are untouched because the messaging envelope
             // carries only those.
+            // The record id rides on the error so a host whose vault refused the
+            // stamp below can finish the record once the vault opens again.
+            if (pending && err && typeof err === 'object') err.pendingTxId = pending.id;
             const stampPending = async (patch) => {
                 if (!pending) return false;
                 try {
