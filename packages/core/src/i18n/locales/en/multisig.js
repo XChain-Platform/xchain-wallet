@@ -39,6 +39,10 @@ const messages = {
     'multisig.share.unavailable': 'Not available from this signer',
     'multisig.reply.signatureInvalid':
         "This cosigner reply's signature doesn't match this signing session, so it doesn't count. Ask the cosigner to sign this session's request again and send the new reply.",
+    'multisig.reply.nonceInvalid':
+        "This cosigner's step 1 reply isn't a valid response for this signing session, so it doesn't count. Ask the cosigner to load this session's request again and send the new reply.",
+    'multisig.reply.nonceRepeated':
+        "This step 1 reply is identical to one already counted for another cosigner, so it doesn't count. One of the two replies isn't genuine. If this session can't collect a reply from every cosigner, cancel it and start a new signing session.",
 };
 
 addEnglish(messages);

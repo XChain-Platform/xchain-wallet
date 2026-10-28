@@ -319,6 +319,11 @@ function makeFakeVault({ wallet }) {
                     startSession(aggNonce, msg, keys) {
                         return { aggNonce, msg, keys, _stub: true };
                     },
+                    // Stub verifier: a partial starting 0xee does not verify.
+                    verifyPartial({ sig, sessionKey }) {
+                        assert.ok(sessionKey?._stub, 'verifyPartial receives the stubbed sessionKey');
+                        return sig[0] !== 0xee;
+                    },
                     aggregateSignatures(sigs, sessionKey) {
                         aggregateSigCalls.push(sigs.map((s) => s.length));
                         assert.ok(sessionKey?._stub, 'aggregateSignatures receives the stubbed sessionKey');
@@ -340,8 +345,10 @@ function makeFakeVault({ wallet }) {
     assert.equal(session.status, 'collecting-nonces');
 
     // Round 1 contributions (66-byte hex == 132 chars).
-    const nonceA = '11'.repeat(66);
-    const nonceB = '22'.repeat(66);
+    // A step 1 nonce is two compressed curve points.
+    const point = (byte) => Buffer.from(secp256k1.getPublicKey(byte.repeat(32), true)).toString('hex');
+    const nonceA = point('11') + point('12');
+    const nonceB = point('22') + point('23');
     const afterAliceNonce = await flows.contributeMultisigNonce({
         vault,
         sessionId: session.id,
@@ -405,16 +412,32 @@ function makeFakeVault({ wallet }) {
         /MuSig2 partial sig must be 32-byte/,
     );
 
+    // A partial that does not verify is refused and leaves the slot open.
+    await assert.rejects(
+        async () => flows.contributeMultisigSignature({
+            vault,
+            sdkRegistry,
+            sessionId: session.id,
+            pubkey: alicePk,
+            signatureHex: 'ee'.repeat(32),
+        }),
+        (err) => err.code === 'MULTISIG_SIGNATURE_INVALID',
+    );
+    assert.equal((await vault.multisigSigningSessions.get(session.id)).partialSigs.length, 0,
+        'a refused partial is not counted');
+
     const partialA = '11'.repeat(32);
     const partialB = '22'.repeat(32);
     await flows.contributeMultisigSignature({
         vault,
+        sdkRegistry,
         sessionId: session.id,
         pubkey: alicePk,
         signatureHex: partialA,
     });
     const afterBobPartial = await flows.contributeMultisigSignature({
         vault,
+        sdkRegistry,
         sessionId: session.id,
         pubkey: bobPk,
         signatureHex: partialB,

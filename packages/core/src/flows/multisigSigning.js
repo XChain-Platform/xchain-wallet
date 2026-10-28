@@ -63,6 +63,69 @@ function signatureInvalidError() {
     return err;
 }
 
+export const MULTISIG_NONCE_INVALID = 'MULTISIG_NONCE_INVALID';
+
+// A MuSig2 step 1 reply is two compressed curve points (BIP327 pubnonce). A
+// value that is not, or that repeats a nonce another cosigner already sent
+// (a copied reply), fills that cosigner's slot with something no partial can
+// verify against, and the real reply is then refused as a repeat. Returns the
+// message for a refused nonce, or null when it counts. A step 1 reply
+// carries no cosigner signature, so a repeat cannot say which of the two is
+// genuine; its message sends the user to a new session.
+function musig2NonceProblem(session, publicNonceHex) {
+    try {
+        secp256k1.ProjectivePoint.fromHex(publicNonceHex.slice(0, 66));
+        secp256k1.ProjectivePoint.fromHex(publicNonceHex.slice(66));
+    } catch {
+        return t('multisig.reply.nonceInvalid');
+    }
+    if (session.nonces.some((n) => n.publicNonce === publicNonceHex)) {
+        return t('multisig.reply.nonceRepeated');
+    }
+    return null;
+}
+
+function nonceInvalidError(message) {
+    const err = /** @type {Error & { code?: string }} */ (new Error(message));
+    err.code = MULTISIG_NONCE_INVALID;
+    return err;
+}
+
+// A MuSig2 partial counts only when it verifies (BIP327 PartialSigVerify) under
+// the cosigner it names, that cosigner's step 1 nonce, the session's aggregate
+// nonce and msgHash. An unchecked partial fills that cosigner's slot, the
+// combined signature cannot spend, and the real partial is refused as a repeat.
+// The verifier lives on the chain SDK, so a caller without the registry is a
+// wiring fault and fails closed rather than counting the reply.
+function isMusig2PartialOf({ sdkRegistry, session, pubkey, partialHex }) {
+    if (!sdkRegistry || typeof sdkRegistry.get !== 'function') {
+        throw new Error('contributeMultisigSignature: sdkRegistry is required to verify a MuSig2 partial');
+    }
+    const sdk = sdkRegistry.get(session.chainId);
+    if (!sdk || !sdk.musig2 || typeof sdk.musig2.verifyPartial !== 'function') {
+        throw new Error(
+            `contributeMultisigSignature: sdk.musig2.verifyPartial unavailable for chainId "${session.chainId}"`,
+        );
+    }
+    const nonce = session.nonces.find((n) => n.pubkey === pubkey);
+    if (!session.aggNonce || !nonce) return false;
+    try {
+        const sessionKey = sdk.musig2.startSession(
+            hexToBytes(session.aggNonce),
+            hexToBytes(session.msgHash),
+            session.cosignerPubkeys.map(hexToBytes),
+        );
+        return sdk.musig2.verifyPartial({
+            sig: hexToBytes(partialHex),
+            publicKey: hexToBytes(pubkey),
+            publicNonce: hexToBytes(nonce.publicNonce),
+            sessionKey,
+        }) === true;
+    } catch {
+        return false;
+    }
+}
+
 const HEX_RE = /^[0-9a-f]+$/;
 const TXID_RE = /^[0-9a-fA-F]{64}$/;
 const isHexLength = (v, byteLen) =>
@@ -244,9 +307,10 @@ async function cancelMultisigSigningSessionLocked({ vault, sessionId }) {
 // ─── Contributions ────────────────────────────────────────────────
 
 /**
- * MuSig2 round 1: append a cosigner's 66-byte publicNonce. Validates
- * shape only here; cryptographic aggregation happens in
- * `aggregateMultisigSession` once threshold is met.
+ * MuSig2 round 1: append a cosigner's 66-byte publicNonce once both
+ * halves decode as curve points and it repeats no other cosigner's
+ * nonce; aggregation happens in `aggregateMultisigSession` once
+ * threshold is met.
  *
  * @param {object} opts
  * @param {import('../storage/Vault.js').Vault} opts.vault
@@ -273,6 +337,10 @@ async function contributeMultisigNonceLocked({ vault, sessionId, pubkey, publicN
             `contributeMultisigNonce: cosigner "${lowerPubkey}" already contributed a nonce`,
         );
     }
+    const nonceProblem = musig2NonceProblem(session, lowerHex(publicNonceHex));
+    if (nonceProblem) {
+        throw nonceInvalidError(nonceProblem);
+    }
     const nonces = [
         ...session.nonces,
         {
@@ -291,11 +359,12 @@ async function contributeMultisigNonceLocked({ vault, sessionId, pubkey, publicN
  *
  * @param {object} opts
  * @param {import('../storage/Vault.js').Vault} opts.vault
+ * @param {import('../sdk/SDKRegistry.js').SDKRegistry} [opts.sdkRegistry] required for a MuSig2 partial, which it verifies
  * @param {string} opts.sessionId
  * @param {string} opts.pubkey
  * @param {string} opts.signatureHex      DER-encoded ECDSA hex (P2SH/P2WSH) or 32-byte hex (MuSig2 partial)
  */
-async function contributeMultisigSignatureLocked({ vault, sessionId, pubkey, signatureHex }) {
+async function contributeMultisigSignatureLocked({ vault, sdkRegistry, sessionId, pubkey, signatureHex }) {
     if (!vault) throw new Error('contributeMultisigSignature: vault is required');
     if (typeof sessionId !== 'string') throw new Error('contributeMultisigSignature: sessionId is required');
     if (typeof signatureHex !== 'string' || signatureHex.length === 0
@@ -317,6 +386,9 @@ async function contributeMultisigSignatureLocked({ vault, sessionId, pubkey, sig
             throw new Error(
                 `contributeMultisigSignature: cosigner "${lowerPubkey}" already contributed a partial sig`,
             );
+        }
+        if (!isMusig2PartialOf({ sdkRegistry, session, pubkey: lowerPubkey, partialHex: lowerSig })) {
+            throw signatureInvalidError();
         }
         const partialSigs = [
             ...session.partialSigs,

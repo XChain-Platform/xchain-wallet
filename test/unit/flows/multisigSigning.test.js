@@ -8,6 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
+import { secp256k1 } from '@noble/curves/secp256k1';
 import { describe, expect, it, vi } from 'vitest';
 import {
     aggregateMultisigSession,
@@ -19,6 +20,10 @@ import {
 
 const ALICE = '02' + 'aa'.repeat(32);
 const BOB = '03' + 'bb'.repeat(32);
+// A step 1 nonce is two compressed curve points.
+const point = (byte) => Buffer.from(secp256k1.getPublicKey(byte.repeat(32), true)).toString('hex');
+const NONCE_ALICE = point('11') + point('12');
+const NONCE_BOB = point('22') + point('23');
 
 function storage(scheme = 'taproot-musig2') {
     const records = new Map();
@@ -62,30 +67,31 @@ describe('multisig signing flow', () => {
         const { vault } = storage();
         const session = await start(vault);
         await contributeMultisigNonce({
-            vault, sessionId: session.id, pubkey: BOB, publicNonceHex: '22'.repeat(66),
+            vault, sessionId: session.id, pubkey: BOB, publicNonceHex: NONCE_BOB,
         });
         await contributeMultisigNonce({
-            vault, sessionId: session.id, pubkey: ALICE, publicNonceHex: '11'.repeat(66),
+            vault, sessionId: session.id, pubkey: ALICE, publicNonceHex: NONCE_ALICE,
         });
 
         const aggregateNonces = vi.fn(() => new Uint8Array(66).fill(0xab));
         const startSession = vi.fn(() => ({ key: 'session-key' }));
         const aggregateSignatures = vi.fn(() => new Uint8Array(64).fill(0xcd));
+        const verifyPartial = vi.fn(() => true);
         const sdkRegistry = {
-            get: vi.fn(() => ({ musig2: { aggregateNonces, startSession, aggregateSignatures } })),
+            get: vi.fn(() => ({ musig2: { aggregateNonces, startSession, aggregateSignatures, verifyPartial } })),
         };
         const roundTwo = await aggregateMultisigSession({
             vault, sdkRegistry, sessionId: session.id,
         });
         expect(roundTwo.status).toBe('collecting-sigs');
         expect(roundTwo.aggNonce).toBe('ab'.repeat(66));
-        expect(aggregateNonces.mock.calls[0][0].map((value) => value[0])).toEqual([0x11, 0x22]);
+        expect(aggregateNonces.mock.calls[0][0].map((value) => Buffer.from(value).toString('hex'))).toEqual([NONCE_ALICE, NONCE_BOB]);
 
         await contributeMultisigSignature({
-            vault, sessionId: session.id, pubkey: BOB, signatureHex: '44'.repeat(32),
+            vault, sdkRegistry, sessionId: session.id, pubkey: BOB, signatureHex: '44'.repeat(32),
         });
         await contributeMultisigSignature({
-            vault, sessionId: session.id, pubkey: ALICE, signatureHex: '33'.repeat(32),
+            vault, sdkRegistry, sessionId: session.id, pubkey: ALICE, signatureHex: '33'.repeat(32),
         });
         const ready = await aggregateMultisigSession({ vault, sdkRegistry, sessionId: session.id });
         expect(ready.status).toBe('ready-to-finalize');

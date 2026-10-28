@@ -5740,8 +5740,10 @@ export function createBackgroundHost(deps) {
         return contributeMultisigNonce({ ...req, vault });
     });
 
-    host.register('multisigSign.contributeSignature', async (req, { vault }) => {
-        return contributeMultisigSignature({ ...req, vault });
+    // The registry carries the SDK's MuSig2 partial verifier; a partial counts
+    // only once it verifies.
+    host.register('multisigSign.contributeSignature', async (req, { vault, sdkRegistry }) => {
+        return contributeMultisigSignature({ ...req, vault, sdkRegistry });
     });
 
     host.register('multisigSign.aggregate', async (req, { vault, sdkRegistry }) => {

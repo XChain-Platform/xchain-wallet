@@ -51,6 +51,9 @@ const CONTRIBUTION_LABELS = {
 };
 const contributionLabel = (k) => CONTRIBUTION_LABELS[k] || 'Signature';
 
+// Host refusals of a reply's content; the same reply can never pass, so no retry.
+const REFUSED_REPLY_CODES = new Set(['MULTISIG_SIGNATURE_INVALID', 'MULTISIG_NONCE_INVALID']);
+
 // Count each configured identity once so duplicated records cannot satisfy a threshold.
 function contributionProgress(session) {
     const cosignerPubkeys = [...new Set(session?.cosignerPubkeys || [])];
@@ -231,6 +234,27 @@ export function MultisigSigningSession({ walletId, onBack }) {
         await refreshList();
     }, [refreshActive, refreshList]);
 
+    // Two surfaces can apply the same reply at once, and the one that loses
+    // holds a stale session: its refusal is developer text and a retry of the
+    // same reply can never pass. Reload the session and re-run the reply check
+    // so the screen says where the session stands. Returns the check's message,
+    // or null when the reply still fits (the failure was something else).
+    const recheckReply = useCallback(async (envelope, sessionId) => {
+        if (!envelope || !mountedRef.current) return null;
+        const requestId = ++activeRequestId.current;
+        let fresh;
+        try {
+            fresh = await messaging.getMultisigSigningSession({ sessionId });
+        } catch (err) {
+            console.error('Multisig session reload failed:', err); // eslint-disable-line no-console
+            return null;
+        }
+        if (!fresh || requestId !== activeRequestId.current || !mountedRef.current) return null;
+        setActive(fresh);
+        refreshList();
+        return replyMismatchMessage(envelope, fresh);
+    }, [messaging, refreshList]);
+
     useEffect(() => {
         mountedRef.current = true;
         return () => { mountedRef.current = false; };
@@ -396,8 +420,9 @@ export function MultisigSigningSession({ walletId, onBack }) {
         // dispatch + busy / refresh choreography).
         setScannerOpen(false);
         setBusy(true);
+        let envelope = null;
         try {
-            const envelope = decodeMultisigEnvelope(next.psbt);
+            envelope = decodeMultisigEnvelope(next.psbt);
             const mismatch = replyMismatchMessage(envelope, active);
             if (mismatch) {
                 fail(mismatch, null);
@@ -435,11 +460,12 @@ export function MultisigSigningSession({ walletId, onBack }) {
             setPasteInput('');
         } catch (err) {
             console.error('Multisig scanned contribution failed:', err); // eslint-disable-line no-console
-            fail(userFacingMessage(err, 'Failed to apply scanned contribution.'), null);
+            const recheck = REFUSED_REPLY_CODES.has(err?.code) ? null : await recheckReply(envelope, active.id);
+            fail(recheck || userFacingMessage(err, 'Failed to apply scanned contribution.'), null);
         } finally {
             setBusy(false);
         }
-    }, [active, busy, collectorState, messaging, refreshAfterAction, fail]);
+    }, [active, busy, collectorState, messaging, refreshAfterAction, recheckReply, fail]);
 
     async function handleSignLocally() {
         if (!active || busy || signPassword.length === 0) return;
@@ -541,11 +567,16 @@ export function MultisigSigningSession({ walletId, onBack }) {
             setPasteInput('');
         } catch (err) {
             console.error('Multisig contribution apply failed:', err); // eslint-disable-line no-console
-            if (err?.code === 'MULTISIG_SIGNATURE_INVALID') {
-                // Submitting the same reply again cannot pass the signature check.
+            if (REFUSED_REPLY_CODES.has(err?.code)) {
+                // Submitting the same reply again cannot pass the reply check.
                 fail(userFacingMessage(err, 'Failed to apply contribution.'), null);
             } else {
-                fail(userFacingMessage(err, 'Failed to apply contribution.'), handlePasteSubmit);
+                const recheck = await recheckReply(envelope, active.id);
+                if (recheck) {
+                    fail(recheck, null);
+                } else {
+                    fail(userFacingMessage(err, 'Failed to apply contribution.'), handlePasteSubmit);
+                }
             }
         } finally {
             setBusy(false);
