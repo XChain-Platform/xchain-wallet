@@ -164,6 +164,7 @@ for (const shimPath of shims) {
 // 5. Settings UI renders the refresh row.
 
 const sectionSrc = read('packages/core/src/shared/components/settings/NetworkEndpointsSection.jsx');
+const settingsLocaleSrc = read('packages/core/src/i18n/locales/en/settings.js');
 assert.ok(/function ChainRegistryRefreshRow\(/.test(sectionSrc),
     'NetworkEndpointsSection defines ChainRegistryRefreshRow');
 assert.ok(/<ChainRegistryRefreshRow \/>/.test(sectionSrc),
@@ -174,8 +175,16 @@ assert.ok(/messaging\.refreshChainRegistry\(\)/.test(sectionSrc),
     'row triggers refresh via the messaging shim');
 assert.ok(/when: formatRelative\(/.test(sectionSrc),
     'row formats the last-refreshed timestamp');
-assert.ok(/networks bundled with this wallet are active/.test(sectionSrc),
-    'row honestly states the bundled-only fallback when no refresh has happened');
+assert.match(
+    sectionSrc,
+    /t\('settings\.endpoints\.noRefreshYet'\)|No refresh yet; the networks bundled with this wallet are active\./,
+    'row renders the localized bundled-only fallback when no refresh has happened',
+);
+assert.match(
+    settingsLocaleSrc,
+    /'settings\.endpoints\.noRefreshYet':\s*'No refresh yet; the networks bundled with this wallet are active\.'/,
+    'English locale keeps the bundled-only fallback copy',
+);
 // The panel is an ordinary Settings section, not developer-gated, so its copy
 // may not name the ChainDescriptor type. `descriptorCount` itself is a wire
 // field spanning core, the background host and the hub response and stays.
