@@ -644,6 +644,22 @@ describe('desktop main entry point', () => {
         expect(win.focus).toHaveBeenCalledOnce();
     });
 
+    it.each(['darwin', 'win32', 'linux'])('tells the %s renderer its window hid on close', async (platform) => {
+        const { applyWindowCloseConvention } = await import('../../../packages/desktop/main/index.js');
+        const send = vi.fn();
+        const win = {
+            hide: vi.fn(),
+            isDestroyed: vi.fn(() => false),
+            webContents: { send, isDestroyed: vi.fn(() => false) },
+        };
+
+        expect(applyWindowCloseConvention(win, { preventDefault: vi.fn() }, {
+            platform, quitting: false, otherVisible: false, detached: false,
+        })).toBe(true);
+
+        expect(send).toHaveBeenCalledWith('xchain:window-hidden');
+    });
+
     it.each(['win32', 'linux'])('restores a hidden window from the %s tray', async (platform) => {
         const { installTray } = await import('../../../packages/desktop/main/index.js');
         const win = new electron.BrowserWindow({});

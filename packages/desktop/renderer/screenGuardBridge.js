@@ -16,6 +16,8 @@
 
 import { installScreenGuard } from '@xchain-wallet/core/shared/utils/screenGuard.js';
 
+export const WINDOW_HIDDEN_EVENT = 'xc:window-hidden';
+
 /**
  * Install the desktop screen guard when the preload offers it.
  *
@@ -37,5 +39,23 @@ export function installDesktopScreenGuard(env = globalThis) {
     // any screen mounts; a key screen that mounts next turns it back on.
     send(false);
     installScreenGuard(send);
+    return true;
+}
+
+/**
+ * Forward native window hiding into the renderer event used by secret screens.
+ *
+ * @param {any} [env]
+ * @returns {boolean} whether the notice bridge was installed
+ */
+export function installDesktopSecretHideNotice(env = globalThis) {
+    const bridge = env?.xchainWalletWindow;
+    if (typeof bridge?.onHidden !== 'function' || typeof env?.dispatchEvent !== 'function') {
+        return false;
+    }
+    bridge.onHidden(() => {
+        const EventType = env.CustomEvent ?? globalThis.CustomEvent;
+        env.dispatchEvent(new EventType(WINDOW_HIDDEN_EVENT));
+    });
     return true;
 }

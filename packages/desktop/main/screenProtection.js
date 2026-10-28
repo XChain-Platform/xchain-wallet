@@ -16,6 +16,22 @@
 // screenshots, screen recordings and screen shares on macOS and Windows.
 
 export const SCREEN_PROTECTION_CHANNEL = 'xchain:screen-protection';
+export const WINDOW_HIDDEN_CHANNEL = 'xchain:window-hidden';
+
+/**
+ * Tell one trusted renderer that its native window is hidden or minimized.
+ * Minimize and tray-hide do not reliably produce DOM blur or visibility events.
+ *
+ * @param {{ webContents?: { send: (channel: string) => void, isDestroyed?: () => boolean }, isDestroyed?: () => boolean } | null} win
+ * @returns {boolean}
+ */
+export function notifyWindowHidden(win) {
+    if (!win || win.isDestroyed?.() || !win.webContents || win.webContents.isDestroyed?.()) {
+        return false;
+    }
+    win.webContents.send(WINDOW_HIDDEN_CHANNEL);
+    return true;
+}
 
 /**
  * Apply a renderer's protect or release request to the window that sent it.

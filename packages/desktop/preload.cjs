@@ -63,6 +63,8 @@
 //     `xchainWalletWindow.onStateChange(listener)` keeps sibling windows
 //     aligned when the shared main-process session, active wallet, settings,
 //     active network, or a wallet or account record changes.
+//     `xchainWalletWindow.onHidden(listener)` reports native minimize and hide
+//     transitions that do not reliably reach the DOM event system.
 //     `xchainWalletWindow.setScreenProtected(boolean)` turns screen capture
 //     protection on or off for the calling window only, while a screen
 //     shows key material (renderer/screenGuardBridge.js). One boolean in,
@@ -125,6 +127,7 @@ const TREZOR_BRIDGE_CLOSE_CHANNEL = 'xchain:trezor-bridge-close';
 // Matches main/trezorBridgeWindow.js CONNECT_METHODS: a call main refuses
 // throws here instead.
 const TREZOR_CONNECT_METHODS = ['getFeatures', 'getAddress', 'getPublicKey', 'signTransaction', 'signMessage'];
+const WINDOW_HIDDEN_CHANNEL = 'xchain:window-hidden';
 
 function assertArgumentCount(method, args, expected) {
     if (args.length !== expected) {
@@ -314,6 +317,21 @@ contextBridge.exposeInMainWorld('xchainWalletWindow', {
         return function unsubscribe() {
             assertNoArguments('xchainWalletWindow.onStateChange unsubscribe', arguments);
             ipcRenderer.removeListener(STATE_CHANGE_CHANNEL, wrapped);
+        };
+    },
+    /**
+     * Subscribe to native minimize and hide transitions for this window.
+     * Returns an unsubscribe function.
+     * @param {() => void} listener
+     * @returns {() => void}
+     */
+    onHidden(listener) {
+        listener = assertListener('xchainWalletWindow.onHidden', arguments);
+        const wrapped = () => { listener(); };
+        ipcRenderer.on(WINDOW_HIDDEN_CHANNEL, wrapped);
+        return function unsubscribe() {
+            assertNoArguments('xchainWalletWindow.onHidden unsubscribe', arguments);
+            ipcRenderer.removeListener(WINDOW_HIDDEN_CHANNEL, wrapped);
         };
     },
     /**

@@ -26,7 +26,7 @@ import { DesktopUpdateBanner } from './DesktopUpdateBanner.jsx';
 import { installShellErrorCapture } from './errorCapture.js';
 import { sendMessage } from './bridgeMessaging.js';
 import { installDesktopPanicModeBridge } from './panicModeBridge.js';
-import { installDesktopScreenGuard } from './screenGuardBridge.js';
+import { installDesktopScreenGuard, installDesktopSecretHideNotice } from './screenGuardBridge.js';
 
 logConsole.attach();
 
@@ -55,6 +55,7 @@ installDesktopFiatRateSource();
 
 // Screens that show key material turn this window's capture protection on.
 installDesktopScreenGuard();
+installDesktopSecretHideNotice();
 
 const container = document.getElementById('xchain-desktop-root');
 if (!container) {

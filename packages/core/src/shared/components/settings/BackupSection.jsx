@@ -176,6 +176,19 @@ export function BackupSection({ activeWallet, onExportInTab }) {
         setRevealError(null);
     }, [activeWalletId]);
 
+    // Re-cover the phrase whenever attention leaves the window. Desktop also
+    // reports native minimize and hide because those paths do not reliably
+    // emit a DOM blur or visibility transition.
+    useEffect(() => {
+        const hide = () => setMnemonicHidden(true);
+        window.addEventListener('blur', hide);
+        window.addEventListener('xc:window-hidden', hide);
+        return () => {
+            window.removeEventListener('blur', hide);
+            window.removeEventListener('xc:window-hidden', hide);
+        };
+    }, []);
+
     // Leaving the screen (a lock included) retires any reveal or export still
     // in flight, so a reply that lands afterwards neither shows a phrase nor
     // saves a file the user no longer asked to see.

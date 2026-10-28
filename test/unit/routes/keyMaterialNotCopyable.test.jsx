@@ -155,6 +155,18 @@ describe('private-key reveal security', () => {
         expect(screen.getByRole('button', { name: /Tap to reveal private key/i })).toBeTruthy();
     });
 
+    it('masks a revealed key when the desktop window is minimized or hidden', async () => {
+        draw();
+        await confirmPassword();
+        fireEvent.click(screen.getByRole('button', { name: /Tap to reveal private key/i }));
+        expect(screen.getByText(PRIVATE_KEY)).toBeTruthy();
+
+        act(() => window.dispatchEvent(new CustomEvent('xc:window-hidden')));
+
+        expect(screen.queryByText(PRIVATE_KEY)).toBeNull();
+        expect(screen.getByRole('button', { name: /Tap to reveal private key/i })).toBeTruthy();
+    });
+
     it('does not carry a revealed key into another address screen', async () => {
         const { messaging, rerender } = draw();
         await confirmPassword();

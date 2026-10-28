@@ -21,8 +21,14 @@ import {
     isScreenGuardActive,
     useProtectedScreen,
 } from '@xchain-wallet/core/shared/utils/screenGuard.js';
-import { installDesktopScreenGuard } from '../../../packages/desktop/renderer/screenGuardBridge.js';
-import { applyScreenProtection } from '../../../packages/desktop/main/screenProtection.js';
+import {
+    installDesktopScreenGuard,
+    installDesktopSecretHideNotice,
+} from '../../../packages/desktop/renderer/screenGuardBridge.js';
+import {
+    applyScreenProtection,
+    notifyWindowHidden,
+} from '../../../packages/desktop/main/screenProtection.js';
 import rendererBoot from '../../../packages/desktop/renderer/main.jsx?raw';
 
 afterEach(() => __resetScreenGuardForTests());
@@ -77,6 +83,22 @@ describe('desktop screen guard, renderer half', () => {
 
     it('is installed by the renderer boot', () => {
         expect(rendererBoot).toMatch(/^installDesktopScreenGuard\(\);$/m);
+        expect(rendererBoot).toMatch(/^installDesktopSecretHideNotice\(\);$/m);
+    });
+
+    it('turns a native hide notice into a renderer-only secret event', () => {
+        let notify;
+        const env = {
+            CustomEvent,
+            dispatchEvent: vi.fn(),
+            xchainWalletWindow: { onHidden: vi.fn((listener) => { notify = listener; }) },
+        };
+
+        expect(installDesktopSecretHideNotice(env)).toBe(true);
+        notify();
+
+        expect(env.dispatchEvent).toHaveBeenCalledOnce();
+        expect(env.dispatchEvent.mock.calls[0][0].type).toBe('xc:window-hidden');
     });
 });
 
@@ -109,5 +131,22 @@ describe('desktop screen guard, main half', () => {
         }).ok).toBe(false);
         expect(applyScreenProtection(event, [true], { isTrustedSender: trusted, windowFor: () => null }).ok).toBe(false);
         expect(win.setContentProtection).not.toHaveBeenCalled();
+    });
+
+    it('notifies only the live renderer belonging to the hidden window', () => {
+        const send = vi.fn();
+        const win = {
+            isDestroyed: () => false,
+            webContents: { isDestroyed: () => false, send },
+        };
+
+        expect(notifyWindowHidden(win)).toBe(true);
+        expect(send).toHaveBeenCalledWith('xchain:window-hidden');
+        expect(notifyWindowHidden({ ...win, isDestroyed: () => true })).toBe(false);
+        expect(notifyWindowHidden({
+            ...win,
+            webContents: { isDestroyed: () => true, send },
+        })).toBe(false);
+        expect(send).toHaveBeenCalledTimes(1);
     });
 });

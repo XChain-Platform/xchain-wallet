@@ -30,6 +30,7 @@
 
 import { decryptWalletSeed, decryptWalletPassphrase } from '../crypto/walletBlob.js';
 import { WalletNotFoundError } from './unlockWallet.js';
+import { assertWalletUnlockedForReveal } from './revealAccess.js';
 
 export class NoMnemonicForWifOnlyError extends Error {
     constructor() {
@@ -60,6 +61,7 @@ export class NoMnemonicForWifOnlyError extends Error {
  */
 export async function revealMnemonic({ vault, walletId, password }) {
     if (!vault) throw new Error('revealMnemonic: vault is required');
+    assertWalletUnlockedForReveal(vault, 'revealMnemonic');
     if (typeof walletId !== 'string' || !walletId) {
         throw new Error('revealMnemonic: walletId is required');
     }

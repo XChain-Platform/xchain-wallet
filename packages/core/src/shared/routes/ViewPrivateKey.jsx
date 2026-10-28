@@ -89,11 +89,17 @@ export function ViewPrivateKey({ walletId, address, renderQR, onBack }) {
         return () => clearTimeout(id);
     }, [stage]);
 
-    // Window blur covers accidental exposure during screen sharing.
+    // Window blur covers accidental exposure during screen sharing. Desktop
+    // also reports native minimize and hide because Electron does not emit a
+    // reliable DOM blur or visibility transition for those paths.
     useEffect(() => {
         const handler = () => setRevealed(false);
         window.addEventListener('blur', handler);
-        return () => window.removeEventListener('blur', handler);
+        window.addEventListener('xc:window-hidden', handler);
+        return () => {
+            window.removeEventListener('blur', handler);
+            window.removeEventListener('xc:window-hidden', handler);
+        };
     }, []);
 
     // A reveal expires even when the window remains focused.

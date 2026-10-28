@@ -62,7 +62,7 @@ import { KeychainSessionBackend, sessionKeyPathFor } from './keychain.js';
 import { FileUnlockThrottleStore, unlockThrottlePathFor } from './unlockThrottle.js';
 import { FileAutoLockStore, autoLockStatePathFor } from './autoLockState.js';
 import { FilePanicModeStore, panicModeStatePathFor } from './panicModeState.js';
-import { applyScreenProtection } from './screenProtection.js';
+import { applyScreenProtection, notifyWindowHidden } from './screenProtection.js';
 import {
     attachRendererCspHeaders,
     allowlistedExternalUrl,
@@ -412,6 +412,9 @@ export function applyWindowCloseConvention(win, event, options = {}) {
     if (otherVisible || detached) return false;
     event.preventDefault();
     win.hide();
+    // macOS hides the window without emitting 'hide', so the renderer hears
+    // about it here; a revealed key or phrase is covered before the next show.
+    notifyWindowHidden(win);
     return true;
 }
 
@@ -636,6 +639,12 @@ export function createWindow(opts = {}) {
     });
     win.on('move', () => { runMainCallback(() => rememberWindowBounds(win), 'window move'); });
     win.on('resize', () => { runMainCallback(() => rememberWindowBounds(win), 'window resize'); });
+    win.on('minimize', () => {
+        runMainCallback(() => { notifyWindowHidden(win); }, 'window minimize secret hide');
+    });
+    win.on('hide', () => {
+        runMainCallback(() => { notifyWindowHidden(win); }, 'window hide secret hide');
+    });
     win.on('close', (event) => {
         runMainCallback(() => {
             rememberWindowBounds(win);

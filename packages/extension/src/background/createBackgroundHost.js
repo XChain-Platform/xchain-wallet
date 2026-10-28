@@ -30,6 +30,7 @@ import { listAnyCoinItemsSupport } from '@xchain-wallet/core/flows/listAnyCoinIt
 import { sdkSupportedAddressTypes } from '@xchain-wallet/core/flows/sdkAddressTypes.js';
 import { supplyHistoryFor } from '@xchain-wallet/core/flows/supplyHistory.js';
 import { capRbfToDescriptor } from '@xchain-wallet/core/flows/rbfCap.js';
+import { assertWalletUnlockedForReveal } from '@xchain-wallet/core/flows/revealAccess.js';
 import {
     buildEditFeedListsParams,
     buildBetActionPsbt,
@@ -2214,6 +2215,7 @@ export function createBackgroundHost(deps) {
     // tap-to-reveal, auto-hide on blur, no clipboard write: this
     // handler is the pure primitive.
     host.register('wallet.revealMnemonic', async (req, { vault }) => {
+        assertWalletUnlockedForReveal(vault, 'revealMnemonic');
         return revealMnemonic({
             vault,
             walletId: req?.walletId,
@@ -6062,6 +6064,7 @@ export function createBackgroundHost(deps) {
 
 
     host.register('wallet.exportPrivateKey', async (req, { vault, chainRegistry, sdkRegistry, signerPool }) => {
+        assertWalletUnlockedForReveal(vault, 'exportPrivateKey');
         return exportPrivateKey({ ...req, signer: await sessionSigner(req, vault, signerPool), vault, chainRegistry, sdkRegistry });
     });
 

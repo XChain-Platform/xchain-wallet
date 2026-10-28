@@ -34,6 +34,7 @@ import {
     deriveMasterKeyAsync,
 } from '../crypto/index.js';
 import { unlockWalletRecord, WalletNotFoundError } from './unlockWallet.js';
+import { assertWalletUnlockedForReveal } from './revealAccess.js';
 
 export class AddressNotFoundError extends Error {
     constructor(addressId) {
@@ -134,6 +135,7 @@ export async function exportPrivateKey({
 }) {
     const hasPassword = typeof password === 'string' && password.length > 0;
     if (!vault) throw new Error('exportPrivateKey: vault is required');
+    assertWalletUnlockedForReveal(vault, 'exportPrivateKey');
     if (typeof walletId !== 'string' || walletId.length === 0) {
         throw new Error('exportPrivateKey: walletId is required');
     }

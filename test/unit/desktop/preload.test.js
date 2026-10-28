@@ -55,7 +55,7 @@ const expectedSurface = {
     xchainWalletSignerBridge: ['onMessage', 'postMessage'],
     xchainWalletTrezorBridge: ['call', 'close'],
     xchainWalletUpdater: ['getState', 'install', 'onEvent'],
-    xchainWalletWindow: ['onStateChange', 'openDetached', 'setScreenProtected'],
+    xchainWalletWindow: ['onHidden', 'onStateChange', 'openDetached', 'setScreenProtected'],
 };
 
 describe('desktop preload API', () => {
@@ -127,6 +127,7 @@ describe('desktop preload API', () => {
             () => bridge.saveBackupFile({ fileName: 'a.xchain-wallet' }),
             () => bridge.saveBackupFile(),
             () => win.openDetached({}),
+            () => win.onHidden(null),
             () => win.onStateChange(null),
             () => win.setScreenProtected('yes'),
             () => win.setScreenProtected(),
@@ -172,6 +173,7 @@ describe('desktop preload API', () => {
     it('validates subscriptions and the unsubscribe functions they return', () => {
         const { worlds, ipcRenderer } = loadPreload();
         const subscriptions = [
+            worlds.get('xchainWalletWindow').onHidden,
             worlds.get('xchainWalletWindow').onStateChange,
             worlds.get('xchainWalletUpdater').onEvent,
             worlds.get('xchainWalletDeepLink').onUri,
@@ -185,8 +187,20 @@ describe('desktop preload API', () => {
             expect(() => unsubscribe()).not.toThrow();
         }
 
-        expect(ipcRenderer.on).toHaveBeenCalledTimes(4);
-        expect(ipcRenderer.removeListener).toHaveBeenCalledTimes(4);
+        expect(ipcRenderer.on).toHaveBeenCalledTimes(5);
+        expect(ipcRenderer.removeListener).toHaveBeenCalledTimes(5);
+    });
+
+    it('forwards a native hide notice without exposing the IPC event', () => {
+        const { worlds, listeners } = loadPreload();
+        const listener = vi.fn();
+        const off = worlds.get('xchainWalletWindow').onHidden(listener);
+
+        for (const receive of listeners.get('xchain:window-hidden')) receive({ sender: 'main' });
+        off();
+
+        expect(listener).toHaveBeenCalledWith();
+        expect(listeners.get('xchain:window-hidden').size).toBe(0);
     });
 
     it('accepts exactly the signer frames main accepts, so no frame is dropped silently', () => {
