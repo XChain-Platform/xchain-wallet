@@ -16,14 +16,12 @@ const SESSION_CHANGE_TYPES = new Set([
     'wallet.unlock',
 ]);
 
-// Messages that add, rename or remove a wallet record in the open vault. A
-// sibling window re-reads its wallet list so its switcher and pickers match.
-const WALLET_RECORD_CHANGE_TYPES = new Set([
+// Messages that add a wallet record to the open vault. A sibling window
+// re-reads its wallet list so its switcher and pickers match.
+const WALLET_ADD_TYPES = new Set([
     'wallet.add.import',
     'wallet.importBackup',
     'wallet.importBackupPointer',
-    'wallet.rename',
-    'wallet.remove',
 ]);
 
 /**
@@ -34,25 +32,67 @@ const WALLET_RECORD_CHANGE_TYPES = new Set([
  * when it moves the active network, the same split the extension publishes
  * to its other surfaces; both carry the full saved settings object.
  *
+ * A wallet added, renamed or removed reaches them as `wallets` (a rename or
+ * removal names the wallet), and an account added or renamed as `accounts`,
+ * so they read their wallet and account names again.
+ *
  * @param {{ type?: unknown, request?: unknown }} message
  * @param {{ ok?: unknown, result?: unknown }} response
- * @returns {{ kind: 'session' } | { kind: 'wallets' } | { kind: 'active-wallet', walletId: string }
- *   | { kind: 'settings' | 'network', settings: Record<string, unknown> } | null}
+ * @returns {{ kind: 'session' } | { kind: 'active-wallet', walletId: string }
+ *   | { kind: 'settings' | 'network', settings: Record<string, unknown> }
+ *   | { kind: 'wallets', change: 'added' }
+ *   | { kind: 'wallets', change: 'renamed' | 'removed', walletId: string }
+ *   | { kind: 'accounts', change: 'added' | 'renamed', walletId: string, accountId: string } | null}
  */
 export function stateChangeForMessage(message, response) {
     if (response?.ok !== true || typeof message?.type !== 'string') return null;
     if (SESSION_CHANGE_TYPES.has(message.type)) return { kind: 'session' };
-    if (WALLET_RECORD_CHANGE_TYPES.has(message.type)) return { kind: 'wallets' };
+    if (WALLET_ADD_TYPES.has(message.type)) return { kind: 'wallets', change: 'added' };
     if (message.type === 'settings.update') return settingsChange(message.request, response.result);
     if (message.type === 'settings.setActiveNetwork') {
         const settings = /** @type {any} */ (response.result)?.settings;
         return isPlainObject(settings) ? { kind: 'network', settings } : null;
+    }
+    if (message.type === 'wallet.rename' || message.type === 'wallet.remove') {
+        return walletRecordChange(message, response.result);
+    }
+    if (message.type === 'account.rename' || message.type === 'account.create') {
+        return accountRecordChange(message.type, response.result);
     }
     if (message.type !== 'wallet.setActive') return null;
 
     const walletId = message.request?.walletId;
     if (typeof walletId !== 'string' || !walletId) return null;
     return { kind: 'active-wallet', walletId };
+}
+
+/**
+ * Name the wallet a rename or removal changed: the renamed record the host
+ * returns, or the removal request's id.
+ *
+ * @param {{ type?: unknown, request?: any }} message
+ * @param {any} result
+ * @returns {{ kind: 'wallets', change: 'renamed' | 'removed', walletId: string } | null}
+ */
+function walletRecordChange(message, result) {
+    const removed = message.type === 'wallet.remove';
+    const walletId = removed ? message.request?.walletId : result?.wallet?.id;
+    if (typeof walletId !== 'string' || !walletId) return null;
+    return { kind: 'wallets', change: removed ? 'removed' : 'renamed', walletId };
+}
+
+/**
+ * Name the account an add or rename changed, from the record the host returns.
+ *
+ * @param {unknown} type
+ * @param {any} result
+ * @returns {{ kind: 'accounts', change: 'added' | 'renamed', walletId: string, accountId: string } | null}
+ */
+function accountRecordChange(type, result) {
+    const walletId = result?.account?.walletId;
+    const accountId = result?.account?.id;
+    if (typeof walletId !== 'string' || !walletId || typeof accountId !== 'string' || !accountId) return null;
+    return { kind: 'accounts', change: type === 'account.create' ? 'added' : 'renamed', walletId, accountId };
 }
 
 /**

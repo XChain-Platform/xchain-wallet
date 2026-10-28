@@ -52,6 +52,7 @@ const RECORD_LIST_VIEWS = new Set([
 import { useAutoLockPolicy } from '@xchain-wallet/core/shared/hooks/useAutoLockPolicy.js';
 import { useLastView } from '@xchain-wallet/core/shared/hooks/useLastView.js';
 import { isConfirmActive } from '@xchain-wallet/core/shared/hooks/useConfirmAction.js';
+import { useHeldWalletSwitch } from '@xchain-wallet/core/shared/hooks/useHeldWalletSwitch.js';
 import { useDocumentTitle } from '@xchain-wallet/core/shared/hooks/useDocumentTitle.js';
 import { useScannedPsbt } from '@xchain-wallet/core/shared/hooks/useScannedPsbt.js';
 import { MessagingProvider } from '@xchain-wallet/core/shared/MessagingProvider.jsx';
@@ -725,16 +726,15 @@ function AppInner({ canOpenInTab, titleEnabled }) {
     const remountUnlessReviewing = () => {
         if (!isConfirmActive()) setSurfaceStateRevision((value) => value + 1);
     };
-    // A wallet chosen in another surface while a review runs here waits for
-    // this surface's next navigation, so the review, and the signing or
-    // broadcast result it ends on, stay on screen for the wallet they belong to.
-    const pendingWalletSwitch = useRef(/** @type {string | null} */ (null));
-    useEffect(() => {
-        const pending = pendingWalletSwitch.current;
-        if (!pending) return;
-        pendingWalletSwitch.current = null;
-        setActiveWalletId(pending);
-    }, [unlockedView]);
+    // A wallet chosen in another surface while a review, or the signing or
+    // broadcast result it ends on, is open here waits until the review is
+    // cancelled or the user leaves the result, so both stay on screen for the
+    // wallet they belong to.
+    const heldWalletSwitch = useHeldWalletSwitch((walletId, { navigated }) => {
+        writeActiveWallet(walletId);
+        setActiveWalletId(walletId);
+        if (!navigated) setUnlockedView('home');
+    });
 
     // Why the background locked the wallet, shown once on the Locked screen.
     const [lockReason, setLockReason] = useState(/** @type {'auto-lock-unsaved' | null} */ (null));
@@ -760,7 +760,7 @@ function AppInner({ canOpenInTab, titleEnabled }) {
             // the session reload picks the stored wallet if it survives, the
             // first remaining wallet otherwise, and Welcome when none remain.
             walletRemoved: (walletId) => {
-                if (pendingWalletSwitch.current === walletId) pendingWalletSwitch.current = null;
+                heldWalletSwitch.drop(walletId);
                 if (readActiveWallet() === walletId) clearActiveWallet();
                 if (shownWalletIds.current.includes(walletId) || chosenWalletId.current === walletId) {
                     refresh();
@@ -795,11 +795,7 @@ function AppInner({ canOpenInTab, titleEnabled }) {
                     .catch(() => { /* the next wallet switch reloads the accounts */ });
             },
             selectWallet: (walletId) => {
-                if (isConfirmActive()) {
-                    pendingWalletSwitch.current = walletId;
-                    return;
-                }
-                pendingWalletSwitch.current = null;
+                if (heldWalletSwitch.request(walletId)) return;
                 writeActiveWallet(walletId);
                 setActiveWalletId(walletId);
                 setUnlockedView('home');
@@ -868,6 +864,7 @@ function AppInner({ canOpenInTab, titleEnabled }) {
             setWallets([]);
             chosenWalletId.current = null;
             removedBeforeShown.current.clear();
+            heldWalletSwitch.clear();
             return;
         }
         let cancelled = false;
@@ -1033,6 +1030,8 @@ function AppInner({ canOpenInTab, titleEnabled }) {
         navigate: setUnlockedView,
         currentView: unlockedView,
     });
+    const heldSwitchNavigated = heldWalletSwitch.navigated;
+    useEffect(() => { heldSwitchNavigated(); }, [unlockedView, palette.navigationKey, heldSwitchNavigated]);
     const loadPaletteSites = useCallback(() => messaging.listConnectedSites(), []);
     const {
         contacts: paletteContacts,

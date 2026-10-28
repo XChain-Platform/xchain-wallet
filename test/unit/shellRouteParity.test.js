@@ -244,14 +244,14 @@ const SHELL_ONLY = {
             reason: 'The web receive picker shares the compact-layout asset filters.',
         },
         'RenameAccountForm.refreshKey': {
-            shells: ['extension'],
+            shells: ['desktop', 'extension'],
             kind: 'intended',
-            reason: 'Only the extension hears record changes from its other surface, so only it reads the names again on an open rename screen.',
+            reason: 'The extension and the desktop app hear record changes from another surface or window, so they read the names again on an open rename screen; a web tab holds the only unlocked session.',
         },
         'RenameWalletForm.refreshKey': {
-            shells: ['extension'],
+            shells: ['desktop', 'extension'],
             kind: 'intended',
-            reason: 'Only the extension hears record changes from its other surface, so only it reads the names again on an open rename screen.',
+            reason: 'The extension and the desktop app hear record changes from another surface or window, so they read the names again on an open rename screen; a web tab holds the only unlocked session.',
         },
         'ScanRoute.embedded': {
             shells: ['web'],

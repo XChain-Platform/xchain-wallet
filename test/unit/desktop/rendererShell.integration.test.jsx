@@ -318,7 +318,7 @@ describe('desktop renderer shell', () => {
         // The sibling restored a wallet, then made it active there.
         wallets = [...wallets, { id: 'wallet-2', name: 'Restored wallet' }];
         act(() => {
-            onStateChange({ kind: 'wallets' });
+            onStateChange({ kind: 'wallets', change: 'added' });
             onStateChange({ kind: 'active-wallet', walletId: 'wallet-2' });
         });
 

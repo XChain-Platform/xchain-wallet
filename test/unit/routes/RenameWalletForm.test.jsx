@@ -176,7 +176,8 @@ describe.each([
     const source = readFileSync(path, 'utf8');
 
     it('updates wallet header state and refreshes account header state', () => {
-        expect(source).toContain('useAccountList(activeWalletId, accountRenameTarget)');
+        // The header account list reads again when a rename screen opens or closes.
+        expect(source).toMatch(/useAccountList\(activeWalletId, [^;]*accountRenameTarget/);
         expect(source).toMatch(/onRenamed=\{\(wallet\) => \{[\s\S]*?setWalletList/);
     });
 });

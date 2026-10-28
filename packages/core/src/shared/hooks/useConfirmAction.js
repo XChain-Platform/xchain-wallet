@@ -47,6 +47,19 @@ import { randomUUID } from '../../util/uuid.js';
 
 // Module-level singleton: only ONE confirm modal may be live per window.
 let activeInstanceId = null;
+const confirmEndListeners = new Set();
+
+/**
+ * Clear the live confirmation and tell the shells how it ended.
+ *
+ * @param {{ approved: boolean, left: boolean }} outcome
+ */
+function endActiveConfirm(outcome) {
+    activeInstanceId = null;
+    for (const listener of [...confirmEndListeners]) {
+        try { listener(outcome); } catch { /* one shell's listener cannot stop the others */ }
+    }
+}
 
 export class ConfirmActionBusyError extends Error {
     constructor() { super('A confirmation is already in progress in this window.'); this.name = 'ConfirmActionBusyError'; this.reason = 'busy'; }
@@ -97,6 +110,20 @@ export function isConfirmActive() {
     return activeInstanceId !== null;
 }
 
+/**
+ * Hear each confirmation in this window end. `approved` is true once Approve
+ * was pressed, so a signing or broadcast result (or its failure) is on screen;
+ * false for a review the user cancelled or that never reached Approve.
+ * `left` is true when the form unmounted, which a navigation does.
+ *
+ * @param {(outcome: { approved: boolean, left: boolean }) => void} listener
+ * @returns {() => void}
+ */
+export function subscribeConfirmEnd(listener) {
+    confirmEndListeners.add(listener);
+    return () => { confirmEndListeners.delete(listener); };
+}
+
 export function useConfirmAction() {
     const instanceId = useRef(Symbol('confirm-action')).current;
     // Names this window in reservation ids. A Symbol's description is the same text in
@@ -143,7 +170,7 @@ export function useConfirmAction() {
     const [source, setSource] = useState(null);
 
     const teardown = useCallback(() => {
-        activeInstanceId = null;
+        endActiveConfirm({ approved: approvalBeganRef.current, left: !mountedRef.current });
         if (abortRef.current) { try { abortRef.current.abort(); } catch { /* noop */ } }
         // Release any reservation this instance registered.
         const o = optsRef.current;
@@ -195,7 +222,7 @@ export function useConfirmAction() {
             if (activeInstanceId !== instanceId) return;
             releaseUnlessApproving(composedRef.current);
             if (approvalBeganRef.current) {
-                activeInstanceId = null;
+                endActiveConfirm({ approved: true, left: true });
                 return;
             }
             settleReject(new UserRejectedError());

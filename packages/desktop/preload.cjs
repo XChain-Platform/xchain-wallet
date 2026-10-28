@@ -61,8 +61,8 @@
 //     asks main to spawn a fresh BrowserWindow pre-routed to the
 //     specified view + context (e.g. a pending tx detail).
 //     `xchainWalletWindow.onStateChange(listener)` keeps sibling windows
-//     aligned when the shared main-process session, active wallet, settings
-//     or active network changes.
+//     aligned when the shared main-process session, active wallet, settings,
+//     active network, or a wallet or account record changes.
 //
 //   - `xchainWalletRegistry.getRemoteDescriptors()`: §9.7 / G007
 //     chain-registry sync. The renderer CSP pins connect-src 'self',
@@ -270,10 +270,14 @@ contextBridge.exposeInMainWorld('xchainWalletWindow', {
         return ipcRenderer.invoke(OPEN_WINDOW_CHANNEL, validateOpenDetached(arguments));
     },
     /**
-     * Subscribe to process-wide session, wallet-list, active-wallet, settings
-     * and network changes made by a sibling window. Returns an unsubscribe function.
-     * @param {(change: { kind: 'session' } | { kind: 'wallets' } | { kind: 'active-wallet', walletId: string }
-     *   | { kind: 'settings' | 'network', settings: Record<string, unknown> }) => void} listener
+     * Subscribe to process-wide session, active-wallet, settings, network,
+     * wallet record and account record changes made by a sibling window.
+     * Returns an unsubscribe function.
+     * @param {(change: { kind: 'session' } | { kind: 'active-wallet', walletId: string }
+     *   | { kind: 'settings' | 'network', settings: Record<string, unknown> }
+     *   | { kind: 'wallets', change: 'added' }
+     *   | { kind: 'wallets', change: 'renamed' | 'removed', walletId: string }
+     *   | { kind: 'accounts', change: 'added' | 'renamed', walletId: string, accountId: string }) => void} listener
      * @returns {() => void}
      */
     onStateChange(listener) {

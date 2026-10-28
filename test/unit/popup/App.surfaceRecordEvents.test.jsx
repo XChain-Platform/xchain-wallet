@@ -20,10 +20,23 @@ import { SURFACE_STATE_STORAGE_KEY } from '../../../packages/extension/src/share
 // Whether this window holds an open review. The real flag is set by a confirm
 // in progress; the tests below set it directly.
 let reviewOpen = false;
+const reviewEndListeners = new Set();
 vi.mock('../../../packages/core/src/shared/hooks/useConfirmAction.js', async (importOriginal) => ({
     ...(await importOriginal()),
     isConfirmActive: () => reviewOpen,
+    subscribeConfirmEnd: (listener) => {
+        reviewEndListeners.add(listener);
+        return () => { reviewEndListeners.delete(listener); };
+    },
 }));
+
+// Ends the review the way a confirm does: cancelled (approved false) or after
+// Approve, with its signing or broadcast result on screen (approved true).
+const endReview = (outcome) => act(async () => {
+    reviewOpen = false;
+    for (const listener of [...reviewEndListeners]) listener(outcome);
+    await new Promise((resolve) => setTimeout(resolve, 0));
+});
 
 beforeEach(() => {
     globalThis.IS_REACT_ACT_ENVIRONMENT = true;
@@ -31,6 +44,7 @@ beforeEach(() => {
 
 afterEach(() => {
     reviewOpen = false;
+    reviewEndListeners.clear();
     cleanup();
     localStorage.clear();
     vi.unstubAllGlobals();
@@ -296,6 +310,49 @@ describe('an open review survives record changes made in another surface', () =>
         const history = screen.getAllByRole('button', { name: /^History\b/ })[0];
         await act(async () => { history.click(); });
         expect(await screen.findByText('Wallet: Bravo')).toBeInTheDocument();
+    });
+
+    it('takes the wallet another surface chose as soon as the review is cancelled', async () => {
+        const { emit } = await twoWallets();
+        reviewOpen = true;
+        localStorage.setItem('xchain.activeWallet', 'w2');
+        await emit('wallet', { walletId: 'w2' });
+        expect(screen.getByText('Wallet: Alpha')).toBeInTheDocument();
+
+        await endReview({ approved: false, left: false });
+
+        expect(await screen.findByText('Wallet: Bravo')).toBeInTheDocument();
+    });
+
+    it('keeps a signing or broadcast result on its wallet until the user leaves it', async () => {
+        const { heading, emit } = await twoWallets();
+        reviewOpen = true;
+        await endReview({ approved: true, left: false });
+        localStorage.setItem('xchain.activeWallet', 'w2');
+        await emit('wallet', { walletId: 'w2' });
+        await act(async () => { await new Promise((resolve) => setTimeout(resolve, 50)); });
+        expect(heading.isConnected).toBe(true);
+        expect(screen.getByText('Wallet: Alpha')).toBeInTheDocument();
+
+        const history = screen.getAllByRole('button', { name: /^History\b/ })[0];
+        await act(async () => { history.click(); });
+
+        expect(await screen.findByText('Wallet: Bravo')).toBeInTheDocument();
+    });
+
+    it('drops a held switch to a wallet another surface removed before the review ended', async () => {
+        const { state, emit } = await twoWallets();
+        reviewOpen = true;
+        localStorage.setItem('xchain.activeWallet', 'w2');
+        await emit('wallet', { walletId: 'w2' });
+        state.wallets = state.wallets.filter((wallet) => wallet.id !== 'w2');
+        await emit('wallets', { change: 'removed', walletId: 'w2' });
+
+        await endReview({ approved: false, left: false });
+        await act(async () => { await new Promise((resolve) => setTimeout(resolve, 50)); });
+
+        expect(screen.getByText('Wallet: Alpha')).toBeInTheDocument();
+        expect(screen.queryByText('Wallet: Bravo')).toBeNull();
     });
 
     it('switches at once when another surface switches wallet with no review open', async () => {

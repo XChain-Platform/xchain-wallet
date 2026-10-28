@@ -63,7 +63,9 @@ import { RenameWalletForm } from '@xchain-wallet/core/shared/routes/RenameWallet
 import { RenameAccountForm } from '@xchain-wallet/core/shared/routes/RenameAccountForm.jsx';
 import { clearActiveAccount, writeActiveAccount } from '@xchain-wallet/core/shared/utils/activeAccountMemory.js';
 import { reconcileActiveAccount } from '@xchain-wallet/core/shared/utils/activeAccountScope.js';
-import { readActiveWallet, writeActiveWallet } from '@xchain-wallet/core/shared/utils/activeWalletMemory.js';
+import { clearActiveWallet, readActiveWallet, writeActiveWallet } from '@xchain-wallet/core/shared/utils/activeWalletMemory.js';
+import { isConfirmActive } from '@xchain-wallet/core/shared/hooks/useConfirmAction.js';
+import { useHeldWalletSwitch } from '@xchain-wallet/core/shared/hooks/useHeldWalletSwitch.js';
 import { takePostDemoIntent } from '@xchain-wallet/core/shared/utils/demoGraduation.js';
 import { historyScopeForAsset } from '@xchain-wallet/core/shared/utils/historyEntryScope.js';
 import { defaultDexAssetForNetwork, sharedListDirectoryChainId, syncDexAssetToNetwork } from '@xchain-wallet/core/shared/chainSelection.js';
@@ -219,6 +221,13 @@ const resetHardwareSessions = () => hardwareFactories.reset();
 // Same default chain registry the web shell uses: buildBalanceRows needs it
 // to resolve divisibility / display names for the palette's token rows.
 const APP_CHAIN_REGISTRY = registryLib.defaultRegistry();
+
+// Screens that list wallet or account rows read them when they mount. A rename
+// or an added account in a sibling window remounts only these, so a form open
+// here (a payment being composed or signed) keeps what it holds.
+const RECORD_LIST_VIEWS = new Set([
+    'wallet-picker', 'wallet-details', 'account-picker', 'settings', 'connected-sites', 'addresses',
+]);
 export const SESSION_STATUS_TIMEOUT_MS = 10_000;
 
 function getSessionStatusWithTimeout() {
@@ -380,8 +389,13 @@ function AppInner() {
     const [walletList, setWalletList] = useState(/** @type {Array<{ id: string, name: string }>} */ ([]));
     // Bumped when a sibling window moves the active network, so chain-scoped routes remount.
     const [networkRevision, setNetworkRevision] = useState(0);
-    // Bumped when a sibling window adds, renames or removes a wallet.
+    // Bumped when a sibling window adds a wallet, so this window reads the list again.
     const [walletsRevision, setWalletsRevision] = useState(0);
+    // Counts wallet and account record changes made in sibling windows, so the
+    // header and an open rename screen read the names again.
+    const [recordRevision, setRecordRevision] = useState(0);
+    // Bumped to remount a screen that lists wallet or account rows.
+    const [recordListRevision, setRecordListRevision] = useState(0);
     const statusStateRef = useRef(status.state);
     const walletListRef = useRef(walletList);
     const pendingActiveWalletId = useRef(/** @type {string | null} */ (null));
@@ -390,7 +404,7 @@ function AppInner() {
     const [activeAccountId, setActiveAccountId] = useState(
         /** @type {string | null} */ (null),
     );
-    const headerAccounts = useAccountList(activeWalletId, accountRenameTarget);
+    const headerAccounts = useAccountList(activeWalletId, `${accountRenameTarget?.id ?? ''}:${recordRevision}`);
     // Unread-message count for the active wallet + account, surfaced as a badge
     // on the Messaging nav entries (see useMessagingUnread / msgReadMemory).
     const messagingUnread = useMessagingUnread(activeWalletId, activeAccountId);
@@ -646,6 +660,30 @@ function AppInner() {
         return () => { statusRequest.current += 1; };
     }, [refresh]);
 
+    // A wallet chosen in a sibling window while a review, or the signing or
+    // broadcast result it ends on, is open here waits until the review is
+    // cancelled or the user leaves the result, so both stay on screen for the
+    // wallet they belong to. A wallet gone from the list by then is dropped.
+    const heldWalletSwitch = useHeldWalletSwitch((walletId, { navigated }) => {
+        if (statusStateRef.current !== 'unlocked') return;
+        if (!walletListRef.current.some((wallet) => wallet.id === walletId)) return;
+        setActiveAccountId(null);
+        setActiveWalletId(walletId);
+        writeActiveWallet(walletId);
+        if (!navigated) setUnlockedView('home');
+    });
+    const heldSwitchNavigated = heldWalletSwitch.navigated;
+    useEffect(() => { heldSwitchNavigated(); }, [unlockedView, palette.navigationKey, heldSwitchNavigated]);
+
+    // The sibling-window listener outlives renders, so it reads what this
+    // window shows through refs.
+    const shownWalletIds = useRef(/** @type {Array<string | null | undefined>} */ ([]));
+    shownWalletIds.current = [activeWalletId, walletDetailsId, walletRenameTarget?.id];
+    const shownWalletId = useRef(/** @type {string | null} */ (null));
+    shownWalletId.current = activeWalletId;
+    const shownView = useRef(/** @type {string} */ ('home'));
+    shownView.current = unlockedView;
+
     useEffect(() => {
         const bridge = globalThis.xchainWalletWindow;
         if (!bridge || typeof bridge.onStateChange !== 'function') return undefined;
@@ -654,7 +692,7 @@ function AppInner() {
                 refresh();
                 return;
             }
-            if (change?.kind === 'wallets') {
+            if (change?.kind === 'wallets' && change.change === 'added') {
                 if (statusStateRef.current === 'unlocked') setWalletsRevision((value) => value + 1);
                 return;
             }
@@ -666,6 +704,44 @@ function AppInner() {
                 if (change.kind === 'network') setNetworkRevision((value) => value + 1);
                 return;
             }
+            if (change?.kind === 'wallets' || change?.kind === 'accounts') {
+                if (statusStateRef.current !== 'unlocked') return;
+                const changedWalletId = change.walletId;
+                if (typeof changedWalletId !== 'string' || !changedWalletId) return;
+                // A review open here signs exactly what it shows, so a record
+                // change leaves it mounted; the names refresh at the next screen.
+                const remountRecordLists = () => {
+                    setRecordRevision((value) => value + 1);
+                    if (RECORD_LIST_VIEWS.has(shownView.current) && !isConfirmActive()) {
+                        setRecordListRevision((value) => value + 1);
+                    }
+                };
+                if (change.kind === 'accounts') {
+                    if (shownWalletId.current === changedWalletId) remountRecordLists();
+                    return;
+                }
+                if (change.change === 'removed') {
+                    // A wallet removed in a sibling window must not stay open
+                    // here: the session reload picks the stored wallet if it
+                    // survives, the first remaining one otherwise.
+                    heldWalletSwitch.drop(changedWalletId);
+                    if (pendingActiveWalletId.current === changedWalletId) pendingActiveWalletId.current = null;
+                    if (readActiveWallet() === changedWalletId) clearActiveWallet();
+                    if (shownWalletIds.current.includes(changedWalletId)) {
+                        refresh();
+                        return;
+                    }
+                }
+                listWallets()
+                    .then((list) => {
+                        if (!Array.isArray(list) || statusStateRef.current !== 'unlocked') return;
+                        walletListRef.current = list;
+                        setWalletList(list);
+                    })
+                    .catch(() => { /* the next session refresh reloads the list */ });
+                remountRecordLists();
+                return;
+            }
             if (change?.kind !== 'active-wallet' || statusStateRef.current !== 'unlocked') return;
             const walletId = change.walletId;
             if (typeof walletId !== 'string') return;
@@ -673,6 +749,7 @@ function AppInner() {
                 pendingActiveWalletId.current = walletId;
                 return;
             }
+            if (heldWalletSwitch.request(walletId)) return;
             setActiveAccountId(null);
             setActiveWalletId(walletId);
             writeActiveWallet(walletId);
@@ -686,6 +763,7 @@ function AppInner() {
             // A key copied in the session must not outlive it on the clipboard.
             void clearSensitiveCopy();
             pendingActiveWalletId.current = null;
+            heldWalletSwitch.clear();
             walletListRef.current = [];
             setActiveWalletId(null);
             setActiveAccountId(null);
@@ -732,9 +810,10 @@ function AppInner() {
         return () => { cancelled = true; };
     }, [status.state]);
 
-    // A sibling window added, renamed or removed a wallet: re-read the list so
-    // this window's switcher matches, take a selection that named a wallet
-    // this list did not hold yet, and leave a wallet that is gone.
+    // A sibling window added a wallet: re-read the list so this window's
+    // switcher matches, take a selection that named a wallet this list did not
+    // hold yet (held like any sibling switch while a review is open), and
+    // leave a wallet that is gone.
     useEffect(() => {
         if (walletsRevision === 0 || statusStateRef.current !== 'unlocked') return undefined;
         let cancelled = false;
@@ -747,6 +826,7 @@ function AppInner() {
                 const pendingWalletId = pendingActiveWalletId.current;
                 if (pendingWalletId && arr.some((w) => w.id === pendingWalletId)) {
                     pendingActiveWalletId.current = null;
+                    if (heldWalletSwitch.request(pendingWalletId)) return;
                     setActiveAccountId(null);
                     setActiveWalletId(pendingWalletId);
                     writeActiveWallet(pendingWalletId);
@@ -832,6 +912,18 @@ function AppInner() {
         setActiveWalletId(id);
         if (id) writeActiveWallet(id, name);
         if (changed) messaging.setActiveWallet(id).catch(() => { /* best-effort sibling-window notice */ });
+        // An add flow left on its closing notice puts the wallet in the vault
+        // without handing it to this list, so the header would call the wallet
+        // unnamed; the list is read again for a wallet it lacks.
+        if (typeof id === 'string' && id && !walletListRef.current.some((wallet) => wallet.id === id)) {
+            listWallets()
+                .then((list) => {
+                    if (!Array.isArray(list) || statusStateRef.current !== 'unlocked') return;
+                    walletListRef.current = list;
+                    setWalletList(list);
+                })
+                .catch(() => { /* the next session refresh reloads the list */ });
+        }
     };
 
     const handleWalletAdded = (wallet) => {
@@ -2634,6 +2726,7 @@ function AppInner() {
                     <RenameWalletForm
                         walletId={walletRenameTarget.id}
                         initialName={walletRenameTarget.name}
+                        refreshKey={recordRevision}
                         onBack={() => {
                             setWalletRenameTarget(null);
                             setUnlockedView('wallet-details');
@@ -2671,6 +2764,7 @@ function AppInner() {
                         accountId={accountRenameTarget.id}
                         walletId={activeWalletId}
                         initialName={accountRenameTarget.name}
+                        refreshKey={recordRevision}
                         onBack={() => {
                             setAccountRenameTarget(null);
                             setUnlockedView('account-picker');
@@ -2938,7 +3032,7 @@ function AppInner() {
                         resetKey={`${unlockedView}:${palette.navigationKey}`}
                         onHome={() => setUnlockedView('home')}
                     >
-                        <Fragment key={`${palette.navigationKey}:${networkRevision}`}>{routeNode}</Fragment>
+                        <Fragment key={`${palette.navigationKey}:${networkRevision}:${recordListRevision}`}>{routeNode}</Fragment>
                     </ShellRouteOutlet>
                     {messageSentNotice ? (
                         <NoticeModal
