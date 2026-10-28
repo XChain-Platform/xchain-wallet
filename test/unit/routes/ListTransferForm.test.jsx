@@ -201,7 +201,7 @@ describe('ListTransferForm', () => {
         fireEvent.click(screen.getByRole('button', { name: 'Create unsigned transaction' }));
 
         await waitFor(() => expect(messaging.buildActionPsbtRequest).toHaveBeenCalledOnce());
-        expect(await screen.findByLabelText('Unsigned transaction hex')).toBeTruthy();
+        expect(await screen.findByLabelText('Unsigned transaction code')).toBeTruthy();
         expect(screen.queryByLabelText('Password')).toBeNull();
         expect(messaging.composeForConfirm).not.toHaveBeenCalled();
         expect(messaging.createList).not.toHaveBeenCalled();

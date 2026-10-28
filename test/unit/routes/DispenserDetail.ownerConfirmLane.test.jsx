@@ -273,7 +273,7 @@ describe('dispenser owner actions sign through the confirm page', () => {
         expect(build.args.actionData.action).toBe('DISPENSER');
         expect(calls.some((c) => c.method === 'composeForConfirm')).toBe(false);
         expect(signCalls(calls)).toHaveLength(0);
-        expect(utils.getByLabelText('Unsigned transaction hex')).toHaveValue('bb00');
+        expect(utils.getByLabelText('Unsigned transaction code')).toHaveValue('bb00');
     });
 
     it('shows close build errors, clears them when the fee changes, and returns unsigned output to the list', async () => {

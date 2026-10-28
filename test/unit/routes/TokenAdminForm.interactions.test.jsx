@@ -253,7 +253,7 @@ describe('TokenAdminForm review interaction safety', () => {
         await act(async () => {
             resolveBuild({ psbtHex: '70736274ff00', chainId: CHAIN });
         });
-        expect(await screen.findByLabelText('Unsigned transaction hex')).toBeTruthy();
+        expect(await screen.findByLabelText('Unsigned transaction code')).toBeTruthy();
     });
 
     it('does not use the previous callback token availability while typing', async () => {

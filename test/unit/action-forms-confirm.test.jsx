@@ -867,7 +867,7 @@ describe('Action forms confirm via the single-encode pipeline', () => {
             }),
         }));
         expect(calls.some((c) => c.method === 'composeForConfirm')).toBe(false);
-        expect(utils.getByLabelText('Unsigned transaction hex')).toBeTruthy();
+        expect(utils.getByLabelText('Unsigned transaction code')).toBeTruthy();
         expect(utils.queryByLabelText('Password')).toBeNull();
     });
 

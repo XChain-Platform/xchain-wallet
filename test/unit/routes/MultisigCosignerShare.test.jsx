@@ -146,13 +146,13 @@ describe('MultisigCosignerShare address selection', () => {
         mount();
         selectAddress('address-1');
         expect(await screen.findByRole('img', {
-            name: 'QR code for multisig cosigner share payload',
+            name: 'QR code for multisig cosigner share details',
         })).toBeTruthy();
 
         selectAddress('address-2');
 
         expect(screen.queryByRole('img', {
-            name: 'QR code for multisig cosigner share payload',
+            name: 'QR code for multisig cosigner share details',
         })).toBeNull();
         expectNoValues();
         resolveSecond({ ...INFO, pubkey: '03abcdef' });
@@ -179,9 +179,9 @@ describe('MultisigCosignerShare key details', () => {
             fingerprint: INFO.fingerprint,
             derivationPath: INFO.derivationPath,
         });
-        expect(screen.getByRole('button', { name: 'Copy cosigner share payload' })).toBeTruthy();
+        expect(screen.getByRole('button', { name: 'Copy cosigner share details' })).toBeTruthy();
         const qr = await screen.findByRole('img', {
-            name: 'QR code for multisig cosigner share payload',
+            name: 'QR code for multisig cosigner share details',
         });
         expect(qr).toHaveAttribute('src', 'data:image/png,cosigner-share');
         expect(qr).toHaveAttribute('width', '256');
@@ -193,7 +193,7 @@ describe('MultisigCosignerShare key details', () => {
             width: 256,
             color: { dark: '#000000', light: '#FFFFFF' },
         });
-        expect(screen.queryByLabelText('Cosigner share payload')).toBeNull();
+        expect(screen.queryByLabelText('Cosigner share details')).toBeNull();
         expect(document.body.textContent).not.toMatch(/regtest|testnet|Not mainnet/i);
         expect(screen.getByRole('note')).toHaveTextContent(
             /compare the master fingerprint and derivation path.*separate trusted channel/i,
@@ -212,7 +212,7 @@ describe('MultisigCosignerShare key details', () => {
         expect(await screen.findByRole('alert')).toHaveTextContent(
             'The wallet returned cosigner keys for a different address.',
         );
-        expect(screen.queryByLabelText('Cosigner share payload')).toBeNull();
+        expect(screen.queryByLabelText('Cosigner share details')).toBeNull();
         expectNoValues();
     });
 

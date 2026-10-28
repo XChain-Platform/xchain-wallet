@@ -368,7 +368,7 @@ describe('OpenOrdersPanel cancellation confirmation', () => {
         fireEvent.click(screen.getByRole('button', { name: 'Cancel order' }));
 
         expect(await screen.findByText('Unsigned transaction, ready for signing')).toBeTruthy();
-        expect(screen.getByLabelText('Unsigned transaction hex').value).toBe('aa00');
+        expect(screen.getByLabelText('Unsigned transaction code').value).toBe('aa00');
         expect(screen.queryByText('No open orders on this market.')).toBeNull();
 
         fireEvent.click(screen.getByRole('button', { name: 'Done' }));

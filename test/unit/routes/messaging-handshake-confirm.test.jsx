@@ -219,7 +219,7 @@ describe('MESSAGE handshakes use shared confirmation', () => {
 
         expect(utils.getByText('Unsigned transaction, ready for signing'))
             .toBeTruthy();
-        expect(utils.getByLabelText('Unsigned transaction hex').value).toBe('aa00');
+        expect(utils.getByLabelText('Unsigned transaction code').value).toBe('aa00');
         expect(utils.container.textContent).not.toMatch(/Key shared/i);
         expect(buildActionPsbtRequest).toHaveBeenCalledOnce();
         expect(calls.some((call) => call.method === 'sendHandshake')).toBe(false);

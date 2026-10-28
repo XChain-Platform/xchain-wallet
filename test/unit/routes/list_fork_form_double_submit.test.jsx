@@ -337,7 +337,7 @@ describe('existing list form identity', () => {
 
         expect(screen.getByText('#2800')).toBeInTheDocument();
         expect(screen.getByLabelText('Destination')).toHaveValue('');
-        expect(screen.queryByLabelText('Unsigned transaction hex')).toBeNull();
+        expect(screen.queryByLabelText('Unsigned transaction code')).toBeNull();
     });
 });
 

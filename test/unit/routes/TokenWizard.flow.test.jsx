@@ -421,6 +421,6 @@ describe('TokenWizard guided flow', () => {
 
         expect(buildActionPsbtRequest).toHaveBeenCalledTimes(1);
         resolveBuild({ psbtHex: '70736274ff00', chainId: 'bitcoin-mainnet' });
-        expect(await screen.findByLabelText('Unsigned transaction hex')).toBeTruthy();
+        expect(await screen.findByLabelText('Unsigned transaction code')).toBeTruthy();
     });
 });

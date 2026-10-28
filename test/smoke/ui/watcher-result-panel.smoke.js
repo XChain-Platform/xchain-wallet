@@ -86,7 +86,7 @@ assert.match(
 assert.match(panelSrc, /qrFormat === 'bbqr'/, 'panel branches export format on qrFormat');
 assert.match(panelSrc, /<AnimatedQrFrames\b/, 'panel renders AnimatedQrFrames');
 assert.match(panelSrc, /readOnly[\s\S]+?value=\{psbtHex\}/, 'panel exposes the hex in a read-only textarea');
-assert.match(panelSrc, /Copy hex|watcherResultPanel\.copyHex/, 'panel exposes a Copy hex affordance');
+assert.match(panelSrc, /Copy code|watcherResultPanel\.copyHex/, 'panel exposes a Copy code affordance');
 assert.match(panelSrc, /Plain-text chunks|watcherResultPanel\.plainTextChunks/, 'panel exposes the plain-text chunks fallback');
 assert.match(
     panelSrc,

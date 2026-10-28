@@ -301,7 +301,7 @@ test.describe(`the native-fee flag on each submit lane on ${REGTEST_CHAIN_LABEL}
                 await main.getByRole('button', { name: 'Create transaction for signing', exact: true }).click();
                 // By ROLE: the panel also carries a "Copy unsigned transaction
                 // hex" button, so the label alone matches two elements.
-                const hex = page.getByRole('textbox', { name: 'Unsigned transaction hex' });
+                const hex = page.getByRole('textbox', { name: 'Unsigned transaction code' });
                 await expect(hex, 'the watcher build produced no unsigned transaction')
                     .toBeVisible({ timeout: 120_000 });
                 const value = await hex.inputValue();

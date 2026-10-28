@@ -119,7 +119,7 @@ describe('BetFeedDetail in watcher mode', () => {
             builder: 'placeBetParams',
             params: { feedActionIndex: '1193', outcome: 0, amount: '1' },
         });
-        expect(utils.getByLabelText('Unsigned transaction hex')).toBeTruthy();
+        expect(utils.getByLabelText('Unsigned transaction code')).toBeTruthy();
         expect(utils.queryByLabelText('Password')).toBeNull();
     });
 
@@ -178,7 +178,7 @@ describe('OracleConsole in watcher mode', () => {
             },
         });
         expect(utils.queryByLabelText('Password')).toBeNull();
-        expect(utils.getByLabelText('Unsigned transaction hex')).toBeTruthy();
+        expect(utils.getByLabelText('Unsigned transaction code')).toBeTruthy();
     });
 
     it('offers both, and no explanation, in full mode', async () => {

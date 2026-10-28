@@ -185,7 +185,7 @@ describe('shared M to Z components at a 320px viewport', () => {
 
         expect(screen.getByTestId('result-screen-notice')).toBeVisible();
         expect(screen.getByTestId('result-screen-notice').textContent).toContain(title);
-        expect(screen.getByRole('textbox', { name: 'Unsigned transaction hex' })).toBeVisible();
+        expect(screen.getByRole('textbox', { name: 'Unsigned transaction code' })).toBeVisible();
         expect(screen.getByRole('button', { name: 'Build another' })).toBeVisible();
         expect(screen.getByRole('button', { name: 'Done' })).toBeVisible();
 

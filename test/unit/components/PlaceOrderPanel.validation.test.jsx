@@ -230,7 +230,7 @@ describe('PlaceOrderPanel validation', () => {
         pressEnter(await screen.findByRole('button', { name: 'Review' }));
         fireEvent.click(await screen.findByRole('button', { name: 'Create unsigned transaction' }));
 
-        expect(await screen.findByLabelText('Unsigned transaction hex')).toHaveValue('aa00');
+        expect(await screen.findByLabelText('Unsigned transaction code')).toHaveValue('aa00');
         expect(buildActionPsbtRequest).toHaveBeenCalledWith(expect.objectContaining({
             chainId: CHAIN,
             actionData: expect.objectContaining({ action: 'ORDER' }),
@@ -264,7 +264,7 @@ describe('PlaceOrderPanel validation', () => {
 
         fireEvent.click(screen.getByRole('button', { name: 'Create unsigned transaction' }));
 
-        expect(await screen.findByLabelText('Unsigned transaction hex')).toHaveValue('aa00');
+        expect(await screen.findByLabelText('Unsigned transaction code')).toHaveValue('aa00');
         expect(buildActionPsbtRequest).toHaveBeenCalledTimes(2);
     });
 

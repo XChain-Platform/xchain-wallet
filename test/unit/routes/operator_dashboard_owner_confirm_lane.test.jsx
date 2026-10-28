@@ -277,7 +277,7 @@ describe('operator publisher alternate signer modes', () => {
         fireEvent.change(screen.getByLabelText('Value'), { target: { value: '123.45' } });
         fireEvent.click(screen.getByRole('button', { name: 'Create unsigned transaction' }));
 
-        expect(await screen.findByLabelText('Unsigned transaction hex')).toHaveValue('bb00');
+        expect(await screen.findByLabelText('Unsigned transaction code')).toHaveValue('bb00');
         expect(methods.buildActionPsbtRequest).toHaveBeenCalledWith(expect.objectContaining({
             actionData: {
                 action: 'BROADCAST',

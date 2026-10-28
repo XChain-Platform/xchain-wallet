@@ -310,7 +310,7 @@ describe('DispenserForm numeric validation', () => {
             resolveBuild({ psbtHex: '70736274ff', encoding: 'psbt', fromAddress: SOURCE.address });
             await drainMicrotasks();
         });
-        expect(utils.getByLabelText('Unsigned transaction hex')).toHaveValue('70736274ff');
+        expect(utils.getByLabelText('Unsigned transaction code')).toHaveValue('70736274ff');
         fireEvent.click(utils.getByRole('button', { name: 'Done' }));
         expect(onBack).toHaveBeenCalledOnce();
     });

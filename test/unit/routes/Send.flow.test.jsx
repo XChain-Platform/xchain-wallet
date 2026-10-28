@@ -1305,7 +1305,7 @@ describe('Send flow with mocked messaging', () => {
         expect(messaging.composeForConfirm).not.toHaveBeenCalled();
         expect(await screen.findByTestId('result-screen-notice'))
             .toHaveTextContent('Unsigned transaction, ready for signing');
-        expect(screen.getByLabelText('Unsigned transaction hex')).toHaveValue(PSBT);
+        expect(screen.getByLabelText('Unsigned transaction code')).toHaveValue(PSBT);
     });
 
     it('submits only one watcher build when the review form submits twice', async () => {

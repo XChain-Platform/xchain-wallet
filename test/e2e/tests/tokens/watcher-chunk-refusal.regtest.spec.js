@@ -133,7 +133,7 @@ async function stageIssue(page, tick, description) {
     return main;
 }
 
-const hexBox = (page) => page.getByRole('textbox', { name: 'Unsigned transaction hex' });
+const hexBox = (page) => page.getByRole('textbox', { name: 'Unsigned transaction code' });
 
 test.describe('the watcher lane and an action the encoder chunks', () => {
     test.use({ actionTimeout: 30_000 });

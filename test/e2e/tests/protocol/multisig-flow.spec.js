@@ -175,10 +175,10 @@ test.describe('multisig flow', () => {
         const share = page.getByRole('region', { name: 'Share this wallet as a cosigner' });
         await share.locator('summary').click();
         await share.getByLabel('Address to share').selectOption({ index: 1 });
-        // The payload is offered as a QR code and a copy action; its raw text
-        // is no longer repeated in a textarea.
-        await expect(share.getByRole('img', { name: 'QR code for multisig cosigner share payload' })).toBeVisible();
-        await expect(share.getByRole('button', { name: /Copy cosigner share payload/ })).toBeVisible();
+        // The share details are offered as a QR code and a copy action; the
+        // page shows no textarea repeating their raw text.
+        await expect(share.getByRole('img', { name: 'QR code for multisig cosigner share details' })).toBeVisible();
+        await expect(share.getByRole('button', { name: /Copy cosigner share details/ })).toBeVisible();
 
         for (const viewport of VIEWPORTS) {
             await test.step(`${viewport.name}: create and cosigner share`, async () => {

@@ -370,7 +370,7 @@ describe('CreateBetFeedForm: compose and submit', () => {
         });
         expect(calls.some((c) => c.method === 'composeBetForConfirm')).toBe(false);
         expect(calls.some((c) => c.method === 'createMarketAction')).toBe(false);
-        expect(utils.getByLabelText('Unsigned transaction hex')).toBeTruthy();
+        expect(utils.getByLabelText('Unsigned transaction code')).toBeTruthy();
         expect(utils.queryByLabelText('Password')).toBeNull();
     });
 

@@ -259,7 +259,7 @@ describe('the message key-request reports its failures', () => {
 
         expect(utils.getByText('Unsigned transaction, ready for signing'))
             .toBeTruthy();
-        expect(utils.getByLabelText('Unsigned transaction hex').value).toBe('aa00');
+        expect(utils.getByLabelText('Unsigned transaction code').value).toBe('aa00');
         expect(utils.container.textContent).not.toMatch(/Key request sent/i);
     });
 });
