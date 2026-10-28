@@ -3059,8 +3059,18 @@ function AppInner() {
             // like the ActionsMenu) plus the lazily-loaded contacts. Every
             // `run` uses the palette navigator, so selecting a command drives
             // the same view state with a fresh route mount.
+            // A plain Send command opens a blank form: the prefill a free-form
+            // intent left behind belongs to that abandoned intent, not to
+            // this one. composeSend keeps the raw navigator so its own
+            // prefill survives the jump.
             const paletteCtx = {
-                navigate: palette.navigate,
+                navigate: (view) => {
+                    if (view === 'send') {
+                        setSendPrefill(null);
+                        setSendBackTo('home');
+                    }
+                    palette.navigate(view);
+                },
                 lock: handleNavLock,
                 refresh,
                 scan: () => setGlobalScannerOpen(true),
