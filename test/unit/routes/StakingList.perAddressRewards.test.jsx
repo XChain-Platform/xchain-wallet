@@ -4,7 +4,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
-import { StakingList, buildRows } from '../../../packages/core/src/shared/routes/StakingList.jsx';
+import { StakingList, buildRows, repeatedSecondLinesOf } from '../../../packages/core/src/shared/routes/StakingList.jsx';
 
 const CHAIN = 'bitcoin-mainnet';
 const IDLE = 'bc1qidleidleidleidleidleidleidleidleidle';
@@ -84,5 +84,50 @@ describe('StakingList Claim button', () => {
         fireEvent.click(await screen.findByRole('button', { name: 'Claim' }));
 
         expect(onOpenStake).toHaveBeenCalledWith({ kind: 'validator', chainId: CHAIN, address: PAID });
+    });
+});
+
+describe('repeatedSecondLinesOf', () => {
+    it('names a second line only when two rows carry it', () => {
+        const rows = [
+            { subtitle2: 'bc1q...aaaa' },
+            { subtitle2: 'bc1q...aaaa' },
+            { subtitle2: 'bc1q...bbbb' },
+            { subtitle2: null },
+        ];
+        expect([...repeatedSecondLinesOf(rows)]).toEqual(['bc1q...aaaa']);
+    });
+});
+
+describe('StakingList owner line', () => {
+    it('shows an owner address under no row when two positions share it, and once when one row carries it', async () => {
+        const read = (map) => vi.fn(async ({ address }) => map[address] || []);
+        const messaging = {
+            getAddressesByChain: vi.fn().mockResolvedValue({
+                [CHAIN]: [{ id: 'a1', address: IDLE }, { id: 'a2', address: PAID }],
+            }),
+            getStakesForAddress: read({
+                [IDLE]: [{ stake_id: 's1', amount: '10', status: 'active', block_index: 9 }],
+                [PAID]: [
+                    { stake_id: 's2', amount: '20', status: 'active', block_index: 8 },
+                    { stake_id: 's3', amount: '30', status: 'active', block_index: 7 },
+                ],
+            }),
+            getDelegationsForAddress: read({}),
+            getRewardsForAddress: read({}),
+            getRewardClaimsForAddress: read({}),
+            getContractStakesForAddress: read({}),
+            getContractUnstakesForAddress: read({}),
+            getIndexerWatermark: vi.fn().mockResolvedValue({ watermark: 100 }),
+        };
+        render(
+            <MessagingProvider shell="web" messaging={messaging}>
+                <StakingList walletId="wallet-1" onOpenStake={vi.fn()} onBack={vi.fn()} />
+            </MessagingProvider>,
+        );
+
+        await waitFor(() => expect(screen.getAllByRole('listitem')).toHaveLength(3));
+        expect(screen.queryAllByText('bc1qpa…paid')).toHaveLength(0);
+        expect(screen.getAllByText('bc1qid…idle')).toHaveLength(1);
     });
 });

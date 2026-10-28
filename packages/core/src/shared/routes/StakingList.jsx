@@ -399,6 +399,10 @@ export function StakingList({ walletId, activeAccountId, onOpenStake, onNewStake
         });
     }, [allRows, query, network]);
 
+    // A second line that two rows share (one owner address under every
+    // position) is shown nowhere; the position detail names the address.
+    const repeatedSecondLines = useMemo(() => repeatedSecondLinesOf(visibleRows), [visibleRows]);
+
     const header = (
         <PageHeader
             onBack={onBack}
@@ -556,6 +560,7 @@ export function StakingList({ walletId, activeAccountId, onOpenStake, onNewStake
                         <StakeRow
                             key={row.key}
                             row={row}
+                            hideSecondLine={repeatedSecondLines.has(row.subtitle2)}
                             period={row.cooldownEndBlock != null
                                 ? cooldownText(cooldownStatus({
                                     unstake: { cooldown_end_block: row.cooldownEndBlock },
@@ -577,7 +582,21 @@ export function StakingList({ walletId, activeAccountId, onOpenStake, onNewStake
     );
 }
 
-function StakeRow({ row, period, onSelect }) {
+/**
+ * The second-line texts that more than one row carries.
+ *
+ * @param {Array<{ subtitle2?: string | null }>} rows
+ * @returns {Set<string>}
+ */
+export function repeatedSecondLinesOf(rows) {
+    const counts = new Map();
+    for (const row of rows) {
+        if (row.subtitle2) counts.set(row.subtitle2, (counts.get(row.subtitle2) || 0) + 1);
+    }
+    return new Set([...counts].filter(([, n]) => n > 1).map(([text]) => text));
+}
+
+function StakeRow({ row, period, hideSecondLine = false, onSelect }) {
     const chainIconUrl = branding.chainIconSmallUrl(row.chainId);
     return (
         /* Stake entries stay native buttons because each control is the complete clickable row. */
@@ -609,7 +628,7 @@ function StakeRow({ row, period, onSelect }) {
             <div className={local.body}>
                 <div className={local.name}>{row.name}</div>
                 <div className={local.subtitle}><bdi dir="ltr">{row.subtitle}</bdi></div>
-                {row.subtitle2 ? <div className={local.subtitle}>{row.subtitle2}</div> : null}
+                {row.subtitle2 && !hideSecondLine ? <div className={local.subtitle}>{row.subtitle2}</div> : null}
             </div>
             <div className={local.trailing}>
                 <span className={`${local.status} ${local[`status_${row.status}`] || ''}`}>
