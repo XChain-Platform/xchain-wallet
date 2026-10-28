@@ -56,8 +56,12 @@ describe('readSourceTickBalance', () => {
 
 describe('recheckSourceTickBalance', () => {
     it('refuses an amount above the fresh balance', async () => {
-        const r = await recheckSourceTickBalance({ ...read(entry({ tokens: [{ tick: 'ART', quantity: '4', divisibility: 0 }] })), amount: '5' });
+        const deps = read(entry({ tokens: [{ tick: 'ART', quantity: '4', divisibility: 0 }] }));
+        const r = await recheckSourceTickBalance({ ...deps, amount: '5' });
         expect(r).toEqual({ ok: false, reason: 'short', balance: '4' });
+        expect(deps.messaging.getWalletBalances).toHaveBeenCalledWith(
+            'w', undefined, CHAIN, { fresh: true },
+        );
     });
 
     it('accepts the full balance', async () => {

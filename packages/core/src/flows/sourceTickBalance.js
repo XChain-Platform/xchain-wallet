@@ -28,15 +28,21 @@ const PLAIN_DECIMAL = /^\d+(?:\.\d+)?$/;
  * @param {string} args.chainId
  * @param {string} args.address                      the source address
  * @param {string} args.tick
+ * @param {boolean} [args.fresh]                     bypass reusable explorer reads
  * @returns {Promise<{ ok: true, amount: string } | { ok: false }>}
  */
-export async function readSourceTickBalance({ messaging, walletId, accountId, chainId, address, tick }) {
+export async function readSourceTickBalance({ messaging, walletId, accountId, chainId, address, tick, fresh = false }) {
     const tickUpper = String(tick || '').trim().toUpperCase();
     if (!chainId || !address || !tickUpper) return { ok: false };
     if (typeof messaging?.getWalletBalances !== 'function') return { ok: false };
     let byChain;
     try {
-        byChain = await messaging.getWalletBalances(walletId, accountId, chainId);
+        byChain = await messaging.getWalletBalances(
+            walletId,
+            accountId,
+            chainId,
+            fresh ? { fresh: true } : undefined,
+        );
     } catch {
         return { ok: false };
     }
@@ -72,7 +78,7 @@ export async function recheckSourceTickBalance({ amount, timeoutMs = RECHECK_TIM
     const timedOut = new Promise((resolve) => { timer = setTimeout(() => resolve({ ok: false }), timeoutMs); });
     let fresh;
     try {
-        fresh = await Promise.race([readSourceTickBalance(read), timedOut]);
+        fresh = await Promise.race([readSourceTickBalance({ ...read, fresh: true }), timedOut]);
     } finally {
         clearTimeout(timer);
     }

@@ -178,9 +178,11 @@ export function createAccount(opts) {
     return /** @type {any} */ (sendMessage('account.create', opts));
 }
 
-/** @param {string} walletId @param {string} [accountId] */
-export function getWalletBalances(walletId, accountId, chainId) {
-    return /** @type {any} */ (sendMessage('balances.wallet', chainId ? { walletId, accountId, chainId } : { walletId, accountId }));
+/** @param {string} walletId @param {string} [accountId] @param {string} [chainId] @param {{ fresh?: boolean }} [opts] */
+export function getWalletBalances(walletId, accountId, chainId, opts) {
+    return /** @type {any} */ (sendMessage('balances.wallet', {
+        walletId, accountId, ...(chainId ? { chainId } : {}), ...(opts ? { opts } : {}),
+    }));
 }
 
 /**

@@ -138,16 +138,27 @@ function batchSdk(fixture, { batchImpl } = {}) {
 
 const registryFor = (sdk) => ({ get: () => sdk });
 
-const run = (addresses, sdk) => walletBalances({
+const run = (addresses, sdk, opts) => walletBalances({
     vault: makeVault(addresses),
     walletId: 'w1',
     chainRegistry,
     sdkRegistry: registryFor(sdk),
+    opts,
 });
 
 beforeEach(() => { _resetBatchSupportMemo(); });
 
 describe('walletBalances reads a chain in batches when the SDK and explorer allow it', () => {
+    it('passes a fresh read tag to batch and per-address token reads', async () => {
+        const batch = batchSdk(FIXTURE);
+        await run(['A1'], batch, { fresh: true });
+        expect(batch.getBalancesBatch).toHaveBeenCalledWith(['A1'], { fresh: true });
+
+        const perAddress = perAddressSdk(FIXTURE);
+        await run(['A1'], perAddress, { fresh: true });
+        expect(perAddress.getBalances).toHaveBeenCalledWith('A1', { fresh: true });
+    });
+
     it('spends ONE request for five addresses, in the order it was given them', async () => {
         const addresses = ['P0', 'P1', 'P2', 'P3', 'P4'];
         const fixture = Object.fromEntries(addresses.map((a) => [a, FIXTURE.A1]));

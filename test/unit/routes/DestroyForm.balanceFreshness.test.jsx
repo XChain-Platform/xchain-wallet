@@ -44,8 +44,8 @@ function mountDestroy({ balances }) {
         signerReady: vi.fn().mockResolvedValue({ ready: true }),
         getSignerStatus: vi.fn().mockResolvedValue({ status: 'unlocked' }),
         getTokenInfo: vi.fn().mockResolvedValue({ chainId: CHAIN, tick: 'ART', divisibility: 0, locks: {} }),
-        getWalletBalances: vi.fn(() => (typeof state.balances === 'function'
-            ? state.balances()
+        getWalletBalances: vi.fn((...args) => (typeof state.balances === 'function'
+            ? state.balances(...args)
             : Promise.resolve(state.balances))),
         composeForConfirm: vi.fn().mockResolvedValue({
             psbt: 'aa00', encoding: 'psbt', actionString: 'DESTROY|0|ART|2', version: 1,
@@ -93,6 +93,30 @@ afterEach(() => {
 });
 
 describe('DestroyForm balance freshness', () => {
+    it('bypasses a balance cached under two seconds old and refuses when the token is gone', async () => {
+        const held = balancesWith([{ tick: 'ART', quantity: '2', divisibility: 0 }]);
+        const gone = balancesWith([]);
+        const cacheAgeMs = 1500;
+        const { messaging } = mountDestroy({
+            balances: (_walletId, _accountId, _chainId, opts) => Promise.resolve(
+                opts?.fresh || cacheAgeMs >= 2000 ? gone : held,
+            ),
+        });
+        expect(await screen.findByText('2 ART available')).toBeInTheDocument();
+        await reviewAmount('2');
+        await waitFor(() => expect(messaging.composeForConfirm).toHaveBeenCalledTimes(1));
+
+        await approveOnConfirm();
+
+        await waitFor(() => expect(screen.getByText(
+            'This address holds 0 ART now, less than the 2 ART this destroy burns. Nothing was signed. Review the amount and try again.',
+        )).toBeInTheDocument());
+        expect(messaging.getWalletBalances).toHaveBeenCalledWith(
+            'w', undefined, CHAIN, { fresh: true },
+        );
+        expect(messaging.destroyToken).not.toHaveBeenCalled();
+    });
+
     it('refuses at Approve when the balance dropped below the amount after Review', async () => {
         const { messaging, state } = mountDestroy({ balances: balancesWith([{ tick: 'ART', quantity: '2', divisibility: 0 }]) });
         expect(await screen.findByText('2 ART available')).toBeInTheDocument();
