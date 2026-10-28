@@ -838,6 +838,7 @@ function AppInner() {
     // link waits here and is applied when that screen unmounts.
     const sendLinksHeldRef = useRef(false);
     const heldLinkRef = useRef(/** @type {string | null} */ (null));
+    const [sendLinkWaiting, setSendLinkWaiting] = useState(false);
 
     // Apply one incoming wallet URI. Extracted from the mount effect below
     // (S3) because the native shells have no query string to read: an
@@ -851,6 +852,7 @@ function AppInner() {
     const applyUriIntent = useCallback((raw) => {
         if (sendLinksHeldRef.current && typeof raw === 'string' && raw.trim()) {
             heldLinkRef.current = raw;
+            setSendLinkWaiting(true);
             return;
         }
         try {
@@ -919,13 +921,21 @@ function AppInner() {
     // strips a query param, while this one must stay subscribed for as long
     // as the app is open, since a tap can arrive at any moment.
     useEffect(() => subscribeToNativeDeepLinks(applyUriIntent), [applyUriIntent]);
-    const holdSendLinks = useCallback((held) => {
+    // The waiting link opens only when the user left Send by Back or Done on
+    // the result; any other route drops it and says so on the screen chosen.
+    const holdSendLinks = useCallback((held, release) => {
         sendLinksHeldRef.current = held;
-        if (held || heldLinkRef.current === null) return;
+        if (held) return;
+        setSendLinkWaiting(false);
+        if (heldLinkRef.current === null) return;
         const raw = heldLinkRef.current;
         heldLinkRef.current = null;
-        applyUriIntent(raw);
-    }, [applyUriIntent]);
+        if (release?.open) {
+            applyUriIntent(raw);
+        } else {
+            showToast({ message: t('shell.waitingLinkDropped'), variant: 'default' });
+        }
+    }, [applyUriIntent, showToast]);
 
     // No auto-unlock: the password is never persisted to Web API
     // storage, so a page reload always re-locks the wallet and the
@@ -1286,6 +1296,7 @@ function AppInner() {
                         }}
                         prefill={sendPrefill}
                         onHoldLinks={holdSendLinks}
+                        linkWaiting={sendLinkWaiting}
                         onChangeAsset={(carry) => {
                             setSendPrefill((prev) => beginSendAssetSwitch(prev, carry));
                             setUnlockedView('send-picker');

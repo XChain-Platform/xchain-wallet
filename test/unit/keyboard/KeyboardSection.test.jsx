@@ -97,8 +97,28 @@ describe('KeyboardSection', () => {
         const messaging = await setup();
         const lockRow = screen.getByText('Lock wallet').closest('div');
         fireEvent.click(lockRow.querySelector('button'));
-        press({ key: 'n', ctrlKey: true }); // taken by New send
-        await waitFor(() => expect(screen.getByText(/already used by/)).toBeTruthy());
+        press({ key: 'k', ctrlKey: true }); // taken by the command palette
+        await waitFor(() => expect(screen.getByText(/already used by "Open command palette"/)).toBeTruthy());
+        expect(messaging.updateSettings).not.toHaveBeenCalled();
+    });
+
+    it.each([
+        ['Ctrl+W', { key: 'w', ctrlKey: true }],
+        ['Ctrl+T', { key: 't', ctrlKey: true }],
+        ['Ctrl+N', { key: 'n', ctrlKey: true }],
+        ['Ctrl+Q', { key: 'q', ctrlKey: true }],
+        ['Ctrl+R', { key: 'r', ctrlKey: true }],
+        ['Ctrl+L', { key: 'l', ctrlKey: true }],
+        ['Ctrl+,', { key: ',', ctrlKey: true }],
+        ['Ctrl+Shift+T', { key: 'T', ctrlKey: true, shiftKey: true }],
+        ['Ctrl+Shift+N', { key: 'N', ctrlKey: true, shiftKey: true }],
+        ['F5', { key: 'F5' }],
+    ])('refuses to rebind to %s, which the browser keeps', async (label, init) => {
+        const messaging = await setup();
+        const lockRow = screen.getByText('Lock wallet').closest('div');
+        fireEvent.click(lockRow.querySelector('button'));
+        press(init);
+        await waitFor(() => expect(screen.getByText(`${label} is already used by the browser or the system.`)).toBeTruthy());
         expect(messaging.updateSettings).not.toHaveBeenCalled();
     });
 
@@ -114,10 +134,10 @@ describe('KeyboardSection', () => {
     });
 
     it('removes an override when capture returns to the built-in binding', async () => {
-        const messaging = await setup({ lock: 'mod+j' });
-        const lockRow = screen.getByText('Lock wallet').closest('div');
-        fireEvent.click(within(lockRow).getByRole('button', { name: 'Rebind' }));
-        press({ key: 'l', ctrlKey: true });
+        const messaging = await setup({ 'command-palette': 'mod+j' });
+        const row = screen.getByText('Open command palette').closest('div');
+        fireEvent.click(within(row).getByRole('button', { name: 'Rebind' }));
+        press({ key: 'k', ctrlKey: true });
         await waitFor(() => expect(messaging.updateSettings).toHaveBeenCalledWith({
             keyboard: { bindings: {} },
         }));

@@ -112,7 +112,7 @@ describe('Send holds incoming links from Approve until it unmounts', () => {
 
         view.unmount();
         expect(onHoldLinks).toHaveBeenCalledTimes(2);
-        expect(onHoldLinks).toHaveBeenLastCalledWith(false);
+        expect(onHoldLinks).toHaveBeenLastCalledWith(false, { open: false });
     });
 
     it('holds nothing for a payment that was never approved', async () => {

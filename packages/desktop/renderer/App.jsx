@@ -981,7 +981,7 @@ function AppInner() {
 
     // OS deep links, applied after unlock and after the resume above. A
     // detached window neither claims nor applies one: it keeps its pinned view.
-    useDeepLinks({
+    const waitingLink = useDeepLinks({
         bridge: typeof window !== 'undefined' ? window.xchainWalletDeepLink : undefined,
         detached: isDetachedWindow.current,
         chainRegistry: APP_CHAIN_REGISTRY,
@@ -1091,7 +1091,17 @@ function AppInner() {
                             setUnlockedView('history');
                         }}
                         prefill={sendPrefill}
-                        onHoldLinks={setSendLinksHeld}
+                        onHoldLinks={(held, release) => {
+                            setSendLinksHeld(held);
+                            // Only Back or Done on the result opens the waiting link;
+                            // any other route drops it and says so.
+                            if (held || release?.open) return;
+                            if (waitingLink.waiting) {
+                                showToast({ message: t('shell.waitingLinkDropped'), variant: 'default' });
+                            }
+                            waitingLink.drop();
+                        }}
+                        linkWaiting={waitingLink.waiting}
                         onBack={() => {
                             setSendPrefill(null);
                             setUnlockedView(sendBackTo);

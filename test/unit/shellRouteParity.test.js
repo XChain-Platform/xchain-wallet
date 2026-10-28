@@ -268,6 +268,11 @@ const SHELL_ONLY = {
             kind: 'intended',
             reason: 'Only the desktop and web or native shells take payment links while running; the extension popup reads a link from its launch query alone, so none can land over an open Send.',
         },
+        'Send.linkWaiting': {
+            shells: ['desktop', 'web'],
+            kind: 'intended',
+            reason: 'Shows the waiting link on the Send result; only the shells that hold payment links while Send is open pass it.',
+        },
         'SendPicker.hideOwnFilter': {
             shells: ['web'],
             kind: 'intended',

@@ -20,6 +20,7 @@ const messages = {
     'shell.privateKeyQr': 'Private key QR',
     'shell.messageSent': 'Message sent',
     'shell.cannotOpenLink': "Can't open link",
+    'shell.waitingLinkDropped': 'The waiting payment link was dropped.',
     'shell.unknownState': 'unknown state "{state}"',
 
     // Copy moved out of JSX literals by the i18n sweep.

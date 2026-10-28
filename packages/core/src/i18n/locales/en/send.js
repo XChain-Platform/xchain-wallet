@@ -98,6 +98,9 @@ const messages = {
     'send.source.choose': 'Choose source address',
     'send.source.hint': 'Only what this address holds can be sent.',
     'send.source.noAddress': 'No address on this network. Use Receive to generate one first.',
+    'send.source.otherNetwork':
+        'This payment link is for {network}, not the network this wallet is on. Switch networks in Settings to open it there.',
+    'send.linkWaiting': 'A payment link is waiting and opens when you leave this screen.',
     'send.offline.bodyNoCache': 'Sending needs a network connection.',
     'send.offline.body': 'Sending needs a network connection. Your cached balance remains available.',
     'send.offline.title': 'Sending needs a network connection',

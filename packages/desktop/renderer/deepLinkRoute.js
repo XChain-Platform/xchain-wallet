@@ -14,7 +14,7 @@
 // only thing it can ever do is land the user on a prefilled form they still
 // have to act on: nothing here unlocks, signs or submits.
 
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { normalizeBip21Amount, parseBip21Uri } from '../../core/src/uri/bip21.js';
 import { hardenUriIntentText, parseXchainUri } from '../../core/src/uri/xchainUri.js';
 import { resolvePaymentChain } from '../../core/src/uri/paymentChain.js';
@@ -228,7 +228,11 @@ export function watchDeepLinks({ bridge, detached, chainRegistry, onRoute }) {
  * apply once a wallet is unlocked and nothing holds it. Call it after the
  * last-view resume so the link's form is the view that sticks.
  *
+ * Returns whether a link is waiting behind the hold and a drop function that
+ * discards it.
+ *
  * @param {{ bridge?: any, detached: boolean, chainRegistry: any, unlocked: boolean, walletId: string | null | undefined, held?: boolean, apply: (route: NonNullable<ReturnType<typeof deepLinkRoute>>) => void }} opts
+ * @returns {{ waiting: boolean, drop: () => void }}
  */
 export function useDeepLinks({ bridge, detached, chainRegistry, unlocked, walletId, held = false, apply }) {
     const [route, setRoute] = useState(/** @type {ReturnType<typeof deepLinkRoute>} */ (null));
@@ -239,4 +243,6 @@ export function useDeepLinks({ bridge, detached, chainRegistry, unlocked, wallet
         apply(route);
         setRoute(null);
     }, [route, unlocked, walletId, held]);
+    const drop = useCallback(() => setRoute(null), []);
+    return { waiting: held && route !== null, drop };
 }

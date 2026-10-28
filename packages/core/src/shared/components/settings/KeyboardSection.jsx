@@ -28,11 +28,12 @@ import { useBackHandler } from '../../../ui/backStack.js';
 import {
     SHORTCUTS,
     SHORTCUT_GROUPS,
+    bindingFamily,
     findBindingConflict,
     formatBinding,
     isRebindable,
     isValidBinding,
-    parseBinding,
+    reservedChordLabel,
     resolveBindings,
 } from '../../keyboard/shortcuts.js';
 import { ROW, ROW_LABEL, STACK, SettingsLoadError, Status } from './_settingsPrimitives.jsx';
@@ -130,8 +131,9 @@ export function KeyboardSection() {
         if (!target) { setCapturingId(null); return undefined; }
         // Rebinding keeps the DEFAULT binding's family even when an override
         // is active, so a combo can't drift into a leader sequence.
-        const defaultBinding = SHORTCUTS.find((s) => s.id === capturingId)?.binding || target.binding;
-        const kind = parseBinding(defaultBinding).kind;
+        const defaultEntry = SHORTCUTS.find((s) => s.id === capturingId);
+        const defaultBinding = defaultEntry?.binding || target.binding;
+        const kind = bindingFamily(defaultEntry || target);
 
         const commit = (binding) => {
             setCapturingId(null);
@@ -158,6 +160,15 @@ export function KeyboardSection() {
             e.preventDefault();
             e.stopPropagation();
             if (e.key === 'Escape' && kind !== 'combo') { setCapturingId(null); setLeaderLead(null); return; }
+            // The browser or desktop keeps these chords, so a binding on one
+            // would never fire.
+            const reserved = reservedChordLabel(e, mac);
+            if (reserved) {
+                setCapturingId(null);
+                setLeaderLead(null);
+                setStatus({ kind: 'error', text: t('settings.keyboard.reservedChord', { chord: reserved }) });
+                return;
+            }
             const frag = bindingFromEvent(e, kind);
             if (frag === null) return;
             if (kind === 'leader') {

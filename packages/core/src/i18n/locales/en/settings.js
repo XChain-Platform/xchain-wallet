@@ -19,6 +19,7 @@ const messages = {
     'settings.toggle.turnOn': 'Turn on',
     'settings.developerMode.switchAccessibleLabel': 'Turn on developer mode',
     'settings.ads.switchAccessibleLabel': 'Turn on Automatic Donation System',
+    'settings.keyboard.reservedChord': '{chord} is already used by the browser or the system.',
     'settings.network.activeLabel': 'Active network',
     'settings.network.switchConfirm': 'Switch network',
     'settings.network.switchError': "Couldn't switch networks. Try again.",

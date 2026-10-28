@@ -50,7 +50,7 @@ test('a second link delivered while Send is open replaces the form', async ({ pa
     await expect(page.locator('#send-amount')).toHaveValue('2');
 });
 
-test('a link delivered after Approve waits until the user leaves the outcome', async ({ page }) => {
+test('a link delivered after Approve waits and is dropped when the user leaves by another route', async ({ page }) => {
     await page.addInitScript(() => {
         if (window.localStorage.getItem('xc:test:links') !== '1') return;
         const listeners = [];
@@ -85,8 +85,9 @@ test('a link delivered after Approve waits until the user leaves the outcome', a
     await expect(page.locator('#send-destination')).toHaveValue(ADDRESS);
     await expect(page.locator('#send-amount')).toHaveValue('0.001');
 
-    // Leaving the outcome releases the waiting link, which opens its own Send.
+    // Leaving by the navigation is not Back or Done on a result, so the waiting
+    // link is dropped and the screen the user chose says so.
     await page.getByRole('navigation', { name: 'Primary navigation' }).getByRole('button', { name: 'Home' }).click();
-    await expect(page.locator('#send-destination')).toHaveValue(OTHER);
-    await expect(page.locator('#send-amount')).toHaveValue('2');
+    await expect(page.getByText('The waiting payment link was dropped.')).toBeVisible();
+    await expect(page.locator('#send-destination')).toHaveCount(0);
 });

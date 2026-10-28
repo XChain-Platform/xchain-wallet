@@ -68,6 +68,7 @@ import { useSignerReady } from '../hooks/useSignerReady.js';
 import { useDeveloperMode } from '../hooks/useDeveloperMode.js';
 import { useSettings } from '../hooks/useSettings.js';
 import { getActiveNetwork } from '../../flows/effectiveNetwork.js';
+import { activeNetworkLabel } from '../utils/activeNetworkSwitch.js';
 import { useConfirmAction } from '../hooks/useConfirmAction.js';
 import { prebuiltPsbtFromComposed } from '../../flows/prebuiltPsbtFromComposed.js';
 import { ActionConfirmScreen } from '../components/ActionConfirmScreen.jsx';
@@ -430,12 +431,16 @@ function pastedSecretKind(text, detected, chainRegistry) {
  * @param {() => void} [props.onDone]
  *        Leaves a completed send for Home. Falls back to onBack for callers
  *        that do not distinguish completion from ordinary back navigation.
- * @param {(held: boolean) => void} [props.onHoldLinks]
+ * @param {(held: boolean, release?: { open: boolean }) => void} [props.onHoldLinks]
  *        Called with true when the user approves a payment and with false when
  *        this screen unmounts. While held, the shell keeps an incoming payment
  *        link waiting instead of replacing the screen that shows the outcome.
+ *        The release carries open: true only when the user left through Back
+ *        or Done on the result; any other route drops the waiting link.
+ * @param {boolean} [props.linkWaiting]
+ *        True while the shell holds a payment link; the result says so.
  */
-export function Send({ walletId, accountId, onBack, prefill = null, onDone, onChangeAsset, onViewHistory, onReceive, onHoldLinks }) {
+export function Send({ walletId, accountId, onBack, prefill = null, onDone, onChangeAsset, onViewHistory, onReceive, onHoldLinks, linkWaiting = false }) {
     const { messaging, shell } = useMessaging();
     // A demo wallet probes nothing; its fixtures never touch a network.
     const { overall: reachabilityOverall, refresh: recheckReachability } = useReachability({
@@ -463,8 +468,9 @@ export function Send({ walletId, accountId, onBack, prefill = null, onDone, onCh
         linksHeldRef.current = true;
         onHoldLinksRef.current?.(true);
     }, []);
+    const leftByResultRef = useRef(false);
     useEffect(() => () => {
-        if (linksHeldRef.current) onHoldLinksRef.current?.(false);
+        if (linksHeldRef.current) onHoldLinksRef.current?.(false, { open: leftByResultRef.current });
     }, []);
     // Unlocked software session signs without a password.
     const signerReady = useSignerReady(walletId);
@@ -778,13 +784,25 @@ export function Send({ walletId, accountId, onBack, prefill = null, onDone, onCh
         || extraLegs.some((leg) => [leg.to, leg.amount, leg.tick]
             .some((value) => String(value || '').trim().length > 0))
     ), [toAddress, amount, memo, fiatAmount, password, tick, chainId, extraLegs]);
+    const stageRef = useRef(stage);
+    stageRef.current = stage;
     const leaveGuard = useFormLeaveGuard({
         dirty: stage !== 'done' && hasRealInput,
         submitting: stage === 'submitting',
         signedUnbroadcast: stage === 'done' && result?.queued === true && result?.unsaved === true,
-        onLeave: onBack,
+        onLeave: () => {
+            if (stageRef.current === 'done') leftByResultRef.current = true;
+            onBack?.();
+        },
         onDiscard: discardDraft,
     });
+    // Done on the result leaves for the shell's Home; either way it is a
+    // leave from the result, so a waiting payment link opens.
+    const leaveResultDone = () => {
+        if (!onDone) { leaveGuard.guardedOnBack(); return; }
+        leftByResultRef.current = true;
+        onDone();
+    };
 
     useEffect(() => {
         if (!prefill?.chainId) return;
@@ -1579,6 +1597,12 @@ export function Send({ walletId, accountId, onBack, prefill = null, onDone, onCh
     }, [stage]);
 
     const descriptor = chainId ? chainRegistry.get(chainId) : null;
+    // A chain from another network (a payment link for Testnet on a Mainnet
+    // wallet) has no address here; the fix is the network switch, not Receive.
+    const otherNetworkKind = settings && descriptor?.networkKind
+        && descriptor.networkKind !== getActiveNetwork(settings)
+        ? descriptor.networkKind
+        : null;
     const fromAddress = useMemo(() => {
         if (!chainId || !fromAddressId || !addressesByChain) return null;
         return (addressesByChain[chainId] || []).find((a) => a.id === fromAddressId) || null;
@@ -3087,6 +3111,9 @@ export function Send({ walletId, accountId, onBack, prefill = null, onDone, onCh
             header={header}
             restoreScroll={!(stage === 'review' || stage === 'submitting')}
         >
+            {stage === 'done' && linkWaiting ? (
+                <StatusMessage variant="status">{t('send.linkWaiting')}</StatusMessage>
+            ) : null}
             {children}
             {footer}
             {leaveGuard.confirmation}
@@ -3361,7 +3388,7 @@ export function Send({ walletId, accountId, onBack, prefill = null, onDone, onCh
         // PSBT instead of a broadcast txid; render the export UI (paste +
         // animated QR) so the user can transport it to a Signer-mode wallet.
         if (result?.psbtHex && !txid) {
-            return wrap(<WatcherResultPanel result={result} onSendAnother={sendAnother} onDone={onDone || leaveGuard.guardedOnBack} />);
+            return wrap(<WatcherResultPanel result={result} onSendAnother={sendAnother} onDone={leaveResultDone} />);
         }
 
         // §5.3.4 TRANSIENT broadcast failure: the transaction IS signed and
@@ -3386,7 +3413,7 @@ export function Send({ walletId, accountId, onBack, prefill = null, onDone, onCh
                             title={SIGNED_NOT_BROADCAST_TITLE}
                             body={t('send.queued.body')}
                             actionLabel={t('common.done')}
-                            onAction={onDone || leaveGuard.guardedOnBack}
+                            onAction={leaveResultDone}
                         />
                     </div>
                 </>,
@@ -3526,7 +3553,7 @@ export function Send({ walletId, accountId, onBack, prefill = null, onDone, onCh
                     <Button variant="secondary" onClick={sendAnother}>
                         {t('send.success.sendAnother')}
                     </Button>
-                    <Button variant="primary" onClick={onDone || leaveGuard.guardedOnBack}>{t('common.done')}</Button>
+                    <Button variant="primary" onClick={leaveResultDone}>{t('common.done')}</Button>
                 </div>
             </>,
         );
@@ -3963,7 +3990,9 @@ export function Send({ walletId, accountId, onBack, prefill = null, onDone, onCh
                 />
             ) : (
                 <FormNotice variant="error">
-                    {t('send.source.noAddress')}
+                    {otherNetworkKind
+                        ? t('send.source.otherNetwork', { network: activeNetworkLabel(otherNetworkKind) })
+                        : t('send.source.noAddress')}
                 </FormNotice>
             )}
             <AddressCombobox
