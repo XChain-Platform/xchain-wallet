@@ -36,6 +36,7 @@ const CONFIRMATION_PER_CHAR_MS = 40;
 // A toast younger than this is treated as part of the navigation that
 // produced it and survives the route change.
 const ROUTE_CHANGE_GRACE_MS = 400;
+export const SPAM_TOKEN_TOAST_KIND = 'spam-token';
 
 function confirmationDuration(message) {
     const length = typeof message === 'string' ? message.length : 0;
@@ -58,6 +59,7 @@ function isConfirmation(input) {
  *   onAction?: () => void | Promise<void>,
  *   durationMs?: number,
  *   variant?: 'default' | 'info' | 'warning' | 'success' | 'error',
+ *   kind?: 'spam-token',
  * }} ToastInput
  */
 
@@ -69,6 +71,7 @@ function isConfirmation(input) {
  *   clearToasts: () => void,
  *   dismissStaleToasts: () => void,
  *   clearGeneration: () => number,
+ *   setConfirmScreenOpen: (open: boolean) => void,
  * }} ToastApi
  */
 
@@ -82,6 +85,7 @@ const ToastContext = createContext(null);
  */
 export function ToastHost({ children }) {
     const [toasts, setToasts] = useState(/** @type {ToastInput[]} */ ([]));
+    const [confirmScreenOpen, setConfirmScreenOpen] = useState(false);
     const [announcement, setAnnouncement] = useState({ id: 0, message: '' });
     const timersRef = useRef(/** @type {Map<string, ReturnType<typeof setTimeout>>} */ (new Map()));
     // Counts clearToasts calls, so a caller can tell a lock cleared the stack
@@ -164,13 +168,19 @@ export function ToastHost({ children }) {
 
     const clearGeneration = useCallback(() => clearCountRef.current, []);
     const api = useMemo(() => ({
-        showToast, announce, dismissToast, clearToasts, dismissStaleToasts, clearGeneration,
+        showToast, announce, dismissToast, clearToasts, dismissStaleToasts, clearGeneration, setConfirmScreenOpen,
     }), [
-        showToast, announce, dismissToast, clearToasts, dismissStaleToasts, clearGeneration,
+        showToast, announce, dismissToast, clearToasts, dismissStaleToasts, clearGeneration, setConfirmScreenOpen,
     ]);
 
-    const visibleToasts = toasts.slice(0, VISIBLE_LIMIT);
-    const hiddenCount = Math.max(0, toasts.length - visibleToasts.length);
+    // Spam detection is background information from Home, not part of a signing
+    // decision. Keep it queued while a confirm page owns the screen, then give
+    // it a full visible timeout after the person returns.
+    const eligibleToasts = confirmScreenOpen
+        ? toasts.filter((toast) => toast.kind !== SPAM_TOKEN_TOAST_KIND)
+        : toasts;
+    const visibleToasts = eligibleToasts.slice(0, VISIBLE_LIMIT);
+    const hiddenCount = Math.max(0, eligibleToasts.length - visibleToasts.length);
 
     useEffect(() => {
         const visibleIds = new Set(visibleToasts.map((toast) => toast.id));
@@ -282,7 +292,18 @@ export function useToast() {
         clearToasts: () => {},
         dismissStaleToasts: () => {},
         clearGeneration: () => 0,
+        setConfirmScreenOpen: () => {},
     });
+}
+
+/** Keeps Home's spam-token nudge out of confirm and approval screens. */
+export function useSuppressSpamToastsOnConfirm(open) {
+    const { setConfirmScreenOpen } = useToast();
+    useLayoutEffect(() => {
+        if (!open) return undefined;
+        setConfirmScreenOpen(true);
+        return () => setConfirmScreenOpen(false);
+    }, [open, setConfirmScreenOpen]);
 }
 
 /**

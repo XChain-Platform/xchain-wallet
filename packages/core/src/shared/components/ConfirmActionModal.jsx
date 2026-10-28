@@ -46,6 +46,7 @@ import { MessagingContext } from '../MessagingContext.js';
 import { readActiveWallet } from '../utils/activeWalletMemory.js';
 import styles from './ConfirmActionModal.module.css';
 import { t } from '../../i18n/index.js';
+import { useSuppressSpamToastsOnConfirm } from './ToastHost.jsx';
 import '../../i18n/locales/en/components.js';
 import '../../i18n/locales/en/extension.js';
 import '../../i18n/locales/en/send.js';
@@ -339,6 +340,7 @@ export function ConfirmActionModal({
     const signaturePhase = phase === 'signing' || phase === 'rechecking';
     const terminal = phase === 'done' || phase === 'error' || phase === 'signed-not-broadcast';
     const open = OPEN_PHASES.has(phase);
+    useSuppressSpamToastsOnConfirm(open);
     const pageRef = useRef(null);
     const titleRef = useRef(null);
     useFocusTrap(pageRef, { active: open, initialFocusRef: titleRef });

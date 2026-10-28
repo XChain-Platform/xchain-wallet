@@ -20,7 +20,8 @@ vi.mock('../../../../packages/core/src/shared/hooks/useHaptic.js', () => ({
 }));
 
 import {
-    ToastHost, preloadToastStack, useClearToastsOnLock, useToast,
+    SPAM_TOKEN_TOAST_KIND, ToastHost, preloadToastStack, useClearToastsOnLock,
+    useSuppressSpamToastsOnConfirm, useToast,
 } from '../../../../packages/core/src/shared/components/ToastHost.jsx';
 
 let toastApi;
@@ -287,5 +288,46 @@ describe('useClearToastsOnLock', () => {
             </ToastHost>,
         );
         expect(screen.getByText('Lock screen notice')).toBeInTheDocument();
+    });
+});
+
+describe('useSuppressSpamToastsOnConfirm', () => {
+    function ConfirmProbe({ open }) {
+        useSuppressSpamToastsOnConfirm(open);
+        return null;
+    }
+
+    it('queues the spam-token nudge until the confirm screen closes', () => {
+        const view = render(
+            <ToastHost>
+                <CaptureToastApi />
+                <ConfirmProbe open={false} />
+            </ToastHost>,
+        );
+        show({ id: 'spam', kind: SPAM_TOKEN_TOAST_KIND, message: 'Likely-spam token detected', durationMs: 1000 });
+        show({ id: 'ordinary', message: 'Connection restored', durationMs: 0 });
+        expect(screen.getByText('Likely-spam token detected')).toBeInTheDocument();
+
+        view.rerender(
+            <ToastHost>
+                <CaptureToastApi />
+                <ConfirmProbe open />
+            </ToastHost>,
+        );
+        expect(screen.queryByText('Likely-spam token detected')).toBeNull();
+        expect(screen.getByText('Connection restored')).toBeInTheDocument();
+
+        act(() => vi.advanceTimersByTime(1000));
+        view.rerender(
+            <ToastHost>
+                <CaptureToastApi />
+                <ConfirmProbe open={false} />
+            </ToastHost>,
+        );
+        expect(screen.getByText('Likely-spam token detected')).toBeInTheDocument();
+        act(() => vi.advanceTimersByTime(999));
+        expect(screen.getByText('Likely-spam token detected')).toBeInTheDocument();
+        act(() => vi.advanceTimersByTime(1));
+        expect(screen.queryByText('Likely-spam token detected')).toBeNull();
     });
 });

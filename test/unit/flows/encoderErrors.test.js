@@ -306,6 +306,32 @@ describe('encoderErrorMessage', () => {
         expect(copy).not.toContain('Internal encoder error');
     });
 
+    it('maps JSON-RPC server failures to temporary copy while preserving real protocol refusals', () => {
+        const failures = [
+            sdkEncoderError('ENCODER_RPC_ERROR', 'Encoder RPC error: Internal error: upstream node timed out', {
+                rpcError: { code: -32603, message: 'Internal error', data: null },
+            }),
+            acrossBoundary(sdkEncoderError(
+                'ENCODER_RPC_ERROR',
+                'Encoder RPC error: Internal error: upstream node timed out',
+                { rpcError: { code: -32603, message: 'Internal error', data: null } },
+            )),
+            sdkEncoderError('ENCODER_RPC_ERROR', 'Encoder RPC error: upstream node timed out', {
+                rpcError: { code: -32000, message: 'upstream node timed out', data: null },
+            }),
+        ];
+        for (const failure of failures) {
+            const copy = submitFailureMessage(failure, { verb: 'sweep' });
+            expect(copy).toMatch(/transaction service could not complete this request/i);
+            expect(copy).toMatch(/nothing was signed or sent/i);
+            expect(copy).not.toContain('upstream node timed out');
+        }
+
+        const refusal = encoderRpcError('TOKEN_ALREADY_REGISTERED', 'This token symbol is already registered.');
+        expect(submitFailureMessage(refusal, { verb: 'sweep' }))
+            .toBe('This token symbol is already registered.');
+    });
+
     it('has a safe answer for an ENCODER_* code minted after this mapper', () => {
         const copy = encoderErrorMessage(sdkEncoderError('ENCODER_QUANTUM_FLUX', 'Encoder went sideways'), {});
         expect(copy).toMatch(/nothing was signed or sent/i);

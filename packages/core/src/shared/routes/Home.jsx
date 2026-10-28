@@ -25,7 +25,7 @@ import { HomeTabs } from '../components/HomeTabs.jsx';
 import { buildBalanceRows, detectSpamCandidates } from '../components/BalanceList.jsx';
 import { hasBackupReminderFunds } from '../../flows/backupReminder.js';
 import { useScreenShortcuts } from '../keyboard/useScreenShortcuts.js';
-import { useToast } from '../components/ToastHost.jsx';
+import { SPAM_TOKEN_TOAST_KIND, useToast } from '../components/ToastHost.jsx';
 import { BackupReminderCard } from '../components/BackupReminderCard.jsx';
 import { AddressDiscoveryNotice } from '../components/AddressDiscoveryNotice.jsx';
 import { DemoExitConfirm } from '../components/DemoExitConfirm.jsx';
@@ -615,6 +615,7 @@ export function Home({ onLocked, onResumeConfirm, onSend, onReceive, onSwap, onE
         if (fresh.length === 0) return;
         spamNudgedForWalletRef.current = activeWalletId;
         showToast({
+            kind: SPAM_TOKEN_TOAST_KIND,
             message: `${fresh.length} likely-spam token${fresh.length === 1 ? '' : 's'} detected. Bulk-hide?`,
             actionLabel: `Hide ${fresh.length}`,
             onAction: () => {
