@@ -878,11 +878,14 @@ export function DispenserDetail({ walletId, chainId, actionIndex, onBack, onCanc
 
     // Keep failed reads unknown; only a resolved membership answer drives a
     // refusal verdict.
-    const readBuyerPolicies = useCallback(async () => {
+    // An Approve-time read passes `fresh` so it reflects the indexer at Approve,
+    // past the explorer wrapper's read reuse and the HTTP cache.
+    const readBuyerPolicies = useCallback(async ({ fresh = false } = {}) => {
+        const tag = fresh ? { fresh: true } : {};
         const readToken = async (tick) => {
             if (isDemoWallet || !tick || typeof messaging.getTokenInfo !== 'function') return null;
             try {
-                return await messaging.getTokenInfo({ chainId, tick });
+                return await messaging.getTokenInfo({ chainId, tick, ...tag });
             } catch {
                 return null;
             }
@@ -904,7 +907,7 @@ export function DispenserDetail({ walletId, chainId, actionIndex, onBack, onCanc
         if (!isDemoWallet && typeof messaging.getListByActionIndex === 'function') {
             await Promise.all(indexes.map(async (index) => {
                 try {
-                    const detail = await messaging.getListByActionIndex({ chainId, actionIndex: index });
+                    const detail = await messaging.getListByActionIndex({ chainId, actionIndex: index, ...tag });
                     members.set(index, listMembers(detail));
                 } catch {
                     members.set(index, null);
@@ -961,10 +964,13 @@ export function DispenserDetail({ walletId, chainId, actionIndex, onBack, onCanc
         return descriptions;
     });
 
-    const refreshBuyerEligibility = useCallback(async (expectedIdentity = detailIdentityRef.current) => {
+    const refreshBuyerEligibility = useCallback(async (
+        expectedIdentity = detailIdentityRef.current,
+        { fresh = false } = {},
+    ) => {
         if (expectedIdentity !== detailIdentityRef.current) return true;
         setEligibilityChecking(true);
-        const policies = await readBuyerPolicies();
+        const policies = await readBuyerPolicies({ fresh });
         if (expectedIdentity !== detailIdentityRef.current) return true;
         setBuyerPolicies(policies);
         setEligibilityChecking(false);
@@ -1228,11 +1234,14 @@ export function DispenserDetail({ walletId, chainId, actionIndex, onBack, onCanc
     // or sold out since then still draws the payment, which reaches the creator
     // and releases nothing, so the buy reads the dispenser again before it
     // composes and again at approval. A failed read is unknown, never a refusal.
-    const buyStateRefusal = useCallback(async (expectedIdentity) => {
+    // The approval read passes `fresh`: a dispenser that opened at the pay-to a
+    // moment ago must not hide behind the review read's reuse or cache.
+    const buyStateRefusal = useCallback(async (expectedIdentity, { fresh: freshRead = false } = {}) => {
         if (isDemoWallet || typeof messaging.getDispenserByActionIndex !== 'function') return null;
+        const tag = freshRead ? { fresh: true } : {};
         let fresh;
         try {
-            fresh = pickDispenser(await messaging.getDispenserByActionIndex({ chainId, actionIndex }));
+            fresh = pickDispenser(await messaging.getDispenserByActionIndex({ chainId, actionIndex, ...tag }));
         } catch {
             return null;
         }
@@ -1256,7 +1265,7 @@ export function DispenserDetail({ walletId, chainId, actionIndex, onBack, onCanc
         let neighbours;
         try {
             neighbours = openDispensersPaidBy(
-                await messaging.getDispensersForAddress({ chainId, address: dispAddr }),
+                await messaging.getDispensersForAddress({ chainId, address: dispAddr, ...tag }),
                 { dest: dispAddr, sentTick: payTick, isNativePayment: coinBuyable },
             );
         } catch {
@@ -1302,14 +1311,14 @@ export function DispenserDetail({ walletId, chainId, actionIndex, onBack, onCanc
                     compose: () => messaging.composeForConfirm(buyRequest),
                     onApprove: async (prebuiltPsbt) => {
                         // Recheck at approval because the dispenser can close while Confirm is open.
-                        const closedRefusal = await buyStateRefusal(expectedIdentity);
+                        const closedRefusal = await buyStateRefusal(expectedIdentity, { fresh: true });
                         if (closedRefusal) {
                             const refused = new Error(closedRefusal);
                             refused.name = BUYER_ACCESS_REFUSED;
                             throw refusedBeforeSigning(refused);
                         }
                         // Recheck at approval because list edits can land while Confirm is open.
-                        if (await refreshBuyerEligibility(expectedIdentity)) {
+                        if (await refreshBuyerEligibility(expectedIdentity, { fresh: true })) {
                             const refused = new Error(
                                 'The selected paying address or dispenser address is refused by a current access list.',
                             );
@@ -1386,7 +1395,8 @@ export function DispenserDetail({ walletId, chainId, actionIndex, onBack, onCanc
         }
         if (isDemoWallet) return true;
         try {
-            const fresh = pickDispenser(await messaging.getDispenserByActionIndex({ chainId, actionIndex }));
+            // The open check guards the owner action's signature, so it reads fresh.
+            const fresh = pickDispenser(await messaging.getDispenserByActionIndex({ chainId, actionIndex, fresh: true }));
             const freshStatus = flowsLib.dispenserLiveState(fresh).status;
             if (freshStatus === 'open') return true;
             if (fresh) setDispenser(fresh);

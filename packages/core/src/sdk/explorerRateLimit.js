@@ -638,6 +638,33 @@ function isSingleAttempt(config) {
     return Boolean(params && typeof params === 'object' && singleAttemptParams.has(params));
 }
 
+// A caller's `fresh` rides the same way: the read guards a signature, so it
+// must reflect the indexer as it stands at Approve. A fresh read never joins
+// or reuses another read and asks the browser's HTTP cache for nothing, since
+// the explorer serves its reads with `max-age=5, stale-while-revalidate=10`.
+const FRESH = Symbol('xc.fresh');
+const freshParams = new WeakSet();
+// Open explorerFreshScope calls on one explorer client.
+const FRESH_SCOPE = Symbol('xc.freshScope');
+
+function isFresh(config) {
+    const params = config && config.params;
+    return Boolean(params && typeof params === 'object' && freshParams.has(params));
+}
+
+/**
+ * The axios config of a fresh read: `cache: 'no-store'` for the fetch
+ * adapter. A page context would pick the XMLHttpRequest adapter, which has no
+ * cache mode, so the read goes through fetch there; Node's http adapter has no
+ * HTTP cache and keeps its own adapter. The URL and headers stay as they are,
+ * so the explorer sees the same request and no CORS preflight is added.
+ */
+function freshConfig(config) {
+    const out = { ...config, fetchOptions: { ...(config && config.fetchOptions), cache: 'no-store' } };
+    if (typeof XMLHttpRequest !== 'undefined' && typeof fetch === 'function') out.adapter = 'fetch';
+    return out;
+}
+
 /** Route one explorer axios instance's read-only calls through the limiter. */
 function wrapExplorerAxios(client, limiter, maxRetries, isCurrent = () => true) {
     if (!client || client.__xcRateLimited || typeof client.get !== 'function') return;
@@ -654,21 +681,28 @@ function wrapExplorerAxios(client, limiter, maxRetries, isCurrent = () => true) 
     const get = client.get.bind(client);
     const post = typeof client.post === 'function' ? client.post.bind(client) : null;
     client.get = (url, config = {}) => {
+        const fresh = isFresh(config);
         // Binary reads keep their own response type, so they are never shared.
-        const shareable = !config || !config.responseType || config.responseType === 'json';
+        const shareable = !fresh && (!config || !config.responseType || config.responseType === 'json');
         const key = shareable ? requestKey('GET', base, url, config && config.params) : null;
+        const sent = fresh ? freshConfig(config) : config;
         return limiter.request(
-            host, key, () => currentResponse(() => get(url, config), isCurrent),
+            host, key, () => currentResponse(() => get(url, sent), isCurrent),
             (s, rateLimited) => pausedError(s, config, rateLimited),
             maxRetries, config?.signal, undefined, { singleAttempt: isSingleAttempt(config) },
         );
     };
     if (post) {
-        client.post = (url, body, config = {}) => limiter.request(
-            host, null, () => currentResponse(() => post(url, body, config), isCurrent),
-            (s, rateLimited) => pausedError(s, config, rateLimited),
-            maxRetries, config?.signal, undefined, { singleAttempt: isSingleAttempt(config) },
-        );
+        // POST reads are never shared or HTTP-cached; a fresh one carries
+        // no-store all the same, so the tag means one thing on both methods.
+        client.post = (url, body, config = {}) => {
+            const sent = isFresh(config) ? freshConfig(config) : config;
+            return limiter.request(
+                host, null, () => currentResponse(() => post(url, body, sent), isCurrent),
+                (s, rateLimited) => pausedError(s, config, rateLimited),
+                maxRetries, config?.signal, undefined, { singleAttempt: isSingleAttempt(config) },
+            );
+        };
     }
     client.__xcRateLimited = true;
     client.__xcRateLimiter = limiter;
@@ -705,6 +739,48 @@ export async function explorerReadOnce(sdk, path, fallback) {
     const explorer = sdk && sdk.explorer;
     if (explorer && typeof explorer.get === 'function') return explorer.get(path, { noRetry: true });
     return fallback();
+}
+
+/**
+ * One fresh explorer GET, for a read that guards a signature through an SDK
+ * facade method that takes no options (`getAction(index)`) and so cannot
+ * carry `fresh`.
+ *
+ * Reads through `sdk.explorer.get(path, { fresh: true })`; an SDK without an
+ * explorer client (a stand-in) gets `fallback()` instead.
+ *
+ * @param {any} sdk
+ * @param {string} path  explorer path below `/<COIN>/api`, already encoded
+ * @param {() => Promise<any>} fallback
+ * @returns {Promise<any>}
+ */
+export async function explorerReadFresh(sdk, path, fallback) {
+    const explorer = sdk && sdk.explorer;
+    if (explorer && typeof explorer.get === 'function') return explorer.get(path, { fresh: true });
+    return fallback();
+}
+
+/**
+ * Run `fn` with every read through this SDK's explorer client sent fresh,
+ * for a guard read whose SDK method builds its own request and takes no
+ * options (`quoteNativeFee`, whose GET /feequote the explorer serves as
+ * cacheable). A read by another caller on the same client while `fn` runs
+ * goes fresh too; it costs one request and is never less current.
+ *
+ * @template T
+ * @param {any} sdk
+ * @param {() => Promise<T>} fn
+ * @returns {Promise<T>}
+ */
+export async function explorerFreshScope(sdk, fn) {
+    const explorer = sdk && sdk.explorer;
+    if (!explorer || typeof explorer !== 'object') return fn();
+    explorer[FRESH_SCOPE] = (explorer[FRESH_SCOPE] || 0) + 1;
+    try {
+        return await fn();
+    } finally {
+        explorer[FRESH_SCOPE] -= 1;
+    }
 }
 
 /** Rewrite a surfaced explorer 429 into the plain sentence, keeping the wait machine-readable. */
@@ -757,6 +833,7 @@ function wrapExplorerClient(explorer, limiter) {
             if (opts && opts[SINGLE_ATTEMPT] && params && typeof params === 'object') {
                 singleAttemptParams.add(params);
             }
+            if (opts && opts[FRESH] && params && typeof params === 'object') freshParams.add(params);
             return params;
         };
     }
@@ -774,6 +851,9 @@ function wrapExplorerClient(explorer, limiter) {
                 // SDK's loop, and the shared layer keeps its retries.
                 if (callerOpts && typeof callerOpts === 'object' && callerOpts.noRetry) {
                     callArgs[optsAt] = { ...callArgs[optsAt], [SINGLE_ATTEMPT]: true };
+                }
+                if ((callerOpts && typeof callerOpts === 'object' && callerOpts.fresh) || this[FRESH_SCOPE] > 0) {
+                    callArgs[optsAt] = { ...callArgs[optsAt], [FRESH]: true };
                 }
                 return await original.apply(this, callArgs);
             } catch (err) {

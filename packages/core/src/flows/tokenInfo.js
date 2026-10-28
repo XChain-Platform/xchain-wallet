@@ -1125,6 +1125,9 @@ function parseTisText(text) {
  * @param {boolean} [params.demo]
  * @param {boolean} [params.metadataFetchEnabled]
  * @param {typeof fetch} [params.fetch]
+ * @param {boolean} [params.fresh]  read the token row past the explorer
+ *        wrapper's read reuse and the HTTP cache, for a caller that judges a
+ *        signature on its list pointers
  * @returns {Promise<TokenInfo>}
  */
 export async function tokenInfoFor({
@@ -1134,6 +1137,7 @@ export async function tokenInfoFor({
     demo = false,
     metadataFetchEnabled = true,
     fetch: fetchImpl,
+    fresh = false,
 }) {
     if (!sdkRegistry) throw new Error('tokenInfoFor: sdkRegistry is required');
     if (!chainId) throw new Error('tokenInfoFor: chainId is required');
@@ -1144,7 +1148,7 @@ export async function tokenInfoFor({
     let readFailed = false;
     if (!demo && typeof sdk?.getToken === 'function') {
         try {
-            raw = await sdk.getToken(tick);
+            raw = fresh ? await sdk.getToken(tick, { fresh: true }) : await sdk.getToken(tick);
         } catch {
             raw = null;
             readFailed = true;

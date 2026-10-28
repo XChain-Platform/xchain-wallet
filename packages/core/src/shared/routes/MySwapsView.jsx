@@ -543,10 +543,12 @@ function SwapActionPanel({
             ? { VERSION: '1', SWAP_ACTION_INDEX: idx }
             : { VERSION: '2', SWAP_ACTION_INDEX: idx, ...editParams };
         try {
+            // Fresh reads, so a cancel or fill since the list loaded is never
+            // answered from the list's own reads.
             let freshCancelledKeys = item.cancelledKeys || new Set();
             if (typeof messaging.getSwapCancelsForAddress === 'function') {
                 try {
-                    const response = await messaging.getSwapCancelsForAddress({ chainId, address: owner.address });
+                    const response = await messaging.getSwapCancelsForAddress({ chainId, address: owner.address, fresh: true });
                     freshCancelledKeys = collectCancelledKeys([{
                         p: { chainId, owner },
                         cancels: extractRows(response),
@@ -559,7 +561,7 @@ function SwapActionPanel({
             if (typeof messaging.getSwapDetail === 'function') {
                 let freshDetail;
                 try {
-                    freshDetail = await messaging.getSwapDetail({ chainId, actionIndex: idx });
+                    freshDetail = await messaging.getSwapDetail({ chainId, actionIndex: idx, fresh: true });
                 } catch {
                     setError('Could not refresh this swap. Try again.');
                     return;

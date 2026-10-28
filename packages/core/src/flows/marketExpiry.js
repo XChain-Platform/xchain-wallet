@@ -3,7 +3,7 @@
 //
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-import { explorerReadOnce } from '../sdk/explorerRateLimit.js';
+import { explorerReadFresh, explorerReadOnce } from '../sdk/explorerRateLimit.js';
 
 const KIND_STATUS_FIELD = Object.freeze({
     order: 'order_status',
@@ -42,16 +42,23 @@ function coinValue(map, coin) {
  * height. This prevents an old block timestamp from keeping an expired offer
  * open while the explorer is catching up.
  *
+ * A caller that refuses a signature on the answer passes `fresh`, so the
+ * status read goes to the indexer past the explorer wrapper's read reuse and
+ * the HTTP cache.
+ *
  * @param {any} sdk
+ * @param {{ fresh?: boolean }} [options]
  * @returns {Promise<{ blockTime: number|null, indexedHeight: number|null, chainHeight: number|null, stale: boolean }>}
  */
-export async function readMarketExpiryClock(sdk) {
+export async function readMarketExpiryClock(sdk, { fresh = false } = {}) {
     if (!sdk || typeof sdk.getStatus !== 'function') {
         return { blockTime: null, indexedHeight: null, chainHeight: null, stale: false };
     }
     let status;
     try {
-        status = await explorerReadOnce(sdk, '/status', () => sdk.getStatus({ noRetry: true }));
+        status = fresh && typeof sdk.explorer?.get === 'function'
+            ? await sdk.explorer.get('/status', { noRetry: true, fresh: true })
+            : await explorerReadOnce(sdk, '/status', () => sdk.getStatus({ noRetry: true }));
     } catch {
         return { blockTime: null, indexedHeight: null, chainHeight: null, stale: false };
     }
@@ -179,8 +186,8 @@ async function mapResponseRows(response, mapRow) {
  * @param {'order'|'swap'|'dispenser'} kind
  * @param {{ hydrate?: boolean }} [options]
  */
-export async function withMarketExpiry(sdk, response, kind, { hydrate = false } = {}) {
-    const clock = await readMarketExpiryClock(sdk);
+export async function withMarketExpiry(sdk, response, kind, { hydrate = false, fresh = false } = {}) {
+    const clock = await readMarketExpiryClock(sdk, { fresh });
     return mapResponseRows(response, async (row) => {
         const current = hydrate && Number.isFinite(clock.blockTime)
             ? await hydrateMarketOffer(sdk, row)
@@ -203,6 +210,8 @@ const ACTION_REFERENCE = Object.freeze({
 /**
  * Refuse a cancel, edit, or close when its referenced offer is expired. A
  * timestamped offer also requires a current indexed height before signing.
+ * Both reads guard the signature, so both read fresh: an offer that filled or
+ * was cancelled a moment ago must not hide behind a reused or cached answer.
  *
  * @param {{ sdkRegistry: any, chainId: string, actionData: any }} params
  */
@@ -217,7 +226,9 @@ export async function assertReferencedOfferActionable({ sdkRegistry, chainId, ac
 
     let detail;
     try {
-        detail = await sdk.getAction(String(actionIndex));
+        // getAction(index) takes no options, so the fresh read names the same path.
+        detail = await explorerReadFresh(sdk, `/action/${encodeURIComponent(String(actionIndex))}`,
+            () => sdk.getAction(String(actionIndex)));
     } catch {
         throw offerRefusal(`Could not verify whether this ${ref.kind} has expired. Try again.`);
     }
@@ -243,7 +254,7 @@ export async function assertReferencedOfferActionable({ sdkRegistry, chainId, ac
 
     const expiration = marketExpirationOf(detail);
     if (expiration == null || expiration <= 0) return;
-    const clock = await readMarketExpiryClock(sdk);
+    const clock = await readMarketExpiryClock(sdk, { fresh: true });
     if (!Number.isFinite(clock.blockTime)) {
         const reason = clock.stale ? 'the chain height is still syncing' : 'the current chain height is unavailable';
         throw offerRefusal(`Could not verify whether this ${ref.kind} has expired because ${reason}. Try again.`);

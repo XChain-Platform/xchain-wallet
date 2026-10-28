@@ -17,6 +17,7 @@
 // state varies, especially for newer markets).
 
 import { withMarketExpiry } from './marketExpiry.js';
+import { explorerReadFresh } from '../sdk/explorerRateLimit.js';
 // My orders and My swaps show every offer an address placed and close the
 // ones its cancels name, so the four address-scoped feeds follow every page.
 import { readAllPages } from './stakingQueries.js';
@@ -145,16 +146,18 @@ export async function ordersForAddress({ sdkRegistry, chainId, address, opts }) 
  * order_statuses 'cancelled' row is not promptly reflected on that read
  * path), but the order_cancels table shows the cancel the moment it
  * indexes. The view treats any order whose index appears here as
- * cancelled and stops offering cancel/edit on it.
+ * cancelled and stops offering cancel/edit on it. The re-read before a
+ * cancel or edit passes `fresh`, past the explorer wrapper's read reuse and
+ * the HTTP cache, since it decides whether that action is signed.
  *
- * @param {SdkCtx & { address: string, opts?: object }} params
+ * @param {SdkCtx & { address: string, opts?: object, fresh?: boolean }} params
  */
-export async function orderCancelsForAddress({ sdkRegistry, chainId, address, opts }) {
+export async function orderCancelsForAddress({ sdkRegistry, chainId, address, opts, fresh = false }) {
     if (!sdkRegistry) throw new Error('orderCancelsForAddress: sdkRegistry is required');
     if (!chainId) throw new Error('orderCancelsForAddress: chainId is required');
     if (!address) throw new Error('orderCancelsForAddress: address is required');
     const sdk = sdkRegistry.get(chainId);
-    return readAllPages((o) => sdk.getOrderCancels(address, 'address', o), opts);
+    return readAllPages((o) => sdk.getOrderCancels(address, 'address', o), freshOpts(opts, fresh));
 }
 
 /**
@@ -162,18 +165,19 @@ export async function orderCancelsForAddress({ sdkRegistry, chainId, address, op
  * `current_status` (open/cancelled/filled/expired) - the field the
  * `getOrders` list query omits. Used by My Orders to gate cancel/edit
  * on an order still being open. Generic action-detail endpoint; the
- * caller reads the order-specific fields off the result.
+ * caller reads the order-specific fields off the result. `fresh` as for
+ * orderCancelsForAddress.
  *
- * @param {SdkCtx & { actionIndex: string }} params
+ * @param {SdkCtx & { actionIndex: string, fresh?: boolean }} params
  */
-export async function orderDetail({ sdkRegistry, chainId, actionIndex }) {
+export async function orderDetail({ sdkRegistry, chainId, actionIndex, fresh = false }) {
     if (!sdkRegistry) throw new Error('orderDetail: sdkRegistry is required');
     if (!chainId) throw new Error('orderDetail: chainId is required');
     if (actionIndex == null || String(actionIndex).length === 0) {
         throw new Error('orderDetail: actionIndex is required');
     }
     const sdk = sdkRegistry.get(chainId);
-    return withMarketExpiry(sdk, await sdk.getAction(String(actionIndex)), 'order');
+    return withMarketExpiry(sdk, await actionDetail(sdk, actionIndex, fresh), 'order', { fresh });
 }
 
 /**
@@ -211,31 +215,45 @@ export async function swapsForAddress({ sdkRegistry, chainId, address, opts }) {
 /**
  * Every SWAP cancel (SWAP v1) an address submitted - the authoritative,
  * immediate "no longer open" signal My Swaps keys off.
+ * `fresh` as for orderCancelsForAddress.
  *
- * @param {SdkCtx & { address: string, opts?: object }} params
+ * @param {SdkCtx & { address: string, opts?: object, fresh?: boolean }} params
  */
-export async function swapCancelsForAddress({ sdkRegistry, chainId, address, opts }) {
+export async function swapCancelsForAddress({ sdkRegistry, chainId, address, opts, fresh = false }) {
     if (!sdkRegistry) throw new Error('swapCancelsForAddress: sdkRegistry is required');
     if (!chainId) throw new Error('swapCancelsForAddress: chainId is required');
     if (!address) throw new Error('swapCancelsForAddress: address is required');
     const sdk = sdkRegistry.get(chainId);
-    return readAllPages((o) => sdk.getSwapCancels(address, 'address', o), opts);
+    return readAllPages((o) => sdk.getSwapCancels(address, 'address', o), freshOpts(opts, fresh));
 }
 
 /**
  * A single SWAP's detail by action index (state.status/remaining/current
- * expiration + lists). Generic action-detail endpoint.
+ * expiration + lists). Generic action-detail endpoint. `fresh` as for
+ * orderCancelsForAddress.
  *
- * @param {SdkCtx & { actionIndex: string }} params
+ * @param {SdkCtx & { actionIndex: string, fresh?: boolean }} params
  */
-export async function swapDetail({ sdkRegistry, chainId, actionIndex }) {
+export async function swapDetail({ sdkRegistry, chainId, actionIndex, fresh = false }) {
     if (!sdkRegistry) throw new Error('swapDetail: sdkRegistry is required');
     if (!chainId) throw new Error('swapDetail: chainId is required');
     if (actionIndex == null || String(actionIndex).length === 0) {
         throw new Error('swapDetail: actionIndex is required');
     }
     const sdk = sdkRegistry.get(chainId);
-    return withMarketExpiry(sdk, await sdk.getAction(String(actionIndex)), 'swap');
+    return withMarketExpiry(sdk, await actionDetail(sdk, actionIndex, fresh), 'swap', { fresh });
+}
+
+/** List options that also ask for a fresh read when `fresh` is set. */
+function freshOpts(opts, fresh) {
+    return fresh ? { ...(opts || {}), fresh: true } : opts;
+}
+
+/** One action's detail; getAction(index) takes no options, so a fresh read names the same path. */
+function actionDetail(sdk, actionIndex, fresh) {
+    const index = String(actionIndex);
+    if (!fresh) return sdk.getAction(index);
+    return explorerReadFresh(sdk, `/action/${encodeURIComponent(index)}`, () => sdk.getAction(index));
 }
 
 /**

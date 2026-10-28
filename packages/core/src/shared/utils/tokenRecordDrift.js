@@ -80,7 +80,9 @@ export async function tokenRecordChangedSince({ messaging, chainId, tick, curren
     if (!current || !chainId || !tick || typeof messaging?.getTokenInfo !== 'function') return false;
     let fresh;
     try {
-        fresh = await messaging.getTokenInfo({ chainId, tick, demo: false });
+        // Fresh: the form read this record moments ago, and a reused or
+        // HTTP-cached answer would be that same record.
+        fresh = await messaging.getTokenInfo({ chainId, tick, demo: false, fresh: true });
     } catch {
         return false;
     }

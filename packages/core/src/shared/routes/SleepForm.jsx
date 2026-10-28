@@ -319,13 +319,16 @@ export function SleepForm({ walletId, onBack, mode, initialChainId, initialTick,
         return null;
     }
 
-    async function refreshHeight() {
+    async function refreshHeight({ fresh = false } = {}) {
         if (flowsLib.isDemoWallet(walletId) || typeof messaging?.getIndexerWatermark !== 'function') {
             throw new Error('The current block could not be refreshed. Check your connection and try again.');
         }
         const requestedChainId = chainId;
         try {
-            const response = await messaging.getIndexerWatermark({ chainId: requestedChainId });
+            const response = await messaging.getIndexerWatermark({
+                chainId: requestedChainId,
+                ...(fresh ? { fresh: true } : {}),
+            });
             const value = response?.watermark;
             const height = value == null ? null : Number(value);
             if (!Number.isSafeInteger(height) || height < 0) throw new Error('invalid height');
@@ -342,7 +345,8 @@ export function SleepForm({ walletId, onBack, mode, initialChainId, initialTick,
         if (!Number.isSafeInteger(wakeBlock) || wakeBlock <= 0) return null;
         let height;
         try {
-            height = await refreshHeight();
+            // This check runs just before signing, so the height is read fresh.
+            height = await refreshHeight({ fresh: true });
         } catch (err) {
             return err.message;
         }

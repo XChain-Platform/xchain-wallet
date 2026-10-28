@@ -542,7 +542,10 @@ function ListForkFormScreen({ walletId, listRef, onBack, onDone, repointHandlers
         if (typeof messaging.getListByActionIndex !== 'function') return null;
         let fresh;
         try {
-            fresh = currentListItems(await messaging.getListByActionIndex({ chainId, actionIndex: String(oldIndex) }));
+            // Fresh, so the screen's own read of the list never answers this check.
+            fresh = currentListItems(await messaging.getListByActionIndex({
+                chainId, actionIndex: String(oldIndex), fresh: true,
+            }));
         } catch (err) {
             return explorerReadFailure(err, `check list #${oldIndex}`)?.message
                 || `Couldn't check list #${oldIndex}. Try again.`;

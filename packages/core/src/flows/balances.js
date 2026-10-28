@@ -30,6 +30,7 @@ import { decimalToBaseUnits, roundDecimalString } from '../shared/utils/amountFo
 import { importedAddressIdsFor } from './_importedAddressIds.js';
 import { synthesizeDemoBalances } from './demoFixtures.js';
 import { UNCONFIRMED_COMMITTED_STATUSES } from './pendingDeltas.js';
+import { explorerReadFresh } from '../sdk/explorerRateLimit.js';
 
 const LIVE_PENDING_STATUSES = new Set(UNCONFIRMED_COMMITTED_STATUSES);
 
@@ -590,10 +591,14 @@ export async function addressMempool({ sdkRegistry, chainId, address, opts }) {
  * timeline falls back to its confirmed-implies-indexed heuristic rather than
  * showing a perpetually-pending row.
  *
- * @param {{ sdkRegistry: import('../sdk/SDKRegistry.js').SDKRegistry, chainId: string }} params
+ * A caller that refuses a signature on the height (a SLEEP whose wake block
+ * has passed) passes `fresh`, so the status read goes past the explorer
+ * wrapper's read reuse and the HTTP cache.
+ *
+ * @param {{ sdkRegistry: import('../sdk/SDKRegistry.js').SDKRegistry, chainId: string, fresh?: boolean }} params
  * @returns {Promise<IndexerWatermarkResult>}
  */
-export async function indexerWatermark({ sdkRegistry, chainId }) {
+export async function indexerWatermark({ sdkRegistry, chainId, fresh = false }) {
     if (!sdkRegistry) throw new Error('indexerWatermark: sdkRegistry is required');
     if (!chainId) throw new Error('indexerWatermark: chainId is required');
     let sdk;
@@ -607,7 +612,8 @@ export async function indexerWatermark({ sdkRegistry, chainId }) {
     }
     let status;
     try {
-        status = await sdk.getStatus();
+        // getStatus() takes no options, so a fresh read names the same path.
+        status = fresh ? await explorerReadFresh(sdk, '/status', () => sdk.getStatus()) : await sdk.getStatus();
     } catch {
         return { chainId, watermark: null };
     }

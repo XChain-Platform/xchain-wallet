@@ -3271,7 +3271,9 @@ export function createBackgroundHost(deps) {
         if (typeof sdk?.quoteNativeFee !== 'function') {
             throw new Error(`action.requoteNativeFee: SDK for "${chainId}" lacks quoteNativeFee`);
         }
-        return sdk.quoteNativeFee(actionString, { source: req?.source });
+        // The Approve-time re-quote must see an oracle round that landed after
+        // compose, never compose's own quote reused or served from the cache.
+        return flows.explorerFreshScope(sdk, () => sdk.quoteNativeFee(actionString, { source: req?.source }));
     });
 
     // Run sdk.preflight HOST-side (the SDK, its explorer endpoint,
@@ -3315,7 +3317,7 @@ export function createBackgroundHost(deps) {
             }
         } catch { /* best-effort; a pending-read hiccup must not fail the pre-flight */ }
         const localDeltas = [...callerDeltas, ...reserved, ...pendingDeltas];
-        return sdk.preflight(req.actionString, {
+        const run = () => sdk.preflight(req.actionString, {
             source: req.source,
             chain: chainId,
             localDeltas: localDeltas.length ? localDeltas : undefined,
@@ -3327,6 +3329,10 @@ export function createBackgroundHost(deps) {
             ...(req.feeMode === 'native' || req.feeMode === 'xchain'
                 ? { feeMode: req.feeMode } : {}),
         });
+        // The Approve-time re-check passes bypassCache, which skips only the
+        // SDK's report cache; its explorer reads go fresh too, so no read
+        // reused or served from the HTTP cache answers it.
+        return req.bypassCache === true ? flows.explorerFreshScope(sdk, run) : run();
     });
 
     // §4.6 input liveness: are the coins this PSBT spends still unspent?

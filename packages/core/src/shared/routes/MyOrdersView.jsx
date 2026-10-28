@@ -599,11 +599,12 @@ function OrderActionPanel({
         try {
             // The list can be minutes old: re-read cancels and fill state so an
             // order that expired, filled or was cancelled since is not signed again.
+            // Both reads are fresh, so they never return the list's own answer.
             let freshCancelledKeys = item.cancelledKeys || new Set();
             if (typeof messaging.getOrderCancelsForAddress === 'function') {
                 let response;
                 try {
-                    response = await messaging.getOrderCancelsForAddress({ chainId, address: owner.address });
+                    response = await messaging.getOrderCancelsForAddress({ chainId, address: owner.address, fresh: true });
                 } catch {
                     setError('Could not refresh this order. Try again.');
                     return;
@@ -619,7 +620,7 @@ function OrderActionPanel({
             if (typeof messaging.getOrderDetail === 'function') {
                 let freshDetail;
                 try {
-                    freshDetail = await messaging.getOrderDetail({ chainId, actionIndex: orderActionIndex });
+                    freshDetail = await messaging.getOrderDetail({ chainId, actionIndex: orderActionIndex, fresh: true });
                 } catch {
                     setError('Could not refresh this order. Try again.');
                     return;
