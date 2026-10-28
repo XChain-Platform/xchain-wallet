@@ -17,6 +17,7 @@
 import { useEffect, useState } from 'react';
 import { normalizeBip21Amount, parseBip21Uri } from '../../core/src/uri/bip21.js';
 import { hardenUriIntentText, parseXchainUri } from '../../core/src/uri/xchainUri.js';
+import { resolvePaymentChain } from '../../core/src/uri/paymentChain.js';
 import { isValidAddressForChain } from '../../core/src/shared/utils/addressValidation.js';
 import { tickerReferenceError } from '../../core/src/shared/utils/tickerGrammar.js';
 
@@ -37,6 +38,21 @@ function descriptorAcceptsAddress(descriptor, address) {
 
 function invalidRoute() {
     return { view: 'deep-link-error', message: INVALID_DEEP_LINK_MESSAGE };
+}
+
+const NETWORK_KINDS = ['mainnet', 'testnet', 'regtest'];
+
+// The chain a coin-scheme link pays on. A coin scheme is shared by every
+// network of its coin, so the address picks the network. A `chain=` value must
+// be one of those networks; without one, an address two networks share (a
+// legacy testnet and regtest address) cannot say which one the amount is on.
+function coinLinkChainId(coin, address, namedChain, chainRegistry) {
+    const candidates = NETWORK_KINDS
+        .filter((kind) => isValidAddressForChain(address, coin, kind))
+        .map((kind) => chainRegistry?.chainIdFor?.(coin, kind))
+        .filter(Boolean);
+    if (namedChain !== undefined) return candidates.includes(namedChain) ? namedChain : null;
+    return candidates.length === 1 ? candidates[0] : null;
 }
 
 function unwrapProtocolHandler(raw) {
@@ -74,16 +90,13 @@ export function deepLinkRoute(raw, chainRegistry) {
             if (parts.required?.length > 0) return invalidRoute();
             const memo = parts.message ?? parts.label;
             const hardened = hardenUriIntentText({ kind: 'send', memo, tick: parts.params?.tick });
-            const chainId = chainRegistry?.chainIdFor?.(coinScheme.coin, 'mainnet') || undefined;
-            if (!chainId) return invalidRoute();
-            // The link's target must be an address on the scheme's own chain.
-            if (!isValidAddressForChain(parts.address, coinScheme.coin, 'mainnet')) return invalidRoute();
-            // A request that names another network cannot be shown as a
-            // payment on this scheme's own chain, and a named token must not
-            // fall back to the coin: either would prefill a different payment
+            // The link's target must be an address on one of the scheme's own
+            // chains, and a request that names a network must name the one its
+            // address is on: either mismatch would prefill a different payment
             // than the link describes.
-            const namedChain = parts.params?.chain;
-            if (namedChain !== undefined && namedChain !== chainId) return invalidRoute();
+            const chainId = coinLinkChainId(coinScheme.coin, parts.address, parts.params?.chain, chainRegistry);
+            if (!chainId) return invalidRoute();
+            // A named token must not fall back to the coin.
             const namedTick = hardened.tick ? hardened.tick.toUpperCase() : undefined;
             if (namedTick && tickerReferenceError(namedTick, { allowRef: true })) return invalidRoute();
             return {
@@ -137,13 +150,19 @@ export function deepLinkRoute(raw, chainRegistry) {
         } catch {
             return invalidRoute();
         }
+        // A link that names no chain pays on the one chain its address
+        // belongs to, the chain the scanner picks for the same link.
+        let chainId = intent.chainId;
+        if (!chainId && intent.address && typeof chainRegistry?.supportedChains === 'function') {
+            chainId = resolvePaymentChain({ address: intent.address, chainRegistry }).chainId;
+        }
         return {
             view: 'send',
             sendPrefill: {
                 address: intent.address,
                 amount,
                 tick: intent.tick,
-                chainId: intent.chainId,
+                chainId,
                 memo: intent.memo,
                 requestMessage: intent.message ?? intent.label,
             },

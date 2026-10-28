@@ -16,6 +16,7 @@ export {
     URI_PARAMETER_LIMITS,
 } from './bip21.js';
 export { detectQrContent, PSBT_HEX_PREFIX } from './detectQrContent.js';
+export { resolvePaymentChain } from './paymentChain.js';
 export {
     parseBackupPointer,
     buildBackupPointer,

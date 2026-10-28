@@ -35,55 +35,20 @@ import {
     Textarea,
 } from '@xchain-wallet/core/ui';
 import { detectQrContent } from '../../uri/detectQrContent.js';
+import { resolvePaymentChain } from '../../uri/paymentChain.js';
 import { parseXchainUri, hardenUriIntentText, safeChainIdParam } from '../../uri/xchainUri.js';
 import { neutralizeControlText } from '../utils/textHardening.js';
-import { isValidAddressAnyNetwork, isValidAddressForChain } from '../utils/addressValidation.js';
+import { isValidAddressAnyNetwork } from '../utils/addressValidation.js';
 import { tickerReferenceError } from '../utils/tickerGrammar.js';
 import { t } from '../../i18n/index.js';
 import '../../i18n/locales/en/scan.js';
 import { defaultRegistry } from '../../registry/index.js';
 
 const DEFAULT_CHAIN_REGISTRY = defaultRegistry();
-const LOCALLY_VALIDATED_COINS = new Set(['bitcoin', 'litecoin', 'dogecoin']);
-
-function descriptorAcceptsAddress(descriptor, address) {
-    if (!LOCALLY_VALIDATED_COINS.has(descriptor.coin)) return true;
-    return isValidAddressForChain(address, descriptor.coin, descriptor.networkKind);
-}
-
-function resolvePaymentChain({ address, chainId, scheme, chainRegistry }) {
-    if (chainId !== undefined) {
-        const descriptor = chainRegistry.get(chainId);
-        if (!descriptor || (scheme && descriptor.uriScheme.toLowerCase() !== scheme)) {
-            return { valid: false };
-        }
-        return descriptorAcceptsAddress(descriptor, address)
-            ? { valid: true, chainId }
-            : { valid: false };
-    }
-
-    const eligible = chainRegistry.supportedChains().filter((descriptor) => (
-        !scheme || descriptor.uriScheme.toLowerCase() === scheme
-    ));
-    const locallyValidated = eligible.filter((descriptor) => (
-        LOCALLY_VALIDATED_COINS.has(descriptor.coin)
-    ));
-    if (locallyValidated.length === 0) {
-        return { valid: eligible.length > 0 };
-    }
-    const descriptors = locallyValidated.filter((descriptor) => (
-        descriptorAcceptsAddress(descriptor, address)
-    ));
-    if (descriptors.length === 0) return { valid: false };
-    return {
-        valid: true,
-        chainId: descriptors.length === 1 ? descriptors[0].id : undefined,
-    };
-}
 
 /**
  * @typedef {(
- *   | { kind: 'send', address?: string, amount?: string, tick?: string, chainId?: string, memo?: string, feePriority?: 'low' | 'normal' | 'fast' }
+ *   | { kind: 'send', address?: string, amount?: string, tick?: string, chainId?: string, memo?: string, requestMessage?: string, feePriority?: 'low' | 'normal' | 'fast' }
  *   | { kind: 'receive' }
  *   | { kind: 'psbt', psbtHex: string }
  * )} ScanRouteOutcome
@@ -157,6 +122,9 @@ export function ScanRoute({ onClassified, onBack, chainRegistry, embedded = fals
                     tick: intent.tick,
                     chainId: resolvedChainId,
                     memo: intent.memo,
+                    // The request's own message, shown above the form as an opened
+                    // link shows it.
+                    requestMessage: intent.message ?? intent.label,
                     feePriority: intent.feePriority,
                 });
                 return;

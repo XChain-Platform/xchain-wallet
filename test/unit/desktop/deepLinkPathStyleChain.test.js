@@ -39,3 +39,22 @@ describe('path-style link chain and destination', () => {
         });
     });
 });
+
+describe('address-style link with no chain', () => {
+    it('pays on the one chain its address belongs to', () => {
+        expect(deepLinkRoute(`xchain:${LTC}?amount=2`, registry)).toMatchObject({
+            view: 'send',
+            sendPrefill: { address: LTC, amount: '2', chainId: 'litecoin-mainnet' },
+        });
+        expect(deepLinkRoute(`xchain:${BTC}?amount=2`, registry)).toMatchObject({
+            view: 'send',
+            sendPrefill: { address: BTC, chainId: 'bitcoin-mainnet' },
+        });
+    });
+
+    it('leaves the chain open for an address two networks share', () => {
+        const route = deepLinkRoute('xchain:mipcBbFg9gMiCh81Kj8tqqdgoZub1ZJRfn?amount=2', registry);
+        expect(route).toMatchObject({ view: 'send', sendPrefill: { amount: '2' } });
+        expect(route.sendPrefill.chainId).toBeUndefined();
+    });
+});

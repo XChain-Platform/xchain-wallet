@@ -1219,6 +1219,7 @@ function AppInner({ canOpenInTab, titleEnabled }) {
                                     tick: outcome.tick,
                                     chainId: outcome.chainId,
                                     memo: outcome.memo,
+                                    requestMessage: outcome.requestMessage,
                                     feePriority: outcome.feePriority,
                                 });
                                 setUnlockedView('send');

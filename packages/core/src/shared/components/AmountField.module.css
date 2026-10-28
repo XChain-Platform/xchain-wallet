@@ -78,6 +78,14 @@
     unicode-bidi: isolate;
 }
 
+/* A linked amount can run to a hundred digits, and a grouped number has no
+   space to break at, so its estimate wraps inside the toggle instead of
+   running past both edges of it. */
+.amountSwapValue {
+    min-width: 0;
+    overflow-wrap: anywhere;
+}
+
 .amountFieldWrap input {
     min-width: 0;
 }

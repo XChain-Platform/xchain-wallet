@@ -1091,7 +1091,15 @@ export function Send({ walletId, accountId, onBack, prefill = null, onDone, onCh
             // (xchain:TBTC/send?to=…) yields intent.address rather than the
             // raw "TBTC/send" that the BIP21 fallback would surface.
             const intent = uriLib.hardenUriIntentText(uriLib.parseXchainUri(trimmed, { chainRegistry }));
-            const nextChainId = intent.chainId || chainId;
+            // A link that names no chain pays on the one chain its address
+            // belongs to, as a scanned or opened link does, when this wallet
+            // has an address there to send from.
+            const addressChainId = !intent.chainId && intent.address
+                ? uriLib.resolvePaymentChain({ address: intent.address, chainRegistry }).chainId
+                : undefined;
+            const linkChainId = intent.chainId
+                || (addressChainId && addressesByChain?.[addressChainId]?.length > 0 ? addressChainId : undefined);
+            const nextChainId = linkChainId || chainId;
             const nextDescriptor = nextChainId ? chainRegistry.get(nextChainId) : null;
             const nextTick = intent.tick
                 ? intent.tick.toUpperCase()
@@ -1126,8 +1134,8 @@ export function Send({ walletId, accountId, onBack, prefill = null, onDone, onCh
             setRequestMessage(safeMessage);
             if (intent.memo) setMemo(intent.memo);
             else if (memo === requestMessage) setMemo('');
-            if (intent.chainId && intent.chainId !== chainId) {
-                setChainId(intent.chainId);
+            if (linkChainId && linkChainId !== chainId) {
+                setChainId(linkChainId);
             }
             setPasteHint('Payment details filled from the pasted payment link.');
         } else {
@@ -2507,6 +2515,16 @@ export function Send({ walletId, accountId, onBack, prefill = null, onDone, onCh
         const amt = String(amount).trim();
         if (!isPositiveDecimalAmount(amt)) {
             setFormError('Amount must be a positive number.');
+            return;
+        }
+        // The field refuses typed digits past the asset's decimal places, but a payment link
+        // fills it directly; compose keeps only the places the asset has, so the payment
+        // would carry less than the field shows.
+        const amountDecimalLimit = sourceBalance?.divisibility
+            ?? (isNativeSend ? nativeDecimalsFor(descriptor) : null);
+        if (Number.isInteger(amountDecimalLimit)
+            && (amt.split('.')[1] || '').length > amountDecimalLimit) {
+            setFormError(`Amount can have at most ${amountDecimalLimit} decimal places.`);
             return;
         }
         // A native amount past 2^53 base units cannot be carried as a safe integer, so compose
