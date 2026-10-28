@@ -17,7 +17,10 @@
 // patched binary, a jailbroken device, a bug in the calling path - gets the
 // wallet. Here the secret is stored in a Keychain item that CANNOT be read
 // without a biometric match, so the enforcement is the Secure Enclave's, and
-// there is no branch in this file that a caller could fail to take.
+// there is no branch in the unlock path that a caller could fail to take.
+// The one evaluatePolicy call is in `enroll`, and it guards no secret: it
+// decides only whether a wrap is written, so a skipped match there costs
+// nothing that the Keychain ACL does not still enforce on every read.
 //
 // WHY `.biometryCurrentSet` AND NOT `.biometryAny`. SSC-3 requires the wrap
 // to be destroyed when biometrics are re-enrolled, because a wrap that
@@ -59,6 +62,8 @@ final class VaultBiometricSidecar {
     private static let service = "io.xchain.wallet.ios.biometric-wrap"
     private static let account = "vault-password"
     private static let retryExhaustedDetail = "biometric authentication failed repeatedly"
+    /// Shared with the Android shell and the SPA (BIOMETRIC_CANCELLED_DETAIL).
+    private static let cancelledDetail = "the biometric prompt was cancelled"
 
     /// Whether the device can do biometrics at all, and whether we hold a wrap.
     ///
@@ -123,10 +128,57 @@ final class VaultBiometricSidecar {
     ///
     /// The prompt here is not ceremony: it proves the person enabling the
     /// shortcut is the person whose biometric will later use it, on a device
-    /// that may be unlocked and briefly unattended.
+    /// that may be unlocked and briefly unattended. Adding an item under a
+    /// biometric ACL asks for no match by itself, so this prompt is what makes
+    /// turning the shortcut on ask for one, as the Android shell's does.
+    ///
+    /// The match comes before anything is cleared or written: a dismissed
+    /// prompt during a re-enrolment leaves the existing wrap as it was.
+    ///
+    /// - Parameter completion: called on the main queue with nil on success,
+    ///   or the reason it was refused. A dismissal answers with the shared
+    ///   cancel detail, which the SPA treats as a choice rather than an error.
+    func enroll(secret: Data, reason: String, completion: @escaping (String?) -> Void) {
+        let context = LAContext()
+        context.localizedCancelTitle = "Cancel"
+        // An empty title hides the "Enter Password" fallback: the device
+        // passcode is not what the wrap will ask for, so it cannot stand in
+        // for the match here.
+        context.localizedFallbackTitle = ""
+        context.evaluatePolicy(.deviceOwnerAuthenticationWithBiometrics, localizedReason: reason) { matched, error in
+            DispatchQueue.main.async {
+                guard matched else {
+                    completion(Self.enrollRefusal(for: error))
+                    return
+                }
+                completion(self.storeWrap(secret: secret))
+            }
+        }
+    }
+
+    /// Why an enrolment prompt ended without a match, in the details the SPA
+    /// already reads: a cancel of any kind is the shared cancel token, and
+    /// everything else is a refusal the settings row shows with a retry.
+    private static func enrollRefusal(for error: Error?) -> String {
+        guard let nsError = error as NSError?,
+              nsError.domain == LAError.errorDomain,
+              let code = LAError.Code(rawValue: nsError.code) else {
+            return "the biometric match did not complete"
+        }
+        switch code {
+        case .userCancel, .appCancel, .systemCancel, .userFallback:
+            return cancelledDetail
+        case .authenticationFailed:
+            return retryExhaustedDetail
+        default:
+            return "the biometric match did not complete (LAError \(code.rawValue))"
+        }
+    }
+
+    /// Write the wrap once a match has been seen.
     ///
     /// - Returns: nil on success, or the reason it was refused.
-    func enroll(secret: Data) -> String? {
+    private func storeWrap(secret: Data) -> String? {
         guard let access = SecAccessControlCreateWithFlags(
             nil,
             // Requires a passcode to be set, and dies with it. A wrap that
@@ -202,7 +254,7 @@ final class VaultBiometricSidecar {
                 case errSecItemNotFound:
                     completion(nil, "ABSENT", "no biometric wrap is stored, or it was invalidated")
                 case errSecUserCanceled:
-                    completion(nil, "LOCKED", "the biometric prompt was cancelled")
+                    completion(nil, "LOCKED", Self.cancelledDetail)
                 case errSecAuthFailed:
                     completion(nil, "LOCKED", Self.retryExhaustedDetail)
                 default:

@@ -178,6 +178,26 @@ export const nativeBiometricProvider = {
     },
 
     /**
+     * Ask the device afresh whether a wrap is stored. Unlike
+     * `refreshBiometricEnrollment`, a probe that fails or answers without an
+     * `enrolled` flag gives null, not false: a password change about to
+     * retire the wrap must not read "could not ask" as "there is none".
+     *
+     * @returns {Promise<boolean | null>}
+     */
+    async confirmRegistered() {
+        if (!hasNativeVault()) return false;
+        try {
+            const reply = await callNativeVault('biometricStatus');
+            if (typeof reply?.enrolled !== 'boolean') return null;
+            enrolledCache = reply.enrolled;
+            return enrolledCache;
+        } catch (_err) {
+            return null;
+        }
+    },
+
+    /**
      * Wrap the password behind a fresh biometric authentication.
      *
      * The prompt at enrollment time is not ceremony: it proves the person

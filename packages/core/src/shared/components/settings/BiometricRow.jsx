@@ -67,21 +67,39 @@ export function BiometricRow() {
     // still in the field, so the error surface offers a one-click "Try again".
     const retryRef = useRef(/** @type {null | (() => void)} */ (null));
 
+    // Probed on mount and again whenever the app comes back into view: the
+    // person removes or adds a face or finger in the device settings, which
+    // leaves this screen mounted, and a row still reading "Enabled" after
+    // biometrics are gone offers an unlock that cannot work.
     useEffect(() => {
         let cancelled = false;
-        describeBiometric().then((described) => {
-            if (!cancelled) setDescription(described);
-        }).catch(() => {
-            if (!cancelled) {
-                setDescription({
-                    supported: false,
-                    reason: 'Could not check biometric unlock on this device.',
-                    mechanism: 'device unlock',
-                    wrapNote: '',
-                });
-            }
-        });
-        return () => { cancelled = true; };
+        const probe = () => {
+            describeBiometric().then((described) => {
+                if (cancelled) return;
+                setDescription(described);
+                setRegistered(isBiometricRegistered());
+            }).catch(() => {
+                if (!cancelled) {
+                    setDescription({
+                        supported: false,
+                        reason: 'Could not check biometric unlock on this device.',
+                        mechanism: 'device unlock',
+                        wrapNote: '',
+                    });
+                }
+            });
+        };
+        const onVisible = () => {
+            if (globalThis.document?.visibilityState !== 'hidden') probe();
+        };
+        probe();
+        globalThis.addEventListener?.('focus', probe);
+        globalThis.document?.addEventListener?.('visibilitychange', onVisible);
+        return () => {
+            cancelled = true;
+            globalThis.removeEventListener?.('focus', probe);
+            globalThis.document?.removeEventListener?.('visibilitychange', onVisible);
+        };
     }, []);
 
     const refreshRegistered = () => setRegistered(isBiometricRegistered());
