@@ -4,6 +4,8 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 import { describe, expect, it, vi } from 'vitest';
+import { networks } from 'bitcoinjs-lib';
+import { signedTxFor, trackerFor } from '../../helpers/signedTx.js';
 import { createBackgroundHost } from '../../../packages/extension/src/background/createBackgroundHost.js';
 import {
     rbfFailureMessage,
@@ -22,6 +24,10 @@ const ORIGINAL = 'aa'.repeat(32);
 const CANCEL = 'bb'.repeat(32);
 const REPLACEMENT = 'cc'.repeat(32);
 const INPUT = '11'.repeat(32);
+// A replacement that lands in the broadcast queue is verified again before it
+// goes out, so the signer returns a real signed spend the tracker can establish.
+const SIGNED = signedTxFor({ inputs: [{ type: 'p2wpkh' }] });
+const SIGNED_TX = SIGNED.txHex;
 
 const decomposition = (outputs) => ({
     inputs: [{
@@ -66,7 +72,7 @@ function harness(initial = [pending(ORIGINAL, 'original-psbt')]) {
     const createTx = vi.fn(async () => ({ psbt: 'replacement-psbt', encoding: 'OP_RETURN' }));
     const broadcastTx = vi.fn(async () => ({ txid: REPLACEMENT }));
     const signPsbt = vi.fn(async () => ({
-        signedPsbtHex: 'signed-replacement', txHex: 'signed-tx', txid: REPLACEMENT,
+        signedPsbtHex: 'signed-replacement', txHex: SIGNED_TX, txid: REPLACEMENT,
     }));
     const decodeActionStringFromPsbt = vi.fn(() => ({
         ok: true, actionString: 'SEND|0|XCHAIN|1|destination',
@@ -88,10 +94,11 @@ function harness(initial = [pending(ORIGINAL, 'original-psbt')]) {
         }
         throw new Error(`unexpected PSBT ${hex}`);
     });
+    const tracker = trackerFor(SIGNED.prevouts, networks.regtest);
     const sdk = {
-        encoder: { createTx, broadcastTx },
+        encoder: { createTx, broadcastTx, getUTXOs: tracker.getUTXOs },
         decoder: { decodeActionStringFromPsbt },
-        wallet: { decomposePsbt },
+        wallet: { decomposePsbt, getBitcoinNetwork: () => networks.regtest },
     };
     const vault = {
         accounts: { findBy: vi.fn(async () => [{ id: 'account-1', walletId: WALLET }]) },
@@ -154,7 +161,7 @@ describe('tx.replace background route', () => {
             psbtHex: 'replacement-psbt',
             signingPaths: [{ inputIndex: 0, path: "m/84'/1'/0'/0/0" }],
         }));
-        expect(h.broadcastTx).toHaveBeenCalledWith('signed-tx');
+        expect(h.broadcastTx).toHaveBeenCalledWith(SIGNED_TX);
         expect([...h.rows.values()]).toEqual(expect.arrayContaining([
             expect.objectContaining({ txid: ORIGINAL, status: 'rbf-replaced', rbfReplacement: REPLACEMENT }),
             expect.objectContaining({ txid: REPLACEMENT, status: 'broadcast', psbtHex: 'replacement-psbt' }),
@@ -262,7 +269,7 @@ describe('tx.replace background route', () => {
         ]));
         const queue = await queueOf(h.host);
         expect(queue).toEqual([expect.objectContaining({
-            signedTxHex: 'signed-tx', txid: REPLACEMENT, rbfReplacesPendingTxId: 'pending-aaaa',
+            signedTxHex: SIGNED_TX, txid: REPLACEMENT, rbfReplacesPendingTxId: 'pending-aaaa',
         })]);
     });
 
@@ -351,7 +358,7 @@ describe('tx.replace under a freeze armed while the signer waits', () => {
             // panic mode from another window meanwhile.
             h.signPsbt.mockImplementationOnce(async () => {
                 activatePanicMode();
-                return { signedPsbtHex: 'signed-replacement', txHex: 'signed-tx', txid: REPLACEMENT };
+                return { signedPsbtHex: 'signed-replacement', txHex: SIGNED_TX, txid: REPLACEMENT };
             });
             const response = await call(h.host, {});
 
