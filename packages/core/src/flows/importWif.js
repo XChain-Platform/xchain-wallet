@@ -27,7 +27,8 @@ import {
 } from '../crypto/index.js';
 import { createAddress } from '../schemas/address.js';
 import { WalletNotFoundError } from './unlockWallet.js';
-import { wifFailureMessage } from './_wifFailureMessage.js';
+import { RAW_HEX_KEY, isRawHexPrivateKey, wifFailureMessage } from './_wifFailureMessage.js';
+import { importedKeyAddressType } from './_importedKeyAddressType.js';
 
 // D-64: the message is what the user reads, so it is written for them (see
 // _wifFailureMessage.js). The library's own text is kept on `.raw` for logs
@@ -124,10 +125,9 @@ export async function importWif({
 
     const descriptor = chainRegistry.get(chainId);
     if (!descriptor) throw new Error(`importWif: unknown chain "${chainId}"`);
-    const type = addressType ?? descriptor.defaultAddressType;
-    if (!descriptor.addressTypes.includes(type)) {
+    if (addressType !== undefined && !descriptor.addressTypes.includes(addressType)) {
         throw new Error(
-            `importWif: addressType "${type}" not supported on ${chainId}`,
+            `importWif: addressType "${addressType}" not supported on ${chainId}`,
         );
     }
 
@@ -137,6 +137,7 @@ export async function importWif({
     // Validate WIF via SDK (checksum + network match) and derive the address
     // before any expensive work; fast failure on bad input.
     const sdk = sdkRegistry.get(chainId);
+    if (isRawHexPrivateKey(wif)) throw new InvalidWifError('raw hex private key', RAW_HEX_KEY);
     let keyInfo;
     try {
         keyInfo = sdk.wallet.importWIF(wif);
@@ -144,6 +145,17 @@ export async function importWif({
         throw new InvalidWifError(
             e && e.message ? e.message : String(e),
             e && typeof e.code === 'string' ? e.code : undefined,
+        );
+    }
+    const type = importedKeyAddressType(
+        descriptor,
+        addressType,
+        keyInfo,
+        (reason, code) => new InvalidWifError(reason, code),
+    );
+    if (!descriptor.addressTypes.includes(type)) {
+        throw new Error(
+            `importWif: addressType "${type}" not supported on ${chainId}`,
         );
     }
     const derivedAddress = sdk.wallet.deriveAddress(keyInfo.publicKeyHex, {
@@ -158,14 +170,19 @@ export async function importWif({
     // Derive (or take) the master key; verify it against the seed blob;
     // encrypt the WIF with the same key. A derived key is zeroed on exit;
     // a session-supplied key belongs to the signer and is left alone.
+    // A wif-only wallet has no seed blob, so its first imported key is the
+    // password probe, the same one SoftwareSigner.unlock decrypts.
     const masterKey = hasSessionKey
         ? sessionMasterKey
         : await deriveMasterKeyAsync(password, walletRecord.kdfParams);
+    const probeCiphertext = walletRecord.format === 'wif-only'
+        ? walletRecord.importedKeys?.[0]?.encryptedWif
+        : walletRecord.encryptedSeed;
     let encryptedWif;
     try {
         let seedBytes;
         try {
-            seedBytes = await decrypt(masterKey, base64ToBytes(walletRecord.encryptedSeed));
+            seedBytes = await decrypt(masterKey, base64ToBytes(probeCiphertext ?? ''));
         } catch (err) {
             // Only a GCM tag mismatch is a wrong password (crypto/aead.js); a
             // damaged seal or a malformed session key propagates as itself.

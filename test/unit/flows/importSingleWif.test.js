@@ -175,3 +175,76 @@ describe('importSingleWif', () => {
         expect(crypto.deriveMasterKeyAsync).not.toHaveBeenCalled();
     });
 });
+
+describe('importSingleWif with an uncompressed key', () => {
+    // The SDK's own refusal: segwit outputs commit to a compressed key, so a
+    // 65-byte public key has no P2WPKH or P2SH-P2WPKH address.
+    const SEGWIT_DESCRIPTOR = Object.freeze({
+        ...DESCRIPTOR,
+        defaultAddressType: 'p2wpkh',
+        addressTypes: ['p2pkh', 'p2sh-p2wpkh', 'p2wpkh'],
+    });
+    const UNCOMPRESSED_PUB = `04${'ab'.repeat(64)}`;
+
+    function uncompressedSetup(overrides = {}) {
+        const s = setup({
+            chainRegistry: { get: vi.fn((id) => (id === SEGWIT_DESCRIPTOR.id ? SEGWIT_DESCRIPTOR : null)) },
+            ...overrides,
+        });
+        s.importWIF.mockReturnValue({ publicKeyHex: UNCOMPRESSED_PUB, compressed: false });
+        s.deriveAddress.mockImplementation((_pub, { type }) => {
+            if (type !== 'p2pkh') throw new Error('Failed to derive address: Invalid pubkey for p2wpkh');
+            return 'mLegacyUncompressed';
+        });
+        return s;
+    }
+
+    it('stores the P2PKH address the key controls when no type is asked for', async () => {
+        const { args, deriveAddress, addressPut } = uncompressedSetup();
+
+        const { address } = await importSingleWif(args);
+
+        expect(deriveAddress).toHaveBeenCalledWith(UNCOMPRESSED_PUB, { type: 'p2pkh' });
+        expect(address).toMatchObject({ addressType: 'p2pkh', address: 'mLegacyUncompressed', publicKey: UNCOMPRESSED_PUB });
+        expect(addressPut).toHaveBeenCalledTimes(1);
+    });
+
+    it('refuses an explicit segwit type with copy naming P2PKH, before any KDF work', async () => {
+        const { args, walletPut } = uncompressedSetup({ addressType: 'p2wpkh' });
+
+        const error = await importSingleWif(args).catch((err) => err);
+
+        expect(error).toBeInstanceOf(InvalidWifError);
+        expect(error.code).toBe('UNCOMPRESSED_KEY_TYPE');
+        expect(error.message).toMatch(/uncompressed/i);
+        expect(error.message).toMatch(/P2PKH/);
+        expect(crypto.deriveMasterKeyAsync).not.toHaveBeenCalled();
+        expect(walletPut).not.toHaveBeenCalled();
+    });
+
+    it('keeps the chain default for a compressed key', async () => {
+        const { args, importWIF, deriveAddress } = uncompressedSetup();
+        importWIF.mockReturnValue({ publicKeyHex: '02abcd', compressed: true });
+        deriveAddress.mockReturnValue('bcrt1qcompressed');
+
+        const { address } = await importSingleWif(args);
+
+        expect(deriveAddress).toHaveBeenCalledWith('02abcd', { type: 'p2wpkh' });
+        expect(address.addressType).toBe('p2wpkh');
+    });
+});
+
+describe('importSingleWif with a raw hex key', () => {
+    it('refuses it with hex copy before asking the SDK or deriving a key', async () => {
+        const { args, importWIF, walletPut } = setup({ wif: 'ab'.repeat(32) });
+
+        const error = await importSingleWif(args).catch((err) => err);
+
+        expect(error).toBeInstanceOf(InvalidWifError);
+        expect(error.code).toBe('RAW_HEX_KEY');
+        expect(error.message).toMatch(/raw hex private key/i);
+        expect(importWIF).not.toHaveBeenCalled();
+        expect(crypto.deriveMasterKeyAsync).not.toHaveBeenCalled();
+        expect(walletPut).not.toHaveBeenCalled();
+    });
+});
