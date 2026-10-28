@@ -325,6 +325,7 @@ export function createCrawl(page, {
     origin,
     start = null,
     directReentry = false,
+    onScreen = null,
 }) {
     mkdirSync(outDir, { recursive: true });
     const findings = [];
@@ -741,6 +742,7 @@ export function createCrawl(page, {
             return;
         }
         for (const e of since(mark)) finding(screen.label, '(open)', e.kind, { error: e.text });
+        if (onScreen) await onScreen(screen);
         // Each pass reopens the screen first; a screen that will not reopen
         // is a finding for this screen, not the end of the shard.
         try {

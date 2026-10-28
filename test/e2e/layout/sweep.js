@@ -657,6 +657,35 @@ export function layoutSweepFailures(screens) {
     return failures;
 }
 
+/** Measure one screen and append the layout sweep's shared JSONL record shape. */
+export async function recordMeasuredScreen(page, {
+    venue, outDir, n, label, shot, contrast = false, expectedRootPx = null, onScreen = null, onResult = null,
+}) {
+    let result;
+    try {
+        result = await page.evaluate(measureInPage, { contrast });
+    } catch (err) {
+        result = { error: String(err?.message || err) };
+    }
+    // Every screen records the root size it was measured at, so a venue
+    // that lost its text size fails by name instead of measuring 100%.
+    try {
+        result.rootFontPx = await page.evaluate(() => parseFloat(getComputedStyle(document.documentElement).fontSize));
+    } catch { /* reported as a root font failure below */ }
+    if (expectedRootPx != null) result.expectedRootFontPx = expectedRootPx;
+    // Extra per-screen audits hook in here; a failure in one is reported on
+    // the screen's line, never thrown into the walk.
+    if (onScreen) {
+        try { result = { ...result, ...(await onScreen(page, label)) }; } catch (err) { result = { ...result, onScreenError: String(err?.message || err) }; }
+    }
+    try {
+        await page.screenshot({ path: join(outDir, shot) });
+    } catch { /* a screenshot failure is not a finding */ }
+    appendFileSync(join(outDir, 'results.jsonl'), `${JSON.stringify({ venue, n, label, shot, ...result })}\n`);
+    if (onResult) await onResult({ label, ...result });
+    return result;
+}
+
 /** A sweep bound to one page, one venue and one output directory. */
 export function createSweep(page, {
     venue, outDir, restart: restartPage = () => page.goto('/'), onScreen = null, onResult = null, contrast = false, fontScale,
@@ -681,29 +710,17 @@ export function createSweep(page, {
         await page.waitForTimeout(450);
         n += 1;
         const slug = `${String(n).padStart(3, '0')}-${label.toLowerCase().replace(/[^a-z0-9]+/g, '-').slice(0, 60)}`;
-        let result;
-        try {
-            result = await page.evaluate(measureInPage, { contrast });
-        } catch (err) {
-            result = { error: String(err?.message || err) };
-        }
-        // Every screen records the root size it was measured at, so a venue
-        // that lost its text size fails by name instead of measuring 100%.
-        try {
-            result.rootFontPx = await page.evaluate(() => parseFloat(getComputedStyle(document.documentElement).fontSize));
-        } catch { /* reported as a root font failure below */ }
-        if (expectedRootPx != null) result.expectedRootFontPx = expectedRootPx;
-        // Extra per-screen audits (the axe sweep) hook in here; a failure in one
-        // is reported on the screen's line, never thrown into the walk.
-        if (onScreen) {
-            try { result = { ...result, ...(await onScreen(page, label)) }; } catch (err) { result = { ...result, onScreenError: String(err?.message || err) }; }
-        }
-        try {
-            await page.screenshot({ path: join(outDir, `${slug}.png`) });
-        } catch { /* a screenshot failure is not a finding */ }
-        appendFileSync(linesPath, `${JSON.stringify({ venue, n, label, shot: `${slug}.png`, ...result })}\n`);
-        if (onResult) await onResult({ label, ...result });
-        return result;
+        return recordMeasuredScreen(page, {
+            venue,
+            outDir,
+            n,
+            label,
+            shot: `${slug}.png`,
+            contrast,
+            expectedRootPx,
+            onScreen,
+            onResult,
+        });
     }
 
     /** Close anything open and land on Home. */

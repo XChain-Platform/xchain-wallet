@@ -23,6 +23,7 @@ import { join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { chromium, expect, test } from '@playwright/test';
 import { createCrawl } from './crawl.js';
+import { measureRulings, recordMeasuredScreen } from './sweep.js';
 
 const here = fileURLToPath(new URL('.', import.meta.url));
 const repo = resolve(here, '..', '..', '..');
@@ -99,7 +100,28 @@ for (let shard = 0; shard < SHARDS; shard += 1) {
                     await accept.click();
                 }
             };
-            const crawl = createCrawl(page, { venue, outDir: join(OUT_ROOT, venue, RUN), origin, start });
+            const outDir = join(OUT_ROOT, venue, RUN);
+            let measured = 0;
+            const recordScreen = async ({ label }) => {
+                const n = shard + 1 + measured * SHARDS;
+                measured += 1;
+                const slug = `${String(n).padStart(3, '0')}-${label.toLowerCase().replace(/[^a-z0-9]+/g, '-').slice(0, 60)}`;
+                await recordMeasuredScreen(page, {
+                    venue,
+                    outDir,
+                    n,
+                    label,
+                    shot: `${slug}.png`,
+                    onScreen: async (p) => ({ rulings: await p.evaluate(measureRulings) }),
+                });
+            };
+            const crawl = createCrawl(page, {
+                venue,
+                outDir,
+                origin,
+                start,
+                onScreen: recordScreen,
+            });
             await crawl.enterDemo();
             let screens = await crawl.discover();
             if (ONLY) screens = screens.filter((s) => ONLY.test(s.label));
