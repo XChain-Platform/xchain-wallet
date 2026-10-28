@@ -82,7 +82,6 @@ import {
     ContractNoticesSection,
     DraftAndExitSection,
     NativeFeeToggleSection,
-    ResultPanelsSection,
     SignCredentialsSection,
 } from './sections/ConfirmAndResultSections.jsx';
 import {
@@ -110,7 +109,7 @@ export const SECTIONS = [
     { id: 'list-page',             label: 'List page',              Component: ListPageSection, primitives: ['ListPage'] },
     { id: 'list-row',              label: 'List row',               Component: ListRowSection, primitives: ['ListRow'] },
     { id: 'empty-state',           label: 'Empty state',            Component: EmptyStateSection, primitives: ['EmptyState'] },
-    { id: 'result-screen',         label: 'Result screen',          Component: ResultScreenSection },
+    { id: 'result-screen',         label: 'Result screen',          Component: ResultScreenSection, components: ['ResultScreen'] },
     { id: 'section-header',        label: 'Section header',         Component: SectionHeaderSection, primitives: ['SectionHeader'] },
     { id: 'buttons',               label: 'Buttons',                Component: ButtonsSection, primitives: ['Button', 'Spinner'] },
     { id: 'checkbox',              label: 'Checkbox',               Component: CheckboxSection, primitives: ['Checkbox'] },
@@ -157,7 +156,6 @@ export const SECTIONS = [
     { id: 'action-confirm',        label: 'Action confirm',         Component: ActionConfirmSection, components: ['ActionConfirmScreen'] },
     { id: 'sign-credentials',      label: 'Sign credentials',       Component: SignCredentialsSection, components: ['SignCredentials'] },
     { id: 'contract-notices',      label: 'Contract notices',       Component: ContractNoticesSection, components: ['ContractConsentPanel', 'OwnerWithdrawWarning'] },
-    { id: 'result-panels',         label: 'Result panels',          Component: ResultPanelsSection, components: ['WatcherResultPanel', 'QueuedResultPanel'] },
     { id: 'draft-exit',            label: 'Draft discard, demo exit', Component: DraftAndExitSection, components: ['DraftDiscardButton', 'DemoExitConfirm'] },
     { id: 'native-fee-toggle',     label: 'Protocol fee toggle',    Component: NativeFeeToggleSection, components: ['NativeFeeToggle'] },
     { id: 'picker-screens',        label: 'Picker screens',         Component: PickerScreensSection, components: ['OwnAddressPickerScreen', 'ListPickerScreen'] },

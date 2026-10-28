@@ -27,7 +27,7 @@ const INTERNAL_ONLY = Object.freeze({
 // The shell and screen parts the UI survey found missing; each keeps a live
 // example whatever the route import count becomes.
 const REQUIRED = Object.freeze([
-    'ActionConfirmScreen', 'WatcherResultPanel', 'QueuedResultPanel', 'SignCredentials',
+    'ActionConfirmScreen', 'ResultScreen', 'SignCredentials',
     'OwnAddressPickerScreen', 'NativeFeeToggle', 'OfflineEmptyState', 'ListPickerScreen',
     'ListToolbar', 'DraftDiscardButton', 'ContractConsentPanel', 'OwnerWithdrawWarning',
     'DemoExitConfirm', 'BalancesUncheckedState', 'HistoryEntryRow', 'ActivityRow',

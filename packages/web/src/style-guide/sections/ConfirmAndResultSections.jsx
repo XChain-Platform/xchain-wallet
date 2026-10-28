@@ -8,8 +8,6 @@ import { ActionConfirmScreen } from '@xchain-wallet/core/shared/components/Actio
 import { SignCredentials } from '@xchain-wallet/core/shared/components/SignCredentials.jsx';
 import { ContractConsentPanel } from '@xchain-wallet/core/shared/components/ContractConsentPanel.jsx';
 import { OwnerWithdrawWarning } from '@xchain-wallet/core/shared/components/OwnerWithdrawWarning.jsx';
-import { WatcherResultPanel } from '@xchain-wallet/core/shared/components/WatcherResultPanel.jsx';
-import { QueuedResultPanel } from '@xchain-wallet/core/shared/components/QueuedResultPanel.jsx';
 import { DemoExitConfirm } from '@xchain-wallet/core/shared/components/DemoExitConfirm.jsx';
 import { DraftDiscardButton } from '@xchain-wallet/core/shared/components/DraftDiscardButton.jsx';
 import { NativeFeeToggle } from '@xchain-wallet/core/shared/components/NativeFeeToggle.jsx';
@@ -172,47 +170,6 @@ export function ContractNoticesSection() {
             </LiveExample>
             <LiveExample label="Owner withdraw warning">
                 <OwnerWithdrawWarning ownerWithdraw />
-            </LiveExample>
-        </Section>
-    );
-}
-
-const SAMPLE_PSBT_HEX = '70736274ff01000a0200000000000000000000';
-
-export function ResultPanelsSection() {
-    return (
-        <Section
-            id="result-panels"
-            title="Result panels"
-            tag="CANONICAL · WatcherResultPanel / QueuedResultPanel"
-            kicker="What a signing form shows after Approve: either a transaction ready to carry to the signer, or a signed one waiting for the network. Fifty screens end on one of the two."
-        >
-            <Guidance
-                what={<><code>WatcherResultPanel</code> composes <code>FormSection</code> with the encoding summary and the export QR frames for a watch-only wallet. <code>QueuedResultPanel</code> says the action is signed and waiting to broadcast, with a Done button; it warns when the signed copy is not saved.</>}
-                when={<>Directly after a form's review step, in place of the form.</>}
-                whenNot={<>A broadcast that finished: the form's own success state.</>}
-                doRule={<>✓ Pass <code>what</code> so the sentence names the action</>}
-                dontRule={<>✗ Add a second Done button beside the panel's own</>}
-                supersedes={<>Source: <code>WatcherResultPanel.jsx</code>, <code>QueuedResultPanel.jsx</code> in <code>shared/components</code>.</>}
-            />
-            <Markup>
-{`<WatcherResultPanel result={result} onBuildAnother={reset} onDone={close} />
-<QueuedResultPanel what="transfer" onDone={close} />`}
-            </Markup>
-            <LiveExample label="WatcherResultPanel: unsigned transaction ready">
-                <PartsExampleProvider>
-                    <WatcherResultPanel
-                        result={{ psbtHex: SAMPLE_PSBT_HEX, encoding: 'PSBT', fromAddress: PART_ADDRESS }}
-                        onBuildAnother={noop}
-                        onDone={noop}
-                    />
-                </PartsExampleProvider>
-            </LiveExample>
-            <LiveExample label="QueuedResultPanel: signed, waiting to broadcast">
-                <QueuedResultPanel what="transfer" unsaved={false} onDone={noop} />
-            </LiveExample>
-            <LiveExample label="QueuedResultPanel: signed copy not saved">
-                <QueuedResultPanel what="transfer" unsaved onDone={noop} />
             </LiveExample>
         </Section>
     );
