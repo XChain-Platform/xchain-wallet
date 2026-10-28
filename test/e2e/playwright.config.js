@@ -70,6 +70,15 @@ const LAYOUT_GATES = [
         testMatch: /field-tokens\.spec\.js$/,
         use: { ...CHROMIUM, viewport: { width: 360, height: 800 }, colorScheme: 'dark', isMobile: true, hasTouch: true },
     },
+    // The control-row gate (ruling U07) under ./layout, at the widths and
+    // project names playwright.control-rows.config.js uses, so the keys in
+    // control-rows.allowlist.json match either run.
+    ...[360, 768, 1280].map((width) => ({
+        name: `control-rows-${width}`,
+        testDir: './layout',
+        testMatch: /control-rows\.spec\.js$/,
+        use: { ...CHROMIUM, viewport: { width, height: 900 } },
+    })),
 ];
 
 // Not 5173: that is the port every other dev server and sweep config defaults to.

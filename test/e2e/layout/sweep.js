@@ -431,17 +431,45 @@ export function measureControlRows() {
         '[role="button"]', '[role="link"]', '[role="checkbox"]', '[role="radio"]',
         '[role="switch"]', '[role="combobox"]', '[role="tab"]', '[role="menuitem"]',
     ].join(',');
+    // A control 2px or less across is visually hidden (a skip link before
+    // focus, the native input under a drawn radio), so nobody sees it in a row.
     const visible = (el) => {
         const cs = getComputedStyle(el);
         const r = el.getBoundingClientRect();
         return cs.display !== 'none' && cs.visibility !== 'hidden' && cs.opacity !== '0'
-            && r.width >= 1 && r.height >= 1
+            && r.width > 2 && r.height > 2
             && !el.matches(':disabled, [aria-disabled="true"]');
+    };
+    // A row lives inside one region: a landmark, a dialog or menu, or a
+    // fixed or sticky layer. The sidebar beside the page, the bottom tab bar
+    // over scrolled content and a sticky header over a list share a flex or
+    // grid shell with the content, yet their controls never form a row with
+    // it.
+    const regionSelector = [
+        'main', 'nav', 'aside', 'header', 'footer', 'dialog',
+        '[role="main"]', '[role="navigation"]', '[role="banner"]', '[role="contentinfo"]',
+        '[role="complementary"]', '[role="dialog"]', '[role="alertdialog"]', '[role="menu"]',
+    ].join(',');
+    const regionOf = (el) => {
+        for (let node = el.parentElement; node && node !== document.body; node = node.parentElement) {
+            if (node.matches(regionSelector)) return node;
+            if (/^(fixed|sticky)$/.test(getComputedStyle(node).position)) return node;
+        }
+        return document.body;
     };
     // Nested interactive markup represents one control even when both the
     // wrapper and its implementation carry an interactive role.
     const controls = [...document.querySelectorAll(selector)].filter((el) => (
         visible(el) && !el.parentElement?.closest(selector)
+    ));
+    // A control with no background and no full border draws no box: an
+    // underlined text link in a sentence, an underline tab. Its height and
+    // corner radius never show, so only its type is held to the row.
+    const clear = (colour) => !colour || colour === 'transparent' || /^rgba\(.*,\s*0\)$/.test(colour);
+    const drawsBox = (cs) => !clear(cs.backgroundColor) || ['Top', 'Right', 'Bottom', 'Left'].every((side) => (
+        parseFloat(cs[`border${side}Width`]) > 0
+        && !/^(none|hidden)$/.test(cs[`border${side}Style`])
+        && !clear(cs[`border${side}Color`])
     ));
     const records = controls.map((el) => {
         const rect = el.getBoundingClientRect();
@@ -450,17 +478,25 @@ export function measureControlRows() {
         const buttonLike = el.tagName === 'BUTTON' || el.getAttribute('role') === 'button';
         const name = el.getAttribute('aria-label') || text.replace(/\s+/g, ' ').slice(0, 48)
             || el.getAttribute('name') || el.tagName.toLowerCase();
+        // A tab is one stop of its tab strip: the strip's outline is what
+        // sits beside the next control, and the selected tab's tint is a
+        // state inside it, so a tab takes the strip's box and radius.
+        const strip = el.getAttribute('role') === 'tab' ? el.closest('[role="tablist"]') : null;
+        const surface = strip ? getComputedStyle(strip) : cs;
         return {
             el,
+            region: regionOf(el),
             rect,
             height: rect.height,
-            radius: cs.borderRadius,
+            radius: surface.borderRadius,
             fontSize: cs.fontSize,
+            box: drawsBox(surface),
             iconOnly: buttonLike && text.length === 0,
             desc: `${el.tagName.toLowerCase()} "${name}"`,
         };
     });
     const sameRow = (a, b) => {
+        if (a.region !== b.region) return false;
         const horizontallySeparate = a.rect.right <= b.rect.left + 1 || b.rect.right <= a.rect.left + 1;
         const overlap = Math.min(a.rect.bottom, b.rect.bottom) - Math.max(a.rect.top, b.rect.top);
         return horizontallySeparate && overlap >= Math.min(a.rect.height, b.rect.height) / 2;
@@ -525,12 +561,13 @@ export function measureControlRows() {
     for (const [container, rows] of grouped.entries()) {
         for (const row of rows) {
             const items = [...row].sort((a, b) => a.rect.left - b.rect.left);
-            const heights = items.map((item) => item.height);
+            const heights = items.filter((item) => item.box || item.iconOnly).map((item) => item.height);
             const styled = items.filter((item) => !item.iconOnly);
+            const boxed = styled.filter((item) => item.box);
             const problems = [];
             if (spills(container, items)) problems.push('overflow');
-            if (Math.max(...heights) - Math.min(...heights) > 2) problems.push('height');
-            if (styled.length > 1 && new Set(styled.map((item) => item.radius)).size > 1) problems.push('border-radius');
+            if (heights.length > 1 && Math.max(...heights) - Math.min(...heights) > 2) problems.push('height');
+            if (boxed.length > 1 && new Set(boxed.map((item) => item.radius)).size > 1) problems.push('border-radius');
             if (styled.length > 1 && new Set(styled.map((item) => item.fontSize)).size > 1) problems.push('font-size');
             if (problems.length === 0) continue;
             const signature = `${problems.join(',')}|${items.map((item) => item.desc).join('|')}`;
@@ -544,6 +581,7 @@ export function measureControlRows() {
                     borderRadius: item.radius,
                     fontSize: item.fontSize,
                     iconOnly: item.iconOnly,
+                    box: item.box,
                 })),
             });
         }
