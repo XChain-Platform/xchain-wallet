@@ -263,7 +263,6 @@ export function MarketActivity({ walletId, accountId, onBack, onOpenDispenser })
                 walletId={walletId}
                 accountId={accountId}
                 title="Select a market"
-                titleIcon={<Icon.MarketIcon />}
                 backLabel="Back to marketplace"
                 onBack={() => setPicking(false)}
                 onSelect={(sel) => {
@@ -284,7 +283,6 @@ export function MarketActivity({ walletId, accountId, onBack, onOpenDispenser })
             onBack={onBack}
             backLabel="Back"
             title="Marketplace"
-            titleIcon={<Icon.MarketIcon />}
         />
     );
 

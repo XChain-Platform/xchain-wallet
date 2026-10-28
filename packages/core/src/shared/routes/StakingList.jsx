@@ -403,7 +403,6 @@ export function StakingList({ walletId, activeAccountId, onOpenStake, onNewStake
         <PageHeader
             onBack={onBack}
             backLabel="Back to home"
-            titleIcon={<Icon.StakeIcon />}
             title="Staking"
         />
     );

@@ -820,17 +820,6 @@
     gap: var(--xc-space-2);
 }
 
-/* Chain icon embedded next to the action label in the ActionDetail
-   header. */
-.titleChainIcon {
-    width: 18px;
-    height: 18px;
-    border-radius: 50%;
-    object-fit: cover;
-    margin-inline-end: var(--xc-space-2);
-    vertical-align: -3px;
-}
-
 .detailDecoded {
     font-family: var(--xc-font-mono, monospace);
     font-size: var(--xc-text-xs);

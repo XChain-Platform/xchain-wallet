@@ -1,12 +1,3 @@
-.headerIcon {
-    display: block;
-    width: var(--xc-avatar-size-header);
-    height: var(--xc-avatar-size-header);
-    border-radius: var(--xc-avatar-shape);
-    object-fit: contain;
-    flex: 0 0 auto;
-}
-
 .headerTitle {
     display: block;
     max-width: 100%;
@@ -14,20 +5,6 @@
     text-overflow: ellipsis;
     white-space: nowrap;
     line-height: 1.2;
-}
-
-.headerIconFallback {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    width: var(--xc-avatar-size-header);
-    height: var(--xc-avatar-size-header);
-    border-radius: var(--xc-avatar-shape);
-    background: var(--xc-bg-muted);
-    color: var(--xc-text);
-    font-size: var(--xc-avatar-initials-header);
-    font-weight: 700;
-    flex: 0 0 auto;
 }
 
 /* ───── Asset balance hero - matches TotalBalanceHero ───── */

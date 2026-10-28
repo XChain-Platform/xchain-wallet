@@ -27,7 +27,6 @@ import {
     Button,
     FieldNote,
     FormPage,
-    Icon,
     PageHeader,
     QrScanner,
     Screen,
@@ -271,7 +270,6 @@ export function ScanRoute({ onClassified, onBack, chainRegistry, embedded = fals
             backLabel={t('common.back')}
             title={t('scan.title')}
             titleId={headingId}
-            titleIcon={<Icon.CameraIcon />}
         />
     ), [headingId, onBack, nested, embedded]);
 

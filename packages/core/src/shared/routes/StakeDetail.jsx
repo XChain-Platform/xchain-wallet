@@ -282,7 +282,6 @@ export function StakeDetail({
         <PageHeader
             onBack={onBack}
             backLabel="Back to staking"
-            titleIcon={<Icon.StakeIcon />}
             title={kind === 'validator' ? 'Validator stake' : `Contract #${contractActionIndex} stake`}
         />
     );

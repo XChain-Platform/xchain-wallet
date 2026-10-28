@@ -754,7 +754,6 @@ export function AddressList({
                             setShowAdvancedGenerate(false);
                         }}
                         title={t('routes.addressList.generateAtIndex')}
-                        titleIcon={<Icon.PlusIcon />}
                     />
                 )}
             >
@@ -848,7 +847,6 @@ export function AddressList({
                     <PageHeader
                         onBack={() => { setShowWifForm(false); resetWifForm(); }}
                         title={t('routes.addressList.importAddress')}
-                        titleIcon={<Icon.DownloadIcon />}
                     />
                 )}
             >
@@ -974,7 +972,6 @@ export function AddressList({
         <PageHeader
             onBack={onBack}
             title={title || (pickerMode ? t('routes.addressList.chooseAddress') : t('home.addresses'))}
-            titleIcon={<Icon.ScanIcon />}
         />
     );
     // The page header holds only the title and Back, so the add and import
@@ -1268,7 +1265,7 @@ export function AddressList({
             }
         };
         return (
-            <Screen variant={variant} header={<PageHeader onBack={() => setSelected(null)} title={t('routes.addressList.viewAddress')} titleIcon={<Icon.ScanIcon />} />}>
+            <Screen variant={variant} header={<PageHeader onBack={() => setSelected(null)} title={t('routes.addressList.viewAddress')} />}>
                 <ListPage notices={overCeiling ? <StatusMessage variant="warning" role="alert">{t('multisig.overCeilingNotice')}</StatusMessage> : null}>
                     <div className={local.detailTop}>
                     {overCeiling ? null : (<>

@@ -7,7 +7,7 @@ import { registry as registryLib } from '@xchain-wallet/core';
 import { MessagingProvider } from '@xchain-wallet/core/shared/MessagingProvider.jsx';
 import { buildBalanceRows } from '@xchain-wallet/core/shared/components/BalanceList.jsx';
 
-const RAW_BALANCES = {
+export const RAW_BALANCES = {
     'bitcoin-mainnet': [{
         address: 'bc1qw508d6qejxtdg4y5r3zarvary0c5xw7kv8f3t4',
         balances: {

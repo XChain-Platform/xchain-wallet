@@ -880,7 +880,6 @@ function ComposeMessageForm({
         <PageHeader
             onBack={stage === 'review' ? () => setStage('form') : onBack}
             title={stage === 'review' || stage === 'submitting' ? t('composeMessage.reviewTitle') : t('composeMessage.newTitle')}
-            titleIcon={<Icon.MessageIcon />}
         />
     );
     const wrap = (children) => (

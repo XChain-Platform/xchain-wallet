@@ -61,7 +61,6 @@ export function ActionsMenu({ entries, onBack }) {
             onBack={onBack}
             backLabel={t('common.backToHome')}
             title={t('actionsMenu.title')}
-            titleIcon={<Icon.TokenIcon />}
         />
     );
     return (

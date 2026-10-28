@@ -90,12 +90,12 @@ describe('TokenDetail collectible media', () => {
     it('shows text and ticker fallbacks when published images fail', async () => {
         renderDetail();
 
-        await waitFor(() => expect(document.querySelectorAll(`img[src="${ICON_URL}"]`)).toHaveLength(2));
+        await waitFor(() => expect(document.querySelectorAll(`img[src="${ICON_URL}"]`)).toHaveLength(1));
         for (const image of [...document.querySelectorAll(`img[src="${ICON_URL}"]`)]) {
             fireEvent.error(image);
         }
         expect(document.querySelectorAll(`img[src="${ICON_URL}"]`)).toHaveLength(0);
-        expect(screen.getAllByText('CO').length).toBeGreaterThanOrEqual(2);
+        expect(screen.getAllByText('CO').length).toBeGreaterThanOrEqual(1);
 
         fireEvent.click(screen.getByRole('tab', { name: 'Media' }));
         const media = await screen.findByRole('img', { name: MEDIA_NAME });

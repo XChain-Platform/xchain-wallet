@@ -9,7 +9,7 @@
 // contact legal@dankest.llc.
 
 import { useMemo, useState } from 'react';
-import { EmptyState, Icon, Input, ListPage, ListRow, PageHeader, Screen } from '@xchain-wallet/core/ui';
+import { EmptyState, Input, ListPage, ListRow, PageHeader, Screen } from '@xchain-wallet/core/ui';
 import { NetworkFilterDropdown } from './NetworkFilterDropdown.jsx';
 import { contactEntryChain } from '../utils/contactChain.js';
 import { compareContactsByName } from '../utils/contactMerge.js';
@@ -75,7 +75,6 @@ export function ContactsPickerScreen({ contacts, variant, onPick, onBack }) {
             nested
             onBack={onBack}
             title={t('components.contactsPickerScreen.contacts')}
-            titleIcon={<Icon.UsersIcon />}
         />
     );
 

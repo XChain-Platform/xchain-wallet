@@ -29,7 +29,6 @@ const RENDERERS = [
     'packages/core/src/shared/routes/StakingList.jsx',
 ];
 const BALANCE_CSS = read('packages/core/src/shared/components/BalanceList.module.css');
-const TOKEN_DETAIL_CSS = read('packages/core/src/shared/routes/TokenDetail.module.css');
 
 describe('ticker icon letters stay visible in forced-colors mode', () => {
     it.each(SHEETS)('%s colours .iconLetter in the stylesheet and re-pairs it under forced colors', (file) => {
@@ -49,19 +48,11 @@ describe('ticker icon letters stay visible in forced-colors mode', () => {
         for (const style of inline) expect(style).not.toMatch(/\bcolor:/);
     });
 
-    it('uses a round neutral balance fallback and token-sized detail title artwork', () => {
+    it('uses a round neutral balance fallback', () => {
         const balanceIcon = BALANCE_CSS.match(/\.iconLetter\s*\{([^}]*)\}/)?.[1] || '';
         expect(balanceIcon).toMatch(/border-radius:\s*50%/);
         expect(balanceIcon).toMatch(/background:\s*var\(--xc-bg-muted\)/);
         expect(read('packages/core/src/shared/components/BalanceList.jsx'))
             .not.toMatch(/style=\{\{\s*background:\s*tickerColor\(row\.tick\)/);
-
-        for (const selector of ['headerIcon', 'headerIconFallback']) {
-            const rule = TOKEN_DETAIL_CSS.match(new RegExp(`\\.${selector}\\s*\\{([^}]*)\\}`))?.[1] || '';
-            // Header artwork uses the shared avatar header size and shape tokens.
-            expect(rule).toMatch(/width:\s*var\(--xc-avatar-size-header\)/);
-            expect(rule).toMatch(/height:\s*var\(--xc-avatar-size-header\)/);
-            expect(rule).toMatch(/border-radius:\s*var\(--xc-avatar-shape\)/);
-        }
     });
 });

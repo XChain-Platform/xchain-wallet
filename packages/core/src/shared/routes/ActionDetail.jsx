@@ -10,8 +10,7 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import { EmptyState, ListPage, Screen, PageHeader, StatusMessage, VerifiedBadge } from '@xchain-wallet/core/ui';
-import { registry as registryLib, flows as flowsLib } from '@xchain-wallet/core';
-import * as branding from '@xchain-wallet/core/branding/branding.js';
+import { flows as flowsLib } from '@xchain-wallet/core';
 import { t } from '../../i18n/index.js';
 import '../../i18n/locales/en/actionDetail.js';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
@@ -25,7 +24,6 @@ import { useHideReachabilityNotice } from '../components/hideReachabilityNotice.
 import { userFacingMessage } from '../utils/userFacingMessage.js';
 import styles from './History.module.css';
 
-const chainRegistry = registryLib.defaultRegistry();
 const OFFLINE_ACTION_REASON = 'This action needs a network connection.';
 
 /**
@@ -183,8 +181,6 @@ export function ActionDetail({ entry: entryProp, walletId, chainTip, indexerWate
         );
     }
 
-    const descriptor = entry.chainId ? chainRegistry.get(entry.chainId) : null;
-    const iconUrl = descriptor ? branding.chainIconSmallUrl(descriptor.id) : null;
     const rawActionIndex = String(entry.actionIndex ?? '').trim();
     const actionIndexLabel = /^\d+$/.test(rawActionIndex)
         ? BigInt(rawActionIndex).toLocaleString('en-US')
@@ -206,16 +202,6 @@ export function ActionDetail({ entry: entryProp, walletId, chainTip, indexerWate
                 // action on every chain.
                 ? titleAction
                 : `${titleAction} #${actionIndexLabel}`}
-            titleIcon={iconUrl ? (
-                <img
-                    src={iconUrl}
-                    alt=""
-                    aria-hidden="true"
-                    className={styles.titleChainIcon}
-                    width={18}
-                    height={18}
-                />
-            ) : null}
         />
     );
 

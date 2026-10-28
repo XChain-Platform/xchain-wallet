@@ -200,7 +200,6 @@ function MyListsScreen({ walletId, activeAccountId, onOpenList, onCreateList, on
         <PageHeader
             onBack={onBack}
             backLabel="Back to home"
-            titleIcon={<Icon.TokenListIcon />}
             title="My lists"
         />
     );

@@ -3149,7 +3149,6 @@ export function Send({ walletId, accountId, onBack, prefill = null, onDone, onCh
             backDisabled={stage === 'submitting'}
             backLabel={stage === 'review' ? t('send.backToEdit') : t('common.backToHome')}
             title={stage === 'review' || stage === 'submitting' ? t('send.review') : t('send.title')}
-            titleIcon={<Icon.SendIcon />}
             titleRef={stage === 'review' ? reviewHeadingRef : undefined}
         />
     );
@@ -4556,7 +4555,7 @@ function AssetIconPicker({ chainId, tick, label, onOpen, error }) {
 // The prefill's imageUrl only applies when the form's current
 // (chainId, tick) still matches what the user picked; if they retype
 // the tick to something else, fall back to the letter-badge style.
-function SelectedTokenHero({ chainId, tick, descriptor, prefill, onChangeAsset, allowRemoteImages }) {
+export function SelectedTokenHero({ chainId, tick, descriptor, prefill, onChangeAsset, allowRemoteImages }) {
     const tickTrim = (tick || '').trim();
     if (!chainId || !tickTrim) return null;
     const nativeTicker = nativeTickerFor(descriptor);

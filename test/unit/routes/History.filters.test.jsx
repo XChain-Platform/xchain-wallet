@@ -602,8 +602,6 @@ describe('History filters', () => {
             expect(ruleBody(narrow, '.detailsTable tbody'))
                 .toMatch(/grid-template-columns:\s*minmax\(0, 1fr\)/);
             expect(ruleBody(narrow, '.detailsTable tr + tr > td')).toMatch(/border-top:\s*0/);
-            expect(ruleBody(tokenDetailCss, '.headerIcon'))
-                .toMatch(/width:\s*var\(--xc-avatar-size-header\)[\s\S]*height:\s*var\(--xc-avatar-size-header\)/);
             expect(tokenDetailSource)
                 .toMatch(/useNativePrice\(isNative && fiatSupported && fiatAllowed && !isDemo \? chainId : null/);
             expect(tokenDetailSource)

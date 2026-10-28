@@ -569,7 +569,6 @@ export function ManageToken({
             onBack={onBack}
             backLabel={t('routes.manageToken.backToMyTokens')}
             title={t('routes.manageToken.manageToken')}
-            titleIcon={<Icon.TokenIcon />}
         />
     );
 

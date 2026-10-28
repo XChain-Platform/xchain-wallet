@@ -423,21 +423,6 @@ function TokenDetailContent({
                     {pageTitle}
                 </span>
             )}
-            titleIcon={headerIconUrl ? (
-                <AssetArtwork
-                    src={headerIconUrl}
-                    className={styles.headerIcon}
-                    fallbackClassName={styles.headerIconFallback}
-                    fallbackText={tick}
-                />
-            ) : metadataLoading ? (
-                <Skeleton
-                    shape="avatar"
-                    width={28}
-                    height={28}
-                    ariaLabel="Loading token artwork"
-                />
-            ) : null}
         />
     );
 

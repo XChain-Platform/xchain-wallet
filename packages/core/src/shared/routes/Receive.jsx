@@ -1067,7 +1067,6 @@ export function Receive({ walletId, accountId, prefill = null, onBack, onChangeA
             onBack={onBack}
             backLabel={t('common.backToHome')}
             title={t('home.receive')}
-            titleIcon={<Icon.ReceiveIcon />}
         />
     );
     // §20: signer mode hides the receive surface, as its own hint

@@ -606,19 +606,6 @@ export function ContactsList({ walletId, onSend, onSendMessage, onBack, scanPref
             title={mode === 'edit'
                 ? (active ? 'Edit Contact' : 'New contact')
                 : mode === 'detail' ? 'View Contact' : 'Contacts'}
-            titleIcon={
-                mode === 'list' ? <Icon.UsersIcon />
-                    : mode === 'detail' && active ? (
-                        <IdentityAvatar
-                            name={active.name}
-                            seed={active.avatarSeed || active.id}
-                            context="header"
-                        />
-                    )
-                    : (mode === 'edit' && active) ? <Icon.PencilIcon />
-                    : (mode === 'edit' && !active) ? <Icon.PlusIcon />
-                    : undefined
-            }
         />
     );
     // The page header holds only the title and Back, so Add contact sits in

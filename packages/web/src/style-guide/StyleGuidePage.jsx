@@ -77,6 +77,22 @@ import {
     AnimatedQrFramesSection,
     QrScannerSection,
 } from './sections/QrPrimitivesSection.jsx';
+import {
+    ActionConfirmSection,
+    ContractNoticesSection,
+    DraftAndExitSection,
+    NativeFeeToggleSection,
+    ResultPanelsSection,
+    SignCredentialsSection,
+} from './sections/ConfirmAndResultSections.jsx';
+import {
+    ActivityRowsSection,
+    HomeTabsSection,
+    ListToolbarSection,
+    PickerScreensSection,
+    ShellNavigationSection,
+    UnavailableStatesSection,
+} from './sections/PickersAndShellSections.jsx';
 // Curated catalog: patterns we've established across the recent work
 // (Home, Receive, Send, TokenDetail). Add a section here when a new
 // pattern lands in two routes or you want to codify a one-off as
@@ -101,19 +117,19 @@ export const SECTIONS = [
     { id: 'choice-control',        label: 'Choice control',         Component: ChoiceControlSection, primitives: ['ChoiceControl'] },
     { id: 'chip',                  label: 'Chip',                   Component: ChipSection, primitives: ['Chip'] },
     { id: 'switch',                label: 'Switch',                 Component: SwitchSection, primitives: ['Switch'] },
-    { id: 'dialogs',               label: 'Dialogs and notices',    Component: DialogsSection },
+    { id: 'dialogs',               label: 'Dialogs and notices',    Component: DialogsSection, components: ['ConfirmModal'] },
     { id: 'app-header',            label: 'App header',             Component: AppHeaderSection },
     { id: 'page-header',           label: 'Page header',            Component: PageHeaderSection, primitives: ['PageHeader'] },
     { id: 'tabs',                  label: 'Tabs (page-level)',      Component: TabsSection, primitives: ['Tabs'] },
     { id: 'quick-action',          label: 'Quick-action card',      Component: QuickActionSection },
     { id: 'gray-card',             label: 'Card',                   Component: GrayCardSection },
     { id: 'solid-accent-card',     label: 'Solid accent card',      Component: AccentBorderedCardSection },
-    { id: 'stacked-asset-icon',    label: 'Stacked asset icon',     Component: StackedAssetIconSection },
+    { id: 'stacked-asset-icon',    label: 'Stacked asset icon',     Component: StackedAssetIconSection, components: ['TickerIcon'] },
     { id: 'asset-hero',            label: 'Asset hero (Send)',      Component: AssetHeroSection },
     { id: 'asset-card',            label: 'Asset card (Receive)',   Component: AssetCardSection },
-    { id: 'balance-list',          label: 'Balance / search list',  Component: BalanceListSection },
+    { id: 'balance-list',          label: 'Balance / search list',  Component: BalanceListSection, components: ['BalanceList'] },
     { id: 'token-selector',        label: 'Token selector page',    Component: TokenSelectorSection },
-    { id: 'address-list',          label: 'Address list (contacts)',Component: AddressListSection },
+    { id: 'address-list',          label: 'Address list (contacts)',Component: AddressListSection, components: ['ContactsPickerScreen', 'NetworkFilterDropdown'] },
     { id: 'radio-group',           label: 'Radio group',            Component: RadioGroupSection, primitives: ['RadioGroup'] },
     { id: 'segmented-control',     label: 'Segmented control',      Component: SegmentedControlSection, primitives: ['SegmentedControl'] },
     { id: 'pill-segmented',        label: 'Pill segmented',         Component: PillSegmentedSection },
@@ -121,9 +137,9 @@ export const SECTIONS = [
     { id: 'field-sizes',           label: 'Field sizes',            Component: FieldSizesSection, primitives: ['Input', 'Select', 'Textarea'] },
     { id: 'icon-select',           label: 'Icon select',            Component: IconSelectSection, primitives: ['IconSelect'] },
     { id: 'address-combobox',      label: 'Address combobox',       Component: AddressComboboxSection, primitives: ['AddressCombobox'] },
-    { id: 'amount-field',          label: 'Amount field',           Component: AmountFieldSection },
+    { id: 'amount-field',          label: 'Amount field',           Component: AmountFieldSection, components: ['AmountField'] },
     { id: 'address-field',         label: 'Address field',          Component: AddressFieldSection, primitives: ['AddressField'] },
-    { id: 'token-field',           label: 'Token field',            Component: TokenFieldSection },
+    { id: 'token-field',           label: 'Token field',            Component: TokenFieldSection, components: ['TokenField'] },
     { id: 'chain-picker',          label: 'Network picker',           Component: ChainPickerSection, primitives: ['ChainPicker'] },
     { id: 'network-field',         label: 'Network field',          Component: NetworkFieldSection, primitives: ['NetworkField'] },
     { id: 'fee-selector',          label: 'Fee selector',           Component: FeeSelectorSection, primitives: ['FeeSelector'] },
@@ -136,9 +152,27 @@ export const SECTIONS = [
     { id: 'animated-qr-frames',    label: 'Animated QR frames',     Component: AnimatedQrFramesSection, primitives: ['AnimatedQrFrames'] },
     { id: 'qr-scanner',            label: 'QR scanner',             Component: QrScannerSection, primitives: ['QrScanner'] },
     { id: 'voice',                 label: 'Voice & microcopy',      Component: VoiceSection },
-    { id: 'states',                label: 'Loading / empty / error',Component: StatesSection, primitives: ['Skeleton', 'StatusMessage'] },
+    { id: 'states',                label: 'Loading / empty / error',Component: StatesSection, primitives: ['Skeleton', 'StatusMessage'], components: ['ToastHost'] },
     { id: 'privacy-mode',          label: 'Privacy mode',           Component: PrivacyModeSection },
+    { id: 'action-confirm',        label: 'Action confirm',         Component: ActionConfirmSection, components: ['ActionConfirmScreen'] },
+    { id: 'sign-credentials',      label: 'Sign credentials',       Component: SignCredentialsSection, components: ['SignCredentials'] },
+    { id: 'contract-notices',      label: 'Contract notices',       Component: ContractNoticesSection, components: ['ContractConsentPanel', 'OwnerWithdrawWarning'] },
+    { id: 'result-panels',         label: 'Result panels',          Component: ResultPanelsSection, components: ['WatcherResultPanel', 'QueuedResultPanel'] },
+    { id: 'draft-exit',            label: 'Draft discard, demo exit', Component: DraftAndExitSection, components: ['DraftDiscardButton', 'DemoExitConfirm'] },
+    { id: 'native-fee-toggle',     label: 'Protocol fee toggle',    Component: NativeFeeToggleSection, components: ['NativeFeeToggle'] },
+    { id: 'picker-screens',        label: 'Picker screens',         Component: PickerScreensSection, components: ['OwnAddressPickerScreen', 'ListPickerScreen'] },
+    { id: 'list-toolbar',          label: 'List toolbar',           Component: ListToolbarSection, components: ['ListToolbar'] },
+    { id: 'unavailable-states',    label: 'Offline, unchecked states', Component: UnavailableStatesSection, components: ['OfflineEmptyState', 'BalancesUncheckedState'] },
+    { id: 'activity-rows',         label: 'Activity rows',          Component: ActivityRowsSection, components: ['ActivityRow', 'HistoryEntryRow', 'RelativeTime'] },
+    { id: 'shell-navigation',      label: 'Shell navigation',       Component: ShellNavigationSection, components: ['LeftNav', 'BottomTabBar', 'HeaderActionMenu'] },
+    { id: 'home-tabs',             label: 'Home tabs',              Component: HomeTabsSection, components: ['HomeTabs'] },
 ];
+
+// Shared components that live outside the UI barrel (shared/components and
+// route helpers) and have a live example in the guide.
+export const DOCUMENTED_COMPONENTS = Object.freeze(
+    SECTIONS.flatMap(({ components = [] }) => components),
+);
 
 export const DOCUMENTED_PRIMITIVES = Object.freeze(
     SECTIONS.flatMap(({ primitives = [] }) => primitives),

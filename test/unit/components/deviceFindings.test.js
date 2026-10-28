@@ -22,18 +22,6 @@ describe('device finding fixes', () => {
         expect(rule(css, '.sheet .header')).toMatch(/padding-inline:\s*var\(--xc-space-4\)/);
     });
 
-    it('lets the page title icon box use the artwork dimensions', () => {
-        const pageHeader = read('packages/core/src/ui/PageHeader.module.css');
-        const tokenDetail = read('packages/core/src/shared/routes/TokenDetail.module.css');
-        const titleIcon = rule(pageHeader, '.titleIcon');
-        const tokenIcon = rule(tokenDetail, '.headerIcon');
-
-        expect(titleIcon).toMatch(/width:\s*max-content/);
-        expect(titleIcon).toMatch(/height:\s*max-content/);
-        expect(tokenIcon).toMatch(/width:\s*var\(--xc-avatar-size-header\)/);
-        expect(tokenIcon).toMatch(/height:\s*var\(--xc-avatar-size-header\)/);
-    });
-
     it('distinguishes Marketplace from Dispensers in every navigation registry', () => {
         const sources = [
             read('packages/core/src/shared/components/LeftNav.jsx'),

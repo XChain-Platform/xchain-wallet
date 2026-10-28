@@ -89,7 +89,6 @@ export function StakeNew({ walletId, onPickValidator, onPickContract, onBack }) 
         <PageHeader
             onBack={step === 'chain' ? () => setStep('options') : onBack}
             backLabel={step === 'chain' ? t('common.back') : t('stakeNew.backToStaking')}
-            titleIcon={<Icon.StakeIcon />}
             title={t('stakeNew.title')}
         />
     );

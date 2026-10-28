@@ -47,9 +47,6 @@ import { t } from '../i18n/index.js';
  * @param {import('react').ReactNode} props.title     centered title text.
  * @param {string} [props.titleId]                    id for naming the screen body.
  * @param {import('react').Ref<HTMLHeadingElement>} [props.titleRef] ref for moving focus to the screen heading.
- * @param {import('react').ReactNode} [props.titleIcon]   optional inline icon
- *   placed immediately to the left of the title (e.g. a route-action glyph
- *   like Send / Receive).
  * @param {import('react').ReactNode} [props.trailing]    right-side slot for
  *   page-scoped actions (filter buttons, scan, etc.). Omit to render an
  *   empty spacer for symmetry.
@@ -62,7 +59,6 @@ export function PageHeader({
     title,
     titleId,
     titleRef,
-    titleIcon = null,
     trailing = null,
 }) {
     useBackHandler(onBack, backDisabled, 'route');
@@ -110,11 +106,6 @@ export function PageHeader({
                     title={typeof title === 'string' ? title : undefined}
                     tabIndex={titleRef ? -1 : undefined}
                 >
-                    {titleIcon ? (
-                        <span className={styles.titleIcon} aria-hidden="true">
-                            {titleIcon}
-                        </span>
-                    ) : null}
                     {title}
                 </h1>
             </span>

@@ -147,7 +147,7 @@ describe('TokenDetail price history', () => {
         );
 
         await screen.findByRole('status', { name: 'Loading token artwork' });
-        expect(document.querySelectorAll('[aria-label="Loading token artwork"]')).toHaveLength(2);
+        expect(document.querySelectorAll('[aria-label="Loading token artwork"]')).toHaveLength(1);
         expect(screen.getByRole('status', { name: 'Loading token verification' }).style.height).toBe('38px');
         expect(screen.getByRole('status', { name: 'Loading supply history' }).style.height).toBe('94px');
         expect(screen.getByRole('status', { name: 'Loading price history' }).style.height).toBe('64px');

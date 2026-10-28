@@ -32,7 +32,7 @@
 
 import { useEffect, useMemo, useRef, useState } from 'react';
 import {
-    Button, ChainPicker, EmptyState, FormPage, Icon, Input, PageHeader, Screen, Select, StatusMessage,
+    Button, ChainPicker, EmptyState, FormPage, Input, PageHeader, Screen, Select, StatusMessage,
 } from '@xchain-wallet/core/ui';
 import { registry as registryLib, flows as flowsLib } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
@@ -213,7 +213,6 @@ export function AddAddressModal({ walletId, accountId, chainIds, onClose, onGene
             nested
             onBack={busy ? undefined : onClose}
             title="Add addresses"
-            titleIcon={<Icon.PlusIcon />}
         />
     );
     const footer = coinOptions.length > 0 ? (

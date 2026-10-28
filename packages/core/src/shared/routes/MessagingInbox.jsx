@@ -577,7 +577,6 @@ export function MessagingInbox({ walletId, activeAccountId, onCompose, onBack, i
         <PageHeader
             onBack={onBack}
             title="Messaging"
-            titleIcon={<Icon.MessageIcon />}
         />
     );
     // The page header holds only the title and Back, so New conversation
@@ -848,7 +847,6 @@ export function MessagingInbox({ walletId, activeAccountId, onCompose, onBack, i
                         nested
                         onBack={() => setSelectedCounterparty(null)}
                         title={cpName || <AddressText address={displayAddress(selectedCounterparty)} />}
-                        titleIcon={<Icon.MessageIcon />}
                     />
                 )}
                 footer={composer}

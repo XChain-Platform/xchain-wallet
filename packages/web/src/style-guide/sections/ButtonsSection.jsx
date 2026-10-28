@@ -11,8 +11,8 @@
 import { Button, Icon, Input } from '@xchain-wallet/core/ui';
 import { Section, Guidance, Markup, LiveExample } from '../StyleGuidePage.jsx';
 
-const VARIANTS = ['primary', 'secondary', 'ghost', 'danger', 'success'];
-const LABELS = { primary: 'Send', secondary: 'Receive', ghost: 'Cancel', danger: 'Delete', success: 'Approve' };
+const VARIANTS = ['primary', 'secondary', 'ghost', 'link', 'danger', 'success'];
+const LABELS = { primary: 'Send', secondary: 'Receive', ghost: 'Cancel', link: 'Discard draft', danger: 'Delete', success: 'Approve' };
 const row = { display: 'flex', flexWrap: 'wrap', gap: 'var(--xc-space-2)', alignItems: 'center' };
 const sizeRow = { ...row, alignItems: 'flex-start' };
 const stack = { display: 'flex', flexDirection: 'column', gap: 'var(--xc-space-3)' };
@@ -25,10 +25,10 @@ export function ButtonsSection() {
             id="buttons"
             title="Buttons"
             tag="CANONICAL · Button"
-            kicker="Every button-shaped control is a <Button>. Five variants, three shared control sizes, a loading state that also disables, and an icon picked from the label unless you pass one."
+            kicker="Every button-shaped control is a <Button>. Six variants, three shared control sizes, a loading state that also disables, and an icon picked from the label unless you pass one."
         >
             <Guidance
-                what={<>Props: <code>variant</code> (<code>primary</code> | <code>secondary</code> | <code>ghost</code> | <code>danger</code> | <code>success</code>), <code>size</code> (<code>sm</code> 28px | <code>md</code> 36px | <code>lg</code> 44px, stepping up to 36/44/48px on touch), <code>block</code> (full width), <code>loading</code> (spinner, disabled, <code>aria-busy</code>), <code>disabled</code>, <code>type</code> (default <code>button</code>, so it never submits by accident), <code>icon</code> (a node, or <code>null</code> for no icon). The same module exports <code>Spinner</code>, the loading indicator a busy Button overlays, for inline progress such as a preflight check.</>}
+                what={<>Props: <code>variant</code> (<code>primary</code> | <code>secondary</code> | <code>ghost</code> | <code>link</code> | <code>danger</code> | <code>success</code>), <code>size</code> (<code>sm</code> 28px | <code>md</code> 36px | <code>lg</code> 44px, stepping up to 36/44/48px on touch), <code>block</code> (full width), <code>loading</code> (spinner, disabled, <code>aria-busy</code>), <code>disabled</code>, <code>type</code> (default <code>button</code>, so it never submits by accident), <code>icon</code> (a node, or <code>null</code> for no icon). The same module exports <code>Spinner</code>, the loading indicator a busy Button overlays, for inline progress such as a preflight check.</>}
                 when={<>Primary: the one action the screen exists for. Secondary: a second real action. Ghost: back out, cancel, less-used actions. Danger: destroys or spends irreversibly. Success: approve or confirm a pending request.</>}
                 sizing={<>The visual heights are <code>sm</code> 28px, <code>md</code> 36px, and <code>lg</code> 44px with a mouse, and 36px, 44px, and 48px on touch. A touch <code>sm</code> button extends its hit area to 44px, so compact buttons need enough space around them. In a FormPage action row buttons grow to share the row and wrap onto a new line; put the primary last.</>}
                 doRule={<>✓ One primary per screen · <code>type="submit"</code> only on the form's submit · <code>loading</code> while the action runs</>}

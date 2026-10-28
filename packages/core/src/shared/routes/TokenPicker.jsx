@@ -92,7 +92,6 @@ function hasSpendableBalance(row) {
  * Caller's action only accepts one kind (BET escrows tokens, so the
  *   native coin is not a legal wager and must not be offered)
  * @param {string} [props.title]
- * @param {import('react').ReactNode} [props.titleIcon]
  * @param {string} [props.backLabel]
  * @param {() => void} [props.onBack]
  * @param {import('react').ElementType} [props.listPageComponent]
@@ -111,7 +110,6 @@ export function TokenPicker({
     onKindFilterChange: onKindFilterChangeProp,
     kindLocked = false,
     title,
-    titleIcon,
     backLabel,
     onBack,
     listPageComponent: ListPageComponent = ListPage,
@@ -562,7 +560,6 @@ export function TokenPicker({
     };
 
     const headerTitle = title ?? (isReceive ? 'Receive' : 'Send');
-    const headerIcon = titleIcon ?? (isReceive ? <Icon.ReceiveIcon /> : <Icon.SendIcon />);
     const headerBackLabel = backLabel ?? 'Back to home';
 
     const header = (
@@ -571,7 +568,6 @@ export function TokenPicker({
             onBack={onBack}
             backLabel={headerBackLabel}
             title={headerTitle}
-            titleIcon={headerIcon}
         />
     );
 

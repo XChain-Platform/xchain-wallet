@@ -49,13 +49,9 @@ describe('list screens share one toolbar', () => {
 });
 
 describe('Dispensers icon', () => {
-    it('uses the menu icon on every Dispensers page header', () => {
+    it('keeps the menu icon in the left navigation', () => {
         expect(read('packages/core/src/shared/components/LeftNav.jsx'))
             .toMatch(/dispensers-list[^\n]*Icon\.DollarIcon/);
-        for (const name of ['DispensersList', 'DispenserDetail', 'DispenserForm']) {
-            expect(route(name)).toMatch(/titleIcon=\{<Icon\.DollarIcon \/>\}/);
-            expect(route(name)).not.toMatch(/titleIcon=\{<Icon\.TokenIcon/);
-        }
     });
 });
 
