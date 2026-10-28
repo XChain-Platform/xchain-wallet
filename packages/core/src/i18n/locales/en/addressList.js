@@ -15,6 +15,7 @@
 import { addEnglish } from '../../store.js';
 
 const messages = {
+    'addressList.balanceCheckWarning': "The balance couldn't be checked. This address may hold coins.",
     'addressList.hidden.show':
         '{count, plural, one {Show # hidden address} other {Show # hidden addresses}}',
     'addressList.hidden.hide':

@@ -95,14 +95,17 @@ const DERIVED_SOURCES = new Set(['hd', 'trezor', 'ledger']);
  * @param {object} opts
  * @param {{ source?: string, derivationPath?: string | null, role?: string } | null | undefined} opts.record
  * @param {string[]} [opts.holdings]   formatted non-zero balances ("0.5 DOGE", "1,000 XCP")
+ * @param {'loading'|'loaded'|'failed'} [opts.balanceStatus] whether cached balances are trustworthy
  * @param {boolean} [opts.hidden]      Privacy Mode: say funds exist without the amounts
  * @param {boolean} [opts.active]      this is the chain's active address
  * @param {boolean} [opts.last]        this is the chain's only address in the wallet
  * @returns {string}
  */
-export function deleteAddressMessage({ record, holdings = [], hidden = false, active = false, last = false }) {
+export function deleteAddressMessage({ record, holdings = [], balanceStatus = 'loaded', hidden = false, active = false, last = false }) {
     const parts = [];
-    if (holdings.length > 0) {
+    if (balanceStatus !== 'loaded') {
+        parts.push(t('addressList.balanceCheckWarning'));
+    } else if (holdings.length > 0) {
         parts.push(hidden ? 'It holds funds.' : `It holds ${holdings.join(', ')}.`);
     }
     if (record?.role === 'dispenser') {
@@ -250,18 +253,38 @@ export function AddressList({
     const [addressesByChain, setAddressesByChain] = useState(
         /** @type {Record<string, any[]> | null} */ (null),
     );
-    // Per-address native balances, so each row can show e.g. "0.0005 BTC".
-    const [balancesByChain, setBalancesByChain] = useState(
-        /** @type {Record<string, any[]> | null} */ (null),
+    // Keep pending and failed reads separate from a valid empty balance map.
+    // Only a loaded map is safe to interpret as a zero balance.
+    const [balanceRead, setBalanceRead] = useState(
+        /** @type {{ status: 'loading'|'loaded'|'failed', byChain: Record<string, any[]> | null }} */ ({
+            status: 'loading',
+            byChain: null,
+        }),
     );
     useEffect(() => {
-        if (!walletId || typeof messaging.getWalletBalances !== 'function') return undefined;
+        setBalanceRead({ status: 'loading', byChain: null });
+        if (!walletId || typeof messaging.getWalletBalances !== 'function') {
+            setBalanceRead({ status: 'failed', byChain: null });
+            return undefined;
+        }
         let cancelled = false;
-        messaging.getWalletBalances(walletId, accountId)
-            .then((b) => { if (!cancelled) setBalancesByChain(b || {}); })
-            .catch(() => { if (!cancelled) setBalancesByChain({}); });
+        Promise.resolve()
+            .then(() => messaging.getWalletBalances(walletId, accountId))
+            .then((byChain) => {
+                if (cancelled) return;
+                const valid = byChain !== null && typeof byChain === 'object' && !Array.isArray(byChain)
+                    && Object.values(byChain).every((entries) => Array.isArray(entries));
+                setBalanceRead(valid
+                    ? { status: 'loaded', byChain }
+                    : { status: 'failed', byChain: null });
+            })
+            .catch(() => {
+                if (!cancelled) setBalanceRead({ status: 'failed', byChain: null });
+            });
         return () => { cancelled = true; };
     }, [walletId, accountId, messaging]);
+
+    const balancesByChain = balanceRead.byChain;
 
     // Resolved active (operating) address per chain: the row matching it gets
     // the green "Active" bubble and the detail view hides "Set active" for it.
@@ -304,6 +327,7 @@ export function AddressList({
     // Formatted native balance for a row, e.g. "0.0005 BTC". Privacy Mode
     // masks it everywhere this is rendered (list rows + detail Balance).
     const amountTextFor = (row) => {
+        if (balanceRead.status !== 'loaded') return t('send.balance.unknown');
         if (balancesHidden) return '•••••';
         const d = chainRegistry.get(row.chainId);
         const nativeTick = tickerForCoin(d?.coin);
@@ -407,7 +431,7 @@ export function AddressList({
         // React retries this render with an empty scope, so no address,
         // balance, selection, or wallet format from another wallet commits.
         setAddressesByChain(null);
-        setBalancesByChain(null);
+        setBalanceRead({ status: 'loading', byChain: null });
         setActiveByChain({});
         setMultisigs([]);
         setLoadError(null);
@@ -1185,6 +1209,7 @@ export function AddressList({
                 message: deleteAddressMessage({
                     record: selected.record,
                     holdings: holdingsFor(selected),
+                    balanceStatus: balanceRead.status,
                     hidden: balancesHidden,
                     active: isActiveRow(selected),
                     last: onChain.length === 1,
