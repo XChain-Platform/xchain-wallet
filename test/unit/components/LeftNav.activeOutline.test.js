@@ -45,8 +45,8 @@ function ruleIn(body, selector) {
 }
 
 // The active nav row carries the same 1px control edge as every other
-// selected control. Every row reserves that edge in transparent and pays it
-// back from its padding, so selecting a row never moves the list.
+// selected control. Every row reserves that edge in transparent, so selecting
+// a row never moves the list.
 describe('left nav active row outline', () => {
     it('draws a 1px control-border edge on the active row', () => {
         const active = topLevelRule('.itemActive');
@@ -61,11 +61,10 @@ describe('left nav active row outline', () => {
         expect(item).not.toMatch(/border:\s*0\s*;/);
     });
 
-    it('takes the 1px edge out of the row padding so the row keeps its size', () => {
+    it('pads the row with the spacing tokens', () => {
         const item = topLevelRule('.item');
-        expect(item).toMatch(
-            /padding:\s*calc\(var\(--xc-space-2\)\s*-\s*1px\)\s+calc\(var\(--xc-space-4\)\s*-\s*1px\)\s*;/,
-        );
+        expect(item).toMatch(/padding:\s*var\(--xc-space-2\)\s+var\(--xc-space-4\)\s*;/);
+        expect(item).not.toMatch(/padding:[^;]*calc\(/);
     });
 
     it('keeps idle rows edgeless and marks the active row in forced colors', () => {

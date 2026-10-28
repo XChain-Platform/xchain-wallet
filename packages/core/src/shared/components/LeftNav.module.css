@@ -231,8 +231,7 @@
     align-items: center;
     gap: var(--xc-space-3);
     width: 100%;
-    /* The padding gives back the 1px edge so the row keeps its borderless size. */
-    padding: calc(var(--xc-space-2) - 1px) calc(var(--xc-space-4) - 1px);
+    padding: var(--xc-space-2) var(--xc-space-4);
     background: transparent;
     /* A transparent 1px edge on every row keeps the active row, which colours it, from shifting the list. */
     border: 1px solid transparent;
