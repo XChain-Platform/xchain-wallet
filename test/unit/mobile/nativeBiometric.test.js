@@ -225,6 +225,41 @@ describe('unlock failures', () => {
         expect(isBiometricRegistered()).toBe(false);
     });
 
+    it('discards a wrap the native side reports invalidated', async () => {
+        // iOS answers ABSENT for a Keychain item a biometric re-enrolment
+        // invalidated, but the item stays stored with the enrolment-day
+        // password in it. Only an explicit clear removes it, and a later
+        // password change does not reach it because the cached flag is false.
+        const plugin = fakeVault({
+            biometricUnlock: vi.fn(async () => ({
+                status: 'ABSENT',
+                detail: 'no biometric wrap is stored, or it was invalidated',
+            })),
+        });
+        __setNativeVaultForTests(plugin);
+        await installNativeBiometricProvider();
+        await registerBiometricCredential({ password: PASSWORD });
+
+        await expect(unlockWithBiometric()).rejects.toThrow(BiometricNotRegisteredError);
+        expect(plugin.biometricClear).toHaveBeenCalledOnce();
+        expect(plugin.state.wrap).toBeNull();
+        expect(isBiometricRegistered()).toBe(false);
+    });
+
+    it('falls back to the password when discarding an invalidated wrap fails', async () => {
+        const plugin = fakeVault({
+            biometricUnlock: vi.fn(async () => ({ status: 'ABSENT', detail: 'invalidated' })),
+            biometricClear: vi.fn(async () => { throw new Error('keychain busy'); }),
+        });
+        __setNativeVaultForTests(plugin);
+        await installNativeBiometricProvider();
+        await registerBiometricCredential({ password: PASSWORD });
+
+        await expect(unlockWithBiometric()).rejects.toThrow(BiometricNotRegisteredError);
+        expect(plugin.biometricClear).toHaveBeenCalledOnce();
+        expect(isBiometricRegistered()).toBe(false);
+    });
+
     it('surfaces a failed prompt without reflecting native detail', async () => {
         const plugin = fakeVault({
             biometricUnlock: async () => ({ status: PASSWORD, detail: PASSWORD }),

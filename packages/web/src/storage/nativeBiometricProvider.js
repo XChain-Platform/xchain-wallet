@@ -219,10 +219,20 @@ export const nativeBiometricProvider = {
                 return new TextDecoder().decode(base64ToBytes(reply.secret));
             }
             case VaultStatus.ABSENT:
-                // The wrap is gone: enrollment changed, or the key was
-                // invalidated. Drop the cached flag so the affordance stops
-                // being offered, and let the user fall back to the password.
+                // The wrap is gone or can never open again: enrollment
+                // changed, or the key was invalidated. Android deletes its
+                // key at that point; iOS leaves the invalidated Keychain item
+                // in place, still holding the password as it was at
+                // enrolment, and a later password change skips the native
+                // clear because it reads the cached flag this branch drops.
+                // So the wrap is discarded here, then the user falls back to
+                // the password whether or not the discard went through.
                 enrolledCache = false;
+                try {
+                    await callNativeVault('biometricClear');
+                } catch (_err) {
+                    // The password fallback stands either way.
+                }
                 throw new BiometricNotRegisteredError();
             default:
                 if (reply?.detail === BIOMETRIC_CANCELLED_DETAIL) throw new BiometricCancelledError();
