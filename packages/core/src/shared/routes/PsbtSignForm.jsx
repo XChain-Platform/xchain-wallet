@@ -1381,10 +1381,12 @@ export function PsbtSignForm({ walletId, onBack, initialPsbt }) {
                     {...drop.rootProps}
                     style={{
                         position: 'relative',
-                        border: drop.isDragOver ? '2px dashed var(--xc-accent)' : '1px solid transparent',
+                        // The drop target shows its state with an outline so the wrapper
+                        // draws no border of its own and never reads as a card.
+                        outline: drop.isDragOver ? '2px dashed var(--xc-accent)' : 'none',
+                        outlineOffset: 2,
                         borderRadius: 'var(--xc-radius-sm)',
-                        padding: drop.isDragOver ? 0 : 1,
-                        transition: 'border-color 120ms ease',
+                        transition: 'outline-color 120ms ease',
                     }}
                 >
                     <Textarea

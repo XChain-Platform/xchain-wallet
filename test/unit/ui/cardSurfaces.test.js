@@ -200,7 +200,17 @@ const INLINE_CARD = {
     padding: "'var(--xc-card-pad)'",
 };
 
-/** Inline style objects that draw a bordered, rounded, padded box off the card tokens, counted per file. */
+/** A quoted border value that draws a line, not a reset or a transparent spacer. */
+function isVisibleInlineBorder(literal) {
+    return !/^['"`](0|none)\b/.test(literal) && !/\s+transparent['"`]$/.test(literal);
+}
+
+/**
+ * Inline style objects that draw a bordered, rounded, padded box off the card
+ * tokens, counted per file. A conditional border (a drag-over state, say)
+ * counts when any of its quoted branches draws a line, so a drop target draws
+ * its state as an outline on an unbordered wrapper.
+ */
 function inlineOffCardBoxes(sources) {
     const counts = {};
     for (const { path, source } of sources) {
@@ -210,7 +220,7 @@ function inlineOffCardBoxes(sources) {
             const border = value('border');
             const radius = value('borderRadius');
             if (!border || !radius || !value('padding')) continue;
-            if (!/^['"`]/.test(border) || /^['"`](0|none)\b/.test(border) || /\s+transparent['"`]$/.test(border)) continue;
+            if (!(border.match(/(['"`])[^'"`]*\1/g) || []).some(isVisibleInlineBorder)) continue;
             if (/^['"`]?(0|50%|9{3,})/.test(radius) || /radius-pill/.test(radius)) continue;
             if (Object.entries(INLINE_CARD).every(([key, token]) => value(key) === token)) continue;
             counts[path] = (counts[path] || 0) + 1;
@@ -305,9 +315,12 @@ describe('card surfaces', () => {
                 "const B = { border: 'var(--xc-card-border)', borderRadius: 'var(--xc-card-radius)', padding: 'var(--xc-card-pad)' };",
                 "const C = { border: drop.isDragOver ? '2px dashed var(--xc-accent)' : 'none' };",
                 "const D = { borderBottom: '1px dotted red' };",
+                "const E = { border: isDragOver ? '2px dashed var(--xc-accent)' : '1px solid transparent', borderRadius: 'var(--xc-radius-sm)', padding: isDragOver ? 0 : 1 };",
+                "const F = { border: isDragOver ? 'none' : '1px solid transparent', borderRadius: '4px', padding: 1 };",
+                "const G = { outline: isDragOver ? '2px dashed var(--xc-accent)' : 'none', border: 0, borderRadius: '4px', padding: 1 };",
             ].join('\n'),
         }];
-        expect(inlineOffCardBoxes(inline)).toEqual({ 'Fixture.jsx': 1 });
+        expect(inlineOffCardBoxes(inline)).toEqual({ 'Fixture.jsx': 2 });
         expect(inlineDashedLines(inline)).toEqual(['Fixture.jsx:4']);
 
         const tinted = [{
