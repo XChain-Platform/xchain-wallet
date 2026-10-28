@@ -27,7 +27,7 @@ describe('K51 small-screen UI', () => {
         const ads = source('packages/core/src/shared/components/settings/AdsSection.jsx');
         const inputCss = source('packages/core/src/ui/Input.module.css');
 
-        expect(ads).toMatch(/import \{ InfoTip, Input, Select \} from '@xchain-wallet\/core\/ui'/);
+        expect(ads).toMatch(/import \{ (?:EmptyState, )?InfoTip, Input, Select \} from '@xchain-wallet\/core\/ui'/);
         // The amount fields share one AmountField, the donation address is a
         // read-only kit Input and the recipient picker is the kit Select, which
         // wears Input's control class, so every field takes the kit heights.

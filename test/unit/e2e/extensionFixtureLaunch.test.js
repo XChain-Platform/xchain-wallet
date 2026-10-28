@@ -13,6 +13,7 @@
 import fs from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
+import { HOST_BLOCK_ARG } from '../../e2e/host-block.js';
 
 // The stock extension fixture launches a persistent Chromium context. It keeps
 // every outside host unresolvable and keeps its profile under the Playwright
@@ -21,7 +22,9 @@ const source = fs.readFileSync(fileURLToPath(new URL('../../e2e/fixtures/extensi
 
 describe('stock extension fixture launch', () => {
     it('passes the full host-resolver rule', () => {
-        expect(source).toContain("'--host-resolver-rules=MAP * ~NOTFOUND, EXCLUDE localhost, EXCLUDE 127.0.0.1'");
+        expect(HOST_BLOCK_ARG).toBe('--host-resolver-rules=MAP * ~NOTFOUND, EXCLUDE localhost, EXCLUDE 127.0.0.1');
+        expect(source).toContain("import { HOST_BLOCK_ARG } from '../host-block.js';");
+        expect(source).toMatch(/^\s+HOST_BLOCK_ARG,$/m);
     });
 
     it('keeps the profile under the Playwright output dir, not the system temp dir', () => {

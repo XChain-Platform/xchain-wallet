@@ -42,7 +42,9 @@ describe('settings inline messages', () => {
         const about = readFileSync(join(settingsDir, 'AboutSection.jsx'), 'utf8');
         expect(about).toMatch(/\{status \? <StatusMessage variant="success">/);
         const settings = readFileSync(files.at(-1), 'utf8');
-        expect(settings).toMatch(/<StatusMessage variant=\{UPDATE_CHECK_VARIANT\[state\]/);
+        // The update check result is a page notice drawn by StatusMessage.
+        expect(settings).toMatch(/variant: UPDATE_CHECK_VARIANT\[state\]/);
+        expect(settings).toMatch(/<StatusMessage variant=\{desktopUpdate\.variant\}>\{desktopUpdate\.message\}<\/StatusMessage>/);
     });
 
     it('puts a row result under the row at full width, not in its label column', () => {
