@@ -286,6 +286,10 @@ export function MarketActivity({ walletId, accountId, onBack, onOpenDispenser })
         />
     );
 
+    const offerNames = chainNamer(offers);
+    const orderNames = chainNamer(dexOrders);
+    const saleNames = chainNamer(sales);
+    const swapNames = chainNamer(dexSwaps);
     const iconChainId = selected.chainId || defaultChainId;
     const marketSelector = (
         <Button
@@ -364,8 +368,8 @@ export function MarketActivity({ walletId, accountId, onBack, onOpenDispenser })
                                             <ListRow
                                                 className={styles.row}
                                                 leading={<TickerIcon chainId={chainId} tick={tick} size={32} />}
-                                                title={title}
-                                                subtitle={remaining != null ? `${formatDecimal(remaining)} ${tick} remaining` : undefined}
+                                                title={offerNames.title(chainId, title)}
+                                                subtitle={offerNames.subtitle(chainId, remaining != null ? `${formatDecimal(remaining)} ${tick} remaining` : undefined)}
                                                 chevron={onClick ? <Icon.ForwardIcon /> : false}
                                                 onClick={onClick}
                                             />
@@ -415,7 +419,7 @@ export function MarketActivity({ walletId, accountId, onBack, onOpenDispenser })
                                             <ListRow
                                                 className={styles.row}
                                                 leading={<TickerIcon chainId={chainId} tick={tick} size={32} />}
-                                                title={title}
+                                                title={orderNames.title(chainId, title)}
                                             />
                                         </li>
                                     );
@@ -459,13 +463,13 @@ export function MarketActivity({ walletId, accountId, onBack, onOpenDispenser })
                                             <ListRow
                                                 className={styles.row}
                                                 leading={<TickerIcon chainId={chainId} tick={tick} size={32} />}
-                                                title={(
+                                                title={saleNames.title(chainId, (
                                                     <>
                                                         {give ? `Sold ${formatDecimal(give)} ${soldTick}` : `Sold ${soldTick}`}
                                                         {give && Number(get) > 0 && payAsset ? ` for ${formatDecimal(get)} ${payAsset}` : ''}
                                                     </>
-                                                )}
-                                                subtitle={timestamp ? <RelativeTime timestamp={timestamp} /> : undefined}
+                                                ))}
+                                                subtitle={saleNames.subtitle(chainId, timestamp ? <RelativeTime timestamp={timestamp} /> : undefined)}
                                             />
                                         </li>
                                     );
@@ -515,8 +519,8 @@ export function MarketActivity({ walletId, accountId, onBack, onOpenDispenser })
                                             <ListRow
                                                 className={styles.row}
                                                 leading={<TickerIcon chainId={chainId} tick={tick} size={32} />}
-                                                title={title}
-                                                subtitle={timestamp ? <RelativeTime timestamp={timestamp} /> : undefined}
+                                                title={swapNames.title(chainId, title)}
+                                                subtitle={swapNames.subtitle(chainId, timestamp ? <RelativeTime timestamp={timestamp} /> : undefined)}
                                             />
                                         </li>
                                     );
@@ -535,6 +539,21 @@ export function MarketActivity({ walletId, accountId, onBack, onOpenDispenser })
             </ListPage>
         </Screen>
     );
+}
+
+// A row on a section that spans several chains names its chain in its own
+// text, so identical rows from two chains read differently to a user and a
+// screen reader. A section on one chain keeps its plain text.
+function chainNamer(entries) {
+    const multi = new Set((entries || []).map((entry) => entry.chainId)).size > 1;
+    const name = (chainId) => chainRegistry.get(chainId)?.displayName || String(chainId).split('-')[0];
+    return {
+        title: (chainId, text) => (multi ? <>{text} on {name(chainId)}</> : text),
+        subtitle: (chainId, content) => {
+            if (!multi) return content;
+            return content ? <>{name(chainId)} · {content}</> : undefined;
+        },
+    };
 }
 
 function LoadMoreActivity({ onClick, label }) {
