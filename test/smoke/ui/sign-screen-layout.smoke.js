@@ -215,4 +215,50 @@ assert.match(
 assert.match(sendCss, /\.details\b/, 'Send.module.css defines .details');
 assert.match(sendCss, /\.detailsToggle\b/, 'Send.module.css defines .detailsToggle');
 
+// --- 7. one Reject / Approve pair on every confirm screen ----------------
+//
+// Every confirm surface ends in exactly two footer buttons: Reject with the
+// thumbs-down icon and Approve with the thumbs-up icon. The in-wallet screens
+// delegate to ConfirmActionModal and render no footer buttons of their own.
+{
+    const read = (...parts) => readFileSync(join(wsRoot, ...parts), 'utf8');
+    const footerOf = (src, startMarker) => {
+        const start = src.indexOf(startMarker);
+        assert.ok(start !== -1, `footer marker ${startMarker} exists`);
+        const end = src.indexOf('</div>', src.lastIndexOf('</Button>', src.indexOf('</div>', start + 200)) );
+        return src.slice(start, end === -1 ? start + 1500 : end);
+    };
+    const assertPair = (name, footer) => {
+        const buttons = footer.match(/<Button\b/g) || [];
+        assert.equal(buttons.length, 2, `${name}: footer has exactly two buttons`);
+        const [rejectBtn, approveBtn] = footer.split(/<Button\b/).slice(1);
+        assert.match(rejectBtn, /icon=\{<Icon\.ThumbsDownIcon \/>\}/, `${name}: Reject carries the thumbs-down icon`);
+        assert.match(rejectBtn, /extension\.approval\.reject|\bReject\b/, `${name}: first button is Reject`);
+        assert.match(approveBtn, /icon=\{<Icon\.ThumbsUpIcon \/>\}/, `${name}: Approve carries the thumbs-up icon`);
+        assert.doesNotMatch(rejectBtn, /variant="(danger|primary)"/, `${name}: Reject is not danger or primary`);
+        assert.doesNotMatch(approveBtn, /variant="danger"/, `${name}: Approve is not danger`);
+    };
+    const connectSrc = read('packages', 'extension', 'src', 'approval', 'kinds', 'ConnectApproval.jsx');
+    assertPair('ConnectApproval', footerOf(connectSrc, '<div className={shared.footer}>'));
+    assertPair('SignApproval', footerOf(signSrc, '<div className={shared.footer}>'));
+    {
+        // The sign footer matches ConfirmActionModal: a neutral Reject and a green Approve.
+        const [signReject, signApprove] = footerOf(signSrc, '<div className={shared.footer}>')
+            .split(/<Button\b/)
+            .slice(1);
+        assert.match(signReject, /variant="secondary"/, 'SignApproval: Reject is variant="secondary"');
+        assert.match(signApprove, /variant="success"/, 'SignApproval: Approve is variant="success"');
+    }
+    assert.equal(en['extension.connect.approve'], 'Approve', 'ConnectApproval approve label is Approve');
+    assertPair(
+        'ConfirmActionModal',
+        footerOf(read('packages', 'core', 'src', 'shared', 'components', 'ConfirmActionModal.jsx'), '<div className={styles.footer}>'),
+    );
+    for (const name of ['ActionConfirmScreen', 'MessageConfirmScreen', 'PsbtConfirmScreen']) {
+        const src = read('packages', 'core', 'src', 'shared', 'components', `${name}.jsx`);
+        assert.match(src, /<ConfirmActionModal\b/, `${name}: renders the shared confirm footer`);
+        assert.doesNotMatch(src, /<Button\b/, `${name}: adds no footer buttons of its own`);
+    }
+}
+
 console.log('sign-screen-layout smoke OK');

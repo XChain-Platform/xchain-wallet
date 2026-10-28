@@ -138,11 +138,11 @@ async function approveConnection(approval) {
     // Wait for React to mount before querying: the window is created, then the
     // approval bundle renders into it.
     try {
-        await approval.getByRole('button', { name: 'Connect', exact: true }).waitFor({ state: 'visible', timeout: 20_000 });
+        await approval.getByRole('button', { name: 'Approve', exact: true }).waitFor({ state: 'visible', timeout: 20_000 });
     } catch (e) {
         const text = await approval.locator('body').innerText().catch(() => '<unreadable>');
         const btns = await approval.getByRole('button').allInnerTexts().catch(() => []);
-        throw new Error(`connect approval never rendered Connect.\n  url: ${approval.url()}\n  buttons: ${JSON.stringify(btns)}\n  text: ${JSON.stringify(text.slice(0, 500))}`);
+        throw new Error(`connect approval never rendered Approve.\n  url: ${approval.url()}\n  buttons: ${JSON.stringify(btns)}\n  text: ${JSON.stringify(text.slice(0, 500))}`);
     }
     const bitcoin = approval.getByRole('checkbox', { name: /^Allow Bitcoin\b/i }).first();
     if (await bitcoin.count() === 0) {
@@ -152,7 +152,7 @@ async function approveConnection(approval) {
     }
     await bitcoin.waitFor({ state: 'attached', timeout: 30_000 });
     if (!(await bitcoin.isChecked())) await bitcoin.check({ force: true });
-    await clickAndLetItClose(approval.getByRole('button', { name: 'Connect', exact: true }));
+    await clickAndLetItClose(approval.getByRole('button', { name: 'Approve', exact: true }));
 }
 
 

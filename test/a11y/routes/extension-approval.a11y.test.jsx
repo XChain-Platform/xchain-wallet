@@ -59,7 +59,7 @@ describe('extension approval accessibility', () => {
         );
 
         await screen.findByLabelText(`Allow ${CHAIN.displayName} ${CHAIN.networkKind}`);
-        await screen.findByRole('button', { name: 'Connect' });
+        await screen.findByRole('button', { name: 'Approve' });
         await expectNoSeriousAxeViolations(container);
     });
 });

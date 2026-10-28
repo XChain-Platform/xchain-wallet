@@ -154,7 +154,7 @@ describe('ConnectApproval network checklist', () => {
         );
 
         const reject = screen.getByRole('button', { name: 'Reject' });
-        const connect = screen.getByRole('button', { name: 'Connect' });
+        const connect = screen.getByRole('button', { name: 'Approve' });
         expect(reject).not.toBeDisabled();
         expect(connect).not.toBeDisabled();
         fireEvent.click(reject);
@@ -169,7 +169,7 @@ describe('ConnectApproval network checklist', () => {
 
         const box = await screen.findByLabelText(label(added));
         expect(box.checked).toBe(true);
-        expect(screen.getByRole('button', { name: 'Connect' }).disabled).toBe(false);
+        expect(screen.getByRole('button', { name: 'Approve' }).disabled).toBe(false);
         expect(defaultRegistry().has(added.id)).toBe(true);
     });
 
@@ -240,7 +240,7 @@ describe('ConnectApproval account checklist', () => {
         expect(screen.getByLabelText('Share Account 2').checked).toBe(false);
 
         fireEvent.click(screen.getByLabelText('Share Account 2'));
-        await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'Connect' })); });
+        await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'Approve' })); });
 
         expect(submitted).toHaveLength(1);
         expect(submitted[0].accounts).toEqual(['acct-1', 'acct-2']);
@@ -250,7 +250,7 @@ describe('ConnectApproval account checklist', () => {
     it('disables Connect while no account is ticked', () => {
         mountWithAccounts(ACCOUNTS);
         fireEvent.click(screen.getByLabelText('Share Account 1'));
-        expect(screen.getByRole('button', { name: 'Connect' }).disabled).toBe(true);
+        expect(screen.getByRole('button', { name: 'Approve' }).disabled).toBe(true);
     });
 
     it('says the primary account is shared when no options arrive', async () => {
@@ -259,7 +259,7 @@ describe('ConnectApproval account checklist', () => {
         mountWithAccounts(undefined);
 
         expect(screen.getByText(/primary account/)).toBeTruthy();
-        await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'Connect' })); });
+        await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'Approve' })); });
         expect(submitted[0].accounts).toEqual([]);
     });
 });

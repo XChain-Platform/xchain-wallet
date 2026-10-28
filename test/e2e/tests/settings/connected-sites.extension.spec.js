@@ -130,7 +130,7 @@ test.describe('Injected-provider approvals and connected sites', () => {
         await dapp.getByRole('button', { name: 'Connect wallet' }).click();
         const approvedConnect = await waitForApprovalPage(context);
         await expectSafeInitialFocus(approvedConnect);
-        const connect = approvedConnect.getByRole('button', { name: 'Connect', exact: true });
+        const connect = approvedConnect.getByRole('button', { name: 'Approve', exact: true });
         await expect(connect).toBeEnabled({ timeout: 20_000 });
         await clickAndLetApprovalClose(connect, approvedConnect);
         await expect.poll(() => dapp.evaluate(() => window.connectResult))

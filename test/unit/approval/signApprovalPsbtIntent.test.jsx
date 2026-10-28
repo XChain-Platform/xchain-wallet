@@ -558,7 +558,7 @@ describe('SignApproval untrusted text', () => {
             />,
         );
 
-        const connect = screen.getByRole('button', { name: 'Connect' });
+        const connect = screen.getByRole('button', { name: 'Approve' });
         fireEvent.click(connect);
 
         expect(await screen.findByRole('alert')).toHaveTextContent(

@@ -62,7 +62,7 @@ describe('ConnectApproval failure handling', () => {
         expect(screen.getByRole('alert')).toHaveTextContent(
             'This connection request is missing or invalid.',
         );
-        expect(screen.getByRole('button', { name: 'Connect' })).toBeDisabled();
+        expect(screen.getByRole('button', { name: 'Approve' })).toBeDisabled();
         expect(mocks.resolveApproval).not.toHaveBeenCalled();
     });
 
@@ -74,14 +74,14 @@ describe('ConnectApproval failure handling', () => {
         const close = vi.spyOn(window, 'close').mockImplementation(() => {});
         mount();
 
-        fireEvent.click(screen.getByRole('button', { name: 'Connect' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Approve' }));
         expect(await screen.findByRole('alert')).toHaveTextContent(
             'This connection request has expired.',
         );
-        expect(screen.getByRole('button', { name: 'Connect' })).toBeDisabled();
+        expect(screen.getByRole('button', { name: 'Approve' })).toBeDisabled();
         expect(close).not.toHaveBeenCalled();
 
-        fireEvent.click(screen.getByRole('button', { name: 'Connect' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Approve' }));
         expect(mocks.resolveApproval).toHaveBeenCalledOnce();
         expect(mocks.resolveApproval).toHaveBeenCalledWith('connect-failure', {
             approved: true,
@@ -97,7 +97,7 @@ describe('ConnectApproval failure handling', () => {
         mocks.resolveApproval.mockRejectedValue(null);
         mount();
 
-        fireEvent.click(screen.getByRole('button', { name: 'Connect' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Approve' }));
 
         expect(await screen.findByRole('alert')).toHaveTextContent(
             'Could not connect this site.',

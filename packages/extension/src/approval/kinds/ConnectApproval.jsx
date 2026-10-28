@@ -9,7 +9,7 @@
 // contact legal@dankest.llc.
 
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Screen, ListPage, Button, ChainBadge, ChoiceControl } from '@xchain-wallet/core/ui';
+import { Screen, ListPage, Button, ChainBadge, ChoiceControl, Icon } from '@xchain-wallet/core/ui';
 import { useBackHandler } from '@xchain-wallet/core/ui/backStack.js';
 import { i18n, registry as registryLib } from '@xchain-wallet/core';
 import '@xchain-wallet/core/i18n/locales/en/accountPicker.js';
@@ -196,12 +196,19 @@ export function ConnectApproval({ id, payload, onReject }) {
             }
             footer={
                 <div className={shared.footer}>
-                    <Button variant="danger" block onClick={onReject} disabled={busy}>
+                    <Button
+                        variant="secondary"
+                        block
+                        icon={<Icon.ThumbsDownIcon />}
+                        onClick={onReject}
+                        disabled={busy}
+                    >
                         {t('extension.approval.reject')}
                     </Button>
                     <Button
-                        variant="primary"
+                        variant="success"
                         block
+                        icon={<Icon.ThumbsUpIcon />}
                         onClick={handleApprove}
                         loading={busy}
                         disabled={busy || !!requestError || approvedChains.length === 0 || accountsMissing}

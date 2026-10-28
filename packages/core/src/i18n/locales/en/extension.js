@@ -27,7 +27,7 @@ const messages = {
     'extension.approval.requestingSite': 'Requesting site',
 
     'extension.connect.title': 'Connect to XChain Wallet?',
-    'extension.connect.approve': 'Connect',
+    'extension.connect.approve': 'Approve',
     'extension.connect.declaredName': 'Site-provided name',
     'extension.connect.permissions': 'Requested permissions',
     'extension.connect.permission.accounts':
