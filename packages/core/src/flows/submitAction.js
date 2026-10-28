@@ -39,7 +39,7 @@ import { resolveChangeAddress } from './changeAddress.js';
 import { actionDisplayLabel } from '../shared/utils/actionDisplayLabel.js';
 import { withAdsPlanAtEncode } from './buildActionPsbt.js';
 import { importedAddressIdsFor } from './_importedAddressIds.js';
-import { assertReferencedOfferActionable } from './marketExpiry.js';
+import { assertNoOfferCancelInFlight, assertReferencedOfferActionable } from './marketExpiry.js';
 import { assertSafeActionText } from '../shared/utils/actionTextSafety.js';
 
 /**
@@ -176,6 +176,7 @@ export async function submitAction({
     if (!descriptor) throw new Error(`submitAction: unknown chain "${chainId}"`);
 
     await assertReferencedOfferActionable({ sdkRegistry, chainId, actionData });
+    await assertNoOfferCancelInFlight({ vault, chainRegistry, chainId, actionData });
 
     // §36.3 ADS: resolve the donation plan ONCE up front against the
     // current settings snapshot. If `canSubmit`, schedule a customOutput

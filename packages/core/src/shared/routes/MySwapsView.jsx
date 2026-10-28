@@ -100,11 +100,21 @@ function swapStateOf(detail) {
     };
 }
 
+// The list feed hydrates each row with its detail's `state` block when the
+// chain clock is current, so only a row without a lifecycle status costs a
+// swaps.detail read.
 async function readSwapStates(messaging, candidates) {
     const states = new Map();
+    const unread = [];
+    for (const item of candidates) {
+        const status = item.row?.state?.status;
+        const own = typeof status === 'string' && status.trim() ? swapStateOf(item.row) : null;
+        if (own) states.set(item.key, own);
+        else unread.push(item);
+    }
     if (typeof messaging?.getSwapDetail !== 'function') return states;
-    for (let i = 0; i < candidates.length; i += STATE_READ_CONCURRENCY) {
-        const slice = candidates.slice(i, i + STATE_READ_CONCURRENCY);
+    for (let i = 0; i < unread.length; i += STATE_READ_CONCURRENCY) {
+        const slice = unread.slice(i, i + STATE_READ_CONCURRENCY);
         const details = await Promise.all(slice.map((item) => messaging.getSwapDetail({
             chainId: item.chainId,
             actionIndex: String(item.row.action_index),

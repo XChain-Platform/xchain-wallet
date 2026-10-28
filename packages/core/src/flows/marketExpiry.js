@@ -261,3 +261,53 @@ export async function assertReferencedOfferActionable({ sdkRegistry, chainId, ac
     }
     if (expiration <= clock.blockTime) throw offerRefusal(`This ${ref.kind} has expired.`);
 }
+
+// PendingTx statuses of a cancel that may still confirm. A failed or dropped
+// one cannot, and an indexed one shows in the cancels feed the lists re-read.
+const CANCEL_IN_FLIGHT_STATUSES = new Set(['signed', 'queued', 'broadcasting', 'broadcast']);
+
+function pendingTxCancels(tx, ref, actionIndex) {
+    if (!tx || tx.action !== ref.action) return false;
+    if (tx.params && tx.params[ref.field] != null && String(tx.params.VERSION) === '1') {
+        return String(tx.params[ref.field]) === actionIndex;
+    }
+    const summary = typeof tx.actionSummary === 'string' ? tx.actionSummary : '';
+    // Digit boundary after the index: "#900" must not match inside "#9001".
+    return new RegExp(`^Cancel ${ref.kind} #${actionIndex}(?!\\d)`).test(summary);
+}
+
+/**
+ * Refuse a cancel or edit of an order or swap whose cancel this wallet already
+ * signed and has not seen fail. The explorer lists the offer as open until that
+ * cancel confirms and indexes, so another window, or the same list opened
+ * again, still offers Cancel; the second cancel or an edit indexes invalid and
+ * keeps its fee. A list that cannot be read is unknown and does not refuse.
+ *
+ * @param {{ vault: any, chainRegistry: any, chainId: string, actionData: any }} params
+ */
+export async function assertNoOfferCancelInFlight({ vault, chainRegistry, chainId, actionData }) {
+    const ref = actionData?.action === 'ORDER' || actionData?.action === 'SWAP'
+        ? { ...ACTION_REFERENCE[actionData.action], action: actionData.action }
+        : null;
+    const actionIndex = ref ? String(actionData?.params?.[ref.field] ?? '').trim() : '';
+    if (!/^\d+$/.test(actionIndex)) return;
+    if (typeof vault?.pendingTxs?.list !== 'function') return;
+    const descriptor = chainRegistry?.get?.(chainId);
+    if (!descriptor) return;
+    let rows;
+    try {
+        rows = await vault.pendingTxs.list();
+    } catch {
+        return;
+    }
+    const inFlight = (Array.isArray(rows) ? rows : []).some((tx) => tx
+        && CANCEL_IN_FLIGHT_STATUSES.has(tx.status)
+        && tx.chain === descriptor.coin
+        && tx.network === descriptor.networkKind
+        && pendingTxCancels(tx, ref, actionIndex));
+    if (!inFlight) return;
+    const isCancel = String(actionData.params.VERSION ?? '') === '1';
+    throw offerRefusal(isCancel
+        ? `A cancel for this ${ref.kind} is already on its way. Nothing was signed. Check History for the earlier cancel.`
+        : `This ${ref.kind} has a cancel on its way. Nothing was signed. Check History for the earlier cancel.`);
+}

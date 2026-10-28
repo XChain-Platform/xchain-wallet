@@ -145,14 +145,28 @@ function partialRemaining(item) {
     return String(fill.giveRemaining);
 }
 
-// Read the open candidates' details a few at a time and return
-// key -> fill state. A failed or shapeless read leaves the order as the
-// feeds saw it rather than failing the whole list.
+// The list feed hydrates each row with its detail's `state` block when the
+// chain clock is current, so a row that carries a lifecycle status already
+// holds what orders.detail would return.
+function hydratedFillState(row) {
+    const status = row?.state?.status;
+    return typeof status === 'string' && status.trim() ? fillStateOf(row) : null;
+}
+
+// Return key -> fill state for the open candidates: a hydrated row's own
+// state, otherwise its detail read a few at a time. A failed or shapeless
+// read leaves the order as the feeds saw it rather than failing the whole list.
 async function readFillStates(messaging, candidates) {
     const fills = new Map();
+    const unread = [];
+    for (const it of candidates) {
+        const own = hydratedFillState(it.row);
+        if (own) fills.set(it.key, own);
+        else unread.push(it);
+    }
     if (typeof messaging?.getOrderDetail !== 'function') return fills;
-    for (let i = 0; i < candidates.length; i += FILL_READ_CONCURRENCY) {
-        const slice = candidates.slice(i, i + FILL_READ_CONCURRENCY);
+    for (let i = 0; i < unread.length; i += FILL_READ_CONCURRENCY) {
+        const slice = unread.slice(i, i + FILL_READ_CONCURRENCY);
         const details = await Promise.all(slice.map((it) => messaging
             .getOrderDetail({ chainId: it.chainId, actionIndex: String(it.row.action_index) })
             .catch(() => null)));
