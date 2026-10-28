@@ -11,17 +11,9 @@
                 "count": 1,
                 "reason": "List data, not copy: two Marketplace sale rows show the same relative time (1 day ago), and the meter reads ListRow subtitles as help text; open until a ruling says whether repeated row values count"
             },
-            "desktop-1280 | palette: Your staking positions": {
-                "count": 1,
-                "reason": "List data, not copy: the demo staking positions share one address, shown short under each row, and the meter reads row subtitles as help text; open until a ruling says whether repeated row values count"
-            },
             "phone-360 | palette: Dispensers and exchange activity": {
                 "count": 1,
                 "reason": "List data, not copy: two Marketplace sale rows show the same relative time (1 day ago), and the meter reads ListRow subtitles as help text; open until a ruling says whether repeated row values count"
-            },
-            "phone-360 | palette: Your staking positions": {
-                "count": 1,
-                "reason": "List data, not copy: the demo staking positions share one address, shown short under each row, and the meter reads row subtitles as help text; open until a ruling says whether repeated row values count"
             }
         }
     }
