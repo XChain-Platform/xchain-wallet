@@ -103,7 +103,7 @@ const messages = {
     'pending.amount.caveat': 'Pending, not yet validated by the service: {summary}',
     // A send that settled while another window had locked the wallet.
     'pending.lockedOutcome.sentLead': 'Sent while the wallet was locked.',
-    'pending.lockedOutcome.sent': '{summary}. Transaction ID {txid}.',
+    'pending.lockedOutcome.sent': '{summary}. Transaction ID {transactionId}.',
     'pending.lockedOutcome.queuedLead': 'Not sent yet.',
     'pending.lockedOutcome.queued':
         "{summary}. The network couldn't be reached while the wallet was locked, so the signed send waits in the send queue.",

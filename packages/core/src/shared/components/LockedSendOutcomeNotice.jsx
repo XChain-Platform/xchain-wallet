@@ -117,7 +117,7 @@ export function LockedSendOutcomeNotice({ walletId, routeKey }) {
             {outcomes.map((o) => (
                 <p key={o.id}>
                     <strong>{t(LEAD[o.kind] ?? LEAD.unsent)}</strong>{' '}
-                    {t(BODY[o.kind] ?? BODY.unsent, { summary: summaryOf(o), txid: shortTxid(o.txid) })}
+                    {t(BODY[o.kind] ?? BODY.unsent, { summary: summaryOf(o), transactionId: shortTxid(o.txid) })}
                 </p>
             ))}
         </StatusMessage>
