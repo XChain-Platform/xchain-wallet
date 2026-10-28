@@ -52,6 +52,8 @@ function sessionArea() {
  * @property {boolean} armed          foreground says auto-lock applies to the active wallet
  * @property {number} idleMs          idle threshold (already clamped by the foreground)
  * @property {number} lastActivity    ms epoch of the last observed UI activity
+ * @property {number} [armedAt]       ms epoch the surface issued the arm on record,
+ *                                    so a disarm issued before it cannot undo it
  */
 
 // The state this worker last set that storage refused to take, or undefined
@@ -90,11 +92,14 @@ export async function readAutoLockState() {
     }
     const v = got?.[KEY];
     if (!v || typeof v !== 'object') return null;
-    return {
+    /** @type {AutoLockState} */
+    const state = {
         armed: v.armed === true,
         idleMs: typeof v.idleMs === 'number' ? v.idleMs : 0,
         lastActivity: typeof v.lastActivity === 'number' ? v.lastActivity : 0,
     };
+    if (typeof v.armedAt === 'number') state.armedAt = v.armedAt;
+    return state;
 }
 
 // The read the writers below start from; an unreadable record reads as absent
@@ -130,12 +135,26 @@ async function writeAutoLockState(next) {
  * disarm or activity stamp stays in this worker's memory: the record left in
  * storage then locks a restarted worker sooner, never later.
  *
- * @param {{ armed: boolean, idleMs?: number, activity?: boolean }} signal
+ * `issuedAt` is when the surface issued the signal, kept across its retries.
+ * A disarm issued before the arm on record changes nothing: it is a retry
+ * that reached the worker after a newer arm, typically one the Locked screen
+ * sent while the worker had no host and that landed after the unlock rebuilt
+ * it. An arm is never refused on its stamp, so a clock set backwards can
+ * only keep a session armed, never leave one disarmed.
+ *
+ * @param {{ armed: boolean, idleMs?: number, activity?: boolean, issuedAt?: number }} signal
  * @param {number} now
  * @returns {Promise<{ saved: boolean }>}
  */
 export async function applyAutoLockSignal(signal, now) {
+    const issuedAt = Number.isFinite(signal?.issuedAt) ? Number(signal.issuedAt) : null;
     if (!signal || signal.armed !== true) {
+        if (issuedAt !== null) {
+            const current = await readForUpdate();
+            if (current?.armed && typeof current.armedAt === 'number' && issuedAt < current.armedAt) {
+                return { saved: true };
+            }
+        }
         // Disarm: keep the record but flip armed off so the alarm no-ops.
         await writeAutoLockState({ armed: false, idleMs: 0, lastActivity: now });
         return { saved: true };
@@ -147,11 +166,20 @@ export async function applyAutoLockSignal(signal, now) {
     if (signal.activity !== true && current?.armed && current.lastActivity > 0) {
         lastActivity = current.lastActivity;
     }
-    const written = await writeAutoLockState({
+    // An activity report keeps the arm stamp; an arm moves it forward only.
+    const priorArmedAt = current?.armed && typeof current.armedAt === 'number' ? current.armedAt : null;
+    let armedAt = priorArmedAt;
+    if (signal.activity !== true && issuedAt !== null) {
+        armedAt = priorArmedAt === null ? issuedAt : Math.max(priorArmedAt, issuedAt);
+    }
+    /** @type {AutoLockState} */
+    const next = {
         armed: true,
         idleMs: Number.isFinite(idleMs) && idleMs > 0 ? idleMs : 0,
         lastActivity,
-    });
+    };
+    if (armedAt !== null) next.armedAt = armedAt;
+    const written = await writeAutoLockState(next);
     return { saved: written || signal.activity === true };
 }
 

@@ -112,6 +112,7 @@ vi.mock('../../../packages/extension/src/background/walletLock.js', () => ({
         return build(...args);
     }),
     createKeepaliveTick: vi.fn(() => bg.keepalive),
+    createUiRequestTracker: vi.fn(() => ({ begin: () => () => {}, isActive: () => false })),
     createLockBackstop: vi.fn(() => ({
         lockWalletNow: vi.fn(async () => {}),
         maybeAutoLock: vi.fn(async () => 'skipped'),

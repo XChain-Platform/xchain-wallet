@@ -48,11 +48,12 @@ import { serializeError } from './MessageHost.js';
  * @param {import('./MessageHost.js').MessageHost} host
  * @param {{ onMessage: { addListener: Function, removeListener: Function } }} [chromeRuntime]
  * @param {{
- *   onActivity?: () => void | (() => void),
+ *   onActivity?: (type: unknown) => void | (() => void),
  *   onWebSender?: (tabId: number, origin: string) => void,
  * }} [opts]   onActivity fires once per message from the trusted extension UI,
- *        feeding the background auto-lock backstop. It may return a completion
- *        callback so the backstop does not lock an active request. onWebSender
+ *        feeding the background auto-lock backstop. It receives the message
+ *        type and may return a completion callback so the backstop does not
+ *        lock an active signing request. onWebSender
  *        fires once per accepted `bridge.*` message from a web page, carrying
  *        the browser's own reading of which tab and which origin it came from.
  * @returns {(() => void) & { listener: Function }}                            detach fn, carrying the attached listener
@@ -111,7 +112,7 @@ export function attachChromeRuntime(host, chromeRuntime, opts = {}) {
         let finishActivity = null;
         if (onActivity && trusted) {
             try {
-                const finish = onActivity();
+                const finish = onActivity(type);
                 if (typeof finish === 'function') finishActivity = finish;
             } catch { /* best-effort */ }
         }

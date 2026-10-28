@@ -12,9 +12,10 @@
 // helper behind it, so a handler that rebuilds the signal without the
 // foreground `activity` flag is caught where the popup actually reaches it.
 
-import { describe, it, expect, afterEach } from 'vitest';
+import { describe, it, expect, afterEach, vi } from 'vitest';
 import { createBackgroundHost } from '../../../packages/extension/src/background/createBackgroundHost.js';
 import { readAutoLockState } from '../../../packages/extension/src/background/autoLockState.js';
+import { reportAutoLock } from '../../../packages/extension/src/popup/messaging.js';
 
 // Build a host with every persistence adapter on its in-memory path.
 function makeHost(extra = {}) {
@@ -120,5 +121,92 @@ describe('session.autolock route (extension service worker)', () => {
         await report(host, { armed: true, idleMs: 60_000, activity: true }, T0 + 30_000);
 
         expect((await readAutoLockState())?.armed).toBe(false);
+    });
+
+    it('drops a disarm issued before the arm on record', async () => {
+        const host = makeHost();
+        installSessionArea();
+        await report(host, { armed: true, idleMs: 60_000, issuedAt: T0 + 2_000 }, T0 + 2_000);
+
+        await report(host, { armed: false, idleMs: 60_000, issuedAt: T0 }, T0 + 2_300);
+
+        expect(await readAutoLockState()).toMatchObject({ armed: true, idleMs: 60_000, lastActivity: T0 + 2_000 });
+    });
+
+    it('applies a disarm issued after the arm on record', async () => {
+        const host = makeHost();
+        installSessionArea();
+        await report(host, { armed: true, idleMs: 60_000, issuedAt: T0 }, T0);
+        // Activity keeps the arm stamp, so a later disarm still applies.
+        await report(host, { armed: true, idleMs: 60_000, activity: true, issuedAt: T0 + 5_000 }, T0 + 5_000);
+
+        await report(host, { armed: false, idleMs: 60_000, issuedAt: T0 + 1_000 }, T0 + 6_000);
+
+        expect((await readAutoLockState())?.armed).toBe(false);
+    });
+
+    it('applies an arm whatever its stamp, so a clock set back never leaves the session disarmed', async () => {
+        const host = makeHost();
+        installSessionArea();
+        await report(host, { armed: true, idleMs: 60_000, issuedAt: T0 }, T0);
+        await report(host, { armed: false, issuedAt: T0 + 1_000 }, T0 + 1_000);
+
+        await report(host, { armed: true, idleMs: 60_000, issuedAt: T0 - 3_600_000 }, T0 + 2_000);
+
+        expect(await readAutoLockState()).toMatchObject({ armed: true, idleMs: 60_000 });
+    });
+});
+
+// The popup reports through chromeMessaging, which repeats a `session.autolock`
+// whose port dropped. The Locked screen's disarm finds no host and drops; its
+// last repeat can reach the host the unlock built after the unlocked screen
+// armed it. Each report is stamped when issued, as useAutoLockPolicy does.
+describe('session.autolock across an unlock (popup messaging into the route)', () => {
+    afterEach(() => {
+        delete globalThis.chrome;
+        vi.useRealTimers();
+    });
+
+    it('keeps the unlocked arm when the Locked screen disarm lands after it', async () => {
+        vi.useFakeTimers({ now: T0 });
+        installSessionArea();
+        const area = globalThis.chrome.storage.session;
+        const host = makeHost();
+        let hostUp = false;
+        globalThis.chrome = {
+            storage: { session: area },
+            runtime: {
+                lastError: undefined,
+                sendMessage(message, callback) {
+                    const rt = globalThis.chrome.runtime;
+                    if (!hostUp) {
+                        // No host listener: Chrome closes the port.
+                        queueMicrotask(() => {
+                            rt.lastError = { message: 'The message port closed before a response was received.' };
+                            callback(undefined);
+                            rt.lastError = undefined;
+                        });
+                        return;
+                    }
+                    host.handle(message).then((response) => callback(response));
+                },
+            },
+        };
+
+        // Locked screen: the disarm drops and waits to repeat.
+        const disarm = reportAutoLock({ armed: false, idleMs: 60_000, issuedAt: Date.now() });
+        await vi.advanceTimersByTimeAsync(600);
+
+        // The unlock builds the host, clears the old deadline, and the
+        // unlocked screen arms.
+        hostUp = true;
+        await area.remove('xchain:autolock');
+        await reportAutoLock({ armed: true, idleMs: 60_000, issuedAt: Date.now() });
+
+        // The disarm's last repeat lands after the arm.
+        await vi.advanceTimersByTimeAsync(2_000);
+        await disarm;
+
+        expect(await readAutoLockState()).toMatchObject({ armed: true, idleMs: 60_000 });
     });
 });

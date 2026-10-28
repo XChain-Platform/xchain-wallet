@@ -167,7 +167,7 @@ export function useAutoLockPolicy({ sessionState, activeWalletId, onLocked, lock
     const reportActivity = useCallback(() => {
         if (!armed || typeof messaging?.reportAutoLock !== 'function') return;
         Promise.resolve()
-            .then(() => messaging.reportAutoLock({ armed: true, idleMs, activity: true }))
+            .then(() => messaging.reportAutoLock({ armed: true, idleMs, activity: true, issuedAt: Date.now() }))
             .catch(() => { /* best-effort */ });
     }, [messaging, armed, idleMs]);
 
@@ -192,11 +192,17 @@ export function useAutoLockPolicy({ sessionState, activeWalletId, onLocked, lock
     // Skipped while the session status is still resolving: reporting a
     // premature `armed: false` there would disarm the backstop for a
     // wallet that turns out to be unlocked a tick later.
+    //
+    // Each report carries the moment it was issued; the extension messaging
+    // layer repeats a report whose port dropped with the same stamp, so the
+    // service worker drops a disarm that reaches it after a newer arm (the
+    // Locked screen's disarm, repeated across the unlock).
     useEffect(() => {
         if (sessionState === 'loading') return;
         if (typeof messaging?.reportAutoLock !== 'function') return;
+        const issuedAt = Date.now();
         Promise.resolve()
-            .then(() => messaging.reportAutoLock({ armed, idleMs }))
+            .then(() => messaging.reportAutoLock({ armed, idleMs, issuedAt }))
             .then((reply) => {
                 if (isAutoLockArmRefused(reply)) onArmRefusedRef.current?.();
             })

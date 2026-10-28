@@ -74,6 +74,7 @@ import {
     createLockBackstop,
     createHostBuildFlight,
     createKeepaliveTick,
+    createUiRequestTracker,
     sequenceUnlockedSession,
 } from './background/walletLock.js';
 import {
@@ -688,15 +689,10 @@ function renewBroadcastQueueStore() {
 // keepalive alarm checks + locks.
 
 let lastActivityStampAt = 0;
-let activeUiRequests = 0;
-function noteAutoLockActivity() {
-    activeUiRequests += 1;
-    let finished = false;
-    const finish = () => {
-        if (finished) return;
-        finished = true;
-        activeUiRequests = Math.max(0, activeUiRequests - 1);
-    };
+// Signing and broadcast requests in flight; a due lock waits for them (once).
+const uiRequests = createUiRequestTracker();
+function noteAutoLockActivity(type) {
+    const finish = uiRequests.begin(type);
     const now = Date.now();
     // Throttle persisted writes to at most once per 10s; a message burst from
     // the open popup only needs to keep the idle clock roughly fresh.
@@ -722,7 +718,7 @@ const lockBackstop = createLockBackstop({
         return teardown;
     },
     isUnlocked: () => Boolean(host && vault),
-    isRequestActive: () => activeUiRequests > 0,
+    isRequestActive: () => uiRequests.isActive(),
     readAutoLockState,
     clearAutoLockState,
     shouldAutoLock,

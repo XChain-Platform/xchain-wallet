@@ -1910,7 +1910,12 @@ export function createBackgroundHost(deps) {
     // that armed it, so it can say why the wallet locked.
     host.register('session.autolock', async (req) => {
         const { saved } = await applyAutoLockSignal(
-            { armed: req?.armed === true, idleMs: req?.idleMs, activity: req?.activity === true },
+            {
+                armed: req?.armed === true,
+                idleMs: req?.idleMs,
+                activity: req?.activity === true,
+                issuedAt: req?.issuedAt,
+            },
             Date.now(),
         );
         if (saved) return { ok: true };

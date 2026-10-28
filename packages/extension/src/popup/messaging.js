@@ -2713,7 +2713,8 @@ export function updateSettings(patch) {
  * process bounds a keychain relaunch by the same window); plain web keeps the
  * key in memory only and has none.
  *
- * @param {{ armed: boolean, idleMs: number, activity?: boolean }} signal
+ * @param {{ armed: boolean, idleMs: number, activity?: boolean, issuedAt?: number }} signal
+ *   `issuedAt` lets the worker drop a disarm that lands after a newer arm
  */
 export function reportAutoLock(signal) {
     return /** @type {any} */ (sendMessage('session.autolock', signal));

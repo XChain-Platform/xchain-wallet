@@ -396,7 +396,7 @@ describe('useAutoLockPolicy', () => {
         const messaging = makeMessaging({ autolockMinutes: 5, reportAutoLock });
         renderShell(<Shell messaging={messaging} />, { messaging, shell: 'popup' });
         await settle();
-        expect(reportAutoLock).toHaveBeenCalledWith({ armed: true, idleMs: 5 * MINUTE });
+        expect(reportAutoLock).toHaveBeenCalledWith({ armed: true, idleMs: 5 * MINUTE, issuedAt: expect.any(Number) });
     });
 
     it('reports foreground activity to reset the shell backstop', async () => {
@@ -412,6 +412,7 @@ describe('useAutoLockPolicy', () => {
             armed: true,
             idleMs: 5 * MINUTE,
             activity: true,
+            issuedAt: expect.any(Number),
         });
     });
 

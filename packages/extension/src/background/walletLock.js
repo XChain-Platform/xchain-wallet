@@ -116,6 +116,51 @@ export async function sequenceUnlockedSession(deps) {
 }
 
 /**
+ * Longest a due idle lock waits on an active UI request. Shorter than the
+ * keepalive alarm period (24 s), so the tick after the first deferral locks.
+ */
+export const AUTO_LOCK_MAX_DEFER_MS = 20_000;
+
+// Requests that sign or broadcast. A due idle lock waits for one of these to
+// settle, the same work the foreground hook holds its lock for. A read never
+// holds it: offline, a balance read the closed popup left behind waits on the
+// network, and the lock must not wait with it.
+const LOCK_HOLDING_REQUEST = /^(action\.|auth\.sign|broadcast\.(signedTx|queue\.broadcast)$|multisigSign\.)/;
+
+/**
+ * Whether a trusted UI request of this type holds a due idle lock.
+ *
+ * @param {unknown} type
+ * @returns {boolean}
+ */
+export function requestHoldsAutoLock(type) {
+    return typeof type === 'string' && LOCK_HOLDING_REQUEST.test(type);
+}
+
+/**
+ * Count the trusted UI requests in flight that hold a due idle lock.
+ * `begin` runs once per request and returns its completion callback.
+ *
+ * @returns {{ begin: (type: unknown) => () => void, isActive: () => boolean }}
+ */
+export function createUiRequestTracker() {
+    let holding = 0;
+    return {
+        begin(type) {
+            if (!requestHoldsAutoLock(type)) return () => {};
+            holding += 1;
+            let finished = false;
+            return () => {
+                if (finished) return;
+                finished = true;
+                holding = Math.max(0, holding - 1);
+            };
+        },
+        isActive: () => holding > 0,
+    };
+}
+
+/**
  * @typedef {Object} LockBackstopDeps
  * @property {() => { sessionBackend: unknown, signingSecretBackend: unknown }} lockDeps   built per attempt, since an attempt can be retried
  * @property {() => void} tearDownHost                     release host + vault, zero the SignerPool
@@ -125,6 +170,7 @@ export async function sequenceUnlockedSession(deps) {
  * @property {() => Promise<void>} clearAutoLockState
  * @property {(state: unknown, now: number) => boolean} shouldAutoLock
  * @property {() => number} [now]
+ * @property {number} [maxDeferMs]                         longest a due lock waits on an active request
  * @property {{ log: Function, error: Function }} [logger]
  * @property {typeof handleWalletLock} [lock]               seam for tests; defaults to the real handler
  */
@@ -155,6 +201,10 @@ export function createLockBackstop(deps) {
 
     // Set when a lock attempt failed to clear a secret; see above.
     let cleanupPending = false;
+    // When a due lock first waited on an active UI request. The next keepalive
+    // tick after maxDeferMs locks whatever is still in flight.
+    let deferredSince = null;
+    const maxDeferMs = deps.maxDeferMs ?? AUTO_LOCK_MAX_DEFER_MS;
 
     async function lockWalletNow() {
         const { sessionBackend, signingSecretBackend } = deps.lockDeps();
@@ -175,14 +225,29 @@ export function createLockBackstop(deps) {
     async function maybeAutoLock() {
         // Already locked; nothing to do, unless a previous lock left a secret
         // behind and is waiting on this alarm to retry the clear.
-        if (!deps.isUnlocked() && !cleanupPending) return 'skipped';
-        if (deps.isRequestActive?.()) return 'deferred';
+        if (!deps.isUnlocked() && !cleanupPending) {
+            deferredSince = null;
+            return 'skipped';
+        }
         // A record storage cannot read is a deadline this worker cannot
         // enforce, so it locks rather than leaving the session open for good.
         let unreadable = false;
         let state;
         try { state = await deps.readAutoLockState(); } catch { unreadable = true; }
-        if (!unreadable && !deps.shouldAutoLock(state, now())) return 'skipped';
+        if (!unreadable && !deps.shouldAutoLock(state, now())) {
+            deferredSince = null;
+            return 'skipped';
+        }
+        // A due lock waits for in-flight signing work once, never for good: a
+        // broadcast can wait on an unreachable network for minutes, and every
+        // tick it holds keeps the session unlocked.
+        if (deps.isRequestActive?.()) {
+            const at = now();
+            if (deferredSince === null) deferredSince = at;
+            if (at - deferredSince < maxDeferMs) return 'deferred';
+            logger.log('[xchain] auto-lock: a UI request outlasted the idle deadline, locking wallet');
+        }
+        deferredSince = null;
         logger.log(unreadable
             ? '[xchain] auto-lock: record unreadable, locking wallet'
             : '[xchain] auto-lock: idle timeout reached, locking wallet');
