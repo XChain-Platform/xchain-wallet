@@ -66,6 +66,8 @@ const messages = {
     'importWallet.phrase.wrongWordCount': 'Expected {expected} words, got {count}.',
     'importWallet.phrase.bip39Detected': 'BIP39 recovery phrase detected',
     'importWallet.phrase.counterwalletDetected': 'Counterwallet/FreeWallet recovery phrase detected',
+    'importWallet.phrase.notBip39UseFreeWallet':
+        "This phrase doesn't pass the recovery phrase check. If it came from FreeWallet, use the From FreeWallet option.",
     'importWallet.phrase.suggestions': 'BIP39 word suggestions',
     'importWallet.phrase.useWord': 'Use BIP39 word "{word}"',
     'importWallet.phrase.releaseToLoad': 'Release to load',

@@ -273,6 +273,23 @@ export function formatOrList(items) {
     }
 }
 
+/**
+ * Join values as an "and" list in the current locale's grammar:
+ * ['Bitcoin', 'Litecoin'] reads "Bitcoin and Litecoin" in English.
+ *
+ * @param {Array<string | number>} items
+ * @returns {string}
+ */
+export function formatAndList(items) {
+    const values = items.map(String);
+    try {
+        return new Intl.ListFormat(resolveFormatLocale(currentLocale), { type: 'conjunction' })
+            .format(values);
+    } catch (_err) {
+        return values.join(', ');
+    }
+}
+
 // --- formatjs message formatting -------------------------------------
 
 // `Intl` rejects a structurally invalid BCP-47 tag with a RangeError,

@@ -27,6 +27,7 @@ import { hasBackupReminderFunds } from '../../flows/backupReminder.js';
 import { useScreenShortcuts } from '../keyboard/useScreenShortcuts.js';
 import { useToast } from '../components/ToastHost.jsx';
 import { BackupReminderCard } from '../components/BackupReminderCard.jsx';
+import { AddressDiscoveryNotice } from '../components/AddressDiscoveryNotice.jsx';
 import { DemoExitConfirm } from '../components/DemoExitConfirm.jsx';
 import { AlertsOverlay } from '../components/AlertsOverlay.jsx';
 import { buildWalletAlerts } from '../walletAlerts.js';
@@ -1358,6 +1359,10 @@ export function Home({ onLocked, onResumeConfirm, onSend, onReceive, onSwap, onE
                 <h1 className="sr-only">{t('home.title')}</h1>
                 {/* A notice is the first item of the page content, not a line among
                     the controls that raised it. */}
+                <AddressDiscoveryNotice
+                    dismissOnLeave
+                    onFinished={(job) => { if (job?.found > 0) void refreshPortfolio(); }}
+                />
                 {isDemoActive && demoSendNoticeOpen ? (
                     <StatusMessage
                         recovery={{

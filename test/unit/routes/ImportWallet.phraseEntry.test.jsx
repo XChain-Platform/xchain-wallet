@@ -193,12 +193,13 @@ describe('ImportWallet recovery phrase entry', () => {
         expect(importMnemonic).not.toHaveBeenCalled();
     });
 
-    it('labels Counterwallet and FreeWallet phrases separately from BIP39', () => {
+    it('labels only BIP39 phrases on the regular lane, leaving FreeWallet phrases to From FreeWallet', () => {
         renderImport();
         const textarea = screen.getByLabelText('Recovery phrase');
 
         fireEvent.change(textarea, { target: { value: COUNTERWALLET_PHRASE } });
-        expect(screen.getByText('Counterwallet/FreeWallet recovery phrase detected')).toBeTruthy();
+        expect(screen.queryByText('Counterwallet/FreeWallet recovery phrase detected')).toBeNull();
+        expect(screen.queryByText('BIP39 recovery phrase detected')).toBeNull();
 
         fireEvent.change(textarea, { target: { value: BIP39_PHRASE } });
         expect(screen.getByText('BIP39 recovery phrase detected')).toBeTruthy();

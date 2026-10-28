@@ -33,12 +33,13 @@ import { AdsNotice } from '../components/AdsNotice.jsx';
 import { useDropZone } from '../hooks/useDropZone.js';
 import { useSupportedChains } from '../hooks/useSupportedChains.js';
 import { detectQrContent } from '../../uri/detectQrContent.js';
-import { englishWordlist, isValidBip39Mnemonic } from '../../crypto/mnemonic.js';
+import { englishWordlist } from '../../crypto/mnemonic.js';
 import { normalizeRecoveryPhrase } from '../../crypto/recoveryPhrase.js';
 import {
-    COUNTERWALLET_WORDLIST,
-    isValidCounterwalletMnemonic,
-} from '../../crypto/counterwallet.js';
+    importPhraseFormat,
+    importPhraseFormatArg,
+    importPhraseRefusal,
+} from '../utils/importPhraseCheck.js';
 // The flows this screen calls throw function-prefixed preconditions
 // ("importMnemonic: mnemonic is required"), and `|| fallback` only fires on an
 // EMPTY message, so those reached the recovery screen verbatim.
@@ -71,34 +72,10 @@ import '../../i18n/locales/en/send.js';
 const MIN_PASSWORD_LENGTH = 8;
 const ACCEPTED_WORD_COUNTS = [12, 15, 18, 21, 24];
 const BIP39_WORDS = new Set(englishWordlist);
-const COUNTERWALLET_WORDS = new Set(COUNTERWALLET_WORDLIST);
 const MAX_WORD_SUGGESTIONS = 5;
 
 function normalizePhraseEntry(value) {
     return normalizeRecoveryPhrase(value);
-}
-
-// `preferCounterwallet` is the FreeWallet lane: a phrase both lists accept belongs to FreeWallet there.
-function phraseFormat(value, preferCounterwallet = false) {
-    if (preferCounterwallet && isValidCounterwalletMnemonic(value)) return 'counterwallet';
-    if (isValidBip39Mnemonic(value)) return 'bip39';
-    if (isValidCounterwalletMnemonic(value)) return 'counterwallet';
-    return null;
-}
-
-function phraseValidationMessage(value) {
-    const words = value.split(' ');
-    const unknownWordIndex = words.findIndex(
-        (word) => !BIP39_WORDS.has(word) && !COUNTERWALLET_WORDS.has(word),
-    );
-    if (unknownWordIndex !== -1) {
-        return `Word ${unknownWordIndex + 1} ("${words[unknownWordIndex]}") is not in the recovery phrase word list. Check its spelling.`;
-    }
-    if (words.every((word) => BIP39_WORDS.has(word))) {
-        return 'Every word is in the BIP39 list, but the checksum does not match. Check the word order and spelling.';
-    }
-    const nonBip39Word = words.find((word) => !BIP39_WORDS.has(word));
-    return `This is not a valid BIP39 or Counterwallet/FreeWallet recovery phrase. Check "${nonBip39Word}" and the other words.`;
 }
 
 function wordRangeAt(value, cursor) {
@@ -484,7 +461,7 @@ export function ImportWallet({
                     walletPassword: backupWalletPassword,
                     ...(usingPointer ? { pointer: backupPointer } : { fileContent: backupContent }),
                 });
-                finishWalletImport(result);
+                finishWalletImport(result, { discover: true });
                 return;
             }
             let result;
@@ -525,7 +502,7 @@ export function ImportWallet({
                     mode,
                 });
             }
-            finishWalletImport(result);
+            finishWalletImport(result, { discover: true });
         } catch (err) {
             if (takeWalletElsewhere(err)) return;
             // A restore has three passwords in play, so "wrong
@@ -644,8 +621,9 @@ export function ImportWallet({
             }));
             return;
         }
-        if (!phraseFormat(trimmed, isFreeWallet)) {
-            setError(phraseValidationMessage(trimmed));
+        const acceptedFormat = importPhraseFormat(trimmed, isFreeWallet);
+        if (!acceptedFormat) {
+            setError(importPhraseRefusal(trimmed, isFreeWallet));
             return;
         }
         if (password.length < MIN_PASSWORD_LENGTH) {
@@ -671,11 +649,11 @@ export function ImportWallet({
             const passphraseArg = !isFreeWallet && showPassphrase
                 ? bip39Passphrase
                 : '';
-            // About 1 in 30,000 FreeWallet phrases also passes the BIP39 checksum, and
-            // auto-detection would derive other keys for it.
-            const formatArg = phraseFormat(trimmed, isFreeWallet) === 'counterwallet' && isFreeWallet
-                ? { format: 'counterwallet-legacy' }
-                : {};
+            // The format this lane accepted rides the request, so no shell
+            // re-detects the phrase as the other format: about 1 in 30,000
+            // FreeWallet phrases also passes the BIP39 checksum, and a BIP39
+            // phrase with a typo can still parse as FreeWallet.
+            const formatArg = importPhraseFormatArg(acceptedFormat, isFreeWallet);
             let result;
             if (mode === 'add') {
                 if (typeof messaging.addImportedWallet !== 'function') {
@@ -685,7 +663,7 @@ export function ImportWallet({
             } else {
                 result = await messaging.importMnemonic({ password, mnemonic: trimmed, name: walletName, bip39Passphrase: passphraseArg, ...formatArg });
             }
-            finishWalletImport(result);
+            finishWalletImport(result, { discover: true });
             const showRestoredLabels = (labelSync) => {
                 const restoredMessage = labelSyncRestoredMessage(labelSync);
                 if (restoredMessage) showToast({ message: restoredMessage });
@@ -712,7 +690,7 @@ export function ImportWallet({
         }
     }
 
-    function finishWalletImport(result) {
+    function finishWalletImport(result, { discover = false } = {}) {
         const walletId = result?.wallet?.id || result?.walletId || null;
         importedWalletRef.current = mode === 'add' && walletId
             ? { id: walletId, name: result?.wallet?.name || result?.walletName || walletName }
@@ -722,6 +700,14 @@ export function ImportWallet({
         endBusy();
         setNoticeError(null);
         setAdsNotice(true);
+        // A restored seed shows only address 0 per chain until the used-address
+        // check runs. It runs in the background once the vault is written; a
+        // restore that names no single wallet checks every unlocked one.
+        if (discover && typeof messaging.discoverAddresses === 'function') {
+            void Promise.resolve()
+                .then(() => messaging.discoverAddresses(walletId ? { walletId } : {}))
+                .catch(() => { /* Wallet details offers the check again */ });
+        }
     }
 
     function onImported() {
@@ -798,7 +784,7 @@ export function ImportWallet({
     const mnemonicWordCount = normalizedMnemonic.length === 0
         ? 0
         : normalizedMnemonic.split(' ').length;
-    const detectedPhraseFormat = phraseFormat(normalizedMnemonic, isFreeWallet);
+    const detectedPhraseFormat = importPhraseFormat(normalizedMnemonic, isFreeWallet);
     const phraseHint = isFreeWallet
         ? (isFull
             ? t('importWallet.freeWallet.fullSubtitle')

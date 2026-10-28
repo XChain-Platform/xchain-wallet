@@ -775,6 +775,12 @@ export {
     DEFAULT_CHAIN_TIMEOUT_MS,
 } from './discoverUsedAddresses.js';
 export {
+    discoverWalletAddresses,
+    discoveryChainIds,
+    DISCOVERY_GAP_LIMIT,
+    UnrecognizedExplorerReplyError,
+} from './walletAddressDiscovery.js';
+export {
     createSignThrottle,
     SIGN_THROTTLE_DEFAULT_BURST,
     SIGN_THROTTLE_DEFAULT_WINDOW_MS,

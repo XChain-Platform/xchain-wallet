@@ -14,8 +14,10 @@ import { isDemoWallet, getDemoWalletExpiry } from '@xchain-wallet/core/flows';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { exitDemoWallet } from '../utils/demoGraduation.js';
 import { DemoExitConfirm } from '../components/DemoExitConfirm.jsx';
+import { AddressDiscoveryNotice } from '../components/AddressDiscoveryNotice.jsx';
 import { t } from '../../i18n/index.js';
 import '../../i18n/locales/en/accountPicker.js';
+import '../../i18n/locales/en/addressDiscovery.js';
 import '../../i18n/locales/en/history.js';
 import '../../i18n/locales/en/renameWallet.js';
 import '../../i18n/locales/en/walletDetails.js';
@@ -61,8 +63,26 @@ export function WalletDetails({ walletId, onBack, onRename, onMigrateToBip39, on
     const [exitBusy, setExitBusy] = useState(false);
     const [exitError, setExitError] = useState(/** @type {string | null} */ (null));
     const [exitConfirmOpen, setExitConfirmOpen] = useState(false);
+    // Remounts the status line on each check started here.
+    const [discoveryRun, setDiscoveryRun] = useState(0);
+    const [discoveryError, setDiscoveryError] = useState(/** @type {string | null} */ (null));
+    const [discoveryStarting, setDiscoveryStarting] = useState(false);
 
     const isDemo = isDemoWallet(walletId);
+
+    async function handleCheckAddresses() {
+        if (discoveryStarting) return;
+        setDiscoveryStarting(true);
+        setDiscoveryError(null);
+        try {
+            await messaging.discoverAddresses({ walletId });
+            setDiscoveryRun((n) => n + 1);
+        } catch (err) {
+            setDiscoveryError(err?.message || String(err));
+        } finally {
+            setDiscoveryStarting(false);
+        }
+    }
     const demoExpiry = isDemo ? getDemoWalletExpiry() : null;
     const currentWalletLoad = walletLoad.walletId === walletId ? walletLoad : null;
     const wallet = currentWalletLoad?.wallet || null;
@@ -171,9 +191,16 @@ export function WalletDetails({ walletId, onBack, onRename, onMigrateToBip39, on
         ? created.toLocaleString()
         : 'N/A';
 
+    const canCheckAddresses = !isDemo
+        && wallet.origin !== 'demo'
+        && wallet.format !== 'wif-only'
+        && typeof messaging.discoverAddresses === 'function';
+
     return (
         <Screen variant={variant} header={header}>
             <ListPage>
+                {discoveryError ? <StatusMessage variant="error">{discoveryError}</StatusMessage> : null}
+                {discoveryRun > 0 ? <AddressDiscoveryNotice key={discoveryRun} /> : null}
                 <dl className={pickerStyles.detailList}>
                     <Row label={t('walletDetails.name')} value={wallet.name || 'Unnamed wallet'} />
                     <Row label={t('walletDetails.type')} value={formatLabel} />
@@ -228,6 +255,20 @@ export function WalletDetails({ walletId, onBack, onRename, onMigrateToBip39, on
                             icon={<Icon.PencilIcon />}
                         >
                             {t('renameWallet.title')}
+                        </Button>
+                    </div>
+                ) : null}
+                {canCheckAddresses ? (
+                    <div>
+                        <Button
+                            type="button"
+                            variant="secondary"
+                            block
+                            onClick={handleCheckAddresses}
+                            disabled={exitBusy || discoveryStarting}
+                            icon={<Icon.SearchIcon />}
+                        >
+                            {t('addressDiscovery.action')}
                         </Button>
                     </div>
                 ) : null}

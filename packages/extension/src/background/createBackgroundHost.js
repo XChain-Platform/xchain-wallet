@@ -73,6 +73,7 @@ import {
     startLabelSyncRestoreTask,
     waitForLabelSyncRestoreTask,
 } from './labelSyncRestoreTasks.js';
+import { createAddressDiscoveryTask } from './addressDiscoveryTask.js';
 
 const {
     importedAddressIdsFor,
@@ -1446,6 +1447,50 @@ export function createBackgroundHost(deps) {
     host.register('wallet.labelSyncRestoreResult', (req) => (
         waitForLabelSyncRestoreTask(req?.token)
     ));
+
+    // Used-address discovery (§15.4). A restore or the Settings action
+    // starts it; it runs in the background over the unlocked software
+    // signers, on the active network only, and screens poll its status.
+    const addressDiscovery = createAddressDiscoveryTask();
+    host.register('wallet.discoverAddresses', async (req, { vault, chainRegistry, sdkRegistry, signerPool }) => {
+        const requested = typeof req?.walletId === 'string' && req.walletId
+            ? [req.walletId]
+            : (await vault.wallets.list()).map((w) => w.id);
+        const signerFor = (walletId) => {
+            const signer = signerPool && typeof signerPool.get === 'function' ? signerPool.get(walletId) : null;
+            return signer && signer.kind === 'software' ? signer : null;
+        };
+        const walletIds = requested.filter((id) => signerFor(id));
+        if (walletIds.length === 0) {
+            throw new Error('Unlock the wallet, then check for used addresses again.');
+        }
+        let activeNetwork = null;
+        try {
+            activeNetwork = getActiveNetwork(await vault.settings.get());
+        } catch { /* every network the wallet holds addresses on */ }
+        return addressDiscovery.start({
+            walletIds,
+            chainName: (chainId) => chainRegistry.descriptorFor(chainId)?.displayName ?? chainId,
+            countChains: async (walletId) => (
+                await flows.discoveryChainIds({ vault, walletId, chainRegistry, activeNetwork: activeNetwork ?? undefined })
+            ).length,
+            run: (walletId, onProgress) => {
+                const signer = signerFor(walletId);
+                if (!signer) throw new Error('The wallet locked before the check finished.');
+                return flows.discoverWalletAddresses({
+                    vault,
+                    walletId,
+                    signer,
+                    chainRegistry,
+                    sdkRegistry,
+                    activeNetwork: activeNetwork ?? undefined,
+                    onProgress,
+                });
+            },
+        });
+    });
+    host.register('wallet.addressDiscoveryStatus', () => addressDiscovery.status());
+    host.register('wallet.addressDiscoveryDismiss', (req) => addressDiscovery.dismiss(req?.id));
 
     host.register('wallet.exists', async (req, { vault }) => {
         const id = req?.walletId;

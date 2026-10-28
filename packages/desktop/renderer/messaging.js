@@ -74,6 +74,20 @@ export function labelSyncRestoreResult(opts) {
     return /** @type {any} */ (sendMessage('wallet.labelSyncRestoreResult', opts));
 }
 
+/** @param {{ walletId?: string }} [opts] */
+export function discoverAddresses(opts) {
+    return /** @type {any} */ (sendMessage('wallet.discoverAddresses', opts || {}));
+}
+
+export function addressDiscoveryStatus() {
+    return /** @type {any} */ (sendMessage('wallet.addressDiscoveryStatus', {}));
+}
+
+/** @param {{ id: number }} opts */
+export function addressDiscoveryDismiss(opts) {
+    return /** @type {any} */ (sendMessage('wallet.addressDiscoveryDismiss', opts));
+}
+
 /**
  * Restore an encrypted backup onto a FRESH install (no vault yet).
  * Pre-host, and named apart from `importBackupRequest` because that one adds

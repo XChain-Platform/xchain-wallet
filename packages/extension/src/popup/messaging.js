@@ -137,6 +137,20 @@ export function labelSyncRestoreResult(opts) {
     return /** @type {any} */ (sendMessage('wallet.labelSyncRestoreResult', opts));
 }
 
+/** @param {{ walletId?: string }} [opts] */
+export function discoverAddresses(opts) {
+    return /** @type {any} */ (sendMessage('wallet.discoverAddresses', opts || {}));
+}
+
+export function addressDiscoveryStatus() {
+    return /** @type {any} */ (sendMessage('wallet.addressDiscoveryStatus', {}));
+}
+
+/** @param {{ id: number }} opts */
+export function addressDiscoveryDismiss(opts) {
+    return /** @type {any} */ (sendMessage('wallet.addressDiscoveryDismiss', opts));
+}
+
 /**
  * Store a legacy wallet's BIP39 passphrase on its record, once (§3.4).
  * A wallet created before the passphrase was stored is opened by the password

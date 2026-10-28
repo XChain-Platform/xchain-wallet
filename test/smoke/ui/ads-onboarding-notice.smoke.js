@@ -137,9 +137,9 @@ assert.match(
 // every success path scrubs its inputs before the shared helper raises the notice.
 const flips = imp.match(/setAdsNotice\(true\)/g) || [];
 assert.equal(flips.length, 1, 'the shared successful-import helper raises the notice once');
-const finishes = imp.match(/finishWalletImport\(result\);/g) || [];
+const finishes = imp.match(/finishWalletImport\(result(?:, \{ discover: true \})?\);/g) || [];
 assert.equal(finishes.length, 4, 'mnemonic, WIF, fresh-backup and add-backup success paths scrub secrets');
-assert.match(imp, /function finishWalletImport\(result\) \{[\s\S]{0,360}clearSensitiveState\(\);[\s\S]{0,180}setAdsNotice\(true\)/,
+assert.match(imp, /function finishWalletImport\(result(?:, \{ discover = false \} = \{\})?\) \{[\s\S]{0,360}clearSensitiveState\(\);[\s\S]{0,180}setAdsNotice\(true\)/,
     'the successful-import helper scrubs secrets before raising the notice');
 
 console.log('ads-onboarding-notice smoke OK');

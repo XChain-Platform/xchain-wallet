@@ -55,6 +55,7 @@
 import accountPicker from './accountPicker.js';
 import actionDetail from './actionDetail.js';
 import actionsMenu from './actionsMenu.js';
+import addressDiscovery from './addressDiscovery.js';
 import addressList from './addressList.js';
 import adsNotice from './adsNotice.js';
 import alerts from './alerts.js';
@@ -119,6 +120,7 @@ export const en = {
     ...accountPicker,
     ...actionDetail,
     ...actionsMenu,
+    ...addressDiscovery,
     ...addressList,
     ...adsNotice,
     ...alerts,
