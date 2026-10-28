@@ -21,6 +21,7 @@ import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { useNativeExitRoot } from '../hooks/useNativeExitRoot.js';
 import { demoOwnsVaultPassword, exitDemoWallet } from '../utils/demoGraduation.js';
 import { isWalletExistsError } from '../utils/walletExistsError.js';
+import { userFacingMessage } from '../utils/userFacingMessage.js';
 import { OnboardingCarousel } from './OnboardingCarousel.jsx';
 import styles from './Onboarding.module.css';
 import { t } from '../../i18n/index.js';
@@ -338,7 +339,7 @@ export function Onboarding({ onCreate, onImport, onImportFromFreeWallet, onPairP
                 setWalletFound(true);
                 setDemoError(t('onboarding.demo.walletExists'));
             } else {
-                setDemoError(err?.message || 'Could not start demo mode.');
+                setDemoError(userFacingMessage(err, 'Could not start demo mode.'));
             }
         } finally {
             setDemoBusy(false);
@@ -392,7 +393,7 @@ export function Onboarding({ onCreate, onImport, onImportFromFreeWallet, onPairP
             setGraduated(true);
             if (typeof next === 'function') next();
         } catch (err) {
-            setGradError(err?.message || 'Could not clear the demo wallet.');
+            setGradError(userFacingMessage(err, 'Could not clear the demo wallet.'));
         } finally {
             setGradBusy(null);
         }

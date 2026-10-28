@@ -20,7 +20,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useMessaging } from '../useMessaging.js';
 import { useToast } from '../components/ToastHost.jsx';
-import { userFacingMessage } from '../utils/userFacingMessage.js';
+import { isVaultConflictError, userFacingMessage } from '../utils/userFacingMessage.js';
 import { t } from '../../i18n/index.js';
 import { defaultRegistry, hydrateCustomChainsFromSettings } from '../../registry/index.js';
 import { normalizeDisplayCurrency } from '../utils/displayCurrency.js';
@@ -108,12 +108,17 @@ export function useSettings({ reportsOwnError = false } = {}) {
         try {
             next = await messaging.updateSettings(patch);
         } catch (err) {
-            if (!reportsOwnError) {
+            const message = userFacingMessage(err, t('settings.saveFailed'));
+            const conflict = isVaultConflictError(err);
+            if (!reportsOwnError || conflict) {
                 showToast({
                     id: 'settings-save-failed',
                     variant: 'error',
-                    message: userFacingMessage(err, t('settings.saveFailed')),
+                    message,
                 });
+            }
+            if (conflict) {
+                throw Object.assign(new Error(message), err, { name: 'VaultConflictError' });
             }
             throw err;
         }

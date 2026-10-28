@@ -45,6 +45,11 @@ const { NotificationsSection } = await import(
 const { DisplaySection } = await import(
     '../../../packages/core/src/shared/components/settings/DisplaySection.jsx'
 );
+const { AppearanceSection } = await import(
+    '../../../packages/core/src/shared/components/settings/AppearanceSection.jsx'
+);
+
+const VAULT_CONFLICT_MESSAGE = 'This wallet changed in another window. Nothing was lost. Reload to see the latest, then try again.';
 
 function renderSection(section) {
     return render(<ToastHost>{section}</ToastHost>);
@@ -66,6 +71,19 @@ afterEach(() => {
 });
 
 describe('background settings save failures', () => {
+    it('explains a refused concurrent settings save and keeps other errors unchanged', async () => {
+        update
+            .mockRejectedValueOnce(Object.assign(new Error('stale write'), { name: 'VaultConflictError' }))
+            .mockRejectedValueOnce(new Error('storage failed'));
+        renderSection(<AppearanceSection />);
+        const control = screen.getByRole('combobox', { name: 'Theme' });
+
+        fireEvent.change(control, { target: { value: 'dark' } });
+        expect(await screen.findByRole('alert')).toHaveTextContent(VAULT_CONFLICT_MESSAGE);
+        fireEvent.change(control, { target: { value: 'light' } });
+        expect(await screen.findByRole('alert')).toHaveTextContent('storage failed');
+    });
+
     it('shows a privacy error beside the switch and restores its value', async () => {
         renderSection(<PrivacySection />);
         const control = screen.getByRole('switch', { name: 'Change-address rotation' });

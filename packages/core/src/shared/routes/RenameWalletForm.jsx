@@ -16,6 +16,7 @@ import '../../i18n/locales/en/history.js';
 import '../../i18n/locales/en/renameWallet.js';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { readActiveWallet, writeActiveWallet } from '../utils/activeWalletMemory.js';
+import { userFacingMessage } from '../utils/userFacingMessage.js';
 
 /**
  * RenameWalletForm: change a Wallet record's `name` field. No
@@ -115,7 +116,7 @@ export function RenameWalletForm({ walletId, initialName = '', onBack, onRenamed
             if (readActiveWallet() === walletId) writeActiveWallet(walletId, trimmed);
             onRenamed(renamed);
         } catch (err) {
-            setError(err?.message || 'Failed to rename wallet.');
+            setError(userFacingMessage(err, 'Failed to rename wallet.'));
             setBusy(false);
         }
     }

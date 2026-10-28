@@ -14,6 +14,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 
 let messaging;
+const VAULT_CONFLICT_MESSAGE = 'This wallet changed in another window. Nothing was lost. Reload to see the latest, then try again.';
 
 vi.mock('../../../packages/core/src/shared/useMessaging.js', () => ({
     useMessaging: () => ({ messaging, shell: 'web' }),
@@ -264,6 +265,20 @@ describe('RenameWalletForm submission', () => {
 });
 
 describe('RenameWalletForm submission failures', () => {
+    it('explains a refused concurrent rename and keeps other errors unchanged', async () => {
+        messaging.renameWallet
+            .mockRejectedValueOnce(Object.assign(new Error('stale write'), { name: 'VaultConflictError' }))
+            .mockRejectedValueOnce(new Error('Rename refused'));
+        mount();
+        const save = screen.getByRole('button', { name: 'Save' });
+        await waitFor(() => expect(save.disabled).toBe(false));
+
+        fireEvent.click(save);
+        expect(await screen.findByText(VAULT_CONFLICT_MESSAGE)).toBeTruthy();
+        fireEvent.click(save);
+        expect(await screen.findByText('Rename refused')).toBeTruthy();
+    });
+
     it.each([
         [new Error('Rename refused'), 'Rename refused'],
         [{}, 'Failed to rename wallet.'],

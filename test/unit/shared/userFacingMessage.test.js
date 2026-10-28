@@ -30,6 +30,14 @@ function protocolRefusal(reason) {
 }
 
 describe('userFacingMessage', () => {
+    it('recognizes a vault conflict by name after a message boundary', () => {
+        const err = { name: 'VaultConflictError', message: 'stale write' };
+        expect(userFacingMessage(err, FALLBACK)).toBe(
+            'This wallet changed in another window. Nothing was lost. Reload to see the latest, then try again.',
+        );
+        expect(userFacingMessage(new Error('stale write'), FALLBACK)).toBe('stale write');
+    });
+
     it('replaces a flow precondition string', () => {
         expect(userFacingMessage(new Error('importWif: walletId is required'), FALLBACK))
             .toBe(FALLBACK);

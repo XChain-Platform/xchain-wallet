@@ -510,6 +510,26 @@ describe('Onboarding: license gate', () => {
 });
 
 describe('Onboarding: demo entry', () => {
+    it('explains a refused concurrent demo save', async () => {
+        stubMatchMedia(false);
+        globalThis.localStorage.setItem('xc:licenseAcceptedAt', new Date().toISOString());
+        globalThis.localStorage.setItem('xc:licenseAcceptedVersion', LICENSE_VERSION);
+        globalThis.localStorage.setItem('xc:onboardingExplainerSeenAt', new Date().toISOString());
+        const refusal = Object.assign(new Error('stale write'), { name: 'VaultConflictError' });
+        const importMnemonic = vi.fn(async () => { throw refusal; });
+
+        render(
+            <MessagingProvider shell="web" messaging={{ importMnemonic }}>
+                <Onboarding onCreate={() => {}} onImport={() => {}} onDemoEntered={() => {}} />
+            </MessagingProvider>,
+        );
+        fireEvent.click(screen.getByRole('button', { name: 'Try in demo mode' }));
+
+        expect(await screen.findByRole('alert')).toHaveTextContent(
+            'This wallet changed in another window. Nothing was lost. Reload to see the latest, then try again.',
+        );
+    });
+
     it('creates and marks a demo wallet before entering it', async () => {
         stubMatchMedia(false);
         globalThis.localStorage.setItem('xc:licenseAcceptedAt', new Date().toISOString());

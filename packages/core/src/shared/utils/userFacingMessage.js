@@ -26,6 +26,8 @@
 // opposite job (classifying node / SDK failures into recovery causes); use
 // this one when the flow layer already owns the wording.
 
+import { t } from '../../i18n/index.js';
+
 // A leading `identifier:` or `some.namespaced.identifier:` segment. Anchored
 // on a lowercase first letter and no internal whitespace, so real copy
 // ("Note: keep a backup") is not mistaken for a function prefix.
@@ -188,6 +190,7 @@ export function unsupportedAddressTypeMessage(err) {
  * @returns {string}
  */
 export function userFacingMessage(err, fallback = 'Something went wrong. Try again.') {
+    if (isVaultConflictError(err)) return t('common.vaultConflict');
     const refusal = protocolRefusalReason(err);
     if (refusal) return refusal;
     const unsupportedType = unsupportedAddressTypeMessage(err);
@@ -195,6 +198,18 @@ export function userFacingMessage(err, fallback = 'Something went wrong. Try aga
     const text = errorText(err);
     if (isDeveloperMessage(err)) return fallback;
     return text;
+}
+
+/**
+ * A vault write can cross a shell message boundary and lose its prototype.
+ * The error name remains stable in every shell, so it is the discriminator.
+ *
+ * @param {unknown} err
+ * @returns {boolean}
+ */
+export function isVaultConflictError(err) {
+    return Boolean(err && typeof err === 'object'
+        && /** @type {any} */ (err).name === 'VaultConflictError');
 }
 
 /**

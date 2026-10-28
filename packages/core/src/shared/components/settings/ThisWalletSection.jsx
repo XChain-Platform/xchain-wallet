@@ -27,6 +27,7 @@ import { addressTypeLabel } from '../../utils/addressTypeLabel.js';
 import { clearLastView } from '../../utils/lastViewMemory.js';
 import { sweepMsgMemoryForWallet } from '../../utils/msgReadMemory.js';
 import { clearRemovedWalletStorage } from '../../utils/wipeWalletStorage.js';
+import { userFacingMessage } from '../../utils/userFacingMessage.js';
 import { retireBiometricAfterPasswordChange } from '../../../flows/biometricUnlock.js';
 import { DURESS_PASSWORD_COLLISION_MESSAGE, walletPasswordCollidesWithDuress } from '../../../flows/duressPassphrase.js';
 import { SettingsActionRow, SettingsInlineForm, Status } from './_settingsPrimitives.jsx';
@@ -146,7 +147,7 @@ export function ThisWalletSection({
                 await onWalletRemoved(activeWallet.id);
             }
         } catch (err) {
-            setRemoveError(err instanceof Error ? err.message : String(err));
+            setRemoveError(userFacingMessage(err, 'Failed to remove wallet.'));
             if (removalSucceeded) setRemoved(true);
         } finally {
             setRemoving(false);

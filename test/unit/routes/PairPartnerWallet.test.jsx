@@ -203,6 +203,19 @@ describe('PairPartnerWallet: seed stage', () => {
         expect(messaging.pairingPayloadRequest).not.toHaveBeenCalled();
     });
 
+    it('explains a refused concurrent import', async () => {
+        const messaging = mkMessaging({
+            importMnemonic: vi.fn(async () => {
+                throw Object.assign(new Error('stale write'), { name: 'VaultConflictError' });
+            }),
+        });
+        await reachExchange(messaging);
+        expect(screen.getByRole('alert')).toHaveTextContent(
+            'This wallet changed in another window. Nothing was lost. Reload to see the latest, then try again.',
+        );
+        expect(messaging.pairingPayloadRequest).not.toHaveBeenCalled();
+    });
+
     it('hides a flow-prefixed precondition behind the import failure copy', async () => {
         const messaging = mkMessaging({
             importMnemonic: vi.fn(async () => { throw new Error('importMnemonic: password is required'); }),

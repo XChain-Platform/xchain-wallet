@@ -4,8 +4,9 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { act, cleanup, renderHook, waitFor } from '@testing-library/react';
 
-const { messagingState } = vi.hoisted(() => ({
+const { messagingState, showToast } = vi.hoisted(() => ({
     messagingState: { current: {} },
+    showToast: vi.fn(),
 }));
 
 vi.mock('../../../packages/core/src/shared/useMessaging.js', () => ({
@@ -15,6 +16,10 @@ vi.mock('../../../packages/core/src/shared/useMessaging.js', () => ({
 vi.mock('../../../packages/core/src/registry/index.js', () => ({
     defaultRegistry: vi.fn(() => ({})),
     hydrateCustomChainsFromSettings: vi.fn(),
+}));
+
+vi.mock('../../../packages/core/src/shared/components/ToastHost.jsx', () => ({
+    useToast: () => ({ showToast }),
 }));
 
 const { useSettings } = await import(
@@ -33,6 +38,7 @@ function deferred() {
 
 beforeEach(() => {
     messagingState.current = {};
+    showToast.mockClear();
 });
 
 afterEach(() => {
@@ -42,6 +48,30 @@ afterEach(() => {
 });
 
 describe('useSettings edge branches', () => {
+    it('reports a concurrent settings save even when the section owns ordinary errors', async () => {
+        const conflict = Object.assign(new Error('stale write'), { name: 'VaultConflictError' });
+        const updateSettings = vi.fn()
+            .mockRejectedValueOnce(conflict)
+            .mockRejectedValueOnce(new Error('storage failed'));
+        messagingState.current = {
+            getSettings: vi.fn(async () => ({ theme: 'system' })),
+            updateSettings,
+        };
+        const { result } = renderHook(() => useSettings({ reportsOwnError: true }));
+        await waitFor(() => expect(result.current.loading).toBe(false));
+
+        await expect(result.current.update({ theme: 'dark' }))
+            .rejects.toMatchObject({ name: 'VaultConflictError', message: 'This wallet changed in another window. Nothing was lost. Reload to see the latest, then try again.' });
+        expect(showToast).toHaveBeenCalledWith(expect.objectContaining({
+            id: 'settings-save-failed',
+            message: 'This wallet changed in another window. Nothing was lost. Reload to see the latest, then try again.',
+        }));
+
+        showToast.mockClear();
+        await expect(result.current.update({ theme: 'light' })).rejects.toThrow('storage failed');
+        expect(showToast).not.toHaveBeenCalled();
+    });
+
     it('reports missing read and update routes without throwing during render', async () => {
         const { result } = renderHook(() => useSettings());
         await waitFor(() => expect(result.current.loading).toBe(false));

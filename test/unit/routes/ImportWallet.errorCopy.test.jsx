@@ -27,6 +27,7 @@ import { ImportWallet } from '../../../packages/core/src/shared/routes/ImportWal
 
 const PHRASE = 'abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about';
 const PASSWORD = 'correct-horse-battery';
+const VAULT_CONFLICT_MESSAGE = 'This wallet changed in another window. Nothing was lost. Reload to see the latest, then try again.';
 
 afterEach(cleanup);
 
@@ -46,6 +47,24 @@ async function submitWith(importMnemonic, { name } = {}) {
 }
 
 describe('the import screen shows house copy, not flow-layer internals', () => {
+    it('explains a refused concurrent save and keeps the ordinary failure copy', async () => {
+        const conflict = Object.assign(new Error('Vault: storage changed while this write was being prepared'), {
+            name: 'VaultConflictError',
+        });
+        const importMnemonic = vi.fn()
+            .mockRejectedValueOnce(conflict)
+            .mockRejectedValueOnce(Object.assign(new Error('backend unavailable'), {
+                code: 'BACKEND_UNAVAILABLE',
+            }));
+        await submitWith(importMnemonic);
+
+        expect(await screen.findByRole('alert')).toHaveTextContent(VAULT_CONFLICT_MESSAGE);
+        fireEvent.click(screen.getByRole('button', { name: 'Import' }));
+        expect(await screen.findByRole('alert')).toHaveTextContent(
+            'Could not import the wallet. Check the recovery phrase and try again.',
+        );
+    });
+
     it('swaps a function-prefixed precondition for the screen fallback', async () => {
         const importMnemonic = vi.fn().mockRejectedValue(new Error('importMnemonic: mnemonic is required'));
         await submitWith(importMnemonic);
@@ -90,6 +109,40 @@ describe('the import screen shows house copy, not flow-layer internals', () => {
 });
 
 describe('onboarding persistence failures', () => {
+    it('explains a refused concurrent create and keeps the ordinary failure copy', async () => {
+        const conflict = Object.assign(new Error('Vault: storage changed while this write was being prepared'), {
+            name: 'VaultConflictError',
+        });
+        const importMnemonic = vi.fn()
+            .mockRejectedValueOnce(conflict)
+            .mockRejectedValueOnce(Object.assign(new Error('vault transaction aborted'), {
+                code: 'VAULT_WRITE_FAILED',
+            }));
+        render(
+            <MessagingProvider shell="web" messaging={{ importMnemonic }}>
+                <CreateWallet onBack={() => {}} onCreated={() => {}} />
+            </MessagingProvider>,
+        );
+        fireEvent.change(screen.getByLabelText('Password'), { target: { value: PASSWORD } });
+        fireEvent.change(screen.getByLabelText('Confirm password'), { target: { value: PASSWORD } });
+        fireEvent.click(screen.getByRole('button', { name: 'Next' }));
+        fireEvent.click(await screen.findByRole('button', { name: 'Reveal recovery phrase' }));
+        const phraseWords = screen.getAllByRole('listitem').map((item) => (
+            item.textContent.replace(/^\d+\.\s*/, '').trim()
+        ));
+        fireEvent.click(screen.getByRole('checkbox', { name: /saved my recovery phrase/i }));
+        fireEvent.click(screen.getByRole('button', { name: 'Verify recovery phrase' }));
+        for (const input of screen.getAllByLabelText(/^Word \d+$/)) {
+            const position = Number(input.labels[0].textContent.replace('Word ', ''));
+            fireEvent.change(input, { target: { value: phraseWords[position - 1] } });
+        }
+        fireEvent.click(screen.getByRole('button', { name: 'Create wallet' }));
+
+        expect(await screen.findByRole('alert')).toHaveTextContent(VAULT_CONFLICT_MESSAGE);
+        fireEvent.click(screen.getByRole('button', { name: 'Create wallet' }));
+        expect(await screen.findByRole('alert')).toHaveTextContent('Failed to create wallet. Try again.');
+    });
+
     it('shows a plain create error and retries with the same wallet name', async () => {
         const writeError = Object.assign(new Error('vault transaction aborted'), {
             code: 'VAULT_WRITE_FAILED',
@@ -163,6 +216,35 @@ describe('onboarding persistence failures', () => {
         fireEvent.click(screen.getByRole('button', { name: 'Restore' }));
         await waitFor(() => expect(importBackupFresh).toHaveBeenCalledTimes(2));
         expect(importBackupFresh.mock.calls[1][0].fileContent).toBe(backupContent);
+    });
+
+    it('explains a refused concurrent backup restore', async () => {
+        const importBackupFresh = vi.fn().mockRejectedValue(
+            Object.assign(new Error('stale write'), { name: 'VaultConflictError' }),
+        );
+        render(
+            <MessagingProvider shell="web" messaging={{ importBackupFresh }}>
+                <ImportWallet
+                    onBack={() => {}}
+                    onImported={() => {}}
+                    mode="fresh"
+                    initialLane="backup"
+                />
+            </MessagingProvider>,
+        );
+        fireEvent.change(screen.getByLabelText('Backup file contents'), {
+            target: { value: '{"encrypted":"backup-data"}' },
+        });
+        fireEvent.change(screen.getByLabelText('Backup password'), { target: { value: PASSWORD } });
+        fireEvent.change(screen.getByLabelText('Password of the wallet in this backup'), {
+            target: { value: PASSWORD },
+        });
+        fireEvent.change(screen.getByLabelText('Password for this device'), {
+            target: { value: PASSWORD },
+        });
+        fireEvent.click(screen.getByRole('button', { name: 'Restore' }));
+
+        expect(await screen.findByRole('alert')).toHaveTextContent(VAULT_CONFLICT_MESSAGE);
     });
 });
 

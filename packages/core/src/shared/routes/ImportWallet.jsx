@@ -43,7 +43,7 @@ import {
 // The flows this screen calls throw function-prefixed preconditions
 // ("importMnemonic: mnemonic is required"), and `|| fallback` only fires on an
 // EMPTY message, so those reached the recovery screen verbatim.
-import { userFacingMessage } from '../utils/userFacingMessage.js';
+import { isVaultConflictError, userFacingMessage } from '../utils/userFacingMessage.js';
 import { isWalletExistsError } from '../utils/walletExistsError.js';
 import { NAME_MAX_LENGTH, hasVisibleText, nameLength } from '../../util/display_name.js';
 import { takeForgotPasswordRestoreLane } from '../utils/forgotPasswordRecovery.js';
@@ -510,7 +510,7 @@ export function ImportWallet({
             // password" is never an answer. Whatever came back, the screen
             // says which of the three boxes it is talking about.
             setError(userFacingMessage(
-                restoreFailureMessage(err, { mode }),
+                isVaultConflictError(err) ? err : restoreFailureMessage(err, { mode }),
                 'That backup could not be restored. Check the backup file and try again.',
             ));
             endBusy();

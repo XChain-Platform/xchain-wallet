@@ -32,6 +32,7 @@ const messages = {
     'common.hidePassphrase': 'Hide passphrase',
     'common.confirm': 'Confirm',
     'common.settingsUnavailable': 'Settings unavailable.',
+    'common.vaultConflict': 'This wallet changed in another window. Nothing was lost. Reload to see the latest, then try again.',
     'common.edit': 'Edit',
     'common.estimateUnavailable': 'Estimate unavailable',
     'common.networkFeeUnavailable': 'Network fee estimate unavailable.',

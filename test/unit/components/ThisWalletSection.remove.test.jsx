@@ -28,6 +28,7 @@ vi.mock('../../../packages/core/src/shared/utils/wipeWalletStorage.js', async (i
 
 const ACTIVE_WALLET = { id: 'wallet-active', name: 'Active Wallet' };
 const OTHER_WALLET = { id: 'wallet-other', name: 'Other Wallet' };
+const VAULT_CONFLICT_MESSAGE = 'This wallet changed in another window. Nothing was lost. Reload to see the latest, then try again.';
 
 function mount(walletsAfterRemoval, overrides = {}) {
     const reload = vi.fn();
@@ -76,6 +77,22 @@ afterEach(() => {
 });
 
 describe('ThisWalletSection removal completion', () => {
+    it('explains a refused concurrent removal and keeps other errors unchanged', async () => {
+        const removeWallet = vi.fn()
+            .mockRejectedValueOnce(Object.assign(new Error('stale write'), { name: 'VaultConflictError' }))
+            .mockRejectedValueOnce(new Error('Removal refused'));
+        mount([OTHER_WALLET], { removeWallet });
+
+        fireEvent.click(screen.getByRole('button', { name: 'Remove…' }));
+        const confirmation = screen.getByRole('textbox', { name: 'Confirm wallet name' });
+        fireEvent.change(confirmation, { target: { value: ACTIVE_WALLET.name } });
+        fireEvent.click(screen.getByRole('button', { name: 'Remove wallet' }));
+        expect(await screen.findByText(VAULT_CONFLICT_MESSAGE)).toBeTruthy();
+
+        fireEvent.click(screen.getByRole('button', { name: 'Remove wallet' }));
+        expect(await screen.findByText('Removal refused')).toBeTruthy();
+    });
+
     it('names the wallet and warns about backups in the confirmation', () => {
         mount([OTHER_WALLET]);
 
