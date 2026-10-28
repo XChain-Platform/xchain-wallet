@@ -391,16 +391,16 @@ export function PollDetail({ walletId, chainId, pollIndex, onBack }) {
     // review sits open: its end block passes or it is finalized. A ballot signed
     // then pays the miner fee and the protocol fee and counts for nothing, and
     // with pre-flight off or local nothing warns. So Approve reads the poll and
-    // the height again and refuses one that no longer takes votes. A failed read
-    // is unknown, never a refusal.
+    // the height fresh, past read reuse and the HTTP cache, and refuses one that
+    // no longer takes votes. A failed read is unknown, never a refusal.
     async function closedPollRefusal() {
         let fresh;
         let heightResponse = null;
         try {
             [fresh, heightResponse] = await Promise.all([
-                messaging.governancePoll({ chainId, pollIndex }),
+                messaging.governancePoll({ chainId, pollIndex, fresh: true }),
                 typeof messaging.getIndexerWatermark === 'function'
-                    ? messaging.getIndexerWatermark({ chainId }).catch(() => null)
+                    ? messaging.getIndexerWatermark({ chainId, fresh: true }).catch(() => null)
                     : Promise.resolve(null),
             ]);
         } catch {

@@ -92,6 +92,19 @@ describe('governance vote queries', () => {
         expect(sdk.getPoll).toHaveBeenCalledWith(0, opts);
     });
 
+    it('pollDetail tags a signature guard read fresh without changing ordinary reads', async () => {
+        const sdk = { getPoll: vi.fn(async () => ({ action_index: 7 })) };
+        const sdkRegistry = registryFor(sdk);
+        await pollDetail({
+            sdkRegistry, chainId: 'chain-a', pollIndex: 7, opts: { include: 'votes' }, fresh: true,
+        });
+        await pollDetail({ sdkRegistry, chainId: 'chain-a', pollIndex: 7 });
+        expect(sdk.getPoll.mock.calls).toEqual([
+            [7, { include: 'votes', fresh: true }],
+            [7, undefined],
+        ]);
+    });
+
     it('pollResults accepts index zero, forwards options, and returns the result', async () => {
         const result = { choices: [3, 5] };
         const sdk = { getPollResults: vi.fn(async () => result) };

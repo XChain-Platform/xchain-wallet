@@ -12,7 +12,8 @@
 // signs whatever was composed. A poll that closes while the review sits open
 // (its end block passes, or it is finalized) still signs and broadcasts the
 // ballot: it pays the miner fee and the protocol fee and counts for nothing.
-// Approve reads the poll again and refuses one that is no longer open.
+// Approve reads the poll fresh and refuses one that is no longer open, even
+// while an ordinary read still returns the open row from the reuse cache.
 
 import { afterEach, describe, expect, it } from 'vitest';
 import { act as domAct, cleanup, fireEvent, render } from '@testing-library/react';
@@ -52,16 +53,16 @@ async function drain(rounds = 30) {
 }
 
 function harness({ later, walletMode = 'full' }) {
-    const calls = { cast: 0, build: 0, pollReads: 0 };
+    const calls = { cast: 0, build: 0, pollRequests: [], heightRequests: [] };
     const target = {
-        governancePoll: () => {
-            calls.pollReads += 1;
-            if (calls.pollReads === 1) return Promise.resolve(POLL);
-            return later.poll();
+        governancePoll: (request) => {
+            calls.pollRequests.push(request);
+            return request.fresh ? later.poll() : Promise.resolve(POLL);
         },
-        getIndexerWatermark: () => (calls.pollReads <= 1
-            ? Promise.resolve({ watermark: 100 })
-            : later.height()),
+        getIndexerWatermark: (request) => {
+            calls.heightRequests.push(request);
+            return request.fresh ? later.height() : Promise.resolve({ watermark: 100 });
+        },
         governancePollResults: () => Promise.resolve([]),
         getAddressesByChain: () => Promise.resolve({ [CHAIN]: [ADDRESS] }),
         getActiveAddresses: () => Promise.resolve({ [CHAIN]: { id: ADDRESS.id } }),
@@ -125,7 +126,7 @@ describe('Poll page: a poll that closes between Review and Approve', () => {
         expect(utils.container.textContent).toMatch(/This poll closed while the review was open\. Nothing was sent\./);
     });
 
-    it('refuses when the poll is no longer open', async () => {
+    it('refuses a freshly closed poll while the reusable row is still open', async () => {
         const { messaging, calls } = harness({
             later: {
                 poll: () => Promise.resolve({ ...POLL, poll_status: 'finalized' }),
@@ -134,6 +135,14 @@ describe('Poll page: a poll that closes between Review and Approve', () => {
         });
         await approveVote(messaging);
         expect(calls.cast).toBe(0);
+        expect(calls.pollRequests).toEqual([
+            { chainId: CHAIN, pollIndex: 7 },
+            { chainId: CHAIN, pollIndex: 7, fresh: true },
+        ]);
+        expect(calls.heightRequests).toEqual([
+            { chainId: CHAIN },
+            { chainId: CHAIN, fresh: true },
+        ]);
     });
 
     it('signs when the poll still reads open', async () => {
