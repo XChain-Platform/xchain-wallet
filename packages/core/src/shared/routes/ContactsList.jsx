@@ -41,6 +41,10 @@ import { BIDI_CONTROLS } from '../utils/textHardening.js';
 // field never holds one: what it shows is what is saved.
 const stripBidiControls = (value) => value.replace(BIDI_CONTROLS, '');
 
+// The contacts store refuses a save whose expected version is not the stored
+// one, with this message (core flows/contacts.js assertExpectedVersion).
+const isVersionConflict = (err) => /changed since this screen loaded/i.test(String(err?.message || err || ''));
+
 const chainRegistry = registryLib.defaultRegistry();
 const CONTACTS_SORT_STORAGE_KEY = 'xc:contacts:sort';
 
@@ -189,15 +193,19 @@ export function ContactsList({ walletId, onSend, onSendMessage, onBack, scanPref
     const walletScopeRef = useRef(walletId);
     walletScopeRef.current = walletId;
 
+    // Resolves to the rows it read, or null when the read fails or the wallet
+    // changes underneath it.
     const loadContacts = useCallback(async () => {
         const scope = walletId;
+        let loaded = null;
         setLoadError(null);
         try {
             const rows = await messaging.listContacts();
-            if (walletScopeRef.current !== scope) return;
-            setContacts(Array.isArray(rows) ? rows : []);
+            if (walletScopeRef.current !== scope) return null;
+            loaded = Array.isArray(rows) ? rows : [];
+            setContacts(loaded);
         } catch (err) {
-            if (walletScopeRef.current !== scope) return;
+            if (walletScopeRef.current !== scope) return null;
             setLoadError(err?.message || 'Failed to load contacts.');
         }
         // Every mutation on this screen ends in a reload, so this is the one
@@ -205,6 +213,7 @@ export function ContactsList({ walletId, onSend, onSendMessage, onBack, scanPref
         if (walletScopeRef.current === scope) {
             await refreshUnpublished(() => walletScopeRef.current === scope);
         }
+        return loaded;
     }, [messaging, refreshUnpublished, walletId]);
 
     useEffect(() => {
@@ -464,6 +473,14 @@ export function ContactsList({ walletId, onSend, onSendMessage, onBack, scanPref
             await loadContacts();
             setMode(active ? 'detail' : 'list');
         } catch (err) {
+            // The conflict message tells the user to try again, so the next
+            // Save carries the version stored now instead of the one that
+            // just lost. The form keeps what the user typed.
+            if (active && isVersionConflict(err)) {
+                const rows = await loadContacts();
+                const fresh = rows?.find((contact) => contact.id === active.id);
+                if (fresh) setEditVersion(fresh.updatedAt);
+            }
             setSubmitError(userFacingMessage(err, 'Could not save this contact. Try again.'));
         } finally {
             setSubmitting(false);
@@ -586,6 +603,9 @@ export function ContactsList({ walletId, onSend, onSendMessage, onBack, scanPref
             setAddAddrOpen(false);
             setAddAddrValue('');
         } catch (err) {
+            // Reloading moves `active` to the stored version, so Add again
+            // appends to the current entries under the current version.
+            if (isVersionConflict(err)) await loadContacts();
             setAddAddrError(userFacingMessage(err, 'Could not save this address. Try again.'));
         } finally {
             setAddAddrSaving(false);
