@@ -1296,12 +1296,19 @@ export function measureRulings() {
             .filter((el) => visible(el) && text(el).length > 0 && !el.parentElement.closest(NOTICE));
         for (const el of notices) {
             if (el.closest('form, [role="dialog"], [role="group"]')) continue; // a form's own status line
+            // A status that announces nothing is a label of the data beside
+            // it ("Updated just now" under a balance), not a notice.
+            if (el.matches('[role="status"][aria-live="off"]')) continue;
             const r = el.getBoundingClientRect();
             const contentAbove = [...main.querySelectorAll('h2, h3, p, li, button, input, table')]
                 .some((other) => visible(other) && !el.contains(other) && !other.closest(NOTICE)
                     && other.getBoundingClientRect().bottom <= r.top + 1);
             const narrow = right - left - r.width > 2;
-            if (contentAbove || narrow) {
+            // An empty state stands where its list would be, below the
+            // page's own controls; U15 asks of it only that it fill the
+            // content width, so it is measured for width, not for place.
+            const emptyState = el.matches('[data-xc-empty-state]');
+            if ((contentAbove && !emptyState) || narrow) {
                 cap(out.noticePlacement, { el: desc(el), contentAbove, width: Math.round(r.width), content: Math.round(right - left) });
             }
         }
