@@ -90,13 +90,60 @@ try {
 
 const LOCALE_PATH_RE = /\/locales\/([^/]+)\/index\.js$/;
 
-/** Return the lazy importer for `code`, or null when none is known. */
+// A browser remembers a module URL whose dynamic import failed (a 404, an
+// offline fetch), so calling the same importer again rejects at once
+// without a request. A locale whose chunk failed is retried by importing
+// its URL with a fresh query, which the module map treats as a new module.
+// The chunk's own imports keep their URLs, so the shared English store is
+// the same instance either way.
+let freshImport = (url) => import(/* @vite-ignore */ url);
+const failedChunkUrls = new Map();
+let retryCounter = 0;
+
+// Chromium and Firefox name the failed module URL in the error message.
+const FAILED_MODULE_URL_RE = /\b[a-z][a-z0-9+.-]*:\/\/[^\s'"<>]+/i;
+
+/** Return the lazy importer for `code` and its glob path, or null. */
 function lazyLoaderFor(code) {
     for (const path in LAZY_LOADERS) {
         const m = LOCALE_PATH_RE.exec(path);
-        if (m && m[1] === code) return LAZY_LOADERS[path];
+        if (m && m[1] === code) return { path, load: LAZY_LOADERS[path] };
     }
     return null;
+}
+
+/**
+ * The URL of a chunk whose import failed: the one the error names, else
+ * the glob path resolved against this module (the dev server layout).
+ */
+function failedChunkUrl(err, path) {
+    const m = FAILED_MODULE_URL_RE.exec(String((err && err.message) || ''));
+    const candidate = m ? m[0].replace(/[),.;]+$/, '') : path;
+    try {
+        const url = new URL(candidate, import.meta.url);
+        url.searchParams.delete('locale-retry');
+        return url.href;
+    } catch (_err) {
+        return null;
+    }
+}
+
+/** Import `url` under a query the browser has not seen fail. */
+function importFresh(url) {
+    const busted = new URL(url);
+    retryCounter += 1;
+    busted.searchParams.set('locale-retry', `${Date.now().toString(36)}-${retryCounter}`);
+    return freshImport(busted.href);
+}
+
+/**
+ * Swap the lazy importer map and the fresh-URL importer. Tests drive the
+ * chunk failure and retry paths through this; production never calls it.
+ */
+export function __setLazyLocaleLoadersForTests(loaders, importer) {
+    LAZY_LOADERS = loaders || {};
+    if (importer) freshImport = importer;
+    failedChunkUrls.clear();
 }
 
 // --- text direction (§54 FOLLOWUP 3) ---------------------------------
@@ -176,7 +223,8 @@ function applyLocale(locale) {
  * chunk, returns a promise that resolves after the chunk loads and the
  * locale is applied; a chunk-load failure keeps the current locale
  * (falling back to English's always-present dictionary) rather than
- * rejecting. Only the latest request applies, so a slower chunk cannot
+ * rejecting, and a later pick of that locale retries the chunk under a
+ * fresh URL. Only the latest request applies, so a slower chunk cannot
  * overwrite a newer picker choice. Throws synchronously only when the
  * locale is neither registered nor lazily discoverable.
  *
@@ -199,8 +247,13 @@ export function setLocale(locale) {
         throw new Error(`setLocale: unknown locale "${locale}"`);
     }
     const requestId = ++localeRequestId;
-    return loader()
+    // After a failed load the original importer only replays the cached
+    // failure, so the retry imports the chunk under a fresh URL.
+    const retryUrl = failedChunkUrls.get(locale);
+    const pending = retryUrl ? importFresh(retryUrl) : loader.load();
+    return pending
         .then((mod) => {
+            failedChunkUrls.delete(locale);
             // `{ import: 'default' }` hands back the default export
             // directly, but tolerate a namespace object too.
             DICTIONARIES[locale] = mod && mod.default ? mod.default : mod;
@@ -209,6 +262,10 @@ export function setLocale(locale) {
             return locale;
         })
         .catch((err) => {
+            if (!failedChunkUrls.has(locale)) {
+                const url = failedChunkUrl(err, loader.path);
+                if (url) failedChunkUrls.set(locale, url);
+            }
             if (typeof console !== 'undefined') {
                 console.warn(
                     `setLocale: failed to load "${locale}"; keeping "${currentLocale}"`,
