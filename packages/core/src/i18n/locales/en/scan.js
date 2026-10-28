@@ -18,7 +18,7 @@ const messages = {
     'scan.scannerAlt': 'Scan a QR code',
     'scan.routing': 'Scanned, routing…',
     'scan.pasteLabel': 'Or paste it here',
-    'scan.pastePlaceholder': 'xchain:… / bitcoin:… / address / transaction hex',
+    'scan.pastePlaceholder': 'xchain:… / bitcoin:… / address / transaction code',
     'scan.classifyPaste': 'Use pasted text',
     'scan.error.pasteEmpty': 'Paste something first.',
     'scan.error.unknownXchainIntent':

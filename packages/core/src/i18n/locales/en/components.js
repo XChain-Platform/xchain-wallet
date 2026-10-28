@@ -171,12 +171,12 @@ const messages = {
     'components.watcherResultPanel.unsignedTransactionReadyForSigning':
         'Unsigned transaction, ready for signing',
     'components.watcherResultPanel.takeThisTransactionToYour':
-        'Take this transaction to your Signer-mode wallet. Paste the hex, or scan the animated QR. Signing authorizes this transaction only, so verify its details again on the signer. Then paste the signed transaction into a Normal-mode wallet to broadcast.',
+        'Take this transaction to your Signer-mode wallet. Paste the code, or scan the animated QR. Signing authorizes this transaction only, so verify its details again on the signer. Then paste the signed transaction into a Normal-mode wallet to broadcast.',
     'components.watcherResultPanel.encoding': 'Encoding',
-    'components.watcherResultPanel.unsignedTransactionHex': 'Unsigned transaction (hex)',
-    'components.watcherResultPanel.unsignedTransactionHex2': 'Unsigned transaction hex',
-    'components.watcherResultPanel.copyHex': 'Copy hex',
-    'components.watcherResultPanel.copyUnsignedTransactionHex': 'Copy unsigned transaction hex',
+    'components.watcherResultPanel.unsignedTransactionHex': 'Unsigned transaction (code)',
+    'components.watcherResultPanel.unsignedTransactionHex2': 'Unsigned transaction code',
+    'components.watcherResultPanel.copyHex': 'Copy code',
+    'components.watcherResultPanel.copyUnsignedTransactionHex': 'Copy unsigned transaction code',
     'components.watcherResultPanel.animatedQrFormat': 'Animated QR format',
     'components.watcherResultPanel.qrFormat': 'QR format',
     'components.watcherResultPanel.animatedQr': 'Animated QR (',
@@ -318,7 +318,7 @@ const messages = {
     'components.rawPsbtViewer.actionFields': 'Action fields',
     'components.rawPsbtViewer.parsedInputsOutputs': 'Parsed inputs / outputs',
     'components.rawPsbtViewer.parserNotWiredYetSee':
-        '(parser not wired yet; see PSBT hex above for the raw bytes)',
+        '(parser not wired yet; see the signing request code above for the raw data)',
     'components.totalBalanceHero.activeAddressBalance': 'Active address balance',
     'components.totalBalanceHero.balanceActions': 'Balance actions',
     'components.totalBalanceHero.openSettings': 'Open settings',

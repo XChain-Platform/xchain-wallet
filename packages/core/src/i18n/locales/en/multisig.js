@@ -22,10 +22,10 @@ const messages = {
         'Only addresses from a software wallet can be shared here. A watch-only wallet has no signing key, and a hardware wallet must export this information from the device or its companion app.',
     'multisig.share.address': 'Address to share',
     'multisig.share.selectAddress': 'Select address',
-    'multisig.share.payload': 'Share payload',
+    'multisig.share.payload': 'Share details',
     'multisig.share.payloadHint': 'The QR code and text contain the same public cosigner fields.',
-    'multisig.share.qrAlt': 'QR code for multisig cosigner share payload',
-    'multisig.share.copyPayload': 'Copy cosigner share payload',
+    'multisig.share.qrAlt': 'QR code for multisig cosigner share details',
+    'multisig.share.copyPayload': 'Copy cosigner share details',
     'multisig.share.xpub': 'xpub',
     'multisig.share.account': 'Account {path}',
     'multisig.overCeilingNotice':
