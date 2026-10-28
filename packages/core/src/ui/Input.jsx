@@ -14,6 +14,7 @@ import styles from './Input.module.css';
 import { resolveFieldRequirement } from './fieldRequirement.js';
 import { localTimeZoneNote } from './localTimeZoneNote.js';
 import { t } from '../i18n/index.js';
+import { useProtectedScreen } from '../shared/utils/screenGuard.js';
 
 const PHONE_PLACEHOLDER_QUERY = '(max-width: 480px)';
 const LONG_PLACEHOLDER_LENGTH = 30;
@@ -68,7 +69,8 @@ export function inspectFieldPaste(value) {
  * Password fields render an inline Caps-Lock warning when the modifier
  * is on (§26 / G067). A password field marked `revealable` also carries a
  * show and hide button inside its border; the value is only ever held by the
- * input itself, so revealing it writes nothing anywhere. Detection runs only for `type="password"`; other
+ * input itself, so revealing it writes nothing anywhere. A password field also holds
+ * the screen guard while it is mounted. Detection runs only for `type="password"`; other
  * inputs see no behavior change. Caller-provided `onKeyDown` / `onKeyUp`
  * / `onFocus` / `onBlur` handlers are chained, never replaced.
  *
@@ -189,6 +191,11 @@ export const Input = forwardRef(function Input(
         || /address/i.test(String(externalLabel || ''));
 
     const isPassword = type === 'password';
+    // A password or passphrase on screen is key material under the screen
+    // guard policy: no screenshot and no recents thumbnail while the field is
+    // mounted. Keyed on the type the caller asked for, so showing the value
+    // through the reveal button keeps the screen protected.
+    useProtectedScreen(isPassword);
     const canReveal = isPassword && revealable;
     const [revealed, setRevealed] = useState(false);
     const renderedType = canReveal && revealed ? 'text' : type;

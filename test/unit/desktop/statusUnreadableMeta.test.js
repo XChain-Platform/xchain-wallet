@@ -10,6 +10,8 @@
 // A locked desktop wallet whose KDF metadata file is unreadable can never
 // unlock. session.status reports that as a damaged vault so the renderer
 // shows the damaged-vault screen instead of a password prompt that fails.
+// With no vault blob, the same file blocks every create and import, so it
+// reports an incomplete install, whose screen offers the reset.
 
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
@@ -42,10 +44,14 @@ describe('session.status with unreadable metadata', () => {
         expect(res.error.name).toBe('VaultCorruptError');
     });
 
-    it('leaves an already unlocked session and a fresh install alone', async () => {
+    it('leaves an already unlocked session alone', async () => {
         const unlocked = await handleIpcMessage(runtimeWith({ hasWallet: true, hasSession: true }), { type: 'session.status', request: {} });
         expect(unlocked.result.state).toBe('unlocked');
-        const fresh = await handleIpcMessage(runtimeWith({ hasWallet: false, hasSession: false }), { type: 'session.status', request: {} });
-        expect(fresh.result.state).toBe('no-wallet');
+    });
+
+    it('reports an install with no vault blob as incomplete, so its screen offers the reset', async () => {
+        const res = await handleIpcMessage(runtimeWith({ hasWallet: false, hasSession: false }), { type: 'session.status', request: {} });
+        expect(res.ok).toBe(false);
+        expect(res.error.name).toBe('VaultIncompleteError');
     });
 });

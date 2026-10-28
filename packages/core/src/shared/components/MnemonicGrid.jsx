@@ -10,6 +10,7 @@
 
 import { useId, useMemo, useState } from 'react';
 import { Button } from '../../ui/Button.jsx';
+import { useProtectedScreen } from '../utils/screenGuard.js';
 import styles from './MnemonicGrid.module.css';
 import { t } from '../../i18n/index.js';
 import '../../i18n/locales/en/components.js';
@@ -31,6 +32,9 @@ import '../../i18n/locales/en/settings.js';
  * @param {'small' | 'full'} [props.variant]
  */
 export function MnemonicGrid({ mnemonic, variant = 'full' }) {
+    // A recovery phrase on screen is a copy of the wallet: hold the screen
+    // guard for as long as the grid is mounted, whatever screen hosts it.
+    useProtectedScreen();
     const mnemonicKey = useMemo(() => Symbol('mnemonic'), [mnemonic]);
     const [revealedKey, setRevealedKey] = useState(null);
     const contentId = useId();

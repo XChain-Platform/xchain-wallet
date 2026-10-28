@@ -79,7 +79,22 @@ export class VaultEvictedError extends VaultUnavailableError {
 }
 
 /**
- * Which of the four this error is, or null when it is not one of them.
+ * The blob is gone and the kdfParams meta is still on disk, on a device whose
+ * stores the wallet alone writes: a desktop reset or a native wipe that
+ * cleared the blob and stopped before the meta, or any other loss of the
+ * blob. Nothing here can be opened, and create, import and restore all
+ * refuse over the meta, so the only way forward is to finish the reset.
+ * Distinct from EVICTED, whose copy names the browser as the cause.
+ */
+export class VaultIncompleteError extends VaultUnavailableError {
+    constructor(detail = 'the encrypted vault is missing but its meta record remains') {
+        super(detail);
+        this.name = 'VaultIncompleteError';
+    }
+}
+
+/**
+ * Which of the five this error is, or null when it is not one of them.
  *
  * The shells catch a boot failure and keep only `err.message`, which throws
  * the type away exactly where it is needed: the screen a user sees for a
@@ -97,17 +112,19 @@ export class VaultEvictedError extends VaultUnavailableError {
  * sets its own `name` is still classified.
  *
  * @param {unknown} err
- * @returns {'corrupt' | 'locked' | 'evicted' | 'unavailable' | null}
+ * @returns {'corrupt' | 'locked' | 'evicted' | 'incomplete' | 'unavailable' | null}
  */
 export function vaultErrorKind(err) {
     const name = /** @type {any} */ (err)?.name;
     if (name === 'VaultCorruptError') return 'corrupt';
     if (name === 'VaultLockedError') return 'locked';
     if (name === 'VaultEvictedError') return 'evicted';
+    if (name === 'VaultIncompleteError') return 'incomplete';
     if (name === 'VaultUnavailableError') return 'unavailable';
     if (err instanceof VaultCorruptError) return 'corrupt';
     if (err instanceof VaultLockedError) return 'locked';
     if (err instanceof VaultEvictedError) return 'evicted';
+    if (err instanceof VaultIncompleteError) return 'incomplete';
     if (err instanceof VaultUnavailableError) return 'unavailable';
     return null;
 }

@@ -37,6 +37,19 @@ const messages = {
     'vaultUnavailable.wipeWarning':
         "Don't do this unless you have your recovery phrase or an encrypted backup file to hand.",
     'vaultUnavailable.wipeConfirm': 'Type WIPE to confirm',
+
+    // --- incomplete wallet data (meta without the vault) ---------
+    'vaultUnavailable.incomplete.title': 'This wallet’s data is incomplete',
+    'vaultUnavailable.incomplete.body':
+        "Part of the wallet stored on this device is missing, so it can't be opened, and a new wallet can't be set up over what is left. A reset that stopped part way leaves it like this.",
+    'vaultUnavailable.incomplete.nextStep':
+        'Reset this wallet, then restore it from your recovery phrase or an encrypted backup.',
+    'vaultUnavailable.incomplete.reset': 'Reset this wallet',
+    'vaultUnavailable.incomplete.region': 'Clear what is left of this wallet',
+    'vaultUnavailable.incomplete.note':
+        'This clears what is left of the wallet on this device so you can restore it from its recovery phrase or an encrypted backup. It changes nothing on the blockchain.',
+    'vaultUnavailable.incomplete.failed':
+        "Couldn't reset this wallet. Try again, or contact support before clearing anything else.",
 };
 
 addEnglish(messages);

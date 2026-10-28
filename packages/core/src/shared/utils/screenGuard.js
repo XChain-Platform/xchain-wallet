@@ -19,8 +19,10 @@
 // that gets sold, stolen, or repaired.
 //
 // So it goes on for: the recovery phrase, private-key export,
-// mnemonic/private-key entry, and the unlock screen. It stays OFF
-// everywhere else, because:
+// mnemonic/private-key entry, the unlock screen, and every password or
+// passphrase field (ui/Input holds it for each one it renders, and
+// MnemonicGrid for each phrase it shows). It stays OFF everywhere else,
+// because:
 //
 //   - screenshotting your own receive address QR is ordinary wallet use,
 //     and users do it constantly;

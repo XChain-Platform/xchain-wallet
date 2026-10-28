@@ -41,7 +41,7 @@ import { SDKRegistry } from '../../core/src/sdk/SDKRegistry.js';
 import { isDevMockAddress, mockDeriveAddress } from '../../core/src/sdk/devMockAddresses.js';
 import { SignerPool } from '../../core/src/signers/SignerPool.js';
 import { Vault } from '../../core/src/storage/Vault.js';
-import { VaultEvictedError } from '../../core/src/storage/backend.js';
+import { VaultEvictedError, VaultIncompleteError } from '../../core/src/storage/backend.js';
 import { configureFiatRateSource } from '../../core/src/flows/priceLookup.js';
 import { PassphraseMismatchError } from '../../core/src/flows/unlockWallet.js';
 import { NotificationService } from '../../core/src/notifications/NotificationService.js';
@@ -1187,6 +1187,14 @@ export async function getSessionStatus() {
             // factual no-wallet answer rather than inventing an eviction.
         }
         if (meta && meta.kdfParams) throw new VaultEvictedError();
+    }
+    if (blob === null && usingNativeVault()) {
+        // On a phone the blob and the meta both live in the shell's vault,
+        // which only the wallet writes, and the wipe clears them one call at
+        // a time. Meta left behind with no blob is that wipe stopped part
+        // way: onboarding would refuse every create and import over it, so
+        // the incomplete-wallet screen offers the reset that finishes it.
+        if (await createMetaBackend().load()) throw new VaultIncompleteError();
     }
     const hasWallet = blob !== null;
     const hasSession = host !== null;
