@@ -195,7 +195,7 @@ describe('submitFailureMessage says what actually happened', () => {
         const { BROADCAST_FAILED_PERMANENT_NAME } =
             await import('../../../packages/core/src/flows/broadcastPermanence.js');
 
-        const err = { name: BROADCAST_FAILED_PERMANENT_NAME, message: 'bad-txns-inputs-missingorspent' };
+        const err = { name: BROADCAST_FAILED_PERMANENT_NAME, message: 'dust' };
         const msg = submitFailureMessage(err, { fallback: "Couldn't mint. The network rejected this transaction." });
         expect(msg).not.toBe(SIGNED_NOT_BROADCAST_MESSAGE);
         expect(msg).toBe("Couldn't mint. The network rejected this transaction.");

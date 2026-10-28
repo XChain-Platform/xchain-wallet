@@ -55,6 +55,7 @@ import { checkPasteIntegrity } from '../utils/pasteIntegrity.js';
 import { humanizeError } from '../utils/humanizeError.js';
 import {
     SIGNED_NOT_BROADCAST_TITLE,
+    isSpentCoinsRefusal,
     submitFailureMessage,
 } from '../utils/submitFailureMessage.js';
 import { t } from '../../i18n/index.js';
@@ -1758,6 +1759,13 @@ export function Send({ walletId, accountId, onBack, prefill = null, onDone, onCh
     // renders inside `<BalanceChanges>` between the headline and details.
     // Fetch failure is non-blocking; the section renders muted with a
     // "(preview unavailable)" line and the user can still sign.
+    // Bumped when a send is refused over coins another send took, so the
+    // balance line and Max read the address again instead of offering them.
+    const [balanceReread, setBalanceReread] = useState(0);
+    const sendFailureCopy = useCallback((err, opts) => {
+        if (isSpentCoinsRefusal(err)) setBalanceReread((n) => n + 1);
+        return submitFailureMessage(err, opts);
+    }, []);
     const [previewBalances, setPreviewBalances] = useState(
         /** @type {{ loading: boolean, error: string | null, sdkShape: any | null }} */
         ({ loading: false, error: null, sdkShape: null }),
@@ -1802,7 +1810,7 @@ export function Send({ walletId, accountId, onBack, prefill = null, onDone, onCh
                 });
             });
         return () => { cancelled = true; };
-    }, [stage, chainId, fromAddress, messaging, isDemo, addressesByChain, networkOffline, walletId, accountId, settings?.activeNetwork]);
+    }, [stage, chainId, fromAddress, messaging, isDemo, addressesByChain, networkOffline, walletId, accountId, settings?.activeNetwork, balanceReread]);
 
     // Set once the first balance check settles; see the loading gate below.
     const balanceGateSettledRef = useRef(false);
@@ -2408,6 +2416,14 @@ export function Send({ walletId, accountId, onBack, prefill = null, onDone, onCh
             let maxSats = balanceSats;
             const quoted = await quoteMaxSats();
             if (!mountedRef.current || requestId !== maxRequestRef.current) return;
+            if (quoted?.coinsHeld) {
+                setAmount('');
+                setFiatAmount('');
+                setMaxUnavailable(true);
+                setMaxNote(t('send.max.coinsHeld'));
+                setMaxBusy(false);
+                return;
+            }
             if (quoted != null) {
                 maxSats = quoted.maxSats;
             } else if (feeEstimate) {
@@ -2914,7 +2930,7 @@ export function Send({ walletId, accountId, onBack, prefill = null, onDone, onCh
                 setSubmitError(null);
                 setSubmitErrorCause(null);
             } else {
-                setSubmitError(submitFailureMessage(err, {
+                setSubmitError(sendFailureCopy(err, {
                     verb: 'send',
                     coinTicker: nativeTickerFor(chainId ? chainRegistry.get(chainId) : null) || undefined,
                 }));
@@ -3039,7 +3055,7 @@ export function Send({ walletId, accountId, onBack, prefill = null, onDone, onCh
                     haptic.error();
                     return;
                 }
-                const message = submitFailureMessage(err, { verb: 'send', coinTicker: coinTicker || undefined });
+                const message = sendFailureCopy(err, { verb: 'send', coinTicker: coinTicker || undefined });
                 setSubmitError(message);
                 setSubmitErrorCause(humanizeError(err, 'send').cause);
             }

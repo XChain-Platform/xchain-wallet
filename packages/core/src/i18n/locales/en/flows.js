@@ -78,6 +78,10 @@ const messages = {
         'Large amount ({amount} sats). Confirm both path and address on your device.',
 
     'flows.pasteIntegrity.changed': 'Clipboard contents changed between paste and re-read.',
+
+    'flows.submit.nothingSigned': 'Nothing was signed.',
+    'flows.submit.spendConflict':
+        'One of the coins this transaction spends was already used by another transaction. Nothing was sent.',
 };
 
 addEnglish(messages);

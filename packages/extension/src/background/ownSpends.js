@@ -21,8 +21,15 @@
 // and again from a broadcast, and a send whose inputs another claim holds is
 // refused before anything is signed. A send that ends unbroadcast drops its
 // claim. With a store the claims outlive a restart of the extension worker.
+//
+// A send that is signed but waiting in the broadcast queue keeps its coins
+// until it goes out, is discarded, or is refused for good. The queue itself is
+// the record of those coins (it outlives a browser restart, which session
+// storage does not), so the caller passes the queued outpoints to each claim,
+// and a queued send that does go out holds its coins from then on.
 
 import { flows } from '@xchain-wallet/core';
+import { parseRawTx } from '@xchain-wallet/core/signers/verifySignedTx.js';
 
 // Long enough to outlast any review built before the other send went out; a
 // confirmed spend leaves the tracker anyway, so later builds never see it.
@@ -45,6 +52,22 @@ export function psbtOutpoints(sdk, psbtHex) {
     return (Array.isArray(inputs) ? inputs : [])
         .filter((i) => i && i.prevTxHash && Number.isInteger(Number(i.prevTxIndex)))
         .map((i) => ({ txid: String(i.prevTxHash), vout: Number(i.prevTxIndex) }));
+}
+
+/**
+ * The outpoints a signed transaction spends. Empty for bytes that do not parse,
+ * which then hold nothing here and fail on their own at broadcast.
+ *
+ * @param {unknown} txHex
+ * @returns {Array<{ txid: string, vout: number }>}
+ */
+export function rawTxOutpoints(txHex) {
+    if (typeof txHex !== 'string' || !txHex) return [];
+    try {
+        return parseRawTx(txHex).inputs.map((i) => ({ txid: i.prevTxHash, vout: i.prevTxIndex }));
+    } catch {
+        return [];
+    }
 }
 
 /**
@@ -78,14 +101,19 @@ export function createOwnSpendLedger({ store, now = () => Date.now(), holdMs = O
          * with no await between them, so two surfaces approving at once cannot
          * both pass.
          *
+         * @param {string} chainId
+         * @param {Array<{ txid: string, vout: number }>} outpoints
+         * @param {{ queued?: Array<{ txid: string, vout: number }> }} [opts]
+         *   outpoints of signed transactions waiting in the broadcast queue
          * @returns {Promise<string>} the claim id, '' when there was nothing to claim
          */
-        async claim(chainId, outpoints) {
+        async claim(chainId, outpoints, { queued = [] } = {}) {
             await hydrated;
             if (!Array.isArray(outpoints) || outpoints.length === 0) return '';
             const at = now();
             held = held.filter((e) => e.until > at);
             const keys = new Set(held.map((e) => e.key));
+            for (const o of Array.isArray(queued) ? queued : []) keys.add(keyOf(chainId, o.txid, o.vout));
             const spent = outpoints.filter((o) => keys.has(keyOf(chainId, o.txid, o.vout)));
             if (spent.length > 0) {
                 const err = new Error(flows.livenessMessage({ spent }));
@@ -104,6 +132,29 @@ export function createOwnSpendLedger({ store, now = () => Date.now(), holdMs = O
             const until = now() + holdMs;
             for (const e of held) if (e.claim === claim) e.until = until;
             await persist();
+        },
+        /** A queued send went out: hold its inputs for holdMs from now. */
+        async hold(chainId, outpoints) {
+            await hydrated;
+            if (!Array.isArray(outpoints) || outpoints.length === 0) return;
+            const at = now();
+            nextClaim += 1;
+            const claim = `${at}-${nextClaim}`;
+            held = held.filter((e) => e.until > at);
+            for (const o of outpoints) held.push({ key: keyOf(chainId, o.txid, o.vout), claim, until: at + holdMs });
+            await persist();
+        },
+        /** The coins claims on this chain hold now. */
+        async heldOutpoints(chainId) {
+            await hydrated;
+            const at = now();
+            const prefix = `${chainId}|`;
+            return held
+                .filter((e) => e.until > at && e.key.startsWith(prefix))
+                .map((e) => {
+                    const [txid, vout] = e.key.slice(prefix.length).split(':');
+                    return { txid, vout: Number(vout) };
+                });
         },
         /** The send ended without a broadcast: free its inputs. */
         async release(claim) {

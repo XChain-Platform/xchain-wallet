@@ -13,8 +13,9 @@
 // A post-sign broadcast failure splits two ways:
 //
 //   PERMANENT - the signed tx can NEVER confirm as-is: its inputs are
-//     gone (spent/missing), or a conflicting tx has already confirmed.
-//     Re-signing is pointless; the modal must offer a fresh re-compose,
+//     gone (spent/missing), another transaction in the mempool spends
+//     them and this one cannot replace it, or a conflicting tx has already
+//     confirmed. Re-signing is pointless; the modal must offer a fresh re-compose,
 //     and the PendingTx is marked `failed` (never queued).
 //
 //   TRANSIENT - the node/connection is momentarily unavailable
@@ -61,22 +62,36 @@ function orderedSubstringMatcher(first, second, { secondStartsWord = false } = {
     };
 }
 
-// Inputs spent or missing, or a confirmed conflicting tx: the signed tx
-// is dead and only a re-compose (new inputs) can succeed.
-const PERMANENT_PATTERNS = [
+// The node refused the transaction because a coin it spends is already spent,
+// missing, or spent by another transaction in its mempool (with no replacement
+// allowed or too low a fee to replace it). These bytes can never be sent as
+// they are; the remedy is a new transaction over coins that are still free.
+const SPEND_CONFLICT_PATTERNS = [
     /missing\s*or\s*spent/i,
     /missingorspent/i,
     /bad-txns-inputs-missingorspent/i,
     /bad-txns-inputs-spent/i,
+    /bad-txns-spends-conflicting-tx/i,
     /missing\s+inputs/i,
+    /already\s+spent/i,
+    /txn-mempool-conflict/i,
+    /rejecting\s+replacement/i,
+    orderedSubstringMatcher('insufficient fee', 'replacement'),
+    /replacement-adds-unconfirmed/i,
+    /too\s+many\s+potential\s+replacements/i,
+];
+
+// Inputs spent or missing, a conflict in the mempool, or a confirmed
+// conflicting tx: the signed tx is dead and only a re-compose (new inputs)
+// can succeed.
+const PERMANENT_PATTERNS = [
+    ...SPEND_CONFLICT_PATTERNS,
     // These two mean THIS txid reached a node (outputs already in the UTXO set, or
     // in its mempool); submitWithSigner and the queue lanes check isAlreadyOnNetworkRejection first.
     /txn-already-known/i,
     /txn-already-in-mempool/i,
     /already\s+in\s+(?:the\s+)?block\s*chain/i,
-    // A conflict with an UNconfirmed tx may still clear, so it stays transient.
     orderedSubstringMatcher('conflict', 'confirmed', { secondStartsWord: true }),
-    /already\s+spent/i,
     // A dust output is a property of the signed BYTES, not of the node's mood: every node
     // on every relay policy rejects the same transaction, so re-queuing it retries forever.
     // Seen live on a DIVIDEND whose 2-sat protocol-fee output was below Bitcoin's dust limit,
@@ -98,7 +113,6 @@ const TRANSIENT_PATTERNS = [
     /too-long-mempool-chain/i, orderedSubstringMatcher('mempool', 'full'), /mempool min fee/i,
     /min relay fee/i, /insufficient priority/i, /rate.?limit/i,
     /502|503|504/,
-    /txn-mempool-conflict/i,        // a competing UNconfirmed tx; may clear
 ];
 
 // Permanence has to survive the messaging boundary, and that envelope
@@ -138,6 +152,20 @@ export function classifyBroadcastFailure(err) {
     for (const re of TRANSIENT_PATTERNS) if (re.test(reason)) return 'transient';
     // Ambiguous: keep the signed tx recoverable (see header rationale).
     return 'transient';
+}
+
+/**
+ * Report whether the node refused a transaction because a coin it spends was
+ * already spent, or is spent by another transaction it holds. Reads the reject
+ * text, so it holds for an error that crossed the messaging boundary with only
+ * its message.
+ *
+ * @param {unknown} err
+ * @returns {boolean}
+ */
+export function isSpendConflictRejection(err) {
+    const reason = extractReason(err);
+    return SPEND_CONFLICT_PATTERNS.some((re) => re.test(reason));
 }
 
 /**

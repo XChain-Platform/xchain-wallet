@@ -18,6 +18,8 @@ const messages = {
     'send.demo.blocked': "Demo wallets can't move funds. Create a real wallet to send.",
     'send.demo.createRealWallet': 'Create a real wallet',
     'send.empty.title': 'Nothing to send yet',
+    'send.max.coinsHeld':
+        'Every coin at this address is held by another send from this wallet that has not gone out yet, so Max cannot create a payment.',
     'send.empty.body': 'Receive coins or tokens on this network before creating a payment.',
     'send.review': 'Review and send',
     'send.backToEdit': 'Edit payment',

@@ -369,12 +369,18 @@ describe('submitFailureMessage adopts the encoder mapper', () => {
     });
 
     it('does not relabel a permanent broadcast failure that quotes an encoder message', () => {
-        // The signed transaction is dead; the form's own re-compose copy must win,
-        // and it must not be reworded as "nothing was signed or sent".
+        // The signed transaction is dead because its coins are spent: the sentence
+        // says so and that nothing was sent, never that nothing was signed, and the
+        // encoder mapper does not reword it as a build failure.
         const dead = new Error('broadcast failed: Encoder RPC error: bad-txns-inputs-missingorspent');
         dead.name = BROADCAST_FAILED_PERMANENT_NAME;
         const copy = submitFailureMessage(dead, { coinTicker: 'BTC', fallback: 'Send failed.' });
-        expect(copy).toBe('Send failed.');
+        expect(copy).toBe('One of the coins this transaction spends was already used by another transaction. Nothing was sent.');
+        expect(copy).not.toMatch(/signed/i);
+
+        const dust = new Error('broadcast failed: Encoder RPC error: dust');
+        dust.name = BROADCAST_FAILED_PERMANENT_NAME;
+        expect(submitFailureMessage(dust, { coinTicker: 'BTC', fallback: 'Send failed.' })).toBe('Send failed.');
     });
 
     it('still falls through to the caller copy for an unrelated error', () => {

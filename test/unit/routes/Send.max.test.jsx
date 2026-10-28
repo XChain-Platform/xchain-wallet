@@ -124,6 +124,24 @@ describe('Send Max', () => {
         expect(messaging.quoteMaxSendable).not.toHaveBeenCalled();
     });
 
+    it('keeps the amount blank and says why when other sends hold every coin', async () => {
+        mount({
+            quote: vi.fn().mockResolvedValue({
+                maxSats: '0',
+                feeSats: '0',
+                inputSats: '0',
+                otherOutputSats: '0',
+                source: 'encoder-quote',
+                coinsHeld: true,
+            }),
+        });
+        await prepareNativeMax();
+
+        await screen.findByText(/held by another send from this wallet that has not gone out yet/);
+        expect(screen.getByLabelText(/^Amount \(/)).toHaveValue('');
+        expect(screen.getByRole('button', { name: /^Send$/ })).toBeDisabled();
+    });
+
     it('keeps the amount blank and shows a plain note when Max is below dust', async () => {
         mount({
             nativeQuantity: '1000',

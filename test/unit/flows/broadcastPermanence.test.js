@@ -7,6 +7,7 @@ import { describe, it, expect } from 'vitest';
 import {
     classifyBroadcastFailure,
     isAlreadyOnNetworkRejection,
+    isSpendConflictRejection,
     broadcastFailureKindFromError,
     BROADCAST_FAILED_PERMANENT_NAME,
     BROADCAST_FAILED_TRANSIENT_NAME,
@@ -15,6 +16,7 @@ import {
     BROADCAST_FAILED_PERMANENT_NAME as EXPORTED_PERMANENT_NAME,
     BROADCAST_FAILED_TRANSIENT_NAME as EXPORTED_TRANSIENT_NAME,
 } from '../../../packages/core/src/flows/index.js';
+import { submitFailureMessage } from '../../../packages/core/src/shared/utils/submitFailureMessage.js';
 
 it('exports broadcast failure names through the flows entry point', () => {
     expect([EXPORTED_PERMANENT_NAME, EXPORTED_TRANSIENT_NAME]).toEqual([
@@ -56,20 +58,35 @@ describe('classifyBroadcastFailure', () => {
     });
 
     it('reads a nested RPC response error', () => {
-        const err = { cause: { response: { data: { error: 'txn-mempool-conflict' } } } };
+        const err = { cause: { response: { data: { error: 'mempool full' } } } };
         expect(classifyBroadcastFailure(err)).toBe('transient');
+        const conflict = { cause: { response: { data: { error: 'txn-mempool-conflict' } } } };
+        expect(classifyBroadcastFailure(conflict)).toBe('permanent');
     });
 
-    it('keeps a conflict with an unconfirmed tx TRANSIENT and a confirmed conflict PERMANENT', () => {
-        expect(classifyBroadcastFailure(new Error('txn-mempool-conflict: conflicts with unconfirmed tx'))).toBe('transient');
+    it('refuses for good a spend of coins another transaction holds, in the mempool or confirmed', () => {
+        expect(classifyBroadcastFailure(new Error('txn-mempool-conflict: conflicts with unconfirmed tx'))).toBe('permanent');
         expect(classifyBroadcastFailure({
             message: 'broadcast failed (phase1): Encoder RPC error',
             cause: { response: { data: { error: 'txn-mempool-conflict (conflicts with an unconfirmed transaction)' } } },
-        })).toBe('transient');
+        })).toBe('permanent');
+        expect(classifyBroadcastFailure(new Error(
+            'insufficient fee, rejecting replacement 4f2a; new feerate 2.00 sat/vB <= old feerate',
+        ))).toBe('permanent');
+        expect(classifyBroadcastFailure(new Error('replacement-adds-unconfirmed'))).toBe('permanent');
+        expect(classifyBroadcastFailure(new Error('min relay fee not met'))).toBe('transient');
+        expect(classifyBroadcastFailure(new Error('mempool min fee not met'))).toBe('transient');
         expect(classifyBroadcastFailure(new Error('conflicting transaction already confirmed'))).toBe('permanent');
         expect(classifyBroadcastFailure(new Error('conflict-confirmed'))).toBe('permanent');
         expect(classifyBroadcastFailure(new Error('conflict with unconfirmed tx; conflicting tx is now confirmed'))).toBe('permanent');
         expect(classifyBroadcastFailure('conflict '.repeat(20000) + 'unconfirmed '.repeat(20000))).toBe('transient');
+    });
+
+    it('names a refusal over spent or held coins and nothing else', () => {
+        expect(isSpendConflictRejection(new Error('broadcast failed (phase1): txn-mempool-conflict'))).toBe(true);
+        expect(isSpendConflictRejection(new Error('broadcast failed (phase1): bad-txns-inputs-missingorspent'))).toBe(true);
+        expect(isSpendConflictRejection(new Error('broadcast failed (phase1): dust'))).toBe(false);
+        expect(isSpendConflictRejection(new Error('broadcast failed (phase1): ECONNREFUSED'))).toBe(false);
     });
 
     it('prefers an explicit structured rejectReason', () => {
@@ -156,5 +173,26 @@ describe('broadcastFailureKindFromError', () => {
         expect(broadcastFailureKindFromError(new Error('nope'))).toBe(null);
         expect(broadcastFailureKindFromError({ name: 'InvalidPasswordError' })).toBe(null);
         expect(broadcastFailureKindFromError(null)).toBe(null);
+    });
+});
+
+describe('the sentence for a send the node refused over spent coins', () => {
+    const SENTENCE = 'One of the coins this transaction spends was already used by another transaction. Nothing was sent.';
+    const refused = (reason, phase = 'phase1') => ({
+        name: BROADCAST_FAILED_PERMANENT_NAME,
+        message: `broadcast failed (${phase}): ${reason}`,
+    });
+
+    it('says the coins were used and nothing was sent, not that the network was unreachable', () => {
+        expect(submitFailureMessage(refused('txn-mempool-conflict'), { verb: 'send' })).toBe(SENTENCE);
+        expect(submitFailureMessage(
+            refused('insufficient fee, rejecting replacement 4f2a; new feerate 2.00 sat/vB <= old feerate'),
+            { verb: 'send' },
+        )).toBe(SENTENCE);
+        expect(submitFailureMessage(refused('bad-txns-inputs-missingorspent'), { verb: 'send' })).toBe(SENTENCE);
+    });
+
+    it('keeps its own copy for a refused second phase, whose commit did go out', () => {
+        expect(submitFailureMessage(refused('txn-mempool-conflict', 'phase2'), { verb: 'send' })).not.toBe(SENTENCE);
     });
 });

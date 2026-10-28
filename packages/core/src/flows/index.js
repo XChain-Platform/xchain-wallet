@@ -669,6 +669,7 @@ export {
 export {
     classifyBroadcastFailure,
     isAlreadyOnNetworkRejection,
+    isSpendConflictRejection,
     BROADCAST_FAILED_PERMANENT_NAME,
     BROADCAST_FAILED_TRANSIENT_NAME,
     QUEUED_BROADCAST_IN_FLIGHT_NAME,

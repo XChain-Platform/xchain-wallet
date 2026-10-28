@@ -50,7 +50,7 @@ import { encoderErrorMessage } from '../../sdk/encoderErrors.js';
 import { explorerErrorMessage } from '../../sdk/explorerErrors.js';
 import { knownSdkErrorMessage, unknownSdkErrorCode } from '../../sdk/sdkErrorMessages.js';
 import { validationErrorMessage } from '../../sdk/validationErrors.js';
-import { broadcastFailureKindFromError } from '../../flows/broadcastPermanence.js';
+import { broadcastFailureKindFromError, isSpendConflictRejection } from '../../flows/broadcastPermanence.js';
 import { OFFER_LIFECYCLE_REFUSAL } from '../../flows/marketExpiry.js';
 import { INPUTS_ALREADY_SPENT_NAME } from '../../flows/inputLiveness.js';
 import { humanizeError } from './humanizeError.js';
@@ -59,6 +59,8 @@ import { CHUNK_LANE_OPENER_RE } from './chunkLaneCopy.js';
 import { isShowableRefusal, protocolRefusalReason, userFacingMessage } from './userFacingMessage.js';
 import { panicRefusalMessage } from '../safety/panicNotice.js';
 import { SIGNATURE_MISMATCH_MESSAGE } from '../../signers/verifyInputSignatures.js';
+import { t } from '../../i18n/index.js';
+import '../../i18n/locales/en/flows.js';
 
 const NEXT_STEP_RE = /\b(?:add|check|choose|enter|give|reconnect|report|retry(?:ing)?|review|try|update|wait)\b/i;
 const SIGNER_CANCELLED_RE = /\b(?:user (?:cancelled|canceled)|(?:cancelled|canceled) (?:by the user|on (?:the )?device)|user rejected on (?:the )?device)\b/i;
@@ -253,6 +255,28 @@ export function chainGateErrorMessage(err) {
     return null;
 }
 
+function isSecondPhaseBroadcast(err) {
+    const message = err && typeof err === 'object' ? String(/** @type {any} */ (err).message || '') : '';
+    return /^broadcast failed \(phase2\)/i.test(message.trim());
+}
+
+function isNodeSpendConflict(err) {
+    return broadcastFailureKindFromError(err) === 'permanent' && isSpendConflictRejection(err)
+        && !isSecondPhaseBroadcast(err);
+}
+
+/**
+ * A send refused because a coin it spends is taken: another send from this
+ * wallet holds it (refused before signing), or the node holds a transaction
+ * that spends it. Either way the balance the form showed is out of date.
+ *
+ * @param {unknown} err
+ * @returns {boolean}
+ */
+export function isSpentCoinsRefusal(err) {
+    return /** @type {any} */ (err)?.name === INPUTS_ALREADY_SPENT_NAME || isNodeSpendConflict(err);
+}
+
 const INTERRUPTED_CODES = new Set(['RUNTIME_DISCONNECTED', 'RUNTIME_NO_RESPONSE']);
 
 export const MAINNET_PRELAUNCH_MESSAGE =
@@ -371,10 +395,16 @@ export function submitFailureMessage(
     // refused this one before signing. The sentence is the wallet's own and
     // names the way forward; the tail would read it as wire text.
     if (/** @type {any} */ (err)?.name === INPUTS_ALREADY_SPENT_NAME) {
-        return userFacingMessage(`${String(/** @type {any} */ (err).message || '').trim()} Nothing was signed.`, generic);
+        const nothingSigned = t('flows.submit.nothingSigned');
+        return userFacingMessage(`${String(/** @type {any} */ (err).message || '').trim()} ${nothingSigned}`, generic);
     }
-    if (isCommitFeeTooLowBroadcast(err)) return NETWORK_FEE_TOO_LOW_MESSAGE;
     const broadcastKind = broadcastFailureKindFromError(err);
+    // The node refused the signed transaction because a coin it spends is spent
+    // or held by another transaction. Nothing left the wallet, and the bytes can
+    // never go out, so the sentence says that rather than quoting the node. A
+    // refused second phase follows a commit that did go out, so it keeps its own copy.
+    if (isNodeSpendConflict(err)) return t('flows.submit.spendConflict');
+    if (isCommitFeeTooLowBroadcast(err)) return NETWORK_FEE_TOO_LOW_MESSAGE;
     if (broadcastKind === 'transient') return SIGNED_NOT_BROADCAST_MESSAGE;
     // Encoder codes are checked only once the error is known NOT to be a
     // broadcast failure: a BroadcastFailedError quotes the node/encoder reason

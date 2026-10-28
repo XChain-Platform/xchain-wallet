@@ -1210,7 +1210,9 @@ describe('Send flow with mocked messaging', () => {
         await approveWithPassword(messaging);
 
         const alert = await screen.findByRole('alert');
-        expect(alert).toHaveTextContent("Couldn't send. The network rejected this transaction.");
+        expect(alert).toHaveTextContent(
+            'One of the coins this transaction spends was already used by another transaction. Nothing was sent.',
+        );
         expect(alert).not.toHaveTextContent('bad-txns-inputs-missingorspent');
         expect(sdk.signPsbt).toHaveBeenCalledTimes(1);
         expect(sdk.signPsbt).toHaveBeenCalledWith(expect.objectContaining({ psbtHex: PSBT }));
