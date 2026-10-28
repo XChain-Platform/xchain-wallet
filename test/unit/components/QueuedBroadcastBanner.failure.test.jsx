@@ -43,6 +43,7 @@ vi.mock('../../../packages/core/src/shared/components/ToastHost.jsx', () => ({
     useToast: () => toastApi,
 }));
 
+const { isAutoLockHeld } = await import('../../../packages/core/src/shared/hooks/autoLockGuard.js');
 const { QueuedBroadcastBanner, queuedBroadcastFailure } = await import(
     '../../../packages/core/src/shared/components/QueuedBroadcastBanner.jsx');
 
@@ -76,6 +77,19 @@ async function renderWith(rows) {
 function pressBroadcast(index = 0) {
     fireEvent.click(screen.getAllByRole('button', { name: /send now/i })[index]);
 }
+
+describe('QueuedBroadcastBanner and auto-lock', () => {
+    it('holds auto-lock while a queued transaction is sent', async () => {
+        await renderWith([entry('a', 'Send 1 XCP')]);
+        let finish;
+        broadcastImpl = () => new Promise((resolve) => { finish = resolve; });
+        pressBroadcast();
+        await waitFor(() => expect(isAutoLockHeld()).toBe(true));
+        queue = [];
+        await act(async () => { finish(undefined); });
+        await waitFor(() => expect(isAutoLockHeld()).toBe(false));
+    });
+});
 
 describe('QueuedBroadcastBanner after a failed broadcast', () => {
     it('drops a permanently rejected row at once and says it was removed', async () => {

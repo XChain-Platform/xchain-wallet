@@ -1046,6 +1046,7 @@ function AppInner({ canOpenInTab, titleEnabled }) {
         sessionState: status.state,
         activeWalletId,
         onLocked: refresh,
+        lock: handleLock,
     });
 
     switch (status.state) {

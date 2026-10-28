@@ -12,6 +12,7 @@ const boot = vi.hoisted(() => ({
     installFiatRateSource: vi.fn(),
     setShellCapabilities: vi.fn(),
     homeMounts: 0,
+    autoLockOpts: null,
 }));
 
 vi.mock('../../../packages/desktop/renderer/errorCapture.js', () => ({
@@ -41,7 +42,10 @@ vi.mock('@xchain-wallet/core/shared/hooks/useSettings.js', () => ({
     }),
 }));
 vi.mock('@xchain-wallet/core/shared/hooks/useAutoLockPolicy.js', () => ({
-    useAutoLockPolicy: () => ({ armed: false, idleMs: 0, minutes: 0, checkNow: vi.fn() }),
+    useAutoLockPolicy: (opts) => {
+        boot.autoLockOpts = opts;
+        return { armed: false, idleMs: 0, minutes: 0, checkNow: vi.fn() };
+    },
 }));
 vi.mock('@xchain-wallet/core/shared/hooks/useLastView.js', () => ({ useLastView: () => {} }));
 vi.mock('@xchain-wallet/core/shared/hooks/useWalletMode.js', () => ({
@@ -204,6 +208,24 @@ describe('desktop renderer shell', () => {
 
         fireEvent.click(screen.getByRole('button', { name: 'Lock' }));
         expect(await screen.findByRole('heading', { name: 'Unlock wallet' })).toBeInTheDocument();
+        expect(bridge.sendMessage).toHaveBeenCalledWith({ type: 'wallet.lock', request: undefined });
+    });
+
+    it('leaves the unlocked screen at once when auto-lock fires, before main answers', async () => {
+        const bridge = createPreloadBridge();
+        window.xchainWalletBridge = bridge;
+        render(<App />);
+        await screen.findByRole('heading', { name: 'Unlock wallet' });
+        fireEvent.change(screen.getByLabelText('Password'), { target: { value: 'correct horse' } });
+        fireEvent.click(screen.getByRole('button', { name: 'Unlock Wallet' }));
+        await screen.findByRole('heading', { name: 'Home screen' });
+
+        const hung = bridge.sendMessage.getMockImplementation();
+        bridge.sendMessage.mockImplementation((msg) => (msg.type === 'wallet.lock' ? new Promise(() => {}) : hung(msg)));
+        await act(async () => { void boot.autoLockOpts.lock(); });
+
+        expect(screen.getByRole('heading', { name: 'Unlock wallet' })).toBeInTheDocument();
+        expect(screen.queryByRole('heading', { name: 'Home screen' })).toBeNull();
         expect(bridge.sendMessage).toHaveBeenCalledWith({ type: 'wallet.lock', request: undefined });
     });
 

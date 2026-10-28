@@ -17,6 +17,7 @@ import { render, act as domAct, fireEvent, cleanup } from '@testing-library/reac
 import React from 'react';
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
 import { PsbtSignForm } from '../../../packages/core/src/shared/routes/PsbtSignForm.jsx';
+import { isAutoLockHeld } from '../../../packages/core/src/shared/hooks/autoLockGuard.js';
 
 const CHAIN = 'bitcoin-mainnet';
 const OWN = 'bc1qexampleexampleexampleexampleexampleex';
@@ -255,6 +256,36 @@ describe('PSBT sign screen: a broadcast the host queued', () => {
         const utils = await queuedWith(true);
         expect(alertsText(utils)).not.toMatch(/could not be saved to the queue/);
         expect(utils.container.textContent).toMatch(/saved in the\s+queued-transactions banner/);
+    });
+});
+
+describe('PSBT sign screen: auto-lock waits for the request in flight', () => {
+    it('holds auto-lock while the hardware device signs', async () => {
+        let finish;
+        const utils = await mountAndPaste({
+            signPsbtUserInitiatedHw: () => new Promise((resolve) => { finish = resolve; }),
+        });
+        await domAct(async () => {
+            fireEvent.click(findButton(utils, /Sign on (Ledger|Trezor)|Sign transaction/i));
+            await drainMicrotasks();
+        });
+        expect(isAutoLockHeld()).toBe(true);
+        await domAct(async () => {
+            finish({ signedPsbtHex: '', txHex: 'cc22', txid: 'dd33' });
+            await drainMicrotasks();
+        });
+        expect(isAutoLockHeld()).toBe(false);
+    });
+
+    it('holds auto-lock while the signed transaction broadcasts', async () => {
+        let fail;
+        await broadcastWith(() => new Promise((_resolve, reject) => { fail = reject; }));
+        expect(isAutoLockHeld()).toBe(true);
+        await domAct(async () => {
+            fail(new Error('node unreachable'));
+            await drainMicrotasks();
+        });
+        expect(isAutoLockHeld()).toBe(false);
     });
 });
 

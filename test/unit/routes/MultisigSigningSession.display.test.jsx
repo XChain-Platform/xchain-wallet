@@ -26,6 +26,7 @@ vi.mock('../../../packages/core/src/shared/useMessaging.js', () => ({
     screenVariantFor: () => 'full',
 }));
 
+const { isAutoLockHeld } = await import('../../../packages/core/src/shared/hooks/autoLockGuard.js');
 const { MultisigSigningSession } = await import(
     '../../../packages/core/src/shared/routes/MultisigSigningSession.jsx');
 
@@ -278,6 +279,23 @@ describe('MultisigSigningSession broadcast readiness', () => {
 
         expect(messaging.getMultisigSigningSession).toHaveBeenCalledTimes(1);
         expect(messaging.listMultisigSigningSessions).toHaveBeenCalledTimes(1);
+    });
+
+    it('holds auto-lock until finalization settles', async () => {
+        const finalizeRequest = deferred();
+        messaging.finalizeMultisigSigningSession.mockReturnValue(finalizeRequest.promise);
+        await mountAndOpen(session({
+            status: 'ready-to-finalize',
+            signatures: [signature(PK_A), signature(PK_B)],
+        }));
+
+        fireEvent.click(screen.getByRole('button', { name: 'Finalize transaction' }));
+        expect(isAutoLockHeld()).toBe(true);
+        await act(async () => {
+            finalizeRequest.resolve(undefined);
+            await finalizeRequest.promise;
+        });
+        expect(isAutoLockHeld()).toBe(false);
     });
 
     it('marks a finalized transaction ready and hides contribution actions', async () => {

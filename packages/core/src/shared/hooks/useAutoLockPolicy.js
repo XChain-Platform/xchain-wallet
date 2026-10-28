@@ -77,15 +77,21 @@ export function resolveAutoLockMinutes(raw) {
  * @param {string | null | undefined} [opts.activeWalletId]
  * @param {(() => void) | undefined} [opts.onLocked] shell refresh, run after a
  *   successful lock so the view switches to the Locked screen.
+ * @param {(() => unknown) | undefined} [opts.lock] the shell's own Lock action.
+ *   Given, an idle lock runs it in place of `lockWallet` + `onLocked`, so the
+ *   unlocked screen and its transient route and prefill state go before the
+ *   host round-trip, exactly as they do when the user presses Lock.
  * @returns {{ armed: boolean, idleMs: number, minutes: number, checkNow: () => boolean }}
  */
-export function useAutoLockPolicy({ sessionState, activeWalletId, onLocked } = {}) {
+export function useAutoLockPolicy({ sessionState, activeWalletId, onLocked, lock: shellLock } = {}) {
     const { messaging, shell } = useMessaging();
     const { settings } = useSettings();
     const { showToast } = useToast();
 
     const onLockedRef = useRef(onLocked);
     onLockedRef.current = onLocked;
+    const shellLockRef = useRef(shellLock);
+    shellLockRef.current = shellLock;
     // Re-entrancy guard. A ref, not state: nothing renders from it, and
     // this hook sits above the whole shell tree where an extra render is
     // expensive.
@@ -95,6 +101,10 @@ export function useAutoLockPolicy({ sessionState, activeWalletId, onLocked } = {
         if (lockingRef.current) return;
         lockingRef.current = true;
         try {
+            if (typeof shellLockRef.current === 'function') {
+                await shellLockRef.current();
+                return;
+            }
             await messaging.lockWallet();
             onLockedRef.current?.();
         } catch {

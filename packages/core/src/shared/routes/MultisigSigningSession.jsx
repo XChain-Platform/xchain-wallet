@@ -13,6 +13,7 @@ import { Screen, PageHeader, Button, EmptyState, Input, ListPage, ListRow, Anima
 import { schemas, uri as uriLib } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { useWalletMode } from '../hooks/useWalletMode.js';
+import { withAutoLockHold } from '../hooks/autoLockGuard.js';
 import { userFacingMessage } from '../utils/userFacingMessage.js';
 import styles from './IssueTokenForm.module.css';
 
@@ -283,7 +284,7 @@ export function MultisigSigningSession({ walletId, onBack }) {
         setBusy(true);
         setError(null);
         try {
-            await messaging.finalizeMultisigSigningSession({ sessionId: active.id });
+            await withAutoLockHold(() => messaging.finalizeMultisigSigningSession({ sessionId: active.id }));
             await refreshAfterAction(active.id);
         } catch (err) {
             console.error('Multisig finalization failed:', err); // eslint-disable-line no-console
@@ -298,10 +299,10 @@ export function MultisigSigningSession({ walletId, onBack }) {
         setBusy(true);
         setError(null);
         try {
-            await messaging.finalizeMultisigSigningSession({
+            await withAutoLockHold(() => messaging.finalizeMultisigSigningSession({
                 sessionId: active.id,
                 broadcast: true,
-            });
+            }));
             await refreshAfterAction(active.id);
         } catch (err) {
             console.error('Multisig broadcast failed:', err); // eslint-disable-line no-console
@@ -446,10 +447,10 @@ export function MultisigSigningSession({ walletId, onBack }) {
         setError(null);
         setSignResult(null);
         try {
-            const result = await messaging.signMultisigLocally({
+            const result = await withAutoLockHold(() => messaging.signMultisigLocally({
                 sessionId: active.id,
                 password:  signPassword,
-            });
+            }));
             setSignResult(
                 `${contributionLabel(result?.contributionKind)} from ${shortPk(result?.pubkey || '')} added.`,
             );

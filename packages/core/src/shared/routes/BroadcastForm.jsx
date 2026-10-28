@@ -48,6 +48,7 @@ import { readFailureMessage } from '../utils/readFailureMessage.js';
 import { useSettings } from '../hooks/useSettings.js';
 import { explorerPageUrl } from '../utils/explorerLinks.js';
 import { useLongOperationStatus } from '../hooks/useLongOperationStatus.js';
+import { withAutoLockHold } from '../hooks/autoLockGuard.js';
 import { useTokenInfo } from '../hooks/useTokenInfo.js';
 import { tokenIssuerEligibility } from '../utils/tokenIssuerEligibility.js';
 
@@ -195,11 +196,11 @@ function RawTransactionBroadcast({
         onBusyChange(true);
         setError(null);
         try {
-            const response = await messaging.broadcastSignedTxRequest({
+            const response = await withAutoLockHold(() => messaging.broadcastSignedTxRequest({
                 walletId,
                 chainId,
                 txHex: preview.txHex,
-            });
+            }));
             setResult(response);
             setState('done');
         } catch (err) {

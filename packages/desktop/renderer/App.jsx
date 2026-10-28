@@ -862,6 +862,7 @@ function AppInner() {
         sessionState: status.state,
         activeWalletId,
         onLocked: refresh,
+        lock: handleLock,
     });
 
     switch (status.state) {

@@ -29,6 +29,7 @@ import { ChainBadge, StatusMessage, useReducedMotion } from '@xchain-wallet/core
 import { defaultRegistry } from '../../registry/index.js';
 import { useMessaging } from '../useMessaging.js';
 import { useReachability } from '../hooks/useReachability.js';
+import { withAutoLockHold } from '../hooks/autoLockGuard.js';
 import { useToast } from './ToastHost.jsx';
 import { broadcastFailureKindFromError } from '../../flows/broadcastPermanence.js';
 import styles from './QueuedBroadcastBanner.module.css';
@@ -174,7 +175,7 @@ export function QueuedBroadcastBanner({ walletId, intervalMs = 30_000 }) {
         setBusyKind('send');
         setError(null);
         try {
-            await messaging.broadcastQueuedRequest({ walletId, id });
+            await withAutoLockHold(() => messaging.broadcastQueuedRequest({ walletId, id }));
             if (!isCurrentAction(action)) return;
             const list = await refresh();
             if (!isCurrentAction(action)) return;

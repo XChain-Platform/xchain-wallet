@@ -1091,6 +1091,7 @@ function AppInner() {
         sessionState: status.state,
         activeWalletId,
         onLocked: refresh,
+        lock: handleLock,
     });
     // While the app is in the background the hook hides the page and keeps
     // the screen mounted; unmounting it would drop every typed form value.

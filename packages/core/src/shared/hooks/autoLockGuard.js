@@ -33,3 +33,21 @@ export function holdAutoLock() {
 export function isAutoLockHeld() {
     return activeOperations > 0;
 }
+
+/**
+ * Run one approved signing or broadcast request under the hold, so an idle
+ * deadline that passes while it is in flight waits for the request to settle
+ * instead of tearing the session down under it and dropping the outcome.
+ *
+ * @template T
+ * @param {() => Promise<T>} run
+ * @returns {Promise<T>}
+ */
+export async function withAutoLockHold(run) {
+    const release = holdAutoLock();
+    try {
+        return await run();
+    } finally {
+        release();
+    }
+}

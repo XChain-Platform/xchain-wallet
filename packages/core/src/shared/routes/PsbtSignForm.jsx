@@ -68,6 +68,7 @@ import { useSignerInfo } from '../hooks/useSignerInfo.js';
 import { useSettings } from '../hooks/useSettings.js';
 import { useWalletMode } from '../hooks/useWalletMode.js';
 import { useConfirmAction, isConfirmOpenPhase } from '../hooks/useConfirmAction.js';
+import { withAutoLockHold } from '../hooks/autoLockGuard.js';
 import {
     exactNetworkFeeSats,
     exactSats,
@@ -990,18 +991,19 @@ export function PsbtSignForm({ walletId, onBack, initialPsbt }) {
         }
         setBusy(true);
         try {
-            const result = isHwSource
-                ? await messaging.signPsbtUserInitiatedHw({
+            // A hardware device can wait on the user past the idle deadline.
+            const result = await withAutoLockHold(() => (isHwSource
+                ? messaging.signPsbtUserInitiatedHw({
                     walletId,
                     addressId,
                     psbtHex,
                 })
-                : await messaging.signPsbtUserInitiated({
+                : messaging.signPsbtUserInitiated({
                     walletId,
                     addressId,
                     password,
                     psbtHex,
-                });
+                })));
             setSignedPsbtHex(result?.signedPsbtHex || '');
             setSignedTxHex(typeof result?.txHex === 'string' ? result.txHex : '');
             setSignedTxid(typeof result?.txid === 'string' ? result.txid : '');
@@ -1158,13 +1160,13 @@ export function PsbtSignForm({ walletId, onBack, initialPsbt }) {
                                 setBroadcastError(null);
                                 setBroadcastUnsaved(false);
                                 try {
-                                    const res = await messaging.broadcastSignedTxRequest({
+                                    const res = await withAutoLockHold(() => messaging.broadcastSignedTxRequest({
                                         walletId,
                                         chainId,
                                         txHex: signedTxHex,
                                         txid: signedTxid || undefined,
                                         fromAddress: selectedAddress?.address || undefined,
-                                    });
+                                    }));
                                     if (res?.queued === true) {
                                         setBroadcastUnsaved(res?.persisted === false);
                                         setBroadcastState('queued');
