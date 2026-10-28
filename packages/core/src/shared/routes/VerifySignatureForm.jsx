@@ -17,11 +17,13 @@
 //
 // The address is a free-form input (the user may verify a signature
 // from a counterparty's address, not necessarily one of their own).
-// The form picks an SDK by chainId; the chain selector is populated
-// from the registry rather than the wallet, since verification has no
-// dependency on what the wallet knows.
+// The form picks an SDK by chainId. The chain selector offers the
+// registry's chains on the active network only: the host refuses an
+// address the chosen chain does not accept, and the picker names a chain
+// by its coin alone, so a chain from another network would read the same
+// and answer every check with "Invalid signature".
 
-import { useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import {
     Screen,
     Button,
@@ -35,6 +37,8 @@ import {
 import { registry as registryLib } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { useSupportedChains } from '../hooks/useSupportedChains.js';
+import { useSettings } from '../hooks/useSettings.js';
+import { getActiveNetwork } from '../../flows/effectiveNetwork.js';
 import { t } from '../../i18n/index.js';
 import '../../i18n/locales/en/send.js';
 import '../../i18n/locales/en/verifySignature.js';
@@ -71,8 +75,18 @@ export function VerifySignatureForm({ onBack }) {
     // Live registry read: a synced descriptor batch reaches this picker without
     // a restart (the boot sync usually lands after first mount).
     const supportedChains = useSupportedChains(chainRegistry);
-    const chainIds = useMemo(() => supportedChains.map((c) => c.id), [supportedChains]);
-    const [chainId, setChainId] = useState(chainIds[0] || null);
+    const { settings } = useSettings();
+    // No chain until settings answer: the default network is mainnet, and a
+    // submit in that window would check a testnet or regtest address there.
+    const activeNetwork = settings ? getActiveNetwork(settings) : null;
+    const chainIds = useMemo(() => (activeNetwork
+        ? supportedChains.filter((c) => c.networkKind === activeNetwork).map((c) => c.id)
+        : []), [supportedChains, activeNetwork]);
+    const [chainId, setChainId] = useState(/** @type {string | null} */ (null));
+    useEffect(() => {
+        if (chainId && chainIds.includes(chainId)) return;
+        setChainId(chainIds[0] || null);
+    }, [chainId, chainIds]);
     const [address, setAddress] = useState('');
     const [message, setMessage] = useState('');
     const [signature, setSignature] = useState('');

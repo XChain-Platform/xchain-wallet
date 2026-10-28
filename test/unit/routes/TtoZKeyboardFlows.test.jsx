@@ -146,8 +146,9 @@ describe('T through Z route keyboard flows', () => {
             },
         );
 
+        // The picker fills once settings name the active network.
+        const chain = await screen.findByRole('button', { name: /Network: Bitcoin/ });
         const back = screen.getByRole('button', { name: 'Back to previous screen' });
-        const chain = screen.getByRole('button', { name: /Network: Bitcoin/ });
         const address = screen.getByLabelText('Address');
         const message = screen.getByLabelText('Message');
         const signature = screen.getByLabelText('Signature');

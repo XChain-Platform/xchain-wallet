@@ -84,7 +84,8 @@ const WALLET_BUG_CODES = new Set([
     'MISSING_TX_HEX', 'MISSING_P2SH_HASH', 'MISSING_P2SH_HEX',
 ]);
 
-const UNKNOWN_ENCODER_FAILURE = 'This transaction could not be built. Nothing was signed or sent, so nothing was spent.';
+const NOTHING_SPENT = 'Nothing was signed or sent, so nothing was spent.';
+const UNKNOWN_ENCODER_FAILURE = `This transaction could not be built. ${NOTHING_SPENT}`;
 const UNINFORMATIVE_RPC_REASON = /^(?:internal encoder error|(?:(?:future )?internal|unknown|unexplained) (?:error|failure|refusal))\.?$/i;
 
 /**
@@ -243,10 +244,11 @@ export function encoderErrorMessage(err, { coinTicker, requiredNative } = {}) {
             : null;
     }
     // A fee under the relay minimum or an amount the inputs cannot cover is the
-    // person's to fix, in a field they can see; say that in the coin's units.
+    // person's to fix, in a field they can see; say that in the coin's units,
+    // closed by the same pre-signature reassurance every other refusal here gives.
     if (code === 'ENCODER_RPC_ERROR') {
         const fieldError = encoderFieldError(err, { coinTicker });
-        if (fieldError) return fieldError.message;
+        if (fieldError) return `${fieldError.message} ${NOTHING_SPENT}`;
     }
     const coin = coinTicker || 'native coin';
     const needed = trimAmount(requiredNative) || requiredFeeFromError(err);

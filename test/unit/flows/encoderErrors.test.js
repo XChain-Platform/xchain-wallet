@@ -269,6 +269,24 @@ describe('encoderErrorMessage', () => {
         expect(copy).not.toContain('Encoder RPC error:');
     });
 
+    it('closes the fee and shortfall refusals in plain words with the pre-signature reassurance', () => {
+        const refusals = [
+            'insufficient funds: selected inputs total 1000 but 3438 is required (outputs 2232 + fee 1206)',
+            'insufficient funds: selected inputs total 1000 but 2206 is required (outputs 0 + fee 1206)',
+            'fee 19 is below the node relay minimum 20 base units for a ~190-byte transaction',
+            'feePerKb 100 base units/kB produces fee 19, below the node relay minimum 20 base units for a ~190-byte transaction',
+        ];
+        for (const reason of refusals) {
+            const err = sdkEncoderError('ENCODER_RPC_ERROR', `Encoder RPC error: ${reason}`);
+            for (const wire of [err, acrossBoundary(err)]) {
+                const copy = encoderErrorMessage(wire, { coinTicker: 'BTC' });
+                expect(copy, reason).toMatch(/Lower|Raise/);
+                expect(copy, reason).toMatch(/Nothing was signed or sent, so nothing was spent\.$/);
+                expect(copy, reason).not.toContain('Encoder RPC error:');
+            }
+        }
+    });
+
     it('uses safe generic copy for an unknown RPC refusal and unknown SDK message', () => {
         const rpc = encoderErrorMessage(
             sdkEncoderError('ENCODER_RPC_ERROR', 'Encoder RPC error: future internal refusal'), {});

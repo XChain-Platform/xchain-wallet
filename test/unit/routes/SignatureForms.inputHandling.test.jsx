@@ -138,6 +138,26 @@ describe('signature verification inputs and results', () => {
             .toHaveTextContent('Valid signature. Signature matches this message and address.');
     });
 
+    it('offers and checks against the active network\'s chains only', async () => {
+        const verifyMessageRequest = vi.fn().mockResolvedValue({ valid: true });
+        renderForm(VerifySignatureForm, messagingFor({
+            getSettings: vi.fn().mockResolvedValue({ walletMode: 'full', activeNetwork: 'regtest' }),
+            verifyMessageRequest,
+        }));
+        const picker = await screen.findByRole('button', { name: /Network: Bitcoin/ });
+        fireEvent.click(picker);
+        expect(screen.getAllByRole('option', { name: /Bitcoin/ })).toHaveLength(1);
+        fireEvent.click(picker);
+        fireEvent.change(screen.getByLabelText('Address'), { target: { value: 'bcrt1qcounterparty' } });
+        fireEvent.change(screen.getByLabelText('Message'), { target: { value: 'message' } });
+        fireEvent.change(screen.getByLabelText('Signature'), { target: { value: 'c2lnbmF0dXJl' } });
+        fireEvent.click(screen.getByRole('button', { name: 'Verify signature' }));
+
+        await waitFor(() => expect(verifyMessageRequest).toHaveBeenCalledWith(
+            expect.objectContaining({ chainId: 'bitcoin-regtest', address: 'bcrt1qcounterparty' }),
+        ));
+    });
+
     it('rejects malformed base64 before calling the verifier', async () => {
         const verifyMessageRequest = vi.fn();
         renderForm(VerifySignatureForm, messagingFor({ verifyMessageRequest }));
