@@ -1385,7 +1385,7 @@ export function ImportWallet({
         <PageHeader
             onBack={handleBack}
             backLabel={t('importWallet.backToSetup')}
-            backDisabled={busy}
+            backDisabled={busy || adsNotice}
             title={pageTitle}
             titleRef={headingRef}
             trailing={onOpenInTab && !adsNotice ? (
