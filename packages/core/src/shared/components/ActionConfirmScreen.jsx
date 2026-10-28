@@ -30,6 +30,7 @@ import { readActiveWallet } from '../utils/activeWalletMemory.js';
 import { sumDecimalStrings, trimAmountTail } from '../utils/amountFormat.js';
 import { t } from '../../i18n/index.js';
 import '../../i18n/locales/en/components.js';
+import '../../i18n/locales/en/extension.js';
 import '../../i18n/locales/en/send.js';
 
 const chainRegistry = registryLib.defaultRegistry();
@@ -321,7 +322,7 @@ export function ActionConfirmScreen({
                             </p>
                         </SigningReadyNote>
                     ) : (
-                        <PanicPasswordGate>
+                        <PanicPasswordGate rejectLabel={t('extension.approval.reject')}>
                             <Input
                                 type="password"
                                 label={t('common.password')}

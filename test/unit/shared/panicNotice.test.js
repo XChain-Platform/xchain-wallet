@@ -49,7 +49,7 @@ describe('panicFreezeNotice', () => {
 
     it('tells a reject-only surface that nothing can be signed and that Reject closes the request', () => {
         const state = activatePanicMode({ nowMs: T0, armedBy: PANIC_ARMED_SELF });
-        const notice = panicFreezeNotice({ state, nowMs: T0, surface: 'reject-only' });
+        const notice = panicFreezeNotice({ state, nowMs: T0, surface: 'reject-only', rejectLabel: 'Reject' });
         expect(notice.disclose).toBe(true);
         expect(notice.detail).toContain('24h remaining');
         expect(notice.detail).toMatch(/nothing can be signed or sent here until panic mode is turned off in the wallet/i);
@@ -97,7 +97,7 @@ describe('panicFreezeNotice', () => {
     it('tells the Send surface that THIS send will be refused', () => {
         const state = activatePanicMode({ nowMs: T0 });
         const notice = panicFreezeNotice({ state, nowMs: T0, surface: 'send' });
-        expect(notice.title).toMatch(/cannot be signed/i);
+        expect(notice.title).toMatch(/can't be signed/i);
     });
 
     it('counts down as the freeze burns off', () => {

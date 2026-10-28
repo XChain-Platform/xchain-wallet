@@ -92,7 +92,7 @@ for (const parts of SIGN_SURFACES) {
     // in its place.
     assert.match(
         src,
-        /<PanicPasswordGate>\s*<Input\b[^>]*?type="password"/,
+        /<PanicPasswordGate(?: rejectLabel=(?:\{[^}]*\}|"[^"]*"))?>\s*<Input\b[^>]*?type="password"/,
         `${file} puts its sign password field inside PanicPasswordGate`,
     );
     assert.doesNotMatch(
@@ -108,7 +108,7 @@ const approvalSrc = readFileSync(
     join(wsRoot, 'packages', 'extension', 'src', 'approval', 'kinds', 'SignApproval.jsx'),
     'utf8',
 );
-assert.match(approvalSrc, /usePanicFreeze\(PANIC_SURFACE_REJECT_ONLY\)/, 'the approval window reads the reject-only freeze');
+assert.match(approvalSrc, /usePanicFreeze\(PANIC_SURFACE_REJECT_ONLY, (?:t\(.extension\.approval\.reject.\)|.Reject.)\)/, 'the approval window reads the reject-only freeze and names the Reject label');
 assert.match(
     approvalSrc,
     /<ListPage>\s*\{panicFrozen \? \(\s*<PanicSignStatus/,

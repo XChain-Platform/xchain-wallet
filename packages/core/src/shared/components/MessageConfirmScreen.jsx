@@ -27,6 +27,7 @@ import { ConfirmActionModal } from './ConfirmActionModal.jsx';
 import { PanicPasswordGate, SigningReadyNote } from '../safety/PanicFreezeNotice.jsx';
 import { t } from '../../i18n/index.js';
 import '../../i18n/locales/en/components.js';
+import '../../i18n/locales/en/extension.js';
 import '../../i18n/locales/en/send.js';
 
 /**
@@ -87,7 +88,7 @@ export function MessageConfirmScreen({
                             </p>
                         </SigningReadyNote>
                     ) : (
-                        <PanicPasswordGate>
+                        <PanicPasswordGate rejectLabel={t('extension.approval.reject')}>
                             <Input
                                 type="password"
                                 label={t('common.password')}

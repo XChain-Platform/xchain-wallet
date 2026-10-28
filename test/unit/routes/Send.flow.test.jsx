@@ -1499,7 +1499,7 @@ describe('Send refused by a freeze armed during the review', () => {
         activatePanicMode();
         await approveWithPassword(messaging);
 
-        expect(await screen.findByText('Panic mode is on. This send cannot be signed.')).toBeInTheDocument();
+        expect(await screen.findByText("Panic mode is on. This send can't be signed.")).toBeInTheDocument();
         expect(screen.queryByText(/Something went wrong/)).not.toBeInTheDocument();
         expect(screen.queryByText(/Signing is frozen by panic mode/)).not.toBeInTheDocument();
     });

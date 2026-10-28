@@ -15,6 +15,7 @@ import { strict as assert } from 'node:assert';
 import { readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { withEnglishCopy } from '../_localized-source.js';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const wsRoot = join(here, '..', '..', '..');
@@ -43,10 +44,12 @@ const safetySrc = readFileSync(
     join(wsRoot, 'packages', 'core', 'src', 'shared', 'components', 'settings', 'SafetySection.jsx'),
     'utf8',
 );
-const rowSrc = readFileSync(
+// The row's copy lives in the English locale; withEnglishCopy puts it back
+// where each t() call sits, so the copy assertions below read the rendered text.
+const rowSrc = withEnglishCopy(readFileSync(
     join(wsRoot, 'packages', 'core', 'src', 'shared', 'components', 'settings', 'PanicModeRow.jsx'),
     'utf8',
-);
+));
 
 // --- flows/index re-exports -------------------------------------------
 

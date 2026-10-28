@@ -45,6 +45,8 @@ import {
     getPanicRemainingMs,
     isSigningFrozen,
 } from '../../flows/panicMode.js';
+import { t } from '../../i18n/index.js';
+import '../../i18n/locales/en/panic.js';
 
 /** Surfaces the policy knows about. */
 export const PANIC_SURFACE_HOME = 'home';
@@ -91,9 +93,10 @@ export function formatPanicRemaining(ms) {
  * @param {import('../../flows/panicMode.js').PanicModeState} [opts.state]
  * @param {number} [opts.nowMs]
  * @param {'home'|'send'|'sign'|'reject-only'} [opts.surface]
+ * @param {string} [opts.rejectLabel] on the reject-only surface, the label of the screen's reject control
  * @returns {PanicNotice|null}
  */
-export function panicFreezeNotice({ state, nowMs = Date.now(), surface = PANIC_SURFACE_HOME } = {}) {
+export function panicFreezeNotice({ state, nowMs = Date.now(), surface = PANIC_SURFACE_HOME, rejectLabel } = {}) {
     if (!state || !isSigningFrozen(state, nowMs)) return null;
 
     const remainingMs = getPanicRemainingMs(state, nowMs);
@@ -109,7 +112,7 @@ export function panicFreezeNotice({ state, nowMs = Date.now(), surface = PANIC_S
         remainingText,
     };
     if (!disclose) return { ...base, title: null, detail: null };
-    return { ...base, ...discloseCopy(surface, remainingText) };
+    return { ...base, ...discloseCopy(surface, remainingText, rejectLabel) };
 }
 
 /**
@@ -118,31 +121,27 @@ export function panicFreezeNotice({ state, nowMs = Date.now(), surface = PANIC_S
  *
  * @param {string} surface
  * @param {string} remainingText
+ * @param {string} [rejectLabel] the label on the screen's reject control, named by the reject-only sentence
  * @returns {{ title: string, detail: string }}
  */
-function discloseCopy(surface, remainingText) {
+function discloseCopy(surface, remainingText, rejectLabel) {
     if (surface === PANIC_SURFACE_SEND) {
-        return {
-            title: 'Panic mode is on. This send cannot be signed.',
-            detail: `Signing stays frozen for another ${remainingText}. You can fill in the form, but approving it will be refused. Turn panic mode off in Settings > Safety to send now.`,
-        };
+        return { title: t('panic.send.title'), detail: t('panic.send.detail', { remaining: remainingText }) };
     }
     if (surface === PANIC_SURFACE_REJECT_ONLY) {
+        // A screen with a labelled reject control names that label; a form
+        // whose only exit is Back says so instead of naming a button it lacks.
         return {
-            title: 'Panic mode is on. Signing is frozen.',
-            detail: `${remainingText} remaining. Nothing can be signed or sent here until panic mode is turned off in the wallet. Reject closes this request.`,
+            title: t('panic.frozen.title'),
+            detail: rejectLabel
+                ? t('panic.rejectOnly.detail', { remaining: remainingText, reject: rejectLabel })
+                : t('panic.rejectOnly.detailBack', { remaining: remainingText }),
         };
     }
     if (surface === PANIC_SURFACE_SIGN) {
-        return {
-            title: 'Panic mode is on. Signing is frozen.',
-            detail: `${remainingText} remaining. Approving will be refused until panic mode is turned off in Settings > Safety.`,
-        };
+        return { title: t('panic.frozen.title'), detail: t('panic.sign.detail', { remaining: remainingText }) };
     }
-    return {
-        title: 'Panic mode is on. Signing is frozen.',
-        detail: `Nothing can be sent or signed for another ${remainingText}. Balances and history still work. Turn it off in Settings > Safety.`,
-    };
+    return { title: t('panic.frozen.title'), detail: t('panic.home.detail', { remaining: remainingText }) };
 }
 
 /**
@@ -162,5 +161,5 @@ export function panicRefusalMessage(err, { state = getPanicModeState(), nowMs = 
     if (/** @type {any} */ (err)?.name !== 'PanicModeActiveError') return null;
     const notice = panicFreezeNotice({ state, nowMs });
     if (!notice || !notice.disclose) return null;
-    return `Panic mode is on, so nothing was sent. Signing stays frozen for another ${notice.remainingText}. Turn panic mode off in Settings > Safety to continue.`;
+    return t('panic.refusal', { remaining: notice.remainingText });
 }

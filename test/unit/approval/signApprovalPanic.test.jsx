@@ -110,6 +110,15 @@ describe('SignApproval under a panic freeze', () => {
         expect(messaging.resolveApproval).not.toHaveBeenCalled();
     });
 
+    it.each(KINDS)('%s names the label on its reject button', async (kind, payload) => {
+        activatePanicMode();
+        renderApproval(kind, payload);
+
+        const notice = await screen.findByTestId('approval-panic-freeze');
+        const reject = screen.getByRole('button', { name: 'Reject' });
+        expect(notice.textContent).toContain(`${reject.textContent.trim()} closes this request.`);
+    });
+
     it.each(KINDS)('%s states a freeze the store refused to save', async (kind, payload) => {
         holdPanicModeFreeze({
             activatedAt: Date.now(),

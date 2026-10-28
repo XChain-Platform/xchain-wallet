@@ -94,6 +94,7 @@ import market from './market.js';
 import multisig from './multisig.js';
 import onboarding from './onboarding.js';
 import palette from './palette.js';
+import panic from './panic.js';
 import parallelComposer from './parallelComposer.js';
 import pending from './pending.js';
 import receive from './receive.js';
@@ -157,6 +158,7 @@ export const en = {
     ...multisig,
     ...onboarding,
     ...palette,
+    ...panic,
     ...parallelComposer,
     ...pending,
     ...receive,

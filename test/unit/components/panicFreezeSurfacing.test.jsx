@@ -134,7 +134,7 @@ describe('PanicPasswordGate', () => {
 
     it('tells the reader that Reject closes the request, and never says Approving is refused', () => {
         activatePanicMode();
-        const { container } = render(<PanicPasswordGate>{field}</PanicPasswordGate>);
+        const { container } = render(<PanicPasswordGate rejectLabel="Reject">{field}</PanicPasswordGate>);
         expect(container.textContent).toMatch(/Nothing can be signed or sent here until panic mode is turned off in the wallet\. Reject closes this request\./);
         expect(container.textContent).not.toMatch(/approving will be refused/i);
     });
@@ -171,7 +171,7 @@ describe('PanicFreezeNotice (Home / Send)', () => {
     it('warns on the Send form that the send will be refused', () => {
         activatePanicMode();
         render(<PanicFreezeNotice surface="send" />);
-        expect(screen.getByText(/this send cannot be signed/i)).toBeTruthy();
+        expect(screen.getByText(/this send can\u0027t be signed/i)).toBeTruthy();
     });
 
     it('shows nothing on Home or Send for a duress-armed freeze', () => {

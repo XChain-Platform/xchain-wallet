@@ -39,7 +39,7 @@ const TICK_MS = 30_000;
  */
 function noticeKey(notice) {
     if (!notice) return 'none';
-    return `${notice.armedBy}|${notice.disclose ? 'd' : 's'}|${notice.remainingText}`;
+    return `${notice.armedBy}|${notice.disclose ? 'd' : 's'}|${notice.remainingText}|${notice.detail}`;
 }
 
 /**
@@ -50,18 +50,19 @@ function noticeKey(notice) {
  * callers on the sign surface still have to drop any "ready to sign" claim.
  *
  * @param {'home'|'send'|'sign'|'reject-only'} [surface]
+ * @param {string} [rejectLabel] on the reject-only surface, the label of the screen's reject control
  * @returns {import('./panicNotice.js').PanicNotice|null}
  */
-export function usePanicFreeze(surface = PANIC_SURFACE_HOME) {
+export function usePanicFreeze(surface = PANIC_SURFACE_HOME, rejectLabel) {
     const [notice, setNotice] = useState(() =>
-        panicFreezeNotice({ state: getPanicModeState(), surface }),
+        panicFreezeNotice({ state: getPanicModeState(), surface, rejectLabel }),
     );
 
     useEffect(() => {
         let cancelled = false;
         const refresh = () => {
             if (cancelled) return;
-            const next = panicFreezeNotice({ state: getPanicModeState(), surface });
+            const next = panicFreezeNotice({ state: getPanicModeState(), surface, rejectLabel });
             setNotice((prev) => (noticeKey(prev) === noticeKey(next) ? prev : next));
         };
         refresh();
@@ -80,7 +81,7 @@ export function usePanicFreeze(surface = PANIC_SURFACE_HOME) {
                 window.removeEventListener('storage', refresh);
             }
         };
-    }, [surface]);
+    }, [surface, rejectLabel]);
 
     return notice;
 }
@@ -135,9 +136,11 @@ export function SigningReadyNote({ children }) {
  *
  * @param {object} props
  * @param {import('react').ReactNode} [props.children]
+ * @param {string} [props.rejectLabel] the label of the screen's reject control, named in the freeze
+ *   sentence; a form with no labelled reject control omits it and the sentence says to go back
  */
-export function PanicPasswordGate({ children }) {
-    const notice = usePanicFreeze(PANIC_SURFACE_REJECT_ONLY);
+export function PanicPasswordGate({ children, rejectLabel }) {
+    const notice = usePanicFreeze(PANIC_SURFACE_REJECT_ONLY, rejectLabel);
     if (!notice || !notice.disclose) return children ?? null;
     return <PanicSignStatus notice={notice} />;
 }

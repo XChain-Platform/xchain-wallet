@@ -155,7 +155,7 @@ export function SignApproval({ id, kind, payload, onReject }) {
         /** @type {Set<string> | null} */ (null),
     );
     const [settings, setSettings] = useState(/** @type {any | null} */ (null));
-    const panicNotice = usePanicFreeze(PANIC_SURFACE_REJECT_ONLY);
+    const panicNotice = usePanicFreeze(PANIC_SURFACE_REJECT_ONLY, t('extension.approval.reject'));
     const inputRef = useRef(/** @type {HTMLInputElement | null} */ (null));
     const requestedFee = approvalFeeRequest(payload, descriptor);
     const nativeTicker = tickerForDescriptor(descriptor);
