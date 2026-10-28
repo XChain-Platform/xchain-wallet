@@ -238,12 +238,16 @@
    hover/focus as the "this is editable" affordance without adding visual
    noise to the resting readout. */
 .readoutEdit {
+    box-sizing: border-box;
+    display: inline-flex;
+    align-items: center;
     background: transparent;
     border: none;
-    /* slice 2: block padding lifts a 17px-tall text button to the
-       24px target floor without moving the figure it underlines. */
-    padding: var(--xc-space-1) 0;
-    min-height: var(--xc-tap-min);
+    /* The figure is as tall as the custom input that replaces it, so the
+       readout row keeps its height when editing starts and an edit figure
+       beside an open input lines up with it. */
+    padding: 0;
+    min-height: var(--xc-control-h-sm);
     font: inherit;
     color: inherit;
     cursor: text;

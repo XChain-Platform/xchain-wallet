@@ -105,6 +105,10 @@ export function EmptyState({
             // Marks the page message, which a route shows at most one of per
             // state (test/unit/ui/pageMessages.test.jsx counts them).
             data-empty-state={sectionLine ? undefined : ''}
+            // Marks every empty state, page message or section line, so a
+            // layout check can tell it from a notice: it stands where its
+            // list would be, not first on the page.
+            data-xc-empty-state=""
             {...rest}
         >
             {icon && !sectionLine ? <div className={styles.icon} aria-hidden="true">{icon}</div> : null}
