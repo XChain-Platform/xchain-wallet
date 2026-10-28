@@ -77,8 +77,15 @@ export async function sleepStateFor({ sdkRegistry, chainId, query, type }) {
     });
     const latest = rows[0];
     const rb = latest.resume_block ?? latest.resumeBlock;
+    const resumeBlock = rb == null || String(rb) === '' ? null : Number(rb);
+    // A RESUME_BLOCK that is not a block number leaves the state unknown. As
+    // NaN it crosses a message channel as null and reads as never slept, so
+    // the read fails and callers treat the state as unread.
+    if (resumeBlock !== null && (!Number.isSafeInteger(resumeBlock) || resumeBlock < -1)) {
+        throw new Error('sleepStateFor: malformed RESUME_BLOCK');
+    }
     return {
-        resumeBlock: rb == null || String(rb) === '' ? null : Number(rb),
+        resumeBlock,
         memo: latest.memo ?? null,
         blockIndex: latest.block_index != null ? Number(latest.block_index) : null,
         actionIndex: latest.action_index != null ? Number(latest.action_index) : null,

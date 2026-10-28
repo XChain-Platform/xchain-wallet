@@ -53,6 +53,7 @@ import { validationErrorMessage } from '../../sdk/validationErrors.js';
 import { broadcastFailureKindFromError, isSpendConflictRejection } from '../../flows/broadcastPermanence.js';
 import { OFFER_LIFECYCLE_REFUSAL } from '../../flows/marketExpiry.js';
 import { INPUTS_ALREADY_SPENT_NAME, NAME_SALE_IN_FLIGHT_NAME } from '../../flows/inputLiveness.js';
+import { APPROVE_REFUSAL_NAME } from './approveRefusal.js';
 import { humanizeError } from './humanizeError.js';
 import { actionDisplayLabel } from './actionDisplayLabel.js';
 import { CHUNK_LANE_OPENER_RE } from './chunkLaneCopy.js';
@@ -399,6 +400,11 @@ export function submitFailureMessage(
     // the tail treats as raw wire text and would replace with the generic line.
     if (/** @type {any} */ (err)?.name === OFFER_LIFECYCLE_REFUSAL) {
         return userFacingMessage(String(/** @type {any} */ (err).message || '').trim(), generic);
+    }
+    // The form's own Approve-time check stopped the signature. The sentence is
+    // the wallet's and names the next step; the tail would read it as wire text.
+    if (/** @type {any} */ (err)?.name === APPROVE_REFUSAL_NAME) {
+        return `${String(/** @type {any} */ (err).message || '').trim()} ${t('flows.submit.nothingSigned')}`;
     }
     // Another send from this wallet is spending these inputs, so the background
     // refused this one before signing. The sentence is the wallet's own and

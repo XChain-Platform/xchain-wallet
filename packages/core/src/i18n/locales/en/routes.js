@@ -127,6 +127,13 @@ const messages = {
     'routes.manageToken.pausedIndefinitely': 'Paused indefinitely',
     'routes.manageToken.pausedUntilBlock': 'Paused until block {resumeBlock}',
     'routes.manageToken.paused': 'Paused',
+    'routes.sleepForm.addressLockedUntil':
+        "This address is locked until block {resumeBlock}. A locked address can't create any XChain action, a new lock included, until it wakes.",
+    'routes.sleepForm.addressLockedForGood':
+        "This address is locked for good. A locked address can't create any XChain action, a new lock included.",
+    'routes.sleepForm.lockStateUnread':
+        "The wallet couldn't check whether this address is already locked, so it can't lock it. Check your connection and try again.",
+    'routes.sleepForm.lockStatePending': 'Wait for the wallet to check whether this address is already locked.',
 };
 
 addEnglish(messages);

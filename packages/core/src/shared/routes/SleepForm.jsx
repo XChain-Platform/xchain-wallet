@@ -45,10 +45,12 @@ import { blockDateEstimateText } from '../utils/blockDateEstimate.js';
 import { OwnAddressPickerScreen } from '../components/OwnAddressPickerScreen.jsx';
 import styles from './IssueTokenForm.module.css';
 import { submitFailureMessage } from '../utils/submitFailureMessage.js';
+import { APPROVE_REFUSAL_NAME, approveRefusal } from '../utils/approveRefusal.js';
 import { isValidAddressForChain } from '../utils/addressValidation.js';
 import { memoLengthError } from '../utils/memoLimit.js';
 import { tickerReferenceError } from '../utils/tickerGrammar.js';
 import { tokenIssuerEligibility } from '../utils/tokenIssuerEligibility.js';
+import { addressLockStateError } from '../utils/addressLockState.js';
 import {
     TOKEN_RECORD_GATE_KEYS, tokenRecordChangedMessage, tokenRecordChangedSince,
 } from '../utils/tokenRecordDrift.js';
@@ -190,6 +192,9 @@ export function SleepForm({ walletId, onBack, mode, initialChainId, initialTick,
         () => interpretSleep(sleepRow ? sleepRow.resumeBlock : null, currentHeight),
         [sleepRow, currentHeight],
     );
+    const addressLockError = isTick ? null : addressLockStateError(sleepRead, sleepRow, currentHeight);
+    // While the read is pending the state line already says it is checking.
+    const addressLockShown = sleepRead === 'loading' ? null : addressLockError;
 
     const [feePick, setFeePick] = useState(
         /** @type {{ mode: 'low' | 'normal' | 'fast' | 'custom', customRate?: number }} */ ({ mode: 'normal' }),
@@ -355,6 +360,39 @@ export function SleepForm({ walletId, onBack, mode, initialChainId, initialTick,
         return null;
     }
 
+    // A wake block at or below a known height has passed; any other wake block
+    // is judged against a refreshed height.
+    function addressLockNeedsHeight(read, row) {
+        const resumeBlock = row ? row.resumeBlock : null;
+        if (read !== 'ready' || !Number.isSafeInteger(resumeBlock) || resumeBlock <= 0) return false;
+        return !(Number.isSafeInteger(currentHeight) && resumeBlock <= currentHeight);
+    }
+
+    async function addressLockRefusal(read, row) {
+        let height;
+        try {
+            height = await refreshHeight();
+        } catch {
+            return addressLockStateError('failed', null, null);
+        }
+        return addressLockStateError(read, row, height);
+    }
+
+    // Another surface can lock the address after the review opened, so the
+    // state is read again just before the signature.
+    async function signTimeAddressLockRefusal() {
+        if (isTick || flowsLib.isDemoWallet(walletId) || typeof messaging?.sleepState !== 'function') return null;
+        let row;
+        try {
+            row = await messaging.sleepState({ chainId, query: fromAddress.address, type: 'address' });
+        } catch {
+            return addressLockStateError('failed', null, null);
+        }
+        return addressLockNeedsHeight('ready', row || null)
+            ? addressLockRefusal('ready', row || null)
+            : addressLockStateError('ready', row || null, currentHeight);
+    }
+
     async function openConfirmModal(params) {
         const from = buildFrom();
         if (!chainId || !from) return;
@@ -394,8 +432,16 @@ export function SleepForm({ walletId, onBack, mode, initialChainId, initialTick,
                     chainId, actionString, source,
                 }),
                 onApprove: async (_creds, composed) => {
+                    // Review checked the owner before composing; the confirm page's
+                    // pre-flight re-check waits for its report to age, so a transfer
+                    // or lock that lands while the page is open is caught here.
+                    if (isTick && await tokenRecordChangedSince({
+                        messaging, chainId, tick: ticker, current: assetInfo, keys: TOKEN_RECORD_GATE_KEYS,
+                    })) {
+                        throw approveRefusal(tokenRecordChangedMessage(ticker));
+                    }
                     const staleError = await wakeBlockFreshnessError(params);
-                    if (staleError) throw new Error(staleError);
+                    if (staleError) throw approveRefusal(staleError);
                     return submit({
                         params,
                         password: passwordValueRef.current,
@@ -413,7 +459,8 @@ export function SleepForm({ walletId, onBack, mode, initialChainId, initialTick,
             setStage('done');
         } catch (err) {
             if (err && (err.reason === 'user-rejected' || err.name === 'UserRejectedError')) return;
-            console.error('Sleep (confirm) failed:', err); // eslint-disable-line no-console
+            // The form's own Approve-time refusal is an answer, not a fault.
+            if (err?.name !== APPROVE_REFUSAL_NAME) console.error('Sleep (confirm) failed:', err); // eslint-disable-line no-console
             setFormError(submitFailureMessage(err, {
                 chainId,
                 coinTicker,
@@ -432,6 +479,12 @@ export function SleepForm({ walletId, onBack, mode, initialChainId, initialTick,
         try {
             const initialError = validationError(currentHeight, { requireHeight: false });
             if (initialError) { setFormError(initialError); return; }
+            if (!isTick) {
+                const lockError = addressLockNeedsHeight(sleepRead, sleepRow)
+                    ? await addressLockRefusal(sleepRead, sleepRow)
+                    : addressLockStateError(sleepRead, sleepRow, currentHeight);
+                if (lockError) { setFormError(lockError); return; }
+            }
             if (isTick && issuerEligibility.pending) {
                 setFormError(`Wait for the wallet to verify the current owner of ${ticker}.`);
                 return;
@@ -490,7 +543,7 @@ export function SleepForm({ walletId, onBack, mode, initialChainId, initialTick,
             setStage('submitting');
             setSubmitError(null);
             const params = reviewedParams || actionParams;
-            const staleError = await wakeBlockFreshnessError(params);
+            const staleError = await signTimeAddressLockRefusal() || await wakeBlockFreshnessError(params);
             if (staleError) {
                 setSubmitError(staleError);
                 setStage('review');
@@ -753,8 +806,8 @@ export function SleepForm({ walletId, onBack, mode, initialChainId, initialTick,
             demoGuard={demoGuard}
             label={titleNoun}
             onSubmit={handleReview}
-            status={formError || (isTick && issuerEligibility.error) ? (
-                <StatusMessage variant="error">{formError || issuerEligibility.error}</StatusMessage>
+            status={formError || (isTick && issuerEligibility.error) || addressLockShown ? (
+                <StatusMessage variant="error">{formError || (isTick ? issuerEligibility.error : addressLockShown)}</StatusMessage>
             ) : null}
             actions={(
                 <Button
@@ -763,7 +816,7 @@ export function SleepForm({ walletId, onBack, mode, initialChainId, initialTick,
                     loading={refreshingHeight || confirmAction.composing}
                     disabled={!fromAddress || (isTick && (
                         sleepLocked || !!issuerEligibility.error
-                    )) || refreshingHeight || confirmAction.composing}
+                    )) || !!addressLockError || refreshingHeight || confirmAction.composing}
                 >
                     {(!isWatcherMode && isTick) ? titleNoun : 'Preview'}
                 </Button>

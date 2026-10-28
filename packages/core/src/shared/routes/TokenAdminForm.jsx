@@ -51,6 +51,7 @@ import styles from './IssueTokenForm.module.css';
 import { preferredSourceId } from '../addressSelection.js';
 import { pickDefaultChainId } from '../chainSelection.js';
 import { submitFailureMessage } from '../utils/submitFailureMessage.js';
+import { approveRefusal } from '../utils/approveRefusal.js';
 import { tickerReferenceError } from '../utils/tickerGrammar.js';
 import {
     MAX_ISSUE_TEXT_LENGTH,
@@ -987,15 +988,26 @@ export function TokenAdminForm({ walletId, mode, onBack, initialChainId, initial
                     payFeeInNativeCoin: nativeFee.flag,
                     ...(feePerKb != null ? { feePerKb } : {}),
                 },
-                onApprove: (prebuiltPsbt) => submitConfirmed({
-                    walletId,
-                    chainId,
-                    from,
-                    params: actionParams,
-                    payFeeInNativeCoin: nativeFee.flag,
-                    ...(feePerKb != null ? { feePerKb } : {}),
-                    prebuiltPsbt,
-                }),
+                onApprove: async (prebuiltPsbt) => {
+                    // Review checked the owner and gates before composing; the
+                    // confirm page's pre-flight re-check waits for its report to
+                    // age, so a transfer, lock or list binding that lands while
+                    // the page is open is caught here.
+                    if (await tokenRecordChangedSince({
+                        messaging, chainId, tick: ticker.trim(), current: currentAssetInfo, keys: TOKEN_RECORD_GATE_KEYS,
+                    })) {
+                        throw approveRefusal(tokenRecordChangedMessage(ticker.trim()));
+                    }
+                    return submitConfirmed({
+                        walletId,
+                        chainId,
+                        from,
+                        params: actionParams,
+                        payFeeInNativeCoin: nativeFee.flag,
+                        ...(feePerKb != null ? { feePerKb } : {}),
+                        prebuiltPsbt,
+                    });
+                },
             });
             setResult(res);
             setPassword('');
