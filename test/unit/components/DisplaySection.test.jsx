@@ -9,7 +9,7 @@
 // contact legal@dankest.llc.
 
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
 import { DisplaySection } from '../../../packages/core/src/shared/components/settings/DisplaySection.jsx';
 import layoutStyles from '../../../packages/core/src/shared/components/settings/DisplaySection.module.css';
@@ -81,16 +81,21 @@ describe('DisplaySection', () => {
         expect(action).toHaveClass(buttonStyles.md);
     });
 
-    it('aligns display fields and equal-height watched-token controls in one grid', async () => {
+    it('uses the shared form surface for equal-height watched-token controls', async () => {
         setup({ pinnedTokens: ['bitcoin-mainnet:XCP'] });
         const ticker = await screen.findByRole('textbox', { name: 'Token ticker' });
         const tickerField = ticker.parentElement.parentElement;
         const watchForm = ticker.closest('form');
 
         expect(tickerField.className).toMatch(/(?:^|\s)_?md_/);
-        expect(watchForm).toHaveClass(layoutStyles.fieldRow);
-        expect(watchForm.style.background).toBe('var(--xc-card-bg)');
-        expect(watchForm.style.border).toBe('var(--xc-card-border)');
+        expect(watchForm).toHaveClass(formStyles.form);
+        expect(watchForm).not.toHaveClass(layoutStyles.fieldRow);
+        expect(watchForm.style.background).toBe('');
+        expect(watchForm.style.border).toBe('');
+        // The form is a column, so a flex basis on the label would be a 280px height.
+        const watchLabel = within(watchForm).getByText('Token to watch');
+        expect(watchLabel.style.flex).toBe('');
+        expect(watchLabel.parentElement.style.flex).toBe('');
         expect(tickerField.parentElement).toHaveClass(layoutStyles.watchControls);
         expect(screen.getByRole('button', { name: 'Watch token' }).className).toMatch(/(?:^|\s)_?md_/);
         const thresholdRow = screen.getByRole('combobox', { name: 'Small-balance threshold' }).parentElement.parentElement.parentElement;

@@ -1,6 +1,5 @@
-/* An opened Backup row is the shared card (ui/Card.module.css), set on the
-   FormSection in the JSX, so its form reads as that row expanded, as This
-   wallet's forms do. */
+/* Interactive forms use FormPage for the shared responsive form card. Result
+   rows use the shared card directly so both paths keep the same surface. */
 
 .actions {
     display: flex;

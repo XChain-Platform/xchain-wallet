@@ -84,7 +84,8 @@ describe('ConnectedSitesSection settings controls', () => {
         const throttleForm = screen.getByRole('form', { name: 'Sign-request throttle controls' });
 
         expect(burstField.className).toMatch(/(?:^|\s)_?md_/);
-        expect(throttleForm.className).toMatch(/controlRow/);
+        expect(throttleForm.className).toMatch(/form/);
+        expect(burstField.parentElement.className).toMatch(/controlRow/);
         expect(controlRowCss).toMatch(/align-items:\s*center/);
         expect(screen.getByRole('button', { name: 'Apply' }).className).toMatch(/(?:^|\s)_?md_/);
     });
@@ -96,7 +97,8 @@ describe('ConnectedSitesSection settings controls', () => {
         const blockForm = origin.closest('form');
 
         expect(originField.className).toMatch(/(?:^|\s)_?md_/);
-        expect(blockForm.className).toMatch(/controlRow/);
+        expect(blockForm.className).toMatch(/form/);
+        expect(originField.parentElement.className).toMatch(/controlRow/);
         expect(controlRowCss).toMatch(/align-items:\s*center/);
         expect(screen.getByRole('button', { name: 'Block' }).className).toMatch(/(?:^|\s)_?md_/);
     });
@@ -226,6 +228,37 @@ describe('ConnectedSitesSection settings controls', () => {
         expect(screen.getByRole('region', { name: 'Allowed sites' })).toBeTruthy();
         expect(screen.queryByRole('heading', { name: 'Connected sites' })).toBeNull();
         expect(screen.getByText(/When a website asks to connect/)).toBeTruthy();
+    });
+
+    it('renders all connected-site empty lines with the plain EmptyState surface', async () => {
+        render(<ConnectedSitesSection />);
+
+        const emptyLines = await Promise.all([
+            screen.findByText('No sites connected yet'),
+            screen.findByText('No blocked sites'),
+            screen.findByText('No site block history'),
+        ]);
+        for (const line of emptyLines) {
+            expect(line.closest('[role="status"]')).toBeTruthy();
+            expect(line.closest('[class*="card"]')).toBeNull();
+        }
+    });
+
+    it('keeps the seven settings sections on the shared form template', () => {
+        const files = [
+            'ConnectedSitesSection.jsx',
+            'BackupSection.jsx',
+            'ThisWalletSection.jsx',
+            'DeveloperModeSection.jsx',
+            'DisplaySection.jsx',
+            'BiometricRow.jsx',
+            'DuressPassphraseRow.jsx',
+        ];
+        for (const file of files) {
+            const source = readFileSync(`packages/core/src/shared/components/settings/${file}`, 'utf8');
+            expect(source, file).not.toMatch(/<\/?form\b/);
+            expect(source, file).toMatch(/<FormPage\b/);
+        }
     });
 
     it('displays each site permission using the bridge policy semantics', async () => {

@@ -51,6 +51,7 @@ import {
     ChainBadge,
     CopyButton,
     EmptyState,
+    FormPage,
     FormSection,
     Input,
     SectionHeader,
@@ -81,7 +82,6 @@ import {
     startBackupDownload,
     writeBackupFile,
 } from '../../utils/backupFileSave.js';
-import { submitOnlyFromLastField } from '../../../ui/formEnter.js';
 import { ROW_HINT, STACK, SettingsActionRow, SettingsInlineForm, Status } from './_settingsPrimitives.jsx';
 import cardStyles from '../../../ui/Card.module.css';
 import styles from './BackupSection.module.css';
@@ -764,8 +764,8 @@ function UnlockPrompt({ label, hint, busy, error, onCancel, onSubmit }) {
     };
     return (
         <SettingsInlineForm error={error && error !== INCORRECT_PASSWORD ? error : null} onCancel={onCancel} cancelDisabled={busy}>
-            <form onSubmit={submit} noValidate>
-                <FormSection title={label} description={hint} className={cardStyles.card}>
+            <FormPage onSubmit={submit} sectioned submitFromAnyField label={label}>
+                <FormSection title={label} description={hint}>
                     <Input
                         type="password"
                         revealable
@@ -788,7 +788,7 @@ function UnlockPrompt({ label, hint, busy, error, onCancel, onSubmit }) {
                         </Button>
                     </div>
                 </FormSection>
-            </form>
+            </FormPage>
         </SettingsInlineForm>
     );
 }
@@ -952,11 +952,10 @@ function DryRunForm({ busy, error, onCancel, onSubmit }) {
 
     return (
         <SettingsInlineForm error={error} onCancel={onCancel} cancelDisabled={busy}>
-            <form onSubmit={submit} onKeyDown={submitOnlyFromLastField} noValidate>
+            <FormPage onSubmit={submit} sectioned label={t('settings.backup.testBackup')}>
                 <FormSection
                     title={t('settings.backup.testBackup')}
                     description={t('settings.backup.enterTheRecoveryPhraseFrom', { value: gapLimitValid ? gapLimitNumber : 'selected' })}
-                    className={cardStyles.card}
                 >
                     <Textarea
                         value={mn}
@@ -1023,7 +1022,7 @@ function DryRunForm({ busy, error, onCancel, onSubmit }) {
                         </Button>
                     </div>
                 </FormSection>
-            </form>
+            </FormPage>
         </SettingsInlineForm>
     );
 }
@@ -1141,11 +1140,10 @@ function PasswordPrompt({ label, hint, busy, operationTime, error, onCancel, onS
     };
     return (
         <SettingsInlineForm error={error} onCancel={onCancel} cancelDisabled={busy}>
-            <form onSubmit={submit} onKeyDown={submitOnlyFromLastField} noValidate>
+            <FormPage onSubmit={submit} sectioned label={t('settings.backup.exportEncryptedBackup')}>
                 <FormSection
                     title={t('settings.backup.exportEncryptedBackup')}
                     description={hint}
-                    className={cardStyles.card}
                 >
                     <Input
                         label={label}
@@ -1195,7 +1193,7 @@ function PasswordPrompt({ label, hint, busy, operationTime, error, onCancel, onS
                         </Button>
                     </div>
                 </FormSection>
-            </form>
+            </FormPage>
         </SettingsInlineForm>
     );
 }

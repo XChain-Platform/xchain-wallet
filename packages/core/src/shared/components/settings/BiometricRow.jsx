@@ -36,7 +36,7 @@
 // sync without a refresh.
 
 import { useEffect, useRef, useState } from 'react';
-import { Button, Input, StatusMessage } from '@xchain-wallet/core/ui';
+import { Button, FormPage, FormSection, Input, StatusMessage } from '@xchain-wallet/core/ui';
 import { useMessaging } from '../../useMessaging.js';
 import {
     describeBiometric,
@@ -223,13 +223,21 @@ export function BiometricRow() {
                 onCancel={cancelEnrol}
                 cancelDisabled={busy}
             >
-                <form onSubmit={handleEnable} style={{ ...ROW, flexDirection: 'column', alignItems: 'stretch' }}>
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--xc-space-1)' }}>
-                        <span style={labelStyle}>{isReenrol ? t('settings.biometric.reEnrol') : t('settings.biometric.enable')} {t('settings.biometric.biometricUnlock2')}</span>
-                        <span style={ROW_HINT}>
+                <FormPage
+                    onSubmit={handleEnable}
+                    sectioned
+                    submitFromAnyField
+                    label={`${isReenrol ? t('settings.biometric.reEnrol') : t('settings.biometric.enable')} ${t('settings.biometric.biometricUnlock2')}`}
+                >
+                    <FormSection
+                        title={`${isReenrol ? t('settings.biometric.reEnrol') : t('settings.biometric.enable')} ${t('settings.biometric.biometricUnlock2')}`}
+                        headingLevel="h3"
+                        description={(
+                            <>
                             {t('settings.biometric.confirmYourCurrentWalletPassword')} {description.wrapNote}
-                        </span>
-                    </div>
+                            </>
+                        )}
+                    >
                     <Input
                         type="password"
                         revealable
@@ -260,7 +268,8 @@ export function BiometricRow() {
                             {busy ? t('settings.biometric.pairing') : (isReenrol ? t('settings.biometric.reEnrol') : t('settings.biometric.enable'))}
                         </Button>
                     </div>
-                </form>
+                    </FormSection>
+                </FormPage>
             </SettingsInlineForm>
         );
     }

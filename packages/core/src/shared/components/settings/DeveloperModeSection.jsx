@@ -367,76 +367,89 @@ export function RegtestRow({ descriptor, isActive, disabled, activeWallet }) {
         setErrorText(null);
     };
 
+    const details = (
+        <DiagnosticDetails
+            summary={t('settings.developer.accountsNotChanged', { length: skippedAccounts.length })}
+            items={skippedAccounts}
+        />
+    );
+
     return (
         <SettingsInlineForm error={errorText}>
-        <section className={styles.entry}>
-            <SectionHeader
-                as="h3"
-                title={descriptor.displayName}
-                description={t('settings.developer.explorer', { id: descriptor.id, value: descriptor.explorer?.defaultUrl, value2: descriptor.explorer?.defaultPort })}
-                trailing={activated ? (
-                    <span className={styles.active}>{t('settings.developer.active')}</span>
-                ) : (
-                    <Button
-                        type="button"
-                        variant="ghost"
-                        size="sm"
-                        icon={null}
-                        onClick={() => setOpen(true)}
-                        disabled={disabled || open}
-                    >
-                        {t('settings.developer.activate')}
-                    </Button>
-                )}
-            />
             {open ? (
-                <form onSubmit={onActivate} className={styles.form}>
-                    {/* SignerSelectForm renders nothing when the wallet has no
-                        paired HW signer (auto-resolves to software), so software
-                        wallets keep the original password-only affordance. */}
-                    {walletId ? (
-                        <SignerSelectForm
-                            walletId={walletId}
-                            value={signerId}
-                            onChange={setSignerId}
-                            disabled={busy}
-                        />
-                    ) : null}
-                    {isHardware ? (
-                        <div
-                            role="note"
-                            style={{ color: 'var(--xc-text-muted)', fontSize: 'var(--xc-text-xs)' }}
-                        >
-                            {t('settings.developer.derivingTheFirst')} {descriptor.displayName} {t('settings.developer.addressRoundTripsToYour')}
+                <FormPage onSubmit={onActivate} sectioned submitFromAnyField label={descriptor.displayName}>
+                    <FormSection
+                        headingLevel="h3"
+                        title={descriptor.displayName}
+                        description={t('settings.developer.explorer', { id: descriptor.id, value: descriptor.explorer?.defaultUrl, value2: descriptor.explorer?.defaultPort })}
+                    >
+                        {/* SignerSelectForm renders nothing when the wallet has no
+                            paired HW signer (auto-resolves to software), so software
+                            wallets keep the original password-only affordance. */}
+                        {walletId ? (
+                            <SignerSelectForm
+                                walletId={walletId}
+                                value={signerId}
+                                onChange={setSignerId}
+                                disabled={busy}
+                            />
+                        ) : null}
+                        {isHardware ? (
+                            <div
+                                role="note"
+                                style={{ color: 'var(--xc-text-muted)', fontSize: 'var(--xc-text-xs)' }}
+                            >
+                                {t('settings.developer.derivingTheFirst')} {descriptor.displayName} {t('settings.developer.addressRoundTripsToYour')}
+                            </div>
+                        ) : (
+                            <Input
+                                type="password"
+                                enterKeyHint="go"
+                                value={password}
+                                onChange={(e) => setPassword(e.target.value)}
+                                placeholder={t('send.gated.passwordLabel')}
+                                autoComplete="current-password"
+                                disabled={busy}
+                                aria-label={t('settings.developer.activationPassword', { displayName: descriptor.displayName })}
+                            />
+                        )}
+                        <div className={styles.actions}>
+                            <Button type="submit" size="sm" icon={null} disabled={busy || (!isHardware && password.length === 0)}>
+                                {busy ? (isHardware ? t('settings.developer.checkYourDevice') : t('settings.developer.activating')) : t('settings.developer.activate2')}
+                            </Button>
+                            <Button type="button" variant="ghost" size="sm" icon={null} onClick={onCancel} disabled={busy}>
+                                {t('common.cancel')}
+                            </Button>
                         </div>
-                    ) : (
-                        <Input
-                            type="password"
-                            enterKeyHint="go"
-                            value={password}
-                            onChange={(e) => setPassword(e.target.value)}
-                            placeholder={t('send.gated.passwordLabel')}
-                            autoComplete="current-password"
-                            disabled={busy}
-                            aria-label={t('settings.developer.activationPassword', { displayName: descriptor.displayName })}
-                        />
-                    )}
-                    <div className={styles.actions}>
-                        <Button type="submit" size="sm" icon={null} disabled={busy || (!isHardware && password.length === 0)}>
-                            {busy ? (isHardware ? t('settings.developer.checkYourDevice') : t('settings.developer.activating')) : t('settings.developer.activate2')}
-                        </Button>
-                        <Button type="button" variant="ghost" size="sm" icon={null} onClick={onCancel} disabled={busy}>
-                            {t('common.cancel')}
-                        </Button>
-                    </div>
-                </form>
-            ) : null}
-            {statusText ? <Status text={statusText} /> : null}
-            <DiagnosticDetails
-                summary={t('settings.developer.accountsNotChanged', { length: skippedAccounts.length })}
-                items={skippedAccounts}
-            />
-        </section>
+                        {statusText ? <Status text={statusText} /> : null}
+                        {details}
+                    </FormSection>
+                </FormPage>
+            ) : (
+                <section className={styles.entry}>
+                    <SectionHeader
+                        as="h3"
+                        title={descriptor.displayName}
+                        description={t('settings.developer.explorer', { id: descriptor.id, value: descriptor.explorer?.defaultUrl, value2: descriptor.explorer?.defaultPort })}
+                        trailing={activated ? (
+                            <span className={styles.active}>{t('settings.developer.active')}</span>
+                        ) : (
+                            <Button
+                                type="button"
+                                variant="ghost"
+                                size="sm"
+                                icon={null}
+                                onClick={() => setOpen(true)}
+                                disabled={disabled}
+                            >
+                                {t('settings.developer.activate')}
+                            </Button>
+                        )}
+                    />
+                    {statusText ? <Status text={statusText} /> : null}
+                    {details}
+                </section>
+            )}
         </SettingsInlineForm>
     );
 }
@@ -517,17 +530,17 @@ function RegtestFaucetForm({
     };
 
     return (
-        <FormSection
-            title={t('settings.developer.regtestFaucet')}
-            description={(
-                <>
-                    {t('settings.developer.localTestingOnlyGetTest')} {coinTicker}{t('settings.developer.asksTheXchainRegtestMiner')} {descriptor.displayName} {t('settings.developer.addressDirectlyNoSigningXchain')} {coinTicker} {t('settings.developer.alreadyToPayTheFee')}
-                    {!developerMode ? t('settings.developer.turnDeveloperModeOnTo3') : ''}
-                </>
-            )}
-        >
-            <SettingsInlineForm error={errorText}>
-            <form onSubmit={onGetFunds} className={styles.form}>
+        <SettingsInlineForm error={errorText}>
+            <FormPage onSubmit={onGetFunds} sectioned submitFromAnyField label={t('settings.developer.regtestFaucet')}>
+                <FormSection
+                    title={t('settings.developer.regtestFaucet')}
+                    description={(
+                        <>
+                            {t('settings.developer.localTestingOnlyGetTest')} {coinTicker}{t('settings.developer.asksTheXchainRegtestMiner')} {descriptor.displayName} {t('settings.developer.addressDirectlyNoSigningXchain')} {coinTicker} {t('settings.developer.alreadyToPayTheFee')}
+                            {!developerMode ? t('settings.developer.turnDeveloperModeOnTo3') : ''}
+                        </>
+                    )}
+                >
                 <Input
                     type="text"
                     label={t('settings.developer.minerUrl')}
@@ -571,11 +584,11 @@ function RegtestFaucetForm({
                             {t('settings.developer.mintTestXchain')}
                         </Button>
                     ) : null}
-                </div>
-            </form>
-            </SettingsInlineForm>
-            {statusText ? <Status text={statusText} /> : null}
-        </FormSection>
+                    </div>
+                    {statusText ? <Status text={statusText} /> : null}
+                </FormSection>
+            </FormPage>
+        </SettingsInlineForm>
     );
 }
 
@@ -785,7 +798,7 @@ function CustomChainsRow({ developerMode }) {
                 </>
             ) : null}
             {open ? (
-                <form onSubmit={onAdd} className={styles.form}>
+                <FormPage onSubmit={onAdd} submitFromAnyField label={t('settings.developer.addCustomChain')}>
                     <Textarea
                         id="custom-chain-descriptor"
                         label={t('settings.developer.customChainDescriptorJson')}
@@ -813,7 +826,7 @@ function CustomChainsRow({ developerMode }) {
                             {t('common.cancel')}
                         </Button>
                     </div>
-                </form>
+                </FormPage>
             ) : (
                 <Button
                     type="button"

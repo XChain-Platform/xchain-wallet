@@ -12,10 +12,10 @@
 // watch-only export, recovery-format upgrade and removal controls.
 
 import { useEffect, useRef, useState } from 'react';
-import { submitOnlyFromLastField } from '../../../ui/formEnter.js';
 import {
     Button,
     CopyButton,
+    FormPage,
     FormSection,
     Input,
 } from '@xchain-wallet/core/ui';
@@ -416,11 +416,10 @@ function ChangePasswordRow({ walletId, disabled }) {
 
     return (
         <SettingsInlineForm error={error && error.field === null ? error.text : null} onCancel={close} cancelDisabled={busy}>
-            <form onSubmit={submit} onKeyDown={submitOnlyFromLastField} aria-busy={busy}>
+            <FormPage onSubmit={submit} sectioned label={t('settings.thisWallet.changeWalletPassword')} aria-busy={busy}>
                 <FormSection
                     title={t('settings.thisWallet.changeWalletPassword')}
                     description={t('settings.thisWallet.useAtLeastCharactersA', { MIN_WALLET_PASSWORD_LENGTH })}
-                    className={cardStyles.card}
                 >
                     <Input
                         ref={currentRef}
@@ -469,7 +468,7 @@ function ChangePasswordRow({ walletId, disabled }) {
                         </Button>
                     </div>
                 </FormSection>
-            </form>
+            </FormPage>
         </SettingsInlineForm>
     );
 }
@@ -487,13 +486,17 @@ function PublicKeyExport({
 }) {
     return (
         <SettingsInlineForm error={stage === 'password' ? error : null} onCancel={onClose} cancelDisabled={busy}>
-            <FormSection
-                title={(accountName ? t('settings.thisWallet.extendedPublicKeysFor', { name: accountName }) : t('settings.thisWallet.extendedPublicKeys'))}
-                description={t('settings.thisWallet.anExtendedPublicKeyDoes')}
-                className={cardStyles.card}
-            >
-                {stage === 'password' ? (
-                    <form onSubmit={onSubmit} className={styles.form}>
+            {stage === 'password' ? (
+                <FormPage
+                    onSubmit={onSubmit}
+                    sectioned
+                    submitFromAnyField
+                    label={(accountName ? t('settings.thisWallet.extendedPublicKeysFor', { name: accountName }) : t('settings.thisWallet.extendedPublicKeys'))}
+                >
+                    <FormSection
+                        title={(accountName ? t('settings.thisWallet.extendedPublicKeysFor', { name: accountName }) : t('settings.thisWallet.extendedPublicKeys'))}
+                        description={t('settings.thisWallet.anExtendedPublicKeyDoes')}
+                    >
                         <Input
                             type="password"
                             revealable
@@ -513,8 +516,14 @@ function PublicKeyExport({
                                 {busy ? t('settings.backup.exporting') : t('settings.thisWallet.showPublicKeys')}
                             </Button>
                         </div>
-                    </form>
-                ) : (
+                    </FormSection>
+                </FormPage>
+            ) : (
+                <FormSection
+                    title={(accountName ? t('settings.thisWallet.extendedPublicKeysFor', { name: accountName }) : t('settings.thisWallet.extendedPublicKeys'))}
+                    description={t('settings.thisWallet.anExtendedPublicKeyDoes')}
+                    className={cardStyles.card}
+                >
                     <>
                         {entries.map((entry) => (
                             <FormSection
@@ -542,8 +551,8 @@ function PublicKeyExport({
                             <Button type="button" variant="ghost" size="sm" icon={null} onClick={onClose}>{t('common.done')}</Button>
                         </div>
                     </>
-                )}
-            </FormSection>
+                </FormSection>
+            )}
         </SettingsInlineForm>
     );
 }

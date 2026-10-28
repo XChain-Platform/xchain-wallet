@@ -36,7 +36,7 @@
 // equal it. Disable remains available to the unlocked session.
 
 import { useRef, useState } from 'react';
-import { Button, Input } from '@xchain-wallet/core/ui';
+import { Button, FormPage, FormSection, Input } from '@xchain-wallet/core/ui';
 import { useMessaging } from '../../useMessaging.js';
 import {
     isDuressConfigured,
@@ -176,13 +176,17 @@ export function DuressPassphraseRow() {
                 onCancel={cancelForm}
                 cancelDisabled={busy}
             >
-                <form onSubmit={handleSet} style={{ ...ROW, flexDirection: 'column', alignItems: 'stretch' }}>
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--xc-space-1)' }}>
-                        <span style={labelStyle}>{t('settings.duress.setDuressPassphrase')}</span>
-                        <span style={ROW_HINT}>
-                            {t('settings.duress.pickAPassphraseThatIs')}
-                        </span>
-                    </div>
+                <FormPage
+                    onSubmit={handleSet}
+                    sectioned
+                    submitFromAnyField
+                    label={t('settings.duress.setDuressPassphrase')}
+                >
+                    <FormSection
+                        title={t('settings.duress.setDuressPassphrase')}
+                        description={t('settings.duress.pickAPassphraseThatIs')}
+                        headingLevel="h3"
+                    >
                     <Input
                         type="password"
                         revealable
@@ -233,7 +237,8 @@ export function DuressPassphraseRow() {
                             {busy ? t('verifySignature.verifying') : t('history.contact.save')}
                         </Button>
                     </div>
-                </form>
+                    </FormSection>
+                </FormPage>
             </SettingsInlineForm>
         );
     }

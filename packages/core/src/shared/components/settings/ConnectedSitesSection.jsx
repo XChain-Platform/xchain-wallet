@@ -27,6 +27,7 @@ import {
     Button,
     EmptyState,
     FormErrorSummary,
+    FormPage,
     FormSection,
     Input,
 } from '@xchain-wallet/core/ui';
@@ -210,7 +211,6 @@ export function ConnectedSitesSection() {
 
     return (
         <div role="group" aria-label={t('settings.connectedSites.connectedSitesAndDappPermissions')} style={STACK}>
-            <SettingsCard>
             <FormSection
                 title={t('settings.connectedSites.allowedSites')}
                 description={t('settings.page.reviewDappConnectionsAndControl')}
@@ -222,7 +222,7 @@ export function ConnectedSitesSection() {
                         titleAs="p"
                     />
                 ) : (
-                    sites.map((site) => {
+                    <SettingsCard>{sites.map((site) => {
                         const isOpen = expanded.has(site.id);
                         return (
                             <FormSection
@@ -280,10 +280,9 @@ export function ConnectedSitesSection() {
                                 {isOpen ? <PermissionsSummary permissions={site.permissions} /> : null}
                             </FormSection>
                         );
-                    })
+                    })}</SettingsCard>
                 )}
             </FormSection>
-            </SettingsCard>
             {blocklistWired ? (
                 <BlockedOriginsPanel
                     blocked={blocked}
@@ -361,7 +360,6 @@ function BlocklistAuditPanel({ confirm }) {
     if (entries === null) return null;
     return (
         <SettingsInlineForm error={error}>
-        <SettingsCard>
         <FormSection
             headingLevel="h3"
             title={t('settings.connectedSites.siteBlockHistory')}
@@ -385,7 +383,7 @@ function BlocklistAuditPanel({ confirm }) {
                     titleAs="p"
                 />
             ) : (
-                // The style guide has no compact audit-list primitive, so this remains a semantic list.
+                <SettingsCard>{/* The style guide has no compact audit-list primitive, so this remains a semantic list. */}
                 <ul
                     style={{
                         margin: 0,
@@ -425,10 +423,9 @@ function BlocklistAuditPanel({ confirm }) {
                             </span>
                         </li>
                     ))}
-                </ul>
+                </ul></SettingsCard>
             )}
         </FormSection>
-        </SettingsCard>
         </SettingsInlineForm>
     );
 }
@@ -517,21 +514,22 @@ function SignThrottlePanel() {
     return (
         <SettingsInlineForm>
         <FormErrorSummary errors={throttleErrors} focusKey={validationAttempt} />
-        <SettingsCard>
-        <FormSection
-            headingLevel="h3"
-            title={t('settings.connectedSites.signRequestThrottle')}
-            description={t('settings.connectedSites.limitsHowManySigningRequests', { SIGN_THROTTLE_DEFAULT_BURST, value: SIGN_THROTTLE_DEFAULT_WINDOW_MS / 1000 })}
+        <FormPage
+            onSubmit={onApply}
+            sectioned
+            submitFromAnyField
+            label={t('settings.connectedSites.signRequestThrottleControls')}
         >
+            <FormSection
+                headingLevel="h3"
+                title={t('settings.connectedSites.signRequestThrottle')}
+                description={t('settings.connectedSites.limitsHowManySigningRequests', { SIGN_THROTTLE_DEFAULT_BURST, value: SIGN_THROTTLE_DEFAULT_WINDOW_MS / 1000 })}
+            >
             <p style={ROW_HINT}>
                 {t('settings.connectedSites.currentlyInEffect')} <strong>{effectiveBurst}</strong> {t('settings.connectedSites.per')}{' '}
                 <strong>{effectiveWindowSec} s</strong>.
             </p>
-            <form
-                aria-label={t('settings.connectedSites.signRequestThrottleControls')}
-                onSubmit={onApply}
-                className={local.controlRow}
-            >
+            <div className={local.controlRow}>
                 <Input
                     id="sign-throttle-burst"
                     size="md"
@@ -582,16 +580,15 @@ function SignThrottlePanel() {
                 >
                     {submitting ? t('settings.connectedSites.applying') : t('settings.connectedSites.apply')}
                 </Button>
-            </form>
-        </FormSection>
-        </SettingsCard>
+            </div>
+            </FormSection>
+        </FormPage>
         </SettingsInlineForm>
     );
 }
 
 function BlockedOriginsPanel({ blocked, manualBlock, setManualBlock, onSubmit, onUnblock, pendingAction }) {
     return (
-        <SettingsCard>
         <FormSection
             headingLevel="h3"
             title={t('settings.connectedSites.blockedSites')}
@@ -611,7 +608,7 @@ function BlockedOriginsPanel({ blocked, manualBlock, setManualBlock, onSubmit, o
                         titleAs="p"
                     />
                 ) : (
-                    // The style guide has no compact origin-list primitive, so this remains a semantic list.
+                    <SettingsCard>{/* The style guide has no compact origin-list primitive, so this remains a semantic list. */}
                     <ul style={{ margin: 0, padding: 0, listStyle: 'none', display: 'flex', flexDirection: 'column', gap: 'var(--xc-space-1)' }}>
                         {blocked.map((origin) => (
                             <li
@@ -632,9 +629,14 @@ function BlockedOriginsPanel({ blocked, manualBlock, setManualBlock, onSubmit, o
                                 </Button>
                             </li>
                         ))}
-                    </ul>
+                    </ul></SettingsCard>
                 )}
-                <form onSubmit={onSubmit} className={`${local.controlRow} ${local.blockRow}`}>
+                <FormPage
+                    onSubmit={onSubmit}
+                    submitFromAnyField
+                    label={t('settings.connectedSites.originOrWildcardToBlock')}
+                >
+                    <div className={`${local.controlRow} ${local.blockRow}`}>
                     <Input
                         type="text"
                         size="md"
@@ -656,9 +658,9 @@ function BlockedOriginsPanel({ blocked, manualBlock, setManualBlock, onSubmit, o
                     >
                         {t('settings.connectedSites.block')}
                     </Button>
-                </form>
+                    </div>
+                </FormPage>
         </FormSection>
-        </SettingsCard>
     );
 }
 

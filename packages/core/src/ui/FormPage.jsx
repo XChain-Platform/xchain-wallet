@@ -93,6 +93,7 @@ function noticeEntry(node, key) {
  * @param {{ blocked: boolean, note: import('react').ReactNode, dialog: import('react').ReactNode }} [props.demoGuard] from useDemoGuard: in a demo wallet the note replaces `status`, submit buttons are disabled and submission is ignored
  * @param {string} [props.label]                        accessible name, which makes the form a landmark
  * @param {boolean} [props.noValidate]                  default true: the route validates and reports through `status`
+ * @param {boolean} [props.submitFromAnyField]          keep native Enter submission for a migrated form that previously allowed it
  * @param {'form' | 'div'} [props.as]                   use div for a reusable form fragment already inside a parent form
  * @param {string} [props.className]
  * @param {import('react').ReactNode} props.children
@@ -117,6 +118,7 @@ export const FormPage = forwardRef(function FormPage(
         label,
         demoGuard,
         noValidate = true,
+        submitFromAnyField = false,
         as: Root = 'form',
         className,
         children,
@@ -142,7 +144,7 @@ export const FormPage = forwardRef(function FormPage(
         : { role: 'group', 'aria-label': label };
     const handleKeyDown = (event) => {
         onKeyDown?.(event);
-        if (Root === 'form') submitOnlyFromLastField(event);
+        if (Root === 'form' && !submitFromAnyField) submitOnlyFromLastField(event);
     };
     // Notices raised by controls inside the form (the fee selector) join the
     // form's own status at the top instead of sitting under their field.

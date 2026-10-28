@@ -418,10 +418,9 @@ export function DisplaySection() {
                 title={t('settings.display.watchedTokens', { length: watched.length })}
                 description={t('settings.display.addATokenByChain')}
             >
-            <form className={layoutStyles.fieldRow} style={{ ...ROW, display: 'grid' }} onSubmit={addWatchedToken}>
-                <div style={ROW_COPY}>
-                    <span style={{ color: 'var(--xc-text)', fontWeight: 500 }}>{t('settings.display.tokenToWatch')}</span>
-                </div>
+            <FormPage onSubmit={addWatchedToken} submitFromAnyField label={t('settings.display.tokenToWatch')}>
+                {/* A plain label: ROW_COPY carries a 280px flex basis that is a width in a row and a height in the form's column. */}
+                <span style={{ color: 'var(--xc-text)', fontWeight: 500 }}>{t('settings.display.tokenToWatch')}</span>
                 <div className={layoutStyles.watchControls}>
                     <Select
                         aria-label={t('settings.display.tokenChain')}
@@ -455,7 +454,7 @@ export function DisplaySection() {
                         {watching ? t('settings.backup.checking') : t('settings.display.watchToken')}
                     </Button>
                 </div>
-            </form>
+            </FormPage>
             {watchMessage ? <StatusMessage variant={watchMessage.variant}>{watchMessage.text}</StatusMessage> : null}
             {watched.map((storedKey) => {
                 const key = tokenDisplayName(storedKey, chains);
