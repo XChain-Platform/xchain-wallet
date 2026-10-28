@@ -27,7 +27,8 @@ import {
 } from '../../schemas/settings.js';
 import { humanizeError } from '../utils/humanizeError.js';
 import { AmountField } from '../components/AmountField.jsx';
-import { useTickBalance } from '../hooks/useTickBalance.js';
+import { useSourceTickBalance } from '../hooks/useSourceTickBalance.js';
+import { recheckSourceTickBalance } from '../../flows/sourceTickBalance.js';
 import { useTokenInfo } from '../hooks/useTokenInfo.js';
 import { amountEntryProblem, formatWithThousands, tokenAmountPrecisionError } from '../utils/amountFormat.js';
 import { exceedsBalance } from '../utils/dividendPerUnit.js';
@@ -53,6 +54,9 @@ import { submitFailureMessage } from '../utils/submitFailureMessage.js';
 import { tickerReferenceError } from '../utils/tickerGrammar.js';
 
 const chainRegistry = registryLib.defaultRegistry();
+
+/** The refusal raised at Approve when the source balance falls short of the amount or cannot be read. */
+const DESTROY_BALANCE_REFUSED = 'DESTROY_BALANCE_REFUSED';
 
 const PROTOCOL_COIN_TICKER = {
     bitcoin: 'BTC',
@@ -124,13 +128,21 @@ export function DestroyForm({ walletId, onBack, initialChainId, initialTick, ini
     const [ticker, setTicker] = useState(initialTick || '');
 
     // Balance of the amount tick at the source address (Max + "available").
-    const tickAmtBalance = useTickBalance({
+    // A failed or unparseable read is unknown, never zero. An Approve refusal
+    // bumps the key, so the footer and Max show the balance that refused it.
+    const [balanceReadKey, setBalanceReadKey] = useState(0);
+    const sourceBalance = useSourceTickBalance({
         messaging,
         walletId,
         chainId,
         address: fromAddress?.address,
         tick: ticker,
+        refreshKey: balanceReadKey,
     });
+    const tickAmtBalance = sourceBalance.amount;
+    // Review waits on a balance read when the debounced one has not landed.
+    const [checkingBalance, setCheckingBalance] = useState(false);
+    const checkingBalanceRef = useRef(false);
     const tokenInfo = useTokenInfo({ chainId, tick: ticker, skip: !ticker.trim() });
     const [amount, setAmount] = useState('');
     const [password, setPassword] = useState('');
@@ -225,6 +237,17 @@ export function DestroyForm({ walletId, onBack, initialChainId, initialTick, ini
         });
     }, [stage, confirmModalOpen, actionParams, chainId]);
 
+    // A refusal before signing hands the composed inputs back to the encoder,
+    // so the next compose is not refused over coins this one still holds.
+    function releaseComposedInputs(composed) {
+        const release = composed?.releaseEncoderInputs;
+        const token = composed?.releaseEncoderInputsToken;
+        const pending = typeof release === 'function'
+            ? release()
+            : (typeof token === 'string' && token ? messaging.releaseEncoderInputs?.({ token }) : null);
+        Promise.resolve(pending).catch(() => {});
+    }
+
     // Single-encode confirm (mirrors Send slice 1): compose + tamper-check +
     // pre-flight run HOST-side; Approve signs the byte-identical prebuilt
     // PSBT via destroyToken.prebuiltPsbt. Reject is a calm no-op back to
@@ -272,22 +295,51 @@ export function DestroyForm({ walletId, onBack, initialChainId, initialTick, ini
                 requoteNativeFee: ({ actionString, source }) => messaging.requoteNativeFee({
                     chainId, actionString, source,
                 }),
-                onApprove: (_creds, composed) => submit({
-                    params: actionParams,
-                    password: passwordValueRef.current,
-                    extraBase: {
-                        payFeeInNativeCoin: nativeFee.flag,
-                        ...(feePerKb != null ? { feePerKb } : {}),
-                        // The shared mapping, envelope and deferred outputs included.
-                        prebuiltPsbt: prebuiltPsbtFromComposed(composed),
-                    },
-                }),
+                onApprove: async (_creds, composed) => {
+                    // The burn is checked against a balance read at Approve, not the
+                    // one from Review: another surface or a send can spend it while
+                    // the confirm page is open, and a destroy is never undone.
+                    const recheck = await recheckSourceTickBalance({
+                        messaging, walletId, chainId, address: from.address,
+                        tick: actionParams.TICK, amount: actionParams.AMOUNT,
+                    });
+                    if (!recheck.ok) {
+                        releaseComposedInputs(composed);
+                        const refusal = new Error(recheck.reason === 'short'
+                            ? t('send.destroy.balanceShort', {
+                                balance: formatWithThousands(recheck.balance),
+                                amount: formatWithThousands(actionParams.AMOUNT),
+                                tick: actionParams.TICK,
+                            })
+                            : t('send.destroy.balanceUnread', { tick: actionParams.TICK }));
+                        refusal.code = DESTROY_BALANCE_REFUSED;
+                        refusal.reason = recheck.reason;
+                        throw refusal;
+                    }
+                    return submit({
+                        params: actionParams,
+                        password: passwordValueRef.current,
+                        extraBase: {
+                            payFeeInNativeCoin: nativeFee.flag,
+                            ...(feePerKb != null ? { feePerKb } : {}),
+                            // The shared mapping, envelope and deferred outputs included.
+                            prebuiltPsbt: prebuiltPsbtFromComposed(composed),
+                        },
+                    });
+                },
             });
             setResult(res);
             setPassword('');
             setStage('done');
         } catch (err) {
             if (err && (err.reason === 'user-rejected' || err.name === 'UserRejectedError')) return;
+            if (err && err.code === DESTROY_BALANCE_REFUSED) {
+                setPassword('');
+                setBalanceReadKey((n) => n + 1);
+                if (err.reason === 'short') refuseAmount(err.message);
+                else setFormError(err.message);
+                return;
+            }
             console.error('Destroy (confirm) failed:', err); // eslint-disable-line no-console
             setFormError(submitFailureMessage(err, {
                 chainId,
@@ -298,8 +350,9 @@ export function DestroyForm({ walletId, onBack, initialChainId, initialTick, ini
         }
     }
 
-    function handleReview(event) {
+    async function handleReview(event) {
         event.preventDefault();
+        if (checkingBalanceRef.current) return;
         const feeStop = customFeeReviewStop({ feePick, tiers: feeTiers, estimate: feeCustomEstimate });
         if (feeStop) { setFormError(feeStop.formError); return; }
         if (!chainId || !fromAddress) {
@@ -336,11 +389,32 @@ export function DestroyForm({ walletId, onBack, initialChainId, initialTick, ini
             return;
         }
         setAmountError(null);
+        const TICK = ticker.trim();
+        // A burn is judged only against a balance the wallet read and parsed:
+        // one still loading is read here, and one that cannot be read stops it.
+        let balance = tickAmtBalance;
+        if (balance == null) {
+            checkingBalanceRef.current = true;
+            setCheckingBalance(true);
+            let read;
+            try {
+                read = await recheckSourceTickBalance({
+                    messaging, walletId, chainId, address: fromAddress.address, tick: TICK, amount: amt,
+                });
+            } finally {
+                checkingBalanceRef.current = false;
+                setCheckingBalance(false);
+            }
+            if (read.reason === 'unread') {
+                setFormError(t('send.destroy.balanceUnread', { tick: TICK }));
+                return;
+            }
+            balance = read.balance;
+        }
         // Refuse a burn the selected source address cannot fund.
-        if (exceedsBalance(amt, tickAmtBalance)) {
-            const TICK = ticker.trim();
+        if (exceedsBalance(amt, balance)) {
             refuseAmount(
-                `This address holds only ${formatWithThousands(tickAmtBalance)} ${TICK}. `
+                `This address holds only ${formatWithThousands(balance)} ${TICK}. `
                 + 'Enter an amount at or below that balance.',
             );
             return;
@@ -662,8 +736,8 @@ export function DestroyForm({ walletId, onBack, initialChainId, initialTick, ini
                 <Button
                     type="submit"
                     variant="primary"
-                    loading={confirmAction.composing}
-                    disabled={!fromAddress || !ticker || !amount || confirmAction.composing}
+                    loading={confirmAction.composing || checkingBalance}
+                    disabled={!fromAddress || !ticker || !amount || confirmAction.composing || checkingBalance}
                 >
                     {!isWatcherMode ? 'Destroy' : 'Preview'}
                 </Button>
@@ -721,7 +795,7 @@ export function DestroyForm({ walletId, onBack, initialChainId, initialTick, ini
                 maxDisabled={!tickAmtBalance}
                 balanceText={tickAmtBalance != null && (ticker)
                     ? `${formatWithThousands(tickAmtBalance)} ${String(ticker)} available`
-                    : null}
+                    : (sourceBalance.unreadable && ticker ? t('send.balance.unknown') : null)}
             />
 
             {feeTiers ? (

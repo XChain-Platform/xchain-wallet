@@ -115,6 +115,10 @@ const messages = {
     'send.balance.unavailable': 'Balance unavailable ({error})',
     'send.balance.unknown': 'Balance unavailable',
     'send.balance.available': '{amount} {ticker} available',
+    'send.destroy.balanceShort':
+        'This address holds {balance} {tick} now, less than the {amount} {tick} this destroy burns. Nothing was signed. Review the amount and try again.',
+    'send.destroy.balanceUnread':
+        "Couldn't read this address's {tick} balance, so nothing was signed. Check your connection and try again.",
     'send.recipient.heading': 'Recipient {number}',
     'send.recipient.removeLabel': 'Remove recipient {number}',
     'send.recipient.addressLabel': 'Recipient {number} address',

@@ -67,6 +67,9 @@ export async function destroyToken(opts) {
         fromAddress: source.address,
         toAddress: null,
         actionSummary: `Destroy ${amount} ${tick}`,
+        // The burn debits the source until the explorer indexes it, so a second
+        // window's balance read cannot offer the same tokens again.
+        balanceDebits: [{ tick, amount }],
     };
 
     return submitAction({

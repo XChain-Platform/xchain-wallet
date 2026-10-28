@@ -518,6 +518,14 @@ function recordingMessaging({ walletMode = 'full' } = {}) {
         getSettings: () => Promise.resolve({
             walletMode,
         }),
+        // A destroy is judged against the source address's read balance.
+        getWalletBalances: () => Promise.resolve({
+            'bitcoin-mainnet': [{
+                address: HD_ADDRESS.address,
+                balances: { native: null, tokens: [{ tick: 'JDOG', quantity: '100000000000', divisibility: 8 }] },
+                error: null,
+            }],
+        }),
         getSignerStatus: () => Promise.resolve({ status: 'unlocked' }),
         mintToken: record('mintToken'),
         mintAssetHw: record('mintAssetHw'),
