@@ -233,7 +233,12 @@ import { BalancesUncheckedState } from '../components/BalancesUncheckedState.jsx
 import { HideReachabilityNotice } from '../components/hideReachabilityNotice.js';
 import { readBalanceCache } from '../utils/balanceCache.js';
 import { useFormLeaveGuard } from '../hooks/useFormLeaveGuard.js';
-import { useDispenserDestination, dispenserDestinationNotice } from '../hooks/useDispenserDestination.js';
+import {
+    useDispenserDestination,
+    useDispenserDestinations,
+    dispenserDestinationNotice,
+    multiDispenserDestinationNotice,
+} from '../hooks/useDispenserDestination.js';
 import {
     formatWithThousands,
     countNonCommaBefore,
@@ -1924,12 +1929,33 @@ export function Send({ walletId, accountId, onBack, prefill = null, onDone, onCh
         isNativePayment: isNativeSend,
         enabled: !isDemo && !isMultiSend,
     });
-    const dispenserNotice = useMemo(() => dispenserDestinationNotice({
-        dispensers: dispensersAtDestination, payer: fromAddress?.address, amount: String(amount).trim(),
-    }), [dispensersAtDestination, fromAddress?.address, amount]);
+    // Each recipient of a multi-recipient Send triggers the open dispensers at
+    // its own address, so every row gets the same lookup and notice.
+    const sendLegsNativeTicker = nativeTickerFor(descriptor);
+    const dispensersByRecipient = useDispenserDestinations({
+        messaging,
+        chainId,
+        payments: isMultiSend ? sendLegs.map((leg) => ({
+            to: leg.to,
+            paymentTick: leg.tick,
+            isNativePayment: Boolean(sendLegsNativeTicker) && leg.tick.toUpperCase() === sendLegsNativeTicker,
+        })) : [],
+        enabled: !isDemo && isMultiSend,
+    });
+    const dispenserNotice = useMemo(() => (isMultiSend
+        ? multiDispenserDestinationNotice({
+            dispensersByRecipient, payer: fromAddress?.address, amounts: sendLegs.map((leg) => leg.amount),
+        })
+        : dispenserDestinationNotice({
+            dispensers: dispensersAtDestination, payer: fromAddress?.address, amount: String(amount).trim(),
+        })), [isMultiSend, dispensersByRecipient, sendLegs, dispensersAtDestination, fromAddress?.address, amount]);
     const dispenserNoticeBlock = dispenserNotice ? (
         <div data-testid="send-dispenser-notice">
-            <StatusMessage variant="status">{dispenserNotice.summary}</StatusMessage>
+            <StatusMessage variant="status">
+                {dispenserNotice.summaries
+                    ? dispenserNotice.summaries.map((line) => <p key={line}>{line}</p>)
+                    : dispenserNotice.summary}
+            </StatusMessage>
             {dispenserNotice.warnings.length > 0 ? (
                 <StatusMessage variant="warning" role="alert">
                     {dispenserNotice.warnings.map((w) => <p key={w}>{w}</p>)}
@@ -1943,7 +1969,7 @@ export function Send({ walletId, accountId, onBack, prefill = null, onDone, onCh
         <FormNotice
             variant={dispenserNotice.warnings.length > 0 ? 'warning' : 'status'}
             role={dispenserNotice.warnings.length > 0 ? 'alert' : undefined}
-            lines={[dispenserNotice.summary, ...dispenserNotice.warnings]}
+            lines={[...(dispenserNotice.summaries || [dispenserNotice.summary]), ...dispenserNotice.warnings]}
         />
     ) : null;
 

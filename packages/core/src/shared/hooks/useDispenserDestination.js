@@ -70,6 +70,59 @@ export function useDispenserDestination({
 }
 
 /**
+ * useDispenserDestination for every recipient of a multi-recipient Send. Each
+ * send in the action triggers the open dispensers at its own destination, so
+ * every recipient gets the same lookup. Answers by recipient position; a
+ * recipient with no open dispenser, or a failed lookup, answers an empty list.
+ *
+ * @param {{ messaging: any, chainId: string | null | undefined,
+ *   payments: Array<{ to: string, paymentTick: string, isNativePayment: boolean }>,
+ *   enabled: boolean }} params
+ * @returns {DispenserAtDestination[][]}
+ */
+export function useDispenserDestinations({ messaging, chainId, payments, enabled }) {
+    const [found, setFound] = useState(/** @type {DispenserAtDestination[][]} */ ([]));
+    const seqRef = useRef(0);
+    const wanted = (Array.isArray(payments) ? payments : []).map((p) => ({
+        dest: typeof p?.to === 'string' ? p.to.trim() : '',
+        sentTick: String(p?.paymentTick || '').trim().toUpperCase(),
+        isNativePayment: Boolean(p?.isNativePayment),
+    }));
+    const signature = JSON.stringify(wanted);
+    useEffect(() => {
+        const seq = seqRef.current + 1;
+        seqRef.current = seq;
+        setFound([]);
+        const list = /** @type {typeof wanted} */ (JSON.parse(signature));
+        if (!enabled || !chainId || list.length === 0) return undefined;
+        if (typeof messaging?.getDispensersForAddress !== 'function') return undefined;
+        let active = true;
+        const timer = setTimeout(() => {
+            // Recipients that share a destination and payment asset share one read.
+            const reads = new Map();
+            const readFor = ({ dest, sentTick, isNativePayment }) => {
+                if (!dest || !sentTick) return Promise.resolve([]);
+                const key = `${dest}\u0000${sentTick}\u0000${isNativePayment}`;
+                if (!reads.has(key)) {
+                    reads.set(key, loadDispensersAt(messaging, chainId, dest, sentTick, isNativePayment, () => active)
+                        .catch(() => []));
+                }
+                return reads.get(key);
+            };
+            Promise.all(list.map(readFor))
+                .then((rows) => { if (seqRef.current === seq) setFound(rows); })
+                .catch(() => { /* best-effort, as for one destination */ });
+        }, 400);
+        return () => {
+            active = false;
+            clearTimeout(timer);
+            if (seqRef.current === seq) seqRef.current += 1;
+        };
+    }, [messaging, chainId, signature, enabled]);
+    return found;
+}
+
+/**
  * @typedef {object} DispenserAtDestination
  * @property {any} row                    list row merged over the by-index detail
  * @property {string[] | null} allowMembers
@@ -256,4 +309,27 @@ export function dispenserDestinationNotice({ dispensers, payer, amount }) {
             + 'One payment can fill more than one of them, so the wallet does not estimate what you would receive.',
         warnings: dispensers.flatMap((d, i) => refusalWarnings(d, payer).map((w) => `Dispenser ${ids[i]}: ${w}`)),
     };
+}
+
+/**
+ * The review-screen copy for a multi-recipient Send, one summary line per
+ * recipient whose destination runs open dispensers, each named by its row
+ * number; null when none does.
+ *
+ * @param {{ dispensersByRecipient: DispenserAtDestination[][], payer?: string | null,
+ *   amounts: string[] }} params
+ * @returns {{ summary: string, summaries: string[], warnings: string[] } | null}
+ */
+export function multiDispenserDestinationNotice({ dispensersByRecipient, payer, amounts }) {
+    const summaries = [];
+    const warnings = [];
+    (Array.isArray(dispensersByRecipient) ? dispensersByRecipient : []).forEach((dispensers, i) => {
+        const notice = dispenserDestinationNotice({ dispensers, payer, amount: String(amounts?.[i] ?? '') });
+        if (!notice) return;
+        const label = `Recipient ${i + 1}`;
+        summaries.push(`${label}: ${notice.summary}`);
+        warnings.push(...notice.warnings.map((w) => `${label}: ${w}`));
+    });
+    if (summaries.length === 0) return null;
+    return { summary: summaries.join(' '), summaries, warnings };
 }

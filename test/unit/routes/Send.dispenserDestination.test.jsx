@@ -230,6 +230,63 @@ describe('Send review: destination matches an open dispenser', () => {
         expect(screen.queryByText(/oracle has no current price/)).toBeNull();
     });
 
+    // Each send in a multi-recipient action triggers the open dispensers at its own
+    // destination, so an added recipient that is a dispenser's pay-to is a purchase too.
+    it('names a dispenser at an added recipient address of a multi-recipient token send', async () => {
+        const OTHER = 'bc1qar0srrr7xfkvy5l643lydnw9re59gtzzwf5mdq';
+        const messaging = mount({
+            getAddressBalances: vi.fn().mockResolvedValue({
+                native: { tick: 'BTC', quantity: '1000000000', divisibility: 8 },
+                tokens: [{ tick: 'XCHAIN', quantity: '100', divisibility: 0 }],
+            }),
+            getDispensersForAddress: vi.fn().mockImplementation(async ({ address }) => (
+                address === DISPENSER_ADDR ? { data: [TOKEN_DISPENSER_ROW] } : { data: [] })),
+            getDispenserByActionIndex: vi.fn().mockResolvedValue({
+                ...TOKEN_DISPENSER_ROW, state: { status: 'open', allow_list: '77' },
+            }),
+            getListByActionIndex: vi.fn().mockResolvedValue({ list: [{ address: DISPENSER_ADDR }] }),
+        }, { prefill: { chainId: CHAIN_ID, tick: 'XCHAIN' } });
+        await flushTimers();
+        fireEvent.change(screen.getByLabelText(/^To$/), { target: { value: OTHER } });
+        fireEvent.change(screen.getByLabelText(/^Amount \(/), { target: { value: '1' } });
+        fireEvent.click(screen.getByRole('button', { name: /Add recipient/ }));
+        fireEvent.change(screen.getByLabelText('Recipient 2 address'), { target: { value: DISPENSER_ADDR } });
+        fireEvent.change(screen.getByLabelText('Recipient 2 amount'), { target: { value: '9' } });
+        await flushTimers();
+        fireEvent.click(screen.getByRole('button', { name: /^Send$/ }));
+        await flushTimers();
+
+        expect(messaging.getDispensersForAddress).toHaveBeenCalledWith({
+            chainId: CHAIN_ID, address: DISPENSER_ADDR,
+        });
+        expect(screen.getAllByText(/Recipient 2: This pays dispenser #9002: you would receive 10 DOGI; the other 1 XCHAIN buys no whole fill/).length)
+            .toBeGreaterThan(0);
+        expect(screen.getAllByText(/Recipient 2: The address you are sending from is not allowed to buy/).length)
+            .toBeGreaterThan(0);
+        expect(screen.queryByText(/Recipient 1: This pays dispenser/)).toBeNull();
+    });
+
+    it('says nothing extra when no recipient of a multi-recipient send is a dispenser', async () => {
+        const OTHER = 'bc1qar0srrr7xfkvy5l643lydnw9re59gtzzwf5mdq';
+        const messaging = mount({
+            getAddressBalances: vi.fn().mockResolvedValue({
+                native: { tick: 'BTC', quantity: '1000000000', divisibility: 8 },
+                tokens: [{ tick: 'XCHAIN', quantity: '100', divisibility: 0 }],
+            }),
+        }, { prefill: { chainId: CHAIN_ID, tick: 'XCHAIN' } });
+        await flushTimers();
+        fireEvent.change(screen.getByLabelText(/^To$/), { target: { value: OTHER } });
+        fireEvent.change(screen.getByLabelText(/^Amount \(/), { target: { value: '1' } });
+        fireEvent.click(screen.getByRole('button', { name: /Add recipient/ }));
+        fireEvent.change(screen.getByLabelText('Recipient 2 address'), { target: { value: DISPENSER_ADDR } });
+        fireEvent.change(screen.getByLabelText('Recipient 2 amount'), { target: { value: '9' } });
+        await flushTimers();
+        fireEvent.click(screen.getByRole('button', { name: /^Send$/ }));
+        await lookupSettled(messaging);
+
+        expect(screen.queryByText(/This pays dispenser/)).toBeNull();
+    });
+
     it('ignores a dispenser that is no longer open', async () => {
         const messaging = mount({
             getDispensersForAddress: vi.fn().mockResolvedValue({
