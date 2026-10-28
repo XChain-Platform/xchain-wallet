@@ -178,6 +178,22 @@ describe('Execute callback reads the token again at Approve', () => {
         expect(target.callbackAction).not.toHaveBeenCalled();
     });
 
+    it('reads the token, height and payout balance fresh at Approve', async () => {
+        const { messaging, target } = confirmMessaging();
+        mount(messaging);
+        await openConfirm();
+        target.getTokenInfo.mockClear();
+        target.getIndexerWatermark.mockClear();
+        target.getWalletBalances.mockClear();
+        await approve();
+        await waitFor(() => expect(target.callbackAction).toHaveBeenCalledTimes(1));
+        expect(target.getTokenInfo).toHaveBeenCalledWith(expect.objectContaining({ tick: 'CALLABLE', fresh: true }));
+        expect(target.getTokenInfo).toHaveBeenCalledWith(expect.objectContaining({ tick: 'PAY', fresh: true }));
+        for (const [req] of target.getTokenInfo.mock.calls) expect(req.fresh).toBe(true);
+        expect(target.getIndexerWatermark).toHaveBeenCalledWith(expect.objectContaining({ fresh: true }));
+        expect(target.getWalletBalances).toHaveBeenCalledWith('w', undefined, undefined, { fresh: true });
+    });
+
     it('signs once when nothing moved', async () => {
         const { messaging, target } = confirmMessaging();
         mount(messaging);

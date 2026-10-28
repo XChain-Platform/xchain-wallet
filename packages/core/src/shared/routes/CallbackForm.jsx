@@ -524,6 +524,8 @@ export function CallbackForm({ walletId, onBack, initialChainId, initialTick, in
         return true;
     }
 
+    // Review and Approve re-read past the explorer reuse window, so a change
+    // that lands seconds before Approve is seen before anything is signed.
     async function refreshBeforeReview() {
         if (demoWallet) {
             if (!blockReached) {
@@ -540,13 +542,13 @@ export function CallbackForm({ walletId, onBack, initialChainId, initialTick, in
         try {
             const [freshInfo, watermark] = await Promise.all([
                 Promise.resolve()
-                    .then(() => messaging.getTokenInfo({ chainId, tick: ticker, demo: false }))
+                    .then(() => messaging.getTokenInfo({ chainId, tick: ticker, demo: false, fresh: true }))
                     .catch(() => ({ loadError: true })),
-                messaging.getIndexerWatermark({ chainId }),
+                messaging.getIndexerWatermark({ chainId, fresh: true }),
             ]);
             const freshTick = String(freshInfo?.callbackTick || '').trim();
             const freshPayoutInfo = freshTick
-                ? await messaging.getTokenInfo({ chainId, tick: freshTick, demo: false })
+                ? await messaging.getTokenInfo({ chainId, tick: freshTick, demo: false, fresh: true })
                 : null;
             if (freshTick && !freshPayoutInfo) {
                 return 'Could not refresh the callback payout token. Try again.';
@@ -588,7 +590,7 @@ export function CallbackForm({ walletId, onBack, initialChainId, initialTick, in
                     callbackAmount: freshInfo.callbackAmount,
                     callbackDecimals: freshDivisibility,
                 }),
-                messaging.getWalletBalances(walletId),
+                messaging.getWalletBalances(walletId, undefined, undefined, { fresh: true }),
             ]);
             if (!freshSummary || freshSummary.totalPayout == null) {
                 return 'Could not refresh the callback payout. Try again.';
