@@ -17,11 +17,20 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { App } from '../../../packages/extension/src/popup/App.jsx';
 import { SURFACE_STATE_STORAGE_KEY } from '../../../packages/extension/src/shared/surfaceStateSync.js';
 
+// Whether this window holds an open review. The real flag is set by a confirm
+// in progress; the tests below set it directly.
+let reviewOpen = false;
+vi.mock('../../../packages/core/src/shared/hooks/useConfirmAction.js', async (importOriginal) => ({
+    ...(await importOriginal()),
+    isConfirmActive: () => reviewOpen,
+}));
+
 beforeEach(() => {
     globalThis.IS_REACT_ACT_ENVIRONMENT = true;
 });
 
 afterEach(() => {
+    reviewOpen = false;
     cleanup();
     localStorage.clear();
     vi.unstubAllGlobals();
@@ -215,5 +224,54 @@ describe('popup reacts to account changes made in another surface', () => {
         await emit('accounts', { change: 'renamed', walletId: 'w9', accountId: 'a9' });
 
         expect(count(sent, 'account.list')).toBe(reads);
+    });
+});
+
+describe('an open review survives record changes made in another surface', () => {
+    // Home reads the stored confirms each time it mounts, so the count of that
+    // read tells a remount of the open screen apart from a re-render.
+    const mounts = (sent) => count(sent, 'action.confirmSession.list');
+
+    async function shown() {
+        const env = boot({ wallets: [{ id: 'w1', name: 'Alpha' }] });
+        env.state.accounts = [{ id: 'a1', walletId: 'w1', index: 0, name: 'Main' }];
+        localStorage.setItem('xchain.activeWallet', 'w1');
+        render(<App />);
+        await waitFor(() => expect(mounts(env.sent)).toBeGreaterThan(0));
+        await act(async () => { await new Promise((resolve) => setTimeout(resolve, 50)); });
+        return env;
+    }
+
+    for (const [label, kind, payload] of [
+        ['a renamed wallet', 'wallets', { change: 'renamed', walletId: 'w1' }],
+        ['a renamed account', 'accounts', { change: 'renamed', walletId: 'w1', accountId: 'a1' }],
+        ['an added account', 'accounts', { change: 'added', walletId: 'w1', accountId: 'a2' }],
+        ['another wallet removed', 'wallets', { change: 'removed', walletId: 'w9' }],
+    ]) {
+        it(`keeps the open screen for ${label} while a review is open`, async () => {
+            const { sent, emit } = await shown();
+            reviewOpen = true;
+            const before = mounts(sent);
+            await emit(kind, payload);
+            await act(async () => { await new Promise((resolve) => setTimeout(resolve, 50)); });
+            expect(mounts(sent)).toBe(before);
+        });
+    }
+
+    // Renames and added accounts leave Home mounted with or without a review
+    // (App.surfaceAccountsChanged.test.jsx); a removal still reloads it.
+    it('reloads the open screen for another wallet removed with no review open', async () => {
+        const { sent, emit } = await shown();
+        const before = mounts(sent);
+        await emit('wallets', { change: 'removed', walletId: 'w9' });
+        await waitFor(() => expect(mounts(sent)).toBeGreaterThan(before));
+    });
+
+    it('reloads the open screen for a network change while a review is open', async () => {
+        const { sent, emit } = await shown();
+        reviewOpen = true;
+        const before = mounts(sent);
+        await emit('network', { settings: { activeNetwork: 'testnet' } });
+        await waitFor(() => expect(mounts(sent)).toBeGreaterThan(before));
     });
 });

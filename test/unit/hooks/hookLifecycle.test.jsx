@@ -3,7 +3,7 @@
 
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { act, cleanup, renderHook, waitFor } from '@testing-library/react';
-import { useConfirmAction } from '../../../packages/core/src/shared/hooks/useConfirmAction.js';
+import { isConfirmActive, useConfirmAction } from '../../../packages/core/src/shared/hooks/useConfirmAction.js';
 import { useConfirmModal } from '../../../packages/core/src/shared/hooks/useConfirmModal.js';
 import { useDispenserDestination } from '../../../packages/core/src/shared/hooks/useDispenserDestination.js';
 import { useDocumentTitle } from '../../../packages/core/src/shared/hooks/useDocumentTitle.js';
@@ -172,9 +172,11 @@ describe('shared hook lifecycle cleanup', () => {
         const rejected = expect(confirmation).rejects.toMatchObject({ reason: 'user-rejected' });
 
         await waitFor(() => expect(hook.result.current.phase).toBe('preflighting'));
+        expect(isConfirmActive()).toBe(true);
         hook.unmount();
 
         await rejected;
+        expect(isConfirmActive()).toBe(false);
         await waitFor(() => {
             expect(releaseEncoderInputs).toHaveBeenCalledWith('release-1');
             expect(session.clear).toHaveBeenCalledWith(expect.stringMatching(/^cs:/));

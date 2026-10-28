@@ -51,6 +51,7 @@ const RECORD_LIST_VIEWS = new Set([
 ]);
 import { useAutoLockPolicy } from '@xchain-wallet/core/shared/hooks/useAutoLockPolicy.js';
 import { useLastView } from '@xchain-wallet/core/shared/hooks/useLastView.js';
+import { isConfirmActive } from '@xchain-wallet/core/shared/hooks/useConfirmAction.js';
 import { useDocumentTitle } from '@xchain-wallet/core/shared/hooks/useDocumentTitle.js';
 import { MessagingProvider } from '@xchain-wallet/core/shared/MessagingProvider.jsx';
 import { Loading } from '@xchain-wallet/core/shared/routes/Loading.jsx';
@@ -703,11 +704,18 @@ function AppInner({ canOpenInTab, titleEnabled }) {
     // has not shown yet wait here for it.
     const chosenWalletId = useRef(/** @type {string | null} */ (null));
     const removedBeforeShown = useRef(/** @type {Set<string>} */ (new Set()));
+    // A review open here signs exactly what it shows. A wallet renamed or
+    // removed elsewhere, or an account added or renamed, changes none of it,
+    // and a remount would close it, so those events leave the open screen
+    // until the next navigation mounts a fresh one.
+    const remountUnlessReviewing = () => {
+        if (!isConfirmActive()) setSurfaceStateRevision((value) => value + 1);
+    };
 
     useEffect(() => attachSurfaceStateListener((event) => {
         const remountRecordLists = () => {
             setRecordRevision((value) => value + 1);
-            if (RECORD_LIST_VIEWS.has(shownView.current)) setSurfaceStateRevision((value) => value + 1);
+            if (RECORD_LIST_VIEWS.has(shownView.current)) remountUnlessReviewing();
         };
         applySurfaceStateEvent(event, {
             refreshSession: refreshUnlessOnboardingHolds,
@@ -729,13 +737,14 @@ function AppInner({ canOpenInTab, titleEnabled }) {
                 listWallets()
                     .then((list) => { if (Array.isArray(list) && list.length) setWallets(list); })
                     .catch(() => { /* the next session refresh reloads the list */ });
-                setSurfaceStateRevision((value) => value + 1);
+                remountUnlessReviewing();
             },
             // An account added or renamed in another surface is news about the
             // list, not a switch: this surface keeps the account it shows while
             // that account exists, even though the other surface stored its own
             // choice in the storage both share. Only a vanished account is
-            // re-picked from the fresh list.
+            // re-picked from the fresh list, and only that reloads the open
+            // screen.
             accountsChanged: (walletId) => {
                 if (shownWalletId.current !== walletId) return;
                 listAccounts(walletId)
@@ -743,10 +752,12 @@ function AppInner({ canOpenInTab, titleEnabled }) {
                         if (shownWalletId.current !== walletId) return;
                         const sorted = Array.isArray(list) ? [...list].sort((a, b) => a.index - b.index) : [];
                         const shown = shownAccountId.current;
-                        setActiveAccountId(shown && sorted.some((account) => account.id === shown)
+                        const next = shown && sorted.some((account) => account.id === shown)
                             ? shown
-                            : reconcileActiveAccount(walletId, sorted));
-                        remountRecordLists();
+                            : reconcileActiveAccount(walletId, sorted);
+                        setActiveAccountId(next);
+                        if (next === shown) remountRecordLists();
+                        else setSurfaceStateRevision((value) => value + 1);
                     })
                     .catch(() => { /* the next wallet switch reloads the accounts */ });
             },

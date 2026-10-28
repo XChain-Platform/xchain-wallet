@@ -74,6 +74,15 @@ export function isConfirmOpenPhase(phase) {
     return OPEN_PHASES.includes(/** @type {string} */ (phase));
 }
 
+/**
+ * Is a confirmation running in this window, from its compose through its
+ * terminal state? A shell that would remount the open screen for an
+ * unrelated reason asks first, since a remount ends the review.
+ */
+export function isConfirmActive() {
+    return activeInstanceId !== null;
+}
+
 export function useConfirmAction() {
     const instanceId = useRef(Symbol('confirm-action')).current;
     // Names this window in reservation ids. A Symbol's description is the same text in
