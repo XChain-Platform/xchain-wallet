@@ -19,6 +19,7 @@ import {
     finalizeMultisigSigningSession,
     startMultisigSigningSession,
 } from '../../../packages/core/src/flows/multisigSigning.js';
+import { signedTxFor } from '../../helpers/signedTx.js';
 
 const ALICE = '02' + 'aa'.repeat(32);
 const BOB = '03' + 'bb'.repeat(32);
@@ -99,9 +100,14 @@ describe('multisig session concurrent writes', () => {
     it('broadcasts a finalized session once when Broadcast runs twice at once', async () => {
         const { vault, records } = slowVault();
         const session = await start(vault);
-        records.set(session.id, { ...session, status: 'finalized', finalizedTxHex: 'ab', txid: 'tx' });
+        // Real finalized bytes and the prevouts their PSBT records: the
+        // broadcast verifies every signature before it sends.
+        const finalized = signedTxFor({ inputs: [{ type: 'p2wsh-multisig' }] });
+        records.set(session.id, { ...session, status: 'finalized', finalizedTxHex: finalized.txHex, txid: 'tx' });
         const broadcastTx = vi.fn(async () => ({ txid: 'tx' }));
-        const sdkRegistry = { get: () => ({ encoder: { broadcastTx } }) };
+        const sdkRegistry = {
+            get: () => ({ encoder: { broadcastTx }, wallet: { decomposePsbt: () => ({ inputs: finalized.prevouts }) } }),
+        };
         const results = await Promise.allSettled([
             finalizeMultisigSigningSession({ vault, sdkRegistry, sessionId: session.id, broadcast: true }),
             finalizeMultisigSigningSession({ vault, sdkRegistry, sessionId: session.id, broadcast: true }),

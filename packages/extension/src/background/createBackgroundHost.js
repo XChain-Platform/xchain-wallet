@@ -41,6 +41,7 @@ import {
 } from '@xchain-wallet/core/flows/diagnosticDump.js';
 import { logConsole } from '@xchain-wallet/core/shared/utils/logConsole.js';
 import { rawTxid } from '@xchain-wallet/core/signers/verifySignedTx.js';
+import { assertBroadcastSignaturesVerify } from '@xchain-wallet/core/signers/verifyTxSignatures.js';
 import { MessageHost } from './MessageHost.js';
 import { registerBridgeHandlers } from '../bridge/handlers.js';
 import {
@@ -4233,6 +4234,18 @@ export function createBackgroundHost(deps) {
         // so it would otherwise bypass an active freeze. Gate at the new call site,
         // same pattern as the signing chokepoints and drainQueuedBroadcast.
         flows.assertSigningAllowed();
+
+        // These bytes come from a paste or a signed PSBT round trip, not from
+        // this wallet's own signer, so every input's signature is verified
+        // against the coin it spends before anything is recorded or sent:
+        // against the PSBT when the caller holds one, otherwise against the
+        // prevouts the UTXO tracker reports. A refusal leaves no record.
+        await assertBroadcastSignaturesVerify({
+            sdk,
+            txHex,
+            psbtHex: typeof req?.psbtHex === 'string' && req.psbtHex ? req.psbtHex : null,
+            signerId: 'broadcast.signedTx',
+        });
 
         // Audit invariant (matches the submitAction path, §11.3.8): persist a
         // PendingTx record BEFORE the irreversible broadcast so a spend through

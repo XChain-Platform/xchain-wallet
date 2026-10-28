@@ -44,7 +44,7 @@ import {
 } from '../../core/src/signers/Signer.js';
 import { assertSignedTxMatchesPsbt } from '../../core/src/signers/verifySignedTx.js';
 import { assertInputSignaturesVerify } from '../../core/src/signers/verifyInputSignatures.js';
-import { CHAIN_ID_TO_TREZOR_COIN, chainIdToTrezorCoin, toTrezorSignTransaction } from './trezorFormat.js';
+import { CHAIN_ID_TO_TREZOR_COIN, chainIdToTrezorCoin, pathToAddressN, toTrezorSignTransaction } from './trezorFormat.js';
 // Imported from validate.js rather than the registry barrel so this package
 // does not pull the bundled descriptors in behind it.
 import { FAMILY_MAINNET_COIN_TYPE_SLOT } from '../../core/src/registry/validate.js';
@@ -214,12 +214,18 @@ export class TrezorSigner extends Signer {
                 );
             }
             return entries.map(({ index, path }, i) => {
-                // Connect echoes each item's path; one that names another path
-                // would file this address under the wrong index.
+                // Connect echoes each item's numeric path. The address and key
+                // are filed under this index only when both items carry exactly
+                // the path asked for, hardened bits included: a missing path, a
+                // reordered answer, or a path that prints the same but differs
+                // as numbers is refused. The serializedPath string is not
+                // compared, since it can match while the numbers do not.
+                const want = pathToAddressN(path);
                 for (const item of [addresses[i], keys[i]]) {
-                    if (typeof item?.serializedPath === 'string' && item.serializedPath !== path) {
+                    if (!sameAddressN(item?.path, want)) {
                         throw new SignerStatusError(
-                            this._id, 'error', `getAddresses: Trezor answered ${item.serializedPath} for ${path}`,
+                            this._id, 'error',
+                            `getAddresses: Trezor answered path ${describeAddressN(item?.path)} for ${path}`,
                         );
                     }
                 }
@@ -528,6 +534,25 @@ function bip44PurposeFor(addressType, coin) {
 function formatBip44Path({ purpose, coin, accountIndex, change, index }) {
     const coinType = coinTypeFor(coin);
     return `m/${purpose}/${coinType}/${accountIndex}'/${change}/${index}`;
+}
+
+/**
+ * Whether Connect's numeric `path` equals `want` element for element, each
+ * read as an unsigned 32-bit integer so a hardened index compares with its top
+ * bit set. Anything that is not such an array is a mismatch.
+ *
+ * @param {unknown} got
+ * @param {number[]} want
+ */
+function sameAddressN(got, want) {
+    if (!Array.isArray(got) || got.length !== want.length) return false;
+    return got.every((n, i) => Number.isInteger(n) && n >= 0 && n <= 0xffffffff && (n >>> 0) === want[i]);
+}
+
+/** A device-reported path for an error message, without trusting its shape. */
+function describeAddressN(got) {
+    if (!Array.isArray(got)) return '(none)';
+    return `[${got.map((n) => String(n)).join(',')}]`;
 }
 
 /**

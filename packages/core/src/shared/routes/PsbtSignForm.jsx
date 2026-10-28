@@ -1166,6 +1166,9 @@ export function PsbtSignForm({ walletId, onBack, initialPsbt }) {
                                         txHex: signedTxHex,
                                         txid: signedTxid || undefined,
                                         fromAddress: selectedAddress?.address || undefined,
+                                        // The signed PSBT's prevouts: the host verifies every
+                                        // input's signature against them before it broadcasts.
+                                        psbtHex: psbtHex || undefined,
                                     }));
                                     if (res?.queued === true) {
                                         setBroadcastUnsaved(res?.persisted === false);

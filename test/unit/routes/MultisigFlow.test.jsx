@@ -22,6 +22,11 @@ import {
     encodeXcwChunks,
     fingerprintSessionRef,
 } from '../../../packages/core/src/uri/index.js';
+import { signedTxFor } from '../../helpers/signedTx.js';
+
+// Real finalized bytes and the prevouts the session PSBT records: the
+// broadcast verifies every signature before it sends.
+const FINALIZED = signedTxFor({ inputs: [{ type: 'p2wsh-multisig' }] });
 
 let messaging;
 const toDataURL = vi.hoisted(() => vi.fn());
@@ -86,13 +91,13 @@ function makeHarness() {
     const sessions = collection();
     const finalizeMultisigPsbt = vi.fn(() => ({
         psbtHex: '00',
-        txHex: '02000000000100',
+        txHex: FINALIZED.txHex,
         txid: 'finalized-txid',
     }));
     const broadcastTx = vi.fn(async () => ({ txid: 'broadcast-txid' }));
     const sdkRegistry = {
         get: vi.fn(() => ({
-            wallet: { finalizeMultisigPsbt },
+            wallet: { finalizeMultisigPsbt, decomposePsbt: () => ({ inputs: FINALIZED.prevouts }) },
             encoder: { broadcastTx },
         })),
     };
@@ -261,13 +266,13 @@ describe('multisig jsdom flow', () => {
         expect((await harness.vault.multisigSigningSessions.get(session.id))).toMatchObject({
             msgHash: MSG_HASH,
             psbtHex: PSBT_HEX,
-            finalizedTxHex: '02000000000100',
+            finalizedTxHex: FINALIZED.txHex,
             status: 'finalized',
         });
 
         fireEvent.click(broadcast);
         expect(await screen.findByText('Broadcast complete: broadcast-txid')).toBeTruthy();
-        expect(harness.broadcastTx).toHaveBeenCalledWith('02000000000100');
+        expect(harness.broadcastTx).toHaveBeenCalledWith(FINALIZED.txHex);
         expect((await harness.vault.multisigSigningSessions.get(session.id))).toMatchObject({
             msgHash: MSG_HASH,
             psbtHex: PSBT_HEX,

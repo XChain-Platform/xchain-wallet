@@ -35,6 +35,7 @@ import {
     pendingCosignerPubkeys,
 } from '../schemas/multisigSigningSession.js';
 import { assertSigningAllowed } from './panicMode.js';
+import { assertBroadcastSignaturesVerify } from '../signers/verifyTxSignatures.js';
 
 const HEX_RE = /^[0-9a-f]+$/;
 const isHexLength = (v, byteLen) =>
@@ -451,6 +452,17 @@ async function finalizeMultisigSigningSessionLocked({
         // step, so it is refused like every other broadcast route. The session
         // stays 'finalized' and can be broadcast once the freeze ends.
         assertSigningAllowed();
+        // The finalized bytes carry cosigner signatures, or came whole from
+        // another coordinator, so none of them is this wallet's own signer's
+        // output: verify every input's signature against the session PSBT's
+        // prevouts (the UTXO tracker's when the PSBT does not decompose) before
+        // anything is sent. A refusal leaves the session finalized.
+        await assertBroadcastSignaturesVerify({
+            sdk,
+            txHex: session.finalizedTxHex,
+            psbtHex: session.psbtHex,
+            signerId: `multisig:${session.id}`,
+        });
         const result = await sdk.encoder.broadcastTx(session.finalizedTxHex);
         const broadcastTxid = typeof result === 'string' ? result : result?.txid;
         if (typeof broadcastTxid !== 'string' || broadcastTxid.length === 0) {

@@ -29,6 +29,7 @@ import { existsSync, readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { scriptsFor, signedReplyFor, TEST_KEYS } from '../../helpers/hwSignedReply.js';
+import { pathToAddressN } from '../../../packages/signers-trezor/src/trezorFormat.js';
 
 import {
     signers,
@@ -78,9 +79,10 @@ function makeMockConnect(overrides = {}) {
                 },
             };
         },
-        // A `bundle` call is answered with one payload item per entry, as Connect does.
+        // A `bundle` call is answered with one payload item per entry, as Connect
+        // does, each echoing its path as numbers and as a string.
         async getAddress(params) {
-            const one = ({ path }) => ({ address: `mock-addr-for-${path}`, path, serializedPath: path });
+            const one = ({ path }) => ({ address: `mock-addr-for-${path}`, path: pathToAddressN(path), serializedPath: path });
             calls.getAddress += 1;
             return { success: true, payload: params.bundle ? params.bundle.map(one) : one(params) };
         },
@@ -89,6 +91,7 @@ function makeMockConnect(overrides = {}) {
                 publicKey: `02mockpub${path.replace(/[^0-9]/g, '')}`,
                 chainCode: 'mockchaincode',
                 fingerprint: 0xdeadbeef,
+                path: pathToAddressN(path),
                 serializedPath: path,
             });
             calls.getPublicKey += 1;

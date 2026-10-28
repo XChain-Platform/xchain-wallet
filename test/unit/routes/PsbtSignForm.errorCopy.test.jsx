@@ -229,6 +229,15 @@ describe('PSBT sign screen: a broadcast that fails', () => {
         expect(text).not.toMatch(/queued-transactions banner/);
     });
 
+    it('sends the signed PSBT so the host verifies against its prevouts, and shows the refusal', async () => {
+        const err = new Error('The signer returned a signature that does not match this transaction. Nothing was broadcast.');
+        err.name = 'SignatureMismatchError';
+        const broadcast = vi.fn(() => Promise.reject(err));
+        const utils = await broadcastWith(broadcast);
+        expect(broadcast).toHaveBeenCalledWith(expect.objectContaining({ psbtHex: PSBT_HEX }));
+        expect(alertsText(utils)).toMatch(/does not match this transaction\. Nothing was broadcast\./);
+    });
+
     it('names no shell API when this shell cannot broadcast', async () => {
         const utils = await broadcastWith(null);
         const text = alertsText(utils);

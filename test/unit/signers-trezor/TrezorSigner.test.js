@@ -21,6 +21,7 @@ import {
 import { Signer } from '../../../packages/core/src/signers/Signer.js';
 import { BUNDLED_DESCRIPTORS } from '../../../packages/core/src/registry/descriptors/index.js';
 import { decomposedFor, signedReplyFor } from '../../helpers/hwSignedReply.js';
+import { pathToAddressN } from '../../../packages/signers-trezor/src/trezorFormat.js';
 
 // coinTypeFor's SLIP-44 slots (btc=0', ltc=2', doge=3') are a second,
 // independently-hardcoded copy of the same coin-type the chain descriptors'
@@ -62,14 +63,20 @@ function makeConnect(overrides = {}) {
                 patch_version: 0,
             },
         }),
-        // Connect answers a `bundle` call with one payload item per entry.
+        // Connect answers a `bundle` call with one payload item per entry,
+        // each echoing its numeric path.
         getAddress: vi.fn(async (params) => ({
             success: true,
-            payload: params?.bundle ? params.bundle.map(() => ({ address: 'bc1qmock' })) : { address: 'bc1qmock' },
+            payload: params?.bundle
+                ? params.bundle.map((e) => ({ address: 'bc1qmock', path: pathToAddressN(e.path) }))
+                : { address: 'bc1qmock' },
         })),
         getPublicKey: vi.fn(async (params) => {
             const key = { publicKey: '02' + 'a'.repeat(64), chainCode: 'c'.repeat(64), fingerprint: '12345678' };
-            return { success: true, payload: params?.bundle ? params.bundle.map(() => key) : key };
+            return {
+                success: true,
+                payload: params?.bundle ? params.bundle.map((e) => ({ ...key, path: pathToAddressN(e.path) })) : key,
+            };
         }),
         signTransaction: vi.fn().mockResolvedValue({
             success: true,
@@ -292,8 +299,8 @@ describe('TrezorSigner.getAddresses', () => {
     // A device stand-in whose answer depends only on the path it is asked for,
     // so a bundled and an unbundled scan can be compared item for item.
     function pathDeterministicConnect() {
-        const address = (p) => ({ address: `addr:${p.coin}:${p.path}`, serializedPath: p.path });
-        const key = (p) => ({ publicKey: `pk:${p.path}`, serializedPath: p.path });
+        const address = (p) => ({ address: `addr:${p.coin}:${p.path}`, path: pathToAddressN(p.path), serializedPath: p.path });
+        const key = (p) => ({ publicKey: `pk:${p.path}`, path: pathToAddressN(p.path), serializedPath: p.path });
         return makeConnect({
             getAddress: vi.fn(async (params) => ({
                 success: true,
@@ -353,11 +360,64 @@ describe('TrezorSigner.getAddresses', () => {
         const connect = pathDeterministicConnect();
         connect.getPublicKey.mockImplementation(async (params) => ({
             success: true,
-            payload: params.bundle.map((_, i) => ({ publicKey: 'pk', serializedPath: params.bundle[(i + 1) % params.bundle.length].path })),
+            payload: params.bundle.map((_, i) => {
+                const other = params.bundle[(i + 1) % params.bundle.length].path;
+                return { publicKey: 'pk', path: pathToAddressN(other), serializedPath: other };
+            }),
         }));
         await expect(makeSigner(connect).getAddresses({
             chainId: 'bitcoin-mainnet', accountIndex: 0, change: 0, startIndex: 0, count: 2, addressType: 'p2wpkh',
-        })).rejects.toThrow(/answered m\/84'/);
+        })).rejects.toThrow(/answered path \[2147483732,2147483648,2147483648,0,1\] for m\/84'\/0'\/0'\/0\/0/);
+    });
+
+    it('refuses an item whose serializedPath matches but whose numeric path drops a hardened bit', async () => {
+        const connect = pathDeterministicConnect();
+        connect.getPublicKey.mockImplementation(async (params) => ({
+            success: true,
+            payload: params.bundle.map((e) => {
+                const numbers = pathToAddressN(e.path);
+                // m/84'/0'/0'/0/i printed the same, with the account index unhardened.
+                numbers[2] &= 0x7fffffff;
+                return { publicKey: `pk:${e.path}`, path: numbers, serializedPath: e.path };
+            }),
+        }));
+        await expect(makeSigner(connect).getAddresses({
+            chainId: 'bitcoin-mainnet', accountIndex: 0, change: 0, startIndex: 0, count: 2, addressType: 'p2wpkh',
+        })).rejects.toThrow(/answered path \[2147483732,2147483648,0,0,0\]/);
+    });
+
+    it('refuses a reordered answer', async () => {
+        const connect = pathDeterministicConnect();
+        const address = (p) => ({ address: `addr:${p.coin}:${p.path}`, path: pathToAddressN(p.path), serializedPath: p.path });
+        connect.getAddress.mockImplementation(async (params) => ({
+            success: true,
+            payload: params.bundle.map(address).reverse(),
+        }));
+        await expect(makeSigner(connect).getAddresses({
+            chainId: 'bitcoin-mainnet', accountIndex: 0, change: 0, startIndex: 0, count: 3, addressType: 'p2wpkh',
+        })).rejects.toThrow(/answered path \[2147483732,2147483648,2147483648,0,2\] for m\/84'\/0'\/0'\/0\/0/);
+    });
+
+    it('refuses a reordered answer that carries numeric paths and no serializedPath', async () => {
+        const connect = pathDeterministicConnect();
+        connect.getAddress.mockImplementation(async (params) => ({
+            success: true,
+            payload: params.bundle.map((e) => ({ address: `addr:${e.path}`, path: pathToAddressN(e.path) })).reverse(),
+        }));
+        await expect(makeSigner(connect).getAddresses({
+            chainId: 'bitcoin-mainnet', accountIndex: 0, change: 0, startIndex: 0, count: 2, addressType: 'p2wpkh',
+        })).rejects.toThrow(/answered path \[2147483732,2147483648,2147483648,0,1\] for m\/84'\/0'\/0'\/0\/0/);
+    });
+
+    it('refuses an item that carries no numeric path', async () => {
+        const connect = pathDeterministicConnect();
+        connect.getAddress.mockImplementation(async (params) => ({
+            success: true,
+            payload: params.bundle.map((e) => ({ address: `addr:${e.path}`, serializedPath: e.path })),
+        }));
+        await expect(makeSigner(connect).getAddresses({
+            chainId: 'bitcoin-mainnet', accountIndex: 0, change: 0, startIndex: 0, count: 2, addressType: 'p2wpkh',
+        })).rejects.toThrow(/answered path \(none\) for m\/84'/);
     });
 });
 

@@ -19,6 +19,11 @@ import {
     activatePanicMode,
     deactivatePanicMode,
 } from '../../../packages/core/src/flows/panicMode.js';
+import { signedTxFor } from '../../helpers/signedTx.js';
+
+// A finalized 2-of-3 spend and the prevouts its session PSBT records, since the
+// broadcast verifies every signature before it sends.
+const FINALIZED = signedTxFor({ inputs: [{ type: 'p2wsh-multisig' }] });
 
 function finalizedSession() {
     const session = {
@@ -26,7 +31,8 @@ function finalizedSession() {
         walletId: 'wallet-1',
         chainId: 'bitcoin-regtest',
         status: 'finalized',
-        finalizedTxHex: '0200000001',
+        finalizedTxHex: FINALIZED.txHex,
+        psbtHex: '70736274ff01',
         cosignerPubkeys: [],
     };
     const records = new Map([[session.id, session]]);
@@ -37,7 +43,9 @@ function finalizedSession() {
         put,
         broadcastTx,
         vault: { multisigSigningSessions: { get: vi.fn(async (id) => records.get(id) || null), put } },
-        sdkRegistry: { get: () => ({ encoder: { broadcastTx } }) },
+        sdkRegistry: {
+            get: () => ({ encoder: { broadcastTx }, wallet: { decomposePsbt: () => ({ inputs: FINALIZED.prevouts }) } }),
+        },
     };
 }
 

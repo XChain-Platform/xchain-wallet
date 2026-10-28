@@ -69,13 +69,13 @@ export class SignatureMismatchError extends Error {
     }
 }
 
-function hexToBytes(hex) {
+export function hexToBytes(hex) {
     const out = new Uint8Array(hex.length / 2);
     for (let i = 0; i < out.length; i++) out[i] = parseInt(hex.slice(i * 2, i * 2 + 2), 16);
     return out;
 }
 
-function bytesToHex(bytes) {
+export function bytesToHex(bytes) {
     let out = '';
     for (const b of bytes) out += b.toString(16).padStart(2, '0');
     return out;
@@ -87,7 +87,7 @@ function reverseHex(hex) {
     return out;
 }
 
-function uintLE(value, bytes) {
+export function uintLE(value, bytes) {
     let v = BigInt(value);
     let out = '';
     for (let i = 0; i < bytes; i++) {
@@ -104,7 +104,7 @@ function varint(n) {
     return `ff${uintLE(n, 8)}`;
 }
 
-function varSlice(hex) {
+export function varSlice(hex) {
     return `${varint(hex.length / 2)}${hex}`;
 }
 
@@ -112,7 +112,7 @@ function hash256(hex) {
     return sha256(sha256(hexToBytes(hex)));
 }
 
-function hash160(hex) {
+export function hash160(hex) {
     return bytesToHex(ripemd160(sha256(hexToBytes(hex))));
 }
 
@@ -145,23 +145,23 @@ function scriptPushes(hex) {
 }
 
 /** `value` as a BigInt satoshi count, or null when it is missing or inexact. */
-function exactSats(value) {
+export function exactSats(value) {
     if (typeof value === 'bigint') return value >= 0n ? value : null;
     if (typeof value === 'string' && /^\d+$/.test(value)) return BigInt(value);
     if (typeof value === 'number' && Number.isSafeInteger(value) && value >= 0) return BigInt(value);
     return null;
 }
 
-function serializeOutputs(outputs) {
+export function serializeOutputs(outputs) {
     return outputs.map((o) => `${uintLE(o.valueSat, 8)}${varSlice(o.scriptPubKeyHex)}`).join('');
 }
 
-function outpoint(input) {
+export function outpoint(input) {
     return `${reverseHex(input.prevTxHash)}${uintLE(input.prevTxIndex, 4)}`;
 }
 
 /** The legacy (pre-segwit) SIGHASH_ALL digest for input `index`. */
-function legacyDigest(tx, index, scriptCodeHex) {
+export function legacyDigest(tx, index, scriptCodeHex) {
     let body = uintLE(tx.version >>> 0, 4) + varint(tx.inputs.length);
     tx.inputs.forEach((input, i) => {
         body += outpoint(input) + (i === index ? varSlice(scriptCodeHex) : '00') + uintLE(input.sequence, 4);
@@ -172,7 +172,7 @@ function legacyDigest(tx, index, scriptCodeHex) {
 }
 
 /** The BIP143 SIGHASH_ALL digest builder, with its whole-transaction hashes computed once. */
-function bip143Digester(tx) {
+export function bip143Digester(tx) {
     const hashPrevouts = bytesToHex(hash256(tx.inputs.map(outpoint).join('')));
     const hashSequence = bytesToHex(hash256(tx.inputs.map((input) => uintLE(input.sequence, 4)).join('')));
     const hashOutputs = bytesToHex(hash256(serializeOutputs(tx.outputs)));
@@ -184,7 +184,7 @@ function bip143Digester(tx) {
     };
 }
 
-function p2pkhScript(keyHashHex) {
+export function p2pkhScript(keyHashHex) {
     return `76a914${keyHashHex}88ac`;
 }
 
@@ -192,7 +192,7 @@ function p2pkhScript(keyHashHex) {
  * Check one DER signature plus its trailing sighash byte against `digest` and
  * `pubkeyHex`. Returns a reason string on failure, null on success.
  */
-function checkSignature(sigHex, pubkeyHex, digestFor, wantSighash) {
+export function checkSignature(sigHex, pubkeyHex, digestFor, wantSighash) {
     if (typeof sigHex !== 'string' || sigHex.length < 4) return 'the signature is empty';
     const sighashType = parseInt(sigHex.slice(-2), 16);
     if (sighashType !== wantSighash) {
@@ -216,7 +216,7 @@ function checkSignature(sigHex, pubkeyHex, digestFor, wantSighash) {
     return ok ? null : 'the signature does not verify for this input';
 }
 
-function isPubkey(hex) {
+export function isPubkey(hex) {
     return (hex.length === 66 && (hex.startsWith('02') || hex.startsWith('03')))
         || (hex.length === 130 && hex.startsWith('04'));
 }

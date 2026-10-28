@@ -11,6 +11,8 @@
 import { webcrypto } from 'node:crypto';
 import { realpathSync } from 'node:fs';
 import { pathToFileURL } from 'node:url';
+import { networks } from 'bitcoinjs-lib';
+import { signedTxFor, trackerFor } from '../../helpers/signedTx.js';
 
 if (!globalThis.crypto) {
     globalThis.crypto = webcrypto;
@@ -50,6 +52,10 @@ export const PROFILE_NATIVE_CONFIRMED = '0.12345678';
 export const PROFILE_SIGN_ADDRESS = 'bc1qcr8te4kr609gcawutmrza0j4xv80jy8z306fyu';
 export const PROFILE_HISTORY_CHAIN_ID = 'bitcoin-regtest';
 export const PROFILE_HISTORY_TXID = 'ab'.repeat(32);
+// The seeded history row's signed bytes, and a tracker listing the coin they
+// spend: broadcast.signedTx verifies every signature before it records a row.
+const PROFILE_SIGNED = signedTxFor({ inputs: [{ type: 'p2wpkh' }] });
+const PROFILE_TRACKER = trackerFor(PROFILE_SIGNED.prevouts, networks.regtest);
 export const PROFILE_SETTINGS = {
     theme: 'dark',
     fiatCurrency: 'EUR',
@@ -96,17 +102,22 @@ export function buildProfileRuntime(userDataDir) {
         chainRegistry,
         sdkRegistry: new sdkLib.SDKRegistry({
             chainRegistry,
-            sdkFactory: (opts) => ({
-                ...createDevMockSdk(opts),
-                getBalances: async () => ({ data: [] }),
-                getAddress: async () => ({
-                    balances: { confirmed: PROFILE_NATIVE_CONFIRMED },
-                }),
-                auth: sdkLib.adaptXChainSDK(XChainSDK)(opts).auth,
-                encoder: {
-                    broadcastTx: async () => PROFILE_HISTORY_TXID,
-                },
-            }),
+            sdkFactory: (opts) => {
+                const mock = createDevMockSdk(opts);
+                return {
+                    ...mock,
+                    wallet: { ...mock.wallet, getBitcoinNetwork: () => networks.regtest },
+                    getBalances: async () => ({ data: [] }),
+                    getAddress: async () => ({
+                        balances: { confirmed: PROFILE_NATIVE_CONFIRMED },
+                    }),
+                    auth: sdkLib.adaptXChainSDK(XChainSDK)(opts).auth,
+                    encoder: {
+                        broadcastTx: async () => PROFILE_HISTORY_TXID,
+                        getUTXOs: PROFILE_TRACKER.getUTXOs,
+                    },
+                };
+            },
         }),
     });
 }
@@ -131,7 +142,7 @@ export async function seedPopulatedProfile(userDataDir) {
             type: 'broadcast.signedTx',
             request: {
                 chainId: PROFILE_HISTORY_CHAIN_ID,
-                txHex: '0200000000',
+                txHex: PROFILE_SIGNED.txHex,
             },
         }));
         resultOrThrow(await handleIpcMessage(runtime, { type: 'wallet.lock' }));
