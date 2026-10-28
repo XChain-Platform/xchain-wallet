@@ -93,6 +93,7 @@ export function FeesSection() {
             <EmptyState
                 title={t('settings.fees.noChainFeeProfilesYet')}
                 titleAs="p"
+                body={t('settings.fees.noChainFeeProfilesYetBody')}
             />
         );
     }

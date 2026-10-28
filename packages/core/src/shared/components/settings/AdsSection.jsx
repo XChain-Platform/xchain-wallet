@@ -216,7 +216,7 @@ export function AdsSection() {
             ) : null}
 
             {chainIds.length === 0 ? (
-                <EmptyState title={t('settings.ads.noChainsSetUpFor')} titleAs="p" />
+                <EmptyState title={t('settings.ads.noChainsSetUpFor')} titleAs="p" body={t('settings.ads.noChainsSetUpForBody')} />
             ) : null}
 
             {chainIds.map((chainId) => {

@@ -20,8 +20,8 @@ const { AdsSection } = await import(
 );
 
 const sections = [
-    ['Fees', FeesSection, 'No network fee profiles yet.'],
-    ['Automatic Donation System', AdsSection, 'No networks set up for donations yet.'],
+    ['Fees', FeesSection, 'No network fee profiles yet'],
+    ['Automatic Donation System', AdsSection, 'No networks set up for donations yet'],
 ];
 
 beforeEach(() => {

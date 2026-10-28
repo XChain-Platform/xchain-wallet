@@ -429,8 +429,8 @@ const messages = {
     'settings.about.reportAProblem': 'Report a problem',
     'settings.ads.itSetsAsideASmall':
         'It sets aside a small amount when you send a transaction and sends it as one donation once it adds up; turning it off stops further set-asides without clearing the pending total.',
-    'settings.ads.noChainsSetUpFor':
-        'No networks set up for donations yet. Each one is added automatically when you activate that network.',
+    'settings.ads.noChainsSetUpFor': 'No networks set up for donations yet',
+    'settings.ads.noChainsSetUpForBody': 'Each one is added automatically when you activate that network.',
     'settings.ads.setAsidePerOutgoingTransaction': 'Set aside per outgoing transaction (sats)',
     'settings.ads.default': ' · default',
     'settings.ads.custom': ' · custom',
@@ -548,8 +548,8 @@ const messages = {
     'settings.languageRegion.searchByCodeOrName': 'Search by code or name',
     'settings.languageRegion.supportedFiatCurrencies': 'Supported fiat currencies',
     'settings.languageRegion.noSupportedCurrenciesMatch': 'No supported currencies match.',
-    'settings.fees.noChainFeeProfilesYet':
-        "No network fee profiles yet. They're seeded automatically when a network is activated.",
+    'settings.fees.noChainFeeProfilesYet': 'No network fee profiles yet',
+    'settings.fees.noChainFeeProfilesYetBody': "They're seeded automatically when a network is activated.",
     'settings.fees.feeStrategy': 'Fee strategy',
     'settings.fees.chooseTheBalanceBetweenConfirmation':
         'Choose the balance between confirmation speed and network cost.',
