@@ -93,6 +93,8 @@ export function ReachabilityBanner({ chainIds, intervalMs, confirmMs, startupGra
             role={null}
             // This is the shell's notice itself, so its error tone never hides it.
             keepsShellNotice
+            // The live region is the inner status span; the box carries the notice marker.
+            marksNotice
             recovery={{
                 label: loading ? 'Checking…' : 'Try again',
                 onAction: refresh,

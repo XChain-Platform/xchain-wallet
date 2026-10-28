@@ -65,8 +65,9 @@ import { t } from '../i18n/index.js';
  * sentence (a form's merged notice).
  *
  * @param {boolean} [props.keepsShellNotice]
+ * @param {boolean} [props.marksNotice]   marks the outer box as a notice (data-xc-notice) when its live region sits on an inner element, so a placement check measures the box
  */
-export function StatusMessage({ variant = 'status', id, children, className, details, recovery, role: roleOverride, testId, lead, label, busy = false, keepsShellNotice = false }) {
+export function StatusMessage({ variant = 'status', id, children, className, details, recovery, role: roleOverride, testId, lead, label, busy = false, keepsShellNotice = false, marksNotice = false }) {
     const presentation = STATUS_PRESENTATION[variant] || STATUS_PRESENTATION.status;
     const empty = children === null || children === undefined || children === '';
     const inShell = Boolean(useContext(ShellNoticesContext));
@@ -91,6 +92,7 @@ export function StatusMessage({ variant = 'status', id, children, className, det
             className={classNames}
             data-variant={presentation.tone}
             data-testid={testId}
+            data-xc-notice={marksNotice ? '' : undefined}
         >
             <span className={styles.icon} aria-hidden="true">{presentation.icon}</span>
             <div className={styles.text}>
