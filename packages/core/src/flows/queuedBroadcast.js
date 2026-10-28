@@ -219,6 +219,17 @@ export async function drainQueuedBroadcast({
         const inFlight = { ...existing, status: 'broadcasting', error: null };
         await vault.pendingTxs.put(inFlight);
 
+        // The freeze is checked again once the claim is written, the last
+        // moment before the bytes leave: a freeze armed during that write
+        // (another tab, the popup, a duress entry) stops the send, and the
+        // record goes back to 'queued' unsent.
+        try {
+            assertSigningAllowed();
+        } catch (err) {
+            await vault.pendingTxs.put(existing);
+            throw err;
+        }
+
         if (onProgress) {
             try { onProgress('broadcasting', { pendingTxId }); } catch { /* swallow */ }
         }
