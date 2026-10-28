@@ -116,10 +116,11 @@ export async function sequenceUnlockedSession(deps) {
 }
 
 /**
- * Longest a due idle lock waits on an active UI request. Shorter than the
- * keepalive alarm period (24 s), so the tick after the first deferral locks.
+ * Longest one signing or broadcast request holds a due idle lock. A hardware
+ * wallet confirm can run for minutes; a request hung on an unreachable
+ * network must not keep a wallet open for good.
  */
-export const AUTO_LOCK_MAX_DEFER_MS = 20_000;
+export const AUTO_LOCK_REQUEST_CEILING_MS = 10 * 60_000;
 
 // Requests that sign or broadcast. A due idle lock waits for one of these to
 // settle, the same work the foreground hook holds its lock for. A read never
@@ -138,25 +139,35 @@ export function requestHoldsAutoLock(type) {
 }
 
 /**
- * Count the trusted UI requests in flight that hold a due idle lock.
- * `begin` runs once per request and returns its completion callback.
+ * Track the trusted UI requests in flight that hold a due idle lock. `begin`
+ * runs once per request and returns its completion callback. A request holds
+ * the lock from its start until it ends or `ceilingMs` passes, whichever
+ * comes first.
  *
+ * @param {{ now?: () => number, ceilingMs?: number }} [opts]
  * @returns {{ begin: (type: unknown) => () => void, isActive: () => boolean }}
  */
-export function createUiRequestTracker() {
-    let holding = 0;
+export function createUiRequestTracker(opts = {}) {
+    const now = opts.now ?? Date.now;
+    const ceilingMs = opts.ceilingMs ?? AUTO_LOCK_REQUEST_CEILING_MS;
+    /** @type {Set<{ startedAt: number }>} */
+    const inFlight = new Set();
     return {
         begin(type) {
             if (!requestHoldsAutoLock(type)) return () => {};
-            holding += 1;
-            let finished = false;
-            return () => {
-                if (finished) return;
-                finished = true;
-                holding = Math.max(0, holding - 1);
-            };
+            const entry = { startedAt: now() };
+            inFlight.add(entry);
+            return () => { inFlight.delete(entry); };
         },
-        isActive: () => holding > 0,
+        isActive() {
+            const at = now();
+            for (const entry of inFlight) {
+                if (at - entry.startedAt < ceilingMs) return true;
+                // Past the ceiling the request stops holding and is dropped.
+                inFlight.delete(entry);
+            }
+            return false;
+        },
     };
 }
 
@@ -170,7 +181,6 @@ export function createUiRequestTracker() {
  * @property {() => Promise<void>} clearAutoLockState
  * @property {(state: unknown, now: number) => boolean} shouldAutoLock
  * @property {() => number} [now]
- * @property {number} [maxDeferMs]                         longest a due lock waits on an active request
  * @property {{ log: Function, error: Function }} [logger]
  * @property {typeof handleWalletLock} [lock]               seam for tests; defaults to the real handler
  */
@@ -201,10 +211,6 @@ export function createLockBackstop(deps) {
 
     // Set when a lock attempt failed to clear a secret; see above.
     let cleanupPending = false;
-    // When a due lock first waited on an active UI request. The next keepalive
-    // tick after maxDeferMs locks whatever is still in flight.
-    let deferredSince = null;
-    const maxDeferMs = deps.maxDeferMs ?? AUTO_LOCK_MAX_DEFER_MS;
 
     async function lockWalletNow() {
         const { sessionBackend, signingSecretBackend } = deps.lockDeps();
@@ -226,7 +232,6 @@ export function createLockBackstop(deps) {
         // Already locked; nothing to do, unless a previous lock left a secret
         // behind and is waiting on this alarm to retry the clear.
         if (!deps.isUnlocked() && !cleanupPending) {
-            deferredSince = null;
             return 'skipped';
         }
         // A record storage cannot read is a deadline this worker cannot
@@ -234,20 +239,11 @@ export function createLockBackstop(deps) {
         let unreadable = false;
         let state;
         try { state = await deps.readAutoLockState(); } catch { unreadable = true; }
-        if (!unreadable && !deps.shouldAutoLock(state, now())) {
-            deferredSince = null;
-            return 'skipped';
-        }
-        // A due lock waits for in-flight signing work once, never for good: a
-        // broadcast can wait on an unreachable network for minutes, and every
-        // tick it holds keeps the session unlocked.
-        if (deps.isRequestActive?.()) {
-            const at = now();
-            if (deferredSince === null) deferredSince = at;
-            if (at - deferredSince < maxDeferMs) return 'deferred';
-            logger.log('[xchain] auto-lock: a UI request outlasted the idle deadline, locking wallet');
-        }
-        deferredSince = null;
+        if (!unreadable && !deps.shouldAutoLock(state, now())) return 'skipped';
+        // A due lock waits for in-flight signing work. The request tracker
+        // stops counting a request after its ceiling, so a hung one cannot
+        // hold the wallet open for good.
+        if (deps.isRequestActive?.()) return 'deferred';
         logger.log(unreadable
             ? '[xchain] auto-lock: record unreadable, locking wallet'
             : '[xchain] auto-lock: idle timeout reached, locking wallet');

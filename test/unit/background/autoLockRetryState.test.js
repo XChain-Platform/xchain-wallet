@@ -29,6 +29,7 @@ import { dirname, join } from 'node:path';
 
 import {
     createLockBackstop,
+    AUTO_LOCK_REQUEST_CEILING_MS,
     createUiRequestTracker,
     requestHoldsAutoLock,
 } from '../../../packages/extension/src/background/walletLock.js';
@@ -274,8 +275,9 @@ describe('auto-lock retry after an incomplete lock', () => {
     });
 });
 
-describe('auto-lock deferral behind a UI request that never settles', () => {
+describe('a signing request holds a due idle lock until it ends or hits its ceiling', () => {
     let priorChrome;
+    const TICK = 24_000;
 
     beforeEach(async () => {
         priorChrome = globalThis.chrome;
@@ -287,48 +289,71 @@ describe('auto-lock deferral behind a UI request that never settles', () => {
         globalThis.chrome = priorChrome;
     });
 
-    // A balance read the closed popup left behind waits on an unreachable
-    // network; the request count never drops to zero while the record is due.
-    function stuckShell() {
+    // One clock drives the tracker and the backstop, as in the worker.
+    function clockedShell() {
         const sw = { host: {}, vault: {}, teardowns: 0, clock: 61_000 + 120_000 };
+        const tracker = createUiRequestTracker({ now: () => sw.clock });
         const sessionBackend = flakyBackend(0);
         const backstop = createLockBackstop({
             lockDeps: () => ({ sessionBackend, signingSecretBackend: flakyBackend(0) }),
             tearDownHost: () => { sw.host = null; sw.vault = null; sw.teardowns += 1; },
             isUnlocked: () => Boolean(sw.host && sw.vault),
-            isRequestActive: () => true,
+            isRequestActive: () => tracker.isActive(),
             readAutoLockState,
             clearAutoLockState,
             shouldAutoLock,
             now: () => sw.clock,
             logger: { log() { }, error() { } },
         });
-        return { sw, sessionBackend, backstop };
+        return { sw, tracker, sessionBackend, backstop };
     }
 
-    it('defers one keepalive tick, then locks on the next', async () => {
-        const { sw, sessionBackend, backstop } = stuckShell();
+    it('holds across three ticks and locks on the first tick after the request ends', async () => {
+        const { sw, tracker, sessionBackend, backstop } = clockedShell();
+        const finish = tracker.begin('auth.signPsbt');
 
-        expect(await backstop.maybeAutoLock()).toBe('deferred');
-        sw.clock += 24_000;
+        for (let i = 0; i < 3; i += 1) {
+            expect(await backstop.maybeAutoLock()).toBe('deferred');
+            sw.clock += TICK;
+        }
+        expect(sw.teardowns).toBe(0);
+        expect(sessionBackend.clears).toBe(0);
+
+        finish();
         expect(await backstop.maybeAutoLock()).toBe('locked');
         expect(sessionBackend.clears).toBe(1);
         expect(sw.teardowns).toBe(1);
         expect(await readAutoLockState()).toBeNull();
     });
 
-    it('starts the deferral again for a later deadline', async () => {
-        const { sw, backstop } = stuckShell();
+    it('stops holding once the request passes the ceiling', async () => {
+        const { sw, tracker, backstop } = clockedShell();
+        tracker.begin('broadcast.signedTx');
 
+        sw.clock += AUTO_LOCK_REQUEST_CEILING_MS - 1;
         expect(await backstop.maybeAutoLock()).toBe('deferred');
-        // Fresh activity moves the deadline out; the earlier wait is spent.
-        await applyAutoLockSignal({ armed: true, idleMs: 60_000, activity: true }, sw.clock);
-        sw.clock += 24_000;
-        expect(await backstop.maybeAutoLock()).toBe('skipped');
-        sw.clock += 60_000;
-        expect(await backstop.maybeAutoLock()).toBe('deferred');
-        sw.clock += 24_000;
+        sw.clock += 1;
         expect(await backstop.maybeAutoLock()).toBe('locked');
+        expect(sw.teardowns).toBe(1);
+    });
+
+    it('measures the ceiling from each request\'s own start', async () => {
+        const { sw, tracker, backstop } = clockedShell();
+        tracker.begin('action.send');
+        sw.clock += AUTO_LOCK_REQUEST_CEILING_MS - TICK;
+        tracker.begin('action.send');
+        sw.clock += TICK;
+        // The first request is past its ceiling; the second still holds.
+        expect(await backstop.maybeAutoLock()).toBe('deferred');
+        sw.clock += AUTO_LOCK_REQUEST_CEILING_MS;
+        expect(await backstop.maybeAutoLock()).toBe('locked');
+    });
+
+    it('a read never holds, however briefly it has run', async () => {
+        const { tracker, backstop, sw } = clockedShell();
+        tracker.begin('balances.wallet');
+        expect(await backstop.maybeAutoLock()).toBe('locked');
+        expect(sw.teardowns).toBe(1);
     });
 });
 
