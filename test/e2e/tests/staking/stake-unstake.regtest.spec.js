@@ -306,10 +306,9 @@ test.describe('STAKE -> UNSTAKE lifecycle on regtest (partial unstake, re-driven
 
         await test.step('FALSIFY: a permanent broadcast failure on UNSTAKE surfaces as an error, never a silent success', async () => {
             await openPaletteCommand(page, 'Staking');
-            // StakeRow renders a real <button> but pins role="listitem" on it
-            // (it lives inside a role="list" container), so it answers to
-            // 'listitem', not 'button', in the accessibility tree.
-            const row = page.getByRole('listitem', { name: 'Open Validator stake', exact: true });
+            // Each stake row is a native button inside its own list item, named
+            // for the position, its amount and its owner.
+            const row = page.getByRole('button', { name: /^Open Validator stake, / });
             await expect(row).toBeVisible({ timeout: 60_000 });
             await row.click();
 

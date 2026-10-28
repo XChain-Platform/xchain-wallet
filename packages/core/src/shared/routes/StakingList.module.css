@@ -64,7 +64,12 @@
     cursor: pointer;
 }
 
-.row:first-of-type {
+.rowItem {
+    display: flex;
+    min-width: 0;
+}
+
+.rowItem:first-of-type > .row {
     border-top: none;
 }
 

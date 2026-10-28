@@ -343,7 +343,7 @@ test.describe('partial COLLECT (validator reward claim) on regtest', () => {
 
         await test.step('FALSIFY: a permanent broadcast failure on a partial Claim never succeeds and never records a claim', async () => {
             await openPaletteCommand(page, 'Staking');
-            const row = page.getByRole('listitem', { name: 'Open Validator stake', exact: true });
+            const row = page.getByRole('button', { name: /^Open Validator stake, / });
             await expect(row).toBeVisible({ timeout: 60_000 });
             await row.click();
 
@@ -381,7 +381,7 @@ test.describe('partial COLLECT (validator reward claim) on regtest', () => {
             await unlockAfterReload(page, PASSWORD);
 
             await openPaletteCommand(page, 'Staking');
-            const row = page.getByRole('listitem', { name: 'Open Validator stake', exact: true });
+            const row = page.getByRole('button', { name: /^Open Validator stake, / });
             await expect(row).toBeVisible({ timeout: 60_000 });
             await row.click();
             const claimBtn = page.getByRole('group', { name: 'Stake actions' })

@@ -166,11 +166,11 @@ for (const viewport of VIEWPORTS) {
                 page.getByRole('button', { name: 'Filter by network' }),
             ], `${viewport.name} staking toolbar`);
 
-            await expect(page.getByRole('listitem', { name: /^Open Validator stake/ })).toBeVisible();
+            await expect(page.getByRole('button', { name: /^Open Validator stake/ })).toBeVisible();
         });
 
         await test.step('stake detail', async () => {
-            await page.getByRole('listitem', { name: /^Open Validator stake/ }).click();
+            await page.getByRole('button', { name: /^Open Validator stake/ }).click();
             await expectScreenFits(page, 'Validator stake', `${viewport.name} validator stake detail`);
             await expect(page.getByRole('main').getByText('50,000 XCHAIN', { exact: true }))
                 .toBeVisible();

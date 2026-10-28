@@ -149,7 +149,7 @@ test.describe('STAKE and partial UNSTAKE on Bitcoin testnet', () => {
 
         await test.step('partially unstake and wait for the valid action', async () => {
             await gotoPalette(page, 'Staking');
-            const row = page.getByRole('listitem', { name: 'Open Validator stake', exact: true });
+            const row = page.getByRole('button', { name: /^Open (Validator stake), / });
             await expect(row).toBeVisible({ timeout: 120_000 });
             await row.click();
             await page.getByRole('group', { name: 'Stake actions' })

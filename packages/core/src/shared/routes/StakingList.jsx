@@ -596,51 +596,63 @@ export function repeatedSecondLinesOf(rows) {
     return new Set([...counts].filter(([, n]) => n > 1).map(([text]) => text));
 }
 
+/**
+ * The accessible name of a stake row: the position, its amount and its
+ * owner, so two positions under one validator or contract read apart.
+ *
+ * @param {{ name: string, subtitle?: string | null, subtitle2?: string | null }} row
+ * @returns {string}
+ */
+export function stakeRowLabel(row) {
+    return ['Open ' + row.name, row.subtitle, row.subtitle2].filter(Boolean).join(', ');
+}
+
 function StakeRow({ row, period, hideSecondLine = false, onSelect }) {
     const chainIconUrl = branding.chainIconSmallUrl(row.chainId);
     return (
-        /* Stake entries stay native buttons because each control is the complete clickable row. */
-        <button
-            type="button"
-            className={local.row}
-            role="listitem"
-            onClick={onSelect}
-            aria-label={`Open ${row.name}`}
-        >
-            <div className={local.iconWrap}>
-                <span
-                    className={local.iconLetter}
-                    style={{ background: tickerColor(row.asset || '?') }}
-                    aria-hidden="true"
-                >
-                    {(row.asset || '?').slice(0, 1)}
-                </span>
-                {chainIconUrl ? (
-                    <img
-                        src={chainIconUrl}
-                        alt=""
+        /* The list item holds one native button, which is the complete clickable row. */
+        <div role="listitem" className={local.rowItem}>
+            <button
+                type="button"
+                className={local.row}
+                onClick={onSelect}
+                aria-label={stakeRowLabel(row)}
+            >
+                <div className={local.iconWrap}>
+                    <span
+                        className={local.iconLetter}
+                        style={{ background: tickerColor(row.asset || '?') }}
                         aria-hidden="true"
-                        title={chainRegistry.get(row.chainId)?.displayName}
-                        className={local.chainOverlay}
-                    />
-                ) : null}
-            </div>
-            <div className={local.body}>
-                <div className={local.name}>{row.name}</div>
-                <div className={local.subtitle}><bdi dir="ltr">{row.subtitle}</bdi></div>
-                {row.subtitle2 && !hideSecondLine ? <div className={local.subtitle}>{row.subtitle2}</div> : null}
-            </div>
-            <div className={local.trailing}>
-                <span className={`${local.status} ${local[`status_${row.status}`] || ''}`}>
-                    {row.status}
-                </span>
-                <span className={local.amount}>{row.amountLabel}</span>
-                {period ? <span className={local.duration}>{period}</span> : null}
-                {row.rewardLabel ? (
-                    <span className={local.rewardChip}>{row.rewardLabel}</span>
-                ) : null}
-            </div>
-        </button>
+                    >
+                        {(row.asset || '?').slice(0, 1)}
+                    </span>
+                    {chainIconUrl ? (
+                        <img
+                            src={chainIconUrl}
+                            alt=""
+                            aria-hidden="true"
+                            title={chainRegistry.get(row.chainId)?.displayName}
+                            className={local.chainOverlay}
+                        />
+                    ) : null}
+                </div>
+                <div className={local.body}>
+                    <div className={local.name}>{row.name}</div>
+                    <div className={local.subtitle}><bdi dir="ltr">{row.subtitle}</bdi></div>
+                    {row.subtitle2 && !hideSecondLine ? <div className={local.subtitle}>{row.subtitle2}</div> : null}
+                </div>
+                <div className={local.trailing}>
+                    <span className={`${local.status} ${local[`status_${row.status}`] || ''}`}>
+                        {row.status}
+                    </span>
+                    <span className={local.amount}>{row.amountLabel}</span>
+                    {period ? <span className={local.duration}>{period}</span> : null}
+                    {row.rewardLabel ? (
+                        <span className={local.rewardChip}>{row.rewardLabel}</span>
+                    ) : null}
+                </div>
+            </button>
+        </div>
     );
 }
 
