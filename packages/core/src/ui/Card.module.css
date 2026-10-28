@@ -68,3 +68,16 @@
     border: var(--xc-card-border);
     border-radius: var(--xc-card-radius);
 }
+
+/* The menu-item reset (tokens.css) and the form-card flattening zero an
+   entry's border at equal weight, so the entry names its list item to keep a
+   border. A card list keeps the card border; a rows list keeps a transparent
+   1px border that the hover rule colours. The box is border-box, so the entry
+   keeps its size. */
+:root [data-xc-menu-list="cards"] li > .card {
+    border: var(--xc-card-border);
+}
+
+:root [data-xc-menu-list="rows"] li > .card {
+    border: 1px solid transparent;
+}

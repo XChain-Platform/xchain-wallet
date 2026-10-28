@@ -11,9 +11,11 @@ const tokensCss = readFileSync(join(coreSrc, 'ui', 'tokens.css'), 'utf8');
 const moduleCss = readFileSync(join(coreSrc, 'shared', 'components', 'BottomTabBar.module.css'), 'utf8');
 const tokensRoot = postcss.parse(tokensCss);
 const moduleRoot = postcss.parse(moduleCss);
+const actionsRoot = postcss.parse(readFileSync(join(coreSrc, 'shared', 'routes', 'ActionsMenu.module.css'), 'utf8'));
 
 const GLOBAL_RESET = ':root [data-xc-menu-list="rows"] [data-xc-menu-item]';
 const HOVER = '.sheetList[data-xc-menu-list="rows"] .sheetItem[data-xc-menu-item]:hover';
+const REST = '.sheetList[data-xc-menu-list="rows"] .sheetItem[data-xc-menu-item]';
 const FOCUS = '.sheetList[data-xc-menu-list="rows"] .sheetItem[data-xc-menu-item]:focus-visible';
 
 function ruleFor(root, selector) {
@@ -49,14 +51,25 @@ describe('More sheet row outline', () => {
         expect(Object.keys(declarations(reset))).not.toContain('outline');
     });
 
-    it('draws an inset 1px control edge on hover above the reset', () => {
+    it('draws a 1px control border on hover above the reset', () => {
+        const rest = ruleFor(moduleRoot, REST);
         const hover = ruleFor(moduleRoot, HOVER);
-        expect(hover).toBeTruthy();
-        expect(declarations(hover)).toMatchObject({
-            outline: '1px solid var(--xc-control-border)',
-            'outline-offset': '-1px',
-        });
+        expect(declarations(rest)).toMatchObject({ border: '1px solid transparent' });
+        expect(declarations(hover)).toMatchObject({ 'border-color': 'var(--xc-control-border)' });
+        expect(specificity(REST)[1]).toBeGreaterThan(specificity(GLOBAL_RESET)[1]);
         expect(specificity(HOVER)[1]).toBeGreaterThan(specificity(GLOBAL_RESET)[1]);
+    });
+
+    it('draws the same 1px border on an actions menu entry', () => {
+        const cardRoot = postcss.parse(readFileSync(join(coreSrc, 'ui', 'Card.module.css'), 'utf8'));
+        const entry = ':root [data-xc-menu-list="cards"] li > .card';
+        const rows = ':root [data-xc-menu-list="rows"] li > .card';
+        const hover = ':root [data-xc-menu-list] li > .entry:hover:not([aria-disabled="true"])';
+        expect(declarations(ruleFor(cardRoot, rows))).toMatchObject({ border: '1px solid transparent' });
+        expect(specificity(rows)[1]).toBeGreaterThan(specificity(GLOBAL_RESET)[1] - 1);
+        expect(declarations(ruleFor(cardRoot, entry))).toMatchObject({ border: 'var(--xc-card-border)' });
+        expect(specificity(entry)[1]).toBeGreaterThan(specificity(GLOBAL_RESET)[1] - 1);
+        expect(declarations(ruleFor(actionsRoot, hover))).toMatchObject({ 'border-color': 'var(--xc-control-border)' });
     });
 
     it('keeps the inset 2px accent ring on keyboard focus', () => {
@@ -73,19 +86,18 @@ describe('More sheet row outline', () => {
         const sizingDeclarations = [];
         moduleRoot.walkRules((rule) => {
             if (!rule.selector.includes('[data-xc-menu-list="rows"]') || !rule.selector.includes('[data-xc-menu-item]')) return;
-            rule.walkDecls(/^(?:padding|margin|border)(?:-|$)/, (decl) => sizingDeclarations.push(decl.toString()));
+            rule.walkDecls(/^(?:padding|margin|border-width)(?:-|$)/, (decl) => sizingDeclarations.push(decl.toString()));
         });
         expect(sizingDeclarations).toEqual([]);
     });
 
-    it('uses the system selection colour for hover and focus in forced colors', () => {
+    it('uses the system selection colour for the hover border and focus ring in forced colors', () => {
         let forcedColors;
         moduleRoot.walkAtRules('media', (rule) => {
             if (rule.params === '(forced-colors: active)') forcedColors = rule;
         });
         expect(forcedColors).toBeTruthy();
-        for (const selector of [HOVER, FOCUS]) {
-            expect(declarations(ruleFor(forcedColors, selector))).toMatchObject({ 'outline-color': 'Highlight' });
-        }
+        expect(declarations(ruleFor(forcedColors, HOVER))).toMatchObject({ 'border-color': 'Highlight' });
+        expect(declarations(ruleFor(forcedColors, FOCUS))).toMatchObject({ 'outline-color': 'Highlight' });
     });
 });

@@ -141,12 +141,16 @@
 
 /* The rows-menu reset in tokens.css (:root [data-xc-menu-list="rows"] [data-xc-menu-item],
    specificity 0,3,0) zeroes the row border, so these rules name the list and
-   item attributes to outrank it. Hover draws the 1px control edge with an
-   inset outline that does not change row size, while keyboard focus keeps its
-   2px accent ring. */
+   item attributes to outrank it. A row keeps a 1px transparent border at rest
+   (the row is border-box, so its size is unchanged) and draws it in the control
+   border colour on hover, so the near-white hover fill has a real edge. Keyboard
+   focus keeps its 2px accent ring. */
+.sheetList[data-xc-menu-list="rows"] .sheetItem[data-xc-menu-item] {
+    border: 1px solid transparent;
+}
+
 .sheetList[data-xc-menu-list="rows"] .sheetItem[data-xc-menu-item]:hover {
-    outline: 1px solid var(--xc-control-border);
-    outline-offset: -1px;
+    border-color: var(--xc-control-border);
 }
 
 .sheetList[data-xc-menu-list="rows"] .sheetItem[data-xc-menu-item]:focus-visible {
@@ -156,7 +160,10 @@
 
 /* Forced colors uses the selection colour for both interactive outlines. */
 @media (forced-colors: active) {
-    .sheetList[data-xc-menu-list="rows"] .sheetItem[data-xc-menu-item]:hover,
+    .sheetList[data-xc-menu-list="rows"] .sheetItem[data-xc-menu-item]:hover {
+        border-color: Highlight;
+    }
+
     .sheetList[data-xc-menu-list="rows"] .sheetItem[data-xc-menu-item]:focus-visible {
         outline-color: Highlight;
     }

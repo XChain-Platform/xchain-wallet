@@ -41,6 +41,19 @@
     transition: background var(--xc-transition), border-color var(--xc-transition), box-shadow var(--xc-transition);
 }
 
+/* Card.module.css keeps the entry's 1px card border above the menu-item and
+   nested-card resets; these rules colour it on hover, selection and press so
+   the near-white hover fill has a visible edge. */
+@media (hover: hover) and (pointer: fine) {
+    :root [data-xc-menu-list] li > .entry:hover:not([aria-disabled="true"]) {
+        border-color: var(--xc-control-border);
+    }
+}
+
+:root [data-xc-menu-list] li > .entry:is(:active, [aria-current='page'], [aria-pressed='true']):not([aria-disabled="true"]) {
+    border-color: var(--xc-control-selected);
+}
+
 .entryIcon {
     flex: 0 0 auto;
     display: inline-flex;
