@@ -1400,16 +1400,16 @@ export function Send({ walletId, accountId, onBack, prefill = null, onDone, onCh
         const changed = value.trim().toUpperCase() !== tick.trim().toUpperCase();
         setTick(value);
         if (!changed) return;
+        // A row without its own token sends the first row's token, so its amount goes too.
+        const sharesToken = (row) => !perRecipientToken || !row.tick.trim();
         const hasSharedAmounts = Boolean(amount)
-            || (!perRecipientToken && extraLegs.some((row) => Boolean(row.amount)));
+            || extraLegs.some((row) => sharesToken(row) && Boolean(row.amount));
         if (!hasSharedAmounts) return;
         cancelMax();
         if (amount) setAmount('');
         setFiatAmount('');
         setAmountInputMode('coin');
-        if (!perRecipientToken) {
-            setExtraLegs((rows) => rows.map((row) => ({ ...row, amount: '' })));
-        }
+        setExtraLegs((rows) => rows.map((row) => (sharesToken(row) ? { ...row, amount: '' } : row)));
         setAssetSwitchNotice('Token changed. The amount was cleared because the new token may use different decimal places.');
     }, [amount, extraLegs, perRecipientToken, tick, cancelMax]);
 
@@ -2136,17 +2136,9 @@ export function Send({ walletId, accountId, onBack, prefill = null, onDone, onCh
         const decoded = decoderLib.balancesFromSdk(previewBalances.sdkShape)
             .find((balance) => balance.tick === tickUpper);
         if (!decoded) return null;
-        const native = previewBalances.sdkShape.native;
-        const rawAsset = native && String(native.tick || '').toUpperCase() === tickUpper
-            ? native
-            : (previewBalances.sdkShape.tokens || [])
-                .find((token) => String(token?.tick || '').toUpperCase() === tickUpper);
-        const divisibility = Number(rawAsset?.divisibility);
         return {
             ...decoded,
-            divisibility: Number.isInteger(divisibility) && divisibility >= 0
-                ? divisibility
-                : undefined,
+            divisibility: heldDivisibility(previewBalances.sdkShape, tickUpper),
         };
     }, [previewBalances.sdkShape, tick]);
 
@@ -2578,8 +2570,17 @@ export function Send({ walletId, accountId, onBack, prefill = null, onDone, onCh
                 if (legAddressError) rowErrors.to = `${label}: ${legAddressError}`;
             }
             const legAmount = String(leg.amount).trim();
+            // The row sends its own token only while per-recipient tokens are on, the
+            // rule sendLegs applies; the network refuses an amount past that token's places.
+            const legTick = ((perRecipientToken && leg.tick.trim()) ? leg.tick : tick).trim().toUpperCase();
+            const legDecimalLimit = previewBalances.sdkShape
+                ? heldDivisibility(previewBalances.sdkShape, legTick)
+                : undefined;
             if (!isPositiveDecimalAmount(legAmount)) {
                 rowErrors.amount = `${label}: amount must be a positive number.`;
+            } else if (Number.isInteger(legDecimalLimit)
+                && (legAmount.split('.')[1] || '').length > legDecimalLimit) {
+                rowErrors.amount = `${label}: amount can have at most ${legDecimalLimit} decimal places.`;
             }
             if (Object.keys(rowErrors).length > 0) nextRecipientErrors[leg.id] = rowErrors;
         }
@@ -3715,9 +3716,17 @@ export function Send({ walletId, accountId, onBack, prefill = null, onDone, onCh
                 kindFilter="tokens"
                 kindLocked
                 onSelect={(selection) => {
-                    updateRecipient(tokenPickerRecipientId, {
-                        tick: String(selection.tick || '').toUpperCase(),
-                    });
+                    const picked = String(selection.tick || '').toUpperCase();
+                    const row = extraLegs.find((leg) => leg.id === tokenPickerRecipientId);
+                    const current = (row?.tick.trim() || tick.trim()).toUpperCase();
+                    // An amount belongs to the token it was typed for, whose decimal places may differ.
+                    const clearAmount = picked !== current && Boolean(row?.amount);
+                    updateRecipient(tokenPickerRecipientId, clearAmount
+                        ? { tick: picked, amount: '' }
+                        : { tick: picked });
+                    if (clearAmount) {
+                        setAssetSwitchNotice('Token changed. The amount was cleared because the new token may use different decimal places.');
+                    }
                     setTokenPickerRecipientId(null);
                 }}
                 onBack={() => setTokenPickerRecipientId(null)}
@@ -4363,6 +4372,24 @@ function DetailRow({ label, value }) {
             <dd className={styles.detailsValue}>{value}</dd>
         </>
     );
+}
+
+/**
+ * Decimal places of one held asset in a source balance read, or undefined when
+ * the read does not state them.
+ *
+ * @param {any} sdkShape   getAddressBalances answer
+ * @param {string} tickUpper
+ * @returns {number | undefined}
+ */
+function heldDivisibility(sdkShape, tickUpper) {
+    const native = sdkShape?.native;
+    const rawAsset = native && String(native.tick || '').toUpperCase() === tickUpper
+        ? native
+        : (sdkShape?.tokens || [])
+            .find((token) => String(token?.tick || '').toUpperCase() === tickUpper);
+    const divisibility = Number(rawAsset?.divisibility);
+    return Number.isInteger(divisibility) && divisibility >= 0 ? divisibility : undefined;
 }
 
 function AssetIconPicker({ chainId, tick, label, onOpen, error }) {

@@ -82,7 +82,11 @@ import { useToast } from '../components/ToastHost.jsx';
 import { useDemoGuard } from '../hooks/useDemoGuard.jsx';
 import { useOwnerActionLane } from '../hooks/useOwnerActionLane.js';
 import { isUserRejection, useActionConfirmFlow, useConfirmSubmit } from '../hooks/useActionConfirmFlow.js';
-import { dispenserDestinationNotice, useDispenserDestination } from '../hooks/useDispenserDestination.js';
+import {
+    dispenserDestinationNotice,
+    openDispensersPaidBy,
+    useDispenserDestination,
+} from '../hooks/useDispenserDestination.js';
 import { copyText } from '../clipboard.js';
 import { formatLocalDateTime, formatRelativeTime } from '../utils/dateTime.js';
 import { exceedsBalance } from '../utils/dividendPerUnit.js';
@@ -1098,6 +1102,8 @@ export function DispenserDetail({ walletId, chainId, actionIndex, onBack, onCanc
         };
     }, [buyFrom, payTick, dispAddr, totalPayAmount, walletId, chainId, feePerKb,
         fillsCount, actionIndex, totalReceive, giveTick]);
+    // Bumped when a buy finds a dispenser at the pay-to that the review does not name.
+    const [buyDestinationReadKey, setBuyDestinationReadKey] = useState(0);
     const dispensersAtBuyDestination = useDispenserDestination({
         messaging,
         chainId,
@@ -1105,7 +1111,10 @@ export function DispenserDetail({ walletId, chainId, actionIndex, onBack, onCanc
         paymentTick: payTick,
         isNativePayment: coinBuyable,
         enabled: canBuyWithSend,
+        refreshKey: buyDestinationReadKey,
     });
+    const shownBuyDestinationRef = useRef(/** @type {string[]} */ ([]));
+    shownBuyDestinationRef.current = dispensersAtBuyDestination.map((d) => String(d.row?.action_index));
     const buyDestinationNotice = useMemo(() => dispenserDestinationNotice({
         dispensers: dispensersAtBuyDestination,
         payer: buyerAddress?.address,
@@ -1240,8 +1249,29 @@ export function DispenserDetail({ walletId, chainId, actionIndex, onBack, onCanc
                 ? 'This dispenser has sold out. Nothing was sent.'
                 : `Only ${left} complete fill${left === 1n ? '' : 's'} remain. Reduce the number of fills.`;
         }
+        // One payment fills every open dispenser at the pay-to that sells for the same
+        // asset, so a neighbour the review does not name takes part of this buy.
+        if (typeof messaging.getDispensersForAddress !== 'function' || !dispAddr) return null;
+        let neighbours;
+        try {
+            neighbours = openDispensersPaidBy(
+                await messaging.getDispensersForAddress({ chainId, address: dispAddr }),
+                { dest: dispAddr, sentTick: payTick, isNativePayment: coinBuyable },
+            );
+        } catch {
+            return null;
+        }
+        if (expectedIdentity !== detailIdentityRef.current) return null;
+        const unseen = neighbours
+            .map((row) => String(row.action_index))
+            .filter((id) => id !== String(actionIndex) && !shownBuyDestinationRef.current.includes(id));
+        if (unseen.length > 0) {
+            setBuyDestinationReadKey((key) => key + 1);
+            return `Another open dispenser at this address (#${unseen.join(', #')}) sells for the same `
+                + 'payment, and one payment can fill more than one of them. Nothing was sent. Review the buy again.';
+        }
         return null;
-    }, [chainId, actionIndex, messaging, isDemoWallet, fillsCount]);
+    }, [chainId, actionIndex, messaging, isDemoWallet, fillsCount, dispAddr, payTick, coinBuyable]);
 
     const beginBuy = useCallback(async () => {
         if (buyInFlightRef.current || buyStage === 'submitting' || !buyRequest) return;

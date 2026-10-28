@@ -44,6 +44,29 @@ describe('dispenserDestinationNotice', () => {
         expect(n.warnings).toEqual([]);
     });
 
+    it('says how much of a payment past whole fills is kept', () => {
+        // 0.035 buys 3 fills at 0.01 each; the network keeps the other 0.005.
+        const n = dispenserDestinationNotice({ dispensers: [entry()], payer: PAYER, amount: '0.035' });
+        expect(n.summary).toBe('This pays dispenser #9001: you would receive 15 DOGI; '
+            + 'the other 0.005 BTC buys no whole fill and is not refunded.');
+    });
+
+    it('names the payment token in the kept remainder of a token-paid fill', () => {
+        const n = dispenserDestinationNotice({
+            dispensers: [entry({ get_tick: 'XCHAIN', get_amount: '5' })], payer: PAYER, amount: '12',
+        });
+        expect(n.summary).toMatch(/you would receive 10 DOGI; the other 2 XCHAIN buys no whole fill and is not refunded/);
+    });
+
+    it('says an ownership dispenser keeps a payment past its single fill', () => {
+        const n = dispenserDestinationNotice({
+            dispensers: [entry({ give_ownership: 1, give_amount: null, escrow_remaining: null })],
+            payer: PAYER,
+            amount: '0.03',
+        });
+        expect(n.summary).toMatch(/you would receive ownership of DOGI; the other 0\.02 BTC buys nothing and is not refunded/);
+    });
+
     it('caps at the escrow left and says the rest is not refunded', () => {
         const n = dispenserDestinationNotice({
             dispensers: [entry({ escrow_remaining: '10' })], payer: PAYER, amount: '0.05',

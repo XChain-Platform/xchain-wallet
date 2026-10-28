@@ -283,6 +283,8 @@ describe('Send: multi-recipient (PC-52)', () => {
         fireEvent.click(pickerButton);
         expect(screen.getByRole('heading', { name: 'Select token for recipient 2' })).toBeInTheDocument();
         fireEvent.click(screen.getByRole('button', { name: 'Pick DANK' }));
+        // The amount typed for PEPE is cleared with the token change and typed again for DANK.
+        await fillRow(1, { amount: '3' });
         expect(screen.getByText(/Total: 7 PEPE \+ 3 DANK across 2 recipients/)).toBeInTheDocument();
     });
 

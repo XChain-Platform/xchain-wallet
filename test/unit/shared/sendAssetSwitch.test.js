@@ -81,6 +81,19 @@ describe('send asset switch', () => {
         expect(chain.assetSwitchNotice).toMatch(/^Network changed/);
     });
 
+    it('names no reset when the switch drops nothing the form held', () => {
+        const empty = { chainId: 'bitcoin-regtest', tick: 'BTC', address: '', amount: '', feeSelection: { mode: 'normal' } };
+        const during = beginSendAssetSwitch(null, empty);
+        expect(applySendAssetPick(during, { chainId: 'bitcoin-regtest', tick: 'XCP' }).assetSwitchNotice).toBeUndefined();
+        expect(applySendAssetPick(during, { chainId: 'litecoin-regtest', tick: 'LTC' }).assetSwitchNotice).toBeUndefined();
+        // A recipient alone is still dropped by a network change, and only that change.
+        const withRecipient = beginSendAssetSwitch(null, { ...empty, address: 'bcrt1qrecipient' });
+        expect(applySendAssetPick(withRecipient, { chainId: 'bitcoin-regtest', tick: 'XCP' }).assetSwitchNotice).toBeUndefined();
+        expect(applySendAssetPick(withRecipient, { chainId: 'litecoin-regtest', tick: 'LTC' }).assetSwitchNotice).toMatch(/^Network changed/);
+        const withFee = beginSendAssetSwitch(null, { ...empty, feeSelection: { mode: 'custom', customRate: 12 } });
+        expect(applySendAssetPick(withFee, { chainId: 'litecoin-regtest', tick: 'LTC' }).assetSwitchNotice).toMatch(/^Network changed/);
+    });
+
     it.each(SHELLS)('%s backs out of send-picker to Send and leaves Send\'s back target alone', (path) => {
         const src = readFileSync(path, 'utf8');
         const picker = block(src, "unlockedView === 'send-picker'", "unlockedView === 'receive-picker'");

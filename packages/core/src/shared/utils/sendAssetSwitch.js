@@ -52,9 +52,17 @@ export function applySendAssetPick(prev, sel) {
     const draft = prev?.assetSwitchDraft;
     const sameChain = draft?.chainId === sel.chainId;
     const sameToken = sameChain && sameTick(draft?.tick, sel.tick);
+    // A notice says what was reset only when the form held it.
+    const heldAmount = Boolean(String(draft?.amount || '').trim());
+    const heldOnChain = heldAmount
+        || Boolean(String(draft?.address || '').trim())
+        || (draft?.feeSelection?.mode != null && draft.feeSelection.mode !== 'normal');
     let assetSwitchNotice;
-    if (draft && !sameChain) assetSwitchNotice = 'Network changed. Recipient, amount, and fee rate were reset.';
-    else if (draft && !sameToken) assetSwitchNotice = 'Token changed. Amount was reset for the new token precision.';
+    if (draft && !sameChain && heldOnChain) {
+        assetSwitchNotice = 'Network changed. Recipient, amount, and fee rate were reset.';
+    } else if (draft && sameChain && !sameToken && heldAmount) {
+        assetSwitchNotice = 'Token changed. Amount was reset for the new token precision.';
+    }
     return {
         chainId: sel.chainId,
         tick: sel.tick,
