@@ -67,6 +67,7 @@ import { takePostDemoIntent } from '@xchain-wallet/core/shared/utils/demoGraduat
 import { historyScopeForAsset } from '@xchain-wallet/core/shared/utils/historyEntryScope.js';
 import { defaultDexAssetForNetwork, sharedListDirectoryChainId, syncDexAssetToNetwork } from '@xchain-wallet/core/shared/chainSelection.js';
 import { lockImmediately } from '@xchain-wallet/core/shared/utils/lockAction.js';
+import { clearSensitiveCopy } from '@xchain-wallet/core/shared/clipboard.js';
 import { useMessagingUnread } from '@xchain-wallet/core/shared/hooks/useMessagingUnread.js';
 import { CoinpayObligationsProvider, useSharedCoinpayObligations } from '@xchain-wallet/core/shared/hooks/useCoinpayObligations.js';
 import { Locked } from '@xchain-wallet/core/shared/routes/Locked.jsx';
@@ -659,6 +660,8 @@ function AppInner() {
     useEffect(() => {
         if (status.state !== 'unlocked') {
             clearTransientActionState();
+            // A key copied in the session must not outlive it on the clipboard.
+            void clearSensitiveCopy();
             pendingActiveWalletId.current = null;
             walletListRef.current = [];
             setActiveWalletId(null);

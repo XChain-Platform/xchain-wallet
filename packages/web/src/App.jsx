@@ -48,6 +48,7 @@ import { reconcileActiveAccount } from '@xchain-wallet/core/shared/utils/activeA
 import { readActiveWallet, writeActiveWallet } from '@xchain-wallet/core/shared/utils/activeWalletMemory.js';
 import { takePostDemoIntent } from '@xchain-wallet/core/shared/utils/demoGraduation.js';
 import { createLaunchRouteState, shouldClearTransientState } from '@xchain-wallet/core/shared/utils/launchRouteState.js';
+import { clearSensitiveCopy } from '@xchain-wallet/core/shared/clipboard.js';
 import { historyScopeForAsset } from '@xchain-wallet/core/shared/utils/historyEntryScope.js';
 import { defaultDexAssetForNetwork, sharedListDirectoryChainId, syncDexAssetToNetwork } from '@xchain-wallet/core/shared/chainSelection.js';
 import { lockImmediately } from '@xchain-wallet/core/shared/utils/lockAction.js';
@@ -904,6 +905,8 @@ function AppInner() {
         if (status.state !== 'unlocked') {
             // A link opened before unlock parks its prefill while the shell
             // loads or sits locked; only leaving an unlocked session wipes it.
+            // A key copied in the session must not outlive it on the clipboard.
+            void clearSensitiveCopy();
             if (shouldClearTransientState(previousState, status.state)) clearTransientActionState();
             setActiveWalletId(null);
             setActiveAccountId(null);

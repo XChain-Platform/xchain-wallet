@@ -192,6 +192,7 @@ import {
     shellForExtensionView,
 } from './launchState.js';
 import { shouldClearTransientState } from '@xchain-wallet/core/shared/utils/launchRouteState.js';
+import { clearSensitiveCopy } from '@xchain-wallet/core/shared/clipboard.js';
 import { usePopupPaletteData } from './usePopupPaletteData.js';
 import {
     activeTabSupportsWallet,
@@ -786,6 +787,8 @@ function AppInner({ canOpenInTab, titleEnabled }) {
         if (status.state !== 'unlocked') {
             // A link opened before unlock parks its prefill while the popup
             // loads or sits locked; only leaving an unlocked session wipes it.
+            // A key copied in the session must not outlive it on the clipboard.
+            void clearSensitiveCopy();
             if (shouldClearTransientState(previousState, status.state)) clearTransientActionState();
             setActiveWalletId(null);
             setActiveAccountId(null);

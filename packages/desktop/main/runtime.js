@@ -710,9 +710,13 @@ export async function wipeRuntimeStores(runtime) {
     const cleared = [];
     /** @type {{ store: string, message: string }[]} */
     const errors = [];
+    // Meta before the blob. A quit between the two unlinks leaves one of
+    // them on disk: a blob alone reads as locked, and the lock screen's
+    // Forgot password runs the reset again; meta alone reads as no wallet
+    // while create, import and restore refuse over it, a dead end.
     const targets = [
-        ['storage', runtime.storageBackend],
         ['meta', runtime.metaBackend],
+        ['storage', runtime.storageBackend],
         ['session', runtime.sessionBackend],
         ['unlockThrottle', runtime.unlockThrottleStore],
         // The auto-lock stamp describes a session that no longer exists

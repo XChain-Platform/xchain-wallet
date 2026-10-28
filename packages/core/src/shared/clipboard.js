@@ -165,6 +165,24 @@ export async function clearClipboard(opts = {}) {
     return cleared;
 }
 
+/**
+ * Clear a sensitive copy whose expiry timer is still running, before the timer
+ * fires. Shells call this as the session leaves unlocked: locking ends the
+ * window in which a copied key was meant to be pasteable. A value another app
+ * has since copied is left alone, and a copy kept on purpose (expiry 0) has no
+ * timer, so it stays.
+ *
+ * @param {{ env?: any }} [opts]
+ * @returns {Promise<boolean>} whether a clear was written
+ */
+export async function clearSensitiveCopy(opts = {}) {
+    const { env = globalThis } = opts;
+    const pending = pendingAutoClear;
+    if (!pending) return false;
+    cancelPendingAutoClear();
+    return clearClipboard({ env, expectedValue: pending.value });
+}
+
 function cancelPendingAutoClear() {
     if (!pendingAutoClear) return;
     pendingAutoClear.cancel(pendingAutoClear.id);
@@ -194,7 +212,7 @@ function scheduleAutoClear(value, seconds, env, generation) {
         pendingAutoClear = null;
         await clearClipboard({ env, expectedValue: value });
     }, seconds * 1000);
-    pendingAutoClear = { id, cancel, clipboard, onChange };
+    pendingAutoClear = { id, cancel, clipboard, onChange, value };
 }
 
 /**
