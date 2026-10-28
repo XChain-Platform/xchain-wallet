@@ -21,6 +21,7 @@ import Module, { createRequire } from 'node:module';
 import { readFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
+import { runInNewContext } from 'node:vm';
 
 import {
     BRIDGE_CLOSED_MESSAGE,
@@ -39,6 +40,7 @@ const HERE = dirname(fileURLToPath(import.meta.url));
 const DESKTOP = resolve(HERE, '../../../packages/desktop');
 const DOCUMENT_PATH = join(DESKTOP, 'main', 'trezorBridge', 'connect.html');
 const BRIDGE_PRELOAD_PATH = join(DESKTOP, 'main', 'trezorBridge', 'preload.cjs');
+const BRIDGE_RESPONDER_PATH = join(DESKTOP, 'main', 'trezorBridge', 'responder.js');
 const APP_PRELOAD_PATH = join(DESKTOP, 'preload.cjs');
 const DOCUMENT_URL = pathToFileURL(DOCUMENT_PATH).href;
 
@@ -212,7 +214,11 @@ describe('desktop Trezor bridge window: relay', () => {
         const { win, call, request } = await liveBridge(rig, { method: 'getAddress', args: { path: "m/84'/0'/0'/0/0" } });
 
         const init = win.requests()[0];
-        expect(init).toEqual({ id: init.id, method: 'init', args: { manifest: { ...TREZOR_CONNECT_MANIFEST }, lazyLoad: true } });
+        expect(init).toEqual({
+            id: init.id,
+            method: 'init',
+            args: { manifest: { ...TREZOR_CONNECT_MANIFEST }, lazyLoad: true, popup: false },
+        });
         expect(request).toEqual({ id: request.id, method: 'getAddress', args: { path: "m/84'/0'/0'/0/0" } });
         win.reply({ id: request.id, ok: true, result: { success: true, payload: { address: 'bc1qexample' } } });
         await expect(call).resolves.toEqual({ ok: true, result: { success: true, payload: { address: 'bc1qexample' } } });
@@ -486,5 +492,55 @@ describe('desktop Trezor bridge preloads', () => {
         expect(() => world.call()).toThrow(TypeError);
         expect(() => world.close('extra')).toThrow(TypeError);
         expect(pre.invokes).toHaveLength(3);
+    });
+});
+
+describe('desktop Trezor bridge responder', () => {
+    it('refuses a response-bearing Connect UI event without supplying PIN or passphrase input', async () => {
+        let onRequest;
+        let onUiEvent;
+        const replies = [];
+        const never = new Promise(() => {});
+        const connect = {
+            on: vi.fn((event, listener) => {
+                expect(event).toBe('UI_EVENT');
+                onUiEvent = listener;
+            }),
+            cancel: vi.fn(),
+            signMessage: vi.fn(() => never),
+        };
+        const bridge = {
+            onRequest: vi.fn((listener) => { onRequest = listener; }),
+            reply: vi.fn((message) => replies.push(message)),
+            ready: vi.fn(),
+        };
+        runInNewContext(readFileSync(BRIDGE_RESPONDER_PATH, 'utf8'), {
+            window: { TrezorConnect: connect, xchainTrezorConnectBridge: bridge },
+            Map,
+            Promise,
+            Error,
+            String,
+        });
+
+        for (const [id, type, description] of [
+            ['7', 'ui-request_pin', 'PIN entry'],
+            ['8', 'ui-request_passphrase', 'passphrase entry'],
+            ['9', 'ui-request_permission', 'permission approval'],
+        ]) {
+            onRequest({ id, method: 'signMessage', args: { message: 'exact message' } });
+            await vi.waitFor(() => expect(connect.signMessage).toHaveBeenCalledTimes(replies.length + 1));
+            onUiEvent({ event: 'UI_EVENT', type, payload: {} });
+            const reply = replies.at(-1);
+            expect(reply).toMatchObject({ id, ok: false });
+            expect(reply.error).toContain(`requested ${description}`);
+            expect(reply.error).toMatch(/refused without supplying a PIN, passphrase, permission grant/);
+            expect(reply.error).toMatch(/Nothing was signed or broadcast/);
+        }
+        expect(replies).toHaveLength(3);
+        expect(connect.cancel).toHaveBeenCalledTimes(3);
+        for (let i = 0; i < replies.length; i += 1) {
+            expect(connect.cancel).toHaveBeenNthCalledWith(i + 1, replies[i].error);
+        }
+        expect(Object.hasOwn(connect, 'uiResponse')).toBe(false);
     });
 });

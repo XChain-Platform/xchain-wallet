@@ -252,7 +252,11 @@ export function createTrezorBridge({
         const { win, loaded } = openWindow();
         const opening = (async () => {
             await loaded;
-            const init = await post(win, 'init', { manifest: { ...TREZOR_CONNECT_MANIFEST }, lazyLoad: true });
+            const init = await post(win, 'init', {
+                manifest: { ...TREZOR_CONNECT_MANIFEST },
+                lazyLoad: true,
+                popup: false,
+            });
             if (!init.ok) throw new Error(init.error);
         })();
         const tracked = opening.catch((err) => {
