@@ -53,6 +53,12 @@ describe('SigningReadyNote', () => {
         expect(screen.getByText(/panic mode is on/i)).toBeTruthy();
     });
 
+    it('keeps the sentence about Approving where Approve is still shown', () => {
+        activatePanicMode();
+        const { container } = render(<SigningReadyNote><p>Wallet unlocked. No password needed.</p></SigningReadyNote>);
+        expect(container.textContent).toMatch(/Approving will be refused/);
+    });
+
     it('withdraws the note WITHOUT a cue when the freeze was duress-armed', () => {
         activatePanicMode({ armedBy: PANIC_ARMED_DURESS });
         const { container } = render(
@@ -124,6 +130,13 @@ describe('PanicPasswordGate', () => {
         render(<PanicPasswordGate>{field}</PanicPasswordGate>);
         expect(screen.queryByLabelText('Password')).toBeNull();
         expect(screen.getByText(/panic mode is on/i)).toBeTruthy();
+    });
+
+    it('tells the reader that Reject closes the request, and never says Approving is refused', () => {
+        activatePanicMode();
+        const { container } = render(<PanicPasswordGate>{field}</PanicPasswordGate>);
+        expect(container.textContent).toMatch(/Nothing can be signed or sent here until panic mode is turned off in the wallet\. Reject closes this request\./);
+        expect(container.textContent).not.toMatch(/approving will be refused/i);
     });
 
     it('keeps the field and says nothing for a duress-armed freeze', () => {

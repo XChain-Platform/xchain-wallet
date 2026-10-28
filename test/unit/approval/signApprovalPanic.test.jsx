@@ -88,7 +88,8 @@ function renderApproval(kind, payload) {
 function expectFreezeFirst() {
     const notice = screen.getByTestId('approval-panic-freeze');
     expect(notice.textContent).toMatch(FREEZE);
-    expect(notice.textContent).toMatch(/Settings > Safety/);
+    expect(notice.textContent).toMatch(/Nothing can be signed or sent here until panic mode is turned off in the wallet\. Reject closes this request\./);
+    expect(notice.textContent).not.toMatch(/Approving/);
     const content = notice.parentElement;
     expect(content.firstElementChild).toBe(notice);
 }

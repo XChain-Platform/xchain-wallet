@@ -25,7 +25,7 @@
 import { useEffect, useState } from 'react';
 import { FormNotice, StatusMessage } from '../../ui/index.js';
 import { getPanicModeState, subscribePanicModeState } from '../../flows/panicMode.js';
-import { PANIC_SURFACE_HOME, PANIC_SURFACE_SIGN, panicFreezeNotice } from './panicNotice.js';
+import { PANIC_SURFACE_HOME, PANIC_SURFACE_REJECT_ONLY, PANIC_SURFACE_SIGN, panicFreezeNotice } from './panicNotice.js';
 
 const TICK_MS = 30_000;
 
@@ -49,7 +49,7 @@ function noticeKey(notice) {
  * means signing IS frozen but this wallet must not say why (duress-armed):
  * callers on the sign surface still have to drop any "ready to sign" claim.
  *
- * @param {'home'|'send'|'sign'} [surface]
+ * @param {'home'|'send'|'sign'|'reject-only'} [surface]
  * @returns {import('./panicNotice.js').PanicNotice|null}
  */
 export function usePanicFreeze(surface = PANIC_SURFACE_HOME) {
@@ -137,7 +137,7 @@ export function SigningReadyNote({ children }) {
  * @param {import('react').ReactNode} [props.children]
  */
 export function PanicPasswordGate({ children }) {
-    const notice = usePanicFreeze(PANIC_SURFACE_SIGN);
+    const notice = usePanicFreeze(PANIC_SURFACE_REJECT_ONLY);
     if (!notice || !notice.disclose) return children ?? null;
     return <PanicSignStatus notice={notice} />;
 }

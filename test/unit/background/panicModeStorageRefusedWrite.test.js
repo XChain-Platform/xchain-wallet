@@ -197,6 +197,32 @@ describe('panic mode when chrome.storage.local refuses the write', () => {
         expect(approval.flows.isSigningFrozen()).toBe(false);
     });
 
+    it('marks the freeze not saved in a page that hears of it from the worker message', async () => {
+        const chromeStub = stubChrome({ refuseSet: true });
+        const { popup } = await bootWorkerAndPopup(chromeStub);
+        const sidePanel = await loadRealm();
+        await sidePanel.adapter.initPanicModePersistence(sidePanel.flows, { notifyWorker: chromeStub.sendFromPage });
+
+        popup.flows.activatePanicMode();
+        await settle();
+
+        expect(sidePanel.flows.isSigningFrozen()).toBe(true);
+        expect(sidePanel.flows.getPanicModeSaveStatus()).toBe(sidePanel.flows.PANIC_SAVE_UNSAVED);
+    });
+
+    it('leaves a page that hears of a saved freeze showing it as saved', async () => {
+        const chromeStub = stubChrome();
+        const { popup } = await bootWorkerAndPopup(chromeStub);
+        const sidePanel = await loadRealm();
+        await sidePanel.adapter.initPanicModePersistence(sidePanel.flows, { notifyWorker: chromeStub.sendFromPage });
+
+        popup.flows.activatePanicMode();
+        await settle();
+
+        expect(sidePanel.flows.isSigningFrozen()).toBe(true);
+        expect(sidePanel.flows.getPanicModeSaveStatus()).toBe(sidePanel.flows.PANIC_SAVE_OK);
+    });
+
     it('refuses the direct channel to a web page', async () => {
         const chromeStub = stubChrome({ refuseSet: true });
         const { worker } = await bootWorkerAndPopup(chromeStub);

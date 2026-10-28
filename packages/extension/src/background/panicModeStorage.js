@@ -112,7 +112,15 @@ function createPanicModeStorage({ notifyWorker = null } = {}) {
         // storage write that follows is what lets the freeze outlive it.
         async save(state) {
             tellWorker(PANIC_HOLD_MESSAGE_TYPE, state);
-            await storageWrite((done) => chrome.storage.local.set({ [STORAGE_KEY]: state }, done));
+            try {
+                await storageWrite((done) => chrome.storage.local.set({ [STORAGE_KEY]: state }, done));
+            } catch (err) {
+                // The first hold goes out before the write settles; a second
+                // hold carrying the flag tells every other extension page
+                // that the record is not stored.
+                tellWorker(PANIC_HOLD_MESSAGE_TYPE, { ...(state && typeof state === 'object' ? state : {}), unsaved: true });
+                throw err;
+            }
         },
         // Removing a key that was never stored raises no onChanged event, so a
         // worker holding a freeze whose save was refused is told to re-read.
@@ -184,7 +192,7 @@ export async function initPanicModePersistence(flows, { notifyWorker = null } = 
  * lifts a freeze this page holds only from a hold message. Extension pages
  * only, as on the worker's side.
  *
- * @param {{ holdPanicModeFreeze: (raw: unknown) => unknown, applyExternalPanicModeState: (raw: unknown) => void }} flows
+ * @param {{ holdPanicModeFreeze: (raw: unknown, opts?: { unsaved?: boolean }) => unknown, applyExternalPanicModeState: (raw: unknown) => void }} flows
  * @param {PanicModeStorage} store
  */
 function followPeerPanicMessages(flows, store) {
@@ -195,7 +203,7 @@ function followPeerPanicMessages(flows, store) {
         if (message.type !== PANIC_HOLD_MESSAGE_TYPE && message.type !== PANIC_RESYNC_MESSAGE_TYPE) return false;
         if (!isTrustedExtensionSender(sender, runtime.id)) return false;
         if (message.type === PANIC_HOLD_MESSAGE_TYPE) {
-            flows.holdPanicModeFreeze(message.request);
+            flows.holdPanicModeFreeze(message.request, { unsaved: message.request?.unsaved === true });
         } else {
             store.load()
                 .then((stored) => flows.applyExternalPanicModeState(stored))
@@ -246,7 +254,7 @@ export function attachPanicStateListener({ flows, isTrustedSender }, chromeRunti
             return true;
         }
         if (message.type === PANIC_HOLD_MESSAGE_TYPE) {
-            respond({ ok: true, result: flows.holdPanicModeFreeze(message.request) });
+            respond({ ok: true, result: flows.holdPanicModeFreeze(message.request, { unsaved: message.request?.unsaved === true }) });
             return true;
         }
         if (message.type === PANIC_LOAD_MESSAGE_TYPE) {

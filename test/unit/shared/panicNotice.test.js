@@ -47,6 +47,26 @@ describe('panicFreezeNotice', () => {
         expect(panicFreezeNotice({ state, nowMs: T0 + HOUR + 1 })).toBeNull();
     });
 
+    it('tells a reject-only surface that nothing can be signed and that Reject closes the request', () => {
+        const state = activatePanicMode({ nowMs: T0, armedBy: PANIC_ARMED_SELF });
+        const notice = panicFreezeNotice({ state, nowMs: T0, surface: 'reject-only' });
+        expect(notice.disclose).toBe(true);
+        expect(notice.detail).toContain('24h remaining');
+        expect(notice.detail).toMatch(/nothing can be signed or sent here until panic mode is turned off in the wallet/i);
+        expect(notice.detail).toMatch(/reject closes this request/i);
+        expect(notice.detail).not.toMatch(/approving/i);
+        const sign = panicFreezeNotice({ state, nowMs: T0, surface: 'sign' });
+        expect(sign.detail).toMatch(/approving will be refused/i);
+    });
+
+    it('keeps a duress-armed freeze silent on a reject-only surface', () => {
+        const state = activatePanicMode({ nowMs: T0, armedBy: PANIC_ARMED_DURESS });
+        const notice = panicFreezeNotice({ state, nowMs: T0, surface: 'reject-only' });
+        expect(notice.frozen).toBe(true);
+        expect(notice.disclose).toBe(false);
+        expect(notice.detail).toBeNull();
+    });
+
     for (const surface of ['home', 'send', 'sign']) {
         it(`announces a self-armed freeze on the ${surface} surface`, () => {
             const state = activatePanicMode({ nowMs: T0, armedBy: PANIC_ARMED_SELF });

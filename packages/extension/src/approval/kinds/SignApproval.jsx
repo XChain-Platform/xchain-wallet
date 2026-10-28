@@ -34,7 +34,7 @@ import '@xchain-wallet/core/i18n/locales/en/verifySignature.js';
 import { BalanceChanges } from '@xchain-wallet/core/shared/components/BalanceChanges.jsx';
 import { RawPsbtViewer } from '@xchain-wallet/core/shared/components/RawPsbtViewer.jsx';
 import { PanicSignStatus, usePanicFreeze } from '@xchain-wallet/core/shared/safety/PanicFreezeNotice.jsx';
-import { PANIC_SURFACE_SIGN } from '@xchain-wallet/core/shared/safety/panicNotice.js';
+import { PANIC_SURFACE_REJECT_ONLY } from '@xchain-wallet/core/shared/safety/panicNotice.js';
 // §5.6 slice 4: the confirm surface's building blocks, reused here.
 // The whole <ConfirmActionModal> deliberately is NOT reused: this window is
 // already a confirm surface with its own Screen, origin block, always-allow
@@ -155,7 +155,7 @@ export function SignApproval({ id, kind, payload, onReject }) {
         /** @type {Set<string> | null} */ (null),
     );
     const [settings, setSettings] = useState(/** @type {any | null} */ (null));
-    const panicNotice = usePanicFreeze(PANIC_SURFACE_SIGN);
+    const panicNotice = usePanicFreeze(PANIC_SURFACE_REJECT_ONLY);
     const inputRef = useRef(/** @type {HTMLInputElement | null} */ (null));
     const requestedFee = approvalFeeRequest(payload, descriptor);
     const nativeTicker = tickerForDescriptor(descriptor);

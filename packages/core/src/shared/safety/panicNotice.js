@@ -50,6 +50,8 @@ import {
 export const PANIC_SURFACE_HOME = 'home';
 export const PANIC_SURFACE_SEND = 'send';
 export const PANIC_SURFACE_SIGN = 'sign';
+/** A sign surface whose only way forward is Reject: the freeze stands where the password field would be. */
+export const PANIC_SURFACE_REJECT_ONLY = 'reject-only';
 
 /**
  * Human countdown, matching the Settings -> Safety row so the two surfaces
@@ -88,7 +90,7 @@ export function formatPanicRemaining(ms) {
  * @param {object} [opts]
  * @param {import('../../flows/panicMode.js').PanicModeState} [opts.state]
  * @param {number} [opts.nowMs]
- * @param {'home'|'send'|'sign'} [opts.surface]
+ * @param {'home'|'send'|'sign'|'reject-only'} [opts.surface]
  * @returns {PanicNotice|null}
  */
 export function panicFreezeNotice({ state, nowMs = Date.now(), surface = PANIC_SURFACE_HOME } = {}) {
@@ -123,6 +125,12 @@ function discloseCopy(surface, remainingText) {
         return {
             title: 'Panic mode is on. This send cannot be signed.',
             detail: `Signing stays frozen for another ${remainingText}. You can fill in the form, but approving it will be refused. Turn panic mode off in Settings > Safety to send now.`,
+        };
+    }
+    if (surface === PANIC_SURFACE_REJECT_ONLY) {
+        return {
+            title: 'Panic mode is on. Signing is frozen.',
+            detail: `${remainingText} remaining. Nothing can be signed or sent here until panic mode is turned off in the wallet. Reject closes this request.`,
         };
     }
     if (surface === PANIC_SURFACE_SIGN) {

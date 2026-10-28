@@ -108,7 +108,7 @@ const approvalSrc = readFileSync(
     join(wsRoot, 'packages', 'extension', 'src', 'approval', 'kinds', 'SignApproval.jsx'),
     'utf8',
 );
-assert.match(approvalSrc, /usePanicFreeze\(PANIC_SURFACE_SIGN\)/, 'the approval window reads the sign-surface freeze');
+assert.match(approvalSrc, /usePanicFreeze\(PANIC_SURFACE_REJECT_ONLY\)/, 'the approval window reads the reject-only freeze');
 assert.match(
     approvalSrc,
     /<ListPage>\s*\{panicFrozen \? \(\s*<PanicSignStatus/,
