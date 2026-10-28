@@ -384,7 +384,9 @@ export function buildCommands(ctx) {
  * the result. Each command navigates to the contacts list (a contact-detail
  * deep-link needs a ref the palette doesn't carry yet, tracked as a
  * follow-up), and the contact's addresses feed the fuzzy keywords so
- * searching a hex prefix finds the person.
+ * searching a hex prefix finds the person. The row carries no subtitle: the
+ * Contacts group heading already says where it opens, and one line repeated
+ * under every name is repeated help text.
  *
  * @param {Array<{ id: string, name?: string, label?: string, entries?: Array<{ address?: string }>, address?: string }>} contacts
  * @param {{ navigate: (view: string) => void }} ctx
@@ -403,7 +405,6 @@ export function contactsToCommands(contacts, ctx) {
             id: `contact-${c.id}`,
             category: 'Contacts',
             title: name,
-            subtitle: t('palette.contact.subtitle'),
             keywords: ['contact', ...addresses],
             Icon: Icon.UserIcon,
             run: () => ctx.navigate('contacts'),
@@ -514,7 +515,9 @@ export function hiddenSettingsSectionIds({ settings, compact = false } = {}) {
  * shell-supplied (sets the Settings initialSubpageId and navigates); when
  * absent (extension popup has no Settings route) no commands are produced.
  * Sections named in `hiddenSettingsSections` are left out, because opening
- * one would land on the bare Settings list.
+ * one would land on the bare Settings list. The rows carry no subtitle: the
+ * title already names the section, and one line repeated under every row is
+ * repeated help text.
  *
  * @param {{ openSettings?: (sectionId: string) => void, hiddenSettingsSections?: string[] }} ctx
  * @returns {import('./fuzzyMatch.js').Command[]}
@@ -526,7 +529,6 @@ export function settingsSectionsToCommands(ctx) {
         id: `settings-${s.id}`,
         category: 'Settings',
         title: t('palette.settingsSectionTitle', { section: s.title }),
-        subtitle: t('palette.settingsSectionSubtitle'),
         keywords: ['settings', ...s.keywords],
         Icon: Icon.GearIcon,
         run: () => ctx.openSettings(s.id),

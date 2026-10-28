@@ -170,6 +170,33 @@ test('rulings measurement flags any Paste button and a Max outside its field', a
     expect(fieldButtonsOutside[0].paste).toBe(true);
 });
 
+test('rulings measurement counts header rows of bars with controls, not a stacked title block', async ({ page }) => {
+    await page.setContent(`
+        <style>header { width: 300px; } .stack > * { display: block; margin: 0; }</style>
+        <header aria-label="Title block" class="stack"><img alt="" src="data:image/gif;base64,R0lGODlhAQABAAAAACw=" width="40" height="40"><h1>Wallet</h1><p>Tagline</p></header>
+        <header aria-label="Wrapped bar" class="stack"><h1>Home</h1><button>Search</button><button>Menu</button></header>
+        <header aria-label="One-row bar" style="display: flex"><h1>Home</h1><button>Menu</button></header>
+    `);
+    const { headerRows } = await page.evaluate(measureRulings);
+    expect(headerRows.map(({ header }) => header)).toEqual(['header.stack "Wrapped bar"']);
+});
+
+test('rulings measurement reads repeated text inside an open modal only', async ({ page }) => {
+    await page.setContent(`
+        <h1>Settings</h1>
+        <p>Pick a section</p>
+        <div role="dialog" aria-modal="true" aria-labelledby="t">
+            <h2 id="t">Commands</h2>
+            <ul>
+                <li><span class="rowTitle">Settings</span><span class="rowSubtitle">Open this section</span></li>
+                <li><span class="rowTitle">Backup</span><span class="rowSubtitle">Open this section</span></li>
+            </ul>
+        </div>
+    `);
+    const { repeatedText } = await page.evaluate(measureRulings);
+    expect(repeatedText.map(({ text, count }) => `${text} x${count}`)).toEqual(['open this section x2']);
+});
+
 test('clip measurement skips text nobody can see', async ({ page, browserName }) => {
     await page.setContent(`
         <style>

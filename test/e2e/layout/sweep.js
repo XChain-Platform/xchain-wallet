@@ -1140,10 +1140,14 @@ export function measureRulings() {
     };
     const cap = (list, item) => { if (list.length < 12) list.push(item); };
 
-    // Header rows: the controls of each visible header share one row.
+    // Header rows: the controls of each visible header share one row. A header
+    // with nothing to press (a form's logo, title and tagline stacked) is a
+    // title block, not a bar, so it has no row to keep.
     const CONTROL = 'button, a[href], img, svg, h1, h2, input, select, [role="button"]';
+    const PRESSABLE = 'button, a[href], input, select, [role="button"]';
     for (const header of document.querySelectorAll('header')) {
         if (!visible(header)) continue;
+        if (![...header.querySelectorAll(PRESSABLE)].some(visible)) continue;
         const items = [...header.querySelectorAll(CONTROL)]
             .filter((el) => visible(el) && !el.parentElement?.closest(CONTROL));
         const rects = items.map((el) => ({ el, r: el.getBoundingClientRect() }));
@@ -1244,9 +1248,12 @@ export function measureRulings() {
         if (el.closest('header')) cap(out.noticesInHeader, desc(el));
     }
 
-    // One title and one copy of each help line per screen.
+    // One title and one copy of each help line per screen. An open modal is
+    // the screen: the page behind it is inert, so its title is not read as a
+    // repeat of a row in the modal.
     const seen = new Map();
-    for (const el of document.querySelectorAll('h1, h2, h3, h4, p, [class*="title" i], [class*="help" i], [class*="hint" i]')) {
+    const modal = [...document.querySelectorAll('[aria-modal="true"]')].filter(visible).pop();
+    for (const el of (modal || document).querySelectorAll('h1, h2, h3, h4, p, [class*="title" i], [class*="help" i], [class*="hint" i]')) {
         if (!visible(el) || el.closest('[aria-hidden="true"], nav, [role="dialog"][aria-label="Command palette"]')) continue;
         if (el.querySelector('h1, h2, h3, h4, p')) continue;
         const t = (el.innerText || '').trim().replace(/\s+/g, ' ');

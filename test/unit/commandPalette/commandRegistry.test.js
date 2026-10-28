@@ -442,3 +442,37 @@ describe('contactsToCommands', () => {
         expect(navigate).toHaveBeenCalledWith('contacts');
     });
 });
+
+// The palette lists every row at once, so a subtitle shared by several rows
+// is the same help line repeated down the list (UI ruling U18: screens never
+// repeat titles or help text).
+describe('palette rows never repeat a subtitle', () => {
+    it('no two commands in the full catalogue share a subtitle', () => {
+        const ctx = {
+            navigate() {},
+            openSettings() {},
+            openHelp() {},
+            hasBtcAddress: true,
+            hasVmAddress: true,
+            hasGovernanceAddress: true,
+        };
+        const commands = [
+            ...buildCommands(ctx),
+            ...settingsSectionsToCommands(ctx),
+            ...helpToCommands(ctx),
+            ...contactsToCommands([
+                { id: 'c1', name: 'Alice', address: 'bc1qalice' },
+                { id: 'c2', name: 'Bob', address: 'DBob' },
+                { id: 'c3', name: 'Carol', address: 'ltc1qcarol' },
+            ], ctx),
+        ];
+        const byText = new Map();
+        for (const c of commands) {
+            if (!c.subtitle) continue;
+            const key = String(c.subtitle).trim().toLowerCase();
+            byText.set(key, [...(byText.get(key) || []), c.id]);
+        }
+        const repeated = [...byText].filter(([, ids]) => ids.length > 1).map(([text, ids]) => `${text}: ${ids.join(', ')}`);
+        expect(repeated).toEqual([]);
+    });
+});

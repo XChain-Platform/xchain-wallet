@@ -1,18 +1,4 @@
 {
-    "headerRows": {
-        "ruling": "U11",
-        "rule": "The app header is one row at every width",
-        "screens": {
-            "desktop-1280 | onboarding: welcome": {
-                "count": 1,
-                "reason": "Measured on develop 6b475269a when the gate entered the suite; open UI debt under this ruling"
-            },
-            "phone-360 | onboarding: welcome": {
-                "count": 1,
-                "reason": "Measured on develop 6b475269a when the gate entered the suite; open UI debt under this ruling"
-            }
-        }
-    },
     "noticePlacement": {
         "ruling": "U15",
         "rule": "A notice is the first item of page content, full content width",
@@ -319,41 +305,25 @@
         "ruling": "U18",
         "rule": "Screens never repeat titles or help text",
         "screens": {
-            "desktop-1280 | menu: Search": {
-                "count": 2,
-                "reason": "Measured on develop 6b475269a when the gate entered the suite; open UI debt under this ruling"
-            },
             "desktop-1280 | nav: Marketplace": {
                 "count": 1,
-                "reason": "Measured on develop 6b475269a when the gate entered the suite; open UI debt under this ruling"
+                "reason": "List data, not copy: two Marketplace sale rows show the same relative time (1 day ago), and the meter reads ListRow subtitles as help text; open until a ruling says whether repeated row values count"
             },
             "desktop-1280 | palette: Dispensers and exchange activity": {
                 "count": 1,
-                "reason": "Measured on develop 6b475269a when the gate entered the suite; open UI debt under this ruling"
-            },
-            "desktop-1280 | palette: open": {
-                "count": 4,
-                "reason": "Measured on develop 6b475269a when the gate entered the suite; open UI debt under this ruling"
+                "reason": "List data, not copy: two Marketplace sale rows show the same relative time (1 day ago), and the meter reads ListRow subtitles as help text; open until a ruling says whether repeated row values count"
             },
             "desktop-1280 | palette: Your staking positions": {
                 "count": 1,
-                "reason": "Measured on develop 6b475269a when the gate entered the suite; open UI debt under this ruling"
-            },
-            "phone-360 | menu: Search": {
-                "count": 2,
-                "reason": "Measured on develop 6b475269a when the gate entered the suite; open UI debt under this ruling"
+                "reason": "List data, not copy: the demo staking positions share one address, shown short under each row, and the meter reads row subtitles as help text; open until a ruling says whether repeated row values count"
             },
             "phone-360 | palette: Dispensers and exchange activity": {
                 "count": 1,
-                "reason": "Measured on develop 6b475269a when the gate entered the suite; open UI debt under this ruling"
-            },
-            "phone-360 | palette: open": {
-                "count": 2,
-                "reason": "Measured on develop 6b475269a when the gate entered the suite; open UI debt under this ruling"
+                "reason": "List data, not copy: two Marketplace sale rows show the same relative time (1 day ago), and the meter reads ListRow subtitles as help text; open until a ruling says whether repeated row values count"
             },
             "phone-360 | palette: Your staking positions": {
                 "count": 1,
-                "reason": "Measured on develop 6b475269a when the gate entered the suite; open UI debt under this ruling"
+                "reason": "List data, not copy: the demo staking positions share one address, shown short under each row, and the meter reads row subtitles as help text; open until a ruling says whether repeated row values count"
             }
         }
     }
