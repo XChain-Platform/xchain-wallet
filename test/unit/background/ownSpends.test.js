@@ -15,6 +15,10 @@
 // the queue.
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { Transaction, networks } from 'bitcoinjs-lib';
+import { secp256k1 } from '@noble/curves/secp256k1';
+import { TEST_KEYS, pubkeyOf } from '../../helpers/hwSignedReply.js';
+import { prevoutScripts } from '../../helpers/signedTx.js';
 
 const {
     sendTokenMock, orderActionMock, broadcastTxMock, quoteMaxSendableMock, createTxMock, deployChunkedRunMock,
@@ -61,9 +65,14 @@ const PSBT_INPUTS = {
     'psbt-c': [{ prevTxHash: 'cc'.repeat(32), prevTxIndex: 1 }],
 };
 
+// The source address pays the first test key; a raw broadcast is checked
+// against the script and amount the tracker reports for each coin it spends.
+const SOURCE_KEY = TEST_KEYS[0];
+const SOURCE_SCRIPT = prevoutScripts('p2wpkh', SOURCE_KEY).script;
+
 // What the tracker reports at the source address: the coin psbt-a spends and one more.
 const SOURCE_UTXOS = [
-    { txid: 'aa'.repeat(32), vout: 0, value: 100000 },
+    { txid: 'aa'.repeat(32), vout: 0, value: 100000, scriptPubKey: SOURCE_SCRIPT },
     { txid: 'cc'.repeat(32), vout: 1, value: 50000 },
 ];
 
@@ -97,7 +106,10 @@ function makeHost() {
         sdkRegistry: {
             for: () => ({}),
             get: () => ({
-                wallet: { decomposePsbt: (hex) => ({ inputs: PSBT_INPUTS[hex] ?? [] }) },
+                wallet: {
+                    decomposePsbt: (hex) => ({ inputs: PSBT_INPUTS[hex] ?? [] }),
+                    getBitcoinNetwork: () => networks.bitcoin,
+                },
                 // The explorer's coin balance: both tracker coins, confirmed.
                 getAddress: async () => ({ balances: { confirmed: '0.0015' } }),
                 getBalances: async () => ({ data: [] }),
@@ -220,9 +232,21 @@ describe('sends over the same coins from two surfaces', () => {
     });
 });
 
-// A signed transaction spending outpoint aa..aa:0, as the queue holds it.
-const RAW_A = '02000000' + '01' + 'aa'.repeat(32) + '00000000' + '00' + 'fdffffff'
-    + '01' + '1027000000000000' + '16' + '0014' + '11'.repeat(20) + '00000000';
+// A transaction spending outpoint aa..aa:0, signed by the source key, as the
+// queue holds it. The host verifies its signature before it queues or sends it.
+function signedSpendOfSourceCoin() {
+    const tx = new Transaction();
+    tx.version = 2;
+    tx.addInput(Buffer.from('aa'.repeat(32), 'hex'), 0, 0xfffffffd);
+    tx.addOutput(Buffer.from(`0014${'11'.repeat(20)}`, 'hex'), 10000);
+    const pub = pubkeyOf(SOURCE_KEY);
+    const code = Buffer.from(`76a914${SOURCE_SCRIPT.slice(4)}88ac`, 'hex');
+    const digest = tx.hashForWitnessV0(0, code, 100000, Transaction.SIGHASH_ALL);
+    const sig = secp256k1.sign(Uint8Array.from(digest), Uint8Array.from(Buffer.from(SOURCE_KEY, 'hex')), { prehash: false, lowS: true }).toHex('der');
+    tx.setWitness(0, [Buffer.from(`${sig}01`, 'hex'), Buffer.from(pub, 'hex')]);
+    return tx.toHex();
+}
+const RAW_A = signedSpendOfSourceCoin();
 
 // The send signs, the node cannot be reached, and the signed bytes go to the queue.
 function queueTheSend() {
