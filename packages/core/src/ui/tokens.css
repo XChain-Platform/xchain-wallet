@@ -50,7 +50,7 @@
     --xc-list-row-padding: var(--xc-space-3);
 
     /* Screen owns page-edge spacing so route content stays geometry-free. */
-    --xc-page-gutter: var(--xc-space-3);
+    --xc-page-gutter: var(--xc-space-3); /* 12px below 640px; the media queries after this block step it up */
     --xc-page-top: var(--xc-space-3);
 
     /* Every card (ui/Card.module.css) shares one border, fill, inset and
@@ -329,6 +329,21 @@
      * padding (see below), and the left/right insets reduce the shell's
      * width, which needs no height math. */
     --xc-viewport-h: calc(100vh - env(safe-area-inset-top, 0px));
+}
+
+/* The page gutter is tiered by viewport width: 12px below 640px (compact,
+ * including the extension popup and side panel), 16px from 640px (rail),
+ * 24px from 900px (full). The tier edges match the layout tiers. */
+@media (min-width: 640px) {
+    :root {
+        --xc-page-gutter: var(--xc-space-4);
+    }
+}
+
+@media (min-width: 900px) {
+    :root {
+        --xc-page-gutter: var(--xc-space-6);
+    }
 }
 
 /* Semantic menus and menu-like navigation lists share one row contract.

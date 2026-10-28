@@ -12,7 +12,7 @@
 // These widths sit in the rail tier, so the sidebar navigation shows, and
 // their heights trip the short-landscape rules in Screen.module.css. The
 // spec holds the shell invariants there: nothing scrolls sideways, the page
-// gutter stays 12px, the app header and navigation stay put while the
+// gutter stays at the 16px rail tier, the app header and navigation stay put while the
 // route scrolls, a footer route fits without the screen itself scrolling,
 // and a primary action stays reachable above a soft keyboard.
 
@@ -97,8 +97,8 @@ for (const phone of LANDSCAPE_PHONES) {
                     const before = await chromeBoxes(page);
                     const geometry = await shellGeometry(page);
                     expect(geometry.sideScroll, 'nothing scrolls the page sideways').toBe(0);
-                    expect(geometry.gutterStart, 'start gutter').toBe(12);
-                    expect(geometry.gutterEnd, 'end gutter').toBe(12);
+                    expect(geometry.gutterStart, 'start gutter').toBe(16);
+                    expect(geometry.gutterEnd, 'end gutter').toBe(16);
                     await scrollRouteToEnd(page);
                     expect(await chromeBoxes(page), 'app header and navigation stay put').toEqual(before);
                 });
@@ -139,8 +139,8 @@ for (const phone of LANDSCAPE_PHONES) {
                     bottomGap: window.innerHeight - bar.bottom,
                 };
             });
-            expect(geometry.start, 'composer start gutter').toBe(12);
-            expect(geometry.end, 'composer end gutter').toBe(12);
+            expect(geometry.start, 'composer start gutter').toBe(16);
+            expect(geometry.end, 'composer end gutter').toBe(16);
             expect(geometry.top, 'composer clears the footer border').toBeGreaterThan(1);
             expect(geometry.bottomGap, 'composer clears the bottom edge').toBeGreaterThan(0);
         });

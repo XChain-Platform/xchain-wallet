@@ -106,8 +106,8 @@ describe('page-template gutter guidance', () => {
         const list = readFileSync(join(styleGuideRoot, 'sections/ListPageSection.jsx'), 'utf8');
 
         expect(page).toContain("{ id: 'compact', label: 'Compact', width: 360, note: '12px gutter' }");
-        expect(page).toContain("{ id: 'rail', label: 'Rail', width: 768, note: '12px gutter' }");
-        expect(page).toContain("{ id: 'full', label: 'Full', width: 1024, note: '12px gutter' }");
+        expect(page).toContain("{ id: 'rail', label: 'Rail', width: 768, note: '16px gutter' }");
+        expect(page).toContain("{ id: 'full', label: 'Full', width: 1024, note: '24px gutter' }");
         expect(examples).toContain("insetInline: 'var(--xc-page-gutter)'");
         expect(examples.match(/<PageGutterGuide \/>/g)).toHaveLength(4);
         expect(list).toContain("Width 100% of Screen's content box, with no maximum.");

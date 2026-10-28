@@ -30,7 +30,7 @@ export function PageTemplatesSection() {
                     </ul>
                 </>}
                 when={<>Pick by what the screen is for. Fill in and submit: FormPage. Look at, pick from, or drill into: ListPage. A detail screen with an edit button is a ListPage; the edit screen it opens is a FormPage.</>}
-                sizing={<>Only <code>Screen.body</code> applies the page tokens: <code>--xc-page-gutter</code> is 12px at every width; <code>--xc-page-top</code> is 12px compact, 16px rail/full, and 8px in short landscape. The form breakpoint is a viewport media query at 600px, not a container query and not the shell. The layout tiers begin at 640px for rail and 900px for full.</>}
+                sizing={<>Only <code>Screen.body</code> applies the page tokens: <code>--xc-page-gutter</code> is 12px compact (below 640px), 16px rail (from 640px) and 24px full (from 900px); <code>--xc-page-top</code> is 12px compact, 16px rail/full, and 8px in short landscape. The form breakpoint is a viewport media query at 600px, not a container query and not the shell. The layout tiers begin at 640px for rail and 900px for full.</>}
                 doRule={<>✓ One template per screen · let <code>Screen.body</code> own the only outer page inset · keep lists full width · drop the <code>isFull ? styles.card : …</code> wrapper when converting</>}
                 dontRule={<>✗ Add route or template gutter padding · decide card or bare in JS from the shell or a width check · box a list into the 560px form column · write a per-route empty-state block</>}
                 supersedes={<>Per-route <code>.card</code> / <code>.listCard</code> / <code>.wrapFull</code> wrappers chosen by <code>screenVariantFor(shell)</code>, and <code>EmptyStateNudge</code>.</>}

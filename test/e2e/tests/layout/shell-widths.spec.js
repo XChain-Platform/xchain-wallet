@@ -63,7 +63,8 @@ const ROUTES = [
     { name: 'Settings', id: 'settings', sidebarOnly: true },
 ];
 
-const GUTTER = 12;
+// The tiered --xc-page-gutter: 12px below 640px, 16px from 640px, 24px from 900px.
+const gutterFor = (width) => (width >= 900 ? 24 : (width >= 640 ? 16 : 12));
 
 async function settle(page) {
     await page.evaluate(() => new Promise((resolve) => {
@@ -242,8 +243,8 @@ test('the shell keeps its rulings at every width and route', async ({ page }) =>
                 expect.soft(await overflowingElements(page), at('elements past the viewport')).toEqual([]);
 
                 // 6. gutter.
-                expect.soft(m.padLeft, at('start gutter')).toBe(GUTTER);
-                expect.soft(m.padRight, at('end gutter')).toBe(GUTTER);
+                expect.soft(m.padLeft, at('start gutter')).toBe(gutterFor(viewport.width));
+                expect.soft(m.padRight, at('end gutter')).toBe(gutterFor(viewport.width));
                 expect.soft(m.minLeft, at(`content not past start gutter (${m.minLeftEl})`)).toBeGreaterThanOrEqual(m.contentLeft - 0.5);
                 expect.soft(m.maxRight, at(`content not past end gutter (${m.maxRightEl})`)).toBeLessThanOrEqual(m.contentRight + 0.5);
 
