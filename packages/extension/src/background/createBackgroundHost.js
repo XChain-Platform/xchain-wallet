@@ -4974,7 +4974,7 @@ export function createBackgroundHost(deps) {
 
     // PC-05: current pause state of a tick or address (latest SLEEP row).
     host.register('sleep.state', async (req, { sdkRegistry }) => {
-        return sleepStateFor({ sdkRegistry, chainId: req.chainId, query: req.query, type: req.type });
+        return sleepStateFor({ sdkRegistry, chainId: req.chainId, query: req.query, type: req.type, fresh: req?.fresh === true });
     });
 
     host.register('action.broadcast', async (req, { vault, chainRegistry, sdkRegistry, signerPool }) => {

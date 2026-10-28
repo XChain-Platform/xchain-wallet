@@ -55,13 +55,18 @@ function isTickSleepRow(r) {
  * }} params
  * @returns {Promise<SleepState>}
  */
-export async function sleepStateFor({ sdkRegistry, chainId, query, type }) {
+export async function sleepStateFor({ sdkRegistry, chainId, query, type, fresh = false }) {
     if (!sdkRegistry) throw new Error('sleepStateFor: sdkRegistry is required');
     if (!chainId) throw new Error('sleepStateFor: chainId is required');
     if (!query) throw new Error('sleepStateFor: query is required');
     const sdk = sdkRegistry.get(chainId);
     if (typeof sdk.getSleeps !== 'function') return { resumeBlock: null, memo: null, blockIndex: null, actionIndex: null };
-    const resp = await sdk.getSleeps(String(query), type === 'token' ? 'token' : 'address');
+    // A sign-time check asks for a fresh read: a reused or HTTP-cached answer
+    // would be the state the review already read.
+    const kind = type === 'token' ? 'token' : 'address';
+    const resp = fresh
+        ? await sdk.getSleeps(String(query), kind, { fresh: true })
+        : await sdk.getSleeps(String(query), kind);
     // The address list holds every SLEEP the address SIGNED, tick pauses
     // included; only an ADDRESS sleep (no TICK) locks the address itself.
     const rows = rowsOf(resp)

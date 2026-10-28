@@ -112,7 +112,7 @@ describe('Lock address refuses an address it cannot lock', () => {
             "This address is locked for good. A locked address can't create any XChain action, a new lock included.",
         )).toBeInTheDocument();
         expect(sleepState).toHaveBeenCalledTimes(2);
-        expect(sleepState).toHaveBeenLastCalledWith({ chainId: BITCOIN, query: ADDRESS.address, type: 'address' });
+        expect(sleepState).toHaveBeenLastCalledWith({ chainId: BITCOIN, query: ADDRESS.address, type: 'address', fresh: true });
         expect(messaging.sleepAction).not.toHaveBeenCalled();
     });
 

@@ -327,7 +327,9 @@ export function SellOwnershipForm({ walletId, onBack, chainId: initialChainId, t
                 recheckBeforeSign: async () => {
                     let fresh = null;
                     try {
-                        fresh = await messaging.getTokenInfo({ chainId, tick: tokenTick, demo: false });
+                        // Fresh: the review read this record moments ago, and a
+                        // reused or HTTP-cached answer would be that same record.
+                        fresh = await messaging.getTokenInfo({ chainId, tick: tokenTick, demo: false, fresh: true });
                     } catch {
                         fresh = null;
                     }

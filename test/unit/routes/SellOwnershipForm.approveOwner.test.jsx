@@ -131,6 +131,8 @@ describe('SellOwnershipForm reads the owner again at Approve', () => {
 
         await waitFor(() => expect(messaging.orderAction).toHaveBeenCalledTimes(1));
         expect(messaging.orderAction.mock.calls[0][0].params).toMatchObject({ GIVE_TICK: 'ALPHA', GIVE_OWNERSHIP: '1' });
+        // The Approve read goes past the read reuse and the HTTP cache.
+        expect(messaging.getTokenInfo).toHaveBeenLastCalledWith(expect.objectContaining({ tick: 'ALPHA', fresh: true }));
         expect(await screen.findByText('Name listed for sale')).toBeInTheDocument();
         expect(messaging.orderAction).toHaveBeenCalledTimes(1);
     });

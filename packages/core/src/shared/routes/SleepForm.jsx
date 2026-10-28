@@ -368,10 +368,10 @@ export function SleepForm({ walletId, onBack, mode, initialChainId, initialTick,
         return !(Number.isSafeInteger(currentHeight) && resumeBlock <= currentHeight);
     }
 
-    async function addressLockRefusal(read, row) {
+    async function addressLockRefusal(read, row, { fresh = false } = {}) {
         let height;
         try {
-            height = await refreshHeight();
+            height = await refreshHeight({ fresh });
         } catch {
             return addressLockStateError('failed', null, null);
         }
@@ -384,12 +384,14 @@ export function SleepForm({ walletId, onBack, mode, initialChainId, initialTick,
         if (isTick || flowsLib.isDemoWallet(walletId) || typeof messaging?.sleepState !== 'function') return null;
         let row;
         try {
-            row = await messaging.sleepState({ chainId, query: fromAddress.address, type: 'address' });
+            // Fresh: the review read this state moments ago, and a reused or
+            // HTTP-cached answer would be that same state.
+            row = await messaging.sleepState({ chainId, query: fromAddress.address, type: 'address', fresh: true });
         } catch {
             return addressLockStateError('failed', null, null);
         }
         return addressLockNeedsHeight('ready', row || null)
-            ? addressLockRefusal('ready', row || null)
+            ? addressLockRefusal('ready', row || null, { fresh: true })
             : addressLockStateError('ready', row || null, currentHeight);
     }
 
