@@ -28,7 +28,8 @@ const OBLIGATION = {
     payee_address: PAYEE,
     coin_amount: '0.0025',
     coinpay_status: 'pending_coinpay',
-    expiration: 900000,
+    // An hour ahead: the deadline is a UNIX time in seconds, judged against now.
+    expiration: Math.floor(Date.now() / 1000) + 3600,
 };
 
 const sdkRegistry = {
