@@ -25,6 +25,7 @@ import {
     coinpayAction,
 } from '../../../packages/core/src/flows/coinpayAction.js';
 import { verifyCoinpayObligation } from '../../../packages/core/src/flows/coinpayQueries.js';
+import { submitFailureMessage } from '../../../packages/core/src/shared/utils/submitFailureMessage.js';
 
 const PAYER = 'mipcBbFg9gMiCh81Kj8tqqdgoZub1ZJRfn';       // BTC testnet
 const PAYEE = 'n2eMqTT929pb1RDNuqEnxdaLau1rxy3efi';       // BTC testnet
@@ -40,7 +41,8 @@ const OBLIGATION = {
     payee_address: PAYEE,
     coin_amount: COIN_AMOUNT,
     coinpay_status: 'pending_coinpay',
-    expiration: 900000,
+    // An hour ahead: the deadline is a UNIX time in seconds, judged against now.
+    expiration: Math.floor(Date.now() / 1000) + 3600,
 };
 
 // Returns an sdkRegistry whose obligation row can be overridden per-test.
@@ -305,5 +307,60 @@ describe('verifyCoinpayObligation: accepts the honest payment', () => {
             coinAmount: AMOUNT,
         });
         expect(row.coin_amount).toBe(COIN_AMOUNT);
+    });
+});
+
+describe('verifyCoinpayObligation: refuses a payment whose deadline has passed', () => {
+    // The indexer keeps the row pending_coinpay until the first block past the
+    // deadline, so a confirm screen left open past it still reads as payable.
+    const lapsed = { ...OBLIGATION, expiration: Math.floor(Date.now() / 1000) - 5 };
+
+    it('refuses a pending_coinpay row whose deadline is in the past', async () => {
+        await expect(verifyCoinpayObligation({
+            sdkRegistry: fakeSdkRegistry(lapsed),
+            chainId: 'bitcoin-testnet',
+            payerAddress: PAYER,
+            orderMatchActionIndex: '4242',
+            payeeAddress: PAYEE,
+            coinAmount: AMOUNT,
+        })).rejects.toMatchObject({ name: 'OfferLifecycleRefusal', message: expect.stringMatching(/expired\. Nothing was sent/) });
+    });
+
+    it('coinpayAction stops at the deadline before any signing', async () => {
+        await expect(coinpayAction({ ...baseOpts, sdkRegistry: fakeSdkRegistry(lapsed) }))
+            .rejects.toThrow(/payment window has expired/);
+    });
+
+    it('the watcher build refuses it too, so no PSBT reaches an air-gapped signer', async () => {
+        const encoderCalls = [];
+        await expect(buildCoinpayPsbtRequest({
+            ...baseOpts, sdkRegistry: fakeSdkRegistry(lapsed, { encoderCalls }),
+        })).rejects.toThrow(/payment window has expired/);
+        expect(encoderCalls).toHaveLength(0);
+    });
+
+    it('the refusal reaches the payment screen as its own sentence', async () => {
+        const err = await coinpayAction({ ...baseOpts, sdkRegistry: fakeSdkRegistry(lapsed) }).catch((e) => e);
+        const copy = submitFailureMessage(err, {
+            chainId: 'bitcoin-testnet',
+            coinTicker: 'BTC',
+            verb: 'prepare this payment',
+            fallback: "Couldn't prepare this payment. Check your connection and try again.",
+        });
+        expect(copy).toMatch(/payment window has expired\. Nothing was sent/);
+    });
+
+    it('a row with no usable deadline keeps the existing behaviour', async () => {
+        const { expiration, ...noDeadline } = OBLIGATION;
+        const row = await verifyCoinpayObligation({
+            sdkRegistry: fakeSdkRegistry(noDeadline),
+            chainId: 'bitcoin-testnet',
+            payerAddress: PAYER,
+            orderMatchActionIndex: '4242',
+            payeeAddress: PAYEE,
+            coinAmount: AMOUNT,
+        });
+        expect(row.action_index).toBe('4242');
+        expect(expiration).toBeGreaterThan(0);
     });
 });

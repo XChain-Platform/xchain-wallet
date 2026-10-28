@@ -19,7 +19,8 @@
 // its current status; callers filter to `pending_coinpay` on the
 // payer side to build the queue.
 
-import { obligationBaseUnits } from '../market/obligationStatus.js';
+import { classifyObligation, obligationBaseUnits } from '../market/obligationStatus.js';
+import { OFFER_LIFECYCLE_REFUSAL } from './marketExpiry.js';
 import {
     BATCH_FEATURE_COINPAY,
     isBatchShape,
@@ -271,6 +272,17 @@ export async function verifyCoinpayObligation({
         throw new Error(
             `verifyCoinpayObligation: ORDER_MATCH #${want} is "${status}", not pending; refusing to pay it`,
         );
+    }
+
+    // The indexer keeps a match pending_coinpay until the first block past its
+    // deadline, so the status alone cannot say the window is still open. The
+    // deadline can pass while the confirm screen is open, and a payment that
+    // confirms after it sends the coin and settles nothing.
+    if (classifyObligation(row.expiration).state === 'expired') {
+        const expired = new Error('This payment window has expired. Nothing was sent: a payment '
+            + 'confirming after the deadline sends your coin without receiving the tokens.');
+        expired.name = OFFER_LIFECYCLE_REFUSAL;
+        throw expired;
     }
 
     const payer = row.payer_address ?? row.payerAddress;

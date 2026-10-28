@@ -9,7 +9,7 @@
 // contact legal@dankest.llc.
 
 import { useEffect, useState } from 'react';
-import { Button, EmptyState, Icon, ListPage, NetworkField, PageHeader, Screen, StatusMessage } from '@xchain-wallet/core/ui';
+import { Button, EmptyState, Icon, ListPage, ListRow, NetworkField, PageHeader, Screen, StatusMessage } from '@xchain-wallet/core/ui';
 import { registry as registryLib } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { useChainIdsWithAction } from '../hooks/useSupportedChains.js';
@@ -18,7 +18,6 @@ import { safeOutcomeLabel } from '../utils/betOutcomeLabels.js';
 import { neutralizeControlText } from '../utils/textHardening.js';
 import styles from './IssueTokenForm.module.css';
 import local from './BetFeedsList.module.css';
-import rowStyles from './ActionsMenu.module.css';
 
 const chainRegistry = registryLib.defaultRegistry();
 
@@ -276,25 +275,31 @@ export function BetFeedsList({ walletId, onOpenMarket, onCreate, onMyBets, onMyM
                         const outcomes = typeof m.outcomes === 'string' ? m.outcomes.split(',') : [];
                         return (
                             <li key={String(id)}>
-                                <Button
+                                {/* The shared row, as Governance polls use: rendered through
+                                    Button, the row took its primary fill, and the muted label and
+                                    outcomes were unreadable on it. */}
+                                <ListRow
                                     type="button"
                                     onClick={() => onOpenMarket(chainId, id)}
-                                    className={rowStyles.entry}
-                                >
-                                    <span className={rowStyles.entryText}>
+                                    className={local.marketCard}
+                                    title={(
                                         <span className={local.marketHeader}>
                                             <strong>#{String(id)} · {m.tick || 'n/a'}</strong>
                                             <StatusPill status={m.feed_status} />
                                         </span>
-                                        <span className={`${local.marketDetail} ${styles.betLongText}`}>{label}</span>
-                                        {outcomes.length ? (
-                                            <span className={`${local.marketDetail} ${styles.betLongText}`}>
-                                                {outcomes.slice(0, 4).map((outcome) => safeOutcomeLabel(outcome) || '?').join(' / ')}
-                                                {outcomes.length > 4 ? ' …' : ''}
-                                            </span>
-                                        ) : null}
-                                    </span>
-                                </Button>
+                                    )}
+                                    subtitle={(
+                                        <>
+                                            <span className={`${local.marketDetail} ${styles.betLongText}`} style={{ display: 'block' }}>{label}</span>
+                                            {outcomes.length ? (
+                                                <span className={`${local.marketDetail} ${styles.betLongText}`} style={{ display: 'block' }}>
+                                                    {outcomes.slice(0, 4).map((outcome) => safeOutcomeLabel(outcome) || '?').join(' / ')}
+                                                    {outcomes.length > 4 ? ' …' : ''}
+                                                </span>
+                                            ) : null}
+                                        </>
+                                    )}
+                                />
                             </li>
                         );
                     })}

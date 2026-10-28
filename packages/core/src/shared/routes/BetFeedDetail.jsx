@@ -373,6 +373,24 @@ export function BetFeedDetail({ walletId, chainId, feedIndex, onOpenOracle, onSe
         };
     }
 
+    // The page keeps the market it loaded and reads it once. A market that
+    // closed, settled or was cancelled since still composes and signs, and with
+    // pre-flight off or local nothing warns: the bet pays the miner fee and the
+    // protocol fee and joins no pool. So the bet reads the market again before
+    // it composes. A failed read is unknown, never a refusal.
+    async function closedMarketRefusal() {
+        let fresh;
+        try {
+            fresh = unwrap(await messaging.betFeed({ chainId, feedIndex }));
+        } catch {
+            return null;
+        }
+        if (!fresh || String(fresh.action_index) !== String(feedIndex)) return null;
+        if (!fresh.feed_status || fresh.feed_status === 'open') return null;
+        setFeed(fresh);
+        return `This market no longer takes bets (${statusLabel(fresh.feed_status).toLowerCase()}). Nothing was sent.`;
+    }
+
     // Compose through the SDK's own placeBetParams builder, host-side. A
     // client-side wire mirror would be SIGNED rather than caught, and for BET the
     // stakes are literal: a place-bet and a resolve differ on the wire only by
@@ -388,6 +406,8 @@ export function BetFeedDetail({ walletId, chainId, feedIndex, onOpenOracle, onSe
         setFormError(null);
         const from = sourceDescriptor();
         try {
+            const closed = await closedMarketRefusal();
+            if (closed) { setFormError(closed); return; }
             if (isWatcherMode) {
                 const res = await messaging.buildBetActionPsbtRequest({
                     chainId,
