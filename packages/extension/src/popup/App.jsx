@@ -42,6 +42,13 @@ import { withResolvedIssuer } from '@xchain-wallet/core/shared/utils/tokenDetail
 // deep-link parse; same instance pattern as the web shell's App.jsx.
 const APP_CHAIN_REGISTRY = registryLib.defaultRegistry();
 const { t } = i18n;
+
+// Screens that list wallet or account rows read when they mount. A rename or an
+// added account in another surface remounts only these, so a form open here (a
+// payment being composed or signed) keeps what it holds.
+const RECORD_LIST_VIEWS = new Set([
+    'wallet-picker', 'wallet-details', 'account-picker', 'settings', 'connected-sites', 'addresses',
+]);
 import { useAutoLockPolicy } from '@xchain-wallet/core/shared/hooks/useAutoLockPolicy.js';
 import { useLastView } from '@xchain-wallet/core/shared/hooks/useLastView.js';
 import { useDocumentTitle } from '@xchain-wallet/core/shared/hooks/useDocumentTitle.js';
@@ -297,6 +304,9 @@ function AppInner({ canOpenInTab, titleEnabled }) {
     const [status, setStatus] = useState(/** @type {any} */ ({ state: 'loading' }));
     useClearToastsOnLock(status.state);
     const [surfaceStateRevision, setSurfaceStateRevision] = useState(0);
+    // Counts wallet and account record changes made in other surfaces, so the
+    // header re-reads account names without remounting the open screen.
+    const [recordRevision, setRecordRevision] = useState(0);
     const [extensionHandoff] = useState(() => (
         typeof window === 'undefined' ? null : parseExtensionHandoff(window.location.search)
     ));
@@ -510,7 +520,7 @@ function AppInner({ canOpenInTab, titleEnabled }) {
     const [activeAccountId, setActiveAccountId] = useState(
         /** @type {string | null} */ (null),
     );
-    const headerAccounts = useAccountList(activeWalletId, activeAccountId);
+    const headerAccounts = useAccountList(activeWalletId, `${activeAccountId}:${recordRevision}`);
     const [dispenserRef, setDispenserRef] = useState(
         /** @type {{ chainId: string, actionIndex: string } | null} */ (null),
     );
@@ -684,6 +694,10 @@ function AppInner({ canOpenInTab, titleEnabled }) {
     shownWalletIds.current = [activeWalletId, walletDetailsId, walletRenameTarget?.id];
     const shownWalletId = useRef(/** @type {string | null} */ (null));
     shownWalletId.current = activeWalletId;
+    const shownAccountId = useRef(/** @type {string | null} */ (null));
+    shownAccountId.current = activeAccountId;
+    const shownView = useRef(/** @type {string} */ ('home'));
+    shownView.current = unlockedView;
     // The wallet list read in flight, or chosen and not yet rendered, is
     // invisible to the refs above. Removals that name a wallet the list read
     // has not shown yet wait here for it.
@@ -691,6 +705,10 @@ function AppInner({ canOpenInTab, titleEnabled }) {
     const removedBeforeShown = useRef(/** @type {Set<string>} */ (new Set()));
 
     useEffect(() => attachSurfaceStateListener((event) => {
+        const remountRecordLists = () => {
+            setRecordRevision((value) => value + 1);
+            if (RECORD_LIST_VIEWS.has(shownView.current)) setSurfaceStateRevision((value) => value + 1);
+        };
         applySurfaceStateEvent(event, {
             refreshSession: refreshUnlessOnboardingHolds,
             refreshWallets: () => {
@@ -713,16 +731,22 @@ function AppInner({ canOpenInTab, titleEnabled }) {
                     .catch(() => { /* the next session refresh reloads the list */ });
                 setSurfaceStateRevision((value) => value + 1);
             },
-            // An account added or renamed in another surface: re-pick the
-            // active account from the fresh list and reload the open screen.
+            // An account added or renamed in another surface is news about the
+            // list, not a switch: this surface keeps the account it shows while
+            // that account exists, even though the other surface stored its own
+            // choice in the storage both share. Only a vanished account is
+            // re-picked from the fresh list.
             accountsChanged: (walletId) => {
                 if (shownWalletId.current !== walletId) return;
                 listAccounts(walletId)
                     .then((list) => {
                         if (shownWalletId.current !== walletId) return;
                         const sorted = Array.isArray(list) ? [...list].sort((a, b) => a.index - b.index) : [];
-                        setActiveAccountId(reconcileActiveAccount(walletId, sorted));
-                        setSurfaceStateRevision((value) => value + 1);
+                        const shown = shownAccountId.current;
+                        setActiveAccountId(shown && sorted.some((account) => account.id === shown)
+                            ? shown
+                            : reconcileActiveAccount(walletId, sorted));
+                        remountRecordLists();
                     })
                     .catch(() => { /* the next wallet switch reloads the accounts */ });
             },
@@ -737,8 +761,8 @@ function AppInner({ canOpenInTab, titleEnabled }) {
             },
             // Chain-scoped routes load from the active network when they mount.
             remountNetworkState: () => setSurfaceStateRevision((value) => value + 1),
-            // Screens that load wallet or account rows on mount read them again.
-            remountScreens: () => setSurfaceStateRevision((value) => value + 1),
+            // Screens that list wallet or account rows read them again.
+            remountScreens: remountRecordLists,
         });
     }), [refresh, refreshUnlessOnboardingHolds]);
 
