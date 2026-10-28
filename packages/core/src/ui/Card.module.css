@@ -55,3 +55,16 @@
         border-radius: 0;
     }
 }
+
+/* A card list (data-xc-menu-list="cards", the actions menu) is a list of
+   separate tappable cards, not part of the surface around it, so its entries
+   keep their own card inside another card. The rule comes after the
+   flattening above and ties its weight, so it wins; entry states such as
+   hover and the menu-item inset in tokens.css carry more weight and still
+   apply. */
+[data-xc-menu-list="cards"] .card {
+    padding: var(--xc-card-pad);
+    background: var(--xc-card-bg);
+    border: var(--xc-card-border);
+    border-radius: var(--xc-card-radius);
+}
