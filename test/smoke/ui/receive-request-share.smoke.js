@@ -117,7 +117,7 @@ assert.doesNotMatch(
 
 // --- CSS hooks -------------------------------------------------------
 
-for (const cls of ['qrBox', 'qr', 'qrActions', 'assetCard']) {
+for (const cls of ['qrSurface', 'qr', 'qrActions', 'assetCard']) {
     assert.match(recvCss, new RegExp(`\\.${cls}\\s*\\{`), `CSS hook .${cls}`);
 }
 

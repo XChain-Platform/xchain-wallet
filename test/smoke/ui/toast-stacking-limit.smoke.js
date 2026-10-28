@@ -43,7 +43,7 @@ assert.ok(/const VISIBLE_LIMIT = 3;/.test(src),
 // --- 2. Slice to the first N -------------------------------------------
 
 assert.ok(
-    /const visibleToasts = toasts\.slice\(0, VISIBLE_LIMIT\);/.test(src),
+    /const visibleToasts = (?:toasts|eligibleToasts)\.slice\(0, VISIBLE_LIMIT\);/.test(src),
     'ToastHost renders only the first VISIBLE_LIMIT toasts',
 );
 assert.ok(
@@ -54,7 +54,7 @@ assert.ok(
 // --- 3. hiddenCount + conditional overflow indicator -------------------
 
 assert.ok(
-    /const hiddenCount = Math\.max\(0,\s*toasts\.length - visibleToasts\.length\);/.test(src),
+    /const hiddenCount = Math\.max\(0,\s*(?:toasts|eligibleToasts)\.length - visibleToasts\.length\);/.test(src),
     'ToastHost computes hiddenCount from the truncated render set',
 );
 assert.ok(

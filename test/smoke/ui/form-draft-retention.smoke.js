@@ -146,7 +146,7 @@ assert.match(
 );
 assert.match(
     privacySrc,
-    /<select[\s\S]+?aria-label="Form draft retention"[\s\S]+?<option value=\{FORM_DRAFT_TTL_OFF\}>Off<\/option>[\s\S]+?<option value=\{FORM_DRAFT_TTL_7D\}>7 days<\/option>/,
+    /<[Ss]elect[\s\S]+?aria-label="Form draft retention"[\s\S]+?<option value=\{FORM_DRAFT_TTL_OFF\}>Off<\/option>[\s\S]+?<option value=\{FORM_DRAFT_TTL_7D\}>7 days<\/option>/,
     'select renders all four options with the right labels',
 );
 assert.match(

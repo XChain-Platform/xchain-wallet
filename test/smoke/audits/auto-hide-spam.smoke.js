@@ -42,7 +42,7 @@ const homeSrc = readFileSync(
 );
 assert.ok(/import \{ buildBalanceRows, detectSpamCandidates \} from '\.\.\/components\/BalanceList\.jsx'/.test(homeSrc),
     'Home.jsx imports buildBalanceRows + detectSpamCandidates from BalanceList');
-assert.ok(/import \{ useToast \} from '\.\.\/components\/ToastHost\.jsx'/.test(homeSrc),
+assert.ok(/import \{ (?:[\w, ]+, )?useToast(?:, [\w, ]+)? \} from '\.\.\/components\/ToastHost\.jsx'/.test(homeSrc),
     'Home.jsx imports useToast from ToastHost');
 
 // --- 2 + 3. Effect shape: per-wallet ref guard + candidate filter ------
