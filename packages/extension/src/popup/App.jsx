@@ -612,6 +612,12 @@ function AppInner({ canOpenInTab, titleEnabled }) {
         })
             .then((next) => {
                 if (requestId !== refreshRequestId.current) return;
+                // A reply without a session state renders as an error screen
+                // the user can retry from, never as a crashed shell.
+                if (!next || typeof next !== 'object' || typeof next.state !== 'string') {
+                    setStatus({ state: 'error', error: t('shell.unknownState', { state: String(next?.state) }) });
+                    return;
+                }
                 setStatus(next);
                 const launchView = launchRouteState.current.takeForSession(next);
                 if (launchView) setUnlockedView(launchView);
@@ -1177,7 +1183,7 @@ function AppInner({ canOpenInTab, titleEnabled }) {
         case 'error':
             return status.errorKind
                 ? <VaultUnavailable kind={status.errorKind} detail={status.error} />
-                : <Loading error={status.error} />;
+                : <Loading error={status.error} onRetry={refresh} />;
         case 'no-wallet':
             if (onboardingStep === 'create') {
                 return (

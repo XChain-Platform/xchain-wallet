@@ -304,9 +304,9 @@ const SHELL_ONLY = {
             reason: 'The web route outlet supplies its compact-layout fallback directly.',
         },
         'Loading.onRetry': {
-            shells: ['desktop'],
+            shells: ['desktop', 'extension'],
             kind: 'known-gap',
-            reason: 'Web and extension loading screens do not yet expose the desktop recovery action.',
+            reason: 'The web loading screen does not yet expose the recovery action that desktop and extension show.',
         },
         'Locked.lockReason': {
             shells: ['extension'],
