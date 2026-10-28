@@ -13,6 +13,7 @@
 // a session must run one at a time or the later write erases the earlier one.
 
 import { describe, expect, it, vi } from 'vitest';
+import { secp256k1 } from '@noble/curves/secp256k1';
 import {
     cancelMultisigSigningSession,
     contributeMultisigSignature,
@@ -21,11 +22,15 @@ import {
 } from '../../../packages/core/src/flows/multisigSigning.js';
 import { signedTxFor } from '../../helpers/signedTx.js';
 
-const ALICE = '02' + 'aa'.repeat(32);
-const BOB = '03' + 'bb'.repeat(32);
-const CAROL = '03' + 'cc'.repeat(32);
-const SIG_A = '30' + 'aa'.repeat(35);
-const SIG_B = '30' + 'bb'.repeat(35);
+const MSG_HASH = '11'.repeat(32);
+const key = (byte) => ({ sk: byte.repeat(32), pub: Buffer.from(secp256k1.getPublicKey(byte.repeat(32), true)).toString('hex') });
+const [A, B, C] = [key('0a'), key('0b'), key('0c')];
+const ALICE = A.pub;
+const BOB = B.pub;
+const CAROL = C.pub;
+// Replies are counted only when they verify, so these are real signatures of MSG_HASH.
+const SIG_A = secp256k1.sign(MSG_HASH, A.sk, { lowS: true }).toDERHex();
+const SIG_B = secp256k1.sign(MSG_HASH, B.sk, { lowS: true }).toDERHex();
 
 // A vault whose reads and writes each yield to the event loop, like IndexedDB.
 function slowVault(scheme = 'p2wsh-multisig') {
@@ -58,7 +63,7 @@ async function start(vault) {
         vault,
         walletId: 'wallet-1',
         chainId: 'bitcoin-regtest',
-        msgHash: '11'.repeat(32),
+        msgHash: MSG_HASH,
         psbtHex: '70736274ff',
     });
 }
@@ -103,8 +108,8 @@ describe('multisig session concurrent writes', () => {
         // Real finalized bytes and the prevouts their PSBT records: the
         // broadcast verifies every signature before it sends.
         const finalized = signedTxFor({ inputs: [{ type: 'p2wsh-multisig' }] });
-        records.set(session.id, { ...session, status: 'finalized', finalizedTxHex: finalized.txHex, txid: 'tx' });
-        const broadcastTx = vi.fn(async () => ({ txid: 'tx' }));
+        records.set(session.id, { ...session, status: 'finalized', finalizedTxHex: finalized.txHex, txid: 'd1'.repeat(32) });
+        const broadcastTx = vi.fn(async () => ({ txid: 'd1'.repeat(32) }));
         const sdkRegistry = {
             get: () => ({ encoder: { broadcastTx }, wallet: { decomposePsbt: () => ({ inputs: finalized.prevouts }) } }),
         };

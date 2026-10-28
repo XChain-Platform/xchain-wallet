@@ -41,9 +41,10 @@ const SERIALIZED_DATA = /(?:^|:\s*)[{[]\s*["'][^\n]*[}\]]/;
 const ENCODER_REFUSAL_PREFIX = /^Encoder RPC error:\s*/i;
 const MAX_REFUSAL_REASON_LENGTH = 500;
 // Codes on errors the wallet itself raises with a sentence written for the user
-// (the confirm page's refusals); the code names the case and is not developer
+// (the confirm page's refusals, a cosigner reply whose signature does not
+// verify); the code names the case and is not developer
 // output, so it must not hide that sentence.
-const USER_COPY_CODES = new Set(['NATIVE_FEE_CHANGED', 'INPUTS_SPENT']);
+const USER_COPY_CODES = new Set(['NATIVE_FEE_CHANGED', 'INPUTS_SPENT', 'MULTISIG_SIGNATURE_INVALID']);
 // A rejected private key carries the SDK's machine code beside a sentence the
 // flow already wrote for the user (wifFailureMessage), so the code must not
 // hide that sentence.

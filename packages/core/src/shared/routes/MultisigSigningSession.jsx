@@ -541,7 +541,12 @@ export function MultisigSigningSession({ walletId, onBack }) {
             setPasteInput('');
         } catch (err) {
             console.error('Multisig contribution apply failed:', err); // eslint-disable-line no-console
-            fail(userFacingMessage(err, 'Failed to apply contribution.'), handlePasteSubmit);
+            if (err?.code === 'MULTISIG_SIGNATURE_INVALID') {
+                // Submitting the same reply again cannot pass the signature check.
+                fail(userFacingMessage(err, 'Failed to apply contribution.'), null);
+            } else {
+                fail(userFacingMessage(err, 'Failed to apply contribution.'), handlePasteSubmit);
+            }
         } finally {
             setBusy(false);
         }

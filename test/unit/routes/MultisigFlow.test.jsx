@@ -8,6 +8,7 @@
 
 import React from 'react';
 import { HDKey } from '@scure/bip32';
+import { secp256k1 } from '@noble/curves/secp256k1';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { createMultisigConfig } from '../../../packages/core/src/flows/createMultisigConfig.js';
@@ -49,7 +50,8 @@ const WALLET_ID = 'wallet-1';
 const CHAIN_ID = 'bitcoin-testnet';
 const PSBT_HEX = '70736274ff';
 const MSG_HASH = 'ab'.repeat(32);
-const SIGNATURE = '30'.repeat(35);
+// A broadcast reply counts only as a 64-hex txid matching the finalized one.
+const TXID = 'e7'.repeat(32);
 
 function cosigner(seed, fingerprint) {
     const account = HDKey.fromMasterSeed(new Uint8Array(32).fill(seed), TESTNET_VERSIONS)
@@ -61,6 +63,9 @@ function cosigner(seed, fingerprint) {
         fingerprint,
         derivationPath: "m/48'/1'/0'/0/0",
         accountPath: "m/48'/1'/0'",
+        // Each cosigner signs MSG_HASH with its own key: a reply is counted only
+        // when its signature verifies.
+        signature: secp256k1.sign(MSG_HASH, child.privateKey, { lowS: true }).toDERHex(),
     };
 }
 
@@ -92,9 +97,9 @@ function makeHarness() {
     const finalizeMultisigPsbt = vi.fn(() => ({
         psbtHex: '00',
         txHex: FINALIZED.txHex,
-        txid: 'finalized-txid',
+        txid: TXID,
     }));
-    const broadcastTx = vi.fn(async () => ({ txid: 'broadcast-txid' }));
+    const broadcastTx = vi.fn(async () => ({ txid: TXID }));
     const sdkRegistry = {
         get: vi.fn(() => ({
             wallet: { finalizeMultisigPsbt, decomposePsbt: () => ({ inputs: FINALIZED.prevouts }) },
@@ -210,7 +215,7 @@ describe('multisig jsdom flow', () => {
             vault: harness.vault,
             sessionId: session.id,
             pubkey: LOCAL.pubkey,
-            signatureHex: SIGNATURE,
+            signatureHex: LOCAL.signature,
         });
         messaging = {
             getSettings: vi.fn(async () => ({ walletMode: 'full' })),
@@ -247,7 +252,7 @@ describe('multisig jsdom flow', () => {
         const reply = buildReplyEnvelope({
             kind: 'multisig-classical-reply',
             fingerprint: fingerprintSessionRef(sessionRef),
-            contribution: { pubkey: BOB.pubkey, sig: SIGNATURE },
+            contribution: { pubkey: BOB.pubkey, sig: BOB.signature },
         });
         const chunks = encodeXcwChunks(encodeMultisigEnvelope(reply));
         fireEvent.change(screen.getByLabelText('Cosigner reply chunks'), {
@@ -271,13 +276,13 @@ describe('multisig jsdom flow', () => {
         });
 
         fireEvent.click(broadcast);
-        expect(await screen.findByText('Broadcast complete: broadcast-txid')).toBeTruthy();
+        expect(await screen.findByText(`Broadcast complete: ${TXID}`)).toBeTruthy();
         expect(harness.broadcastTx).toHaveBeenCalledWith(FINALIZED.txHex);
         expect((await harness.vault.multisigSigningSessions.get(session.id))).toMatchObject({
             msgHash: MSG_HASH,
             psbtHex: PSBT_HEX,
             status: 'broadcast',
-            txid: 'broadcast-txid',
+            txid: TXID,
         });
     });
 

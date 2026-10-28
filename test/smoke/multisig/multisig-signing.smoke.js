@@ -31,6 +31,7 @@ import {
     progressSummary,
     MULTISIG_SESSION_STATUSES,
 } from '../../../packages/core/src/schemas/multisigSigningSession.js';
+import { secp256k1 } from '@noble/curves/secp256k1';
 import { flows } from '../../../packages/core/src/index.js';
 import { surfacesEntry } from '../_action-entries.js';
 
@@ -203,8 +204,14 @@ function makeFakeVault({ wallet }) {
     };
 }
 
-// P2WSH: 2-of-3 single-round flow.
+// P2WSH: 2-of-3 single-round flow. Replies count only when they verify, so
+// this block signs its msgHash with real keys.
 {
+    const p2wshMsgHash = 'cd'.repeat(32);
+    const realKey = (byte) => ({ sk: byte.repeat(32), pk: Buffer.from(secp256k1.getPublicKey(byte.repeat(32), true)).toString('hex') });
+    const [alice, bob, carol] = [realKey('0a'), realKey('0b'), realKey('0c')];
+    const sigOf = (k) => secp256k1.sign(p2wshMsgHash, k.sk, { lowS: true }).toDERHex();
+    const [alicePk, bobPk, carolPk] = [alice.pk, bob.pk, carol.pk];
     const wallet = {
         id: 'w-p2wsh',
         multisigs: [{
@@ -225,7 +232,7 @@ function makeFakeVault({ wallet }) {
         vault,
         walletId: 'w-p2wsh',
         chainId: 'bitcoin-mainnet',
-        msgHash: 'cd'.repeat(32),
+        msgHash: p2wshMsgHash,
         psbtHex: '',
         actionSummary: 'send 0.5 BTC',
     });
@@ -238,7 +245,7 @@ function makeFakeVault({ wallet }) {
         vault,
         sessionId: session.id,
         pubkey: alicePk,
-        signatureHex: '30' + '44'.repeat(35) + '01', // length checks only
+        signatureHex: sigOf(alice),
     });
     assert.equal(afterAlice.signatures.length, 1);
     assert.equal(afterAlice.status, 'collecting-sigs');
@@ -249,7 +256,7 @@ function makeFakeVault({ wallet }) {
             vault,
             sessionId: session.id,
             pubkey: alicePk,
-            signatureHex: '30' + '44'.repeat(35) + '01',
+            signatureHex: sigOf(alice),
         }),
         /already contributed/,
     );
@@ -259,7 +266,7 @@ function makeFakeVault({ wallet }) {
         vault,
         sessionId: session.id,
         pubkey: bobPk,
-        signatureHex: '30' + '45'.repeat(35) + '01',
+        signatureHex: sigOf(bob),
     });
     assert.equal(afterBob.signatures.length, 2);
     assert.equal(afterBob.status, 'ready-to-finalize');

@@ -30,14 +30,41 @@
 // the cosigners have submitted and to drive transitions between
 // statuses. Cryptographic aggregation is delegated to `sdk.musig2.*`.
 
+import { secp256k1 } from '@noble/curves/secp256k1';
 import {
     createMultisigSigningSession,
     pendingCosignerPubkeys,
 } from '../schemas/multisigSigningSession.js';
 import { assertSigningAllowed } from './panicMode.js';
 import { assertBroadcastSignaturesVerify } from '../signers/verifyTxSignatures.js';
+import { isAlreadyOnNetworkRejection } from './broadcastPermanence.js';
+import { t } from '../i18n/index.js';
+import '../i18n/locales/en/multisig.js';
+
+export const MULTISIG_SIGNATURE_INVALID = 'MULTISIG_SIGNATURE_INVALID';
+
+// A classical reply counts toward the threshold only when it is a low-S DER
+// signature of the session's msgHash by the cosigner it names. Shape checks
+// alone let a corrupted or forged reply mark the session ready to finalize,
+// and nothing after that point can tell which reply was bad. The check is
+// pure math, so it holds while the explorer or encoder is unreachable.
+function isClassicalSignatureOf(derHex, msgHash, pubkey) {
+    try {
+        const signature = secp256k1.Signature.fromDER(derHex);
+        return secp256k1.verify(signature, msgHash, pubkey, { lowS: true });
+    } catch {
+        return false;
+    }
+}
+
+function signatureInvalidError() {
+    const err = /** @type {Error & { code?: string }} */ (new Error(t('multisig.reply.signatureInvalid')));
+    err.code = MULTISIG_SIGNATURE_INVALID;
+    return err;
+}
 
 const HEX_RE = /^[0-9a-f]+$/;
+const TXID_RE = /^[0-9a-fA-F]{64}$/;
 const isHexLength = (v, byteLen) =>
     typeof v === 'string' && HEX_RE.test(v.toLowerCase()) && v.length === byteLen * 2;
 
@@ -315,6 +342,9 @@ async function contributeMultisigSignatureLocked({ vault, sessionId, pubkey, sig
             `contributeMultisigSignature: cosigner "${lowerPubkey}" already contributed a signature`,
         );
     }
+    if (!isClassicalSignatureOf(lowerSig, session.msgHash, lowerPubkey)) {
+        throw signatureInvalidError();
+    }
     const signatures = [
         ...session.signatures,
         {
@@ -463,12 +493,33 @@ async function finalizeMultisigSigningSessionLocked({
             psbtHex: session.psbtHex,
             signerId: `multisig:${session.id}`,
         });
-        const result = await sdk.encoder.broadcastTx(session.finalizedTxHex);
+        let result;
+        try {
+            result = await sdk.encoder.broadcastTx(session.finalizedTxHex);
+        } catch (err) {
+            // When the node takes the transaction but its reply is lost (a 500, a
+            // dropped connection, a timeout), the retry meets "already known" for
+            // these same bytes. The node holding the session's own finalized
+            // transaction is the broadcast having happened, so the session records
+            // it instead of offering a retry that can never succeed.
+            if (isAlreadyOnNetworkRejection(err)) {
+                return persist(vault, { ...session, status: 'broadcast' });
+            }
+            throw err;
+        }
         const broadcastTxid = typeof result === 'string' ? result : result?.txid;
-        if (typeof broadcastTxid !== 'string' || broadcastTxid.length === 0) {
+        // 'broadcast' is terminal and hides the retry, so only a real txid for
+        // this transaction moves the session there. Any other reply leaves it
+        // finalized: retrying the same bytes is safe, and a node that did take
+        // them answers "already known", which the branch above records.
+        if (typeof broadcastTxid !== 'string' || !TXID_RE.test(broadcastTxid)) {
             throw new Error('finalizeMultisigSigningSession: broadcast returned no txid');
         }
-        return persist(vault, { ...session, txid: broadcastTxid, status: 'broadcast' });
+        if (typeof session.txid === 'string' && TXID_RE.test(session.txid)
+            && broadcastTxid.toLowerCase() !== session.txid.toLowerCase()) {
+            throw new Error('finalizeMultisigSigningSession: broadcast returned a txid for a different transaction');
+        }
+        return persist(vault, { ...session, txid: broadcastTxid.toLowerCase(), status: 'broadcast' });
     }
 
     assertStatus(session, 'ready-to-finalize', 'finalized');

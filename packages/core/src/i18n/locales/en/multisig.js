@@ -37,6 +37,8 @@ const messages = {
         'Identity check: before funding the multisig, compare the master fingerprint and derivation path with the cosigner over a separate trusted channel. For a hardware signer, confirm its fingerprint on the device itself.',
     'multisig.share.copyField': 'Copy {label}',
     'multisig.share.unavailable': 'Not available from this signer',
+    'multisig.reply.signatureInvalid':
+        "This cosigner reply's signature doesn't match this signing session, so it doesn't count. Ask the cosigner to sign this session's request again and send the new reply.",
 };
 
 addEnglish(messages);
