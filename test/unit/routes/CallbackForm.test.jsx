@@ -99,6 +99,16 @@ afterEach(() => {
 });
 
 describe('callback field validation', () => {
+    it('distinguishes unread records from readable records with no callback', () => {
+        const unreadMessage = "The token's issuer could not be confirmed, so this action is not available. Try again when the explorer answers.";
+        expect(callbackTermsError(null, 2)).toBe(unreadMessage);
+        expect(callbackTermsError({ tick: 'CALLABLE', loadError: true }, 2)).toBe(unreadMessage);
+        expect(callbackTermsError({ tick: 'CALLABLE' }, 2)).toBe(unreadMessage);
+        expect(callbackTermsError({ tick: 'CALLABLE', creator: SOURCE.address }, 2)).toBe(
+            'This token does not have a complete callback configuration.',
+        );
+    });
+
     it('refuses before review when the issuer is unknown', async () => {
         const buildActionPsbtRequest = vi.fn();
         mount({
@@ -250,6 +260,25 @@ describe('CallbackForm review safety', () => {
         fireEvent.click(await readySubmit());
 
         expect(await screen.findByText(/Callback terms changed since this form opened/)).toBeTruthy();
+        expect(messaging.buildActionPsbtRequest).not.toHaveBeenCalled();
+    });
+
+    it('names an unread token record when its Review refresh rejects', async () => {
+        let callbackReads = 0;
+        const getTokenInfo = vi.fn(async ({ tick }) => {
+            if (tick === 'PAY') return { tick: 'PAY', divisibility: 2 };
+            callbackReads += 1;
+            if (callbackReads === 1) return { ...TERMS };
+            throw new Error('explorer failed');
+        });
+        const messaging = mount({ getTokenInfo });
+
+        fireEvent.click(await readySubmit());
+
+        expect(await screen.findByText(
+            "The token's issuer could not be confirmed, so this action is not available. Try again when the explorer answers.",
+        )).toBeTruthy();
+        expect(screen.queryByText(/does not have a complete callback configuration/)).toBeNull();
         expect(messaging.buildActionPsbtRequest).not.toHaveBeenCalled();
     });
 

@@ -149,6 +149,22 @@ describe('Execute callback reads the token again at Approve', () => {
         expect(target.callbackAction).not.toHaveBeenCalled();
     });
 
+    it('names an unread token record when its Approve refresh rejects', async () => {
+        const { messaging, target } = confirmMessaging();
+        mount(messaging);
+        await openConfirm();
+        target.getTokenInfo.mockImplementation(async ({ tick }) => {
+            if (tick === 'PAY') return { chainId: CHAIN, tick: 'PAY', divisibility: 2 };
+            throw new Error('explorer failed');
+        });
+        await approve();
+        expect(await screen.findByText(
+            "The token's issuer could not be confirmed, so this action is not available. Try again when the explorer answers. Nothing was signed.",
+        )).toBeInTheDocument();
+        expect(screen.queryByText(/does not have a complete callback configuration/)).toBeNull();
+        expect(target.callbackAction).not.toHaveBeenCalled();
+    });
+
     // The compose holds its inputs at the encoder for minutes. A refusal before
     // signing hands them back, or every retry over the same coins fails.
     it('hands the held inputs back to the encoder when Approve refuses', async () => {

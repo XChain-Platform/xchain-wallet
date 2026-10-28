@@ -51,7 +51,10 @@ import { APPROVE_REFUSAL_NAME, approveRefusal } from '../utils/approveRefusal.js
 import { MAX_MEMO_LENGTH, memoLengthError, utf8ByteLength } from '../utils/memoLimit.js';
 import { isValidAddressForChain } from '../utils/addressValidation.js';
 import { tickerReferenceError } from '../utils/tickerGrammar.js';
-import { tokenIssuerEligibility } from '../utils/tokenIssuerEligibility.js';
+import {
+    UNKNOWN_TOKEN_ISSUER_MESSAGE,
+    tokenIssuerEligibility,
+} from '../utils/tokenIssuerEligibility.js';
 import { compareDecimalStrings, tokenAmountPrecisionError } from '../utils/amountFormat.js';
 
 const chainRegistry = registryLib.defaultRegistry();
@@ -66,6 +69,13 @@ const WHOLE_NUMBER_RE = /^\d+$/;
 const POSITIVE_DECIMAL_RE = /^\d+(?:\.\d+)?$/;
 
 export function callbackTermsError(info, payoutDivisibility = null) {
+    // A record without an owner was not read well enough to establish its
+    // callback state. Keep that distinct from a readable record whose callback
+    // fields are genuinely absent.
+    if (!info || typeof info !== 'object' || info.loadError
+        || !String(info.creator || '').trim()) {
+        return UNKNOWN_TOKEN_ISSUER_MESSAGE;
+    }
     const callbackTick = String(info?.callbackTick || '').trim();
     const callbackAmount = String(info?.callbackAmount ?? '').trim();
     const callbackBlock = String(info?.callbackBlock ?? '').trim();
@@ -529,7 +539,9 @@ export function CallbackForm({ walletId, onBack, initialChainId, initialTick, in
         }
         try {
             const [freshInfo, watermark] = await Promise.all([
-                messaging.getTokenInfo({ chainId, tick: ticker, demo: false }),
+                Promise.resolve()
+                    .then(() => messaging.getTokenInfo({ chainId, tick: ticker, demo: false }))
+                    .catch(() => ({ loadError: true })),
                 messaging.getIndexerWatermark({ chainId }),
             ]);
             const freshTick = String(freshInfo?.callbackTick || '').trim();
