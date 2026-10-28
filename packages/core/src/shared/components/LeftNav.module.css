@@ -231,9 +231,11 @@
     align-items: center;
     gap: var(--xc-space-3);
     width: 100%;
-    padding: var(--xc-space-2) var(--xc-space-4);
+    /* The padding gives back the 1px edge so the row keeps its borderless size. */
+    padding: calc(var(--xc-space-2) - 1px) calc(var(--xc-space-4) - 1px);
     background: transparent;
-    border: 0;
+    /* A transparent 1px edge on every row keeps the active row, which colours it, from shifting the list. */
+    border: 1px solid transparent;
     border-radius: 0;
     color: var(--xc-text);
     font: inherit;
@@ -275,6 +277,7 @@
 }
 
 .itemActive {
+    border: 1px solid var(--xc-control-border);
     background: var(--xc-surface);
     font-weight: 600;
     color: var(--xc-accent-text, var(--xc-text));
@@ -344,6 +347,19 @@
     .itemActive {
         outline: 2px solid currentColor;
         outline-offset: -2px;
+    }
+}
+
+/* Forced colors paints a transparent border in CanvasText, which would outline
+   every row. Idle rows take the canvas colour and the active row takes the
+   selection colour, so only the current destination shows an edge. */
+@media (forced-colors: active) {
+    .item {
+        border-color: Canvas;
+    }
+
+    .itemActive {
+        border-color: Highlight;
     }
 }
 

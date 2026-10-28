@@ -286,7 +286,7 @@ describe('OperatorPublisherMode', () => {
                 },
             },
         }));
-        expect(await screen.findByText('Last published: txid 1234567890abcdef…'))
+        expect(await screen.findByText('Last published transaction ID: 1234567890abcdef…'))
             .toBeInTheDocument();
         expect(screen.getByLabelText('Value')).toHaveValue('');
     });

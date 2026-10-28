@@ -239,7 +239,7 @@ describe('BackupSection label publication confirmation', () => {
             fireEvent.change(await screen.findByLabelText('Wallet password'), { target: { value: 'secret' } });
             fireEvent.click(screen.getByRole('button', { name: 'Publish' }));
             fireEvent.click(await screen.findByTestId('confirm-approve'));
-            fireEvent.click(await screen.findByRole('button', { name: 'Copy txid' }));
+            fireEvent.click(await screen.findByRole('button', { name: 'Copy transaction ID' }));
 
             expect(await screen.findByText(/Copy failed: the clipboard is unavailable/)).toBeTruthy();
         } finally {
@@ -260,7 +260,7 @@ describe('BackupSection label publication confirmation', () => {
             fireEvent.click(screen.getByRole('button', { name: 'Publish' }));
             fireEvent.click(await screen.findByTestId('confirm-approve'));
 
-            const button = await screen.findByRole('button', { name: 'Copy txid' });
+            const button = await screen.findByRole('button', { name: 'Copy transaction ID' });
             fireEvent.click(button);
 
             expect(await screen.findByRole('status')).toHaveTextContent('Copied');
@@ -268,7 +268,7 @@ describe('BackupSection label publication confirmation', () => {
             expect(button).toHaveTextContent('Copied');
             act(() => vi.advanceTimersByTime(1501));
             expect(screen.queryByRole('status')).toBeNull();
-            expect(button).toHaveTextContent('Copy txid');
+            expect(button).toHaveTextContent('Copy transaction ID');
         } finally {
             vi.useRealTimers();
             if (prior) Object.defineProperty(navigator, 'clipboard', prior);

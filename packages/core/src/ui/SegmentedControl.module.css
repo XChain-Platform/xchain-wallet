@@ -23,8 +23,8 @@
     min-width: 0;
     height: 100%;
     padding: 0 var(--xc-control-pad-x);
+    /* The group draws the outer edge; a segment draws only its divider. */
     border: 0;
-    border-inline-start: 1px solid var(--xc-border);
     background: transparent;
     color: var(--xc-text-muted);
     font: inherit;
@@ -36,8 +36,8 @@
     transition: background var(--xc-transition), color var(--xc-transition);
 }
 
-.segment:first-child {
-    border-inline-start: 0;
+.segment + .segment {
+    border-inline-start: 1px solid var(--xc-control-border);
 }
 
 .segment:hover:not(:disabled):not([aria-checked='true']) {

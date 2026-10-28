@@ -108,6 +108,17 @@ function incompleteCopy() {
     };
 }
 
+/**
+ * Whether the typed confirmation reads WIPE. The field auto-capitalizes, and
+ * a Turkish keyboard capitalizes a typed "i" to U+0130 (I with dot above),
+ * which toUpperCase leaves as is; folding that one letter to "I" keeps the
+ * gate open for the word the label asks for while look-alike and
+ * full-width letters still keep it shut.
+ */
+function isWipeConfirmed(text) {
+    return text.trim().toUpperCase().replace(/İ/g, 'I') === 'WIPE';
+}
+
 /** The kinds where the user genuinely cannot proceed without the escape. */
 const OFFERS_ESCAPE = new Set(['corrupt', 'evicted', 'incomplete']);
 
@@ -181,7 +192,7 @@ export function VaultUnavailable({ kind, onRetry, wipe = wipeWalletStorage }) {
 
     async function handleWipe() {
         if (busy) return;
-        if (confirmText.trim().toUpperCase() !== 'WIPE') return;
+        if (!isWipeConfirmed(confirmText)) return;
         setBusy(true);
         setWipeError(null);
         try {
@@ -283,7 +294,7 @@ export function VaultUnavailable({ kind, onRetry, wipe = wipeWalletStorage }) {
                                     block
                                     onClick={handleWipe}
                                     loading={busy}
-                                    disabled={busy || confirmText.trim().toUpperCase() !== 'WIPE'}
+                                    disabled={busy || !isWipeConfirmed(confirmText)}
                                 >
                                     {wipeCopy.button}
                                 </Button>

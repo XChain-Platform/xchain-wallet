@@ -1113,7 +1113,7 @@ export function PsbtSignForm({ walletId, onBack, initialPsbt }) {
                             fontSize: 'var(--xc-text-xs)',
                             wordBreak: 'break-all',
                         }}>{broadcastTxid}</code>
-                        <CopyButton value={broadcastTxid} label="Copy txid" />
+                        <CopyButton value={broadcastTxid} label="Copy transaction ID" />
                     </div>
                 ) : broadcastState === 'queued' && broadcastUnsaved ? (
                     // Never promise the banner holds bytes the queue failed to save;

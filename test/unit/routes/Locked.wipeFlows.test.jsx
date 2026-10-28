@@ -160,6 +160,28 @@ describe('Locked forgot-password wipe', () => {
         expect(wipe.className).toMatch(/danger/);
     });
 
+    it('opens the erase gate for WIPE typed on a Turkish keyboard with caps (U+0130)', async () => {
+        mount();
+        openForgotDialog();
+        chooseRestorePath('Use recovery phrase');
+        const wipe = screen.getByRole('button', { name: 'Erase vault and restore' });
+        fireEvent.change(screen.getByLabelText('Type WIPE to confirm'), { target: { value: 'WİPE' } });
+        expect(wipe).toBeEnabled();
+        fireEvent.click(wipe);
+        await waitFor(() => expect(wipeWalletStorage).toHaveBeenCalledTimes(1));
+    });
+
+    it('keeps WIPEX shut on the erase gate', () => {
+        mount();
+        openForgotDialog();
+        chooseRestorePath('Use backup file');
+        const wipe = screen.getByRole('button', { name: 'Erase vault and restore' });
+        fireEvent.change(screen.getByLabelText('Type WIPE to confirm'), { target: { value: 'WIPEX' } });
+        expect(wipe).toBeDisabled();
+        fireEvent.click(wipe);
+        expect(wipeWalletStorage).not.toHaveBeenCalled();
+    });
+
     it('cancels without wiping and resets the typed confirmation', () => {
         mount();
         openForgotDialog();

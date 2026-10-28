@@ -59,6 +59,17 @@ import { t } from '../../i18n/index.js';
 const BIOMETRIC_PASSWORD_FALLBACK = 'Biometric unlock is unavailable. Use your wallet password.';
 
 /**
+ * Whether the typed confirmation reads WIPE. The field auto-capitalizes, and
+ * a Turkish keyboard capitalizes a typed "i" to U+0130 (I with dot above),
+ * which toUpperCase leaves as is; folding that one letter to "I" keeps the
+ * gate open for the word the label asks for while look-alike and
+ * full-width letters still keep it shut.
+ */
+function isWipeConfirmed(text) {
+    return text.trim().toUpperCase().replace(/İ/g, 'I') === 'WIPE';
+}
+
+/**
  * Unlock screen. Reads the shell from context and picks the matching
  * Screen variant (360×600 popup vs flexible full-page). The web shell
  * wraps this route in a card for centering; the popup renders flush
@@ -176,7 +187,7 @@ export function Locked({ onUnlocked, lockReason = null }) {
     async function handleForgotPasswordWipe() {
         if (wipeBusy) return;
         if (!restoreLane) return;
-        if (wipeConfirmText.trim().toUpperCase() !== 'WIPE') return;
+        if (!isWipeConfirmed(wipeConfirmText)) return;
         setWipeBusy(true);
         setWipeError(null);
         try {
@@ -732,7 +743,7 @@ export function Locked({ onUnlocked, lockReason = null }) {
                                                 variant="danger"
                                                 onClick={handleForgotPasswordWipe}
                                                 loading={wipeBusy}
-                                                disabled={wipeBusy || wipeConfirmText.trim().toUpperCase() !== 'WIPE'}
+                                                disabled={wipeBusy || !isWipeConfirmed(wipeConfirmText)}
                                             >
                                                 {t('locked.eraseVaultAndRestore')}
                                             </Button>

@@ -598,7 +598,7 @@ export function AddressList({
             || derivationIndex < 0
             || derivationIndex > 0x7fffffff
         ) {
-            setAdvancedError('Enter a whole-number derivation index from 0 to 2147483647.');
+            setAdvancedError('Enter an address number from 0 to 2147483647.');
             return;
         }
         if (typeof messaging.generateReceiveAddress !== 'function') {
@@ -622,7 +622,7 @@ export function AddressList({
         } catch (err) {
             setAdvancedError(userFacingMessage(
                 err,
-                'Could not generate that address. Check the derivation index and try again.',
+                'Could not generate that address. Check the address number and try again.',
             ));
         } finally {
             advancedGenerateLockRef.current = false;

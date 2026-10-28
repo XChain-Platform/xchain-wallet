@@ -240,7 +240,7 @@ const messages = {
     'components.operatorPublisherMode.loadingSourceAddress': 'Loading source address…',
     'components.operatorPublisherMode.watcherModeBuildsAnUnsigned':
         'Watcher mode builds an unsigned transaction for a Signer-mode wallet.',
-    'components.operatorPublisherMode.lastPublishedTxid': 'Last published: txid',
+    'components.operatorPublisherMode.lastPublishedTxid': 'Last published transaction ID:',
     'components.operatorPublisherMode.publishValue': 'Publish value',
     'components.operatorPublisherMode.loadingFeed': 'Loading the most recent feed for this address.',
     'components.operatorPublisherMode.sourceNotInWallet': "This wallet doesn't contain the source address on this network.",
