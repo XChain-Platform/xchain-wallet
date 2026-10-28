@@ -41,6 +41,19 @@ export const OWN_SPEND_HOLD_MS = 30 * 60 * 1000;
 
 const keyOf = (chainId, txid, vout) => `${chainId}|${String(txid).toLowerCase()}:${Number(vout)}`;
 const txidKey = (txid) => (typeof txid === 'string' ? txid.trim().toLowerCase() : '');
+const nameKeyOf = (chainId, tick) => `${chainId}|name:${String(tick).toUpperCase()}`;
+
+/**
+ * The token names an ORDER or DISPENSER hands over (GIVE_OWNERSHIP=1).
+ *
+ * @param {Record<string, unknown> | null | undefined} params
+ * @returns {string[]}
+ */
+export function soldNames(params) {
+    if (!params || Number(params.GIVE_OWNERSHIP || 0) !== 1) return [];
+    const tick = typeof params.GIVE_TICK === 'string' ? params.GIVE_TICK.trim() : '';
+    return tick ? [tick] : [];
+}
 
 /**
  * The outpoints a PSBT spends, read with the chain SDK's own decomposer.
@@ -113,15 +126,25 @@ export function createOwnSpendLedger({ store, now = () => Date.now(), holdMs = O
          *   queue; `txid`: the transaction being sent, whose own earlier claims pass
          * @returns {Promise<string>} the claim id, '' when there was nothing to claim
          */
-        async claim(chainId, outpoints, { queued = [], txid = '' } = {}) {
+        async claim(chainId, outpoints, { queued = [], txid = '', names = [] } = {}) {
             await hydrated;
-            if (!Array.isArray(outpoints) || outpoints.length === 0) return '';
+            const coins = Array.isArray(outpoints) ? outpoints : [];
+            const sold = (Array.isArray(names) ? names : []).filter(Boolean).map((n) => String(n).toUpperCase());
+            if (coins.length === 0 && sold.length === 0) return '';
             const at = now();
             held = held.filter((e) => e.until > at);
             const same = txidKey(txid);
             const keys = new Set(held.filter((e) => !same || e.txid !== same).map((e) => e.key));
+            // A name another sale from this wallet holds stays in escrow until
+            // that sale ends, so the network would refuse this one after its fees.
+            const listed = sold.find((n) => keys.has(nameKeyOf(chainId, n)));
+            if (listed) {
+                const err = new Error(flows.nameSaleInFlightMessage(listed));
+                err.name = flows.NAME_SALE_IN_FLIGHT_NAME;
+                throw err;
+            }
             for (const o of Array.isArray(queued) ? queued : []) keys.add(keyOf(chainId, o.txid, o.vout));
-            const spent = outpoints.filter((o) => keys.has(keyOf(chainId, o.txid, o.vout)));
+            const spent = coins.filter((o) => keys.has(keyOf(chainId, o.txid, o.vout)));
             if (spent.length > 0) {
                 const err = new Error(flows.livenessMessage({ spent }));
                 err.name = flows.INPUTS_ALREADY_SPENT_NAME;
@@ -129,7 +152,8 @@ export function createOwnSpendLedger({ store, now = () => Date.now(), holdMs = O
             }
             nextClaim += 1;
             const claim = `${at}-${nextClaim}`;
-            for (const o of outpoints) held.push({ key: keyOf(chainId, o.txid, o.vout), claim, until: at + holdMs });
+            for (const o of coins) held.push({ key: keyOf(chainId, o.txid, o.vout), claim, until: at + holdMs });
+            for (const n of sold) held.push({ key: nameKeyOf(chainId, n), claim, until: at + holdMs });
             await persist();
             return claim;
         },

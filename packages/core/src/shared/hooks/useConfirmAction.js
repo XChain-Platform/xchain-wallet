@@ -270,6 +270,10 @@ export function useConfirmAction() {
      *   Called only when the composed action actually attaches a native-coin
      *   fee output; a composed amount outside the fresh band interrupts
      *   instead of signing.
+     * @param {() => Promise<Error | string | null>} [args.recheckBeforeSign]
+     * The form's last re-check, run after every other one and before
+     *   signing. Null lets Approve sign; an Error or a sentence (or a throw)
+     *   interrupts with that message and leaves the PSBT unsigned.
      * @param {(token: string) => Promise<any>} [args.releaseEncoderInputs]
      * Redeems the host's `releaseEncoderInputsToken` (messaging.releaseEncoderInputs)
      *   on Reject, an aborted compose or unmount, so the encoder frees the inputs it held.
@@ -534,6 +538,33 @@ export function useConfirmAction() {
                 });
                 settleUnmountedInterruption(err);
                 return { interrupted: true, reason: 'fee-changed', requote };
+            }
+            updateMounted(() => setPhase('signing'));
+        }
+
+        // The form's own last word before signing. An action whose validity
+        // rests on chain state the wallet does not control (who owns a token
+        // name) re-reads that state here, after the user has read the review,
+        // and an answer other than null stops the signature. A re-check that
+        // throws refuses too: the form chose to ask, so an unanswered question
+        // never signs. Ungated by staleness for the same reason as the
+        // re-quote above: what it protects can change one block after compose.
+        if (typeof args.recheckBeforeSign === 'function') {
+            updateMounted(() => setPhase('rechecking'));
+            let refusal = null;
+            try {
+                refusal = await args.recheckBeforeSign();
+            } catch (err) {
+                refusal = err;
+            }
+            if (refusal) {
+                const err = refusal instanceof Error ? refusal : new Error(String(refusal));
+                updateMounted(() => {
+                    setError(err);
+                    setPhase('ready');
+                });
+                settleUnmountedInterruption(err);
+                return { interrupted: true, reason: 'recheck-refused' };
             }
             updateMounted(() => setPhase('signing'));
         }

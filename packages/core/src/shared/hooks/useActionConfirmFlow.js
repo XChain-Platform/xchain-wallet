@@ -96,6 +96,9 @@ export function useActionConfirmFlow({ messaging, walletId, slice = 'actionForms
      *   exist once the host has built them (see `action.message.composeForConfirm`).
      *   Must resolve with the same tamper-verified envelope
      *   `action.composeForConfirm` returns. Defaults to the generic route.
+     * @param {() => Promise<Error | string | null>} [args.recheckBeforeSign]
+     *   the form's last re-check before signing (see useConfirmAction); a
+     *   non-null answer interrupts Approve with that message.
      * @param {(prebuiltPsbt: import('../../sdk/submitWithSigner.js').PrebuiltPsbt, composed: object) => Promise<any>} args.onApprove
      * @param {{ software: string, hardware?: string, base: object, after?: object, returnTo?: object, label?: string }} [args.resume]
      * §5.4 opt-in. Supply it only when this form's Approve can be
@@ -106,10 +109,11 @@ export function useActionConfirmFlow({ messaging, walletId, slice = 'actionForms
      * @returns {Promise<any>}   resolves with onApprove's return value; rejects with the
      *   documented reasons from useConfirmAction (`busy`, `user-rejected`).
      */
-    const start = useCallback(({ chainId, from, actionData, encoderOpts, compose, onApprove, resume }) => (
+    const start = useCallback(({ chainId, from, actionData, encoderOpts, compose, onApprove, resume, recheckBeforeSign }) => (
         confirmAction.confirm({
             chainId,
             source: from?.address,
+            ...(typeof recheckBeforeSign === 'function' ? { recheckBeforeSign } : {}),
             preflightOpts: {
                 mode: resolvePreflightPrivacy(settings) === 'local' ? 'local' : 'report',
             },

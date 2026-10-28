@@ -38,12 +38,14 @@ import { submitFailureMessage } from '../utils/submitFailureMessage.js';
 import { useActionConfirmFlow, useConfirmSubmit, isUserRejection } from '../hooks/useActionConfirmFlow.js';
 import { ActionConfirmScreen } from '../components/ActionConfirmScreen.jsx';
 import { tokenAmountPrecisionError } from '../utils/amountFormat.js';
+import { salePriceLimitError } from '../utils/salePriceLimit.js';
 import {
-    TOKEN_RECORD_GATE_KEYS, tokenRecordChangedMessage, tokenRecordChangedSince,
+    TOKEN_RECORD_GATE_KEYS, tokenRecordChangedMessage, tokenRecordChangedSince, tokenRecordsDiffer,
 } from '../utils/tokenRecordDrift.js';
+import { invalidateTokenInfo } from '../utils/tokenInfoCache.js';
 import { tickerReferenceError } from '../utils/tickerGrammar.js';
 import { memoLengthError } from '../utils/memoLimit.js';
-import { tokenIssuerEligibility } from '../utils/tokenIssuerEligibility.js';
+import { tokenIssuerEligibility, UNKNOWN_TOKEN_ISSUER_MESSAGE } from '../utils/tokenIssuerEligibility.js';
 
 const chainRegistry = registryLib.defaultRegistry();
 
@@ -310,12 +312,36 @@ export function SellOwnershipForm({ walletId, onBack, chainId: initialChainId, t
             signerId: fromAddress.signerId,
         };
         setSubmitError(null);
+        // The record the user reviewed the sale against.
+        const reviewedRecord = ownershipTokenInfo;
         try {
             const dispatch = mechanism === 'dispenser' ? submitDispenser : submitOrder;
             const r = await actionConfirm.run({
                 chainId,
                 from,
                 actionData: { action: saleAction, params: saleParams },
+                // Read the owner once more at Approve. A sale signed by an
+                // address that no longer owns the name pays its fees for a
+                // refusal, so a moved name stops here, and so does an owner
+                // the explorer cannot confirm, as it does when the form opens.
+                recheckBeforeSign: async () => {
+                    let fresh = null;
+                    try {
+                        fresh = await messaging.getTokenInfo({ chainId, tick: tokenTick, demo: false });
+                    } catch {
+                        fresh = null;
+                    }
+                    const owner = fresh && !fresh.loadError && typeof fresh.creator === 'string'
+                        ? fresh.creator.trim()
+                        : '';
+                    if (!owner) return UNKNOWN_TOKEN_ISSUER_MESSAGE;
+                    if (owner.toLowerCase() !== String(from.address || '').toLowerCase()
+                        || tokenRecordsDiffer(reviewedRecord, fresh, TOKEN_RECORD_GATE_KEYS)) {
+                        invalidateTokenInfo(chainId, tokenTick);
+                        return tokenRecordChangedMessage(tokenTick);
+                    }
+                    return null;
+                },
                 encoderOpts: {
                     payFeeInNativeCoin: nativeFee.flag || undefined,
                     ...(feePerKb != null ? { feePerKb } : {}),
@@ -382,6 +408,15 @@ export function SellOwnershipForm({ walletId, onBack, chainId: initialChainId, t
         });
         if (precisionError) {
             setFormError(precisionError);
+            return;
+        }
+        // A price the network refuses spends the fees for nothing, and one above
+        // the price token's maximum supply is a sale no buyer can ever take.
+        const limitError = salePriceLimitError(price, getMode === 'token'
+            ? { supplyCap: priceTokenInfo?.maxSupply, tick: getTick }
+            : {});
+        if (limitError) {
+            setFormError(limitError);
             return;
         }
         // The owner check came from the record read when the form opened; a

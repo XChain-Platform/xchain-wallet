@@ -15,6 +15,9 @@
 import { addEnglish } from '../../store.js';
 
 const messages = {
+    'manageToken.sellName.priceTooLarge':
+        'Price is too large. The network takes at most {digits} digits before the decimal point.',
+    'manageToken.sellName.priceAboveSupply': 'Price can\'t be more than the {supply} {tick} that can ever exist.',
     'manageToken.officialProjectNoun':
         '{count, plural, one {project.} other {projects.}}',
     'manageToken.subassetCount':

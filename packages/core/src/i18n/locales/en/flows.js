@@ -15,6 +15,7 @@
 import { addEnglish } from '../../store.js';
 
 const messages = {
+    'flows.nameSale.alreadyListed': '{tick} is already listed for sale from this wallet.',
     'flows.dispenserAddress.self':
         'This is the source address itself, so it can always host its own dispenser.',
     'flows.dispenserAddress.preference':

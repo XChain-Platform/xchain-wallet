@@ -64,6 +64,7 @@ import {
     createRouteClaims,
     psbtOutpoints,
     rawTxOutpoints,
+    soldNames,
 } from './ownSpends.js';
 import { createSignThrottleStorage } from './signThrottleStorage.js';
 import { createLogConsoleStorage } from './logConsoleStorage.js';
@@ -1216,13 +1217,22 @@ export function createBackgroundHost(deps) {
     // deploy) claims its coins the moment the encoder returns it, through the
     // registry `run` receives. The claim holds while the transaction signs, for
     // a while after it goes out, and, through the queue entry itself, while it
-    // waits in the broadcast queue; any other end frees it.
+    // waits in the broadcast queue; any other end frees it. An order or a
+    // dispenser that sells a name claims the name too, so another sale of it
+    // from this wallet is refused before signing.
     async function withSpendClaim(req, deps, run) {
         const chainId = req?.chainId;
         const route = createRouteClaims(ownSpends, queuedOutpoints);
         let sdk = null;
         try { sdk = deps?.sdkRegistry?.get?.(chainId) ?? null; } catch { sdk = null; }
-        await route.claim(chainId, psbtOutpoints(sdk, req?.prebuiltPsbt?.psbtHex));
+        const names = soldNames(req?.params);
+        const nameClaim = names.length > 0 ? await ownSpends.claim(chainId, [], { names }) : '';
+        try {
+            await route.claim(chainId, psbtOutpoints(sdk, req?.prebuiltPsbt?.psbtHex));
+        } catch (err) {
+            if (nameClaim) await ownSpends.release(nameClaim);
+            throw err;
+        }
         const claimDeps = deps?.sdkRegistry
             ? {
                 ...deps,
@@ -1243,6 +1253,10 @@ export function createBackgroundHost(deps) {
             throw err;
         } finally {
             await route.settle(wentOut);
+            if (nameClaim) {
+                if (wentOut) await ownSpends.keep(nameClaim);
+                else await ownSpends.release(nameClaim);
+            }
         }
     }
 
