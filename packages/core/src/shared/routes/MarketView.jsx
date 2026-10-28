@@ -80,7 +80,13 @@ export function MarketView({ walletId, chainId, tick1, tick2, onBack, onSwap }) 
     const [summaryLoading, setSummaryLoading] = useState(true);
     const [summaryError, setSummaryError] = useState(/** @type {string | null} */ (null));
     const [marketMissing, setMarketMissing] = useState(false);
-    const [prefillPrice, setPrefillPrice] = useState(/** @type {string | null} */ (null));
+    // A book row pick carries a count, so picking the same price again after
+    // editing it fills the field again.
+    const [prefill, setPrefill] = useState(/** @type {{ price: string, pick: number } | null} */ (null));
+    // The Place panel mounts on its first visit and then stays mounted, so a
+    // look at another tab keeps the typed order; a new pair remounts it by key.
+    const [placeOpened, setPlaceOpened] = useState(false);
+    const prefillPrice = prefill?.price ?? null;
     const [tab, setTab] = useState(/** @type {'book' | 'trades' | 'place' | 'orders' | 'history'} */ ('book'));
     // The market, price and order-book loads share one page error and one reload.
     const loadFailures = usePageLoadFailures();
@@ -108,8 +114,12 @@ export function MarketView({ walletId, chainId, tick1, tick2, onBack, onSwap }) 
     }, [messaging, chainId, tick1, tick2, reloadKey]);
 
     useEffect(() => {
-        setPrefillPrice(null);
+        setPrefill(null);
     }, [chainId, tick1, tick2]);
+    const openTab = (id) => {
+        if (id === 'place') setPlaceOpened(true);
+        setTab(id);
+    };
 
     // Header 24h stats (last / change / high / low / volume) derive from
     // the live getMarketHistory feed, the same data the chart + trades
@@ -198,7 +208,7 @@ export function MarketView({ walletId, chainId, tick1, tick2, onBack, onSwap }) 
                     <Button
                         type="button"
                         onClick={() => {
-                            setPrefillPrice(null);
+                            setPrefill(null);
                             onSwap();
                         }}
                         aria-label={t('market.reversePair', { pair: `${tick2}/${tick1}` })}
@@ -331,7 +341,7 @@ export function MarketView({ walletId, chainId, tick1, tick2, onBack, onSwap }) 
                             tabIndex={active ? 0 : -1}
                             className={`${receivePickerStyles.kindSegment} ${active ? receivePickerStyles.kindSegmentActive : ''}`}
                             style={{ flex: 1 }}
-                            onClick={() => setTab(opt.id)}
+                            onClick={() => openTab(opt.id)}
                             icon={null}
                         >
                             {opt.label}
@@ -353,21 +363,14 @@ export function MarketView({ walletId, chainId, tick1, tick2, onBack, onSwap }) 
                             tick1={tick1}
                             tick2={tick2}
                             demo={demo}
-                            onPickPrice={(price) => { setPrefillPrice(price); setTab('place'); }}
+                            onPickPrice={(price) => {
+                                setPrefill((last) => ({ price, pick: (last?.pick ?? 0) + 1 }));
+                                openTab('place');
+                            }}
                         />
                     ) : null}
                     {tab === 'trades' ? (
                         <RecentTradesPanel key={panelKey} chainId={chainId} tick1={tick1} tick2={tick2} demo={demo} />
-                    ) : null}
-                    {tab === 'place' ? (
-                        <PlaceOrderPanel
-                            key={marketKey}
-                            walletId={walletId}
-                            chainId={chainId}
-                            tick1={tick1}
-                            tick2={tick2}
-                            prefillPrice={prefillPrice}
-                        />
                     ) : null}
                     {tab === 'orders' ? (
                         <OpenOrdersPanel
@@ -388,6 +391,21 @@ export function MarketView({ walletId, chainId, tick1, tick2, onBack, onSwap }) 
                         />
                     ) : null}
                 </RouteErrorBoundary>
+                {placeOpened ? (
+                    <div hidden={tab !== 'place'}>
+                        <RouteErrorBoundary variant="compact" resetKey={`${marketKey}:place`}>
+                            <PlaceOrderPanel
+                                key={marketKey}
+                                walletId={walletId}
+                                chainId={chainId}
+                                tick1={tick1}
+                                tick2={tick2}
+                                prefillPrice={prefillPrice}
+                                prefillPick={prefill?.pick}
+                            />
+                        </RouteErrorBoundary>
+                    </div>
+                ) : null}
             </div>
         </>,
     );

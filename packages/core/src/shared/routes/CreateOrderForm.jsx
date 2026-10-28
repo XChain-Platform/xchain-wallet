@@ -47,7 +47,7 @@ import { QueuedResultPanel } from '../components/QueuedResultPanel.jsx';
 import { ActionIntentSummary } from '../components/ActionIntentSummary.jsx';
 import { useTickBalance } from '../hooks/useTickBalance.js';
 import { useTokenInfo } from '../hooks/useTokenInfo.js';
-import { compareAmounts } from '../../market/orderMath.js';
+import { compareAmounts, multiplyAmounts } from '../../market/orderMath.js';
 import { tokenAmountPrecisionError } from '../utils/amountFormat.js';
 import { addressValidationError } from '../utils/addressValidation.js';
 import { tickerReferenceError } from '../utils/tickerGrammar.js';
@@ -82,6 +82,10 @@ function localInputToUnix(localStr) {
 // invalid, so the native coin is chosen with the Native option, not typed.
 const isNativeCoinName = (tick, coinTicker) => Boolean(coinTicker) && String(tick).trim().toUpperCase() === coinTicker;
 const nativeCoinTickMessage = (coinTicker) => `${coinTicker} is the network coin. Choose Native ${coinTicker} for that side instead of typing it as a token.`;
+
+// The amount as the order spells it: consensus reads 00012 as 12 and 2.50 as
+// 2.5, so the plain form is what the confirm shows and the chain credits.
+const wireAmount = (v) => multiplyAmounts(v, '1') ?? String(v).trim();
 
 const isPlainPositive = (v) => /^\d+(\.\d+)?$/.test(String(v).trim()) && Number(String(v).trim()) > 0;
 const isCanonicalActionIndex = (value, { allowZero = false } = {}) => (
@@ -255,17 +259,17 @@ export function CreateOrderForm({ walletId, onBack, initialChainId, initialFromA
         const p = { VERSION: '0', GIVE_COIN: coinTicker, GET_COIN: coinTicker };
         if (giveType === 'token') {
             p.GIVE_TICK = giveTick.trim().toUpperCase();
-            if (giveOwnership) p.GIVE_OWNERSHIP = '1'; else p.GIVE_AMOUNT = giveAmount.trim();
+            if (giveOwnership) p.GIVE_OWNERSHIP = '1'; else p.GIVE_AMOUNT = wireAmount(giveAmount);
         } else {
             p.GIVE_TICK = '';
-            p.GIVE_AMOUNT = giveAmount.trim();
+            p.GIVE_AMOUNT = wireAmount(giveAmount);
         }
         if (getType === 'token') {
             p.GET_TICK = getTick.trim().toUpperCase();
-            if (getOwnership) p.GET_OWNERSHIP = '1'; else p.GET_AMOUNT = getAmount.trim();
+            if (getOwnership) p.GET_OWNERSHIP = '1'; else p.GET_AMOUNT = wireAmount(getAmount);
         } else {
             p.GET_TICK = '';
-            p.GET_AMOUNT = getAmount.trim();
+            p.GET_AMOUNT = wireAmount(getAmount);
         }
         if (getAddress.trim()) p.GET_ADDRESS = getAddress.trim();
         if (expMode === 'custom' && expInput.trim()) {
@@ -309,13 +313,13 @@ export function CreateOrderForm({ walletId, onBack, initialChainId, initialFromA
             setFormError(`Enter a positive amount of ${coinTicker} to give.`); return false;
         }
         if (!giveOwnership) {
-            const precisionError = tokenAmountPrecisionError(giveAmount, {
+            const precisionError = tokenAmountPrecisionError(wireAmount(giveAmount), {
                 divisibility: giveType === 'coin' ? 8 : giveTokenInfo?.divisibility,
                 tick: giveAssetTick,
                 noun: 'Give amount',
             });
             if (precisionError) { setFormError(precisionError); return false; }
-            if (giveBalance !== null && compareAmounts(giveAmount, giveBalance) === 1) {
+            if (giveBalance !== null && compareAmounts(wireAmount(giveAmount), giveBalance) === 1) {
                 setFormError(`Give amount exceeds your available ${giveAssetTick.toUpperCase()} balance of ${giveBalance}.`);
                 return false;
             }
@@ -332,12 +336,19 @@ export function CreateOrderForm({ walletId, onBack, initialChainId, initialFromA
         }
         if (!getOwnership) {
             const getAssetTick = getType === 'coin' ? coinTicker : getTick;
-            const precisionError = tokenAmountPrecisionError(getAmount, {
+            const precisionError = tokenAmountPrecisionError(wireAmount(getAmount), {
                 divisibility: getType === 'coin' ? 8 : getTokenInfo?.divisibility,
                 tick: getAssetTick,
                 noun: 'Get amount',
             });
             if (precisionError) { setFormError(precisionError); return false; }
+        }
+        // Consensus accepts the same token on both sides, and at any price
+        // other than one the difference goes to whoever matches the order.
+        if (giveType === 'token' && getType === 'token'
+            && giveTick.trim().toUpperCase() === getTick.trim().toUpperCase()) {
+            setFormError('You give and get the same token. Choose a different token for one side.');
+            return false;
         }
         const ga = getAddress.trim();
         const receiveError = ga ? addressValidationError(ga, descriptor) : null;

@@ -98,8 +98,8 @@ export function MarketsList({
             if (requestId !== watchlistRequestId.current) return;
             setWatchlist(Array.isArray(rows) ? rows : []);
         } catch {
-            if (requestId !== watchlistRequestId.current) return;
-            setWatchlist([]);
+            // Keep the stars already shown: a failed read says nothing about
+            // what is stored, and a wallet switch clears the list on its own.
         }
     }, [walletId, messaging]);
 
@@ -243,12 +243,14 @@ export function MarketsList({
         if (pendingWatchlistKeysRef.current.has(key)) return;
         pendingWatchlistKeysRef.current.add(key);
         setPendingWatchlistKeys((current) => new Set(current).add(key));
-        const existing = watchlist.find(
+        // Every row for the market: two windows starring it together can
+        // leave two, and clearing one would keep the star lit.
+        const existing = watchlist.filter(
             (e) => `${e.chainId}::${e.tick1}::${e.tick2}` === key,
         );
         try {
-            if (existing) {
-                await messaging.clearWatchlistEntry({ id: existing.id });
+            if (existing.length > 0) {
+                for (const e of existing) await messaging.clearWatchlistEntry({ id: e.id });
             } else {
                 await messaging.saveWatchlistEntry({ walletId, chainId, tick1, tick2 });
             }
@@ -682,6 +684,9 @@ export function normalizeMarket(row) {
     const tick1 = row.tick1 || row.tickA || row.give_tick || row.base || null;
     const tick2 = row.tick2 || row.tickB || row.get_tick || row.quote || null;
     if (typeof tick1 !== 'string' || typeof tick2 !== 'string') return null;
+    // A pair of one token with itself is no market; opening it would offer
+    // an order that gives and gets the same token.
+    if (tick1.trim().toUpperCase() === tick2.trim().toUpperCase()) return null;
     const lastPrice = finiteFigure(row.tick1_price ?? row.last_price ?? row.lastPrice ?? row.last);
     const change24h = finiteFigure(
         row.tick1_24hr_change ?? row.change_24h ?? row.change24h,

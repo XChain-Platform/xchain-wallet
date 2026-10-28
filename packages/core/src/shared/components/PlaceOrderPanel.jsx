@@ -90,9 +90,10 @@ const EXPIRATION_PRESETS = [
  * @param {string} props.tick1
  * @param {string} props.tick2
  * @param {string | null} [props.prefillPrice]       from orderbook click
+ * @param {number} [props.prefillPick]               counts book picks, so the same price picked again refills
  * @param {() => void} [props.onOrderPlaced]         refresh parent after placement
  */
-export function PlaceOrderPanel({ walletId, chainId, tick1, tick2, prefillPrice, onOrderPlaced }) {
+export function PlaceOrderPanel({ walletId, chainId, tick1, tick2, prefillPrice, prefillPick, onOrderPlaced }) {
     const { messaging, shell } = useMessaging();
     const demoGuard = useDemoGuard(walletId);
     const variant = screenVariantFor(shell);
@@ -162,7 +163,7 @@ export function PlaceOrderPanel({ walletId, chainId, tick1, tick2, prefillPrice,
 
     useEffect(() => {
         if (prefillPrice) setPrice(prefillPrice);
-    }, [prefillPrice]);
+    }, [prefillPrice, prefillPick]);
 
     useEffect(() => {
         let cancelled = false;
@@ -285,6 +286,9 @@ export function PlaceOrderPanel({ walletId, chainId, tick1, tick2, prefillPrice,
     // empty half (".5", "5."), which the entry filter allows; multiplying by
     // one gives the same plain form the total already uses.
     const sizeText = useMemo(() => multiplyAmounts(size, '1') ?? String(size).trim(), [size]);
+    // The price in the same plain spelling, so the review row reads like the
+    // give and get amounts beside it.
+    const priceText = useMemo(() => multiplyAmounts(price, '1') ?? String(price).trim(), [price]);
 
     // The chosen expiration as a Unix timestamp (seconds). `null` = the
     // default window (omit EXPIRATION); `undefined` = an invalid custom
@@ -423,6 +427,12 @@ export function PlaceOrderPanel({ walletId, chainId, tick1, tick2, prefillPrice,
         // nothing to spend from and nothing to receive into.
         if (!fromAddress) {
             setFormError('No address to sign from on this network. Use Receive first.');
+            return;
+        }
+        // One token on both sides composes give X for get X, which consensus
+        // accepts and whoever matches it profits from.
+        if (String(tick1).trim().toUpperCase() === String(tick2).trim().toUpperCase()) {
+            setFormError('This market has the same token on both sides, so it cannot take an order.');
             return;
         }
         // Both legs are required: an order with one side blank has no price.
@@ -717,7 +727,7 @@ export function PlaceOrderPanel({ walletId, chainId, tick1, tick2, prefillPrice,
                     <dt style={dtStyle}>{t('components.placeOrderPanel.get')}</dt>
                     <dd style={ddStyle}>{getAmt} {getTick}</dd>
                     <dt style={dtStyle}>{t('components.placeOrderPanel.price')}</dt>
-                    <dd style={ddStyle}>{price} {tick2}/{tick1}</dd>
+                    <dd style={ddStyle}>{priceText} {tick2}/{tick1}</dd>
                     <dt style={dtStyle}>{t('components.placeOrderPanel.expiration')}</dt>
                     <dd style={ddStyle}>{expirationLabel}</dd>
                     <dt style={dtStyle}>{t('send.fields.from')}</dt>
