@@ -32,7 +32,7 @@ describe('screen guard', () => {
     it('is inert until a shell installs one', () => {
         expect(isScreenGuardActive()).toBe(false);
         // Mounting a protected screen with no shell handler must not throw:
-        // this is the web, extension and desktop case, i.e. most of them.
+        // this is the web and extension case.
         expect(() => renderHook(() => useProtectedScreen())).not.toThrow();
     });
 

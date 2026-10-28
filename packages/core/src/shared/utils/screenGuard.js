@@ -30,9 +30,11 @@
 //     trying to get help would find their support call showing black.
 //
 // Core owns the POLICY (which screens) and knows nothing about how the
-// protection is applied. A shell installs a handler; every other shell -
-// web, extension, desktop - installs none and every call here is a no-op,
-// which is correct: a browser tab cannot stop a screenshot, and pretending
+// protection is applied. A shell that can apply it installs a handler: the
+// mobile shell (FLAG_SECURE) and desktop (BrowserWindow content protection,
+// renderer/screenGuardBridge.js). Web and extension install none and every
+// call here is a no-op, which is correct: a browser tab cannot stop a
+// screenshot, and pretending
 // otherwise in the UI would be worse than not trying.
 
 import { useEffect } from 'react';

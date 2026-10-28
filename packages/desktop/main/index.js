@@ -62,6 +62,7 @@ import { KeychainSessionBackend, sessionKeyPathFor } from './keychain.js';
 import { FileUnlockThrottleStore, unlockThrottlePathFor } from './unlockThrottle.js';
 import { FileAutoLockStore, autoLockStatePathFor } from './autoLockState.js';
 import { FilePanicModeStore, panicModeStatePathFor } from './panicModeState.js';
+import { applyScreenProtection } from './screenProtection.js';
 import {
     attachRendererCspHeaders,
     allowlistedExternalUrl,
@@ -1259,6 +1260,23 @@ void runMainTask(async () => {
         } catch (err) {
             reportMainFailure('open-window IPC action', err);
             return { ok: false, error: 'open-window: operation failed' };
+        }
+    });
+
+    // §1 / S4: screen capture protection while a screen shows key material.
+    // The renderer names only on or off; the target is the sender's own window.
+    ipcMain.handle('xchain:screen-protection', async (event, ...args) => {
+        if (!isTrustedSender(event)) {
+            return { ok: false, error: 'screen-protection: rejected from untrusted frame' };
+        }
+        try {
+            return applyScreenProtection(event, args, {
+                isTrustedSender,
+                windowFor: (sender) => BrowserWindow.fromWebContents(sender),
+            });
+        } catch (err) {
+            reportMainFailure('screen-protection IPC action', err);
+            return { ok: false, error: 'screen-protection: operation failed' };
         }
     });
 

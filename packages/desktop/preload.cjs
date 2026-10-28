@@ -63,6 +63,10 @@
 //     `xchainWalletWindow.onStateChange(listener)` keeps sibling windows
 //     aligned when the shared main-process session, active wallet, settings,
 //     active network, or a wallet or account record changes.
+//     `xchainWalletWindow.setScreenProtected(boolean)` turns screen capture
+//     protection on or off for the calling window only, while a screen
+//     shows key material (renderer/screenGuardBridge.js). One boolean in,
+//     no window id: a renderer cannot aim it at another window.
 //
 //   - `xchainWalletRegistry.getRemoteDescriptors()`: §9.7 / G007
 //     chain-registry sync. The renderer CSP pins connect-src 'self',
@@ -107,6 +111,7 @@ const UPDATER_INSTALL_CHANNEL = 'xchain:updater-install';
 const UPDATER_STATE_CHANNEL = 'xchain:updater-state';
 const DEEP_LINK_CHANNEL = 'xchain:uri';
 const DEEP_LINK_TAKE_CHANNEL = 'xchain:deep-link-take';
+const SCREEN_PROTECTION_CHANNEL = 'xchain:screen-protection';
 
 function assertArgumentCount(method, args, expected) {
     if (args.length !== expected) {
@@ -288,6 +293,18 @@ contextBridge.exposeInMainWorld('xchainWalletWindow', {
             assertNoArguments('xchainWalletWindow.onStateChange unsubscribe', arguments);
             ipcRenderer.removeListener(STATE_CHANGE_CHANNEL, wrapped);
         };
+    },
+    /**
+     * Turn screen capture protection on or off for this window. Core's
+     * screen guard calls it as a key-material screen mounts and unmounts.
+     * @param {boolean} protectedNow
+     * @returns {Promise<{ ok: true } | { ok: false, error: string }>}
+     */
+    setScreenProtected(protectedNow) {
+        const method = 'xchainWalletWindow.setScreenProtected';
+        assertArgumentCount(method, arguments, 1);
+        if (typeof protectedNow !== 'boolean') throw new TypeError(`${method}: expected a boolean`);
+        return ipcRenderer.invoke(SCREEN_PROTECTION_CHANNEL, protectedNow);
     },
 });
 

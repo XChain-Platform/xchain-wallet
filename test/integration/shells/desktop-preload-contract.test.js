@@ -255,6 +255,7 @@ describe('desktop preload: the renderer sandbox surface', () => {
         await bridge.wipeStorage();
         await bridge.saveBackupFile({ fileName: 'w-backup.xchain-wallet', content: '{}' });
         await win.openDetached({ initialView: 'history' });
+        await win.setScreenProtected(true);
         await registry.getRemoteDescriptors();
         signer.postMessage({ kind: 'register', signerIds: [] });
         // row 142: the install call is walked here specifically so
@@ -277,7 +278,7 @@ describe('desktop preload: the renderer sandbox surface', () => {
         ]);
         // Sanity: the walk above must actually have produced traffic, or the
         // agreement checks below are vacuously true.
-        expect(used.size).toBe(9);
+        expect(used.size).toBe(10);
 
         const registered = mainRegisteredChannels();
         for (const channel of used) {

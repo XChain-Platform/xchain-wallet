@@ -43,8 +43,9 @@ const REVEAL_TIMEOUT_MS = 30_000;
 export function ViewPrivateKey({ walletId, address, renderQR, onBack }) {
     // S4: A private key on screen is the wallet. FLAG_SECURE also keeps this
     // window out of the recents thumbnail, which Android writes to disk.
-    // No-op on every shell that installs no screen guard (web, extension,
-    // desktop): a browser tab cannot stop a screenshot and must not pretend to.
+    // Desktop applies window content protection; web and extension install
+    // no screen guard: a browser tab cannot stop a screenshot and must not
+    // pretend to.
     useProtectedScreen();
 
     const { messaging, shell } = useMessaging();
