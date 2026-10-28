@@ -137,7 +137,7 @@ describe('Send Max', () => {
         });
         await prepareNativeMax();
 
-        await screen.findByText(/held by another send from this wallet that has not gone out yet/);
+        await screen.findByText(/held by another send from this wallet that hasn't gone out yet, so Max can't create a payment/);
         expect(screen.getByLabelText(/^Amount \(/)).toHaveValue('');
         expect(screen.getByRole('button', { name: /^Send$/ })).toBeDisabled();
     });
