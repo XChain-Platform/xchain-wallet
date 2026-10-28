@@ -128,7 +128,6 @@ const messages = {
     'settings.backup.encryptedSize': 'Encrypted size',
     'settings.backup.bytes': 'bytes',
     'settings.backup.discoveryName': 'Discovery name',
-    'settings.backup.copyTxid': 'Copy transaction ID',
     'settings.backup.restoreChain': 'Restore network',
     'settings.backup.checking': 'Checking…',
     'settings.backup.check2': 'Check',

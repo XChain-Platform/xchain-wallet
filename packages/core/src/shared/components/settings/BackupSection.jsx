@@ -1457,7 +1457,7 @@ function PublishLabelsReport({ result, onDone }) {
                 <dd style={{ margin: 0, fontFamily: 'var(--xc-font-mono)', fontSize: 'var(--xc-text-xs)', wordBreak: 'break-all' }}>{result?.discoveryName || '-'}</dd>
             </dl>
             <div className={styles.actions}>
-                <CopyButton value={txid} label={t('settings.backup.copyTxid')} />
+                <CopyButton value={txid} label={t('common.copyTransactionId')} />
                 <Button variant="ghost" size="sm" onClick={onDone}>{t('common.done')}</Button>
             </div>
         </FormSection>
