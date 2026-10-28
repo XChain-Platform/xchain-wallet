@@ -429,8 +429,12 @@ function pastedSecretKind(text, detected, chainRegistry) {
  * @param {() => void} [props.onDone]
  *        Leaves a completed send for Home. Falls back to onBack for callers
  *        that do not distinguish completion from ordinary back navigation.
+ * @param {(held: boolean) => void} [props.onHoldLinks]
+ *        Called with true when the user approves a payment and with false when
+ *        this screen unmounts. While held, the shell keeps an incoming payment
+ *        link waiting instead of replacing the screen that shows the outcome.
  */
-export function Send({ walletId, accountId, onBack, prefill = null, onDone, onChangeAsset, onViewHistory, onReceive }) {
+export function Send({ walletId, accountId, onBack, prefill = null, onDone, onChangeAsset, onViewHistory, onReceive, onHoldLinks }) {
     const { messaging, shell } = useMessaging();
     // A demo wallet probes nothing; its fixtures never touch a network.
     const { overall: reachabilityOverall, refresh: recheckReachability } = useReachability({
@@ -446,6 +450,20 @@ export function Send({ walletId, accountId, onBack, prefill = null, onDone, onCh
     useEffect(() => {
         mountedRef.current = true;
         return () => { mountedRef.current = false; };
+    }, []);
+    // Once a payment is approved, this screen is the only place its outcome
+    // (sent, failed, cancelled or signed for export) is shown, so the shell
+    // holds incoming payment links until the user leaves it.
+    const onHoldLinksRef = useRef(onHoldLinks);
+    onHoldLinksRef.current = onHoldLinks;
+    const linksHeldRef = useRef(false);
+    const holdIncomingLinks = useCallback(() => {
+        if (linksHeldRef.current) return;
+        linksHeldRef.current = true;
+        onHoldLinksRef.current?.(true);
+    }, []);
+    useEffect(() => () => {
+        if (linksHeldRef.current) onHoldLinksRef.current?.(false);
     }, []);
     // Unlocked software session signs without a password.
     const signerReady = useSignerReady(walletId);
@@ -2815,6 +2833,7 @@ export function Send({ walletId, accountId, onBack, prefill = null, onDone, onCh
                     // sent and offer to restore and send it a second time.
                     draftDiscardedRef.current = true;
                     draft.clear();
+                    holdIncomingLinks();
                     // The shared mapping: a multi-recipient send takes the chunk
                     // lane, so its deferred outputs and any envelope must ride along.
                     const prebuiltPsbt = prebuiltPsbtFromComposed(composed);
@@ -2924,6 +2943,7 @@ export function Send({ walletId, accountId, onBack, prefill = null, onDone, onCh
             if (isHwSource && signRisk.requireExplicitConfirm && !hwExplicitConfirmed) return;
         }
         submitInFlightRef.current = true;
+        holdIncomingLinks();
         setStage('submitting');
         setSubmitError(null);
         setSubmitErrorCause(null);

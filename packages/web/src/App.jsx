@@ -824,6 +824,11 @@ function AppInner() {
 
     useEffect(() => { refresh(); }, [refresh]);
 
+    // While the Send screen shows an approved payment, the newest incoming
+    // link waits here and is applied when that screen unmounts.
+    const sendLinksHeldRef = useRef(false);
+    const heldLinkRef = useRef(/** @type {string | null} */ (null));
+
     // Apply one incoming wallet URI. Extracted from the mount effect below
     // (S3) because the native shells have no query string to read: an
     // Android intent arrives through the XChainLinks plugin instead, and it
@@ -834,6 +839,10 @@ function AppInner() {
     // Nothing here unlocks anything or submits anything. Every branch ends at
     // a prefilled form the user still has to act on.
     const applyUriIntent = useCallback((raw) => {
+        if (sendLinksHeldRef.current && typeof raw === 'string' && raw.trim()) {
+            heldLinkRef.current = raw;
+            return;
+        }
         try {
             // The mapping is shared with the desktop shell; it parses with
             // the registry, hardens the free text and routes only links that
@@ -859,6 +868,9 @@ function AppInner() {
             // view never changes out of sight.
             launchRouteState.current.remember(route.view, statusStateRef.current);
             if (canApplyNativeIntent(statusStateRef.current, nativeSuspendedRef.current)) {
+                // The link's form replaces whatever the scanner overlay covers,
+                // so the overlay closes and releases the camera.
+                setGlobalScannerOpen(false);
                 setUnlockedView(route.view);
             } else if (statusStateRef.current === 'unlocked') {
                 launchRouteState.current.remember(route.view, 'suspended');
@@ -897,6 +909,13 @@ function AppInner() {
     // strips a query param, while this one must stay subscribed for as long
     // as the app is open, since a tap can arrive at any moment.
     useEffect(() => subscribeToNativeDeepLinks(applyUriIntent), [applyUriIntent]);
+    const holdSendLinks = useCallback((held) => {
+        sendLinksHeldRef.current = held;
+        if (held || heldLinkRef.current === null) return;
+        const raw = heldLinkRef.current;
+        heldLinkRef.current = null;
+        applyUriIntent(raw);
+    }, [applyUriIntent]);
 
     // No auto-unlock: the password is never persisted to Web API
     // storage, so a page reload always re-locks the wallet and the
@@ -1256,6 +1275,7 @@ function AppInner() {
                             setUnlockedView('home');
                         }}
                         prefill={sendPrefill}
+                        onHoldLinks={holdSendLinks}
                         onChangeAsset={(carry) => {
                             setSendPrefill((prev) => beginSendAssetSwitch(prev, carry));
                             setUnlockedView('send-picker');
@@ -3229,6 +3249,13 @@ function AppInner() {
                                                     memo: outcome.memo,
                                                     requestMessage: outcome.requestMessage,
                                                 });
+                                                // Send reads its prefill once on mount, so a scan
+                                                // over an open Send form remounts it like a link
+                                                // does (the earlier form is kept as a draft).
+                                                // The scan is newer than any link waiting on an
+                                                // approved payment, so that link is dropped.
+                                                heldLinkRef.current = null;
+                                                setSendLinkSeq((n) => n + 1);
                                                 setUnlockedView('send');
                                             }
                                         } else if (outcome.kind === 'receive') {

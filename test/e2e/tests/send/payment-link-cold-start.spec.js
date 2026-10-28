@@ -49,3 +49,44 @@ test('a second link delivered while Send is open replaces the form', async ({ pa
     await expect(page.locator('#send-destination')).toHaveValue(OTHER);
     await expect(page.locator('#send-amount')).toHaveValue('2');
 });
+
+test('a link delivered after Approve waits until the user leaves the outcome', async ({ page }) => {
+    await page.addInitScript(() => {
+        if (window.localStorage.getItem('xc:test:links') !== '1') return;
+        const listeners = [];
+        globalThis.__deliverLink = (url) => listeners.forEach((fn) => fn({ url }));
+        globalThis.Capacitor = {
+            Plugins: {
+                XChainLinks: {
+                    takePendingLink: async () => ({ url: null }),
+                    addListener: async (_name, fn) => { listeners.push(fn); return { remove() {} }; },
+                },
+            },
+        };
+    });
+    await createWallet(page, { password: DEFAULT_PASSWORD });
+    await page.evaluate(() => window.localStorage.setItem('xc:test:links', '1'));
+    await page.goto('/');
+    await page.getByLabel('Password', { exact: true }).fill(DEFAULT_PASSWORD);
+    await page.getByRole('button', { name: 'Unlock Wallet' }).click();
+    await expect(page.getByRole('region', { name: 'App header', exact: true })).toBeVisible({ timeout: 90_000 });
+
+    await page.evaluate((url) => globalThis.__deliverLink(url), `bitcoin:${ADDRESS}?amount=0.001`);
+    await expect(page.locator('#send-amount')).toHaveValue('0.001');
+    const main = page.getByRole('main');
+    await main.getByRole('button', { name: 'Send', exact: true }).click();
+    await expect(page.getByTestId('confirm-modal')).toBeVisible();
+    await page.getByTestId('confirm-approve').click();
+    await page.evaluate((url) => globalThis.__deliverLink(url), `bitcoin:${OTHER}?amount=2`);
+
+    // The dev SDK cannot broadcast, so the approved payment ends on its failure
+    // notice. The second link must not replace it.
+    await expect(main.getByText("Couldn't send.", { exact: false })).toBeVisible();
+    await expect(page.locator('#send-destination')).toHaveValue(ADDRESS);
+    await expect(page.locator('#send-amount')).toHaveValue('0.001');
+
+    // Leaving the outcome releases the waiting link, which opens its own Send.
+    await page.getByRole('navigation', { name: 'Primary navigation' }).getByRole('button', { name: 'Home' }).click();
+    await expect(page.locator('#send-destination')).toHaveValue(OTHER);
+    await expect(page.locator('#send-amount')).toHaveValue('2');
+});

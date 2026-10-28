@@ -46,6 +46,24 @@ function rememberedCameraFailure() {
     return null;
 }
 
+/**
+ * Whether an ended camera track means camera access was taken away. A
+ * permission still granted (or back to asking) means the device went away
+ * instead. Without a permission reading the loss counts as withdrawn.
+ *
+ * @returns {Promise<boolean>}
+ */
+async function cameraAccessWithdrawn() {
+    try {
+        const query = globalThis.navigator?.permissions?.query;
+        if (typeof query !== 'function') return true;
+        const status = await query.call(globalThis.navigator.permissions, { name: 'camera' });
+        return status?.state !== 'granted' && status?.state !== 'prompt';
+    } catch {
+        return true;
+    }
+}
+
 function rememberCameraFailure(e) {
     const failure = terminalCameraFailure(e);
     if (!failure) return false;
@@ -392,8 +410,16 @@ export function QrScanner({
             setError(cameraErrorText(e));
         }
 
+        // A track also ends when the camera is unplugged, suspended by the
+        // system or taken by another app. Only a withdrawn permission is
+        // remembered as denied; any other loss lets the next scanner try again.
         function handleTrackEnded() {
-            showCameraFailure({ name: 'NotAllowedError' });
+            if (cancelled) return;
+            stopBrowserCamera();
+            cameraAccessWithdrawn().then((withdrawn) => {
+                if (withdrawn) showCameraFailure({ name: 'NotAllowedError' });
+                else if (!cancelled) setError(nativeScanClosedText('error'));
+            });
         }
 
         async function start() {

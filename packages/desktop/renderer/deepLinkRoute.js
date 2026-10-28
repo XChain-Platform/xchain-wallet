@@ -223,19 +223,20 @@ export function watchDeepLinks({ bridge, detached, chainRegistry, onRoute }) {
 }
 
 /**
- * Desktop deep-link intake: claim on mount, hold the route while locked, and
- * hand it to apply once a wallet is unlocked. Call it after the last-view
- * resume so the link's form is the view that sticks.
+ * Desktop deep-link intake: claim on mount, hold the route while locked or
+ * while `held` (a Send screen showing an approved payment), and hand it to
+ * apply once a wallet is unlocked and nothing holds it. Call it after the
+ * last-view resume so the link's form is the view that sticks.
  *
- * @param {{ bridge?: any, detached: boolean, chainRegistry: any, unlocked: boolean, walletId: string | null | undefined, apply: (route: NonNullable<ReturnType<typeof deepLinkRoute>>) => void }} opts
+ * @param {{ bridge?: any, detached: boolean, chainRegistry: any, unlocked: boolean, walletId: string | null | undefined, held?: boolean, apply: (route: NonNullable<ReturnType<typeof deepLinkRoute>>) => void }} opts
  */
-export function useDeepLinks({ bridge, detached, chainRegistry, unlocked, walletId, apply }) {
+export function useDeepLinks({ bridge, detached, chainRegistry, unlocked, walletId, held = false, apply }) {
     const [route, setRoute] = useState(/** @type {ReturnType<typeof deepLinkRoute>} */ (null));
     // Mount-only: the bridge and the detached flag are fixed for a window's life
     useEffect(() => watchDeepLinks({ bridge, detached, chainRegistry, onRoute: setRoute }), []);
     useEffect(() => {
-        if (!route || detached || !unlocked || !walletId) return;
+        if (!route || detached || !unlocked || !walletId || held) return;
         apply(route);
         setRoute(null);
-    }, [route, unlocked, walletId]);
+    }, [route, unlocked, walletId, held]);
 }

@@ -338,6 +338,8 @@ function AppInner() {
     // link arriving while Send is open replaces the form (the earlier one is
     // kept as a draft) instead of being dropped silently.
     const [sendLinkSeq, setSendLinkSeq] = useState(0);
+    // True while the Send screen shows an approved payment; incoming links wait.
+    const [sendLinksHeld, setSendLinksHeld] = useState(false);
     const [sendPrefill, setSendPrefill] = useState(
         /** @type {{ address?: string, amount?: string, tick?: string, chainId?: string, memo?: string } | null} */ (null),
     );
@@ -846,6 +848,7 @@ function AppInner() {
         chainRegistry: APP_CHAIN_REGISTRY,
         unlocked: status.state === 'unlocked',
         walletId: activeWalletId,
+        held: sendLinksHeld,
         apply: (route) => {
             if (route.view === 'deep-link-error') {
                 setDeepLinkNotice(route.message);
@@ -949,6 +952,7 @@ function AppInner() {
                             setUnlockedView('history');
                         }}
                         prefill={sendPrefill}
+                        onHoldLinks={setSendLinksHeld}
                         onBack={() => {
                             setSendPrefill(null);
                             setUnlockedView(sendBackTo);

@@ -253,6 +253,11 @@ const SHELL_ONLY = {
             kind: 'intended',
             reason: 'The embedded web scanner supplies an accessible route title identifier.',
         },
+        'Send.onHoldLinks': {
+            shells: ['desktop', 'web'],
+            kind: 'intended',
+            reason: 'Only the desktop and web or native shells take payment links while running; the extension popup reads a link from its launch query alone, so none can land over an open Send.',
+        },
         'SendPicker.hideOwnFilter': {
             shells: ['web'],
             kind: 'intended',
