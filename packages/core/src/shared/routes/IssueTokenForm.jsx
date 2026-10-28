@@ -211,17 +211,6 @@ export function IssueTokenForm({ walletId, onBack }) {
         draftDiscardedRef.current = true;
         draft.clear();
     }, [draft]);
-    useEffect(() => {
-        if (stage !== 'form' || !draftPending || draftDiscardedRef.current) return;
-        draft.save({
-            chainId, fromAddressId, ticker, supply, initialMint, maxMint, divisible,
-            description, lockSupply, transferTo, transferSupplyTo, payFeeInNativeCoin,
-        });
-    }, [
-        stage, draftPending, draft,
-        chainId, fromAddressId, ticker, supply, initialMint, maxMint, divisible,
-        description, lockSupply, transferTo, transferSupplyTo, payFeeInNativeCoin,
-    ]);
     const restoreDraft = useCallback(() => {
         const v = draft.load();
         if (!v) { setDraftPending(true); return; }
@@ -249,6 +238,25 @@ export function IssueTokenForm({ walletId, onBack }) {
         || divisible
         || lockSupply
     ), [ticker, supply, initialMint, maxMint, description, transferTo, transferSupplyTo, password, divisible, lockSupply]);
+    // The network, source and fee switch fill themselves in, so only what the
+    // user typed or turned on makes a draft. A draft of defaults would come
+    // back as a Restore banner, and the form holds its autosave while that
+    // banner waits, so the next values typed would never be saved.
+    useEffect(() => {
+        if (stage !== 'form' || !draftPending || draftDiscardedRef.current) return;
+        if (!hasRealInput) {
+            draft.clear();
+            return;
+        }
+        draft.save({
+            chainId, fromAddressId, ticker, supply, initialMint, maxMint, divisible,
+            description, lockSupply, transferTo, transferSupplyTo, payFeeInNativeCoin,
+        });
+    }, [
+        stage, draftPending, draft, hasRealInput,
+        chainId, fromAddressId, ticker, supply, initialMint, maxMint, divisible,
+        description, lockSupply, transferTo, transferSupplyTo, payFeeInNativeCoin,
+    ]);
     const leaveGuard = useFormLeaveGuard({
         dirty: stage !== 'done' && hasRealInput,
         submitting: stage === 'submitting',
@@ -619,6 +627,9 @@ export function IssueTokenForm({ walletId, onBack }) {
     // verified. Watcher mode still branches (it encodes, it never signs).
     const actionConfirm = useActionConfirmFlow({ messaging, walletId });
     const singleEncode = !isWatcherMode;
+    // The form stays on screen while the host composes it; its fields hold
+    // still so the confirm page opens for exactly the values on screen.
+    const composing = actionConfirm.composing;
     // The confirm page's password field writes `password` state; the approve
     // callback reads the ref so it sees the latest keystrokes.
     const passwordValueRef = useRef('');
@@ -669,6 +680,12 @@ export function IssueTokenForm({ walletId, onBack }) {
             setResult(res);
             setPassword('');
             setStage('done');
+            // The draft is the token this approval just created. Kept, it
+            // comes back as "unfinished" and invites a second ISSUE of the
+            // same ticker, which the chain refuses after the fee or, with a
+            // partial initial mint, honours by minting that amount again.
+            draft.clear();
+            setDraftPending(false);
         } catch (err) {
             if (isUserRejection(err)) return;
             // Same mapping the sign path already does: NativeFeeForfeitError's own message is
@@ -1008,10 +1025,11 @@ export function IssueTokenForm({ walletId, onBack }) {
                 </Button>
             )}
         >
-            <ChainPicker label={t('settings.network.label')} value={chainId} onChange={setChainId} chainIds={chainsWithAddresses.length ? chainsWithAddresses : (chainId ? [chainId] : [])} chainRegistry={chainRegistry} />
+            <ChainPicker disabled={composing} label={t('settings.network.label')} value={chainId} onChange={setChainId} chainIds={chainsWithAddresses.length ? chainsWithAddresses : (chainId ? [chainId] : [])} chainRegistry={chainRegistry} />
 
             {fromAddress ? (
                 <AddressField
+                    disabled={composing}
                     label={t('send.fields.from')}
                     icon="addresses"
                     value={fromAddress.address}
@@ -1027,6 +1045,7 @@ export function IssueTokenForm({ walletId, onBack }) {
             )}
 
             <Input
+                disabled={composing}
                 id="issue-ticker"
                 label={t('issue.ticker')}
                 hint={TICKER_HINT}
@@ -1041,6 +1060,7 @@ export function IssueTokenForm({ walletId, onBack }) {
                     : undefined}
             />
             <Input
+                disabled={composing}
                 id="issue-supply"
                 label={t('issue.supply')}
                 hint={t('issue.supplyHint')}
@@ -1050,6 +1070,7 @@ export function IssueTokenForm({ walletId, onBack }) {
                 autoComplete="off"
             />
             <Input
+                disabled={composing}
                 id="issue-initial-mint"
                 label={t('issue.initialMintOptional')}
                 hint={mintHeadroom
@@ -1061,6 +1082,7 @@ export function IssueTokenForm({ walletId, onBack }) {
                 autoComplete="off"
             />
             <Input
+                disabled={composing}
                 id="issue-max-mint"
                 label={t('issue.maxMintOptional')}
                 hint={t('issue.maxMintHint')}
@@ -1070,11 +1092,13 @@ export function IssueTokenForm({ walletId, onBack }) {
                 autoComplete="off"
             />
             <Switch
+                disabled={composing}
                 label={t('issue.divisible')}
                 checked={divisible}
                 onChange={(e) => setDivisible(e.target.checked)}
             />
             <Input
+                disabled={composing}
                 label={t('issue.descriptionOptional')}
                 hint={t('issue.descriptionHint')}
                 value={description}
@@ -1083,6 +1107,7 @@ export function IssueTokenForm({ walletId, onBack }) {
                 maxLength={MAX_ISSUE_TEXT_LENGTH}
             />
             <Switch
+                disabled={composing}
                 label={t('issue.lockSupply')}
                 checked={lockSupply}
                 onChange={(e) => setLockSupply(e.target.checked)}
@@ -1109,6 +1134,7 @@ export function IssueTokenForm({ walletId, onBack }) {
                 {`${t('issue.bridgingHint')} ${t('issue.boundListHint')}`}
             </FormNotice>
             <AddressField
+                disabled={composing}
                 id="issue-transfer-owner"
                 label={t('issue.transferOwnershipOptional')}
                 icon="contacts"
@@ -1118,6 +1144,7 @@ export function IssueTokenForm({ walletId, onBack }) {
                 onIconClick={() => { setContactsTarget('owner'); setContactsPickerOpen(true); }}
             />
             <AddressField
+                disabled={composing}
                 id="issue-transfer-supply"
                 label={t('issue.sendInitialMintOptional')}
                 icon="contacts"
@@ -1128,6 +1155,7 @@ export function IssueTokenForm({ walletId, onBack }) {
             />
 
             <FeeSelector
+                disabled={composing}
                 key={chainId}
                 label={t('send.networkFee')}
                 coinTicker={coinTicker}
@@ -1139,6 +1167,7 @@ export function IssueTokenForm({ walletId, onBack }) {
             />
 
             <NativeFeeToggle
+                disabled={composing}
                 checked={payFeeInNativeCoin}
                 onChange={setPayFeeInNativeCoin}
                 coinTicker={coinTicker}

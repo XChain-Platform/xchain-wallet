@@ -383,6 +383,13 @@ export function TokenWizard({ walletId, onBack }) {
         });
     }, [stage, actionParams, chainId]);
 
+    // What the details submit validated against, read again after the
+    // subtoken parent lookup resolves.
+    const detailsInputsRef = useRef('');
+    detailsInputsRef.current = JSON.stringify([
+        stage, chainId, fromAddress?.address || null, actionParams,
+    ]);
+
     async function handleDetailsSubmit(event) {
         event.preventDefault();
         if (parentCheckRef.current) return;
@@ -542,6 +549,7 @@ export function TokenWizard({ walletId, onBack }) {
             return;
         }
         if (template === 'subtoken') {
+            const checkedInputs = detailsInputsRef.current;
             parentCheckRef.current = true;
             let parentError = null;
             try {
@@ -549,6 +557,10 @@ export function TokenWizard({ walletId, onBack }) {
             } finally {
                 parentCheckRef.current = false;
             }
+            // The user went Back, or changed the network, the signer or a
+            // field, while the lookup ran: its answer is about values no
+            // longer on screen, so it neither reviews nor reports them.
+            if (detailsInputsRef.current !== checkedInputs) return;
             if (parentError) {
                 setFormError(parentError);
                 return;
@@ -660,9 +672,13 @@ export function TokenWizard({ walletId, onBack }) {
             : stage === 'preview'
                 ? () => { setFormError(null); setStage('details'); }
                 : onBack;
+    // The host is composing the reviewed values. Going Back now would let the
+    // user edit Details while the confirm page opens for the old values.
+    const composingReview = stage === 'preview' && actionConfirm.composing;
     const header = (
         <PageHeader
             onBack={stageBack}
+            backDisabled={composingReview}
             backLabel={stage === 'template' || stage === 'done' ? 'Back to home' : 'Back'}
             title="Issue a token"
         />
