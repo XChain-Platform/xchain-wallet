@@ -18,6 +18,11 @@ const messages = {
     // Copy moved out of JSX literals by the i18n sweep.
     'undoSend.toast.sendingInS': 'Sending in {remaining} s',
     'undoSend.toast.sendCancelled': 'Send cancelled',
+    // The countdown and outcome of a held send whose Send screen is gone.
+    'undoSend.handoff.sendingInS': 'Your send goes out in {remaining} s.',
+    'undoSend.handoff.sent': 'Your held send is broadcast. It shows in History.',
+    'undoSend.handoff.cancelled': 'Send cancelled. Nothing was broadcast.',
+    'undoSend.handoff.failed': 'Your held send did not finish. Check History before you send it again.',
 };
 
 addEnglish(messages);

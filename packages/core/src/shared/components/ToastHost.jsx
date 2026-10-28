@@ -68,6 +68,7 @@ function isConfirmation(input) {
  *   dismissToast: (id: string) => void,
  *   clearToasts: () => void,
  *   dismissStaleToasts: () => void,
+ *   clearGeneration: () => number,
  * }} ToastApi
  */
 
@@ -83,6 +84,9 @@ export function ToastHost({ children }) {
     const [toasts, setToasts] = useState(/** @type {ToastInput[]} */ ([]));
     const [announcement, setAnnouncement] = useState({ id: 0, message: '' });
     const timersRef = useRef(/** @type {Map<string, ReturnType<typeof setTimeout>>} */ (new Map()));
+    // Counts clearToasts calls, so a caller can tell a lock cleared the stack
+    // between two of its toasts and keep the second off the lock screen.
+    const clearCountRef = useRef(0);
     const viewportRef = useRef(/** @type {HTMLDivElement | null} */ (null));
     const haptic = useHaptic();
     useIdlePreload(ToastStack);
@@ -128,6 +132,7 @@ export function ToastHost({ children }) {
     }, [haptic]);
 
     const clearToasts = useCallback(() => {
+        clearCountRef.current += 1;
         for (const timer of timersRef.current.values()) clearTimeout(timer);
         timersRef.current.clear();
         setToasts([]);
@@ -157,8 +162,11 @@ export function ToastHost({ children }) {
         timersRef.current.clear();
     }, []);
 
-    const api = useMemo(() => ({ showToast, announce, dismissToast, clearToasts, dismissStaleToasts }), [
-        showToast, announce, dismissToast, clearToasts, dismissStaleToasts,
+    const clearGeneration = useCallback(() => clearCountRef.current, []);
+    const api = useMemo(() => ({
+        showToast, announce, dismissToast, clearToasts, dismissStaleToasts, clearGeneration,
+    }), [
+        showToast, announce, dismissToast, clearToasts, dismissStaleToasts, clearGeneration,
     ]);
 
     const visibleToasts = toasts.slice(0, VISIBLE_LIMIT);
@@ -273,6 +281,7 @@ export function useToast() {
         dismissToast: () => {},
         clearToasts: () => {},
         dismissStaleToasts: () => {},
+        clearGeneration: () => 0,
     });
 }
 

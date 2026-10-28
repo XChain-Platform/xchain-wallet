@@ -243,6 +243,7 @@ describe('background send hold wiring', () => {
         expect(sendHold.hold).toHaveBeenCalledWith('send-1', 5);
         expect(response.ok).toBe(false);
         expect(response.error.message).toContain('review the payment again');
+        expect(response.error.name).toBe('ActiveNetworkChangedError');
         expect(broadcast).not.toHaveBeenCalled();
     });
 

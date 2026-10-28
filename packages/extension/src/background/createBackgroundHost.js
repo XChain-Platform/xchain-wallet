@@ -1101,7 +1101,10 @@ export function createBackgroundHost(deps) {
         if (!descriptor) return;
         const activeNetwork = getActiveNetwork(await vault.settings.get());
         if (descriptor.networkKind !== activeNetwork) {
-            throw new Error(`The active network changed to ${activeNetwork}. ${reviewAgain}`);
+            // Named so the form shows this sentence instead of its generic failure line.
+            throw Object.assign(new Error(`The active network changed to ${activeNetwork}. ${reviewAgain}`), {
+                name: 'ActiveNetworkChangedError',
+            });
         }
     }
 

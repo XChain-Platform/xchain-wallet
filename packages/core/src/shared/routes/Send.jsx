@@ -63,6 +63,7 @@ import '../../i18n/locales/en/history.js';
 import '../../i18n/locales/en/scan.js';
 import '../../i18n/locales/en/send.js';
 import '../../i18n/locales/en/transactionStatus.js';
+import '../../i18n/locales/en/undoSend.js';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { useSignerReady } from '../hooks/useSignerReady.js';
 import { useDeveloperMode } from '../hooks/useDeveloperMode.js';
@@ -507,7 +508,7 @@ export function Send({ walletId, accountId, onBack, prefill = null, onDone, onCh
     }, [demoExitBusy, messaging, walletId, onBack]);
     const allowRemoteImages = Boolean(settings)
         && settings.privacy?.metadataFetchEnabled !== false;
-    const { showToast } = useToast();
+    const { showToast, dismissToast, clearGeneration } = useToast();
     const haptic = useHaptic();
     const [undoHoldActive, setUndoHoldActive] = useState(false);
     const undoHoldIdRef = useRef(/** @type {string | null} */ (null));
@@ -549,6 +550,42 @@ export function Send({ walletId, accountId, onBack, prefill = null, onDone, onCh
         onElapsed: clearUndoHold,
         onCancelHold: cancelUndoHold,
     });
+    // A held send outlives this screen: a wallet or account switch (here or in
+    // another surface), a network change or a route change remounts Send while
+    // the host still counts down. The countdown moves to the app toast stack,
+    // so Cancel stays in reach, and the outcome is stated when the send settles.
+    const undoLiveRef = useRef(/** @type {{ holdId: string, remaining: number } | null} */ (null));
+    undoLiveRef.current = undoHoldActive && undoSendStatus === 'counting' && undoHoldIdRef.current
+        ? { holdId: undoHoldIdRef.current, remaining: undoSendRemaining }
+        : null;
+    const undoHandoffRef = useRef(/** @type {{ toastId: string, generation: number } | null} */ (null));
+    const undoHandoffDepsRef = useRef({ messaging, showToast, clearGeneration });
+    undoHandoffDepsRef.current = { messaging, showToast, clearGeneration };
+    // A layout cleanup, so a lock that unmounts Send clears this toast with the
+    // rest of the session's toasts in the same commit (useClearToastsOnLock).
+    useLayoutEffect(() => () => {
+        const live = undoLiveRef.current;
+        if (!live) return;
+        const { messaging: host, showToast: show, clearGeneration: generationOf } = undoHandoffDepsRef.current;
+        const toastId = show({
+            message: t('undoSend.handoff.sendingInS', { remaining: live.remaining }),
+            actionLabel: t('common.cancel'),
+            onAction: () => host.sendHoldCancel(live.holdId),
+            durationMs: Math.max(1, live.remaining) * 1000,
+        });
+        undoHandoffRef.current = { toastId, generation: generationOf() };
+    }, []);
+    const reportUndoHandoffOutcome = useCallback((outcome) => {
+        const handoff = undoHandoffRef.current;
+        if (!handoff) return;
+        undoHandoffRef.current = null;
+        dismissToast(handoff.toastId);
+        // A lock cleared the stack since the handoff: the outcome stays off the lock screen.
+        if (clearGeneration() !== handoff.generation) return;
+        if (outcome === 'sent') showToast({ message: t('undoSend.handoff.sent') });
+        else if (outcome === 'cancelled') showToast({ message: t('undoSend.handoff.cancelled') });
+        else showToast({ message: t('undoSend.handoff.failed'), variant: 'error' });
+    }, [clearGeneration, dismissToast, showToast]);
 
     // §5.6 slice 1: the single-encode confirm modal. Flag-gated
     // (read with code defaults, never vault-stamped). brought
@@ -2913,7 +2950,10 @@ export function Send({ walletId, accountId, onBack, prefill = null, onDone, onCh
             });
             recordLastUsedChain(messaging, chainId);
             draft.clear();
-            if (!mountedRef.current) return;
+            if (!mountedRef.current) {
+                reportUndoHandoffOutcome('sent');
+                return;
+            }
             setStage('done');
             haptic.success();
             setResult(res);
@@ -2921,7 +2961,10 @@ export function Send({ walletId, accountId, onBack, prefill = null, onDone, onCh
             setPassword('');
             setDraftPending(false);
         } catch (err) {
-            if (!mountedRef.current) return;
+            if (!mountedRef.current) {
+                reportUndoHandoffOutcome(isUndoSendCancellation(err) ? 'cancelled' : 'failed');
+                return;
+            }
             // A send that stays on this form resumes saving the next edit.
             draftDiscardedRef.current = false;
             if (isUndoSendCancellation(err)) {
@@ -2974,7 +3017,7 @@ export function Send({ walletId, accountId, onBack, prefill = null, onDone, onCh
         chainId, fromAddress, walletId, toAddress, tick, amount, memo, rbfForSend,
         feePerKb, settings, messaging, confirmAction, draft, haptic,
         isNativeSend, isHwSource, isMultiSend, sendLegs, sendTotals, startUndoSend,
-        clearUndoHold, resetUndoSend, showToast, changeAddress, coinControlEnabled, selectedUtxos,
+        clearUndoHold, resetUndoSend, reportUndoHandoffOutcome, showToast, changeAddress, coinControlEnabled, selectedUtxos,
         feeTiers,
     ]);
 

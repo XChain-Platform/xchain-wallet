@@ -303,6 +303,13 @@ function isMainnetPrelaunch(err) {
  * @param {unknown} err
  * @returns {boolean}
  */
+function isActiveNetworkChanged(err) {
+    const e = /** @type {any} */ (err);
+    return Boolean(e && typeof e === 'object'
+        && e.name === 'ActiveNetworkChangedError'
+        && /^The active network changed to [a-z]+\. /.test(String(e.message || '')));
+}
+
 function isBackgroundInterrupted(err) {
     const e = /** @type {any} */ (err);
     return Boolean(e && typeof e === 'object'
@@ -344,6 +351,9 @@ export function submitFailureMessage(
     // flight. The error already carries the wallet's own sentence, which says
     // to review and try again; the generic line would hide that.
     if (isBackgroundInterrupted(err)) return String(/** @type {any} */ (err).message).trim();
+    // The host refused a send whose network is no longer the active one, at
+    // Approve or after an Undo hold. Its sentence names the remedy.
+    if (isActiveNetworkChanged(err)) return String(/** @type {any} */ (err).message).trim();
     // A mainnet action refused before launch names the chain id and the word
     // "prelaunch" in its own text, which the filters below reduce to the
     // generic line. Nothing was signed, and the remedy is a test network.
