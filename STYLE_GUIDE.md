@@ -59,7 +59,7 @@ Core CSS modules use this reviewed set of viewport widths. Choose the narrowest 
 | `360px` | the extension popup width: fallbacks at or below the popup |
 | `400px` | extension-width detail layouts |
 | `420px` | narrow row and toolbar stacking |
-| `480px` | compact grids, dense controls and the header network badge |
+| `480px` | compact grids and dense controls |
 | `600px` | the form and narrow route boundary |
 | `640px` | rail layout and sidebar begin |
 | `900px` | full layout and labelled sidebar begin |
@@ -268,7 +268,8 @@ Use `<AddressCombobox>` from `@xchain-wallet/core/ui`; it ships the autocomplete
 - Always pass `suggestions`; it's what makes the combobox useful. Source them from contacts + recent send history scoped to the active chain.
 - Treat paste as a special event (`onPaste`) so you can run paste-time validation (chain match, novelty check) before the value lands in state.
 - Let `AddressCombobox` reserve the right padding and position its icon action. Do not wrap it in another absolutely-positioned button.
-- One inline action max (the most-used: typically Address Book). If you have multiple secondary actions (scan, paste-from-clipboard, etc.), move them to the toolbar's trailing slot or behind a `MoreIcon` overflow.
+- One inline action max (the most-used: typically Address Book). If you have more secondary actions (scan, say), move them to the toolbar's trailing slot or behind a `MoreIcon` overflow.
+- No Paste button in or beside any field: users paste with the native menu and shortcuts, and `onPaste` sees that paste.
 
 ## Fee selector
 

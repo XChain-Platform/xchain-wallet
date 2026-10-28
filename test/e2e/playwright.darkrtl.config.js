@@ -11,6 +11,7 @@
 // Each project writes screenshots and results.jsonl under SWEEP_OUT/<project>.
 
 import { defineConfig } from '@playwright/test';
+import { withHostBlock } from './host-block.js';
 
 const PORT = Number(process.env.SWEEP_PORT) || 5173;
 const BASE_URL = `http://localhost:${PORT}`;
@@ -19,7 +20,7 @@ const SIZES = { 360: [360, 800], 820: [820, 1180], 1440: [1440, 900] };
 const projects = [];
 for (const mode of ['dark', 'rtl', 'darkset']) {
     for (const [width, height] of Object.values(SIZES)) {
-        projects.push({
+        projects.push(withHostBlock({
             name: `${mode}-${width}`,
             metadata: { mode },
             use: {
@@ -32,7 +33,7 @@ for (const mode of ['dark', 'rtl', 'darkset']) {
                 hasTouch: width < 500,
                 deviceScaleFactor: 1,
             },
-        });
+        }));
     }
 }
 

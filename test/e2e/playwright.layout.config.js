@@ -26,6 +26,7 @@
 // 54 px status bar).
 
 import { defineConfig, devices } from '@playwright/test';
+import { withHostBlock } from './host-block.js';
 
 // strictPort below: a busy port fails the run instead of silently measuring
 // whichever tree's server already answers there.
@@ -72,7 +73,8 @@ export function selectVenues(value) {
     return selected;
 }
 
-const projects = selectVenues(process.env.LAYOUT_VENUES);
+// WebKit venues take no Chromium switches; withHostBlock leaves them as they are.
+const projects = selectVenues(process.env.LAYOUT_VENUES).map((project) => withHostBlock(project));
 
 export default defineConfig({
     testDir: './layout',

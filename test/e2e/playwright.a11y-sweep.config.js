@@ -16,6 +16,7 @@
 //     LAYOUT_PORT=5580 ...   other port when 5441 is busy
 
 import { defineConfig } from '@playwright/test';
+import { withHostBlock } from './host-block.js';
 
 const PORT = Number(process.env.LAYOUT_PORT) || 5441;
 const BASE_URL = `http://localhost:${PORT}`;
@@ -30,7 +31,7 @@ export default defineConfig({
     timeout: 30 * 60 * 1000,
     reporter: 'list',
     use: { baseURL: BASE_URL, trace: 'off', video: 'off', screenshot: 'off' },
-    projects: [{ name: 'chromium', use: { browserName: 'chromium', channel: 'chromium' } }],
+    projects: [{ name: 'chromium', use: { browserName: 'chromium', channel: 'chromium' } }].map((project) => withHostBlock(project)),
     webServer: {
         command: `pnpm -C ../../packages/web dev --port ${PORT} --strictPort --host 127.0.0.1`,
         url: BASE_URL,

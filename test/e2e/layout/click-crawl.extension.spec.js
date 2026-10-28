@@ -24,6 +24,7 @@ import { fileURLToPath } from 'node:url';
 import { chromium, expect, test } from '@playwright/test';
 import { createCrawl } from './crawl.js';
 import { measureRulings, recordMeasuredScreen } from './sweep.js';
+import { HOST_BLOCK_ARG } from '../host-block.js';
 
 const here = fileURLToPath(new URL('.', import.meta.url));
 const repo = resolve(here, '..', '..', '..');
@@ -55,7 +56,7 @@ for (let shard = 0; shard < SHARDS; shard += 1) {
             channel: 'chromium',
             headless: true,
             viewport: { width: WIDTH, height: HEIGHT },
-            args: [`--disable-extensions-except=${DIST}`, `--load-extension=${DIST}`],
+            args: [`--disable-extensions-except=${DIST}`, `--load-extension=${DIST}`, HOST_BLOCK_ARG],
         });
         try {
             let [worker] = context.serviceWorkers();

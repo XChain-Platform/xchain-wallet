@@ -45,6 +45,7 @@ import QRCode from 'qrcode';
 import { mkdtempSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { PRODUCTION_BLOCK_ARG } from '../host-block.js';
 
 const y4mHeader = (width, height) =>
     Buffer.from(`YUV4MPEG2 W${width} H${height} F30:1 Ip A1:1 C420mpeg2\n`, 'ascii');
@@ -162,6 +163,8 @@ export async function launchWithQrCamera(text, { launchArgs = [] } = {}) {
             '--use-fake-ui-for-media-stream',
             '--use-fake-device-for-media-stream',
             `--use-file-for-fake-video-capture=${video}`,
+            // The regtest specs reach their venue; the production hosts fail to resolve.
+            PRODUCTION_BLOCK_ARG,
             ...launchArgs,
         ],
     });

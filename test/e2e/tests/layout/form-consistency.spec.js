@@ -13,7 +13,8 @@
 //   - every text, number, select and textarea field draws a solid 1px border
 //     in the shared control-border colour (on itself or on its wrapper),
 //   - inputs, selects and buttons that share a row share one height,
-//   - Paste and Max sit inside the field they act on,
+//   - no field has a Paste button (users paste with the native menu and
+//     shortcuts), and Max sits inside the amount field it acts on,
 //   - primary, secondary and danger buttons keep the shared Button colours
 //     (secondary keeps its 1px outline) and a button drawn like one is a Button,
 //   - disabled buttons use the shared disabled colours,
@@ -146,7 +147,7 @@ function formFaults() {
     const inFieldSizes = [];
     const styles = { labels: [], fields: [] };
     const faults = [];
-    const counts = { fields: 0, buttons: 0, rows: 0, labels: 0, pasteMax: 0, disabled: 0 };
+    const counts = { fields: 0, buttons: 0, rows: 0, labels: 0, max: 0, paste: 0, disabled: 0 };
 
     // Fields, and the box that draws each one's border (itself or a wrapper).
     const fieldSel = 'input:not([type=checkbox]):not([type=radio]):not([type=hidden]):not([type=range]):not([type=file]):not([type=color]):not([type=button]):not([type=submit]), select, textarea';
@@ -196,15 +197,20 @@ function formFaults() {
         if (cs.position === 'absolute' && r.width >= 30 && cs.opacity !== '0') faults.push(`${name(el)}: native input shows through its custom control`);
     }
 
-    // Paste and Max sit inside the field they act on.
+    // No Paste button anywhere; Max sits inside the field it acts on.
     // Page-header actions and the shared notice's own action are measured by
     // their own specs.
     const buttons = [...document.querySelectorAll('button, [role="button"]')].filter((el) => visible(el)
         && !el.closest('header, [data-variant]') && !tokenTrigger(el));
     for (const btn of buttons) {
         const label = (btn.getAttribute('aria-label') || btn.innerText || '').trim();
-        if (!/^(paste|max|use max)\b/i.test(label)) continue;
-        counts.pasteMax += 1;
+        if (/^paste\b/i.test(label)) {
+            counts.paste += 1;
+            faults.push(`${name(btn)}: a Paste button; users paste with the native menu and shortcuts`);
+            continue;
+        }
+        if (!/^(max|use max)\b/i.test(label)) continue;
+        counts.max += 1;
         const r = rect(btn);
         const inside = [...boxes.values()].some((box) => box !== btn && contains(rect(box), r));
         if (!inside) faults.push(`${name(btn)}: sits outside any field`);
@@ -392,11 +398,11 @@ for (const viewport of VIEWPORTS) {
         if (process.env.FORM_SWEEP_OUT) writeFileSync(`${process.env.FORM_SWEEP_OUT}/${size}.json`, JSON.stringify(results, null, 1));
         const measured = results.reduce((n, r) => n + (r.counts.fields || 0), 0);
         expect(measured, 'the walk measured fields').toBeGreaterThan(10);
-        // Every Paste and Max button inside a field is one height, set in from the border the same way.
+        // Every Max button inside a field is one height, set in from the border the same way.
         const inField = results.flatMap((r) => (r.inFieldSizes || []).map((b) => ({ route: r.route, ...b })));
         for (const key of ['height', 'inset']) {
             const values = [...new Set(inField.map((b) => b[key]))];
-            expect(values.length, `in-field Paste/Max ${key} differs: ${JSON.stringify(inField.filter((b) => b[key] !== inField[0][key]).slice(0, 4))} vs ${JSON.stringify(inField[0])}`).toBe(1);
+            expect(values.length, `in-field Max ${key} differs: ${JSON.stringify(inField.filter((b) => b[key] !== inField[0][key]).slice(0, 4))} vs ${JSON.stringify(inField[0])}`).toBe(1);
         }
         expect(results.flatMap((r) => r.faults.map((f) => `${r.route}: ${f}`))).toEqual([]);
     });

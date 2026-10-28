@@ -41,6 +41,7 @@ import {
 } from './wallet.js';
 import { LICENSE_VERSION } from '../../../packages/core/src/buildInfo.js';
 import { desktopUserAgentForHost } from '../host-user-agent.js';
+import { PRODUCTION_BLOCK_ARG } from '../host-block.js';
 
 export const GAS_TICK = 'XCHAIN';
 
@@ -324,7 +325,7 @@ export async function ensureGasToken({ baseURL, log = console.log }) {
     // seeded here by hand because this page is not a test's `page`.
     const browser = await chromium.launch({
         channel: 'chromium',
-        args: ['--disable-web-security', '--disable-features=IsolateOrigins,site-per-process'],
+        args: ['--disable-web-security', '--disable-features=IsolateOrigins,site-per-process', PRODUCTION_BLOCK_ARG],
     });
     let page = null;
     let source = null;

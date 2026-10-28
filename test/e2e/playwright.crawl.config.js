@@ -23,6 +23,7 @@
 // worktree started on Vite's default port and silently tests that tree.
 
 import { defineConfig, devices } from '@playwright/test';
+import { withHostBlock } from './host-block.js';
 
 const PORT = Number(process.env.CRAWL_PORT || 5191);
 const SHARDS = Number(process.env.CRAWL_SHARDS || 4);
@@ -70,7 +71,8 @@ const VENUES = [
     },
 ];
 const WANTED = (process.env.CRAWL_VENUES || 'android-lg-k51').split(',').map((v) => v.trim()).filter(Boolean);
-const projects = WANTED.includes('all') ? VENUES : VENUES.filter((v) => WANTED.includes(v.name));
+const projects = (WANTED.includes('all') ? VENUES : VENUES.filter((v) => WANTED.includes(v.name)))
+    .map((project) => withHostBlock(project));
 if (projects.length === 0) throw new Error(`CRAWL_VENUES names no known venue: ${WANTED.join(', ')}`);
 
 // One output folder per run, shared by every shard: workers inherit the

@@ -49,6 +49,7 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import { LICENSE_VERSION } from '../../../packages/core/src/buildInfo.js';
 import { LICENSE_ACCEPTED_AT_KEY, LICENSE_ACCEPTED_VERSION_KEY } from './wallet.js';
+import { HOST_BLOCK_ARG } from '../host-block.js';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 export const EXTENSION_DIST = path.resolve(HERE, '../../../packages/extension/dist');
@@ -82,7 +83,7 @@ export const test = base.extend({
                 // Every host but this machine fails to resolve, so a run that has
                 // not yet switched to regtest cannot reach any outside service
                 // from the page or the service worker.
-                '--host-resolver-rules=MAP * ~NOTFOUND, EXCLUDE localhost, EXCLUDE 127.0.0.1',
+                HOST_BLOCK_ARG,
             ],
         });
         await use(context);

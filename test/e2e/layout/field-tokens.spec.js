@@ -10,11 +10,13 @@
 // to read; the test fails on any mismatch.
 
 import { mkdirSync, writeFileSync } from 'node:fs';
-import { join, resolve } from 'node:path';
+import { join } from 'node:path';
 import { dismissIntroCarousel, expect, gotoSection, test, unlockedShell } from '../fixtures/wallet.js';
 import { enterDemoWallet } from '../fixtures/responsive.js';
 
-const OUT_ROOT = process.env.FIELD_OUT || resolve(process.cwd(), '..', '..', 'tmp', 'field-tokens');
+// FIELD_OUT=<dir> keeps the fields and screenshots; by default they go to
+// the test's own output directory.
+const OUT_ROOT = process.env.FIELD_OUT || '';
 
 /** Runs in the page: computed style of every visible field. */
 function readFields() {
@@ -45,7 +47,7 @@ const escapeRegExp = (v) => v.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
 test('dark mode fields share the field tokens', async ({ page }, testInfo) => {
     test.setTimeout(20 * 60 * 1000);
-    const outDir = join(OUT_ROOT, testInfo.project.name);
+    const outDir = OUT_ROOT ? join(OUT_ROOT, testInfo.project.name) : testInfo.outputPath('fields');
     mkdirSync(outDir, { recursive: true });
     await enterDemoWallet(page, { dismissIntroCarousel, expect, unlockedShell });
     const screens = {};

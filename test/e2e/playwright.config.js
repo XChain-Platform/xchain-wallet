@@ -39,6 +39,39 @@ import { desktopUserAgentForHost } from './host-user-agent.js';
 
 export { desktopUserAgentForHost };
 
+const CHROMIUM = {
+    ...devices['Desktop Chrome'],
+    // Playwright derives navigator.platform from this user agent,
+    // keeping ControlOrMeta aligned with the app's host shortcut gate.
+    userAgent: desktopUserAgentForHost(),
+    // New headless: the full browser, which renders like the headed one users run.
+    channel: 'chromium',
+    launchOptions: {
+        // The dev-mock suite reaches only loopback. Route handlers do not
+        // cover WebSockets, so the resolver refuses every other host, which
+        // keeps a spec from reaching a live explorer by any transport.
+        args: ['--host-resolver-rules=MAP * ~NOTFOUND, EXCLUDE localhost, EXCLUDE 127.0.0.1'],
+    },
+};
+
+// The dark-mode field-token gate under ./layout (field-tokens.spec.js),
+// one project per size it walks; playwright.field-tokens.config.js runs the
+// same spec on its own.
+const LAYOUT_GATES = [
+    {
+        name: 'dark-1440',
+        testDir: './layout',
+        testMatch: /field-tokens\.spec\.js$/,
+        use: { ...CHROMIUM, viewport: { width: 1440, height: 900 }, colorScheme: 'dark' },
+    },
+    {
+        name: 'dark-360',
+        testDir: './layout',
+        testMatch: /field-tokens\.spec\.js$/,
+        use: { ...CHROMIUM, viewport: { width: 360, height: 800 }, colorScheme: 'dark', isMobile: true, hasTouch: true },
+    },
+];
+
 // Not 5173: that is the port every other dev server and sweep config defaults to.
 const PORT = Number(process.env.E2E_DEV_PORT) || 5473;
 const BASE_URL = `http://localhost:${PORT}`;
@@ -94,23 +127,8 @@ export default defineConfig({
         screenshot: 'only-on-failure',
     },
     projects: [
-        {
-            name: 'chromium',
-            use: {
-                ...devices['Desktop Chrome'],
-                // Playwright derives navigator.platform from this user agent,
-                // keeping ControlOrMeta aligned with the app's host shortcut gate.
-                userAgent: desktopUserAgentForHost(),
-                // New headless: the full browser, which renders like the headed one users run.
-                channel: 'chromium',
-                launchOptions: {
-                    // The dev-mock suite reaches only loopback. Route handlers do not
-                    // cover WebSockets, so the resolver refuses every other host, which
-                    // keeps a spec from reaching a live explorer by any transport.
-                    args: ['--host-resolver-rules=MAP * ~NOTFOUND, EXCLUDE localhost, EXCLUDE 127.0.0.1'],
-                },
-            },
-        },
+        { name: 'chromium', use: CHROMIUM },
+        ...LAYOUT_GATES,
     ],
     // The sweep runner owns and records its server process group, so Playwright
     // connects to that listener instead of starting an untracked second server.

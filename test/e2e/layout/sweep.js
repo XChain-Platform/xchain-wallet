@@ -601,35 +601,54 @@ export function rootFontFailure({ label, rootFontPx, expectedRootFontPx: expecte
  */
 export const PAGE_GUTTER_PX = 12;
 
-/** Returns the route labels and layout-contract failures from a completed sweep. */
-export function layoutSweepFailures(screens) {
-    const failures = [];
+/**
+ * The layout keys the page gutter contract owns. The other keys
+ * (headerScrolledAway, contentEdge) are open UI debt measured against the
+ * rulings allowlist by tests/layout/rulings-gate.spec.js.
+ */
+export const GUTTER_CONTRACT_KEYS = Object.freeze(['rootFont', 'gutter', 'topGap']);
+
+/**
+ * Every layout finding of a completed sweep, keyed:
+ *   rootFont            the screen lost the text size it was measured at
+ *   gutter              content, header or first block off the page gutter
+ *   topGap              form and list top gaps differ inside one shell
+ *   headerScrolledAway  the app header or navigation left the viewport when
+ *                       the page scrolled (measured with `rulings: true`)
+ *   contentEdge         a list, card or table stops short of the usable
+ *                       content width, so it does not reach the scrollbar
+ * Each finding is { key, screen, detail }; `screen` is null for a finding
+ * about the whole sweep.
+ */
+export function layoutSweepFindings(screens) {
+    const findings = [];
+    const add = (key, screen, detail) => findings.push({ key, screen, detail });
     // The sidebar layout sets its own top gap per tier, so form and list gaps
     // are only comparable inside one shell: onboarding screens sit outside it.
     const gapsByShell = new Map();
     const close = (actual, expected) => Math.abs(actual - expected) <= 1;
     for (const screen of screens) {
         const rootFailure = rootFontFailure(screen);
-        if (rootFailure) failures.push(rootFailure);
+        if (rootFailure) add('rootFont', screen.label, rootFailure);
     }
     for (const { label, layout, vw } of screens) {
         if (!layout) {
-            failures.push(`${label}: missing #xc-main layout measurement`);
+            add('gutter', label, `${label}: missing #xc-main layout measurement`);
             continue;
         }
         const gutter = PAGE_GUTTER_PX;
         const { first } = layout;
         if (!close(layout.contentLeft, gutter)) {
-            failures.push(`${label}: content left ${layout.contentLeft}px, expected ${gutter}px`);
+            add('gutter', label, `${label}: content left ${layout.contentLeft}px, expected ${gutter}px`);
         }
         if (layout.contentRightGap + 1 < gutter) {
-            failures.push(`${label}: content right gap ${layout.contentRightGap}px, expected at least ${gutter}px`);
+            add('gutter', label, `${label}: content right gap ${layout.contentRightGap}px, expected at least ${gutter}px`);
         }
         if (layout.headerLeft !== null && !close(layout.headerLeft, gutter)) {
-            failures.push(`${label}: header left ${layout.headerLeft}px, expected ${gutter}px`);
+            add('gutter', label, `${label}: header left ${layout.headerLeft}px, expected ${gutter}px`);
         }
         if (!first) {
-            failures.push(`${label}: missing first content block`);
+            add('gutter', label, `${label}: missing first content block`);
             continue;
         }
         // Wide forms intentionally centre their card inside the guttered
@@ -637,10 +656,10 @@ export function layoutSweepFailures(screens) {
         // other first block starts on the lane edge.
         const centred = vw >= 600 && first.left > gutter * 2 && close(first.left, first.rightGap);
         if ((first.kind !== 'form' || vw < 600) && !centred && !close(first.left, gutter)) {
-            failures.push(`${label}: first content left ${first.left}px, expected ${gutter}px`);
+            add('gutter', label, `${label}: first content left ${first.left}px, expected ${gutter}px`);
         }
         if (first.rightGap + 1 < gutter) {
-            failures.push(`${label}: first content right gap ${first.rightGap}px, expected at least ${gutter}px`);
+            add('gutter', label, `${label}: first content right gap ${first.rightGap}px, expected at least ${gutter}px`);
         }
         const shell = layout.tier ?? 'none';
         if (!gapsByShell.has(shell)) gapsByShell.set(shell, { form: new Set(), list: new Set() });
@@ -651,15 +670,24 @@ export function layoutSweepFailures(screens) {
         const forms = [...topGaps.form].sort((a, b) => a - b);
         const lists = [...topGaps.list].sort((a, b) => a - b);
         if (forms.length !== lists.length || forms.some((gap, i) => !close(gap, lists[i]))) {
-            failures.push(`form top gaps [${forms.join(', ')}] do not match list top gaps [${lists.join(', ')}]`);
+            add('topGap', null, `form top gaps [${forms.join(', ')}] do not match list top gaps [${lists.join(', ')}]`);
         }
     }
-    return failures;
+    for (const { label, headerScrolledAway = [], narrow = [] } of screens) {
+        for (const item of headerScrolledAway) {
+            add('headerScrolledAway', label, `${label}: ${item.el} scrolled out of view (top ${item.top}px, bottom ${item.bottom}px)`);
+        }
+        for (const item of narrow) {
+            add('contentEdge', label, `${label}: ${item.el} is ${item.short}px short of the ${item.usable}px content width`);
+        }
+    }
+    return findings;
 }
 
 /** Measure one screen and append the layout sweep's shared JSONL record shape. */
 export async function recordMeasuredScreen(page, {
     venue, outDir, n, label, shot, contrast = false, expectedRootPx = null, onScreen = null, onResult = null,
+    rulings = false, screenshots = true,
 }) {
     let result;
     try {
@@ -673,22 +701,101 @@ export async function recordMeasuredScreen(page, {
         result.rootFontPx = await page.evaluate(() => parseFloat(getComputedStyle(document.documentElement).fontSize));
     } catch { /* reported as a root font failure below */ }
     if (expectedRootPx != null) result.expectedRootFontPx = expectedRootPx;
+    if (rulings) {
+        try {
+            result.rulings = await page.evaluate(measureRulings);
+            result.headerScrolledAway = await page.evaluate(measureHeaderPinned);
+        } catch (err) {
+            result.rulingsError = String(err?.message || err);
+        }
+    }
     // Extra per-screen audits hook in here; a failure in one is reported on
     // the screen's line, never thrown into the walk.
     if (onScreen) {
         try { result = { ...result, ...(await onScreen(page, label)) }; } catch (err) { result = { ...result, onScreenError: String(err?.message || err) }; }
     }
-    try {
-        await page.screenshot({ path: join(outDir, shot) });
-    } catch { /* a screenshot failure is not a finding */ }
+    if (screenshots) {
+        try {
+            await page.screenshot({ path: join(outDir, shot) });
+        } catch { /* a screenshot failure is not a finding */ }
+    }
     appendFileSync(join(outDir, 'results.jsonl'), `${JSON.stringify({ venue, n, label, shot, ...result })}\n`);
     if (onResult) await onResult({ label, ...result });
     return result;
 }
 
-/** A sweep bound to one page, one venue and one output directory. */
+/**
+ * Returns the layout failures of a completed sweep as one line each.
+ * `keys` limits them to some layoutSweepFindings keys; by default every key.
+ */
+export function layoutSweepFailures(screens, { keys = null } = {}) {
+    return layoutSweepFindings(screens)
+        .filter((finding) => !keys || keys.includes(finding.key))
+        .map((finding) => finding.detail);
+}
+
+/**
+ * Runs inside the page. The app header and the primary navigation stay on
+ * screen while the page scrolls: drives every vertical scroller that holds
+ * the page content to its end, reads where each header and navigation bar
+ * outside the content sits, and puts every scroller back. Returns the bars
+ * that were in view before the scroll and left it after.
+ */
+export function measureHeaderPinned() {
+    const vw = document.documentElement.clientWidth;
+    const vh = document.documentElement.clientHeight;
+    const scrollable = (v) => v === 'auto' || v === 'scroll' || v === 'overlay';
+    const desc = (el) => {
+        let s = el.tagName.toLowerCase();
+        const cls = [...el.classList].slice(0, 2).join('.');
+        if (cls) s += `.${cls}`;
+        const label = el.getAttribute('aria-label');
+        if (label) s += ` "${label.slice(0, 40)}"`;
+        return s;
+    };
+    const inView = (el) => {
+        const cs = getComputedStyle(el);
+        if (cs.display === 'none' || cs.visibility === 'hidden') return false;
+        const r = el.getBoundingClientRect();
+        return r.width >= 1.5 && r.height >= 1.5 && r.top >= -1 && r.bottom <= vh + 1 && r.left < vw && r.right > 0;
+    };
+    const main = document.getElementById('xc-main');
+    const scrollers = [];
+    const se = document.scrollingElement || document.documentElement;
+    if (se.scrollHeight > se.clientHeight + 1) scrollers.push(se);
+    for (let a = main; a && a !== document.documentElement && a !== document.body; a = a.parentElement) {
+        if (scrollable(getComputedStyle(a).overflowY) && a.scrollHeight > a.clientHeight + 1) scrollers.push(a);
+    }
+    if (scrollers.length === 0) return [];
+    const saved = scrollers.map((el) => el.scrollTop);
+    const out = [];
+    try {
+        // The bars in view with the page at its top are the ones that must stay.
+        for (const el of scrollers) el.scrollTo({ top: 0, behavior: 'instant' });
+        const bars = [...document.querySelectorAll('header, nav')]
+            .filter((el) => !(main && main.contains(el)) && !el.closest('[role="dialog"], [role="menu"], [aria-hidden="true"]'))
+            .filter((el) => !el.parentElement?.closest('header, nav'))
+            .filter(inView);
+        for (const el of scrollers) el.scrollTo({ top: el.scrollHeight, behavior: 'instant' });
+        for (const bar of bars) {
+            if (inView(bar)) continue;
+            const r = bar.getBoundingClientRect();
+            if (out.length < 12) out.push({ el: desc(bar), top: Math.round(r.top), bottom: Math.round(r.bottom) });
+        }
+    } finally {
+        scrollers.forEach((el, i) => el.scrollTo({ top: saved[i], behavior: 'instant' }));
+    }
+    return out;
+}
+
+/**
+ * A sweep bound to one page, one venue and one output directory.
+ * `rulings` also records measureRulings and measureHeaderPinned on every
+ * screen; `screenshots: false` skips the per-screen PNG.
+ */
 export function createSweep(page, {
     venue, outDir, restart: restartPage = () => page.goto('/'), onScreen = null, onResult = null, contrast = false, fontScale,
+    rulings = false, screenshots = true,
 }) {
     mkdirSync(outDir, { recursive: true });
     const linesPath = join(outDir, 'results.jsonl');
@@ -720,6 +827,8 @@ export function createSweep(page, {
             expectedRootPx,
             onScreen,
             onResult,
+            rulings,
+            screenshots,
         });
     }
 
@@ -965,7 +1074,7 @@ export function createSweep(page, {
 /**
  * Runs inside the page. The operator's layout rulings that the geometry
  * above does not measure: the app header on one row, fields that draw a
- * border, Paste and Max inside their field, no dotted or dashed borders,
+ * border, no Paste button and Max inside its field, no dotted or dashed borders,
  * every card drawn with the card tokens, notices kept out of headers, no
  * title repeated on one screen, and no Back button beside a sidebar entry
  * for the screen it shows. Findings are for a person to judge.
@@ -1034,11 +1143,13 @@ export function measureRulings() {
         if (!frameOf(field)) cap(out.borderlessFields, desc(field));
     }
 
-    // Paste and Max sit inside the field they act on.
+    // No Paste button anywhere (users paste with the native menu and
+    // shortcuts); Max sits inside the field it acts on.
     for (const btn of document.querySelectorAll('button')) {
         if (!visible(btn)) continue;
         const name = text(btn);
-        if (!/^(paste|max)\b/i.test(name)) continue;
+        if (/^paste\b/i.test(name)) { cap(out.fieldButtonsOutside, { button: name, paste: true }); continue; }
+        if (!/^max\b/i.test(name)) continue;
         let field = null;
         for (let a = btn.parentElement, i = 0; a && i < 4 && !field; a = a.parentElement, i += 1) {
             field = [...a.querySelectorAll('input, textarea')].find(visible) || null;

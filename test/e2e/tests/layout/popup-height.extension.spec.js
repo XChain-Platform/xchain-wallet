@@ -19,6 +19,7 @@ import {
     unlockedShell,
 } from '../../fixtures/wallet.js';
 import { kdfStepTimeout } from '../../timeout-budget.js';
+import { HOST_BLOCK_ARG } from '../../host-block.js';
 
 const here = fileURLToPath(new URL('.', import.meta.url));
 const repo = resolve(here, '..', '..', '..', '..');
@@ -111,7 +112,7 @@ test('popup keeps route scrolling between pinned header and tabs', async () => {
         channel: 'chromium',
         headless: true,
         viewport: { width: WIDTH, height: HEIGHT },
-        args: [`--disable-extensions-except=${DIST}`, `--load-extension=${DIST}`],
+        args: [`--disable-extensions-except=${DIST}`, `--load-extension=${DIST}`, HOST_BLOCK_ARG],
     });
 
     try {

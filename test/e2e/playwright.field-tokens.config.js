@@ -9,6 +9,7 @@
 //         --config playwright.field-tokens.config.js
 
 import { defineConfig } from '@playwright/test';
+import { withHostBlock } from './host-block.js';
 
 const PORT = Number(process.env.FIELD_PORT) || 5173;
 const BASE_URL = `http://localhost:${PORT}`;
@@ -25,7 +26,7 @@ export default defineConfig({
     projects: [
         { name: 'dark-1440', use: { browserName: 'chromium', channel: 'chromium', viewport: { width: 1440, height: 900 }, colorScheme: 'dark' } },
         { name: 'dark-360', use: { browserName: 'chromium', channel: 'chromium', viewport: { width: 360, height: 800 }, colorScheme: 'dark', isMobile: true, hasTouch: true } },
-    ],
+    ].map((project) => withHostBlock(project)),
     webServer: {
         command: `pnpm -C ../../packages/web dev --port ${PORT} --strictPort --host 127.0.0.1`,
         url: BASE_URL,

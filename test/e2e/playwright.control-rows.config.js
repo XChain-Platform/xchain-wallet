@@ -4,6 +4,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 import { defineConfig, devices } from '@playwright/test';
+import { withHostBlock } from './host-block.js';
 import layoutConfig from './playwright.layout.config.js';
 
 const WIDTHS = [360, 768, 1280];
@@ -12,7 +13,7 @@ export default defineConfig({
     ...layoutConfig,
     testMatch: /control-rows\.spec\.js$/,
     outputDir: './test-results-control-rows',
-    projects: WIDTHS.map((width) => ({
+    projects: WIDTHS.map((width) => withHostBlock({
         name: `control-rows-${width}`,
         use: {
             ...devices['Desktop Chrome'],

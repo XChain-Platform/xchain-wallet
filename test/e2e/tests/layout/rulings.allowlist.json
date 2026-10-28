@@ -1,0 +1,478 @@
+{
+    "headerRows": {
+        "ruling": "U11",
+        "rule": "The app header is one row at every width",
+        "screens": {
+            "desktop-1280 | onboarding: welcome": {
+                "count": 1,
+                "reason": "Measured on develop 6b475269a when the gate entered the suite; open UI debt under this ruling"
+            },
+            "phone-360 | onboarding: welcome": {
+                "count": 1,
+                "reason": "Measured on develop 6b475269a when the gate entered the suite; open UI debt under this ruling"
+            }
+        }
+    },
+    "noticePlacement": {
+        "ruling": "U15",
+        "rule": "A notice is the first item of page content, full content width",
+        "screens": {
+            "desktop-1280 | home: Activity": {
+                "count": 1,
+                "reason": "Measured on develop 6b475269a when the gate entered the suite; open UI debt under this ruling"
+            },
+            "desktop-1280 | home: coins": {
+                "count": 1,
+                "reason": "Measured on develop 6b475269a when the gate entered the suite; open UI debt under this ruling"
+            },
+            "desktop-1280 | home: DeFi": {
+                "count": 1,
+                "reason": "Measured on develop 6b475269a when the gate entered the suite; open UI debt under this ruling"
+            },
+            "desktop-1280 | home: NFTs": {
+                "count": 1,
+                "reason": "Measured on develop 6b475269a when the gate entered the suite; open UI debt under this ruling"
+            },
+            "desktop-1280 | home: Tokens": {
+                "count": 1,
+                "reason": "Measured on develop 6b475269a when the gate entered the suite; open UI debt under this ruling"
+            },
+            "desktop-1280 | menu: list": {
+                "count": 1,
+                "reason": "Measured on develop 6b475269a when the gate entered the suite; open UI debt under this ruling"
+            },
+            "desktop-1280 | menu: Scan": {
+                "count": 1,
+                "reason": "Measured on develop 6b475269a when the gate entered the suite; open UI debt under this ruling"
+            },
+            "desktop-1280 | menu: Search": {
+                "count": 1,
+                "reason": "Measured on develop 6b475269a when the gate entered the suite; open UI debt under this ruling"
+            },
+            "desktop-1280 | menu: Settings": {
+                "count": 1,
+                "reason": "Measured on develop 6b475269a when the gate entered the suite; open UI debt under this ruling"
+            },
+            "desktop-1280 | nav: Contracts": {
+                "count": 3,
+                "reason": "Measured on develop 6b475269a when the gate entered the suite; open UI debt under this ruling"
+            },
+            "desktop-1280 | nav: History": {
+                "count": 1,
+                "reason": "Measured on develop 6b475269a when the gate entered the suite; open UI debt under this ruling"
+            },
+            "desktop-1280 | nav: Home": {
+                "count": 1,
+                "reason": "Measured on develop 6b475269a when the gate entered the suite; open UI debt under this ruling"
+            },
+            "desktop-1280 | nav: Lists": {
+                "count": 1,
+                "reason": "Measured on develop 6b475269a when the gate entered the suite; open UI debt under this ruling"
+            },
+            "desktop-1280 | nav: Marketplace": {
+                "count": 1,
+                "reason": "Measured on develop 6b475269a when the gate entered the suite; open UI debt under this ruling"
+            },
+            "desktop-1280 | nav: Payments due": {
+                "count": 1,
+                "reason": "Measured on develop 6b475269a when the gate entered the suite; open UI debt under this ruling"
+            },
+            "desktop-1280 | palette: Address and token lists": {
+                "count": 1,
+                "reason": "Measured on develop 6b475269a when the gate entered the suite; open UI debt under this ruling"
+            },
+            "desktop-1280 | palette: Balances and portfolio": {
+                "count": 1,
+                "reason": "Measured on develop 6b475269a when the gate entered the suite; open UI debt under this ruling"
+            },
+            "desktop-1280 | palette: BANANE on Bitcoin": {
+                "count": 1,
+                "reason": "Measured on develop 6b475269a when the gate entered the suite; open UI debt under this ruling"
+            },
+            "desktop-1280 | palette: Browse betting markets": {
+                "count": 1,
+                "reason": "Measured on develop 6b475269a when the gate entered the suite; open UI debt under this ruling"
+            },
+            "desktop-1280 | palette: Coin payments you still owe": {
+                "count": 1,
+                "reason": "Measured on develop 6b475269a when the gate entered the suite; open UI debt under this ruling"
+            },
+            "desktop-1280 | palette: Dispensers and exchange activity": {
+                "count": 1,
+                "reason": "Measured on develop 6b475269a when the gate entered the suite; open UI debt under this ruling"
+            },
+            "desktop-1280 | palette: DOGI on Dogecoin": {
+                "count": 1,
+                "reason": "Measured on develop 6b475269a when the gate entered the suite; open UI debt under this ruling"
+            },
+            "desktop-1280 | palette: DSHIB on Dogecoin": {
+                "count": 1,
+                "reason": "Measured on develop 6b475269a when the gate entered the suite; open UI debt under this ruling"
+            },
+            "desktop-1280 | palette: LITECRED on Litecoin": {
+                "count": 1,
+                "reason": "Measured on develop 6b475269a when the gate entered the suite; open UI debt under this ruling"
+            },
+            "desktop-1280 | palette: Markets you run as oracle: publish a result or cancel": {
+                "count": 1,
+                "reason": "Measured on develop 6b475269a when the gate entered the suite; open UI debt under this ruling"
+            },
+            "desktop-1280 | palette: MWEB on Litecoin": {
+                "count": 1,
+                "reason": "Measured on develop 6b475269a when the gate entered the suite; open UI debt under this ruling"
+            },
+            "desktop-1280 | palette: OMNILITE on Litecoin": {
+                "count": 1,
+                "reason": "Measured on develop 6b475269a when the gate entered the suite; open UI debt under this ruling"
+            },
+            "desktop-1280 | palette: Open the camera scanner": {
+                "count": 1,
+                "reason": "Measured on develop 6b475269a when the gate entered the suite; open UI debt under this ruling"
+            },
+            "desktop-1280 | palette: Opens the shortcut cheatsheet": {
+                "count": 1,
+                "reason": "Measured on develop 6b475269a when the gate entered the suite; open UI debt under this ruling"
+            },
+            "desktop-1280 | palette: Polls and voting": {
+                "count": 1,
+                "reason": "Measured on develop 6b475269a when the gate entered the suite; open UI debt under this ruling"
+            },
+            "desktop-1280 | palette: Reload balances and status": {
+                "count": 1,
+                "reason": "Measured on develop 6b475269a when the gate entered the suite; open UI debt under this ruling"
+            },
+            "desktop-1280 | palette: RUSTBITS on Bitcoin": {
+                "count": 1,
+                "reason": "Measured on develop 6b475269a when the gate entered the suite; open UI debt under this ruling"
+            },
+            "desktop-1280 | palette: Show the shortcut cheatsheet": {
+                "count": 1,
+                "reason": "Measured on develop 6b475269a when the gate entered the suite; open UI debt under this ruling"
+            },
+            "desktop-1280 | palette: Smart contracts": {
+                "count": 3,
+                "reason": "Measured on develop 6b475269a when the gate entered the suite; open UI debt under this ruling"
+            },
+            "desktop-1280 | palette: Tokens you own": {
+                "count": 1,
+                "reason": "Measured on develop 6b475269a when the gate entered the suite; open UI debt under this ruling"
+            },
+            "desktop-1280 | palette: Transaction timeline": {
+                "count": 1,
+                "reason": "Measured on develop 6b475269a when the gate entered the suite; open UI debt under this ruling"
+            },
+            "desktop-1280 | palette: WOW on Dogecoin": {
+                "count": 1,
+                "reason": "Measured on develop 6b475269a when the gate entered the suite; open UI debt under this ruling"
+            },
+            "desktop-1280 | palette: Your staking positions": {
+                "count": 1,
+                "reason": "Measured on develop 6b475269a when the gate entered the suite; open UI debt under this ruling"
+            },
+            "phone-360 | home: Activity": {
+                "count": 1,
+                "reason": "Measured on develop 6b475269a when the gate entered the suite; open UI debt under this ruling"
+            },
+            "phone-360 | home: coins": {
+                "count": 1,
+                "reason": "Measured on develop 6b475269a when the gate entered the suite; open UI debt under this ruling"
+            },
+            "phone-360 | home: DeFi": {
+                "count": 1,
+                "reason": "Measured on develop 6b475269a when the gate entered the suite; open UI debt under this ruling"
+            },
+            "phone-360 | home: NFTs": {
+                "count": 1,
+                "reason": "Measured on develop 6b475269a when the gate entered the suite; open UI debt under this ruling"
+            },
+            "phone-360 | home: Tokens": {
+                "count": 1,
+                "reason": "Measured on develop 6b475269a when the gate entered the suite; open UI debt under this ruling"
+            },
+            "phone-360 | menu: list": {
+                "count": 1,
+                "reason": "Measured on develop 6b475269a when the gate entered the suite; open UI debt under this ruling"
+            },
+            "phone-360 | menu: Scan": {
+                "count": 1,
+                "reason": "Measured on develop 6b475269a when the gate entered the suite; open UI debt under this ruling"
+            },
+            "phone-360 | menu: Search": {
+                "count": 1,
+                "reason": "Measured on develop 6b475269a when the gate entered the suite; open UI debt under this ruling"
+            },
+            "phone-360 | menu: Settings": {
+                "count": 1,
+                "reason": "Measured on develop 6b475269a when the gate entered the suite; open UI debt under this ruling"
+            },
+            "phone-360 | nav: History": {
+                "count": 1,
+                "reason": "Measured on develop 6b475269a when the gate entered the suite; open UI debt under this ruling"
+            },
+            "phone-360 | nav: Home": {
+                "count": 1,
+                "reason": "Measured on develop 6b475269a when the gate entered the suite; open UI debt under this ruling"
+            },
+            "phone-360 | nav: More sheet": {
+                "count": 1,
+                "reason": "Measured on develop 6b475269a when the gate entered the suite; open UI debt under this ruling"
+            },
+            "phone-360 | palette: Address and token lists": {
+                "count": 1,
+                "reason": "Measured on develop 6b475269a when the gate entered the suite; open UI debt under this ruling"
+            },
+            "phone-360 | palette: Balances and portfolio": {
+                "count": 1,
+                "reason": "Measured on develop 6b475269a when the gate entered the suite; open UI debt under this ruling"
+            },
+            "phone-360 | palette: BANANE on Bitcoin": {
+                "count": 1,
+                "reason": "Measured on develop 6b475269a when the gate entered the suite; open UI debt under this ruling"
+            },
+            "phone-360 | palette: Browse betting markets": {
+                "count": 1,
+                "reason": "Measured on develop 6b475269a when the gate entered the suite; open UI debt under this ruling"
+            },
+            "phone-360 | palette: Coin payments you still owe": {
+                "count": 1,
+                "reason": "Measured on develop 6b475269a when the gate entered the suite; open UI debt under this ruling"
+            },
+            "phone-360 | palette: Dispensers and exchange activity": {
+                "count": 1,
+                "reason": "Measured on develop 6b475269a when the gate entered the suite; open UI debt under this ruling"
+            },
+            "phone-360 | palette: DOGI on Dogecoin": {
+                "count": 1,
+                "reason": "Measured on develop 6b475269a when the gate entered the suite; open UI debt under this ruling"
+            },
+            "phone-360 | palette: DSHIB on Dogecoin": {
+                "count": 1,
+                "reason": "Measured on develop 6b475269a when the gate entered the suite; open UI debt under this ruling"
+            },
+            "phone-360 | palette: LITECRED on Litecoin": {
+                "count": 1,
+                "reason": "Measured on develop 6b475269a when the gate entered the suite; open UI debt under this ruling"
+            },
+            "phone-360 | palette: Markets you run as oracle: publish a result or cancel": {
+                "count": 1,
+                "reason": "Measured on develop 6b475269a when the gate entered the suite; open UI debt under this ruling"
+            },
+            "phone-360 | palette: MWEB on Litecoin": {
+                "count": 1,
+                "reason": "Measured on develop 6b475269a when the gate entered the suite; open UI debt under this ruling"
+            },
+            "phone-360 | palette: OMNILITE on Litecoin": {
+                "count": 1,
+                "reason": "Measured on develop 6b475269a when the gate entered the suite; open UI debt under this ruling"
+            },
+            "phone-360 | palette: open": {
+                "count": 1,
+                "reason": "Measured on develop 6b475269a when the gate entered the suite; open UI debt under this ruling"
+            },
+            "phone-360 | palette: Open the camera scanner": {
+                "count": 1,
+                "reason": "Measured on develop 6b475269a when the gate entered the suite; open UI debt under this ruling"
+            },
+            "phone-360 | palette: Opens the shortcut cheatsheet": {
+                "count": 1,
+                "reason": "Measured on develop 6b475269a when the gate entered the suite; open UI debt under this ruling"
+            },
+            "phone-360 | palette: Polls and voting": {
+                "count": 1,
+                "reason": "Measured on develop 6b475269a when the gate entered the suite; open UI debt under this ruling"
+            },
+            "phone-360 | palette: Reload balances and status": {
+                "count": 1,
+                "reason": "Measured on develop 6b475269a when the gate entered the suite; open UI debt under this ruling"
+            },
+            "phone-360 | palette: RUSTBITS on Bitcoin": {
+                "count": 1,
+                "reason": "Measured on develop 6b475269a when the gate entered the suite; open UI debt under this ruling"
+            },
+            "phone-360 | palette: Show the shortcut cheatsheet": {
+                "count": 1,
+                "reason": "Measured on develop 6b475269a when the gate entered the suite; open UI debt under this ruling"
+            },
+            "phone-360 | palette: Smart contracts": {
+                "count": 3,
+                "reason": "Measured on develop 6b475269a when the gate entered the suite; open UI debt under this ruling"
+            },
+            "phone-360 | palette: Tokens you own": {
+                "count": 1,
+                "reason": "Measured on develop 6b475269a when the gate entered the suite; open UI debt under this ruling"
+            },
+            "phone-360 | palette: Transaction timeline": {
+                "count": 1,
+                "reason": "Measured on develop 6b475269a when the gate entered the suite; open UI debt under this ruling"
+            },
+            "phone-360 | palette: WOW on Dogecoin": {
+                "count": 1,
+                "reason": "Measured on develop 6b475269a when the gate entered the suite; open UI debt under this ruling"
+            },
+            "phone-360 | palette: Your staking positions": {
+                "count": 1,
+                "reason": "Measured on develop 6b475269a when the gate entered the suite; open UI debt under this ruling"
+            }
+        }
+    },
+    "offTokenCards": {
+        "ruling": "U16",
+        "rule": "Every card uses the card border and radius tokens",
+        "screens": {
+            "desktop-1280 | menu: View address": {
+                "count": 1,
+                "reason": "Measured on develop 6b475269a when the gate entered the suite; open UI debt under this ruling"
+            },
+            "desktop-1280 | nav: Contacts": {
+                "count": 1,
+                "reason": "Measured on develop 6b475269a when the gate entered the suite; open UI debt under this ruling"
+            },
+            "desktop-1280 | nav: Receive": {
+                "count": 1,
+                "reason": "Measured on develop 6b475269a when the gate entered the suite; open UI debt under this ruling"
+            },
+            "desktop-1280 | nav: Scan": {
+                "count": 1,
+                "reason": "Measured on develop 6b475269a when the gate entered the suite; open UI debt under this ruling"
+            },
+            "desktop-1280 | palette: Show a receive address": {
+                "count": 1,
+                "reason": "Measured on develop 6b475269a when the gate entered the suite; open UI debt under this ruling"
+            },
+            "phone-360 | nav: Send": {
+                "count": 1,
+                "reason": "Measured on develop 6b475269a when the gate entered the suite; open UI debt under this ruling"
+            },
+            "phone-360 | palette: Add to an existing token": {
+                "count": 1,
+                "reason": "Measured on develop 6b475269a when the gate entered the suite; open UI debt under this ruling"
+            },
+            "phone-360 | palette: Author any action by hand": {
+                "count": 1,
+                "reason": "Measured on develop 6b475269a when the gate entered the suite; open UI debt under this ruling"
+            },
+            "phone-360 | palette: Burn supply": {
+                "count": 1,
+                "reason": "Measured on develop 6b475269a when the gate entered the suite; open UI debt under this ruling"
+            },
+            "phone-360 | palette: Choose which chains a token you issued can move to": {
+                "count": 1,
+                "reason": "Measured on develop 6b475269a when the gate entered the suite; open UI debt under this ruling"
+            },
+            "phone-360 | palette: Distribute to holders": {
+                "count": 1,
+                "reason": "Measured on develop 6b475269a when the gate entered the suite; open UI debt under this ruling"
+            },
+            "phone-360 | palette: Issue a token directly": {
+                "count": 1,
+                "reason": "Measured on develop 6b475269a when the gate entered the suite; open UI debt under this ruling"
+            },
+            "phone-360 | palette: Limit order across chains": {
+                "count": 1,
+                "reason": "Measured on develop 6b475269a when the gate entered the suite; open UI debt under this ruling"
+            },
+            "phone-360 | palette: Markets you run as oracle: publish a result or cancel": {
+                "count": 1,
+                "reason": "Measured on develop 6b475269a when the gate entered the suite; open UI debt under this ruling"
+            },
+            "phone-360 | palette: Move balances, ownerships, and escrow to one destination": {
+                "count": 1,
+                "reason": "Measured on develop 6b475269a when the gate entered the suite; open UI debt under this ruling"
+            },
+            "phone-360 | palette: Post a message on-chain": {
+                "count": 1,
+                "reason": "Measured on develop 6b475269a when the gate entered the suite; open UI debt under this ruling"
+            },
+            "phone-360 | palette: Price a token in a currency so dispensers can sell at that rate": {
+                "count": 1,
+                "reason": "Measured on develop 6b475269a when the gate entered the suite; open UI debt under this ruling"
+            },
+            "phone-360 | palette: Public or token-gated on-chain file": {
+                "count": 1,
+                "reason": "Measured on develop 6b475269a when the gate entered the suite; open UI debt under this ruling"
+            },
+            "phone-360 | palette: Publish an address or token list": {
+                "count": 1,
+                "reason": "Measured on develop 6b475269a when the gate entered the suite; open UI debt under this ruling"
+            },
+            "phone-360 | palette: Route this address's actions through a guard contract": {
+                "count": 1,
+                "reason": "Measured on develop 6b475269a when the gate entered the suite; open UI debt under this ruling"
+            },
+            "phone-360 | palette: Sell a token at a fixed rate": {
+                "count": 1,
+                "reason": "Measured on develop 6b475269a when the gate entered the suite; open UI debt under this ruling"
+            },
+            "phone-360 | palette: Send a coin or token": {
+                "count": 1,
+                "reason": "Measured on develop 6b475269a when the gate entered the suite; open UI debt under this ruling"
+            },
+            "phone-360 | palette: Send a token to another chain and take the credit there": {
+                "count": 1,
+                "reason": "Measured on develop 6b475269a when the gate entered the suite; open UI debt under this ruling"
+            },
+            "phone-360 | palette: Send to many recipients": {
+                "count": 1,
+                "reason": "Measured on develop 6b475269a when the gate entered the suite; open UI debt under this ruling"
+            },
+            "phone-360 | palette: Swap across chains": {
+                "count": 1,
+                "reason": "Measured on develop 6b475269a when the gate entered the suite; open UI debt under this ruling"
+            },
+            "phone-360 | palette: Trade at the price you set": {
+                "count": 1,
+                "reason": "Measured on develop 6b475269a when the gate entered the suite; open UI debt under this ruling"
+            },
+            "phone-360 | palette: Trade one token for another, all or nothing": {
+                "count": 1,
+                "reason": "Measured on develop 6b475269a when the gate entered the suite; open UI debt under this ruling"
+            },
+            "phone-360 | palette: Your saved addresses": {
+                "count": 1,
+                "reason": "Measured on develop 6b475269a when the gate entered the suite; open UI debt under this ruling"
+            }
+        }
+    },
+    "repeatedText": {
+        "ruling": "U18",
+        "rule": "Screens never repeat titles or help text",
+        "screens": {
+            "desktop-1280 | menu: Search": {
+                "count": 2,
+                "reason": "Measured on develop 6b475269a when the gate entered the suite; open UI debt under this ruling"
+            },
+            "desktop-1280 | nav: Marketplace": {
+                "count": 1,
+                "reason": "Measured on develop 6b475269a when the gate entered the suite; open UI debt under this ruling"
+            },
+            "desktop-1280 | palette: Dispensers and exchange activity": {
+                "count": 1,
+                "reason": "Measured on develop 6b475269a when the gate entered the suite; open UI debt under this ruling"
+            },
+            "desktop-1280 | palette: open": {
+                "count": 4,
+                "reason": "Measured on develop 6b475269a when the gate entered the suite; open UI debt under this ruling"
+            },
+            "desktop-1280 | palette: Your staking positions": {
+                "count": 1,
+                "reason": "Measured on develop 6b475269a when the gate entered the suite; open UI debt under this ruling"
+            },
+            "phone-360 | menu: Search": {
+                "count": 2,
+                "reason": "Measured on develop 6b475269a when the gate entered the suite; open UI debt under this ruling"
+            },
+            "phone-360 | palette: Dispensers and exchange activity": {
+                "count": 1,
+                "reason": "Measured on develop 6b475269a when the gate entered the suite; open UI debt under this ruling"
+            },
+            "phone-360 | palette: open": {
+                "count": 2,
+                "reason": "Measured on develop 6b475269a when the gate entered the suite; open UI debt under this ruling"
+            },
+            "phone-360 | palette: Your staking positions": {
+                "count": 1,
+                "reason": "Measured on develop 6b475269a when the gate entered the suite; open UI debt under this ruling"
+            }
+        }
+    }
+}

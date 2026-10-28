@@ -19,6 +19,7 @@ import {
 } from '../../fixtures/wallet.js';
 import { EXTENSION_DIST } from '../../fixtures/extension.js';
 import { kdfStepTimeout } from '../../timeout-budget.js';
+import { HOST_BLOCK_ARG } from '../../host-block.js';
 
 const VIEWPORTS = [
     { width: 400, height: 800 },
@@ -172,6 +173,7 @@ test('side panel fits primary routes at narrow extension sizes', async () => {
         args: [
             `--disable-extensions-except=${EXTENSION_DIST}`,
             `--load-extension=${EXTENSION_DIST}`,
+            HOST_BLOCK_ARG,
         ],
     });
 

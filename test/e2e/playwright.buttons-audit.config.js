@@ -11,6 +11,7 @@
 // BUTTONS_PORT picks the dev server port, BUTTONS_SCHEME light (default) or dark.
 
 import { defineConfig, devices } from '@playwright/test';
+import { withHostBlock } from './host-block.js';
 
 const PORT = Number(process.env.BUTTONS_PORT) || 5173;
 const COLOR_SCHEME = process.env.BUTTONS_SCHEME === 'dark' ? 'dark' : 'light';
@@ -30,7 +31,7 @@ export default defineConfig({
             use: { browserName: 'chromium', channel: 'chromium', viewport: { width: 360, height: 800 }, deviceScaleFactor: 2, isMobile: true, hasTouch: true },
         },
         { name: 'desktop-1440', use: { ...devices['Desktop Chrome'], channel: 'chromium', viewport: { width: 1440, height: 900 } } },
-    ],
+    ].map((project) => withHostBlock(project)),
     webServer: {
         command: `pnpm -C ../../packages/web dev --port ${PORT} --strictPort --host 127.0.0.1`,
         url: `http://localhost:${PORT}`,

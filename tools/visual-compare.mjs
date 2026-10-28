@@ -44,6 +44,7 @@ import pngjs from 'pngjs';
 import {
     optimizePngs, pruneReportRows, VISUAL_REPORT_GENERATOR,
 } from './visual-report-files.mjs';
+import { HOST_BLOCK_ARG } from '../test/e2e/host-block.js';
 
 const { PNG } = pngjs;
 
@@ -634,7 +635,8 @@ async function main() {
         startServer('baseline', trees.baseline, PORT),
         startServer('candidate', trees.candidate, PORT + 1),
     ]);
-    const browser = await chromium.launch();
+    // Demo mode reaches only loopback; every other host fails to resolve.
+    const browser = await chromium.launch({ channel: 'chromium', args: [HOST_BLOCK_ARG] });
     const entries = [];
     const skips = [];
     try {

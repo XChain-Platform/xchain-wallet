@@ -38,6 +38,7 @@ import { test as base, expect, chromium } from '@playwright/test';
 import { LICENSE_VERSION } from '../../../packages/core/src/buildInfo.js';
 import { stubOfflineVenue } from './offlineVenue.js';
 import { LICENSE_ACCEPTED_AT_KEY, LICENSE_ACCEPTED_VERSION_KEY } from './wallet.js';
+import { PRODUCTION_BLOCK_ARG } from '../host-block.js';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const EXTENSION_DIST = path.resolve(HERE, '../../../packages/extension/dist');
@@ -58,6 +59,8 @@ export const test = base.extend({
                 `--load-extension=${EXTENSION_DIST}`,
                 // Deliberately NO --disable-web-security and NO
                 // --disable-features=IsolateOrigins: see the header.
+                // The production hosts fail to resolve, as in extension.js.
+                PRODUCTION_BLOCK_ARG,
             ],
         });
         await use(context);

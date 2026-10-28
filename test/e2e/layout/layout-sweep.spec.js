@@ -18,7 +18,10 @@
 import { join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { expect, test } from '../fixtures/wallet.js';
-import { createSweep, layoutSweepFailures, measureInPage } from './sweep.js';
+import {
+    GUTTER_CONTRACT_KEYS, createSweep, layoutSweepFailures, layoutSweepFindings, measureHeaderPinned, measureInPage,
+    measureRulings,
+} from './sweep.js';
 
 const DARK = process.env.LAYOUT_SCHEME === 'dark';
 const OUT_ROOT = resolve(fileURLToPath(new URL('.', import.meta.url)), '..', '..', '..', 'tmp', DARK ? 'dark-sweep' : 'layout-sweep');
@@ -112,6 +115,61 @@ test('top gaps compare form and list only inside one shell', () => {
     ])).toEqual(['form top gaps [12] do not match list top gaps [16]']);
 });
 
+test('layout findings key the scrolled-away header and short content apart from the gutter contract', () => {
+    const layout = { contentLeft: 12, contentRightGap: 12, headerLeft: 12, first: { kind: 'list', left: 12, rightGap: 12, topGap: 12 } };
+    const screens = [
+        {
+            label: 'history',
+            vw: 360,
+            layout,
+            headerScrolledAway: [{ el: 'header.appHeader', top: -56, bottom: 0 }],
+            narrow: [{ el: 'ul.list', w: 300, usable: 336, short: 36, offset: 0 }],
+        },
+        { label: 'home', vw: 360, layout },
+    ];
+    expect(layoutSweepFindings(screens)).toEqual([
+        { key: 'headerScrolledAway', screen: 'history', detail: 'history: header.appHeader scrolled out of view (top -56px, bottom 0px)' },
+        { key: 'contentEdge', screen: 'history', detail: 'history: ul.list is 36px short of the 336px content width' },
+    ]);
+    expect(layoutSweepFailures(screens, { keys: GUTTER_CONTRACT_KEYS })).toEqual([]);
+    expect(layoutSweepFailures(screens)).toHaveLength(2);
+});
+
+test('header pin measurement finds a header that scrolls away and puts the scroll back', async ({ page }) => {
+    await page.setViewportSize({ width: 360, height: 400 });
+    await page.setContent(`
+        <style>body { margin: 0; } .tall { height: 2000px; }</style>
+        <header aria-label="App header" style="height: 48px">Wallet</header>
+        <nav aria-label="Primary navigation" style="position: fixed; bottom: 0; height: 48px; width: 100%">Tabs</nav>
+        <main id="xc-main"><div class="tall"></div></main>
+    `);
+    await page.evaluate(() => window.scrollTo(0, 30));
+    const away = await page.evaluate(measureHeaderPinned);
+    expect(away.map(({ el }) => el)).toEqual(['header "App header"']);
+    expect(away[0].bottom).toBeLessThan(0);
+    expect(await page.evaluate(() => window.scrollY)).toBe(30);
+    await page.setContent(`
+        <style>body { margin: 0; } .tall { height: 2000px; }</style>
+        <div style="display: flex; flex-direction: column; height: 100vh">
+            <header aria-label="App header" style="height: 48px; flex: none">Wallet</header>
+            <main id="xc-main" style="overflow-y: auto; flex: 1"><div class="tall"></div></main>
+        </div>
+    `);
+    expect(await page.evaluate(measureHeaderPinned)).toEqual([]);
+});
+
+test('rulings measurement flags any Paste button and a Max outside its field', async ({ page }) => {
+    await page.setContent(`
+        <style>.frame { display: flex; border: 1px solid #888; width: 300px; } input { border: 0; flex: 1; }</style>
+        <div class="frame"><input aria-label="Amount"><button>Max</button></div>
+        <div class="frame"><input aria-label="To"><button>Paste</button></div>
+        <div><input aria-label="Fee" style="border: 1px solid #888"></div><button>Max fee</button>
+    `);
+    const { fieldButtonsOutside } = await page.evaluate(measureRulings);
+    expect(fieldButtonsOutside.map(({ button }) => button)).toEqual(['Paste', 'Max fee']);
+    expect(fieldButtonsOutside[0].paste).toBe(true);
+});
+
 test('clip measurement skips text nobody can see', async ({ page, browserName }) => {
     await page.setContent(`
         <style>
@@ -166,9 +224,12 @@ test('layout sweep', async ({ page }, testInfo) => {
         outDir: join(OUT_ROOT, venue),
         fontScale: testInfo.project.metadata?.fontScale,
         contrast: DARK,
+        rulings: true,
         onResult: (result) => screens.push(result),
     });
     await sweep.onboarding();
     await sweep.unlocked();
-    expect(layoutSweepFailures(screens), 'every measured route follows the page gutter contract').toEqual([]);
+    // The rulings keys (headerScrolledAway, contentEdge and measureRulings)
+    // are written to results.jsonl and gated by rulings-gate.spec.js.
+    expect(layoutSweepFailures(screens, { keys: GUTTER_CONTRACT_KEYS }), 'every measured route follows the page gutter contract').toEqual([]);
 });
