@@ -3,6 +3,8 @@
 //
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
+import { explorerReadOnce } from '../sdk/explorerRateLimit.js';
+
 const KIND_STATUS_FIELD = Object.freeze({
     order: 'order_status',
     swap: 'swap_status',
@@ -49,7 +51,7 @@ export async function readMarketExpiryClock(sdk) {
     }
     let status;
     try {
-        status = await sdk.getStatus({ noRetry: true });
+        status = await explorerReadOnce(sdk, '/status', () => sdk.getStatus({ noRetry: true }));
     } catch {
         return { blockTime: null, indexedHeight: null, chainHeight: null, stale: false };
     }

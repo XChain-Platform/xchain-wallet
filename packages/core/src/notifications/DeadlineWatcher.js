@@ -51,6 +51,7 @@
 // order-fill notifications.
 
 import { targetBlockSecondsForCoin } from '../shared/utils/blockDateEstimate.js';
+import { explorerReadOnce } from '../sdk/explorerRateLimit.js';
 import { taggedLogger } from './taggedLogger.js';
 import { ActiveAddressPoll, isVaultLockedError } from './activeAddressPoll.js';
 
@@ -321,7 +322,7 @@ export class DeadlineWatcher {
         if (typeof sdk.getStatus !== 'function') return { blockTime: null, height: null };
         let status;
         try {
-            status = await sdk.getStatus({ noRetry: true });
+            status = await explorerReadOnce(sdk, '/status', () => sdk.getStatus({ noRetry: true }));
         } catch (e) {
             this._log.warn('DeadlineWatcher: getStatus failed', e);
             return { blockTime: null, height: null };

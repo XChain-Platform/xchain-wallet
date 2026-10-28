@@ -48,6 +48,7 @@ import {
     compareDecimalStrings,
     decimalQuotientFloor,
 } from '../shared/utils/amountFormat.js';
+import { explorerReadOnce } from '../sdk/explorerRateLimit.js';
 import { taggedLogger } from './taggedLogger.js';
 import { ActiveAddressPoll, isVaultLockedError } from './activeAddressPoll.js';
 
@@ -255,7 +256,11 @@ export class DispenserEscrowWatcher {
         for (const d of budget) {
             let detail;
             try {
-                detail = await sdk.getAction(d.actionIndex, { noRetry: true });
+                detail = await explorerReadOnce(
+                    sdk,
+                    `/action/${encodeURIComponent(String(d.actionIndex))}`,
+                    () => sdk.getAction(d.actionIndex, { noRetry: true }),
+                );
             } catch (e) {
                 this._log.warn(`DispenserEscrowWatcher: getAction ${d.actionIndex} failed`, e);
                 continue;

@@ -227,17 +227,31 @@ export class HostRateLimiter {
      * holds only the small active set while the rest remain queued, and every
      * queued request observes the host pause before it reaches the network.
      *
+     * A single-attempt waiter leaves the queue as soon as the host is paused:
+     * the slots ahead of it are then held by requests sleeping out that pause,
+     * and its caller asked to fail rather than wait.
+     *
      * @param {string} host
      * @param {AbortSignal} [signal]
+     * @param {(() => Error) | null} [onPause]  single-attempt only: builds the
+     *        error a queued waiter rejects with when the host is paused
      * @returns {Promise<() => void>} releases the slot
      */
-    acquire(host, signal) {
+    acquire(host, signal, onPause = null) {
         if (signal?.aborted) return Promise.reject(abortError());
         const st = this.state(host);
         const limit = Math.max(1, Math.floor(Number(this.opts.maxConcurrency) || 1));
         return new Promise((resolve, reject) => {
             let queued = false;
             let released = false;
+            const leave = (err) => {
+                if (!queued) return;
+                queued = false;
+                const index = st.waiters.indexOf(enter);
+                if (index >= 0) st.waiters.splice(index, 1);
+                signal?.removeEventListener('abort', cancel);
+                reject(err);
+            };
             const enter = () => {
                 queued = false;
                 signal?.removeEventListener('abort', cancel);
@@ -254,14 +268,8 @@ export class HostRateLimiter {
                     this.drain(host);
                 });
             };
-            const cancel = () => {
-                if (!queued) return;
-                queued = false;
-                const index = st.waiters.indexOf(enter);
-                if (index >= 0) st.waiters.splice(index, 1);
-                signal?.removeEventListener('abort', cancel);
-                reject(abortError());
-            };
+            const cancel = () => leave(abortError());
+            if (onPause) enter.onPause = () => leave(onPause());
             if (st.active < limit) {
                 enter();
                 return;
@@ -297,7 +305,14 @@ export class HostRateLimiter {
         if (st.remaining === 0) {
             st.blockedUntil = Math.max(st.blockedUntil, st.resetAt);
             st.rateBlockedUntil = Math.max(st.rateBlockedUntil, st.resetAt);
+            this.releasePausedWaiters(st);
         }
+    }
+
+    /** Fail every queued single-attempt request once the host is paused. */
+    releasePausedWaiters(st) {
+        if (st.blockedUntil <= this.now()) return;
+        for (const waiter of st.waiters.filter((w) => w.onPause)) waiter.onPause();
     }
 
     /**
@@ -311,6 +326,13 @@ export class HostRateLimiter {
         const until = this.now() + Math.max(0, waitMs);
         st.blockedUntil = Math.max(st.blockedUntil, until);
         if (rateLimited) st.rateBlockedUntil = Math.max(st.rateBlockedUntil, until);
+        this.releasePausedWaiters(st);
+    }
+
+    /** Whole seconds the host stays paused for any reason, or 0. */
+    blockedSeconds(host) {
+        const left = this.state(host).blockedUntil - this.now();
+        return left > 0 ? Math.ceil(left / 1000) : 0;
     }
 
     /** Whole seconds the host stays paused for a rate limit, or 0 (a network backoff is not counted). */
@@ -416,10 +438,14 @@ export class HostRateLimiter {
      * @param {(seconds: number, rateLimited: boolean) => any} tooLong  builds the error for a pause past the cap
      * @param {number} [maxRetries] retries available to this HTTP method
      * @param {AbortSignal} [signal] cancels rate-limit and pacing waits
+     * @param {(err: any) => boolean} [retryable] classifies a failure as transient
+     * @param {{ singleAttempt?: boolean }} [policy]  `singleAttempt` sends at
+     *        most once and fails at once while the host is paused, instead of
+     *        retrying or sleeping out the pause (the caller asked for noRetry)
      */
     async request(
         host, key, send, tooLong, maxRetries = this.opts.maxRetries, signal,
-        retryable = isTransientReadError,
+        retryable = isTransientReadError, { singleAttempt = false } = {},
     ) {
         if (signal?.aborted) throw abortError();
         const configuredCap = Number.isFinite(this.opts.maxRetries)
@@ -428,20 +454,23 @@ export class HostRateLimiter {
         const requested = Number.isFinite(maxRetries)
             ? Math.max(0, Math.floor(maxRetries))
             : configuredCap;
-        const retryBudget = Math.min(
+        const retryBudget = singleAttempt ? 0 : Math.min(
             configuredCap,
             requested,
         );
         // A shared request would let one caller's signal cancel every waiter.
         // Signalled reads stay independent so each caller owns its cancellation.
         if (signal) key = null;
+        // A single-attempt read joins only other single-attempt reads, so it
+        // never inherits the retries of an identical read already in flight.
+        if (key && singleAttempt) key = `${key} single-attempt`;
         if (key) {
             const recent = this.recent.get(key);
             if (recent && this.now() - recent.at <= this.opts.reuseMs) return cloneResponse(recent.res);
             const pending = this.inFlight.get(key);
             if (pending) return pending.then(cloneResponse);
         }
-        const run = this.attempt(host, send, tooLong, retryBudget, signal, retryable);
+        const run = this.attempt(host, send, tooLong, retryBudget, signal, retryable, singleAttempt);
         if (!key) return run;
         this.inFlight.set(key, run);
         try {
@@ -461,16 +490,21 @@ export class HostRateLimiter {
         for (const [k, v] of this.recent) if (v.at < cutoff) this.recent.delete(k);
     }
 
-    async attempt(host, send, tooLong, maxRetries, signal, retryable) {
+    async attempt(host, send, tooLong, maxRetries, signal, retryable, singleAttempt = false) {
         const st = this.state(host);
         const deadline = this.now() + this.opts.maxTotalMs;
+        const paused = () => tooLong(this.blockedSeconds(host), this.pausedSeconds(host) > 0);
         let retries = 0;
         for (;;) {
+            // A single-attempt read never queues behind a host pause it would
+            // only fail at, so it is refused before it takes a send slot.
+            if (singleAttempt && this.blockedSeconds(host) > 0) throw paused();
             // The send slot wraps the gate, the trial wait and the send, so
             // queued requests observe a host pause before reaching the network.
-            const release = await this.acquire(host, signal);
+            const release = await this.acquire(host, signal, singleAttempt ? paused : null);
             try {
-                const waitSeconds = await this.gate(host, deadline, signal);
+                // A deadline of now turns any host pause into an immediate refusal.
+                const waitSeconds = await this.gate(host, singleAttempt ? this.now() : deadline, signal);
                 if (waitSeconds > 0) throw tooLong(waitSeconds, this.pausedSeconds(host) > 0);
                 // After a transient failure one request goes first and the rest wait
                 // for its answer, so an unhealthy host sees one probe instead of a wave.
@@ -590,6 +624,20 @@ async function currentResponse(send, isCurrent) {
     }
 }
 
+// The SDK hands its HTTP client only `{ params: buildParams(opts) }`, so a
+// caller's `noRetry` never reaches the client on its own. The explorer wrapper
+// tags the opts of a call that asked for it, the wrapped `buildParams` records
+// the params object it builds from tagged opts, and the wrapped HTTP methods
+// look the params object up here. A WeakSet leaves the params themselves (which
+// axios serializes into the URL) untouched.
+const SINGLE_ATTEMPT = Symbol('xc.singleAttempt');
+const singleAttemptParams = new WeakSet();
+
+function isSingleAttempt(config) {
+    const params = config && config.params;
+    return Boolean(params && typeof params === 'object' && singleAttemptParams.has(params));
+}
+
 /** Route one explorer axios instance's read-only calls through the limiter. */
 function wrapExplorerAxios(client, limiter, maxRetries, isCurrent = () => true) {
     if (!client || client.__xcRateLimited || typeof client.get !== 'function') return;
@@ -612,14 +660,14 @@ function wrapExplorerAxios(client, limiter, maxRetries, isCurrent = () => true) 
         return limiter.request(
             host, key, () => currentResponse(() => get(url, config), isCurrent),
             (s, rateLimited) => pausedError(s, config, rateLimited),
-            maxRetries, config?.signal,
+            maxRetries, config?.signal, undefined, { singleAttempt: isSingleAttempt(config) },
         );
     };
     if (post) {
         client.post = (url, body, config = {}) => limiter.request(
             host, null, () => currentResponse(() => post(url, body, config), isCurrent),
             (s, rateLimited) => pausedError(s, config, rateLimited),
-            maxRetries, config?.signal,
+            maxRetries, config?.signal, undefined, { singleAttempt: isSingleAttempt(config) },
         );
     }
     client.__xcRateLimited = true;
@@ -639,6 +687,24 @@ export function explorerPausedSeconds(sdk) {
     const client = sdk && sdk.explorer && sdk.explorer.client;
     const limiter = client && client.__xcRateLimiter;
     return limiter ? limiter.pausedSeconds(hostOf(client)) : 0;
+}
+
+/**
+ * One single-attempt explorer GET, for reads whose SDK facade method takes no
+ * options (`getStatus()`, `getAction(index)`) and so cannot carry `noRetry`.
+ *
+ * Reads through `sdk.explorer.get(path, { noRetry: true })`; an SDK without an
+ * explorer client (a stand-in) gets `fallback()` instead.
+ *
+ * @param {any} sdk
+ * @param {string} path  explorer path below `/<COIN>/api`, already encoded
+ * @param {() => Promise<any>} fallback
+ * @returns {Promise<any>}
+ */
+export async function explorerReadOnce(sdk, path, fallback) {
+    const explorer = sdk && sdk.explorer;
+    if (explorer && typeof explorer.get === 'function') return explorer.get(path, { noRetry: true });
+    return fallback();
 }
 
 /** Rewrite a surfaced explorer 429 into the plain sentence, keeping the wait machine-readable. */
@@ -684,14 +750,31 @@ function wrapExplorerClient(explorer, limiter) {
     }
     // The shared layer owns every retry, so the SDK must not add a second loop.
     explorer.retry = false;
+    if (typeof explorer.buildParams === 'function') {
+        const buildParams = explorer.buildParams;
+        explorer.buildParams = function buildParamsWithAttemptPolicy(opts, ...rest) {
+            const params = buildParams.call(this, opts, ...rest);
+            if (opts && opts[SINGLE_ATTEMPT] && params && typeof params === 'object') {
+                singleAttemptParams.add(params);
+            }
+            return params;
+        };
+    }
     for (const method of ['get', 'post']) {
         const original = explorer[method];
         if (typeof original !== 'function') continue;
+        const optsAt = method === 'post' ? 2 : 1;
         explorer[method] = async function rateLimitAwareCall(...args) {
             try {
-                const callArgs = method === 'post'
-                    ? [args[0], args[1], { ...(args[2] || {}), noRetry: true }]
-                    : args;
+                const callerOpts = args[optsAt];
+                const callArgs = [...args];
+                if (method === 'post') callArgs[2] = { ...(callerOpts || {}), noRetry: true };
+                // Only the caller's own noRetry makes the call single-attempt;
+                // the noRetry injected for every POST above only stops the
+                // SDK's loop, and the shared layer keeps its retries.
+                if (callerOpts && typeof callerOpts === 'object' && callerOpts.noRetry) {
+                    callArgs[optsAt] = { ...callArgs[optsAt], [SINGLE_ATTEMPT]: true };
+                }
                 return await original.apply(this, callArgs);
             } catch (err) {
                 throw friendlyRateLimitError(err, limiter.pausedSeconds(hostOf(this.client)));
