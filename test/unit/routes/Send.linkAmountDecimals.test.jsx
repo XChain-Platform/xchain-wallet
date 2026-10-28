@@ -13,6 +13,7 @@ import { defaultRegistry } from '../../../packages/core/src/registry/index.js';
 vi.mock('qrcode', () => ({ default: { toDataURL: vi.fn(async () => 'data:image/png;base64,iVBORw0KGgo=') } }));
 vi.mock('../../../packages/core/src/shared/components/ToastHost.jsx', () => ({
     useToast: () => ({ showToast: vi.fn(), dismissToast: vi.fn(), clearToasts: vi.fn() }),
+    useSuppressSpamToastsOnConfirm: () => {},
 }));
 vi.mock('@xchain-wallet/core/ui', async (importOriginal) => {
     const actual = await importOriginal();
