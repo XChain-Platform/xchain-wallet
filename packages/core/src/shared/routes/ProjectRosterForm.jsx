@@ -30,7 +30,7 @@ import { extractActionIndex } from '../utils/actionIndexFromTx.js';
 import { submitFailureMessage } from '../utils/submitFailureMessage.js';
 import { useActionConfirmFlow, useConfirmSubmit, isUserRejection } from '../hooks/useActionConfirmFlow.js';
 import { ActionConfirmScreen } from '../components/ActionConfirmScreen.jsx';
-import { QueuedResultPanel } from '../components/QueuedResultPanel.jsx';
+import { ResultScreen } from '../components/ResultScreen.jsx';
 import { classifyTickItems } from '../utils/listTickItems.js';
 import { memoLengthError, MEMO_HINT } from '../utils/memoLimit.js';
 import { tokenIssuerEligibility } from '../utils/tokenIssuerEligibility.js';
@@ -566,7 +566,7 @@ export function ProjectRosterForm({ walletId, chainId, tick, issuerAddress = nul
     // A leg signed but not broadcast stops the flow: the panel offers no retry,
     // because signing again while a signed copy is queued double-broadcasts.
     if (queuedLeg) {
-        return wrap(<QueuedResultPanel onDone={onBack} what="official token list" unsaved={queuedLeg?.unsaved} />);
+        return wrap(<ResultScreen state="signed-not-broadcast" onDone={onBack} what="official token list" unsaved={queuedLeg?.unsaved} />);
     }
 
     if (stage === 'done') {

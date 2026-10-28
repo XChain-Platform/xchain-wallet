@@ -37,7 +37,7 @@ import {
 } from '../utils/tokenRecordDrift.js';
 import { LockedTokenContext } from '../components/LockedTokenContext.jsx';
 import { SignCredentials } from '../components/SignCredentials.jsx';
-import { WatcherResultPanel } from '../components/WatcherResultPanel.jsx';
+import { ResultScreen } from '../components/ResultScreen.jsx';
 import { useActionForm } from '../hooks/useActionForm.js';
 import {
     estimateNativeSendFee,
@@ -56,7 +56,6 @@ import { useNativeFee } from '../hooks/useNativeFee.js';
 import { useFeeFiat } from '../hooks/useFeeFiat.js';
 import { submitFailureMessage } from '../utils/submitFailureMessage.js';
 import { tickerReferenceError } from '../utils/tickerGrammar.js';
-import { QueuedResultPanel } from '../components/QueuedResultPanel.jsx';
 import { isValidAddressForChain } from '../utils/addressValidation.js';
 
 const chainRegistry = registryLib.defaultRegistry();
@@ -557,7 +556,8 @@ export function MintForm({ walletId, onBack, initialChainId, initialTick, initia
         const txid = result?.txid || result?.broadcast?.txid;
         if (result?.psbtHex && !txid) {
             return wrap(
-                <WatcherResultPanel
+                <ResultScreen
+                    state="unsigned"
                     result={result}
                     onBuildAnother={handleBuildAnother}
                     onDone={onBack}
@@ -568,7 +568,7 @@ export function MintForm({ walletId, onBack, initialChainId, initialTick, initia
         // would claim the one thing that has not happened yet.
         if (result?.queued) {
             return wrap(
-                <QueuedResultPanel onDone={onBack} what="mint" unsaved={result.unsaved} />,
+                <ResultScreen state="signed-not-broadcast" onDone={onBack} what="mint" unsaved={result.unsaved} />,
             );
         }
         return wrap(

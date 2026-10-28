@@ -390,7 +390,7 @@ for (const [name, copy] of [
 }
 
 // 19c. The three names admitted for copy the set had no word for.
-// QueuedResultPanel interpolates `what` into `Your ${what}` and nineteen
+// ResultScreen interpolates `what` into `Your ${what}` and nineteen
 // routes pass it as a literal; StalenessLabel ships `prefix = 'Last synced'`
 // as a default and renders it into `${prefix} … ago`; tickerGrammarError
 // defaults `{ noun = 'Ticker' }` into the validation line the user reads.

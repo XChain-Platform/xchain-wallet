@@ -26,8 +26,7 @@ import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { useDemoGuard } from '../hooks/useDemoGuard.jsx';
 import { useBalancesHidden } from '../hooks/useBalancesHidden.js';
 import { ActionConfirmScreen } from './ActionConfirmScreen.jsx';
-import { WatcherResultPanel } from './WatcherResultPanel.jsx';
-import { QueuedResultPanel } from './QueuedResultPanel.jsx';
+import { ResultScreen } from './ResultScreen.jsx';
 import { useOwnerActionLane } from '../hooks/useOwnerActionLane.js';
 import { useSignerReady } from '../hooks/useSignerReady.js';
 import { useNativeFee } from '../hooks/useNativeFee.js';
@@ -293,7 +292,8 @@ export function OpenOrdersPanel({ walletId, chainId, tick1, tick2 }) {
 
     if (queuedResult) {
         return (
-            <QueuedResultPanel
+            <ResultScreen
+                state="signed-not-broadcast"
                 what={t('components.openOrdersPanel.orderCancellation')}
                 unsaved={queuedResult.unsaved}
                 onDone={() => {
@@ -306,7 +306,8 @@ export function OpenOrdersPanel({ walletId, chainId, tick1, tick2 }) {
 
     if (watcherResult) {
         return (
-            <WatcherResultPanel
+            <ResultScreen
+                state="unsigned"
                 result={watcherResult}
                 onBuildAnother={() => setWatcherResult(null)}
                 onDone={() => {

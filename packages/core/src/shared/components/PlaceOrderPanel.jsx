@@ -49,7 +49,7 @@ import { useWalletMode } from '../hooks/useWalletMode.js';
 import { isHwSource, SignCredentials } from './SignCredentials.jsx';
 import { buildBalanceRows, formatAmount } from './BalanceList.jsx';
 import { NativeFeeToggle } from './NativeFeeToggle.jsx';
-import { WatcherResultPanel } from './WatcherResultPanel.jsx';
+import { ResultScreen } from './ResultScreen.jsx';
 import { NATIVE_FEE_WARNING } from '../../sdk/nativeFeePreflight.js';
 import { submitFailureMessage, SIGNED_NOT_BROADCAST_TITLE } from '../utils/submitFailureMessage.js';
 import { preferredSourceId } from '../addressSelection.js';
@@ -588,7 +588,8 @@ export function PlaceOrderPanel({ walletId, chainId, tick1, tick2, prefillPrice,
         const txid = result?.txid || result?.broadcast?.txid;
         if (result?.psbtHex && !txid) {
             return (
-                <WatcherResultPanel
+                <ResultScreen
+                    state="unsigned"
                     result={result}
                     onBuildAnother={() => { setResult(null); setStage('form'); }}
                     onDone={() => { setResult(null); setStage('form'); }}

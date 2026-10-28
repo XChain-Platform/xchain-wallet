@@ -24,7 +24,7 @@ import {
     resolvePreflightPrivacy,
 } from '../../schemas/settings.js';
 import { SignCredentials } from '../components/SignCredentials.jsx';
-import { WatcherResultPanel } from '../components/WatcherResultPanel.jsx';
+import { ResultScreen } from '../components/ResultScreen.jsx';
 import { useActionForm } from '../hooks/useActionForm.js';
 import { useSignerInfo } from '../hooks/useSignerInfo.js';
 import { useNativeFee } from '../hooks/useNativeFee.js';
@@ -43,7 +43,6 @@ import styles from './IssueTokenForm.module.css';
 import { humanizeError } from '../utils/humanizeError.js';
 import { memoCharacterError, memoLengthError } from '../utils/memoLimit.js';
 import { submitFailureMessage } from '../utils/submitFailureMessage.js';
-import { QueuedResultPanel } from '../components/QueuedResultPanel.jsx';
 import { ActionIntentSummary } from '../components/ActionIntentSummary.jsx';
 import { useTickBalance } from '../hooks/useTickBalance.js';
 import { useTokenInfo } from '../hooks/useTokenInfo.js';
@@ -550,13 +549,13 @@ export function CreateOrderForm({ walletId, onBack, initialChainId, initialFromA
     if (stage === 'done') {
         const txid = result?.txid || result?.broadcast?.txid;
         if (result?.psbtHex && !txid) {
-            return wrap(<WatcherResultPanel result={result} onBuildAnother={handleBuildAnother} onDone={onBack} />);
+            return wrap(<ResultScreen state="unsigned" result={result} onBuildAnother={handleBuildAnother} onDone={onBack} />);
         }
         // Signed but not broadcast. No order exists to match yet, so
         // the auto-pay note below would be describing a thing that is not
         // on the chain.
         if (result?.queued) {
-            return wrap(<QueuedResultPanel onDone={onBack} what="order" unsaved={result.unsaved} />);
+            return wrap(<ResultScreen state="signed-not-broadcast" onDone={onBack} what="order" unsaved={result.unsaved} />);
         }
         const autopayNote = autopayArm
             ? (result?.autopayArmed === false

@@ -55,6 +55,7 @@ import { FormSectionSection } from './sections/FormSectionSection.jsx';
 import { ListPageSection } from './sections/ListPageSection.jsx';
 import { ListRowSection } from './sections/ListRowSection.jsx';
 import { EmptyStateSection } from './sections/EmptyStateSection.jsx';
+import { ResultScreenSection } from './sections/ResultScreenSection.jsx';
 import { SectionHeaderSection } from './sections/SectionHeaderSection.jsx';
 import { ButtonsSection } from './sections/ButtonsSection.jsx';
 import { ChipSection } from './sections/ChipSection.jsx';
@@ -93,6 +94,7 @@ export const SECTIONS = [
     { id: 'list-page',             label: 'List page',              Component: ListPageSection, primitives: ['ListPage'] },
     { id: 'list-row',              label: 'List row',               Component: ListRowSection, primitives: ['ListRow'] },
     { id: 'empty-state',           label: 'Empty state',            Component: EmptyStateSection, primitives: ['EmptyState'] },
+    { id: 'result-screen',         label: 'Result screen',          Component: ResultScreenSection },
     { id: 'section-header',        label: 'Section header',         Component: SectionHeaderSection, primitives: ['SectionHeader'] },
     { id: 'buttons',               label: 'Buttons',                Component: ButtonsSection, primitives: ['Button', 'Spinner'] },
     { id: 'checkbox',              label: 'Checkbox',               Component: CheckboxSection, primitives: ['Checkbox'] },

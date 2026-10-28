@@ -15,7 +15,7 @@ import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { useDemoGuard } from '../hooks/useDemoGuard.jsx';
 import { SignCredentials, isHwSource } from '../components/SignCredentials.jsx';
 import { useSignerReady } from '../hooks/useSignerReady.js';
-import { WatcherResultPanel } from '../components/WatcherResultPanel.jsx';
+import { ResultScreen } from '../components/ResultScreen.jsx';
 import { useWalletMode } from '../hooks/useWalletMode.js';
 import { useSignerInfo } from '../hooks/useSignerInfo.js';
 import { TickerIcon } from '../components/TickerIcon.jsx';
@@ -37,7 +37,6 @@ import { NativeFeeToggle } from '../components/NativeFeeToggle.jsx';
 import { submitFailureMessage } from '../utils/submitFailureMessage.js';
 import { useActionConfirmFlow, useConfirmSubmit, isUserRejection } from '../hooks/useActionConfirmFlow.js';
 import { ActionConfirmScreen } from '../components/ActionConfirmScreen.jsx';
-import { QueuedResultPanel } from '../components/QueuedResultPanel.jsx';
 import { tokenAmountPrecisionError } from '../utils/amountFormat.js';
 import {
     TOKEN_RECORD_GATE_KEYS, tokenRecordChangedMessage, tokenRecordChangedSince,
@@ -531,7 +530,7 @@ export function SellOwnershipForm({ walletId, onBack, chainId: initialChainId, t
         const txid = result?.txid;
         if (result?.psbtHex && !txid) {
             return wrap(
-                <ListPage><WatcherResultPanel result={result} onBuildAnother={handleBuildAnother} onDone={onBack} /></ListPage>,
+                <ListPage><ResultScreen state="unsigned" result={result} onBuildAnother={handleBuildAnother} onDone={onBack} /></ListPage>,
             );
         }
         // A queued result is SIGNED and not broadcast: the confirm lane
@@ -540,7 +539,7 @@ export function SellOwnershipForm({ walletId, onBack, chainId: initialChainId, t
         // is not.
         if (result?.queued) {
             return wrap(
-                <ListPage><QueuedResultPanel onDone={onBack} what="ownership sale" unsaved={result.unsaved} /></ListPage>,
+                <ListPage><ResultScreen state="signed-not-broadcast" onDone={onBack} what="ownership sale" unsaved={result.unsaved} /></ListPage>,
             );
         }
         return wrap(

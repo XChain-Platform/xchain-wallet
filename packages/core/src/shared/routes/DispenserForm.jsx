@@ -59,7 +59,7 @@ import {
 import { LockedTokenContext } from '../components/LockedTokenContext.jsx';
 import { SignCredentials, isHwSource } from '../components/SignCredentials.jsx';
 import { useSignerReady } from '../hooks/useSignerReady.js';
-import { WatcherResultPanel } from '../components/WatcherResultPanel.jsx';
+import { ResultScreen } from '../components/ResultScreen.jsx';
 import { useWalletMode } from '../hooks/useWalletMode.js';
 import { useFormDraft } from '../hooks/useFormDraft.js';
 import { useSettings } from '../hooks/useSettings.js';
@@ -89,7 +89,6 @@ import {
     recallUnusedDispenserAddress,
     forgetUnusedDispenserAddress,
 } from '../utils/unusedDispenserAddress.js';
-import { QueuedResultPanel } from '../components/QueuedResultPanel.jsx';
 import { DraftDiscardButton } from '../components/DraftDiscardButton.jsx';
 import { useDispenserPriceFloor, PRICE_BELOW_FLOOR_ERROR } from '../hooks/useDispenserPriceFloor.js';
 import { detectAddressCoin, isValidAddressForChain } from '../utils/addressValidation.js';
@@ -1260,7 +1259,8 @@ export function DispenserForm({ walletId, activeAccountId, onBack, initialChainI
         const txid = result?.txid || result?.broadcast?.txid;
         if (result?.psbtHex && !txid) {
             return wrap(
-                <WatcherResultPanel
+                <ResultScreen
+                    state="unsigned"
                     result={result}
                     onBuildAnother={handleBuildAnother}
                     onDone={leaveGuard.guardedOnBack}
@@ -1269,7 +1269,7 @@ export function DispenserForm({ walletId, activeAccountId, onBack, initialChainI
         }
         // Signed but not broadcast, so no dispenser is open yet.
         if (result?.queued) {
-            return wrap(<QueuedResultPanel onDone={leaveGuard.guardedOnBack} what="dispenser" unsaved={result.unsaved} />);
+            return wrap(<ResultScreen state="signed-not-broadcast" onDone={leaveGuard.guardedOnBack} what="dispenser" unsaved={result.unsaved} />);
         }
         return wrap(
             <>

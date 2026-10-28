@@ -225,7 +225,7 @@ const USER_FACING_ATTRS = new Set([
     'copyLabel',
     'balanceText',
     'submitLabel',
-    // Three copy props the set still had no name for. QueuedResultPanel
+    // Three copy props the set still had no name for. ResultScreen
     // interpolates `what` into `Your ${what}` and renders it in the queued
     // hint, and nineteen routes pass it as a literal ("cross-chain swap",
     // "dispenser", "sweep"); StalenessLabel ships `prefix = 'Last synced'`

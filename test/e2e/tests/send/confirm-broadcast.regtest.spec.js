@@ -265,7 +265,7 @@ test.describe('broadcast permanence on regtest', () => {
         await failBroadcast(page, 'transient');
         await approveSend(page);
 
-        await expect(page.getByRole('heading', { name: 'Signed. Not broadcast yet.' }))
+        await expect(page.getByText('Signed. Not broadcast yet.'))
             .toBeVisible({ timeout: 120_000 });
 
         // the screen promises a reminder, not an automatic retry -

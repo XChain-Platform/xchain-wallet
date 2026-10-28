@@ -35,7 +35,7 @@ import { humanizeDeployDiagnostic, humanizeGasRationale } from '../utils/deployD
 import { SignCredentials } from '../components/SignCredentials.jsx';
 import { useSignerReady } from '../hooks/useSignerReady.js';
 import { useSupportedChains } from '../hooks/useSupportedChains.js';
-import { WatcherResultPanel } from '../components/WatcherResultPanel.jsx';
+import { ResultScreen } from '../components/ResultScreen.jsx';
 import { useWalletMode } from '../hooks/useWalletMode.js';
 import { preferredSourceId } from '../addressSelection.js';
 import { OwnAddressPickerScreen } from '../components/OwnAddressPickerScreen.jsx';
@@ -48,7 +48,6 @@ import {
 import { customFeeReviewStop } from '../../flows/feeEstimate.js';
 import styles from './IssueTokenForm.module.css';
 import contractStyles from './ContractScreens.module.css';
-import { QueuedResultPanel } from '../components/QueuedResultPanel.jsx';
 import { ConfirmModal } from '../components/ConfirmModal.jsx';
 import { useConfirmModal } from '../hooks/useConfirmModal.js';
 import { isValidAddressForChain } from '../utils/addressValidation.js';
@@ -1034,11 +1033,12 @@ export function DeployContractForm({ walletId, onBack }) {
         // A queued result is SIGNED and not broadcast. The confirm
         // pipeline resolves that case rather than throwing, so without this
         // branch the done screen below reports it as a completed action.
-        if (result?.queued) return wrap(<ListPage><QueuedResultPanel onDone={onBack} unsaved={result.unsaved} /></ListPage>);
+        if (result?.queued) return wrap(<ListPage><ResultScreen state="signed-not-broadcast" onDone={onBack} unsaved={result.unsaved} /></ListPage>);
         if (result?.psbtHex && !txid) {
             return wrap(
                 <ListPage>
-                    <WatcherResultPanel
+                    <ResultScreen
+                        state="unsigned"
                         result={result}
                         onBuildAnother={handleBuildAnother}
                         onDone={onBack}

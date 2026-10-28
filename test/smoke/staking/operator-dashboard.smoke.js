@@ -74,7 +74,7 @@ assert.ok(/hardware:\s*['"]broadcastActionHw['"]/.test(publisherSrc),
     'PublisherMode selects the hardware broadcast method through the owner-action lane');
 assert.ok(/ActionConfirmScreen/.test(publisherSrc),
     'PublisherMode renders the shared confirm screen');
-assert.ok(/WatcherResultPanel/.test(publisherSrc),
+assert.ok(/ResultScreen/.test(publisherSrc),
     'PublisherMode renders an unsigned watcher result');
 assert.ok(/setValue\(''\)/.test(publisherSrc),
     'PublisherMode clears the value input on success for rapid successive entry');

@@ -300,7 +300,7 @@ describe('CreateOrderForm coverage', () => {
             params: expect.objectContaining({ GIVE_TICK: 'XCP', GET_AMOUNT: '0.1' }),
             password: '',
         })));
-        expect(await screen.findByRole('heading', { name: 'Unsigned transaction, ready for signing' }))
+        expect(await screen.findByText('Unsigned transaction, ready for signing'))
             .toBeInTheDocument();
     });
 

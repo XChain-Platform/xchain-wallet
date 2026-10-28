@@ -19,7 +19,7 @@ import '../../i18n/locales/en/parallelComposer.js';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { useDemoGuard } from '../hooks/useDemoGuard.jsx';
 import { ActionConfirmScreen } from '../components/ActionConfirmScreen.jsx';
-import { WatcherResultPanel } from '../components/WatcherResultPanel.jsx';
+import { ResultScreen } from '../components/ResultScreen.jsx';
 import { isUserRejection } from '../hooks/useActionConfirmFlow.js';
 import { useOwnerActionLane } from '../hooks/useOwnerActionLane.js';
 import { useSignerReady } from '../hooks/useSignerReady.js';
@@ -530,7 +530,8 @@ export function ParallelComposer({ walletId, onBack, initialRows, hasDexSurface 
 
     if (watcherResult) {
         return wrap(
-            <WatcherResultPanel
+            <ResultScreen
+                state="unsigned"
                 result={watcherResult}
                 onBuildAnother={() => setWatcherResult(null)}
                 onDone={onBack}

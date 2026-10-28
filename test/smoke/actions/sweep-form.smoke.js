@@ -53,7 +53,7 @@ assert.match(form, /listGatedKeys/, 'gate checks vault custody before prompting'
 assert.match(form, /cannot run the key recovery scan/,
     'HW / watch-only degrade to a per-tick warning (§5 signer note)');
 assert.match(form, /ackMissingKeys/, 'missing keys need an explicit acknowledgment');
-assert.match(form, /WatcherResultPanel/, 'watcher (encode-only) result surface');
+assert.match(form, /ResultScreen/, 'watcher (encode-only) result surface');
 assert.match(form, /SignCredentials/, 'standard signing surface used');
 assert.match(form, /prebuiltPsbt/, 'single-encode confirm path forwards the composed PSBT');
 assert.match(form, /1-hour (close )?window/, 'dispenser close-window delay stated');

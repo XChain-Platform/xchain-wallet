@@ -33,8 +33,8 @@ assert.match(
 );
 assert.match(
     formSrc,
-    /import \{ WatcherResultPanel \} from '\.\.\/components\/WatcherResultPanel\.jsx';/,
-    'imports the shared WatcherResultPanel',
+    /import \{ ResultScreen \} from '\.\.\/components\/ResultScreen\.jsx';/,
+    'imports the shared ResultScreen',
 );
 assert.match(
     formSrc,
@@ -53,8 +53,8 @@ assert.match(
 );
 assert.match(
     formSrc,
-    /if \(result\?\.psbtHex && !txid\) \{[\s\S]+?<WatcherResultPanel/,
-    'done stage renders WatcherResultPanel when result.psbtHex is set',
+    /if \(result\?\.psbtHex && !txid\) \{[\s\S]+?<ResultScreen/,
+    'done stage renders ResultScreen when result.psbtHex is set',
 );
 assert.match(
     formSrc,

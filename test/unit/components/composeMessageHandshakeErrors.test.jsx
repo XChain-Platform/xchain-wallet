@@ -257,7 +257,7 @@ describe('the message key-request reports its failures', () => {
             await drainMicrotasks();
         });
 
-        expect(utils.getByRole('heading', { name: 'Unsigned transaction, ready for signing' }))
+        expect(utils.getByText('Unsigned transaction, ready for signing'))
             .toBeTruthy();
         expect(utils.getByLabelText('Unsigned transaction hex').value).toBe('aa00');
         expect(utils.container.textContent).not.toMatch(/Key request sent/i);

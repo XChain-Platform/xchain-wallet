@@ -33,7 +33,7 @@ const formSrc = read('packages', 'core', 'src', 'shared', 'routes', 'CoinpayForm
 const ownerLaneSrc = read('packages', 'core', 'src', 'shared', 'hooks', 'useOwnerActionLane.js');
 
 assert.match(formSrc, /import \{ useOwnerActionLane \} from '\.\.\/hooks\/useOwnerActionLane\.js';/);
-assert.match(formSrc, /import \{ WatcherResultPanel \} from '\.\.\/components\/WatcherResultPanel\.jsx';/);
+assert.match(formSrc, /import \{ ResultScreen \} from '\.\.\/components\/ResultScreen\.jsx';/);
 assert.match(formSrc, /const ownerLane = useOwnerActionLane\(\{/);
 assert.match(ownerLaneSrc, /import \{ useWalletMode \} from '\.\/useWalletMode\.js';/);
 assert.match(ownerLaneSrc, /const \{ isWatcherMode \} = useWalletMode\(\);/);

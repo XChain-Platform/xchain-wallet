@@ -37,7 +37,7 @@ import { NativeFeeToggle } from '../components/NativeFeeToggle.jsx';
 import { useNativeFee } from '../hooks/useNativeFee.js';
 import { TokenPicker } from './TokenPicker.jsx';
 import { SignCredentials } from '../components/SignCredentials.jsx';
-import { WatcherResultPanel } from '../components/WatcherResultPanel.jsx';
+import { ResultScreen } from '../components/ResultScreen.jsx';
 import { useActionForm } from '../hooks/useActionForm.js';
 import { useSignerInfo } from '../hooks/useSignerInfo.js';
 import {
@@ -51,7 +51,6 @@ import { OwnAddressPickerScreen } from '../components/OwnAddressPickerScreen.jsx
 import styles from './IssueTokenForm.module.css';
 import { submitFailureMessage } from '../utils/submitFailureMessage.js';
 import { tickerReferenceError } from '../utils/tickerGrammar.js';
-import { QueuedResultPanel } from '../components/QueuedResultPanel.jsx';
 
 const chainRegistry = registryLib.defaultRegistry();
 
@@ -447,7 +446,8 @@ export function DestroyForm({ walletId, onBack, initialChainId, initialTick, ini
         if (result?.psbtHex && !txid) {
             return wrap(
                 <FormPage demoGuard={demoGuard} label="Unsigned destroy transaction">
-                    <WatcherResultPanel
+                    <ResultScreen
+                        state="unsigned"
                         result={result}
                         onBuildAnother={handleBuildAnother}
                         onDone={onBack}
@@ -459,7 +459,7 @@ export function DestroyForm({ walletId, onBack, initialChainId, initialTick, ini
         if (result?.queued) {
             return wrap(
                 <FormPage demoGuard={demoGuard} label="Queued destroy transaction">
-                    <QueuedResultPanel onDone={onBack} what="destroy" unsaved={result.unsaved} />
+                    <ResultScreen state="signed-not-broadcast" onDone={onBack} what="destroy" unsaved={result.unsaved} />
                 </FormPage>,
             );
         }

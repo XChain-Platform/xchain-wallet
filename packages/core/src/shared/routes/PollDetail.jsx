@@ -31,7 +31,7 @@ import { ActionConfirmScreen } from '../components/ActionConfirmScreen.jsx';
 import { submitFailureMessage } from '../utils/submitFailureMessage.js';
 import { SignCredentials } from '../components/SignCredentials.jsx';
 import { useSignerReady } from '../hooks/useSignerReady.js';
-import { WatcherResultPanel } from '../components/WatcherResultPanel.jsx';
+import { ResultScreen } from '../components/ResultScreen.jsx';
 import { useWalletMode } from '../hooks/useWalletMode.js';
 import { preferredSourceId } from '../addressSelection.js';
 import {
@@ -43,7 +43,6 @@ import {
 import { customFeeReviewStop } from '../../flows/feeEstimate.js';
 import styles from './IssueTokenForm.module.css';
 import detailStyles from './PollDetail.module.css';
-import { QueuedResultPanel } from '../components/QueuedResultPanel.jsx';
 import { explorerReadFailure } from '../../sdk/explorerErrors.js';
 import { userFacingMessage } from '../utils/userFacingMessage.js';
 import { memoLengthError, MEMO_HINT } from '../utils/memoLimit.js';
@@ -585,10 +584,10 @@ export function PollDetail({ walletId, chainId, pollIndex, onBack }) {
         // pipeline resolves that case rather than throwing, so without this
         // branch the done screen below reports it as a completed action.
         if (result?.queued) {
-            return wrap(<QueuedResultPanel onDone={onBack} unsaved={result.unsaved} />);
+            return wrap(<ResultScreen state="signed-not-broadcast" onDone={onBack} unsaved={result.unsaved} />);
         }
         if (result?.psbtHex && !txid) {
-            return wrap(<WatcherResultPanel result={result} onBuildAnother={() => setStage('view')} onDone={onBack} />);
+            return wrap(<ResultScreen state="unsigned" result={result} onBuildAnother={() => setStage('view')} onDone={onBack} />);
         }
         return wrap(
             <ListPage>

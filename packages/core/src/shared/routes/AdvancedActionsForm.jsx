@@ -28,7 +28,7 @@ import { ActionConfirmScreen } from '../components/ActionConfirmScreen.jsx';
 import { irreversibleConfirmWord } from '../utils/irreversibleActionGate.js';
 import { SignCredentials } from '../components/SignCredentials.jsx';
 import { useSignerReady } from '../hooks/useSignerReady.js';
-import { WatcherResultPanel } from '../components/WatcherResultPanel.jsx';
+import { ResultScreen } from '../components/ResultScreen.jsx';
 import { useWalletMode } from '../hooks/useWalletMode.js';
 import { actionDisplayLabel } from '../utils/actionDisplayLabel.js';
 import { OwnAddressPickerScreen } from '../components/OwnAddressPickerScreen.jsx';
@@ -43,7 +43,6 @@ import styles from './IssueTokenForm.module.css';
 import { useNativeFee } from '../hooks/useNativeFee.js';
 import { preferredSourceId } from '../addressSelection.js';
 import { pickDefaultChainId } from '../chainSelection.js';
-import { QueuedResultPanel } from '../components/QueuedResultPanel.jsx';
 import {
     BTC_EXCLUSIVE_ACTIONS,
     COMMON_ACTIONS,
@@ -635,7 +634,8 @@ export function AdvancedActionsForm({ walletId, onBack, hasDexSurface = true }) 
         const txid = result?.txid || result?.broadcast?.txid;
         if (result?.psbtHex && !txid) {
             return wrap(
-                <WatcherResultPanel
+                <ResultScreen
+                    state="unsigned"
                     result={result}
                     onBuildAnother={handleBuildAnother}
                     onDone={onBack}
@@ -646,7 +646,8 @@ export function AdvancedActionsForm({ walletId, onBack, hasDexSurface = true }) 
         // cannot make.
         if (result?.queued) {
             return wrap(
-                <QueuedResultPanel
+                <ResultScreen
+                    state="signed-not-broadcast"
                     onDone={onBack}
                     what={actionDisplayLabel(action).toLowerCase()}
                     unsaved={result?.unsaved}

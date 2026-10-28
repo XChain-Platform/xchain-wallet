@@ -20,8 +20,7 @@ import { isUserRejection } from '../hooks/useActionConfirmFlow.js';
 import { submitFailureMessage, SIGNED_NOT_BROADCAST_MESSAGE } from '../utils/submitFailureMessage.js';
 import { userFacingMessage } from '../utils/userFacingMessage.js';
 import { ActionConfirmScreen } from '../components/ActionConfirmScreen.jsx';
-import { WatcherResultPanel } from '../components/WatcherResultPanel.jsx';
-import { QueuedResultPanel } from '../components/QueuedResultPanel.jsx';
+import { ResultScreen } from '../components/ResultScreen.jsx';
 import { ListToolbar } from '../components/ListToolbar.jsx';
 import { NetworkFilterDropdown } from '../components/NetworkFilterDropdown.jsx';
 import { OfflineEmptyState } from '../components/OfflineEmptyState.jsx';
@@ -1115,7 +1114,8 @@ function SessionRequestRow({
     if (watcherResult) {
         return (
             <li className={local.requestRow}>
-                <WatcherResultPanel
+                <ResultScreen
+                    state="unsigned"
                     result={watcherResult}
                     onBuildAnother={onClearWatcherResult}
                     onDone={onClearWatcherResult}
@@ -1129,7 +1129,7 @@ function SessionRequestRow({
     if (stage === 'queued') {
         return (
             <li className={local.requestRow}>
-                <QueuedResultPanel onDone={onQueuedSeen} what="key share" unsaved={shareState?.unsaved} />
+                <ResultScreen state="signed-not-broadcast" onDone={onQueuedSeen} what="key share" unsaved={shareState?.unsaved} />
             </li>
         );
     }

@@ -388,7 +388,7 @@ describe('trade form style guide primitives', () => {
             OpenOrdersPanel: ['Switch'],
             PlaceOrderPanel: ['Checkbox'],
             PreflightPanel: ['Checkbox'],
-            WatcherResultPanel: ['RadioGroup'],
+            WatcherExport: ['RadioGroup'],
         };
 
         for (const [componentName, controls] of Object.entries(componentControls)) {

@@ -34,7 +34,7 @@ import { extractActionIndex } from '../utils/actionIndexFromTx.js';
 import { submitFailureMessage } from '../utils/submitFailureMessage.js';
 import { useActionConfirmFlow, useConfirmSubmit, isUserRejection } from '../hooks/useActionConfirmFlow.js';
 import { ActionConfirmScreen } from '../components/ActionConfirmScreen.jsx';
-import { QueuedResultPanel } from '../components/QueuedResultPanel.jsx';
+import { ResultScreen } from '../components/ResultScreen.jsx';
 import { MEMO_HINT, memoLengthError } from '../utils/memoLimit.js';
 import { actionTextSafetyError } from '../utils/actionTextSafety.js';
 import { imagePreviewDataUrl, publishFileType } from '../utils/publishingFile.js';
@@ -830,7 +830,8 @@ export function AttachContentForm({ walletId, chainId, tick, issuerAddress = nul
     // copy is queued is the double-broadcast trap).
     if (queuedLeg) {
         return wrap(
-            <QueuedResultPanel
+            <ResultScreen
+                state="signed-not-broadcast"
                 onDone={onBack}
                 what="attachment"
                 unsaved={queuedLeg?.unsaved}

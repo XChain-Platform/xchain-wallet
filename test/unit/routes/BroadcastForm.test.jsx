@@ -466,7 +466,7 @@ describe('BroadcastForm broadcasts a pasted signed transaction safely', () => {
             await screen.findByText(/spends 1 input/);
             fireEvent.click(screen.getByRole('button', { name: 'Broadcast transaction' }));
 
-            expect(await screen.findByRole('heading', { name: 'Signed. Not broadcast yet.' })).toBeTruthy();
+            expect(await screen.findByText('Signed. Not broadcast yet.')).toBeTruthy();
             expect(Boolean(screen.queryByText(/could not be saved to the queue/))).toBe(warns);
         } finally {
             clearQueuedResultHandoff();

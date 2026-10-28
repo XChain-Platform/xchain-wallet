@@ -22,7 +22,7 @@ import { submitFailureMessage } from '../utils/submitFailureMessage.js';
 import { humanizeError } from '../utils/humanizeError.js';
 import { useSignerReady } from '../hooks/useSignerReady.js';
 import { useWalletMode } from '../hooks/useWalletMode.js';
-import { WatcherResultPanel } from '../components/WatcherResultPanel.jsx';
+import { ResultScreen } from '../components/ResultScreen.jsx';
 import { preferredSourceId } from '../addressSelection.js';
 import {
     compareDecimalStrings,
@@ -517,7 +517,8 @@ export function BetFeedDetail({ walletId, chainId, feedIndex, onOpenOracle, onSe
     if (!feed) return wrap(<p>Loading market…</p>);
     if (result?.psbtHex && !(result?.txid || result?.tx_hash)) {
         return wrap(
-            <WatcherResultPanel
+            <ResultScreen
+                state="unsigned"
                 result={result}
                 onBuildAnother={() => setResult(null)}
                 onDone={onBack}

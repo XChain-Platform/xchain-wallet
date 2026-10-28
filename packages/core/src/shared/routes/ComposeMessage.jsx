@@ -18,8 +18,7 @@ import { useDemoGuard } from '../hooks/useDemoGuard.jsx';
 import { useActionConfirmFlow, useConfirmSubmit, isUserRejection } from '../hooks/useActionConfirmFlow.js';
 import { useOwnerActionLane } from '../hooks/useOwnerActionLane.js';
 import { ActionConfirmScreen } from '../components/ActionConfirmScreen.jsx';
-import { WatcherResultPanel } from '../components/WatcherResultPanel.jsx';
-import { QueuedResultPanel } from '../components/QueuedResultPanel.jsx';
+import { ResultScreen } from '../components/ResultScreen.jsx';
 import { ContactsPickerScreen } from '../components/ContactsPickerScreen.jsx';
 import { buildDeliveryNetworkOptions } from '../utils/deliveryNetworks.js';
 import { useSignerReady } from '../hooks/useSignerReady.js';
@@ -905,12 +904,13 @@ function ComposeMessageForm({
     }
 
     if (handshakeQueued) {
-        return wrap(<QueuedResultPanel onDone={onBack} what={t('composeMessage.whatKeyRequest')} unsaved={handshakeQueued.unsaved} />);
+        return wrap(<ResultScreen state="signed-not-broadcast" onDone={onBack} what={t('composeMessage.whatKeyRequest')} unsaved={handshakeQueued.unsaved} />);
     }
 
     if (handshakeResult) {
         return wrap(
-            <WatcherResultPanel
+            <ResultScreen
+                state="unsigned"
                 result={handshakeResult}
                 onBuildAnother={() => setHandshakeResult(null)}
                 onDone={() => setHandshakeResult(null)}
@@ -921,7 +921,7 @@ function ComposeMessageForm({
     if (stage === 'done') {
         // Signed but held in the broadcast queue: the message has not left the wallet.
         if (result?.queued) {
-            return wrap(<QueuedResultPanel onDone={onBack} what={t('composeMessage.whatMessage')} unsaved={result.unsaved} />);
+            return wrap(<ResultScreen state="signed-not-broadcast" onDone={onBack} what={t('composeMessage.whatMessage')} unsaved={result.unsaved} />);
         }
         return wrap(
             <>

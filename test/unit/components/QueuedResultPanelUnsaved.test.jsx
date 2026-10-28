@@ -10,7 +10,7 @@
 
 import { describe, it, expect, afterEach } from 'vitest';
 import { render, screen, cleanup } from '@testing-library/react';
-import { QueuedResultPanel } from '../../../packages/core/src/shared/components/QueuedResultPanel.jsx';
+import { ResultScreen } from '../../../packages/core/src/shared/components/ResultScreen.jsx';
 import {
     SIGNED_NOT_BROADCAST_MESSAGE,
     SIGNED_NOT_BROADCAST_UNSAVED_WARNING,
@@ -18,35 +18,35 @@ import {
 
 afterEach(() => cleanup());
 
-describe('QueuedResultPanel unsaved warning', () => {
+describe('ResultScreen signed-not-broadcast unsaved warning', () => {
     it('does not render an alert when unsaved is absent or false', () => {
-        const { rerender } = render(<QueuedResultPanel onDone={() => {}} />);
+        const { rerender } = render(<ResultScreen state="signed-not-broadcast" onDone={() => {}} />);
         expect(screen.queryByRole('alert')).toBeNull();
 
-        rerender(<QueuedResultPanel onDone={() => {}} unsaved={false} />);
+        rerender(<ResultScreen state="signed-not-broadcast" onDone={() => {}} unsaved={false} />);
         expect(screen.queryByRole('alert')).toBeNull();
     });
 
     it('renders the unsaved warning as exactly one alert', () => {
-        render(<QueuedResultPanel onDone={() => {}} unsaved />);
+        render(<ResultScreen state="signed-not-broadcast" onDone={() => {}} unsaved />);
         const alerts = screen.getAllByRole('alert');
         expect(alerts.length).toBe(1);
         expect(alerts[0].textContent).toBe(SIGNED_NOT_BROADCAST_UNSAVED_WARNING);
     });
 
     it('follows an explicit unsaved verdict when the input changes', () => {
-        const { rerender } = render(<QueuedResultPanel onDone={() => {}} unsaved={false} />);
+        const { rerender } = render(<ResultScreen state="signed-not-broadcast" onDone={() => {}} unsaved={false} />);
         expect(screen.queryByRole('alert')).toBeNull();
 
-        rerender(<QueuedResultPanel onDone={() => {}} unsaved />);
+        rerender(<ResultScreen state="signed-not-broadcast" onDone={() => {}} unsaved />);
         expect(screen.getByRole('alert').textContent).toBe(SIGNED_NOT_BROADCAST_UNSAVED_WARNING);
 
-        rerender(<QueuedResultPanel onDone={() => {}} unsaved={false} />);
+        rerender(<ResultScreen state="signed-not-broadcast" onDone={() => {}} unsaved={false} />);
         expect(screen.queryByRole('alert')).toBeNull();
     });
 
     it('keeps the hint, status and single Done button beside the warning', () => {
-        render(<QueuedResultPanel onDone={() => {}} unsaved />);
+        render(<ResultScreen state="signed-not-broadcast" onDone={() => {}} unsaved />);
         expect(screen.getByText(/signed but couldn't reach the network/i)).toBeTruthy();
         expect(screen.getByRole('status')).toBeTruthy();
         const buttons = screen.getAllByRole('button', { name: 'Done' });

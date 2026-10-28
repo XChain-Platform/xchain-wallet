@@ -382,9 +382,7 @@ describe('ParallelComposer confirmation', () => {
         fireEvent.click(screen.getByRole('button', { name: 'Sign all' }));
         fireEvent.click(await screen.findByRole('button', { name: 'Sign' }));
 
-        expect(await screen.findByRole('heading', {
-            name: 'Unsigned transaction, ready for signing',
-        })).toBeTruthy();
+        expect(await screen.findByText('Unsigned transaction, ready for signing')).toBeTruthy();
         expect(screen.getByLabelText('Unsigned transaction hex').value).toBe('aa00');
         expect(screen.queryByText('Parallel run complete')).toBeNull();
         expect(messaging.advancedAction).not.toHaveBeenCalled();

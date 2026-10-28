@@ -34,8 +34,7 @@ import { coinFromChainId } from '../components/BalanceList.jsx';
 import { OwnAddressPickerScreen } from '../components/OwnAddressPickerScreen.jsx';
 import { SignCredentials, isHwSource } from '../components/SignCredentials.jsx';
 import { useSignerReady } from '../hooks/useSignerReady.js';
-import { WatcherResultPanel } from '../components/WatcherResultPanel.jsx';
-import { QueuedResultPanel } from '../components/QueuedResultPanel.jsx';
+import { ResultScreen } from '../components/ResultScreen.jsx';
 import { useWalletMode } from '../hooks/useWalletMode.js';
 import { useNetworkOffline } from '../hooks/useNetworkOffline.js';
 import { useHideReachabilityNotice } from '../components/hideReachabilityNotice.js';
@@ -650,7 +649,8 @@ export function CrossChainSwapForm({ walletId, onBack }) {
         const txid = result?.txid;
         if (result?.psbtHex && !txid) {
             return wrap(
-                <WatcherResultPanel
+                <ResultScreen
+                    state="unsigned"
                     result={result}
                     onBuildAnother={handleBuildAnother}
                     onDone={onBack}
@@ -661,7 +661,7 @@ export function CrossChainSwapForm({ walletId, onBack }) {
         // resolves a transient broadcast failure that way, and the success
         // copy below would report an escrow that is not open yet.
         if (result?.queued) {
-            return wrap(<QueuedResultPanel onDone={onBack} what="cross-chain swap" unsaved={result.unsaved} />);
+            return wrap(<ResultScreen state="signed-not-broadcast" onDone={onBack} what="cross-chain swap" unsaved={result.unsaved} />);
         }
         return wrap(
             <>

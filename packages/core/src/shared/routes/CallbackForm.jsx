@@ -30,7 +30,7 @@ import { humanizeError } from '../utils/humanizeError.js';
 import { formatWithThousands } from '../utils/amountFormat.js';
 import { LockedTokenContext } from '../components/LockedTokenContext.jsx';
 import { SignCredentials } from '../components/SignCredentials.jsx';
-import { WatcherResultPanel } from '../components/WatcherResultPanel.jsx';
+import { ResultScreen } from '../components/ResultScreen.jsx';
 import { useActionForm } from '../hooks/useActionForm.js';
 import { useSignerInfo } from '../hooks/useSignerInfo.js';
 import { useNativeFee } from '../hooks/useNativeFee.js';
@@ -46,7 +46,6 @@ import { customFeeReviewStop } from '../../flows/feeEstimate.js';
 import { OwnAddressPickerScreen } from '../components/OwnAddressPickerScreen.jsx';
 import styles from './IssueTokenForm.module.css';
 import { submitFailureMessage } from '../utils/submitFailureMessage.js';
-import { QueuedResultPanel } from '../components/QueuedResultPanel.jsx';
 import { MAX_MEMO_LENGTH, memoLengthError, utf8ByteLength } from '../utils/memoLimit.js';
 import { isValidAddressForChain } from '../utils/addressValidation.js';
 import { tickerReferenceError } from '../utils/tickerGrammar.js';
@@ -684,14 +683,14 @@ export function CallbackForm({ walletId, onBack, initialChainId, initialTick, in
         const txid = result?.txid || result?.broadcast?.txid;
         if (result?.psbtHex && !txid) {
             return wrap(
-                <WatcherResultPanel result={result} onBuildAnother={handleBuildAnother} onDone={onBack} />,
+                <ResultScreen state="unsigned" result={result} onBuildAnother={handleBuildAnother} onDone={onBack} />,
             );
         }
         // Signed but not broadcast, so nothing is on its way to
         // confirming and no holder is being paid yet.
         if (result?.queued) {
             return wrap(
-                <QueuedResultPanel onDone={onBack} what="callback" unsaved={result?.unsaved} />,
+                <ResultScreen state="signed-not-broadcast" onDone={onBack} what="callback" unsaved={result?.unsaved} />,
             );
         }
         return wrap(

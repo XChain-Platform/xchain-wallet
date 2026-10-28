@@ -26,8 +26,7 @@ import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { useDemoGuard } from '../hooks/useDemoGuard.jsx';
 import { humanizeError } from '../utils/humanizeError.js';
 import { ActionConfirmScreen } from '../components/ActionConfirmScreen.jsx';
-import { WatcherResultPanel } from '../components/WatcherResultPanel.jsx';
-import { QueuedResultPanel } from '../components/QueuedResultPanel.jsx';
+import { ResultScreen } from '../components/ResultScreen.jsx';
 import { NativeFeeToggle } from '../components/NativeFeeToggle.jsx';
 import { useNativeFee } from '../hooks/useNativeFee.js';
 import { useActionForm } from '../hooks/useActionForm.js';
@@ -292,7 +291,8 @@ export function AddressPreferencesForm({ walletId, chainId: initialChainId, addr
         const txid = result?.txid || result?.broadcast?.txid;
         if (result?.queued) {
             return wrap(
-                <QueuedResultPanel
+                <ResultScreen
+                    state="signed-not-broadcast"
                     onDone={onBack}
                     what="address preferences"
                     unsaved={result?.unsaved}
@@ -301,7 +301,7 @@ export function AddressPreferencesForm({ walletId, chainId: initialChainId, addr
         }
         if (result?.psbtHex && !txid) {
             return wrap(
-                <WatcherResultPanel result={result} onBuildAnother={handleBuildAnother} onDone={onBack} />,
+                <ResultScreen state="unsigned" result={result} onBuildAnother={handleBuildAnother} onDone={onBack} />,
             );
         }
         return wrap(

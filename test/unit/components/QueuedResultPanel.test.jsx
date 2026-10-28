@@ -10,16 +10,16 @@
 
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import { render, screen, fireEvent, cleanup } from '@testing-library/react';
-import { QueuedResultPanel } from '../../../packages/core/src/shared/components/QueuedResultPanel.jsx';
+import { ResultScreen } from '../../../packages/core/src/shared/components/ResultScreen.jsx';
 import {
     SIGNED_NOT_BROADCAST_UNSAVED_WARNING,
 } from '../../../packages/core/src/shared/utils/submitFailureMessage.js';
 
 afterEach(() => cleanup());
 
-describe('QueuedResultPanel', () => {
+describe('ResultScreen signed-not-broadcast', () => {
     it('says the transaction is signed and not yet broadcast', () => {
-        render(<QueuedResultPanel onDone={() => {}} />);
+        render(<ResultScreen state="signed-not-broadcast" onDone={() => {}} />);
         expect(screen.getByText('Signed. Not broadcast yet.')).toBeTruthy();
         expect(screen.getByText(/signed but couldn't reach the network/i)).toBeTruthy();
         // It must not claim the action happened.
@@ -29,7 +29,7 @@ describe('QueuedResultPanel', () => {
     // nothing in the wallet re-broadcasts a queued transaction, so the
     // panel may promise a reminder and never an automatic retry.
     it('promises a reminder, not an automatic re-broadcast', () => {
-        render(<QueuedResultPanel onDone={() => {}} />);
+        render(<ResultScreen state="signed-not-broadcast" onDone={() => {}} />);
         expect(screen.getByText(/reminds you when the network is back/i)).toBeTruthy();
         expect(screen.getByText(/only goes out when you broadcast it/i)).toBeTruthy();
         expect(screen.queryByText(/automatically/i)).toBeNull();
@@ -39,14 +39,14 @@ describe('QueuedResultPanel', () => {
     // The whole point of the panel: the user has to know a signed copy exists,
     // or they submit a second one (the §5.3.4 double-broadcast trap).
     it('points at the queue and warns against submitting again', () => {
-        render(<QueuedResultPanel onDone={() => {}} />);
+        render(<ResultScreen state="signed-not-broadcast" onDone={() => {}} />);
         expect(screen.getByText(/queued-transactions banner/i)).toBeTruthy();
         expect(screen.getByText(/don't submit this again/i)).toBeTruthy();
         expect(screen.queryByRole('alert')).toBeNull();
     });
 
     it('warns when the signed bytes were not saved to durable storage', () => {
-        render(<QueuedResultPanel onDone={() => {}} unsaved />);
+        render(<ResultScreen state="signed-not-broadcast" onDone={() => {}} unsaved />);
         const alerts = screen.getAllByRole('alert');
         expect(alerts).toHaveLength(1);
         expect(alerts[0].textContent).toBe(SIGNED_NOT_BROADCAST_UNSAVED_WARNING);
@@ -56,18 +56,18 @@ describe('QueuedResultPanel', () => {
     });
 
     it('does not warn when durable storage accepted the signed bytes', () => {
-        render(<QueuedResultPanel onDone={() => {}} unsaved={false} />);
+        render(<ResultScreen state="signed-not-broadcast" onDone={() => {}} unsaved={false} />);
         expect(screen.queryByRole('alert')).toBeNull();
     });
 
     it('names the action when the form supplies one', () => {
-        render(<QueuedResultPanel onDone={() => {}} what="dividend" />);
+        render(<ResultScreen state="signed-not-broadcast" onDone={() => {}} what="dividend" />);
         expect(screen.getByText(/Your dividend is signed/i)).toBeTruthy();
     });
 
     it('announces itself politely and offers only Done', () => {
         const onDone = vi.fn();
-        render(<QueuedResultPanel onDone={onDone} what="mint" />);
+        render(<ResultScreen state="signed-not-broadcast" onDone={onDone} what="mint" />);
         expect(screen.getByRole('status').getAttribute('aria-live')).toBe('polite');
         const buttons = screen.getAllByRole('button');
         expect(buttons.length).toBe(1);

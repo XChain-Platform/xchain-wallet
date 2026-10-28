@@ -26,14 +26,14 @@ const formSrc = readFileSync(
 // hook. The form declares `action: 'DESTROY'`; `isWatcherMode` and the
 // encode-only buildActionPsbtRequest branch are the hook's job.
 assert.match(formSrc, /import \{ useActionForm \} from '\.\.\/hooks\/useActionForm\.js';/);
-assert.match(formSrc, /import \{ WatcherResultPanel \} from '\.\.\/components\/WatcherResultPanel\.jsx';/);
+assert.match(formSrc, /import \{ ResultScreen \} from '\.\.\/components\/ResultScreen\.jsx';/);
 assert.match(formSrc, /const \{[\s\S]+?isWatcherMode,[\s\S]+?\} = useActionForm\(\{/);
 assert.match(
     formSrc,
     /useActionForm\(\{[\s\S]+?action:\s*'DESTROY'/,
 );
 assert.match(formSrc, /if \(!isWatcherMode && !isHwSource && \(!signerReady && password\.length === 0\)\) return;/);
-assert.match(formSrc, /if \(result\?\.psbtHex && !txid\) \{[\s\S]+?<WatcherResultPanel/);
+assert.match(formSrc, /if \(result\?\.psbtHex && !txid\) \{[\s\S]+?<ResultScreen/);
 assert.match(formSrc, /\{isWatcherMode \? \([\s\S]+?Watcher mode/);
 assert.match(formSrc, /Create unsigned transaction/);
 console.log('destroy-watcher-mode smoke OK');

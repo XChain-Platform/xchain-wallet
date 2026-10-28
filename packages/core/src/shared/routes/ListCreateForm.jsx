@@ -19,7 +19,7 @@ import { SignCredentials, isHwSource } from '../components/SignCredentials.jsx';
 import { useSignerReady } from '../hooks/useSignerReady.js';
 import { useWalletMode } from '../hooks/useWalletMode.js';
 import { useDropZone } from '../hooks/useDropZone.js';
-import { WatcherResultPanel } from '../components/WatcherResultPanel.jsx';
+import { ResultScreen } from '../components/ResultScreen.jsx';
 import { OwnAddressPickerScreen } from '../components/OwnAddressPickerScreen.jsx';
 import { DiagnosticDetails } from '../components/DiagnosticDetails.jsx';
 import { NativeFeeToggle } from '../components/NativeFeeToggle.jsx';
@@ -49,7 +49,6 @@ import {
 } from '../../flows/listMetaInput.js';
 import { submitFailureMessage } from '../utils/submitFailureMessage.js';
 import { memoLengthError, MEMO_HINT } from '../utils/memoLimit.js';
-import { QueuedResultPanel } from '../components/QueuedResultPanel.jsx';
 import { listActionSize, listActionSizeError } from '../utils/listActionSize.js';
 
 const chainRegistry = registryLib.defaultRegistry();
@@ -531,13 +530,13 @@ export function ListCreateForm({ walletId, chainId: initialChainId, initialType,
     if (stage === 'done') {
         const txid = result?.txid || result?.tx_hash;
         if (result?.psbtHex && !txid) {
-            return wrap(<WatcherResultPanel result={result} onBuildAnother={() => { setResult(null); setStage('form'); }} onDone={onBack} />);
+            return wrap(<ResultScreen state="unsigned" result={result} onBuildAnother={() => { setResult(null); setStage('form'); }} onDone={onBack} />);
         }
         // Signed but never broadcast. "List published... is on its
         // way" is the one thing that did not happen.
         if (result?.queued) {
             return wrap(
-                <QueuedResultPanel onDone={onBack} what="list" unsaved={result.unsaved} />,
+                <ResultScreen state="signed-not-broadcast" onDone={onBack} what="list" unsaved={result.unsaved} />,
             );
         }
         return wrap(

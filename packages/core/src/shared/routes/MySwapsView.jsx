@@ -46,8 +46,7 @@ import { useDemoGuard } from '../hooks/useDemoGuard.jsx';
 import { ListPickerScreen } from '../components/ListPickerScreen.jsx';
 import { MarketLifecycleTimeline } from '../components/MarketLifecycleTimeline.jsx';
 import { ActionConfirmScreen } from '../components/ActionConfirmScreen.jsx';
-import { WatcherResultPanel } from '../components/WatcherResultPanel.jsx';
-import { QueuedResultPanel } from '../components/QueuedResultPanel.jsx';
+import { ResultScreen } from '../components/ResultScreen.jsx';
 import { useOwnerActionLane } from '../hooks/useOwnerActionLane.js';
 import { useSignerReady } from '../hooks/useSignerReady.js';
 import { useNativeFee } from '../hooks/useNativeFee.js';
@@ -653,7 +652,8 @@ function SwapActionPanel({
         // Signed but not broadcast yet: nothing changed on chain, so no success copy.
         if (result.queued) {
             return wrap(
-                <QueuedResultPanel
+                <ResultScreen
+                    state="signed-not-broadcast"
                     onDone={onDone}
                     what={isCancel ? 'swap cancel' : 'swap edit'}
                     unsaved={result.unsaved}
@@ -661,7 +661,7 @@ function SwapActionPanel({
             );
         }
         if (result.psbtHex && !txid) {
-            return wrap(<WatcherResultPanel result={result} onDone={onDone} />);
+            return wrap(<ResultScreen state="unsigned" result={result} onDone={onDone} />);
         }
         return wrap(
             <>

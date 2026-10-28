@@ -19,8 +19,7 @@ import { TokenPicker } from './TokenPicker.jsx';
 import { OwnAddressPickerScreen } from '../components/OwnAddressPickerScreen.jsx';
 import { SignCredentials, isHwSource } from '../components/SignCredentials.jsx';
 import { NativeFeeToggle } from '../components/NativeFeeToggle.jsx';
-import { WatcherResultPanel } from '../components/WatcherResultPanel.jsx';
-import { QueuedResultPanel } from '../components/QueuedResultPanel.jsx';
+import { ResultScreen } from '../components/ResultScreen.jsx';
 import { ActionConfirmScreen } from '../components/ActionConfirmScreen.jsx';
 import { useTickBalance } from '../hooks/useTickBalance.js';
 import { useTokenInfo } from '../hooks/useTokenInfo.js';
@@ -574,7 +573,8 @@ export function BridgeMoveForm({ walletId, accountId, initialChainId, initialTic
     if (stage === 'done') {
         if (result?.psbtHex && !result?.txid) {
             return wrap(
-                <WatcherResultPanel
+                <ResultScreen
+                    state="unsigned"
                     result={result}
                     onBuildAnother={() => { setResult(null); setStage('form'); }}
                     onDone={onBack}
@@ -583,7 +583,8 @@ export function BridgeMoveForm({ walletId, accountId, initialChainId, initialTic
         }
         if (result?.queued) {
             return wrap(
-                <QueuedResultPanel
+                <ResultScreen
+                    state="signed-not-broadcast"
                     onDone={onBack}
                     what="bridge transfer"
                     unsaved={result?.unsaved}

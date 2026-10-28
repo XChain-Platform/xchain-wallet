@@ -24,7 +24,7 @@ import { ActionConfirmScreen } from '../components/ActionConfirmScreen.jsx';
 import { LockedTokenContext } from '../components/LockedTokenContext.jsx';
 import { SignCredentials } from '../components/SignCredentials.jsx';
 import { useSignerReady } from '../hooks/useSignerReady.js';
-import { WatcherResultPanel } from '../components/WatcherResultPanel.jsx';
+import { ResultScreen } from '../components/ResultScreen.jsx';
 import { useWalletMode } from '../hooks/useWalletMode.js';
 import { useSignerInfo } from '../hooks/useSignerInfo.js';
 import { AmountField } from '../components/AmountField.jsx';
@@ -60,7 +60,6 @@ import { isNativeCoinTick, nativeCoinTickMessage, unknownTickMessage } from '../
 import styles from './IssueTokenForm.module.css';
 import { preferredSourceId } from '../addressSelection.js';
 import { pickDefaultChainId } from '../chainSelection.js';
-import { QueuedResultPanel } from '../components/QueuedResultPanel.jsx';
 import { MEMO_HINT, memoLengthError } from '../utils/memoLimit.js';
 import { listMembers } from '../../flows/allowListSelfCheck.js';
 import { normalizeProtocolFee } from '../../flows/protocolFeeRow.js';
@@ -841,7 +840,8 @@ export function DividendForm({ walletId, onBack, initialChainId, initialTick, in
         const txid = result?.txid || result?.broadcast?.txid;
         if (result?.psbtHex && !txid) {
             return wrap(
-                <WatcherResultPanel
+                <ResultScreen
+                    state="unsigned"
                     result={result}
                     onBuildAnother={handleBuildAnother}
                     onDone={onBack}
@@ -853,7 +853,7 @@ export function DividendForm({ walletId, onBack, initialChainId, initialTick, in
         // node was briefly unreachable that their holders had been paid.
         if (result?.queued) {
             return wrap(
-                <QueuedResultPanel onDone={onBack} what="dividend" unsaved={result.unsaved} />,
+                <ResultScreen state="signed-not-broadcast" onDone={onBack} what="dividend" unsaved={result.unsaved} />,
             );
         }
         return wrap(

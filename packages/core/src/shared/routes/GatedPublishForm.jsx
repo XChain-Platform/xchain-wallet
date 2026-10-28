@@ -15,7 +15,7 @@ import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { useDemoGuard } from '../hooks/useDemoGuard.jsx';
 import { SignCredentials, isHwSource } from '../components/SignCredentials.jsx';
 import { useSignerReady } from '../hooks/useSignerReady.js';
-import { WatcherResultPanel } from '../components/WatcherResultPanel.jsx';
+import { ResultScreen } from '../components/ResultScreen.jsx';
 import { useWalletMode } from '../hooks/useWalletMode.js';
 import {
     estimateNativeSendFeeTiers,
@@ -26,7 +26,6 @@ import { customFeeReviewStop } from '../../flows/feeEstimate.js';
 import { submitFailureMessage } from '../utils/submitFailureMessage.js';
 import { useActionConfirmFlow, useConfirmSubmit, isUserRejection } from '../hooks/useActionConfirmFlow.js';
 import { ActionConfirmScreen } from '../components/ActionConfirmScreen.jsx';
-import { QueuedResultPanel } from '../components/QueuedResultPanel.jsx';
 import { imagePreviewDataUrl, publishFileType } from '../utils/publishingFile.js';
 import { memoLengthError } from '../utils/memoLimit.js';
 import { actionTextSafetyError } from '../utils/actionTextSafety.js';
@@ -483,7 +482,8 @@ export function GatedPublishForm({ walletId, chainId, tick, issuerAddress = null
         if (result?.psbtHex && !result?.txid) {
             return wrap(
                 <>
-                    <WatcherResultPanel
+                    <ResultScreen
+                        state="unsigned"
                         result={result}
                         onBuildAnother={() => { setResult(null); setStage('form'); }}
                         onDone={onBack}
@@ -496,7 +496,7 @@ export function GatedPublishForm({ walletId, chainId, tick, issuerAddress = null
         }
         if (result?.queued) {
             return wrap(
-                <QueuedResultPanel onDone={onBack} what={t('gatedPublish.queuedWhat')} unsaved={result.unsaved} />,
+                <ResultScreen state="signed-not-broadcast" onDone={onBack} what={t('gatedPublish.queuedWhat')} unsaved={result.unsaved} />,
             );
         }
         return wrap(

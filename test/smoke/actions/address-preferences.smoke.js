@@ -57,7 +57,7 @@ assert.match(form, /reviewBaseline/, 'review compares against the re-fetched bas
 assert.match(form, /CHANGED/, 'review marks changed rows');
 assert.match(form, /unchanged/, 'review shows unchanged rows being re-written too');
 assert.match(form, /<NativeFeeToggle/, 'PC-51 toggle mounted');
-assert.match(form, /WatcherResultPanel/, 'watcher encode-only lane');
+assert.match(form, /ResultScreen/, 'watcher encode-only lane');
 assert.match(
     form,
     /useOwnerActionLane\(\{[\s\S]*?software: 'addressPreferencesAction',[\s\S]*?hardware: 'addressPreferencesActionHw',[\s\S]*?\}\)/,

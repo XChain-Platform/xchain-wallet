@@ -46,8 +46,7 @@ import { useDemoGuard } from '../hooks/useDemoGuard.jsx';
 import { SignCredentials, isHwSource } from '../components/SignCredentials.jsx';
 import { useSignerReady } from '../hooks/useSignerReady.js';
 import { useWalletMode } from '../hooks/useWalletMode.js';
-import { WatcherResultPanel } from '../components/WatcherResultPanel.jsx';
-import { QueuedResultPanel } from '../components/QueuedResultPanel.jsx';
+import { ResultScreen } from '../components/ResultScreen.jsx';
 import { actionDisplayLabel } from '../utils/actionDisplayLabel.js';
 import { userFacingMessage } from '../utils/userFacingMessage.js';
 import {
@@ -602,7 +601,8 @@ export function BatchComposerForm({ walletId, onBack, hasDexSurface = true }) {
         const txid = result?.txid || result?.broadcast?.txid;
         if (result?.psbtHex && !txid) {
             return wrap(
-                <WatcherResultPanel
+                <ResultScreen
+                    state="unsigned"
                     result={result}
                     onBuildAnother={() => { setResult(null); setComposed(null); setStage('compose'); }}
                     onDone={onBack}
@@ -614,7 +614,7 @@ export function BatchComposerForm({ walletId, onBack, hasDexSurface = true }) {
         // broadcast" would report N sub-actions as sent when none are.
         if (result?.queued) {
             return wrap(
-                <QueuedResultPanel onDone={onBack} what="batch" unsaved={result?.unsaved} />,
+                <ResultScreen state="signed-not-broadcast" onDone={onBack} what="batch" unsaved={result?.unsaved} />,
             );
         }
         return wrap(

@@ -72,12 +72,11 @@ import {
 import { boundListIndex, editListConflict } from '../../flows/accessListSlots.js';
 import { isListEditRemoveActive } from '../../flows/protocolActivations.js';
 import { ActionConfirmScreen } from '../components/ActionConfirmScreen.jsx';
-import { WatcherResultPanel } from '../components/WatcherResultPanel.jsx';
+import { ResultScreen } from '../components/ResultScreen.jsx';
 import {
     DISPENSER_PRICE_STALE_MESSAGE,
     isDispenserPriceStale,
 } from '../utils/dispenserPricing.js';
-import { QueuedResultPanel } from '../components/QueuedResultPanel.jsx';
 import { useToast } from '../components/ToastHost.jsx';
 import { useDemoGuard } from '../hooks/useDemoGuard.jsx';
 import { useOwnerActionLane } from '../hooks/useOwnerActionLane.js';
@@ -1608,10 +1607,10 @@ export function DispenserDetail({ walletId, chainId, actionIndex, onBack, onCanc
     // nothing reached the chain yet, so neither gets the "submitted" copy.
     const ownerPendingPanel = (res, onDone) => {
         if (res?.queued) {
-            return wrap(<QueuedResultPanel onDone={onDone} what="dispenser update" unsaved={res.unsaved} />);
+            return wrap(<ResultScreen state="signed-not-broadcast" onDone={onDone} what="dispenser update" unsaved={res.unsaved} />);
         }
         if (res?.psbtHex && !(res.txid || res.broadcast?.txid)) {
-            return wrap(<WatcherResultPanel result={res} onDone={onDone} />);
+            return wrap(<ResultScreen state="unsigned" result={res} onDone={onDone} />);
         }
         return null;
     };
@@ -1879,7 +1878,7 @@ export function DispenserDetail({ walletId, chainId, actionIndex, onBack, onCanc
 
     if (buyStage === 'done') {
         if (buyResult?.psbtHex && !(buyResult.txid || buyResult.broadcast?.txid)) {
-            return wrap(<WatcherResultPanel result={buyResult} onDone={onBack} />);
+            return wrap(<ResultScreen state="unsigned" result={buyResult} onDone={onBack} />);
         }
         const txid = buyResult?.txid || buyResult?.broadcast?.txid;
         return wrap(

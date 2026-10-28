@@ -1193,7 +1193,7 @@ describe('Send flow with mocked messaging', () => {
         await openPasswordConfirm(messaging);
         await approveWithPassword(messaging);
 
-        expect(await screen.findByRole('heading', { name: 'Signed. Not broadcast yet.' }))
+        expect(await screen.findByText('Signed. Not broadcast yet.'))
             .toBeInTheDocument();
         expect(within(screen.getByRole('main')).getByRole('status')).toHaveTextContent(/queued-transactions banner/i);
         expect(within(screen.getByRole('main')).getByRole('status')).toHaveTextContent(/don't send this payment again/i);
@@ -1231,7 +1231,7 @@ describe('Send flow with mocked messaging', () => {
         await openPasswordConfirm(messaging);
         await approveWithPassword(messaging);
 
-        expect(await screen.findByRole('heading', { name: 'Signed. Not broadcast yet.' }))
+        expect(await screen.findByText('Signed. Not broadcast yet.'))
             .toBeInTheDocument();
         expect(within(screen.getByRole('main')).getByRole('status')).toHaveTextContent(/waiting in the queued-transactions banner/i);
         expect(within(screen.getByRole('main')).getByRole('status')).not.toHaveTextContent('ETIMEDOUT');
@@ -1303,8 +1303,8 @@ describe('Send flow with mocked messaging', () => {
         }));
         expect(messaging.sendToken).not.toHaveBeenCalled();
         expect(messaging.composeForConfirm).not.toHaveBeenCalled();
-        expect(await screen.findByRole('heading', { name: 'Unsigned transaction, ready for signing' }))
-            .toBeInTheDocument();
+        expect(await screen.findByTestId('result-screen-notice'))
+            .toHaveTextContent('Unsigned transaction, ready for signing');
         expect(screen.getByLabelText('Unsigned transaction hex')).toHaveValue(PSBT);
     });
 
@@ -1322,8 +1322,8 @@ describe('Send flow with mocked messaging', () => {
         expect(messaging.buildSendPsbtRequest).toHaveBeenCalledTimes(1);
 
         build.resolve({ psbtHex: PSBT, fromAddress: FROM, chainId: CHAIN_ID });
-        expect(await screen.findByRole('heading', { name: 'Unsigned transaction, ready for signing' }))
-            .toBeInTheDocument();
+        expect(await screen.findByTestId('result-screen-notice'))
+            .toHaveTextContent('Unsigned transaction, ready for signing');
     });
 
     it('keeps the reviewed source fixed when the active-address lookup settles late', async () => {

@@ -274,7 +274,7 @@ describe('coin-paid dispenser: Buy from this wallet', () => {
         expect(messaging.composeForConfirm).not.toHaveBeenCalled();
         expect(messaging.sendToken).not.toHaveBeenCalled();
         expect(messaging.sendAssetHw).not.toHaveBeenCalled();
-        expect(await screen.findByRole('heading', { name: 'Unsigned transaction, ready for signing' }))
+        expect(await screen.findByText('Unsigned transaction, ready for signing'))
             .toBeInTheDocument();
         expect(screen.queryByRole('heading', { name: 'Buy submitted' })).toBeNull();
     });

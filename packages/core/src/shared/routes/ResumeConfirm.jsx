@@ -42,7 +42,7 @@ import { actionDisplayLabel } from '../utils/actionDisplayLabel.js';
 import { copyText } from '../clipboard.js';
 import styles from './ResumeConfirm.module.css';
 import { useWalletMode } from '../hooks/useWalletMode.js';
-import { WatcherResultPanel } from '../components/WatcherResultPanel.jsx';
+import { ResultScreen } from '../components/ResultScreen.jsx';
 import { useSettings } from '../hooks/useSettings.js';
 import { explorerPageUrl } from '../utils/explorerLinks.js';
 import { useToast } from '../components/ToastHost.jsx';
@@ -198,7 +198,8 @@ export function ResumeConfirm({ session, onDone, onCancel }) {
             >
                 <FormPage label="Unsigned transaction">
                     {composed?.psbt ? (
-                        <WatcherResultPanel
+                        <ResultScreen
+                            state="unsigned"
                             result={{
                                 psbtHex: String(composed.psbt),
                                 encoding: composed.encoding,

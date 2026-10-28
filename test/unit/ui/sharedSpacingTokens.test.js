@@ -21,7 +21,6 @@ const cardModules = [
     'BackupReminderCard.module.css',
     'CollectiblesView.module.css',
     'QueuedBroadcastBanner.module.css',
-    'QueuedResultPanel.module.css',
     'TotalBalanceHero.module.css',
 ];
 const routeModules = [
@@ -66,13 +65,12 @@ const pixelTokenModules = [
     'PreflightPanel.module.css',
     'PsbtIntentPanel.module.css',
     'QueuedBroadcastBanner.module.css',
-    'QueuedResultPanel.module.css',
     'RawPsbtViewer.module.css',
     'ReachabilityBanner.module.css',
 ];
 const settingsGeometryModules = [
     'WalletIdentity.module.css',
-    'WatcherResultPanel.module.css',
+    'WatcherExport.module.css',
     'settings/BackupSection.module.css',
     'settings/DeveloperModeSection.module.css',
     'settings/ThisWalletSection.module.css',
@@ -365,7 +363,7 @@ it('uses tokens for geometry in the requested component modules', () => {
     expect(identity).toContain('flex: 0 0 var(--xc-icon-xl);');
     expect(identity).toContain('font-size: var(--xc-text-xs);');
 
-    const watcher = readFileSync(join(componentsRoot, 'WatcherResultPanel.module.css'), 'utf8');
+    const watcher = readFileSync(join(componentsRoot, 'WatcherExport.module.css'), 'utf8');
     const successRow = watcher.slice(watcher.indexOf('.successRow {'), watcher.indexOf('}', watcher.indexOf('.successRow {')));
     expect(successRow).toContain('gap: var(--xc-space-1);');
 });
@@ -477,6 +475,4 @@ it('uses dimension tokens or documents unmatched pixel values in cleanup modules
 
     expect(violations).toEqual([]);
 
-    const queuedResult = readFileSync(join(componentsRoot, 'QueuedResultPanel.module.css'), 'utf8');
-    expect(queuedResult).toContain('font-size: var(--xc-icon-xl);');
 });

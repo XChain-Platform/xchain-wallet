@@ -23,7 +23,7 @@ import { ActionConfirmScreen } from '../components/ActionConfirmScreen.jsx';
 import { LockedTokenContext } from '../components/LockedTokenContext.jsx';
 import { SignCredentials } from '../components/SignCredentials.jsx';
 import { useSignerReady } from '../hooks/useSignerReady.js';
-import { WatcherResultPanel } from '../components/WatcherResultPanel.jsx';
+import { ResultScreen } from '../components/ResultScreen.jsx';
 import { useWalletMode } from '../hooks/useWalletMode.js';
 import { useSignerInfo } from '../hooks/useSignerInfo.js';
 import { OwnAddressPickerScreen } from '../components/OwnAddressPickerScreen.jsx';
@@ -40,7 +40,6 @@ import styles from './IssueTokenForm.module.css';
 import { preferredSourceId } from '../addressSelection.js';
 import { pickDefaultChainId } from '../chainSelection.js';
 import { submitFailureMessage } from '../utils/submitFailureMessage.js';
-import { QueuedResultPanel } from '../components/QueuedResultPanel.jsx';
 import { MAX_MEMO_LENGTH, memoLengthError, utf8ByteLength } from '../utils/memoLimit.js';
 import { actionTextSafetyError } from '../utils/actionTextSafety.js';
 import { parseRawTx } from '../../signers/verifySignedTx.js';
@@ -224,7 +223,8 @@ function RawTransactionBroadcast({
             // never goes through useConfirmAction, so the panel's handoff fallback
             // would show another action's leftover warning, or none at all.
             return (
-                <QueuedResultPanel
+                <ResultScreen
+                    state="signed-not-broadcast"
                     onDone={onDone}
                     what="broadcast"
                     unsaved={result?.persisted === false}
@@ -871,7 +871,8 @@ export function BroadcastForm({ walletId, onBack, onDone, initialChainId, initia
         const txid = result?.txid || result?.broadcast?.txid;
         if (result?.psbtHex && !txid) {
             return wrap(
-                <WatcherResultPanel
+                <ResultScreen
+                    state="unsigned"
                     result={result}
                     onBuildAnother={handleBuildAnother}
                     onDone={onDone || onBack}
@@ -883,7 +884,7 @@ export function BroadcastForm({ walletId, onBack, onDone, initialChainId, initia
         // branch it renders as a completed broadcast.
         if (result?.queued) {
             return wrap(
-                <QueuedResultPanel onDone={onDone || onBack} what="broadcast" unsaved={result?.unsaved} />,
+                <ResultScreen state="signed-not-broadcast" onDone={onDone || onBack} what="broadcast" unsaved={result?.unsaved} />,
             );
         }
         const explorerUrl = txid ? explorerPageUrl({

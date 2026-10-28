@@ -23,8 +23,7 @@ import { ActionConfirmScreen } from '../components/ActionConfirmScreen.jsx';
 import { resolvePreflightPrivacy } from '../../schemas/settings.js';
 import { humanizeError } from '../utils/humanizeError.js';
 import { SignCredentials } from '../components/SignCredentials.jsx';
-import { WatcherResultPanel } from '../components/WatcherResultPanel.jsx';
-import { QueuedResultPanel } from '../components/QueuedResultPanel.jsx';
+import { ResultScreen } from '../components/ResultScreen.jsx';
 import { useActionForm } from '../hooks/useActionForm.js';
 import { useGetChainAddress } from '../hooks/useGetChainAddress.js';
 import { useSignerInfo } from '../hooks/useSignerInfo.js';
@@ -508,10 +507,10 @@ export function CrossChainOrderForm({ walletId, onBack, initialChainId, initialF
     if (stage === 'done') {
         const txid = result?.txid || result?.broadcast?.txid;
         if (result?.psbtHex && !txid) {
-            return wrap(<ListPage><WatcherResultPanel result={result} onBuildAnother={handleBuildAnother} onDone={onBack} /></ListPage>);
+            return wrap(<ListPage><ResultScreen state="unsigned" result={result} onBuildAnother={handleBuildAnother} onDone={onBack} /></ListPage>);
         }
         if (result?.queued) {
-            return wrap(<ListPage><QueuedResultPanel onDone={onBack} what="cross-chain order" unsaved={result.unsaved} /></ListPage>);
+            return wrap(<ListPage><ResultScreen state="signed-not-broadcast" onDone={onBack} what="cross-chain order" unsaved={result.unsaved} /></ListPage>);
         }
         return wrap(
             <ListPage>

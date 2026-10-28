@@ -36,7 +36,7 @@ import { useActionConfirmFlow, useConfirmSubmit, isUserRejection } from '../hook
 import { ActionConfirmScreen } from '../components/ActionConfirmScreen.jsx';
 import { SignCredentials } from '../components/SignCredentials.jsx';
 import { useSignerReady } from '../hooks/useSignerReady.js';
-import { WatcherResultPanel } from '../components/WatcherResultPanel.jsx';
+import { ResultScreen } from '../components/ResultScreen.jsx';
 import { useWalletMode } from '../hooks/useWalletMode.js';
 import { useFormDraft } from '../hooks/useFormDraft.js';
 import { useSettings } from '../hooks/useSettings.js';
@@ -68,7 +68,6 @@ import { useFeeFiat } from '../hooks/useFeeFiat.js';
 import { useFormLeaveGuard } from '../hooks/useFormLeaveGuard.js';
 import { preferredSourceId } from '../addressSelection.js';
 import { pickDefaultChainId } from '../chainSelection.js';
-import { QueuedResultPanel } from '../components/QueuedResultPanel.jsx';
 import { DraftDiscardButton } from '../components/DraftDiscardButton.jsx';
 import {
     compareDecimalStrings,
@@ -797,7 +796,8 @@ export function IssueTokenForm({ walletId, onBack }) {
         const txid = result?.txid || result?.broadcast?.txid;
         if (result?.psbtHex && !txid) {
             return wrap(
-                <WatcherResultPanel
+                <ResultScreen
+                    state="unsigned"
                     result={result}
                     onBuildAnother={handleBuildAnother}
                     onDone={leaveGuard.guardedOnBack}
@@ -807,7 +807,7 @@ export function IssueTokenForm({ walletId, onBack }) {
         // Signed but not broadcast, so the token does not exist yet.
         if (result?.queued) {
             return wrap(
-                <QueuedResultPanel onDone={leaveGuard.guardedOnBack} what={t('issue.issuance')} unsaved={result.unsaved} />,
+                <ResultScreen state="signed-not-broadcast" onDone={leaveGuard.guardedOnBack} what={t('issue.issuance')} unsaved={result.unsaved} />,
             );
         }
         return wrap(

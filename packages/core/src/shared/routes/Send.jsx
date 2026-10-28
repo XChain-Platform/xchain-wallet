@@ -46,7 +46,7 @@ import {
 } from '../components/BalanceList.jsx';
 import { ContactsPickerScreen } from '../components/ContactsPickerScreen.jsx';
 import { OwnAddressPickerScreen } from '../components/OwnAddressPickerScreen.jsx';
-import { WatcherResultPanel } from '../components/WatcherResultPanel.jsx';
+import { ResultScreen } from '../components/ResultScreen.jsx';
 import { buildRecentDestinations } from '../../flows/recentDestinations.js';
 import { addressValidationError, detectAddressCoin, isValidAddressForChain } from '../utils/addressValidation.js';
 import { neutralizeControlText, ZERO_WIDTH } from '../utils/textHardening.js';
@@ -3386,7 +3386,7 @@ export function Send({ walletId, accountId, onBack, prefill = null, onDone, onCh
         // PSBT instead of a broadcast txid; render the export UI (paste +
         // animated QR) so the user can transport it to a Signer-mode wallet.
         if (result?.psbtHex && !txid) {
-            return wrap(<WatcherResultPanel result={result} onSendAnother={sendAnother} onDone={leaveResultDone} />);
+            return wrap(<ResultScreen state="unsigned" result={result} onSendAnother={sendAnother} onDone={leaveResultDone} />);
         }
 
         // §5.3.4 TRANSIENT broadcast failure: the transaction IS signed and

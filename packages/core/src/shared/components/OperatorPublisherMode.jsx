@@ -19,8 +19,7 @@ import {
 } from '../../flows/feeEstimate.js';
 import { customFeeReviewStop } from '../../flows/feeEstimate.js';
 import { ActionConfirmScreen } from './ActionConfirmScreen.jsx';
-import { QueuedResultPanel } from './QueuedResultPanel.jsx';
-import { WatcherResultPanel } from './WatcherResultPanel.jsx';
+import { ResultScreen } from './ResultScreen.jsx';
 import { useOwnerActionLane } from '../hooks/useOwnerActionLane.js';
 import { isUserRejection } from '../hooks/useActionConfirmFlow.js';
 import { useNativeFee } from '../hooks/useNativeFee.js';
@@ -246,10 +245,10 @@ function usePublisherSubmission({
 
 function publisherResultPanel(result, clearResult) {
     if (result?.queued) {
-        return <QueuedResultPanel onDone={clearResult} what={t('components.operatorPublisherMode.oracleValue')} unsaved={result.unsaved} />;
+        return <ResultScreen state="signed-not-broadcast" onDone={clearResult} what={t('components.operatorPublisherMode.oracleValue')} unsaved={result.unsaved} />;
     }
     if (result?.psbtHex && !(result.txid || result.broadcast?.txid)) {
-        return <WatcherResultPanel result={result} onBuildAnother={clearResult} onDone={clearResult} />;
+        return <ResultScreen state="unsigned" result={result} onBuildAnother={clearResult} onDone={clearResult} />;
     }
     return null;
 }

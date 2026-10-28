@@ -17,7 +17,7 @@ import { useActionConfirmFlow, useConfirmSubmit, isUserRejection } from '../hook
 import { ActionConfirmScreen } from '../components/ActionConfirmScreen.jsx';
 import { useSignerReady } from '../hooks/useSignerReady.js';
 import { useWalletMode } from '../hooks/useWalletMode.js';
-import { WatcherResultPanel } from '../components/WatcherResultPanel.jsx';
+import { ResultScreen } from '../components/ResultScreen.jsx';
 import { outcomeLabelsOf, safeOutcomeLabel } from '../utils/betOutcomeLabels.js';
 import { neutralizeControlText } from '../utils/textHardening.js';
 import { submitFailureMessage } from '../utils/submitFailureMessage.js';
@@ -311,7 +311,8 @@ export function OracleConsole({ walletId, accountId, onOpenMarket, onDuplicate, 
     if (result?.psbtHex && !result?.txid) {
         return wrap(
             <ListPage>
-                <WatcherResultPanel
+                <ResultScreen
+                    state="unsigned"
                     result={result}
                     onBuildAnother={() => { setResult(null); setActive(null); }}
                     onDone={onBack}

@@ -1,4 +1,11 @@
-/* §20 / Cluster X Step 3 result details shared by watcher-mode action surfaces. */
+/* The unsigned PSBT export body shared by watcher-mode action surfaces. */
+
+.body {
+    display: flex;
+    flex-direction: column;
+    gap: var(--xc-space-3);
+    min-width: 0;
+}
 
 .successLabel {
     font-size: var(--xc-text-xs);
@@ -7,14 +14,6 @@
     text-transform: uppercase;
     letter-spacing: 0.04em;
     margin: 0 0 var(--xc-space-1);
-}
-
-.successHint {
-    margin: 0;
-    color: var(--xc-text-muted);
-    font-size: var(--xc-text-sm);
-    text-align: center;
-    overflow-wrap: anywhere;
 }
 
 .successSummary {
@@ -82,12 +81,3 @@
     margin: 0;
 }
 
-.actions {
-    display: flex;
-    flex-wrap: wrap;
-    min-width: 0;
-    max-width: 100%;
-    gap: var(--xc-space-2);
-    justify-content: flex-end;
-    margin-top: var(--xc-space-4);
-}

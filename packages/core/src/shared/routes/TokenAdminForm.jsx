@@ -24,7 +24,7 @@ import { ActionConfirmScreen } from '../components/ActionConfirmScreen.jsx';
 import { TickerIcon } from '../components/TickerIcon.jsx';
 import { SignCredentials } from '../components/SignCredentials.jsx';
 import { useSignerReady } from '../hooks/useSignerReady.js';
-import { WatcherResultPanel } from '../components/WatcherResultPanel.jsx';
+import { ResultScreen } from '../components/ResultScreen.jsx';
 import { useWalletMode } from '../hooks/useWalletMode.js';
 import { useSignerInfo } from '../hooks/useSignerInfo.js';
 import { useTokenInfo } from '../hooks/useTokenInfo.js';
@@ -57,7 +57,6 @@ import {
     issueDescriptionError,
     issueSupplyLimitError,
 } from '../utils/issueFieldValidation.js';
-import { QueuedResultPanel } from '../components/QueuedResultPanel.jsx';
 import { currentListMemberCount } from '../../flows/listMembership.js';
 import { compareDecimalStrings, formatWithThousands, tokenAmountPrecisionError } from '../utils/amountFormat.js';
 import { exceedsHeadroom, mintHeadroom } from '../utils/mintHeadroom.js';
@@ -1112,7 +1111,8 @@ export function TokenAdminForm({ walletId, mode, onBack, initialChainId, initial
         const txid = result?.txid || result?.broadcast?.txid;
         if (result?.psbtHex && !txid) {
             return wrap(
-                <WatcherResultPanel
+                <ResultScreen
+                    state="unsigned"
                     result={result}
                     onBuildAnother={handleBuildAnother}
                     onDone={onBack}
@@ -1122,7 +1122,7 @@ export function TokenAdminForm({ walletId, mode, onBack, initialChainId, initial
         // Signed, not broadcast. The confirm pipeline resolves this
         // case, so the done screen has to tell them apart.
         if (result?.queued) {
-            return wrap(<QueuedResultPanel onDone={onBack} what="update" unsaved={result.unsaved} />);
+            return wrap(<ResultScreen state="signed-not-broadcast" onDone={onBack} what="update" unsaved={result.unsaved} />);
         }
         return wrap(
             <>

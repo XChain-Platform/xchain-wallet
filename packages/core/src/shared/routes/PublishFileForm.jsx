@@ -18,8 +18,7 @@ import { useSignerReady } from '../hooks/useSignerReady.js';
 import { useWalletMode } from '../hooks/useWalletMode.js';
 import { useNativeFee } from '../hooks/useNativeFee.js';
 import { NativeFeeToggle } from '../components/NativeFeeToggle.jsx';
-import { WatcherResultPanel } from '../components/WatcherResultPanel.jsx';
-import { QueuedResultPanel } from '../components/QueuedResultPanel.jsx';
+import { ResultScreen } from '../components/ResultScreen.jsx';
 import { TickerIcon } from '../components/TickerIcon.jsx';
 import { GatedPublishForm } from './GatedPublishForm.jsx';
 import {
@@ -588,7 +587,8 @@ export function PublishFileForm({ walletId, onBack }) {
         );
         if (result?.psbtHex && !result?.txid) {
             return wrap(
-                <WatcherResultPanel
+                <ResultScreen
+                    state="unsigned"
                     result={result}
                     onBuildAnother={() => { setResult(null); setStage('compose'); }}
                     onDone={onBack}
@@ -601,7 +601,7 @@ export function PublishFileForm({ walletId, onBack }) {
         // published" would claim a permanent publish that never happened.
         if (result?.queued) {
             return wrap(
-                <QueuedResultPanel onDone={onBack} what="file publish" unsaved={result.unsaved} />,
+                <ResultScreen state="signed-not-broadcast" onDone={onBack} what="file publish" unsaved={result.unsaved} />,
             );
         }
         return wrap(

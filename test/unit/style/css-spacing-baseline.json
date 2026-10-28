@@ -440,7 +440,7 @@
     ]
   },
   {
-    "file": "packages/core/src/shared/components/WatcherResultPanel.module.css",
+    "file": "packages/core/src/shared/components/WatcherExport.module.css",
     "property": "gap",
     "value": "2px",
     "lines": [

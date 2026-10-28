@@ -31,8 +31,7 @@ import { useBetChainIds } from './BetFeedsList.jsx';
 import styles from './IssueTokenForm.module.css';
 import { t } from '../../i18n/index.js';
 import '../../i18n/locales/en/betCreate.js';
-import { QueuedResultPanel } from '../components/QueuedResultPanel.jsx';
-import { WatcherResultPanel } from '../components/WatcherResultPanel.jsx';
+import { ResultScreen } from '../components/ResultScreen.jsx';
 import {
     formatWithThousands,
     normalizeLocalizedDecimal,
@@ -577,7 +576,8 @@ export function CreateBetFeedForm({
         const txid = result?.txid || result?.tx_hash;
         if (result?.psbtHex && !txid) {
             return wrap(
-                <WatcherResultPanel
+                <ResultScreen
+                    state="unsigned"
                     result={result}
                     onBuildAnother={() => setResult(null)}
                     onDone={onBack}
@@ -587,7 +587,7 @@ export function CreateBetFeedForm({
         // A queued result is SIGNED and not broadcast. The confirm
         // pipeline resolves that case rather than throwing, so without this
         // branch the done screen below reports it as a completed action.
-        if (result?.queued) return wrap(<QueuedResultPanel onDone={onBack} unsaved={result.unsaved} />);
+        if (result?.queued) return wrap(<ResultScreen state="signed-not-broadcast" onDone={onBack} unsaved={result.unsaved} />);
         return wrap(
             <>
                 <p className={styles.summary}>

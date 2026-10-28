@@ -23,7 +23,7 @@ import { useDemoGuard } from '../hooks/useDemoGuard.jsx';
 import { useActionConfirmFlow, isUserRejection } from '../hooks/useActionConfirmFlow.js';
 import { useWalletMode } from '../hooks/useWalletMode.js';
 import { ActionConfirmScreen } from '../components/ActionConfirmScreen.jsx';
-import { WatcherResultPanel } from '../components/WatcherResultPanel.jsx';
+import { ResultScreen } from '../components/ResultScreen.jsx';
 import { useSignerReady } from '../hooks/useSignerReady.js';
 import { ListPickerScreen } from '../components/ListPickerScreen.jsx';
 import { OwnAddressPickerScreen } from '../components/OwnAddressPickerScreen.jsx';
@@ -56,7 +56,6 @@ import {
     WATCH_ONLY_SIGNING_MESSAGE,
 } from '../addressSelection.js';
 import { pickDefaultChainId } from '../chainSelection.js';
-import { QueuedResultPanel } from '../components/QueuedResultPanel.jsx';
 import { listLabel } from '../utils/listLabel.js';
 import { compareDecimalStrings } from '../utils/amountFormat.js';
 import { isValidAddressForChain } from '../utils/addressValidation.js';
@@ -1115,7 +1114,8 @@ export function TokenWizard({ walletId, onBack }) {
         const txid = result?.txid || result?.broadcast?.txid;
         if (result?.psbtHex && !txid) {
             return wrap(
-                <WatcherResultPanel
+                <ResultScreen
+                    state="unsigned"
                     result={result}
                     onBuildAnother={() => { setResult(null); setStage('details'); }}
                     onDone={onBack}
@@ -1126,7 +1126,7 @@ export function TokenWizard({ walletId, onBack }) {
         if (result?.queued) {
             return wrap(
                 <ListPage>
-                    <QueuedResultPanel onDone={onBack} what="token issuance" unsaved={result.unsaved} />
+                    <ResultScreen state="signed-not-broadcast" onDone={onBack} what="token issuance" unsaved={result.unsaved} />
                 </ListPage>,
             );
         }
