@@ -63,7 +63,28 @@ export async function readAllListPages(read, previous = null) {
     }
     const pageSize = firstRows.length;
     const pages = Math.min(Math.ceil(total / pageSize), HISTORY_MAX_PAGES);
-    const rows = [...firstRows];
+    // The rows the followed pages must cover: the stated total, or the page cap.
+    const expected = Math.min(total, pages * pageSize);
+    const shortPage = () => new Error(`The explorer sent a short page of ${total} rows.`);
+    // A row that lands while the pages are read shifts the later pages by one,
+    // so the same action can arrive on two pages; it is kept once.
+    const seen = new Set();
+    const unique = [];
+    let duplicates = 0;
+    const keep = (row) => {
+        const id = rowIdentity(row);
+        if (id !== null) {
+            if (seen.has(id)) {
+                duplicates += 1;
+                return false;
+            }
+            seen.add(id);
+        }
+        unique.push(row);
+        return true;
+    };
+    firstRows.forEach(keep);
+    let rowsRead = firstRows.length;
     for (let start = 2; start <= pages; start += PAGE_CONCURRENCY) {
         const batch = [];
         for (let page = start; page < start + PAGE_CONCURRENCY && page <= pages; page += 1) {
@@ -73,18 +94,19 @@ export async function readAllListPages(read, previous = null) {
             if (!response || (!Array.isArray(response) && !Array.isArray(response.data))) {
                 throw new Error(`The explorer sent an unreadable page of ${total} rows.`);
             }
-            rows.push(...rowsOf(response));
+            const pageRows = rowsOf(response);
+            // An empty page below the stated total ends the list early.
+            if (pageRows.length === 0 && rowsRead < expected) throw shortPage();
+            rowsRead += pageRows.length;
+            // An insert shifts a page by the rows it adds, so a page that adds
+            // no new row at all repeats an earlier page: the explorer is stale.
+            let added = 0;
+            for (const row of pageRows) if (keep(row)) added += 1;
+            if (added === 0 && pageRows.length > 0) throw shortPage();
         }
     }
-    // A row that lands while the pages are read shifts the later pages by one,
-    // so the same action can arrive on two pages.
-    const seen = new Set();
-    const unique = rows.filter((row) => {
-        const id = rowIdentity(row);
-        if (id === null) return true;
-        if (seen.has(id)) return false;
-        seen.add(id);
-        return true;
-    });
+    // Each duplicate a shift explains pushes one row past the last page, so
+    // the list may fall short by at most the duplicates removed.
+    if (unique.length < expected - duplicates) throw shortPage();
     return { rows: unique, snapshot: { total, head, rows: unique } };
 }
