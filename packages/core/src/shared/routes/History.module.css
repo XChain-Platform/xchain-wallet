@@ -1037,19 +1037,17 @@
 }
 
 /* M2.3: the pending branch of the detail card. Sits above the hero
-   table, banded on its leading edge so it reads as a state notice
-   rather than as another field group. */
+   table as the plain card; a stuck or failed transaction tints its
+   headline instead of the card surface. */
 .pendingPanel {
     composes: card from '../../ui/Card.module.css';
     display: flex;
     flex-direction: column;
     gap: var(--xc-space-2);
-    border-inline-start: 3px solid var(--xc-warning, #d99000);
 }
 
-.pendingPanelWarning {
-    border-inline-start-color: var(--xc-danger, #d93838);
-    background: color-mix(in srgb, var(--xc-danger, #d93838) 8%, var(--xc-surface));
+.pendingPanelWarning .pendingHeadline {
+    color: var(--xc-danger-fg, #d93838);
 }
 
 .pendingHeadline {

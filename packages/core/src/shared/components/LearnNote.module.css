@@ -4,8 +4,6 @@
 
 .note {
     composes: card from '../../ui/Card.module.css';
-    /* The accent rail has no matching border-width token. */
-    border-inline-start: 3px solid var(--xc-accent-primary);
     color: var(--xc-text-muted);
     font-size: var(--xc-text-sm);
     line-height: 1.5;

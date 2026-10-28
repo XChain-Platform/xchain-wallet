@@ -3,14 +3,10 @@
 */
 
 .banner {
+    composes: card from '../../ui/Card.module.css';
     display: flex;
     flex-direction: column;
     gap: var(--xc-space-2);
-    padding: var(--xc-card-pad);
-    border-radius: var(--xc-card-radius);
-    border: 1px solid var(--xc-info);
-    background: var(--xc-info-bg);
-    color: var(--xc-info-text);
     font-size: var(--xc-text-sm);
     margin: var(--xc-space-2);
 }

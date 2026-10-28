@@ -324,9 +324,7 @@ it('uses shared dimension tokens across the empty, gated, menu, hardware, and la
     expect(modules['HeaderActionMenu.module.css']).toMatch(
         /\.rowChevron\s*\{[^}]*width:\s*var\(--xc-icon-sm\);[^}]*height:\s*var\(--xc-icon-sm\)/s,
     );
-    expect(modules['HwSignBlock.module.css']).toContain(
-        'padding: var(--xc-space-1) var(--xc-space-2);',
-    );
+    expect(modules['HwSignBlock.module.css']).toContain('gap: var(--xc-space-2);');
     expect(modules['LayoutModeToggle.module.css']).toContain('gap: var(--xc-space-2);');
 
     for (const [file, css] of Object.entries(modules)) {

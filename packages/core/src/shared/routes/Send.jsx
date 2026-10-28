@@ -3137,10 +3137,7 @@ export function Send({ walletId, accountId, onBack, prefill = null, onDone, onCh
     // where it belongs: the whole point is to intervene before the user
     // commits, and it is the last screen every send path passes through.
     const testSendGateBanner = testSendGate ? (
-        <div role="alert" className={styles.testSendGate}>
-            <p className={styles.testSendTitle}>
-                {t('send.testGate.title')}
-            </p>
+        <StatusMessage variant="info" role="alert" lead={t('send.testGate.title')}>
             <p className={styles.testSendBody}>
                 {t('send.testGate.body', {
                     amount: decimalStringFromSats(BigInt(testSendGate.amountSats), descriptor),
@@ -3163,7 +3160,7 @@ export function Send({ walletId, accountId, onBack, prefill = null, onDone, onCh
                     {t('send.testGate.sendSmall')}
                 </Button>
             </div>
-        </div>
+        </StatusMessage>
     ) : null;
     const unusualSendWarningBlock = unusualSendWarnings.length > 0 ? (
         <StatusMessage variant="warning" role="alert" testId="send-unusual-warnings">

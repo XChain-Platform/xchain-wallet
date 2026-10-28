@@ -51,9 +51,7 @@ describe('shared component design-token geometry', () => {
         }
 
         const learnNote = readComponentCss('LearnNote');
-        expect(learnNote).toMatch(
-            /\/\* The accent rail has no matching border-width token\. \*\/\s*border-inline-start:\s*3px/,
-        );
+        expect(learnNote).not.toMatch(/border-inline-start/);
         expect(learnNote).toMatch(
             /\/\* Two pixels separate the underline without changing the line box\. \*\/\s*text-underline-offset:\s*2px/,
         );

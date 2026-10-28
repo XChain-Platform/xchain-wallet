@@ -3,6 +3,7 @@
  * but nothing has been broadcast yet. */
 
 .queuedCard {
+    composes: card from '../../ui/Card.module.css';
     display: flex;
     flex-direction: column;
     gap: var(--xc-space-3);
@@ -11,10 +12,6 @@
     width: 100%;
     min-width: 0;
     max-width: 100%;
-    padding: var(--xc-card-pad);
-    border: 1px solid var(--xc-warning, #b8860b);
-    border-radius: var(--xc-card-radius);
-    background: var(--xc-surface-raised);
 }
 
 .queuedStage {

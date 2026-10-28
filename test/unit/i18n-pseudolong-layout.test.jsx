@@ -69,7 +69,6 @@ const SCREEN_TEXT_RULES = {
         [sendCss, '.detailsToggle'],
         [sendCss, '.detailsLabel'],
         [sendCss, '.detailsValue'],
-        [sendCss, '.testSendTitle'],
         [sendCss, '.testSendBody'],
         [sendCss, '.recipientRowLabel'],
         [sendCss, '.successTitle'],

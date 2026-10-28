@@ -57,10 +57,6 @@
     font-size: var(--xc-text-sm);
     line-height: 1.4;
     color: var(--xc-text);
-    padding: var(--xc-space-2) var(--xc-space-3);
-    background: color-mix(in srgb, var(--xc-accent-primary) 10%, transparent);
-    border: 1px solid color-mix(in srgb, var(--xc-accent-primary) 30%, transparent);
-    border-radius: var(--xc-radius-sm);
 }
 
 .instruction strong {

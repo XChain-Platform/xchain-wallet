@@ -78,7 +78,6 @@ for (const path of cssFiles(join(wsRoot, 'packages'))) {
 const targets = [
     [join(components, 'AlertsOverlay.module.css'), 'close'],
     [join(components, 'BackupReminderCard.module.css'), 'dismissBtn'],
-    [join(components, 'HwSignBlock.module.css'), 'refresh'],
     [join(components, 'QueuedBroadcastBanner.module.css'), 'broadcastBtn'],
     [join(components, 'QueuedBroadcastBanner.module.css'), 'discardBtn'],
     [join(components, 'RawPsbtViewer.module.css'), 'toggle'],

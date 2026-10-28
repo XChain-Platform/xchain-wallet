@@ -6,15 +6,12 @@
         "packages/core/src/shared/components/AppHeader.module.css | .actionMenu": "A floating surface (menu, popover, dialog, toast or tooltip), not an in-page card; it keeps its overlay geometry and elevation.",
         "packages/core/src/shared/components/ConfirmActionModal.module.css | .messageText": "A monospace value box (code, address, transaction id or raw data) that reads like a read-only field, not a card.",
         "packages/core/src/shared/components/ContactsPickerScreen.module.css | .abSearch": "A control (button, field, toggle or picker trigger), not a card; controls keep the control border and radius.",
-        "packages/core/src/shared/components/DerivationPathCrossCheck.module.css | .instruction": "A tone notice whose coloured border names its state (warning, error, success or info); notices follow the notice pattern, not the card.",
         "packages/core/src/shared/components/DerivationPathCrossCheck.module.css | .path": "A monospace value box (code, address, transaction id or raw data) that reads like a read-only field, not a card.",
         "packages/core/src/shared/components/GatedFileViewer.module.css | .body": "A floating surface (menu, popover, dialog, toast or tooltip), not an in-page card; it keeps its overlay geometry and elevation.",
-        "packages/core/src/shared/components/GatedFileViewer.module.css | .mismatch": "A tone notice whose coloured border names its state (warning, error, success or info); notices follow the notice pattern, not the card.",
         "packages/core/src/shared/components/GatedFileViewer.module.css | .panel": "A floating surface (menu, popover, dialog, toast or tooltip), not an in-page card; it keeps its overlay geometry and elevation.",
         "packages/core/src/shared/components/HeaderSettingsButton.module.css | .summaryRow": "A floating surface (menu, popover, dialog, toast or tooltip), not an in-page card; it keeps its overlay geometry and elevation.",
         "packages/core/src/shared/components/HomeTabs.module.css | .sortControl": "A control (button, field, toggle or picker trigger), not a card; controls keep the control border and radius.",
         "packages/core/src/shared/components/HomeTabs.module.css | .sortSelect": "A control (button, field, toggle or picker trigger), not a card; controls keep the control border and radius.",
-        "packages/core/src/shared/components/HwSignBlock.module.css | .refresh": "A control (button, field, toggle or picker trigger), not a card; controls keep the control border and radius.",
         "packages/core/src/shared/components/LayoutModeToggle.module.css | .btn": "A control (button, field, toggle or picker trigger), not a card; controls keep the control border and radius.",
         "packages/core/src/shared/components/LeftNav.module.css | .skipLink": "A control (button, field, toggle or picker trigger), not a card; controls keep the control border and radius.",
         "packages/core/src/shared/components/MnemonicGrid.module.css | .cell": "One recovery-phrase word cell in the word grid, read like a value box, not a card.",
@@ -26,9 +23,7 @@
         "packages/core/src/shared/components/PlatformSwitcher.module.css | .here": "A floating surface (menu, popover, dialog, toast or tooltip), not an in-page card; it keeps its overlay geometry and elevation.",
         "packages/core/src/shared/components/PlatformSwitcher.module.css | .menu": "A floating surface (menu, popover, dialog, toast or tooltip), not an in-page card; it keeps its overlay geometry and elevation.",
         "packages/core/src/shared/components/PlatformSwitcher.module.css | .trigger": "A control (button, field, toggle or picker trigger), not a card; controls keep the control border and radius.",
-        "packages/core/src/shared/components/QueuedBroadcastBanner.module.css | .banner": "A tone notice whose coloured border names its state (warning, error, success or info); notices follow the notice pattern, not the card.",
         "packages/core/src/shared/components/QueuedBroadcastBanner.module.css | .broadcastBtn, .discardBtn": "A control (button, field, toggle or picker trigger), not a card; controls keep the control border and radius.",
-        "packages/core/src/shared/components/QueuedResultPanel.module.css | .queuedCard": "A tone notice whose coloured border names its state (warning, error, success or info); notices follow the notice pattern, not the card.",
         "packages/core/src/shared/components/RawPsbtViewer.module.css | .copyBtn": "A control (button, field, toggle or picker trigger), not a card; controls keep the control border and radius.",
         "packages/core/src/shared/components/RawPsbtViewer.module.css | .hex": "A monospace value box (code, address, transaction id or raw data) that reads like a read-only field, not a card.",
         "packages/core/src/shared/components/RawPsbtViewer.module.css | .json": "A monospace value box (code, address, transaction id or raw data) that reads like a read-only field, not a card.",
@@ -61,13 +56,10 @@
         "packages/core/src/shared/routes/IssueTokenForm.module.css | .picker": "A control (button, field, toggle or picker trigger), not a card; controls keep the control border and radius.",
         "packages/core/src/shared/routes/IssueTokenForm.module.css | .txid": "A monospace value box (code, address, transaction id or raw data) that reads like a read-only field, not a card.",
         "packages/core/src/shared/routes/ManageToken.module.css | .manageMoreMenu": "A floating surface (menu, popover, dialog, toast or tooltip), not an in-page card; it keeps its overlay geometry and elevation.",
-        "packages/core/src/shared/routes/ManageToken.module.css | .officialBanner": "A tone notice whose coloured border names its state (warning, error, success or info); notices follow the notice pattern, not the card.",
         "packages/core/src/shared/routes/OnboardingCarousel.module.css | .stackFrame": "Artwork or a camera or QR frame, not a card.",
         "packages/core/src/shared/routes/PairSignerForm.module.css | .code": "A monospace value box (code, address, transaction id or raw data) that reads like a read-only field, not a card.",
         "packages/core/src/shared/routes/Receive.module.css | .addressBox": "A monospace value box (code, address, transaction id or raw data) that reads like a read-only field, not a card.",
         "packages/core/src/shared/routes/Send.module.css | .coinControlDust": "A control (button, field, toggle or picker trigger), not a card; controls keep the control border and radius.",
-        "packages/core/src/shared/routes/Send.module.css | .successCard": "A tone notice whose coloured border names its state (warning, error, success or info); notices follow the notice pattern, not the card.",
-        "packages/core/src/shared/routes/Send.module.css | .testSendGate": "A tone notice whose coloured border names its state (warning, error, success or info); notices follow the notice pattern, not the card.",
         "packages/core/src/shared/routes/Send.module.css | .txid": "A monospace value box (code, address, transaction id or raw data) that reads like a read-only field, not a card.",
         "packages/core/src/shared/routes/StakeDetail.module.css | .quickActionMoreMenu": "A floating surface (menu, popover, dialog, toast or tooltip), not an in-page card; it keeps its overlay geometry and elevation.",
         "packages/core/src/shared/routes/TokenDetail.module.css | .balanceHero": "The accent-filled balance hero banner at the top of the screen, not a card.",
@@ -110,12 +102,7 @@
         "packages/web/src/style-guide/sections/templateExamples.module.css | .search, .select": "Development-only or style-guide chrome, not product UI."
     },
     "overrides": {
-        "packages/core/src/shared/components/HwSignBlock.module.css | .statusRow[data-status=\"available\"] | background, border-color": "The hardware signer status row tints by device state, like a tone notice; moving it to the notice pattern is a design call left open.",
-        "packages/core/src/shared/components/HwSignBlock.module.css | .statusRow[data-status=\"wrong-app\"], .statusRow[data-status=\"locked\"] | background, border-color": "The hardware signer status row tints by device state, like a tone notice; moving it to the notice pattern is a design call left open.",
-        "packages/core/src/shared/components/HwSignBlock.module.css | .statusRow[data-status=\"disconnected\"], .statusRow[data-status=\"error\"] | background, border-color": "The hardware signer status row tints by device state, like a tone notice; moving it to the notice pattern is a design call left open.",
-        "packages/core/src/shared/components/LearnNote.module.css | .note | border-inline-start": "The learn note keeps an accent rail on the card; dropping it is a design call left open.",
-        "packages/core/src/shared/routes/History.module.css | .pendingPanel | border-inline-start": "The pending broadcast panel keeps a warning rail on the card; moving it to the notice pattern is a design call left open.",
-        "packages/core/src/shared/routes/Onboarding.module.css | .licenseScroll | padding": "A narrower inset on the license terms scroller on short screens; a design call left open."
+        "packages/core/src/shared/routes/Onboarding.module.css | .licenseScroll | padding": "Open debt (not a ruling): the licence terms card keeps a narrower inset on short screens so two lines of the terms stay visible above the actions; the card itself stays outlined by the licence-page ruling."
     },
     "inline": {
         "packages/core/src/shared/components/LogConsole.jsx": {

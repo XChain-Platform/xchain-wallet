@@ -93,7 +93,11 @@ assert.match(sendSrc, /setStage\('form'\)/, 'returns to form');
 
 // --- gate UI -----------------------------------------------------------
 
-assert.match(sendSrc, /styles\.testSendGate/, 'banner uses testSendGate class');
+assert.match(
+    sendSrc,
+    /<StatusMessage variant="info" role="alert" lead=\{t\('send\.testGate\.title'\)\}>/,
+    'banner is a shared StatusMessage that announces as an alert',
+);
 // The banner used to be inlined in the `stage === 'review'` branch,
 // which a later change made unreachable for every non-watcher send. Every assertion
 // in this file still passed while the feature was dead, so pin the banner to
@@ -146,7 +150,7 @@ assert.match(
 
 // --- CSS hooks ----------------------------------------------------------
 
-for (const cls of ['testSendGate', 'testSendTitle', 'testSendBody', 'testSendActions']) {
+for (const cls of ['testSendBody', 'testSendActions']) {
     assert.match(sendCss, new RegExp(`\\.${cls}\\s*\\{`), `CSS hook .${cls}`);
 }
 

@@ -41,7 +41,7 @@ describe('HwSignBlock device instructions', () => {
         render(<HwSignBlock {...baseProps} getStatus={transport} />);
 
         await waitFor(() => {
-            expect(screen.getByRole('status')).toHaveAttribute('data-status', 'cancelled');
+            expect(screen.getByRole('status').closest('[data-status]')).toHaveAttribute('data-status', 'cancelled');
         });
         expect(screen.getByRole('status')).toHaveTextContent(
             'Signing was cancelled on your device. Nothing was signed.',

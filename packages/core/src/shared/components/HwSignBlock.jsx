@@ -28,7 +28,7 @@
 // hook so the parent can gate Submit on `status === 'available'`.
 
 import { useCallback, useEffect, useRef } from 'react';
-import { FieldNote } from '@xchain-wallet/core/ui';
+import { FieldNote, StatusMessage } from '@xchain-wallet/core/ui';
 import { useSignerStatus } from '../hooks/useSignerStatus.js';
 import { userFacingMessage } from '../utils/userFacingMessage.js';
 import { DerivationPathCrossCheck } from './DerivationPathCrossCheck.jsx';
@@ -36,10 +36,19 @@ import { HwFirmwareBanner } from './HwFirmwareBanner.jsx';
 import styles from './HwSignBlock.module.css';
 import { t } from '../../i18n/index.js';
 
+// The notice tone for each device state; a state not listed (cancelled) reads as info.
+const STATUS_VARIANT = {
+    available: 'success',
+    'wrong-app': 'warning',
+    locked: 'warning',
+    disconnected: 'error',
+    error: 'error',
+};
+
 /**
  * @param {object} props
  * @param {'trezor'|'ledger'} props.signerKind
- * @param {string} props.signerName                   e.g. "Trezor Model T (My Trezor)"
+ * @param {string} props.signerName                 e.g. "Trezor Model T (My Trezor)"
  * @param {string} props.path                         BIP32 path for the source address
  * @param {string} props.address                      the source address string
  * @param {string} [props.chainId]                    forwarded to getStatus (Ledger uses it for wrong-app detection)
@@ -107,20 +116,17 @@ export function HwSignBlock({
                 onConfirmedChange={onConfirmedChange}
             />
             {shownStatus !== 'idle' ? (
-                <div className={styles.statusRow} data-status={notConnected ? 'disconnected' : status} role="status">
-                    <span className={styles.statusDot} aria-hidden="true" />
-                    <span className={styles.statusText}>
+                <div data-status={notConnected ? 'disconnected' : status}>
+                    <StatusMessage
+                        variant={STATUS_VARIANT[notConnected ? 'disconnected' : status] || 'info'}
+                        role="status"
+                        keepsShellNotice
+                        recovery={shownStatus !== 'available'
+                            ? { label: t('home.retryBalances'), onAction: refresh }
+                            : undefined}
+                    >
                         {statusCopy(shownStatus, signerKind, chainId)}
-                    </span>
-                    {shownStatus !== 'available' ? (
-                        <button
-                            type="button"
-                            onClick={refresh}
-                            className={styles.refresh}
-                        >
-                            {t('home.retryBalances')}
-                        </button>
-                    ) : null}
+                    </StatusMessage>
                 </div>
             ) : null}
         </div>

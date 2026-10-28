@@ -601,6 +601,19 @@ export function ManageToken({
                         {UNKNOWN_TOKEN_ISSUER_MESSAGE}
                     </StatusMessage>
                 ) : null}
+                {/* "Official token" notice: on a project registry's
+                    current roster (owner-attested; Project_Registry.md). */}
+                {Array.isArray(assetInfo?.projects) && assetInfo.projects.length > 0 ? (
+                    <StatusMessage variant="success" role="status">
+                        {t('routes.manageToken.thisTokenIsAnOfficial')}{' '}
+                        {assetInfo.projects.map((p, i) => (
+                            <span key={p} className={styles.officialBannerProject}>
+                                {i > 0 ? ', ' : ''}{p}
+                            </span>
+                        ))}
+                        {' '}{t('manageToken.officialProjectNoun', { count: assetInfo.projects.length })}
+                    </StatusMessage>
+                ) : null}
 
                 {/* Hero: identity (no Total Balance; this is the issuer view). */}
                 <section className={styles.hero} aria-label={t('routes.manageToken.tokenIdentity')}>
@@ -644,20 +657,6 @@ export function ManageToken({
                         ) : null}
                     </div>
                 </section>
-
-                {/* "Official token" banner: on a project registry's
-                    current roster (owner-attested; Project_Registry.md). */}
-                {Array.isArray(assetInfo?.projects) && assetInfo.projects.length > 0 ? (
-                    <p className={styles.officialBanner} role="status">
-                        {t('routes.manageToken.thisTokenIsAnOfficial')}{' '}
-                        {assetInfo.projects.map((p, i) => (
-                            <span key={p} className={styles.officialBannerProject}>
-                                {i > 0 ? ', ' : ''}{p}
-                            </span>
-                        ))}
-                        {' '}{t('manageToken.officialProjectNoun', { count: assetInfo.projects.length })}
-                    </p>
-                ) : null}
 
                 {/* Market panel: stats strip + chart placeholder. The
                     chart slot is reserved for future supply / dispense-
