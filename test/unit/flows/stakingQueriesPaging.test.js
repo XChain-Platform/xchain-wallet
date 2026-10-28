@@ -78,4 +78,31 @@ describe('address-scoped staking reads', () => {
         await expect(rewardsForAddress({ sdkRegistry: registryFor(sdk), chainId: 'c', address: 'a' }))
             .rejects.toThrow(/unreadable page/);
     });
+
+    it('rejects a reward history that comes back shorter than its total', async () => {
+        const rows = Array.from({ length: 230 }, (_, i) => ({ id: 250 - i, amount: '1' }));
+        const pages = { 1: rows.slice(0, 100), 2: rows.slice(100, 200), 3: rows.slice(200, 230) };
+        const sdk = {
+            getValidatorRewards: vi.fn(async (_a, _t, opts = {}) => ({ total: 250, data: pages[opts.page ?? 1] })),
+        };
+
+        await expect(rewardsForAddress({ sdkRegistry: registryFor(sdk), chainId: 'c', address: 'a' }))
+            .rejects.toThrow(/230 of 250 rows/);
+        expect(sdk.getValidatorRewards).toHaveBeenCalledTimes(3);
+    });
+
+    it('rejects a short later page even when it repeats a row from an earlier page', async () => {
+        const rows = Array.from({ length: 200 }, (_, i) => ({ id: 250 - i, amount: '1' }));
+        const pages = {
+            1: rows.slice(0, 100),
+            2: [rows[99], ...rows.slice(100, 150)],
+            3: rows.slice(150, 200),
+        };
+        const sdk = {
+            getValidatorRewards: vi.fn(async (_a, _t, opts = {}) => ({ total: 250, data: pages[opts.page ?? 1] })),
+        };
+
+        await expect(rewardsForAddress({ sdkRegistry: registryFor(sdk), chainId: 'c', address: 'a' }))
+            .rejects.toThrow(/201 of 250 rows/);
+    });
 });

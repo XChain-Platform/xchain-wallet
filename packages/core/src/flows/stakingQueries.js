@@ -55,6 +55,12 @@ export async function readAllPages(read, opts) {
             rows.push(...response.data);
         }
     }
+    // A short page (rows that shift out between page reads) would cut every
+    // sum without a sign; a repeated row is fine, since the sums count a
+    // ledger row once per identity.
+    if (rows.length < total) {
+        throw new Error(`The explorer sent ${rows.length} of ${total} rows, so the totals cannot be read yet.`);
+    }
     return { ...first, data: rows };
 }
 
