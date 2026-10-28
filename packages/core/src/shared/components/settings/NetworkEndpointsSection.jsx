@@ -289,11 +289,14 @@ function ChainEndpointBlock({ descriptor, override, onSave }) {
             hubUrl: canonicalEndpoint(draft.hubUrl) || defaults.hubUrl,
         };
         const bad = [
-            [t('settings.endpoints.explorerUrl'), next.explorerUrl],
-            [t('settings.endpoints.encoderUrl'), next.encoderUrl],
-            [t('settings.endpoints.hubUrl'), next.hubUrl],
+            [t('settings.endpoints.explorerUrl'), next.explorerUrl, defaults.explorerUrl],
+            [t('settings.endpoints.encoderUrl'), next.encoderUrl, defaults.encoderUrl],
+            [t('settings.endpoints.hubUrl'), next.hubUrl, defaults.hubUrl],
         ]
-            .map(([label, value]) => {
+            .map(([label, value, fallback]) => {
+                // A chain that ships without this endpoint (testnet has no hub)
+                // seeds the field empty; left empty, it keeps that default.
+                if (value === '' && fallback === '') return null;
                 const err = endpointError(value, descriptor);
                 return err ? `${label}: ${err}` : null;
             })
