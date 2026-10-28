@@ -409,8 +409,13 @@
 .metaRow th,
 .metaRow td {
     padding: var(--xc-table-cell-padding-block) var(--xc-table-cell-padding-inline);
+    padding-inline: 0;
     vertical-align: top;
     line-height: 1.4;
+}
+
+.detailRow {
+    padding-inline: 0;
 }
 
 .metaRow + .metaRow th,
@@ -506,6 +511,9 @@
 .pgpsigBlock {
     margin: 0;
     padding: var(--xc-space-2);
+    min-width: 0;
+    max-width: 100%;
+    box-sizing: border-box;
     background: var(--xc-bg-muted);
     border-radius: var(--xc-radius-sm);
     font-family: var(--xc-font-mono, monospace);

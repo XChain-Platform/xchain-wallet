@@ -16,6 +16,8 @@ import { addEnglish } from '../../store.js';
 
 const messages = {
     // Copy moved out of JSX literals by the i18n sweep.
+    'routes.marketsList.loading': 'Loading markets',
+    'routes.myLists.loading': 'Loading lists',
     'routes.addressList.generateAtIndex': 'Generate at index',
     'routes.addressList.generateAddressAtIndex': 'Generate address at index',
     'routes.addressList.generate': 'Generate',

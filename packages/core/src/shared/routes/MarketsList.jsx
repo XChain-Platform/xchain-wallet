@@ -21,6 +21,8 @@ import marketsStyles from './MarketsList.module.css';
 import { percentChangeDisplay } from '../utils/percentFormat.js';
 import { formatDecimalAmount } from '../utils/amountFormat.js';
 import { withRequestTimeout } from '../utils/requestTimeout.js';
+import { t } from '../../i18n/index.js';
+import '../../i18n/locales/en/routes.js';
 
 const chainRegistry = registryLib.defaultRegistry();
 const MARKETS_PAGE_SIZE = 25;
@@ -289,6 +291,7 @@ export function MarketsList({
         && !networkOffline;
     const showOffline = !!selectedAsset && networkOffline
         && ((marketsLoading && !hasCachedMarkets) || !!loadError);
+    const showLoading = !!selectedAsset && marketsLoading && !hasCachedMarkets && !showOffline;
     return (
         <Screen variant={variant} header={header}>
             <ListPage
@@ -306,6 +309,8 @@ export function MarketsList({
                     >
                         {loadError}
                     </StatusMessage>
+                ) : showLoading ? (
+                    <StatusMessage variant="status">{t('routes.marketsList.loading')}</StatusMessage>
                 ) : null}
                 toolbar={(
                     <div style={{ width: '100%' }}>
@@ -401,8 +406,8 @@ export function MarketsList({
                             />
                         ) : showOffline ? (
                             <OfflineEmptyState body="Markets load when the connection returns." onRetry={recheckNetwork} />
-                        ) : marketsLoading && !hasCachedMarkets ? (
-                            <div role="status" aria-label="Loading markets">
+                        ) : showLoading ? (
+                            <div aria-hidden="true">
                                 <Skeleton.List rows={5} rowHeight={60} avatarSize={36} />
                             </div>
                         ) : loadError ? null : displayMarkets.length === 0 ? (

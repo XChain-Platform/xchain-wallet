@@ -167,8 +167,10 @@ describe('MarketsList narrow layout', () => {
 
         const region = screen.getByRole('region', { name: 'Markets results' });
         expect(region).toHaveAttribute('aria-busy', 'true');
-        const skeletonRows = screen.getByRole('status', { name: 'Loading markets' })
-            .querySelectorAll('[style*="height: 60px"]');
+        const notice = screen.getByRole('status');
+        expect(notice).toHaveTextContent('Loading markets');
+        expect(notice.parentElement.firstElementChild).toBe(notice);
+        const skeletonRows = region.querySelectorAll('[style*="height: 60px"]');
         expect(skeletonRows).toHaveLength(5);
     });
 
@@ -271,7 +273,7 @@ describe('MarketsList narrow layout', () => {
             </MessagingProvider>,
         );
 
-        expect(screen.getByRole('status', { name: 'Loading markets' })).toBeInTheDocument();
+        expect(screen.getByRole('status')).toHaveTextContent('Loading markets');
         await act(async () => vi.advanceTimersByTimeAsync(15_000));
         expect(screen.getByText('Could not load markets. Try again.')).toBeInTheDocument();
 

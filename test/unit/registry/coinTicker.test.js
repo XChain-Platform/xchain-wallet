@@ -105,7 +105,7 @@ describe('chain UI metadata', () => {
         expect(transactionExplorerLinks(descriptor, 'ab/cd')).toEqual([{
             id: 'example',
             label: 'Example Explorer',
-            iconImg: 'https://example.com/favicon.ico',
+            icon: 'E',
             url: 'https://example.com/transaction/ab%2Fcd',
         }]);
     });

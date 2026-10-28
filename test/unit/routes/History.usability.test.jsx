@@ -14,9 +14,9 @@ import { formatLocalDateTime } from '../../../packages/core/src/shared/utils/dat
 const CHAIN = 'bitcoin-mainnet';
 const ADDRESS = 'bc1qw508d6qejxtdg4y5r3zarvary0c5xw7kv8f3t4';
 
-function provider(messaging, child) {
+function provider(messaging, child, shell = 'web') {
     return (
-        <MessagingProvider shell="web" messaging={messaging}>
+        <MessagingProvider shell={shell} messaging={messaging}>
             <ToastHost>{child}</ToastHost>
         </MessagingProvider>
     );
@@ -25,6 +25,40 @@ function provider(messaging, child) {
 afterEach(() => cleanup());
 
 describe('History usability', () => {
+    it('renders no outside favicon URL for extension explorer actions', () => {
+        const view = render(provider(
+            {
+                listContacts: vi.fn().mockResolvedValue([]),
+                getSettings: vi.fn().mockResolvedValue({}),
+            },
+            <DetailCard
+                entry={{
+                    action: 'SEND',
+                    actionIndex: '12',
+                    blockIndex: 100,
+                    chainId: CHAIN,
+                    txHash: 'abc123',
+                    timestamp: Date.now() / 1000,
+                    raw: {},
+                }}
+                peerCache={{}}
+                walletId="wallet-a"
+                showFiatInHistory={false}
+                fiatCurrency="USD"
+            />,
+            'extension',
+        ));
+
+        const mempool = screen.getByRole('link', { name: /Mempool/ });
+        expect(mempool.querySelector('img')).toBeNull();
+        expect(mempool).toHaveTextContent(/^M/);
+        const imageSources = [...view.container.querySelectorAll('img')]
+            .map((image) => image.getAttribute('src'));
+        expect(imageSources).not.toEqual(expect.arrayContaining([
+            expect.stringMatching(/^https:\/\/(?:mempool\.space|blockstream\.info|litecoinspace\.org|blockchair\.com|www\.blockcypher\.com)/),
+        ]));
+    });
+
     it('shows an exact History timestamp in local time', () => {
         const timestamp = Date.parse('2024-01-15T20:30:00Z') / 1000;
         const messaging = {

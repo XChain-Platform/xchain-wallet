@@ -20,6 +20,8 @@ import { useNetworkOffline } from '../hooks/useNetworkOffline.js';
 import { coinFromChainId } from '../components/BalanceList.jsx';
 import { listLabel } from '../utils/listLabel.js';
 import { listStatusText } from '../utils/listItemStatusText.js';
+import { t } from '../../i18n/index.js';
+import '../../i18n/locales/en/routes.js';
 import styles from './ActionsMenu.module.css';
 import local from './MyLists.module.css';
 
@@ -259,9 +261,9 @@ function MyListsScreen({ walletId, activeAccountId, onOpenList, onCreateList, on
     }
     if (!addressesByChain) {
         return wrap(
-            <div role="status" aria-label="Loading lists">
-                <Skeleton.List rows={5} />
-            </div>,
+            <div aria-hidden="true"><Skeleton.List rows={5} /></div>,
+            undefined,
+            { notices: <StatusMessage variant="status">{t('routes.myLists.loading')}</StatusMessage> },
         );
     }
     if (Object.keys(addressesByChain).length === 0) {
@@ -281,6 +283,7 @@ function MyListsScreen({ walletId, activeAccountId, onOpenList, onCreateList, on
     );
 
     // Offline, the screen's one message is its offline state below.
+    const loadingNotice = anyLoading && visibleRows.length === 0 && !offline;
     const notices = loadErrors.length > 0 && !offline ? (
         <StatusMessage
             variant="error"
@@ -297,6 +300,8 @@ function MyListsScreen({ walletId, activeAccountId, onOpenList, onCreateList, on
                 HTTP codes that mean nothing to the user. */}
             Couldn't load your lists for {loadErrors.join(', ')}. Try again in a moment.
         </StatusMessage>
+    ) : loadingNotice ? (
+        <StatusMessage variant="status">{t('routes.myLists.loading')}</StatusMessage>
     ) : null;
     const emptyOffersCreate = !anyLoading && loadErrors.length === 0 && allRows.length === 0;
 
@@ -304,8 +309,8 @@ function MyListsScreen({ walletId, activeAccountId, onOpenList, onCreateList, on
         <>
             {offline && allRows.length === 0 ? (
                 <OfflineEmptyState body="Your lists load when the connection returns." onRetry={recheck} />
-            ) : anyLoading && visibleRows.length === 0 ? (
-                <div role="status" aria-label="Loading lists">
+            ) : loadingNotice ? (
+                <div aria-hidden="true">
                     <Skeleton.List rows={5} />
                 </div>
             ) : loadErrors.length > 0 && allRows.length === 0 ? (

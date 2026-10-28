@@ -261,6 +261,7 @@ export function Settings({
     const [siteCount, setSiteCount] = useState(/** @type {number | null} */ (null));
     const [siteSearchTerms, setSiteSearchTerms] = useState('');
     const [walletManagementBusy, setWalletManagementBusy] = useState(false);
+    const desktopUpdate = useDesktopUpdateCheck();
     const sectionOpenerRefs = useRef(new Map());
     const pendingFocusRestore = useRef(/** @type {string | null} */ (null));
 
@@ -532,6 +533,7 @@ export function Settings({
             keywords: 'updates update check for updates new version upgrade latest release',
             kind: 'panel',
             Component: UpdateCheckPanel,
+            props: { updateCheck: desktopUpdate },
         }] : []),
         {
             id: 'about',
@@ -542,7 +544,7 @@ export function Settings({
             Component: AboutSection,
             summary: WALLET_VERSION,
         },
-    ]), [walletLabel, accountLabel, onOpenWalletPicker, onOpenAccountPicker, activeWallet, activeAccount, settings, siteCount, siteSearchTerms, onNavigateToMint, handleWalletRemoved, reload, variant, getLocale()]);
+    ]), [walletLabel, accountLabel, onOpenWalletPicker, onOpenAccountPicker, activeWallet, activeAccount, settings, siteCount, siteSearchTerms, onNavigateToMint, handleWalletRemoved, reload, variant, desktopUpdate.state, desktopUpdate.message, getLocale()]);
 
     // List-view filter. Hoisted ABOVE the subpage early-return so that
     // both render paths call the same number of hooks; flipping
@@ -630,6 +632,9 @@ export function Settings({
         <Screen variant={variant} header={header} scrollKey={listScrollKey}>
             <SettingsPageTemplate
                 view="list"
+                notices={desktopUpdate.message ? (
+                    <StatusMessage variant={desktopUpdate.variant}>{desktopUpdate.message}</StatusMessage>
+                ) : null}
                 toolbar={(
                     <div className={settingsStyles.searchField}>
                         <Input
@@ -877,7 +882,7 @@ function desktopUpdaterBridge() {
 
 const SEMVER = /^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?$/;
 
-/** How each update-check result reads as an inline message. */
+/** How each update-check result reads as a page message. */
 const UPDATE_CHECK_VARIANT = { checking: 'status', current: 'success', available: 'info', error: 'error' };
 
 /**
@@ -885,7 +890,7 @@ const UPDATE_CHECK_VARIANT = { checking: 'status', current: 'success', available
  * 'check' action) and shows its outcome. Every sentence is a constant; the
  * only feed-derived value shown is a version that parses as plain semver.
  */
-function UpdateCheckPanel() {
+function useDesktopUpdateCheck() {
     // 'idle' | 'checking' | 'current' | 'available' | 'error'
     const [state, setState] = useState('idle');
     const [version, setVersion] = useState(/** @type {string | null} */ (null));
@@ -939,13 +944,25 @@ function UpdateCheckPanel() {
         error: t('desktopUpdate.checkError'),
     }[state];
 
+    return {
+        state,
+        message,
+        variant: UPDATE_CHECK_VARIANT[state] || 'status',
+        check,
+    };
+}
+
+function UpdateCheckPanel({ updateCheck }) {
     return (
-        <div style={{ display: 'flex', flexDirection: 'column' }}>
-            <Button variant="ghost" size="sm" style={{ alignSelf: 'flex-start' }} onClick={check} disabled={state === 'checking'}>
-                {t('settings.page.checkForUpdates')}
-            </Button>
-            <StatusMessage variant={UPDATE_CHECK_VARIANT[state] || 'status'}>{message}</StatusMessage>
-        </div>
+        <Button
+            variant="ghost"
+            size="sm"
+            style={{ alignSelf: 'flex-start' }}
+            onClick={updateCheck.check}
+            disabled={updateCheck.state === 'checking'}
+        >
+            {t('settings.page.checkForUpdates')}
+        </Button>
     );
 }
 

@@ -35,6 +35,19 @@ describe('TokenDetail layout guards', () => {
         expect(block('.metaRow th')).toMatch(/overflow-wrap:\s*anywhere/);
     });
 
+    it('aligns detail rows and metadata cells to the card padding edge', () => {
+        expect(block('.detailRow')).toMatch(/padding-inline:\s*0/);
+        expect(block('.metaRow th,\n.metaRow td')).toMatch(/padding-inline:\s*0/);
+    });
+
+    it('contains the PGP signature overflow inside its own box', () => {
+        const pgp = block('.pgpsigBlock');
+        expect(pgp).toMatch(/min-width:\s*0/);
+        expect(pgp).toMatch(/max-width:\s*100%/);
+        expect(pgp).toMatch(/box-sizing:\s*border-box/);
+        expect(pgp).toMatch(/overflow-x:\s*auto/);
+    });
+
     it('lets a link chip with a long host wrap inside the content width', () => {
         const chip = block('.socialChip');
         expect(chip).toMatch(/max-width:\s*100%/);

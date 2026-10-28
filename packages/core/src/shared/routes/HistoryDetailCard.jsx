@@ -64,9 +64,8 @@ import { useNetworkOffline } from '../hooks/useNetworkOffline.js';
 import styles from './History.module.css';
 import { NATIVE_TICKER_BY_COIN, OFFLINE_ACTION_REASON, PENDING_WARNING_STATES, chainRegistry, coinOfChainId, describePendingAction, formatTimestamp, historyAmountDirection, peerAddressOfEntry, peerCacheKey, pendingCopyFor, pendingStateOf } from './HistoryShared.jsx';
 
-// A third-party explorer favicon is blocked by the page's img-src policy and
-// fails to load; the broken-image glyph is worse than a letter badge, so a
-// failed load falls back to the explorer's initial.
+// Image sources here are bundled assets. Third-party explorers use the local
+// letter badge path below so opening History never fetches a remote favicon.
 function ExplorerFavicon({ src, label }) {
     const [failed, setFailed] = useState(false);
     if (failed) {

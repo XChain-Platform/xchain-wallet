@@ -43,6 +43,25 @@ function search(text) {
 }
 
 describe('MyLists search', () => {
+    it('renders loading through StatusMessage before the page actions', () => {
+        render(
+            <MessagingProvider shell="extension" messaging={{
+                getAddressesByChain: vi.fn(() => new Promise(() => {})),
+            }}>
+                <MyLists
+                    walletId="w1"
+                    onOpenList={() => {}}
+                    onCreateList={() => {}}
+                    onBack={() => {}}
+                />
+            </MessagingProvider>,
+        );
+
+        const notice = screen.getByRole('status');
+        expect(notice).toHaveTextContent('Loading lists');
+        expect(notice.parentElement.firstElementChild).toBe(notice);
+    });
+
     it('finds a list by its name', async () => {
         await renderRows();
         search('road');

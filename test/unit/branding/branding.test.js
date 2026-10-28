@@ -92,7 +92,7 @@ describe('branding constants', () => {
             TREZOR_MANIFEST.appUrl,
             DEFAULT_MINER_URL,
             ...Object.values(EXTERNAL_EXPLORERS)
-                .flatMap(({ baseUrl, iconUrl }) => [baseUrl, iconUrl]),
+                .map(({ baseUrl }) => baseUrl),
         ];
         expect(serviceUrls.every((value) => URL.canParse(value))).toBe(true);
         expect(LOCAL_CONNECT_SOURCES).toEqual([

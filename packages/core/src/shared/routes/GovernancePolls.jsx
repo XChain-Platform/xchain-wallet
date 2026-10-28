@@ -154,11 +154,9 @@ export function GovernancePolls({ walletId, onOpenPoll, onCreate, onDelegate, on
     }
     if (!chainId && !error) {
         return wrap(
-            <ListPage>
-                <div role="status" aria-label={t('governance.loadingAddressesLabel')} aria-busy="true">
-                    {t('governance.loadingAddresses')}
-                </div>
-            </ListPage>,
+            <ListPage notices={(
+                <StatusMessage variant="status">{t('governance.loadingAddresses')}</StatusMessage>
+            )} />,
         );
     }
     if (!chainId) {
@@ -183,6 +181,8 @@ export function GovernancePolls({ walletId, onOpenPoll, onCreate, onDelegate, on
                 >
                     {pollError}
                 </StatusMessage>
+            ) : !rows ? (
+                <StatusMessage variant="status">{t('governance.loadingPolls')}</StatusMessage>
             ) : null}
             toolbar={(
             <>
@@ -192,11 +192,6 @@ export function GovernancePolls({ walletId, onOpenPoll, onCreate, onDelegate, on
             </>
         )}>
 
-            {chainId && !rows && !pollError ? (
-                <div role="status" aria-label={t('governance.loadingPollsLabel')} aria-busy="true">
-                    {t('governance.loadingPolls')}
-                </div>
-            ) : null}
             {rows && rows.length === 0 ? (
                 <EmptyState title={t('governance.empty.title')} body={t('governance.empty.body')} />
             ) : null}

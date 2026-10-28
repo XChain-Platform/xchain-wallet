@@ -1356,7 +1356,7 @@ function DetailsPanel({
 function DetailRow({ label, children }) {
     return (
         <li>
-            <ListRow title={label} trailing={children} />
+            <ListRow className={styles.detailRow} title={label} trailing={children} />
         </li>
     );
 }

@@ -36,7 +36,7 @@ const configuredUrls = [
     TREZOR_CONNECT_ORIGIN,
     ...LOCAL_CONNECT_SOURCES,
     ...Object.values(EXTERNAL_EXPLORERS)
-        .flatMap(({ baseUrl, iconUrl }) => [baseUrl, iconUrl]),
+        .map(({ baseUrl }) => baseUrl),
 ];
 const endpointHosts = new Set(configuredUrls.map((value) => {
     const match = /^[a-z]+:\/\/([^/:*]+)/i.exec(value);

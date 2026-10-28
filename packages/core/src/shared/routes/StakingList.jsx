@@ -512,7 +512,7 @@ export function StakingList({ walletId, activeAccountId, onOpenStake, onNewStake
     return wrap(
         <>
             {Number(claimable.unclaimed) > 0 ? (
-                <div className={local.claimable} role="status">
+                <div className={local.claimable}>
                     <div>
                         <strong><bdi dir="ltr">{formatWithThousands(claimable.unclaimed)} XCHAIN</bdi></strong>
                         {' '}ready to claim

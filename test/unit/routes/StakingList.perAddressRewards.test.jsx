@@ -57,6 +57,7 @@ describe('StakingList Claim button', () => {
 
         const claim = await screen.findByRole('button', { name: 'Claim' });
         await waitFor(() => expect(screen.getAllByText('+5 XCHAIN reward')).toHaveLength(1));
+        expect(claim.parentElement).not.toHaveAttribute('role');
         fireEvent.click(claim);
 
         expect(onOpenStake).toHaveBeenCalledWith({ kind: 'validator', chainId: CHAIN, address: PAID });
