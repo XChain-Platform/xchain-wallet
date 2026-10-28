@@ -32,10 +32,6 @@
             "count": 2,
             "reason": "A sort select laid over a hand-drawn label and chevron, plus the tab buttons; moving it needs a design call on the compact sort control."
         },
-        "packages/core/src/shared/components/HwSignBlock.jsx": {
-            "count": 1,
-            "reason": "The control is the whole clickable row, tab, tile or icon target of its surface, so the kit Button cannot wrap it yet."
-        },
         "packages/core/src/shared/components/LayoutModeToggle.jsx": {
             "count": 2,
             "reason": "The control is the whole clickable row, tab, tile or icon target of its surface, so the kit Button cannot wrap it yet."
