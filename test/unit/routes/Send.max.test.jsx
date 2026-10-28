@@ -142,6 +142,29 @@ describe('Send Max', () => {
         expect(screen.getByRole('button', { name: /^Send$/ })).toBeDisabled();
     });
 
+    it('says other sends hold every coin when held coins leave the available line at zero', async () => {
+        // The available line leaves held coins out, so a queued send that
+        // holds every coin reads as a zero balance. The note still names
+        // the reason, not a wallet with nothing in it.
+        mount({
+            nativeQuantity: '0',
+            tokens: [{ tick: 'PEPE', quantity: '1', divisibility: 0 }],
+            quote: vi.fn().mockResolvedValue({
+                maxSats: '0',
+                feeSats: '0',
+                inputSats: '0',
+                otherOutputSats: '0',
+                source: 'encoder-quote',
+                coinsHeld: true,
+            }),
+        });
+        await prepareNativeMax();
+
+        await screen.findByText(/held by another send from this wallet that hasn't gone out yet/);
+        expect(screen.queryByText(/There is no spendable balance/)).toBeNull();
+        expect(screen.getByLabelText(/^Amount \(/)).toHaveValue('');
+    });
+
     it('keeps the amount blank and shows a plain note when Max is below dust', async () => {
         mount({
             nativeQuantity: '1000',

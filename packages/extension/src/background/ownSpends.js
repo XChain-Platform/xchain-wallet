@@ -27,6 +27,10 @@
 // the record of those coins (it outlives a browser restart, which session
 // storage does not), so the caller passes the queued outpoints to each claim,
 // and a queued send that does go out holds its coins from then on.
+//
+// A claim that went out records its transaction id, so the same signed bytes
+// sent again (a pasted copy of a send the wallet made) are not refused over
+// their own coins.
 
 import { flows } from '@xchain-wallet/core';
 import { parseRawTx } from '@xchain-wallet/core/signers/verifySignedTx.js';
@@ -36,6 +40,7 @@ import { parseRawTx } from '@xchain-wallet/core/signers/verifySignedTx.js';
 export const OWN_SPEND_HOLD_MS = 30 * 60 * 1000;
 
 const keyOf = (chainId, txid, vout) => `${chainId}|${String(txid).toLowerCase()}:${Number(vout)}`;
+const txidKey = (txid) => (typeof txid === 'string' ? txid.trim().toLowerCase() : '');
 
 /**
  * The outpoints a PSBT spends, read with the chain SDK's own decomposer.
@@ -71,7 +76,7 @@ export function rawTxOutpoints(txHex) {
 }
 
 /**
- * @typedef {{ key: string, claim: string, until: number }} OwnSpend
+ * @typedef {{ key: string, claim: string, until: number, txid?: string }} OwnSpend
  * @typedef {{ load: () => Promise<OwnSpend[]>, save: (entries: OwnSpend[]) => Promise<void> }} OwnSpendStore
  */
 
@@ -103,16 +108,18 @@ export function createOwnSpendLedger({ store, now = () => Date.now(), holdMs = O
          *
          * @param {string} chainId
          * @param {Array<{ txid: string, vout: number }>} outpoints
-         * @param {{ queued?: Array<{ txid: string, vout: number }> }} [opts]
-         *   outpoints of signed transactions waiting in the broadcast queue
+         * @param {{ queued?: Array<{ txid: string, vout: number }>, txid?: string }} [opts]
+         *   `queued`: outpoints of signed transactions waiting in the broadcast
+         *   queue; `txid`: the transaction being sent, whose own earlier claims pass
          * @returns {Promise<string>} the claim id, '' when there was nothing to claim
          */
-        async claim(chainId, outpoints, { queued = [] } = {}) {
+        async claim(chainId, outpoints, { queued = [], txid = '' } = {}) {
             await hydrated;
             if (!Array.isArray(outpoints) || outpoints.length === 0) return '';
             const at = now();
             held = held.filter((e) => e.until > at);
-            const keys = new Set(held.map((e) => e.key));
+            const same = txidKey(txid);
+            const keys = new Set(held.filter((e) => !same || e.txid !== same).map((e) => e.key));
             for (const o of Array.isArray(queued) ? queued : []) keys.add(keyOf(chainId, o.txid, o.vout));
             const spent = outpoints.filter((o) => keys.has(keyOf(chainId, o.txid, o.vout)));
             if (spent.length > 0) {
@@ -126,25 +133,33 @@ export function createOwnSpendLedger({ store, now = () => Date.now(), holdMs = O
             await persist();
             return claim;
         },
-        /** The send broadcast: hold its inputs for holdMs from now. */
-        async keep(claim) {
+        /** The send broadcast: hold its inputs for another holdMs, under its txid when known. */
+        async keep(claim, txid) {
             if (!claim) return;
             const until = now() + holdMs;
-            for (const e of held) if (e.claim === claim) e.until = until;
+            const sent = txidKey(txid);
+            for (const e of held) {
+                if (e.claim !== claim) continue;
+                e.until = until;
+                if (sent) e.txid = sent;
+            }
             await persist();
         },
-        /** A queued send went out: hold its inputs for holdMs from now. */
-        async hold(chainId, outpoints) {
+        /** A queued send went out: hold its inputs for another holdMs. */
+        async hold(chainId, outpoints, txid) {
             await hydrated;
             if (!Array.isArray(outpoints) || outpoints.length === 0) return;
             const at = now();
             nextClaim += 1;
             const claim = `${at}-${nextClaim}`;
             held = held.filter((e) => e.until > at);
-            for (const o of outpoints) held.push({ key: keyOf(chainId, o.txid, o.vout), claim, until: at + holdMs });
+            const sent = txidKey(txid);
+            for (const o of outpoints) {
+                held.push({ key: keyOf(chainId, o.txid, o.vout), claim, until: at + holdMs, ...(sent ? { txid: sent } : {}) });
+            }
             await persist();
         },
-        /** The coins claims on this chain hold now. */
+        /** The coins that live claims on this chain hold. */
         async heldOutpoints(chainId) {
             await hydrated;
             const at = now();
@@ -163,4 +178,119 @@ export function createOwnSpendLedger({ store, now = () => Date.now(), holdMs = O
             await persist();
         },
     };
+}
+
+/**
+ * The claims of one signing route. A route can build more than one PSBT (a
+ * send or action built at submit time, each leg of a chunked deploy), and each
+ * one claims its inputs the moment it exists, before it is signed. Coins the
+ * route already holds are not claimed twice, so a later build over them never
+ * refuses itself. A transaction that goes out keeps its claim even if a later
+ * step of the route fails; the rest are freed unless the route went out.
+ *
+ * @param {ReturnType<typeof createOwnSpendLedger>} ledger
+ * @param {(chainId: string) => Promise<Array<{ txid: string, vout: number }>>} queuedOutpoints
+ */
+export function createRouteClaims(ledger, queuedOutpoints) {
+    /** @type {Array<{ id: string, keys: Set<string>, sent: boolean }>} */
+    const claims = [];
+    const routeKeys = new Set();
+    return {
+        /**
+         * @param {string} chainId
+         * @param {Array<{ txid: string, vout: number }>} outpoints
+         */
+        async claim(chainId, outpoints) {
+            const fresh = (Array.isArray(outpoints) ? outpoints : [])
+                .filter((o) => !routeKeys.has(keyOf(chainId, o.txid, o.vout)));
+            if (fresh.length === 0) return;
+            const id = await ledger.claim(chainId, fresh, { queued: await queuedOutpoints(chainId) });
+            if (!id) return;
+            const keys = new Set(fresh.map((o) => keyOf(chainId, o.txid, o.vout)));
+            for (const key of keys) routeKeys.add(key);
+            claims.push({ id, keys, sent: false });
+        },
+        /**
+         * A transaction of the route went out: its claims hold from here.
+         *
+         * @param {string} chainId
+         * @param {Array<{ txid: string, vout: number }>} outpoints
+         * @param {string} [txid]
+         */
+        async sent(chainId, outpoints, txid) {
+            const spent = new Set((Array.isArray(outpoints) ? outpoints : []).map((o) => keyOf(chainId, o.txid, o.vout)));
+            for (const entry of claims) {
+                if (entry.sent || ![...entry.keys].some((key) => spent.has(key))) continue;
+                entry.sent = true;
+                await ledger.keep(entry.id, txid);
+            }
+        },
+        /** The route ended: keep every claim if it went out, else free the ones nothing sent. */
+        async settle(wentOut) {
+            for (const entry of claims) {
+                if (wentOut) await ledger.keep(entry.id);
+                else if (!entry.sent) await ledger.release(entry.id);
+            }
+        },
+    };
+}
+
+/**
+ * A view of an SDK registry whose encoders report each transaction they build
+ * and each one they broadcast, so a route can claim the coins of a PSBT built
+ * at submit time before anything signs it. Everything else reads through to
+ * the real registry and SDKs.
+ *
+ * @param {any} registry
+ * @param {{
+ *   onBuilt: (chainId: string, sdk: any, psbtHex: unknown) => Promise<void>,
+ *   onSent: (chainId: string, txHex: string) => Promise<void>,
+ * }} hooks
+ */
+export function claimingSdkRegistry(registry, { onBuilt, onSent }) {
+    if (!registry || typeof registry.get !== 'function') return registry;
+    /** @type {Map<string, { sdk: any, view: any }>} */
+    const views = new Map();
+    const passThrough = (target, prop) => {
+        const value = Reflect.get(target, prop, target);
+        return typeof value === 'function' ? value.bind(target) : value;
+    };
+    const viewOf = (chainId, sdk) => {
+        const encoder = sdk.encoder;
+        if (!encoder || typeof encoder.createTx !== 'function') return sdk;
+        const watched = Object.create(encoder);
+        watched.createTx = async (params) => {
+            const built = await encoder.createTx(params);
+            await onBuilt(chainId, sdk, built?.psbt);
+            return built;
+        };
+        if (typeof encoder.broadcastTx === 'function') {
+            watched.broadcastTx = async (txHex) => {
+                const sent = await encoder.broadcastTx(txHex);
+                await onSent(chainId, txHex);
+                return sent;
+            };
+        }
+        // A fee estimate builds through createTx as well and spends nothing.
+        if (typeof encoder.estimateFee === 'function') {
+            watched.estimateFee = (params) => encoder.estimateFee(params);
+        }
+        return new Proxy(sdk, {
+            get: (target, prop) => (prop === 'encoder' ? watched : passThrough(target, prop)),
+        });
+    };
+    return new Proxy(registry, {
+        get(target, prop) {
+            if (prop !== 'get') return passThrough(target, prop);
+            return (chainId) => {
+                const sdk = target.get(chainId);
+                if (!sdk || typeof sdk !== 'object') return sdk;
+                const cached = views.get(chainId);
+                if (cached && cached.sdk === sdk) return cached.view;
+                const view = viewOf(chainId, sdk);
+                views.set(chainId, { sdk, view });
+                return view;
+            };
+        },
+    });
 }

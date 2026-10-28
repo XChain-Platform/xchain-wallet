@@ -821,7 +821,9 @@ function PendingDetailPanel({ entry, balancesHidden = false, onDismissFailed, tr
                         </Button>
                     ) : null}
                 </>
-            ) : (
+            ) : state === 'replaced-elsewhere' ? null : (
+                // A send spent around has nothing left to validate: its
+                // headline already says it won't confirm.
                 <p className={styles.pendingNotValidated}>{t('pending.detail.notValidated')}</p>
             )}
 

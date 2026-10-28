@@ -126,7 +126,12 @@ export function classifyEntryStatus(entry, nowMs = Date.now()) {
     if (raw.valid === 0 || raw.valid === false) return 'failed';
     if (Number(entry.blockIndex) > 0) return 'confirmed';
     if (entry.pending?.chainConfirmed === true) return 'confirmed';
-    if (entry.pending && pendingDisplayState(entry, nowMs) === 'dropped') return 'failed';
+    if (entry.pending) {
+        const state = pendingDisplayState(entry, nowMs);
+        // Another transaction spent this one's coins, so it can never
+        // confirm: like a dropped send, it is over, not waiting.
+        if (state === 'dropped' || state === 'replaced-elsewhere') return 'failed';
+    }
     return 'pending';
 }
 

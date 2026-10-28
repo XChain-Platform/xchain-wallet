@@ -13,6 +13,7 @@ import styles from './TxStatusTimeline.module.css';
 import { t } from '../../i18n/index.js';
 import '../../i18n/locales/en/transactionStatus.js';
 import '../../i18n/locales/en/txTimeline.js';
+import '../../i18n/locales/en/pending.js';
 import { pendingDisplayState } from '../utils/pendingHistory.js';
 import { formatRelativeTime } from '../utils/dateTime.js';
 
@@ -54,6 +55,12 @@ const MEMPOOL_STAGE_COPY = {
         label: 'Replaced',
         done: false,
         sub: 'You replaced this transaction with a higher-fee version',
+    },
+    'replaced-elsewhere': {
+        get label() { return t('pending.detail.replacedElsewhere'); },
+        done: false,
+        warn: true,
+        get sub() { return t('pending.detail.replacedElsewhereHelp'); },
     },
     // The wallet's own verdict, not the network's: it gave up before the
     // network took the send. The detail panel carries the recorded reason.

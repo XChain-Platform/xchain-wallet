@@ -192,6 +192,21 @@ describe('History row labels a pending transaction by state', () => {
         await waitFor(() => expect(rowFor(view, 'replaced')).toBeTruthy());
         expect(rowFor(view, 'replaced').textContent).toContain('replaced');
     });
+
+    it('reads a send another transaction spent around as replaced, never as pending', async () => {
+        // The coins this send spends are gone from the sender's unspent
+        // outputs and nothing lists it: it can never confirm, so neither the
+        // row's status nor the detail may call it pending.
+        const { view } = mountHistory({ pendingTxs: [staleLocalSend({ replacedElsewhere: true })] });
+        await waitFor(() => expect(rowFor(view, 'replaced-elsewhere')).toBeTruthy());
+        const row = rowFor(view, 'replaced-elsewhere');
+        expect(row.textContent).toMatch(/replaced/i);
+        expect(row.textContent).not.toMatch(/\bPending\b/);
+        const region = await openRow(view, 'replaced-elsewhere');
+        const panel = panelIn(region);
+        expect(within(panel).getByText('Another transaction spent the same coins. This one won\'t confirm.')).toBeTruthy();
+        expect(panel.textContent).not.toContain('Pending, not yet validated by the service.');
+    });
 });
 
 describe('History pending detail branch', () => {

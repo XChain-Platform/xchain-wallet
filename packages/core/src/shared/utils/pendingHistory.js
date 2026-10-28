@@ -371,6 +371,7 @@ export function pendingTxToEntry({
             localStatus: String(pendingTx?.status || ''),
             pendingTxId: pendingTx?.id ? String(pendingTx.id) : null,
             replaced: String(pendingTx?.status || '') === 'rbf-replaced',
+            replacedElsewhere: pendingTx?.replacedElsewhere === true,
             rbf: typeof pendingTx?.rbf === 'boolean' ? pendingTx.rbf : null,
             replacementTxHash: pendingTx?.rbfReplacement
                 ? normalizeHash(pendingTx.rbfReplacement)
@@ -410,6 +411,7 @@ function foldLocalIntoNetwork(networkEntry, localEntry) {
             localStatus: localEntry.pending.localStatus,
             pendingTxId: localEntry.pending.pendingTxId,
             replaced: localEntry.pending.replaced,
+            replacedElsewhere: localEntry.pending.replacedElsewhere === true,
             rbf: localEntry.pending.rbf,
             replacementTxHash: localEntry.pending.replacementTxHash,
             // A block is the one thing a mempool row cannot know about; only
@@ -504,6 +506,8 @@ export function mergePendingEntries({ confirmed, pending }) {
  *   `dropped`           a mempool DID report it and no longer does, with no
  *                       confirmation, past the grace window
  *   `replaced`          we replaced it ourselves via RBF
+ *   `replaced-elsewhere` another transaction spent its coins, so it cannot
+ *                       confirm (no mempool lists it and no block holds it)
  *
  * `confirmed` is the one state that speaks of a block, and it is a fact
  * about the transaction, not about any action: the service recorded none
@@ -521,7 +525,7 @@ export function mergePendingEntries({ confirmed, pending }) {
  * the network took the send. Only a proven block outranks it, since a
  * "permanent" broadcast failure can still turn out to have landed.
  *
- * @returns {'confirmed' | 'awaiting-network' | 'seen' | 'not-seen' | 'dropped' | 'replaced' | 'failed'}
+ * @returns {'confirmed' | 'awaiting-network' | 'seen' | 'not-seen' | 'dropped' | 'replaced' | 'replaced-elsewhere' | 'failed'}
  */
 export function pendingDisplayState(entry, nowMs, windows) {
     const meta = entry?.pending;
@@ -539,6 +543,9 @@ export function pendingDisplayState(entry, nowMs, windows) {
 
     // Present in a mempool as of the latest read: unambiguously healthy.
     if (meta.origin === 'mempool' || meta.origin === 'both') return 'seen';
+
+    // Nothing lists it and its coins are spent by another transaction.
+    if (meta.replacedElsewhere) return 'replaced-elsewhere';
 
     // No mempool is reporting it right now. This includes a local record and
     // an incoming row remembered from the previous successful mempool read.

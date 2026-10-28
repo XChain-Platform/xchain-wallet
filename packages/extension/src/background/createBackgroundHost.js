@@ -58,7 +58,13 @@ import {
     createHoldBeforeBroadcast,
     createSendHoldRegistry,
 } from './sendHold.js';
-import { createOwnSpendLedger, psbtOutpoints, rawTxOutpoints } from './ownSpends.js';
+import {
+    claimingSdkRegistry,
+    createOwnSpendLedger,
+    createRouteClaims,
+    psbtOutpoints,
+    rawTxOutpoints,
+} from './ownSpends.js';
 import { createSignThrottleStorage } from './signThrottleStorage.js';
 import { createLogConsoleStorage } from './logConsoleStorage.js';
 import {
@@ -1173,7 +1179,10 @@ export function createBackgroundHost(deps) {
         activeSendIntents.add(intentKey);
         try {
             // The hardware lane passes its deps inside req.
-            return await withSpendClaim(req, flowDeps ?? req, () => sendHeld(req, flowDeps));
+            return await withSpendClaim(req, flowDeps ?? req, (claimDeps) => sendHeld(req, {
+                ...flowDeps,
+                ...(claimDeps?.sdkRegistry ? { sdkRegistry: claimDeps.sdkRegistry } : {}),
+            }));
         } finally {
             activeSendIntents.delete(intentKey);
         }
@@ -1202,20 +1211,30 @@ export function createBackgroundHost(deps) {
 
     // Every action the background signs claims the coins its reviewed PSBT
     // spends (see ownSpends.js), so a review another surface built over the same
-    // coins is refused before anything is signed. The claim holds while the
-    // transaction signs, for a while after it goes out, and, through the queue
-    // entry itself, while it waits in the broadcast queue; any other end frees it.
+    // coins is refused before anything is signed. A PSBT the route builds itself
+    // (a dApp send, an action built at submit time, each leg of a chunked
+    // deploy) claims its coins the moment the encoder returns it, through the
+    // registry `run` receives. The claim holds while the transaction signs, for
+    // a while after it goes out, and, through the queue entry itself, while it
+    // waits in the broadcast queue; any other end frees it.
     async function withSpendClaim(req, deps, run) {
         const chainId = req?.chainId;
+        const route = createRouteClaims(ownSpends, queuedOutpoints);
         let sdk = null;
         try { sdk = deps?.sdkRegistry?.get?.(chainId) ?? null; } catch { sdk = null; }
-        const outpoints = psbtOutpoints(sdk, req?.prebuiltPsbt?.psbtHex);
-        const claim = outpoints.length > 0
-            ? await ownSpends.claim(chainId, outpoints, { queued: await queuedOutpoints(req?.walletId, chainId) })
-            : '';
+        await route.claim(chainId, psbtOutpoints(sdk, req?.prebuiltPsbt?.psbtHex));
+        const claimDeps = deps?.sdkRegistry
+            ? {
+                ...deps,
+                sdkRegistry: claimingSdkRegistry(deps.sdkRegistry, {
+                    onBuilt: (builtChain, builtSdk, psbtHex) => route.claim(builtChain, psbtOutpoints(builtSdk, psbtHex)),
+                    onSent: (sentChain, txHex) => route.sent(sentChain, rawTxOutpoints(txHex), txidOfRaw(txHex)),
+                }),
+            }
+            : deps;
         let wentOut = false;
         try {
-            const result = await run();
+            const result = await run(claimDeps);
             wentOut = Boolean(result?.txid) && !result?.queued;
             return result;
         } catch (err) {
@@ -1223,18 +1242,27 @@ export function createBackgroundHost(deps) {
             wentOut = /^broadcast failed \(phase2\)/i.test(String(err?.message || '').trim());
             throw err;
         } finally {
-            if (wentOut) await ownSpends.keep(claim);
-            else await ownSpends.release(claim);
+            await route.settle(wentOut);
         }
     }
 
-    // The coins this wallet's signed transactions waiting in the broadcast queue spend.
-    async function queuedOutpoints(walletId, chainId) {
-        if (typeof walletId !== 'string' || !walletId) return [];
+    // The coins the signed transactions waiting in the broadcast queue spend, in
+    // every wallet's queue: a dApp request names no wallet, and a coin belongs
+    // to one queue at most. `exceptTxid` leaves out a queued copy of the very
+    // transaction being sent.
+    async function queuedOutpoints(chainId, exceptTxid = '') {
         await ensureQueueLoaded();
-        return getQueue(walletId)
+        const except = String(exceptTxid || '').toLowerCase();
+        return [...queueStore.queues.values()]
+            .flatMap((entries) => (Array.isArray(entries) ? entries : []))
             .filter((entry) => entry?.chainId === chainId)
+            .filter((entry) => !except || txidOfRaw(entry?.signedTxHex) !== except)
             .flatMap((entry) => rawTxOutpoints(entry?.signedTxHex));
+    }
+
+    // The id of signed transaction bytes, '' for bytes that do not parse.
+    function txidOfRaw(txHex) {
+        try { return String(rawTxid(txHex) || '').toLowerCase(); } catch { return ''; }
     }
 
     // ONE reservation ledger per host, shared across every
@@ -3048,7 +3076,7 @@ export function createBackgroundHost(deps) {
         // Coins another send or action from this wallet holds are not this
         // send's to spend, so Max prices the rest (see ownSpends.js).
         if (!Array.isArray(encoderOpts.utxos)) {
-            const free = await unclaimedUtxos(req?.walletId, chainId, source.address, sdkRegistry);
+            const free = await unclaimedUtxos(chainId, source.address, sdkRegistry);
             // Every coin is held: there is nothing for Max to offer, and the
             // form must not fall back to the balance less a fee estimate.
             if (free?.length === 0) {
@@ -3065,8 +3093,8 @@ export function createBackgroundHost(deps) {
 
     // The address's spendable outputs minus the coins a claim or a queued send
     // holds, or null when nothing is held there (the encoder then selects as usual).
-    async function unclaimedUtxos(walletId, chainId, address, sdkRegistry) {
-        const held = [...await ownSpends.heldOutpoints(chainId), ...await queuedOutpoints(walletId, chainId)];
+    async function unclaimedUtxos(chainId, address, sdkRegistry) {
+        const held = [...await ownSpends.heldOutpoints(chainId), ...await queuedOutpoints(chainId)];
         if (held.length === 0) return null;
         const taken = new Set(held.map((o) => `${String(o.txid).toLowerCase()}:${Number(o.vout)}`));
         let rows;
@@ -4059,7 +4087,7 @@ export function createBackgroundHost(deps) {
                         recordOwedSettlement(walletId, entry.pendingTxId, 'patch', deliveredPatch);
                     }
                     await settleReplacedOriginal(vault, entry, entry.txid);
-                    await ownSpends.hold(entry.chainId, queuedSpend);
+                    await ownSpends.hold(entry.chainId, queuedSpend, txidOfRaw(entry.signedTxHex));
                     const landed = q.findIndex((e) => e.id === id);
                     if (landed >= 0) q.splice(landed, 1);
                     await persistQueue();
@@ -4151,7 +4179,7 @@ export function createBackgroundHost(deps) {
                 recordOwedSettlement(walletId, entry.pendingTxId, 'patch', landedPatch);
             }
             await settleReplacedOriginal(vault, entry, landedPatch.txid);
-            await ownSpends.hold(entry.chainId, queuedSpend);
+            await ownSpends.hold(entry.chainId, queuedSpend, txidOfRaw(entry.signedTxHex));
             const cur = q.findIndex((e) => e.id === id);
             if (cur >= 0) q.splice(cur, 1);
             await persistQueue();
@@ -4654,7 +4682,7 @@ export function createBackgroundHost(deps) {
             // ignore the extra option.
             // A send claims its coins inside sendWithHold; every other action claims them here.
             if (flow === sendWithHold) return flow({ ...rest, ...deps, reservationLedger, signer, onBroadcastFailure });
-            return withSpendClaim(rest, deps, () => flow({ ...rest, ...deps, reservationLedger, signer, onBroadcastFailure }));
+            return withSpendClaim(rest, deps, (claimDeps) => flow({ ...rest, ...claimDeps, reservationLedger, signer, onBroadcastFailure }));
         });
     }
 
@@ -5904,8 +5932,31 @@ export function createBackgroundHost(deps) {
     host.register('balances.address', async (req, { vault, sdkRegistry, chainRegistry }) => {
         // The vault lets the read answer a demo wallet's address from its
         // fixture instead of the explorer (issue #82).
-        return addressBalances({ ...req, vault, sdkRegistry, chainRegistry });
+        const shape = await addressBalances({ ...req, vault, sdkRegistry, chainRegistry });
+        return withHeldCoinsAside(shape, req?.chainId, req?.address, sdkRegistry);
     });
+
+    // The coin balance a form offers, without the coins another send from this
+    // wallet holds. A send that is signing or waiting in the queue has spent
+    // them, and the change the netted balance counts does not exist until it
+    // goes out. Max prices the same coins (see unclaimedUtxos), so the
+    // available line and Max agree. Nothing is read when nothing is held.
+    async function withHeldCoinsAside(shape, chainId, address, sdkRegistry) {
+        const native = shape?.native;
+        if (!native || typeof chainId !== 'string' || typeof address !== 'string') return shape;
+        const free = await unclaimedUtxos(chainId, address, sdkRegistry);
+        if (!free) return shape;
+        let freeSats = 0n;
+        let offered;
+        try {
+            for (const row of free) freeSats += BigInt(row?.value ?? 0);
+            offered = BigInt(native.quantity);
+        } catch {
+            return shape;
+        }
+        if (freeSats >= offered) return shape;
+        return { ...shape, native: { ...native, quantity: freeSats.toString() } };
+    }
 
     host.register('utxos.address', async (req, { sdkRegistry }) => {
         const chainId = req?.chainId;
@@ -5950,10 +6001,11 @@ export function createBackgroundHost(deps) {
     // exactly as before.
     host.register('pendingTxs.forAddress', async (req, { vault, chainRegistry, sdkRegistry }) => {
         let seenNow;
+        let replaced;
         try {
-            ({ seenNow } = await flows.reconcileNativePendingTxs({ ...req, vault, chainRegistry, sdkRegistry }));
+            ({ seenNow, replaced } = await flows.reconcileNativePendingTxs({ ...req, vault, chainRegistry, sdkRegistry }));
         } catch { /* the listing below must never depend on the tracker or the explorer */ }
-        return livePendingTxs({ ...req, vault, chainRegistry, seenNow });
+        return livePendingTxs({ ...req, vault, chainRegistry, seenNow, replaced });
     });
 
     // "Remove from history" on a failed local send. The flow deletes only a
@@ -6086,10 +6138,41 @@ export function createBackgroundHost(deps) {
     // Every software-signed action that spends coins claims them around its
     // whole route (see withSpendClaim); a send claims inside sendWithHold.
     for (const type of SPENDING_ACTION_TYPES) {
-        host.wrap(type, (handler) => (req, routeDeps) => withSpendClaim(req, routeDeps, () => handler(req, routeDeps)));
+        host.wrap(type, (handler) => (req, routeDeps) => withSpendClaim(req, routeDeps, (claimDeps) => handler(req, claimDeps)));
     }
 
+    // A raw signed transaction claims the coins it spends before it goes out,
+    // like every send the background signs (see ownSpends.js), so it can
+    // neither replace a send from this wallet nor be replaced by one. The same
+    // bytes sent again, a copy of a send already out or of one in the queue,
+    // pass; queued bytes hold their coins through the queue entry.
+    host.wrap('broadcast.signedTx', (handler) => async (req, routeDeps) => {
+        const chainId = req?.chainId;
+        const outpoints = typeof chainId === 'string' && chainId ? rawTxOutpoints(req?.txHex) : [];
+        if (outpoints.length === 0) return handler(req, routeDeps);
+        const txid = txidOfRaw(req.txHex);
+        const claim = await ownSpends.claim(chainId, outpoints, { queued: await queuedOutpoints(chainId, txid), txid });
+        let wentOut = false;
+        try {
+            const result = await handler(req, routeDeps);
+            wentOut = Boolean(result?.txid) && !result?.queued;
+            return result;
+        } finally {
+            if (wentOut) await ownSpends.keep(claim, txid);
+            else await ownSpends.release(claim);
+        }
+    });
+
     registerBridgeHandlers(host, { approvals, events: bridgeEvents, signThrottle, getAssetUrl });
+    // A dApp SEND or SWEEP builds its PSBT after the approval and claims its
+    // coins there, before it signs. A page names no reviewed PSBT to claim.
+    for (const type of ['bridge.signAction', 'bridge.parallel']) {
+        host.wrap(type, (handler) => (req, routeDeps) => withSpendClaim(
+            { chainId: req?.chainId },
+            routeDeps,
+            (claimDeps) => handler(req, claimDeps),
+        ));
+    }
 
     // PC-16: the auto-pay engine runs shell-side (next to the other
     // watchers) but must place its funds holds in THIS host's ledger so

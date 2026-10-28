@@ -55,6 +55,12 @@ export const PENDING_COPY = {
         headline: 'pending.detail.replaced',
         help: 'pending.detail.replacedHelp',
     },
+    // Another transaction, not one this wallet made, spent the same coins.
+    'replaced-elsewhere': {
+        row: 'pending.row.replaced',
+        headline: 'pending.detail.replacedElsewhere',
+        help: 'pending.detail.replacedElsewhereHelp',
+    },
     // The block is proven and no explorer row will ever take the entry's
     // place. The headline says what the block settled: a plain coin transfer
     // has no action to speak of, an action-carrying transaction the service
@@ -88,7 +94,7 @@ export const CONFIRMED_NO_EFFECT_COPY = {
  * Healthy pending and "nothing has ever reported this" must not look
  * alike.
  */
-export const PENDING_WARNING_STATES = new Set(['not-seen', 'dropped', 'failed']);
+export const PENDING_WARNING_STATES = new Set(['not-seen', 'dropped', 'replaced-elsewhere', 'failed']);
 
 /**
  * The pending state of an entry, or null when there is nothing to

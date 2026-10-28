@@ -16,11 +16,21 @@
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-const { sendTokenMock, orderActionMock, broadcastTxMock, quoteMaxSendableMock } = vi.hoisted(() => ({
+const {
+    sendTokenMock, orderActionMock, broadcastTxMock, quoteMaxSendableMock, createTxMock, deployChunkedRunMock,
+} = vi.hoisted(() => ({
     sendTokenMock: vi.fn(),
     orderActionMock: vi.fn(),
     broadcastTxMock: vi.fn(),
     quoteMaxSendableMock: vi.fn(),
+    createTxMock: vi.fn(),
+    deployChunkedRunMock: vi.fn(),
+}));
+
+// A paired hardware signer for every hardware route.
+vi.mock('../../../packages/extension/src/background/signerBridge.js', async (importOriginal) => ({
+    ...(await importOriginal()),
+    getTransport: () => ({}),
 }));
 
 vi.mock('@xchain-wallet/core', async (importOriginal) => {
@@ -32,6 +42,9 @@ vi.mock('@xchain-wallet/core', async (importOriginal) => {
             sendToken: sendTokenMock,
             orderAction: orderActionMock,
             quoteMaxSendable: quoteMaxSendableMock,
+            deployChunkedRun: deployChunkedRunMock,
+            resolveSigner: async () => ({ kind: 'ledger', signerRecord: { id: 'ledger-one' } }),
+            buildRemoteSigner: () => ({ kind: 'ledger' }),
         },
     };
 });
@@ -65,17 +78,32 @@ function makeHost() {
         vault: {
             settings: { get: async () => ({ activeNetwork: 'mainnet' }) },
             wallets: { list: async () => [] },
+            addresses: { list: async () => [{ id: 'addr-one', address: 'source-one' }] },
+            pendingTxs: (() => {
+                const records = new Map();
+                return {
+                    put: async (r) => { records.set(r.id, r); },
+                    get: async (id) => records.get(id) ?? null,
+                    list: async () => [...records.values()],
+                    findBy: async () => [],
+                };
+            })(),
         },
         chainRegistry: {
-            get: (id) => (id === 'bitcoin-mainnet' ? { id, networkKind: 'mainnet' } : null),
+            get: (id) => (id === 'bitcoin-mainnet' ? { id, coin: 'bitcoin', networkKind: 'mainnet' } : null),
+            descriptorFor: (id) => (id === 'bitcoin-mainnet' ? { id, coin: 'bitcoin', networkKind: 'mainnet' } : null),
             list: () => [],
         },
         sdkRegistry: {
             for: () => ({}),
             get: () => ({
                 wallet: { decomposePsbt: (hex) => ({ inputs: PSBT_INPUTS[hex] ?? [] }) },
+                // The explorer's coin balance: both tracker coins, confirmed.
+                getAddress: async () => ({ balances: { confirmed: '0.0015' } }),
+                getBalances: async () => ({ data: [] }),
                 encoder: {
                     broadcastTx: broadcastTxMock,
+                    createTx: createTxMock,
                     getUTXOs: async () => ({ utxos: SOURCE_UTXOS.map((row) => ({ ...row })) }),
                 },
             }),
@@ -114,6 +142,8 @@ beforeEach(() => {
     orderActionMock.mockReset();
     broadcastTxMock.mockReset();
     quoteMaxSendableMock.mockReset();
+    createTxMock.mockReset();
+    deployChunkedRunMock.mockReset();
     quoteMaxSendableMock.mockResolvedValue(null);
 });
 afterEach(() => {
@@ -319,6 +349,154 @@ describe('every action the background signs over the same coins', () => {
     });
 });
 
+// The route's flow asks the encoder for its PSBT, as a dApp send and a send or
+// action with no reviewed PSBT do, and then signs what came back.
+function buildsAtSubmit(flowMock, psbtHex, txid, signs = () => {}) {
+    createTxMock.mockResolvedValueOnce({ psbt: psbtHex });
+    flowMock.mockImplementationOnce(async (opts) => {
+        await opts.sdkRegistry.get(opts.chainId).encoder.createTx({});
+        signs();
+        return { txid };
+    });
+}
+const withoutReview = ({ type, request }) => {
+    const { prebuiltPsbt: _reviewed, ...rest } = request;
+    return { type, request: rest };
+};
+
+describe('a PSBT the route builds itself', () => {
+    it('claims the coins of a send built at submit time', async () => {
+        buildsAtSubmit(sendTokenMock, 'psbt-a', 'tx-a');
+        const host = makeHost();
+
+        await expect(host.handle(withoutReview(sendRequest('psbt-a', 'recipient-one', '0.0003'))))
+            .resolves.toEqual({ ok: true, result: { txid: 'tx-a' } });
+        await expect(host.handle(sendRequest('psbt-b', 'recipient-two', '0.0004'))).resolves.toEqual(SPENT);
+    });
+
+    it('refuses an action built at submit time over held coins before it signs', async () => {
+        const signs = vi.fn();
+        sendTokenMock.mockResolvedValueOnce({ txid: 'tx-a' });
+        buildsAtSubmit(orderActionMock, 'psbt-b', 'tx-b', signs);
+        const host = makeHost();
+
+        await host.handle(sendRequest('psbt-a', 'recipient-one', '0.0003'));
+        await expect(host.handle(withoutReview(actionRequest('action.order', 'psbt-b')))).resolves.toEqual(SPENT);
+        expect(signs).not.toHaveBeenCalled();
+    });
+
+    it('frees the coins of a build that never went out', async () => {
+        createTxMock.mockResolvedValueOnce({ psbt: 'psbt-a' });
+        orderActionMock.mockImplementationOnce(async (opts) => {
+            await opts.sdkRegistry.get(opts.chainId).encoder.createTx({});
+            throw Object.assign(new Error('Wrong password'), { name: 'InvalidPasswordError' });
+        });
+        sendTokenMock.mockResolvedValueOnce({ txid: 'tx-b' });
+        const host = makeHost();
+
+        await host.handle(withoutReview(actionRequest('action.order', 'psbt-a')));
+        await expect(host.handle(sendRequest('psbt-b', 'recipient-two', '0.0004')))
+            .resolves.toEqual({ ok: true, result: { txid: 'tx-b' } });
+    });
+
+    it('claims every leg of a chunked deploy and keeps the legs that went out', async () => {
+        let legTwoBuilt;
+        let failLegTwo;
+        createTxMock.mockResolvedValueOnce({ psbt: 'psbt-a' }).mockResolvedValueOnce({ psbt: 'psbt-c' });
+        broadcastTxMock.mockResolvedValueOnce({ txid: 'tx-leg-one' });
+        deployChunkedRunMock.mockImplementationOnce(async (opts) => {
+            const encoder = opts.sdkRegistry.get(opts.chainId).encoder;
+            await encoder.createTx({});
+            await encoder.broadcastTx(RAW_A);
+            await encoder.createTx({});
+            legTwoBuilt();
+            await new Promise((resolve, reject) => { failLegTwo = reject; });
+        });
+        sendTokenMock.mockResolvedValue({ txid: 'tx-b' });
+        const host = makeHost();
+
+        const built = new Promise((resolve) => { legTwoBuilt = resolve; });
+        const deploy = host.handle(actionRequest('action.deployChunked', undefined));
+        await built;
+        const legTwoCoins = { type: 'action.send', request: { ...sendRequest('psbt-c', 'recipient-two', '0.0001').request } };
+        await expect(host.handle(legTwoCoins)).resolves.toEqual(SPENT);
+
+        failLegTwo(new Error('leg two could not be signed'));
+        await expect(deploy).resolves.toMatchObject({ ok: false });
+        await expect(host.handle(sendRequest('psbt-b', 'recipient-two', '0.0004'))).resolves.toEqual(SPENT);
+        await expect(host.handle(legTwoCoins)).resolves.toEqual({ ok: true, result: { txid: 'tx-b' } });
+    });
+
+    it('claims the coins of an action on a hardware route', async () => {
+        sendTokenMock.mockResolvedValueOnce({ txid: 'tx-a' });
+        const host = makeHost();
+
+        await host.handle(sendRequest('psbt-a', 'recipient-one', '0.0003'));
+        await expect(host.handle(actionRequest('action.order.hw', 'psbt-b'))).resolves.toEqual(SPENT);
+        expect(orderActionMock).not.toHaveBeenCalled();
+    });
+
+    it('frees the coins of a hardware action that ends unsigned', async () => {
+        orderActionMock.mockRejectedValueOnce(new Error('The device refused the request'));
+        sendTokenMock.mockResolvedValueOnce({ txid: 'tx-b' });
+        const host = makeHost();
+
+        await expect(host.handle(actionRequest('action.order.hw', 'psbt-a'))).resolves.toMatchObject({ ok: false });
+        expect(orderActionMock).toHaveBeenCalledTimes(1);
+        await expect(host.handle(sendRequest('psbt-b', 'recipient-two', '0.0004')))
+            .resolves.toEqual({ ok: true, result: { txid: 'tx-b' } });
+    });
+});
+
+function rawBroadcast(txHex) {
+    return {
+        type: 'broadcast.signedTx',
+        request: { walletId: 'wallet-one', chainId: 'bitcoin-mainnet', txHex },
+    };
+}
+
+describe('a raw signed transaction', () => {
+    it('is refused over coins a send from the wallet holds, before it goes out', async () => {
+        sendTokenMock.mockResolvedValueOnce({ txid: 'tx-a' });
+        const host = makeHost();
+
+        await host.handle(sendRequest('psbt-a', 'recipient-one', '0.0003'));
+        await expect(host.handle(rawBroadcast(RAW_A))).resolves.toEqual(SPENT);
+        expect(broadcastTxMock).not.toHaveBeenCalled();
+    });
+
+    it('holds its coins once it goes out, and the same bytes may go out again', async () => {
+        broadcastTxMock.mockResolvedValue({ txid: 'tx-raw' });
+        const host = makeHost();
+
+        await expect(host.handle(rawBroadcast(RAW_A))).resolves.toMatchObject({ ok: true });
+        await expect(host.handle(sendRequest('psbt-b', 'recipient-two', '0.0004'))).resolves.toEqual(SPENT);
+        expect(sendTokenMock).not.toHaveBeenCalled();
+        await expect(host.handle(rawBroadcast(RAW_A))).resolves.toMatchObject({ ok: true });
+        expect(broadcastTxMock).toHaveBeenCalledTimes(2);
+    });
+
+    it('may carry the bytes of a send waiting in the queue', async () => {
+        queueTheSend();
+        broadcastTxMock.mockResolvedValueOnce({ txid: 'tx-q' });
+        const host = makeHost();
+
+        await host.handle(sendRequest('psbt-a', 'recipient-one', '0.0003'));
+        await expect(host.handle(rawBroadcast(RAW_A))).resolves.toMatchObject({ ok: true });
+        expect(broadcastTxMock).toHaveBeenCalledTimes(1);
+    });
+
+    it('frees its coins when the node refuses it', async () => {
+        broadcastTxMock.mockRejectedValueOnce(new Error('bad-txns-inputs-missingorspent'));
+        sendTokenMock.mockResolvedValueOnce({ txid: 'tx-b' });
+        const host = makeHost();
+
+        await expect(host.handle(rawBroadcast(RAW_A))).resolves.toMatchObject({ ok: false });
+        await expect(host.handle(sendRequest('psbt-b', 'recipient-two', '0.0004')))
+            .resolves.toEqual({ ok: true, result: { txid: 'tx-b' } });
+    });
+});
+
 describe('Max on the Send form', () => {
     const quote = (host) => host.handle({
         type: 'action.quoteMaxSendable',
@@ -362,6 +540,38 @@ describe('Max on the Send form', () => {
 
         expect(res.result).toMatchObject({ maxSats: '0', coinsHeld: true });
         expect(quoteMaxSendableMock).not.toHaveBeenCalled();
+    });
+});
+
+describe('the available line on the Send form', () => {
+    const available = async (host) => {
+        const res = await host.handle({
+            type: 'balances.address',
+            request: { walletId: 'wallet-one', chainId: 'bitcoin-mainnet', address: 'source-one' },
+        });
+        return res.result?.native?.quantity;
+    };
+
+    it('offers the whole balance when no send holds a coin', async () => {
+        expect(await available(makeHost())).toBe('150000');
+    });
+
+    it('leaves out the coins a queued send holds, as Max does', async () => {
+        queueTheSend();
+        const host = makeHost();
+
+        await host.handle(sendRequest('psbt-a', 'recipient-one', '0.0003'));
+        expect(await available(host)).toBe('50000');
+    });
+
+    it('offers nothing while other sends hold every coin', async () => {
+        queueTheSend();
+        sendTokenMock.mockResolvedValueOnce({ txid: 'tx-c' });
+        const host = makeHost();
+
+        await host.handle(sendRequest('psbt-a', 'recipient-one', '0.0003'));
+        await host.handle(sendRequest('psbt-c', 'recipient-one', '0.0001'));
+        expect(await available(host)).toBe('0');
     });
 });
 

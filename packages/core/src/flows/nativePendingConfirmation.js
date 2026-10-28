@@ -229,14 +229,16 @@ function sentAtMs(r) {
  * @param {string} [args.address]   only records sent FROM this address; all of the chain's when absent
  * @param {{ now?: () => string, probeAfterMs?: number, probeIntervalMs?: number, probeMemo?: Map<string, number> }} [args.opts]
  *        `now` is the ISO-timestamp source the stamps and the age gate share
- * @returns {Promise<{ seenNow: Set<string>, confirmed: Set<string> }>}  lowercased txids
+ * @returns {Promise<{ seenNow: Set<string>, confirmed: Set<string>, replaced: Set<string> }>}  lowercased txids;
+ *          `replaced` names native sends another transaction spent the coins of
  */
 export async function reconcileNativePendingTxs({ vault, sdkRegistry, chainRegistry, chainId, address, opts = {} }) {
     const seenNow = new Set();
     const confirmed = new Set();
-    if (!vault || !chainId) return { seenNow, confirmed };
+    const replaced = new Set();
+    if (!vault || !chainId) return { seenNow, confirmed, replaced };
     const descriptor = chainRegistry?.get?.(chainId) || null;
-    if (!descriptor?.coin) return { seenNow, confirmed };
+    if (!descriptor?.coin) return { seenNow, confirmed, replaced };
 
     const wanted = address ? lower(address) : null;
     const all = await vault.pendingTxs.list();
@@ -252,7 +254,7 @@ export async function reconcileNativePendingTxs({ vault, sdkRegistry, chainRegis
         if (isNativePendingTx(r, descriptor)) natives.push(r);
         else actions.push(r);
     }
-    if (natives.length === 0 && actions.length === 0) return { seenNow, confirmed };
+    if (natives.length === 0 && actions.length === 0) return { seenNow, confirmed, replaced };
 
     const sdk = sdkRegistry?.get?.(chainId) || null;
     const nowIso = typeof opts.now === 'function' ? opts.now() : new Date().toISOString();
@@ -264,14 +266,14 @@ export async function reconcileNativePendingTxs({ vault, sdkRegistry, chainRegis
     const unresolved = [];
 
     const encoder = sdk?.encoder;
+    /** @type {Record<string, TrackerUtxo[]>} */
+    const utxosByAddress = {};
     if (natives.length > 0 && encoder && typeof encoder.getUTXOs === 'function') {
         const addresses = new Set();
         for (const r of natives) {
             if (r.toAddress) addresses.add(String(r.toAddress));
             if (r.fromAddress) addresses.add(String(r.fromAddress));
         }
-        /** @type {Record<string, TrackerUtxo[]>} */
-        const utxosByAddress = {};
         await Promise.all([...addresses].map(async (addr) => {
             try {
                 const list = utxoListOf(await encoder.getUTXOs(addr));
@@ -304,7 +306,7 @@ export async function reconcileNativePendingTxs({ vault, sdkRegistry, chainRegis
         const sent = sentAtMs(r);
         return sent != null && nowMs - sent >= probeAfterMs;
     });
-    if (aged.length === 0) return { seenNow, confirmed };
+    if (aged.length === 0) return { seenNow, confirmed, replaced };
 
     const memo = opts.probeMemo instanceof Map ? opts.probeMemo : lastProbedAt;
     const intervalMs = Number(opts.probeIntervalMs) >= 0 ? Number(opts.probeIntervalMs) : INCLUSION_PROBE_INTERVAL_MS;
@@ -341,5 +343,40 @@ export async function reconcileNativePendingTxs({ vault, sdkRegistry, chainRegis
     for (const key of due) {
         if (!confirmed.has(key)) memo.set(key, nowMs);
     }
-    return { seenNow, confirmed };
+
+    // A native send that no output, mempool or block shows, and whose own
+    // coins are gone from the sender's unspent outputs, is spent around:
+    // another transaction holds those coins, so this one can never confirm.
+    // Every aged hash here misses an inclusion lookup, at this read or one
+    // interval before it.
+    if (canProbe) {
+        for (const r of natives) {
+            const key = lower(r.txid);
+            if (!agedByKey.has(key) || confirmed.has(key)) continue;
+            if (inputsSpentElsewhere(r, utxosByAddress)) replaced.add(key);
+        }
+    }
+    return { seenNow, confirmed, replaced };
+}
+
+/**
+ * Has a coin this record's signed transaction spends left the sender's
+ * unspent outputs? Only a tracker list this read holds counts, and a record
+ * without parseable signed bytes says nothing.
+ *
+ * @param {{ fromAddress?: string, txHex?: string | null }} record
+ * @param {Record<string, TrackerUtxo[]>} utxosByAddress
+ */
+function inputsSpentElsewhere(record, utxosByAddress) {
+    const own = utxosByAddress[String(record.fromAddress || '')];
+    if (!Array.isArray(own) || typeof record.txHex !== 'string' || !record.txHex) return false;
+    let inputs;
+    try {
+        ({ inputs } = parseRawTx(record.txHex));
+    } catch {
+        return false;
+    }
+    if (!Array.isArray(inputs) || inputs.length === 0) return false;
+    const unspent = new Set(own.map((u) => `${lower(u.txid)}:${Number(/** @type {any} */ (u).vout)}`));
+    return inputs.some((i) => !unspent.has(`${lower(i.prevTxHash)}:${Number(i.prevTxIndex)}`));
 }

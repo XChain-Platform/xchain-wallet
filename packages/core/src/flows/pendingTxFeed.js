@@ -65,7 +65,7 @@ import { isPrunableConfirmedPendingTx } from '../schemas/pendingTx.js';
  * @param {boolean} networkSeenNow
  * @returns {PendingTxSummary}
  */
-function summarize(record, networkSeenNow) {
+function summarize(record, networkSeenNow, replacedElsewhere) {
     const block = Number(record.confirmedBlockIndex);
     return {
         id: String(record.id),
@@ -87,6 +87,7 @@ function summarize(record, networkSeenNow) {
         tick: record.tick == null ? null : String(record.tick),
         amount: record.amount == null ? null : String(record.amount),
         networkSeenNow: networkSeenNow === true,
+        replacedElsewhere: replacedElsewhere === true,
         chainConfirmed: record.chainConfirmed === true,
         confirmedBlockIndex: Number.isInteger(block) && block > 0 ? block : null,
         confirmedAt: record.confirmedAt == null ? null : String(record.confirmedAt),
@@ -101,6 +102,8 @@ function summarize(record, networkSeenNow) {
  * @property {string} [address]   restrict to sends FROM this address
  * @property {Set<string>} [seenNow]   lowercased txids the chain's UTXO set
  *   held at this read (from `reconcileNativePendingTxs`); marks the summary
+ * @property {Set<string>} [replaced]  lowercased txids whose coins another
+ *   transaction spent at this read (from `reconcileNativePendingTxs`)
  */
 
 /**
@@ -127,7 +130,7 @@ function summarize(record, networkSeenNow) {
  * @param {LivePendingTxsOpts} params
  * @returns {Promise<PendingTxSummary[]>}
  */
-export async function livePendingTxs({ vault, chainRegistry, chainId, address, seenNow }) {
+export async function livePendingTxs({ vault, chainRegistry, chainId, address, seenNow, replaced }) {
     if (!vault) throw new Error('livePendingTxs: vault is required');
     if (!chainId) throw new Error('livePendingTxs: chainId is required');
     const all = await vault.pendingTxs.list();
@@ -167,7 +170,10 @@ export async function livePendingTxs({ vault, chainRegistry, chainId, address, s
         const seen = Boolean(record.txid)
             && seenNow instanceof Set
             && seenNow.has(String(record.txid).toLowerCase());
-        out.push(summarize(record, seen));
+        const spentAround = Boolean(record.txid)
+            && replaced instanceof Set
+            && replaced.has(String(record.txid).toLowerCase());
+        out.push(summarize(record, seen, spentAround));
     }
     return out;
 }

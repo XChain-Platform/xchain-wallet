@@ -2430,10 +2430,17 @@ export function Send({ walletId, accountId, onBack, prefill = null, onDone, onCh
             // by whole sats, leaving dust behind or overshooting the balance.
             const balanceSats = exactSatsBigIntFromDecimalString(sourceBalance.amount, descriptor);
             if (balanceSats == null || balanceSats <= 0n) {
+                // The available line leaves out coins other sends hold, so a
+                // zero here can mean those sends hold every coin; the quote
+                // says which, and the note names that reason.
+                const heldQuote = balanceSats == null ? null : await quoteMaxSats().catch(() => null);
+                if (!mountedRef.current || requestId !== maxRequestRef.current) return;
                 setAmount('');
                 setFiatAmount('');
                 setMaxUnavailable(true);
-                setMaxNote('There is no spendable balance, so Max cannot create a payment.');
+                setMaxNote(heldQuote?.coinsHeld
+                    ? t('send.max.coinsHeld')
+                    : 'There is no spendable balance, so Max cannot create a payment.');
                 setMaxBusy(false);
                 return;
             }

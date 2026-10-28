@@ -162,6 +162,16 @@ describe('dismissFailedPendingTx', () => {
         expect(out).toHaveLength(0);
     });
 
+    it('marks a record whose coins another transaction spent at this read, and nothing else', async () => {
+        const out = await livePendingTxs({
+            vault: vaultOf([record(), record({ id: 'ptx-2', txid: 'DDEEFF' })]),
+            chainRegistry: registry,
+            chainId: CHAIN_ID,
+            replaced: new Set(['aabbcc']),
+        });
+        expect(out.map((s) => [s.txid, s.replacedElsewhere])).toEqual([['AABBCC', true], ['DDEEFF', false]]);
+    });
+
     it('marks a record the UTXO set held at this read, and nothing else', async () => {
         const out = await livePendingTxs({
             vault: vaultOf([record(), record({ id: 'ptx-2', txid: 'DDEEFF' })]),

@@ -59,6 +59,7 @@ const messages = {
     'pending.detail.notSeen': 'Not seen by the network',
     'pending.detail.dropped': 'No longer seen by the network',
     'pending.detail.replaced': 'Replaced by a newer transaction',
+    'pending.detail.replacedElsewhere': 'Replaced',
     'pending.detail.awaitingNetworkHelp':
         'The transaction has been sent. It can take a minute before the network reports it.',
     'pending.detail.seenHelp':
@@ -69,6 +70,7 @@ const messages = {
         "The network reported this transaction earlier but no longer does, and it isn't in the permanent record.",
     'pending.detail.replacedHelp':
         'This wallet replaced this transaction with a newer one. Follow the replacement instead.',
+    'pending.detail.replacedElsewhereHelp': "Another transaction spent the same coins. This one won't confirm.",
     'pending.detail.notValidated': 'Pending, not yet validated by the service.',
     'pending.detail.firstSeen': 'First seen by the network {when}',
     'pending.detail.broadcastAt': 'Broadcast from this wallet {when}',
