@@ -78,7 +78,7 @@
 //       --config=playwright.regtest.config.js tests/tokens/ticker-grammar.regtest.spec.js
 
 import { waitForShownTxid } from '../../fixtures/pendingHistory.js';
-import { createWallet, expect, openPaletteCommand, test } from '../../fixtures/wallet.js';
+import { createWallet, expect, openPaletteCommand, submitTokenWizard, test } from '../../fixtures/wallet.js';
 import {
     expectConfirmModal,
     fundAddress,
@@ -364,16 +364,9 @@ async function submitWizardName(page, tick) {
     await field.fill(tick);
     const held = await field.inputValue();
     await main.getByLabel('Supply', { exact: true }).fill(String(SUPPLY));
-    await main.getByRole('button', { name: 'Review token', exact: true }).click();
-
     const grammar = page.getByRole('alert')
         .filter({ hasText: /Token name (?:cannot|can only use|is required)/ });
-    const continueButton = main.getByRole('button', {
-        name: 'Continue to confirmation',
-        exact: true,
-    });
-    await grammar.or(continueButton).first().waitFor({ state: 'visible', timeout: 30_000 });
-    if (await continueButton.isVisible().catch(() => false)) await continueButton.click();
+    await submitTokenWizard(page);
     const confirm = page.getByTestId('confirm-modal');
     // Raced rather than waited on in sequence: a refused submit never composes
     // and an accepted one never shows a grammar error, so whichever appears IS
@@ -529,8 +522,7 @@ test.describe(`ticker grammar on ${REGTEST_CHAIN_LABEL}`, () => {
             // wallet holds no XCHAIN, so the Bitcoin default (XCHAIN) would be
             // refused for insufficient funds before the ticker is ever tested.
             await payProtocolFeeInCoin(main);
-            await main.getByRole('button', { name: 'Review token', exact: true }).click();
-            await main.getByRole('button', { name: 'Continue to confirmation', exact: true }).click();
+            await submitTokenWizard(page);
 
             await confirmOrSkipOnRateLimit(page, 'this action', 90_000);
             const approve = page.getByTestId('confirm-approve');
@@ -886,8 +878,7 @@ test.describe(`ticker grammar on ${REGTEST_CHAIN_LABEL}`, () => {
             await expect(main.getByRole('switch', { name: /instead of XCHAIN/ })).not.toBeChecked();
             await main.getByLabel('Token name (ticker)').fill(TICK);
             await main.getByLabel('Supply', { exact: true }).fill(String(SUPPLY));
-            await main.getByRole('button', { name: 'Review token', exact: true }).click();
-            await main.getByRole('button', { name: 'Continue to confirmation', exact: true }).click();
+            await submitTokenWizard(page);
 
             await confirmOrSkipOnRateLimit(page, 'this action', 90_000);
             const approve = page.getByTestId('confirm-approve');

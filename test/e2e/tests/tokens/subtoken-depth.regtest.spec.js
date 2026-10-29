@@ -58,7 +58,7 @@
 // two reads is that, not this spec - restart the indexer and re-run.
 
 import { waitForShownTxid } from '../../fixtures/pendingHistory.js';
-import { createWallet, expect, openPaletteCommand, test } from '../../fixtures/wallet.js';
+import { createWallet, expect, openPaletteCommand, submitTokenWizard, test } from '../../fixtures/wallet.js';
 import {
     EXPLORER_URL,
     REGTEST_ADDRESS_RE,
@@ -298,8 +298,8 @@ async function onboardAndIssueParent(page, walletName) {
 /**
  * Fills the wizard's Subtoken template and submits it, WITHOUT assuming what
  * happens next: a refused action never reaches the confirm screen at all (the
- * native-fee pre-flight answers on the form), so the caller waits for whichever
- * of the two outcomes it is asserting.
+ * parent lookup or native-fee pre-flight answers in the wizard), so the caller
+ * waits for whichever of the two outcomes it is asserting.
  *
  * Returns the address it is signing with, read off the chain step.
  */
@@ -332,8 +332,7 @@ async function fillSubtoken(page, { parent, child, supply }) {
     // The coin lane: the screen's native fee line and the payer's coin delta
     // are what this spec measures.
     await payProtocolFeeInCoin(main);
-    await main.getByRole('button', { name: 'Review token', exact: true }).click();
-    await main.getByRole('button', { name: 'Continue to confirmation', exact: true }).click();
+    await submitTokenWizard(page);
 
     return feePaidBy.trim();
 }
@@ -475,15 +474,16 @@ test.describe(`subtoken depth on ${REGTEST_CHAIN_LABEL}`, () => {
                 parent: absentParent, child: GRAND, supply: GRAND_SUPPLY,
             });
 
-            // Refused on the FORM by the native-fee pre-flight, so no confirm
-            // screen opens and no fee is attached to anything (Session 39).
-            const alert = page.getByRole('alert').filter({ hasText: /parent unknown/i });
+            // Refused on the Details form by the wallet's fail-closed parent
+            // lookup, so no confirm screen opens and no fee is attached.
+            const alert = page.getByRole('alert')
+                .filter({ hasText: /could not be confirmed as a token this wallet owns/i });
             await expect(alert,
                 'the wizard neither refused a grandchild under a non-existent middle level nor '
                 + 'explained it, which is what truncating the parent to its first segment would '
                 + 'look like from here')
                 .toBeVisible({ timeout: 90_000 });
-            await expect(alert).toContainText(/Nothing was signed or sent/i);
+            await expect(alert).toContainText(/Check the ticker and your connection, then try again/i);
             expect(await page.getByTestId('confirm-modal').count(),
                 'an ISSUE the network has already refused reached the confirm screen')
                 .toBe(0);

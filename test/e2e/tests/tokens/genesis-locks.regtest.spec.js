@@ -47,6 +47,7 @@ import {
     createWallet,
     expect,
     openPaletteCommand,
+    submitTokenWizard,
     test,
 } from '../../fixtures/wallet.js';
 import {
@@ -94,7 +95,6 @@ const MAX_MINT_EDITED = 50;
 const MINTABLE_TICK = `LKM${STAMP}`;
 const EDITION_SIZE = 100;
 const EDITION_PER_TX = 10;
-const EDITION_DESCRIPTION = `mintable and unlocked ${STAMP}`;
 /**
  * Artwork URL for the limited-edition template, which refuses to review an
  * edition without one. Any stable https URL serves: nothing here reads it back.
@@ -311,8 +311,7 @@ async function onboardAndCreateLocked(page) {
         .toBeVisible({ timeout: 15_000 });
     await descriptionLock.check();
 
-    await main.getByRole('button', { name: 'Review token', exact: true }).click();
-    await main.getByRole('button', { name: 'Continue to confirmation', exact: true }).click();
+    await submitTokenWizard(page);
     await expectConfirmScreen(page);
     const issued = await waitForIndexedAction(await approveAndGetTxid(page));
     expect(String(issued.status), `the venue rejected the ${TICK} genesis (${issued.status})`)
@@ -429,9 +428,8 @@ test.describe(`genesis lock flags on ${REGTEST_CHAIN_LABEL}`, () => {
             await main.getByLabel('Token name (ticker)').fill(MINTABLE_TICK);
             await main.getByLabel('Edition size').fill(String(EDITION_SIZE));
             await main.getByLabel('Copies per mint').fill(String(EDITION_PER_TX));
-            await main.getByLabel('Image URL').fill(EDITION_DESCRIPTION);
-            await main.getByRole('button', { name: 'Review token', exact: true }).click();
-            await main.getByRole('button', { name: 'Continue to confirmation', exact: true }).click();
+            await main.getByLabel('Image URL').fill(EDITION_IMAGE_URL);
+            await submitTokenWizard(page);
             await expectConfirmScreen(page);
             const issued = await waitForIndexedAction(await approveAndGetTxid(page));
             expect(String(issued.status)).toBe('valid');
@@ -571,8 +569,7 @@ test.describe(`genesis lock flags on ${REGTEST_CHAIN_LABEL}`, () => {
             await main.getByLabel('Edition size').fill(String(EDITION_SIZE));
             await main.getByLabel('Copies per mint').fill(String(EDITION_PER_TX));
             await main.getByLabel('Image URL').fill(EDITION_IMAGE_URL);
-            await main.getByRole('button', { name: 'Review token', exact: true }).click();
-            await main.getByRole('button', { name: 'Continue to confirmation', exact: true }).click();
+            await submitTokenWizard(page);
             await expectConfirmScreen(page);
             expect(String((await waitForIndexedAction(await approveAndGetTxid(page))).status))
                 .toBe('valid');

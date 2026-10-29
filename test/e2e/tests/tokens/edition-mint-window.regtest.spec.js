@@ -53,7 +53,7 @@
 //       --config=playwright.regtest.config.js tests/tokens/edition-mint-window.regtest.spec.js
 
 import { waitForShownTxid } from '../../fixtures/pendingHistory.js';
-import { createWallet, expect, openPaletteCommand, test } from '../../fixtures/wallet.js';
+import { createWallet, expect, openPaletteCommand, submitTokenWizard, test } from '../../fixtures/wallet.js';
 import {
     EXPLORER_URL,
     REGTEST_ADDRESS_RE,
@@ -411,8 +411,7 @@ async function onboardAndCreateEdition(page, {
     if (stopBlock !== null) {
         await main.getByLabel('Minting closes at block (optional)').fill(String(stopBlock));
     }
-    await main.getByRole('button', { name: 'Review token', exact: true }).click();
-    await main.getByRole('button', { name: 'Continue to confirmation', exact: true }).click();
+    await submitTokenWizard(page);
 
     await expectConfirmScreen(page);
     const issued = await waitForIndexedAction(await approveAndGetTxid(page));

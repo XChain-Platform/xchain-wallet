@@ -53,7 +53,7 @@
 //       --config=playwright.regtest.config.js tests/tokens/subtoken-issue.regtest.spec.js
 
 import { waitForShownTxid } from '../../fixtures/pendingHistory.js';
-import { createWallet, expect, openPaletteCommand, test } from '../../fixtures/wallet.js';
+import { createWallet, expect, openPaletteCommand, submitTokenWizard, test } from '../../fixtures/wallet.js';
 import {
     EXPLORER_URL,
     REGTEST_ADDRESS_RE,
@@ -291,8 +291,8 @@ async function onboardAndIssueParent(page, walletName, parentTick = PARENT) {
 /**
  * Fills the wizard's Subtoken template and submits it, WITHOUT assuming what
  * happens next: a refused action never reaches the confirm screen at all (the
- * native-fee pre-flight answers on the form), so the caller waits for whichever
- * of the two outcomes it is asserting.
+ * parent lookup or native-fee pre-flight answers in the wizard), so the caller
+ * waits for whichever of the two outcomes it is asserting.
  *
  * `signAs` picks the signing address through the chain step's own picker.
  * Omitted, the wizard's default stands: the chain's active address.
@@ -347,8 +347,7 @@ async function fillSubtoken(page, { parent, child, supply, signAs }) {
     // The coin lane: the screen's native fee line and the payer's coin delta
     // are what this spec measures.
     await payProtocolFeeInCoin(main);
-    await main.getByRole('button', { name: 'Review token', exact: true }).click();
-    await main.getByRole('button', { name: 'Continue to confirmation', exact: true }).click();
+    await submitTokenWizard(page);
 
     return feePaidBy.trim();
 }
@@ -566,16 +565,15 @@ test.describe(`subtoken issuance on ${REGTEST_CHAIN_LABEL}`, () => {
                 .toBe(stranger);
 
             // THE GOOD HALF, and it is why this was a dead end rather than a
-            // loss: the refusal arrives on the FORM, from the native-fee
-            // pre-flight, so no confirm screen opens and no fee is attached to
-            // anything. The wallet quotes the network's own verdict.
+            // loss: the wallet's parent lookup refuses the wrong signer on the
+            // Details form, so no confirm screen opens and no fee is attached.
             const alert = page.getByRole('alert')
-                .filter({ hasText: /parent issued by another address/i });
+                .filter({ hasText: /owned by another address in this wallet/i });
             await expect(alert,
                 'the wizard neither refused this nor explained it, so a doomed action reached the '
                 + 'signing screen')
                 .toBeVisible({ timeout: 90_000 });
-            await expect(alert).toContainText(/Nothing was signed or sent/i);
+            await expect(alert).toContainText(/Go back and choose it as the address that pays the fee/i);
             expect(await page.getByTestId('confirm-modal').count(),
                 'a subtoken the network has already refused reached the confirm screen')
                 .toBe(0);

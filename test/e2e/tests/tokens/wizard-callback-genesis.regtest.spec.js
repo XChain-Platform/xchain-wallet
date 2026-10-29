@@ -1,7 +1,7 @@
 // Copyright © 2025–2026 Dankest, LLC
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-import { createWallet, expect, openPaletteCommand, test } from '../../fixtures/wallet.js';
+import { createWallet, expect, openPaletteCommand, submitTokenWizard, test } from '../../fixtures/wallet.js';
 import {
     explorerJson,
     expectConfirmModal,
@@ -84,8 +84,7 @@ test.describe(`wizard callback fields on ${REGTEST_CHAIN_LABEL}`, () => {
         await main.getByLabel('Callback token (optional)').fill(CALLBACK_TICK);
         await main.getByLabel('Payout per unit').fill(String(CALLBACK_AMOUNT));
         await main.getByLabel('Callback allowed from block').fill(String(callbackBlock));
-        await main.getByRole('button', { name: 'Review token', exact: true }).click();
-        await main.getByRole('button', { name: 'Continue to confirmation', exact: true }).click();
+        await submitTokenWizard(page);
 
         const txid = await approveAndReadTxid(page);
         const genesis = await waitForValidAction(txid);

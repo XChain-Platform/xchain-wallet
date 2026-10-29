@@ -63,7 +63,7 @@
 //       --config=playwright.regtest.config.js tests/tokens/collectible-one-of-one.regtest.spec.js
 
 import { waitForShownTxid } from '../../fixtures/pendingHistory.js';
-import { createWallet, expect, openPaletteCommand, test } from '../../fixtures/wallet.js';
+import { createWallet, expect, openPaletteCommand, submitTokenWizard, test } from '../../fixtures/wallet.js';
 import {
     EXPLORER_URL,
     REGTEST_ADDRESS_RE,
@@ -272,8 +272,7 @@ test.describe(`collectible 1-of-1 on ${REGTEST_CHAIN_LABEL}`, () => {
                 'the Collectible template offered a Supply field, so its 1-of-1 is no longer fixed '
                 + 'by the composer')
                 .toBe(0);
-            await main.getByRole('button', { name: 'Review token', exact: true }).click();
-            await main.getByRole('button', { name: 'Continue to confirmation', exact: true }).click();
+            await submitTokenWizard(page);
 
             await expectConfirmScreen(page);
             const action = await waitForIndexedAction(await approveAndGetTxid(page));

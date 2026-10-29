@@ -19,6 +19,7 @@ import {
     createWallet,
     expect,
     openPaletteCommand,
+    submitTokenWizard,
     test,
 } from '../../fixtures/wallet.js';
 import {
@@ -144,8 +145,7 @@ test.describe(`admin lock flags on ${REGTEST_CHAIN_LABEL}`, () => {
             await main.getByLabel('Edition size').fill(String(EDITION_SIZE));
             await main.getByLabel('Copies per mint').fill(String(MAX_MINT));
             await main.getByLabel('Image URL').fill(IMAGE_URL);
-            await main.getByRole('button', { name: 'Review token', exact: true }).click();
-            await main.getByRole('button', { name: 'Continue to confirmation', exact: true }).click();
+            await submitTokenWizard(page);
 
             await expectConfirmModal(page, 'the edition ISSUE');
             const action = await waitForValidAction(await approveAndGetTxid(page));

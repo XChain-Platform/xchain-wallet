@@ -48,6 +48,7 @@ import {
     createWallet,
     expect,
     openPaletteCommand,
+    submitTokenWizard,
     test,
 } from '../../fixtures/wallet.js';
 import {
@@ -230,8 +231,7 @@ async function fillSubtoken(page, { parent, child, supply }) {
     // the native-fee pre-flight is what answers a refused ISSUE on the form.
     // On the XCHAIN lane the same verdict surfaces on the confirm screen.
     await payProtocolFeeInCoin(main);
-    await main.getByRole('button', { name: 'Review token', exact: true }).click();
-    await main.getByRole('button', { name: 'Continue to confirmation', exact: true }).click();
+    await submitTokenWizard(page);
 }
 
 test.describe(`subtoken under an escrowed parent on ${REGTEST_CHAIN_LABEL}`, () => {

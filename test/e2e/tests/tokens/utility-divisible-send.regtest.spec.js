@@ -66,7 +66,7 @@
 //       --config=playwright.regtest.config.js tests/tokens/utility-divisible-send.regtest.spec.js
 
 import { waitForShownTxid } from '../../fixtures/pendingHistory.js';
-import { createWallet, expect, gotoSection, mainButton, openPaletteCommand, test } from '../../fixtures/wallet.js';
+import { createWallet, expect, gotoSection, mainButton, openPaletteCommand, submitTokenWizard, test } from '../../fixtures/wallet.js';
 import {
     EXPLORER_URL,
     REGTEST_ADDRESS_RE,
@@ -306,8 +306,7 @@ test.describe(`utility token divisibility on ${REGTEST_CHAIN_LABEL}`, () => {
             // The two fields only this template and Custom expose.
             await main.getByLabel('Divisible (8 decimal places)').check();
             await main.getByLabel('Max mint per transaction (optional)').fill(String(MAX_MINT));
-            await main.getByRole('button', { name: 'Review token', exact: true }).click();
-            await main.getByRole('button', { name: 'Continue to confirmation', exact: true }).click();
+            await submitTokenWizard(page);
 
             await expectConfirmScreen(page);
             const action = await waitForIndexedAction(await approveAndGetTxid(page));

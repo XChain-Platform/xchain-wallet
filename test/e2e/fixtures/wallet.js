@@ -458,6 +458,36 @@ export async function clickManageTokenAction(main, label, { timeout = 30_000 } =
 }
 
 /**
+ * Submits the token wizard's Details step and advances through Review when the
+ * details are accepted. A refused submission stays on Details with an alert,
+ * so callers that exercise a refusal can assert that verdict without waiting
+ * for a review-stage button that will never be rendered.
+ *
+ * @param {import('@playwright/test').Page} page
+ * @param {{ onReview?: (main: import('@playwright/test').Locator) => Promise<void> }} [options]
+ * @returns {Promise<boolean>} true when Review advanced toward confirmation,
+ * false when the Details step displayed a refusal
+ */
+export async function submitTokenWizard(page, { onReview } = {}) {
+    const main = page.getByRole('main');
+    await main.getByRole('button', { name: 'Review token', exact: true }).click();
+
+    const continueButton = main.getByRole('button', {
+        name: 'Continue to confirmation',
+        exact: true,
+    });
+    const refusal = main.getByRole('alert');
+    await expect(continueButton.or(refusal).first(),
+        'the token wizard neither opened Review nor explained why Details were refused')
+        .toBeVisible({ timeout: 90_000 });
+
+    if (!(await continueButton.isVisible().catch(() => false))) return false;
+    if (onReview) await onReview(main);
+    await continueButton.click();
+    return true;
+}
+
+/**
  * The nav rail's "Lock" button. Only the phone layout's header carries a
  * "Lock wallet" button (never beside the rail), but a substring match on
  * "Lock" would still hit it, so anchor on the exact accessible name.
