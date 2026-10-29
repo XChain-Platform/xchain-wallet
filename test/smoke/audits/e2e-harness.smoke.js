@@ -177,8 +177,14 @@ assert.ok(
 const shellFn = fixture.slice(fixture.indexOf('function createdWalletShell'));
 const shellBody = shellFn.slice(0, shellFn.indexOf('\n}\n') + 2);
 assert.ok(
-    /waitForBalances \? unlockedShell\(page\) : unlockedAnyScreen\(page\)/.test(shellBody),
-    'the created-wallet shell is the unlocked shell unless the balances wait is off',
+    /waitForBalances \? openedWalletHome\(page\) : unlockedAnyScreen\(page\)/.test(shellBody),
+    'the created-wallet shell is the opened wallet Home unless the balances wait is off',
+);
+const homeFn = fixture.slice(fixture.indexOf('export function openedWalletHome'));
+const homeBody = homeFn.slice(0, homeFn.indexOf('\n}\n') + 2);
+assert.ok(
+    /return unlockedShell\(page\)\s*\.or\(page\.getByRole\('main'\)\.getByText\(OFFLINE_HOME_EMPTY, \{ exact: true \}\)\)\s*\.first\(\);/.test(homeBody),
+    'an opened wallet Home is the balance hero or Home\'s offline message, nothing wider',
 );
 assert.ok(
     /timeout:\s*KDF_STEP_MS/.test(consentBody),

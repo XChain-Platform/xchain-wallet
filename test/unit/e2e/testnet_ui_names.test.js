@@ -114,7 +114,7 @@ describe('testnet e2e UI name literals', () => {
             .sort();
 
         expect(fixture).toContain('bip39Passphrase = null, waitForBalances = true,');
-        expect(fixture).toContain('waitForBalances ? unlockedShell(page) : unlockedAnyScreen(page)');
+        expect(fixture).toContain('waitForBalances ? openedWalletHome(page) : unlockedAnyScreen(page)');
         expect(fixture).toContain('acknowledgeDonationNotice(page, ads, { waitForBalances })');
         expect(optOuts).toEqual(expectedOptOuts);
     });
