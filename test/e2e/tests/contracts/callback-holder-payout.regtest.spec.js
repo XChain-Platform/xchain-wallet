@@ -376,7 +376,10 @@ test.describe(`holder-payout callback on ${REGTEST_CHAIN_LABEL}`, () => {
             await ownerPage.reload();
             await unlockAfterReload(ownerPage, UNLOCK_VALUE);
             await expectHomeBalance(ownerPage, TICK, SUPPLY);
-            await expectHomeBalance(ownerPage, PAYOUT_TICK, ownerXchainAfter);
+            // The venue reports XCHAIN with 0 decimals while gas leaves the
+            // indexed amount fractional, and Home rounds an explorer aggregate
+            // to the asset's decimals (atomicFromHumanAmount in flows/balances.js).
+            await expectHomeBalance(ownerPage, PAYOUT_TICK, Math.round(ownerXchainAfter));
 
             await holderPage.reload();
             await unlockAfterReload(holderPage, UNLOCK_VALUE);

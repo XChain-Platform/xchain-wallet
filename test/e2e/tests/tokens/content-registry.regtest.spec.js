@@ -359,7 +359,9 @@ test.describe(`content and registry flows on ${REGTEST_CHAIN_LABEL}`, () => {
             };
 
             await openManagedList();
-            await page.getByRole('button', { name: 'Rename list', exact: true }).click();
+            // List details read through the shared host gate, which holds every
+            // read while the venue's per-IP limit is paused after a 429.
+            await page.getByRole('button', { name: 'Rename list', exact: true }).click({ timeout: 90_000 });
             const renameMain = page.getByRole('main');
             await renameMain.getByLabel('Name (empty means unchanged)').fill(NAME);
             await renameMain.getByRole('button', { name: 'Review', exact: true }).click();
