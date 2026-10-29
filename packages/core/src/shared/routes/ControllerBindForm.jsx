@@ -35,7 +35,6 @@ import {
     externalIndexOf,
     hasAnyAddress,
     preferredSourceId,
-    signingAddressesByChain,
     WATCH_ONLY_SIGNING_MESSAGE,
 } from '../addressSelection.js';
 import { pickDefaultChainId } from '../chainSelection.js';
@@ -60,9 +59,8 @@ const FALLBACK_ACTION_CLASSES = ['transfer', 'trade', 'burn', 'mint', 'stake', '
 
 // Sources the form can author a bind from: an HD external address signs with
 // the password, a Trezor or Ledger address signs on its device, and a
-// watch-only address builds the unsigned transaction a watcher-mode wallet
-// hands to its signer. Watch-only addresses reach this pick only in watcher
-// mode, because signingAddressesByChain drops them everywhere else.
+// watch-only address reaches the form so a full-mode wallet can explain why it
+// cannot sign, while watcher mode can build the unsigned transaction.
 function isFormSource(address) {
     switch (address?.source) {
         case 'hd': return externalIndexOf(address.derivationPath) !== null;
@@ -127,8 +125,9 @@ export function ControllerBindForm({ walletId, chainId: initialChainId, tick, on
         /** @type {Record<string, any[]> | null} */ (null),
     );
     const [loadError, setLoadError] = useState(/** @type {string | null} */ (null));
-    // Chains the Network field offers: those holding an address that can sign.
-    const [signingChainIds, setSigningChainIds] = useState(/** @type {string[] | null} */ (null));
+    // The Network field keeps every chain returned by the wallet, including a
+    // chain whose only records are not eligible sources.
+    const [walletChainIds, setWalletChainIds] = useState(/** @type {string[] | null} */ (null));
     // A chosen chain with no address to sign from is an inline, recoverable
     // error: the Network field stays on the page so the user can switch away.
     const [sourceError, setSourceError] = useState(/** @type {string | null} */ (null));
@@ -173,19 +172,21 @@ export function ControllerBindForm({ walletId, chainId: initialChainId, tick, on
             .then(([byChain, active, settings]) => {
                 if (cancelled) return;
                 setAddressesByChain(byChain || {});
-                // The wallet mode hook and the settings read agree once settings
-                // load; either one marking watcher mode keeps watch-only sources.
-                const signingByChain = signingAddressesByChain(
-                    byChain,
-                    isWatcherMode ? { ...(settings || {}), walletMode: 'watcher' } : settings,
+                const allByChain = byChain || {};
+                setLoadError(null);
+                setWalletChainIds(Object.keys(allByChain));
+                // Keep admitted but currently unable sources in the form. The
+                // submit gate below gives hardware and watch-only records their
+                // specific reason instead of misreporting that no address exists.
+                const sourceByChain = Object.fromEntries(
+                    Object.entries(allByChain)
+                        .map(([id, list]) => [id, (Array.isArray(list) ? list : []).filter(isFormSource)])
+                        .filter(([, list]) => list.length > 0),
                 );
-                if (Object.keys(signingByChain).length === 0) {
-                    setLoadError(hasAnyAddress(byChain)
-                        ? WATCH_ONLY_SIGNING_MESSAGE
-                        : 'No addresses on any network yet. Use Receive to generate one first.');
+                if (!hasAnyAddress(allByChain)) {
+                    setLoadError('No addresses on any network yet. Use Receive to generate one first.');
                     return;
                 }
-                setSigningChainIds(Object.keys(signingByChain));
                 // D-153: opened WITHOUT a token (the address-controller lane),
                 // there is no chain to inherit, so default to the last-used
                 // chain, else the first chain the wallet has an address on -
@@ -196,22 +197,17 @@ export function ControllerBindForm({ walletId, chainId: initialChainId, tick, on
                 // at all here the form renders its "no address on this
                 // chain" error over a wallet that has plenty, because
                 // `chainId` is simply undefined. The default comes from the
-                // chains this form can sign from, so an empty or watch-only
-                // first chain never becomes the opening chain.
+                // chains this form can author from, so an ineligible first
+                // chain never becomes the opening chain.
                 let cid = chainId;
                 if (!cid) {
-                    const sourceByChain = Object.fromEntries(
-                        Object.entries(signingByChain)
-                            .map(([id, list]) => [id, list.filter(isFormSource)])
-                            .filter(([, list]) => list.length > 0),
-                    );
                     cid = pickDefaultChainId(
-                        Object.keys(sourceByChain).length > 0 ? sourceByChain : signingByChain,
+                        Object.keys(sourceByChain).length > 0 ? sourceByChain : allByChain,
                         { settings },
                     );
                     setChainId(cid);
                 }
-                const addrs = (signingByChain[cid] || []).filter(isFormSource);
+                const addrs = sourceByChain[cid] || [];
                 if (addrs.length === 0) {
                     setFromAddressId(null);
                     setSourceError(NO_SOURCE_MESSAGE);
@@ -275,6 +271,7 @@ export function ControllerBindForm({ walletId, chainId: initialChainId, tick, on
     });
 
     const isHwSource = fromAddress?.source === 'trezor' || fromAddress?.source === 'ledger';
+    const isBlockedWatchOnlySource = fromAddress?.source === 'watch-only' && !isWatcherMode;
     const [hwStatus, setHwStatus] = useState('idle');
     const onHwStatusChange = useCallback(({ status }) => setHwStatus(status), []);
     const [sourcePickerOpen, setSourcePickerOpen] = useState(false);
@@ -386,6 +383,7 @@ export function ControllerBindForm({ walletId, chainId: initialChainId, tick, on
 
     function handleReview(event) {
         event.preventDefault();
+        if (isBlockedWatchOnlySource || (isHwSource && hwStatus !== 'available')) return;
         const feeStop = customFeeReviewStop({ feePick, tiers: feeTiers, estimate: feeCustomEstimate });
         if (feeStop) { setFormError(feeStop.formError); return; }
         if (!fromAddress) {
@@ -507,8 +505,8 @@ export function ControllerBindForm({ walletId, chainId: initialChainId, tick, on
 
     const verb = unbind ? 'Unbind' : 'Bind';
     // Keep the current chain listed so the field always shows its value.
-    const networkChainIds = signingChainIds
-        ? (chainId && !signingChainIds.includes(chainId) ? [...signingChainIds, chainId] : signingChainIds)
+    const networkChainIds = walletChainIds
+        ? (chainId && !walletChainIds.includes(chainId) ? [...walletChainIds, chainId] : walletChainIds)
         : [chainId];
     const subjectLabel = target === 'token'
         ? `token ${tick || ''}`.trim()
@@ -762,6 +760,8 @@ export function ControllerBindForm({ walletId, chainId: initialChainId, tick, on
             onSubmit={handleReview}
             status={formError || (target === 'token' && issuerEligibility.error) ? (
                 <StatusMessage variant="error">{formError || issuerEligibility.error}</StatusMessage>
+            ) : isBlockedWatchOnlySource ? (
+                <StatusMessage variant="error">{WATCH_ONLY_SIGNING_MESSAGE}</StatusMessage>
             ) : null}
             actions={(
                 <Button
@@ -769,6 +769,8 @@ export function ControllerBindForm({ walletId, chainId: initialChainId, tick, on
                     variant="primary"
                     loading={actionConfirm.composing}
                     disabled={!fromAddress
+                        || isBlockedWatchOnlySource
+                        || (isHwSource && hwStatus !== 'available')
                         || (target === 'token' && (issuerEligibility.pending || !!issuerEligibility.error))
                         || actionConfirm.composing}
                 >
@@ -794,6 +796,14 @@ export function ControllerBindForm({ walletId, chainId: initialChainId, tick, on
                     onChange={() => {}}
                     onIconClick={() => setSourcePickerOpen(true)}
                     iconLabel="Choose source address"
+                />
+            ) : null}
+            {isHwSource ? (
+                <SignCredentials
+                    fromAddress={fromAddress}
+                    chainId={chainId}
+                    onStatusChange={onHwStatusChange}
+                    getSignerStatus={messaging.getSignerStatus}
                 />
             ) : null}
 
