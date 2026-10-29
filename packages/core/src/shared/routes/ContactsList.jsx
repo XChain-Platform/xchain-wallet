@@ -122,11 +122,13 @@ export function ContactsList({ walletId, onSend, onSendMessage, onBack, scanPref
     // happen. Dismissal lasts for this visit only: the edits stay unpublished.
     const [unpublished, setUnpublished] = useState(0);
     const [nudgeDismissed, setNudgeDismissed] = useState(false);
+    const unpublishedRequestRef = useRef(0);
     const refreshUnpublished = useCallback(async (isCurrent = () => true) => {
         if (typeof messaging?.labelSyncStatusRequest !== 'function') return;
+        const request = ++unpublishedRequestRef.current;
         try {
             const s = await messaging.labelSyncStatusRequest();
-            if (!isCurrent()) return;
+            if (unpublishedRequestRef.current !== request || !isCurrent()) return;
             const count = Number(s?.batch?.changeCount ?? s?.changeCount ?? 0);
             setUnpublished(s?.due || s?.pending ? Math.max(1, count) : 0);
         } catch {
@@ -167,6 +169,7 @@ export function ContactsList({ walletId, onSend, onSendMessage, onBack, scanPref
     );
     const [submitError, setSubmitError] = useState(/** @type {string | null} */ (null));
     const [submitting, setSubmitting] = useState(false);
+    const submittingRef = useRef(false);
     const [deleting, setDeleting] = useState(/** @type {string | null} */ (null));
     const [editVersion, setEditVersion] = useState(/** @type {string | null} */ (null));
     // An error answers the last Save; once the user edits the form it no
@@ -191,27 +194,31 @@ export function ContactsList({ walletId, onSend, onSendMessage, onBack, scanPref
     const [addrPicker, setAddrPicker] = useState(/** @type {'send' | 'message' | null} */ (null));
     const actionsRef = useRef(null);
     const walletScopeRef = useRef(walletId);
+    const contactsRequestRef = useRef(0);
     walletScopeRef.current = walletId;
 
-    // Resolves to the rows it read, or null when the read fails or the wallet
-    // changes underneath it.
+    // Resolves to the rows it read, or null when the read fails, the wallet
+    // changes underneath it, or a newer request supersedes it.
     const loadContacts = useCallback(async () => {
         const scope = walletId;
+        const request = ++contactsRequestRef.current;
+        const isCurrent = () => walletScopeRef.current === scope
+            && contactsRequestRef.current === request;
         let loaded = null;
         setLoadError(null);
         try {
             const rows = await messaging.listContacts();
-            if (walletScopeRef.current !== scope) return null;
+            if (!isCurrent()) return null;
             loaded = Array.isArray(rows) ? rows : [];
             setContacts(loaded);
         } catch (err) {
-            if (walletScopeRef.current !== scope) return null;
+            if (!isCurrent()) return null;
             setLoadError(err?.message || 'Failed to load contacts.');
         }
         // Every mutation on this screen ends in a reload, so this is the one
         // place the unpublished count needs refreshing.
-        if (walletScopeRef.current === scope) {
-            await refreshUnpublished(() => walletScopeRef.current === scope);
+        if (isCurrent()) {
+            await refreshUnpublished(isCurrent);
         }
         return loaded;
     }, [messaging, refreshUnpublished, walletId]);
@@ -409,7 +416,7 @@ export function ContactsList({ walletId, onSend, onSendMessage, onBack, scanPref
 
     async function handleSave(event) {
         event.preventDefault();
-        if (submitting) return;
+        if (submittingRef.current) return;
         if (!formName.trim()) {
             setSubmitError('Name is required.');
             return;
@@ -457,6 +464,7 @@ export function ContactsList({ walletId, onSend, onSendMessage, onBack, scanPref
             setSubmitError(`This address is already saved for ${addressOwner.name}.`);
             return;
         }
+        submittingRef.current = true;
         setSubmitting(true);
         setSubmitError(null);
         try {
@@ -483,6 +491,7 @@ export function ContactsList({ walletId, onSend, onSendMessage, onBack, scanPref
             }
             setSubmitError(userFacingMessage(err, 'Could not save this contact. Try again.'));
         } finally {
+            submittingRef.current = false;
             setSubmitting(false);
         }
     }

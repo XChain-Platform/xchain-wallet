@@ -8,12 +8,11 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// A save that meets a version conflict tells the user to try again. The
-// retry carries the version the screen reloads after the conflict, so a
-// second Save or Add goes through instead of meeting the same conflict.
+// Contact network replies stay ordered, duplicate submissions stay single,
+// and conflict retries carry the version the screen reloads.
 
 import { describe, it, expect, vi } from 'vitest';
-import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { base58check } from '@scure/base';
 import { sha256 } from '@noble/hashes/sha2';
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
@@ -33,6 +32,20 @@ function contactAt(updatedAt) {
         updatedAt,
         entries: [{ chain: 'bitcoin', address: ADDRESS_A, label: '' }],
     };
+}
+
+function deferred() {
+    let resolve;
+    const promise = new Promise((res) => { resolve = res; });
+    return { promise, resolve };
+}
+
+function contactsTree(messaging) {
+    return (
+        <MessagingProvider shell="web" messaging={messaging}>
+            <ContactsList walletId="w1" onBack={() => {}} />
+        </MessagingProvider>
+    );
 }
 
 function conflictMessaging() {
@@ -94,5 +107,94 @@ describe('ContactsList version conflict retry', () => {
         await waitFor(() => expect(messaging.saveContact).toHaveBeenCalledTimes(2));
         expect(messaging.saveContact.mock.calls[1][0].expectedUpdatedAt).toBe(NEW_VERSION);
         await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+    });
+});
+
+describe('ContactsList response ordering', () => {
+    it('keeps the newer same-wallet list when an older request answers late', async () => {
+        const oldRead = deferred();
+        const first = {
+            listContacts: vi.fn(() => oldRead.promise),
+            saveContact: vi.fn(),
+            deleteContact: vi.fn(),
+        };
+        const second = {
+            listContacts: vi.fn(async () => [{ ...contactAt(NEW_VERSION), name: 'New head' }]),
+            saveContact: vi.fn(),
+            deleteContact: vi.fn(),
+        };
+        const view = render(contactsTree(first));
+
+        view.rerender(contactsTree(second));
+        expect(await screen.findByRole('button', { name: 'New head' })).toBeTruthy();
+        await act(async () => {
+            oldRead.resolve([{ ...contactAt(OLD_VERSION), name: 'Old head' }]);
+            await oldRead.promise;
+        });
+
+        expect(screen.queryByRole('button', { name: 'Old head' })).toBeNull();
+        expect(screen.getByRole('button', { name: 'New head' })).toBeTruthy();
+    });
+
+    it('keeps the newer publish count when an older request answers late', async () => {
+        const oldStatus = deferred();
+        const messaging = {
+            listContacts: vi.fn()
+                .mockResolvedValueOnce([contactAt(OLD_VERSION)])
+                .mockResolvedValueOnce([contactAt(NEW_VERSION)]),
+            saveContact: vi.fn(async () => {}),
+            deleteContact: vi.fn(async () => {}),
+            labelSyncStatusRequest: vi.fn()
+                .mockImplementationOnce(() => oldStatus.promise)
+                .mockResolvedValueOnce({ pending: true, changeCount: 2 }),
+        };
+        render(contactsTree(messaging));
+        fireEvent.click(await screen.findByRole('button', { name: 'Alice' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Edit' }));
+        fireEvent.change(screen.getByLabelText('Name'), { target: { value: 'Alice current' } });
+        fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+
+        await screen.findByRole('heading', { name: 'View Contact' });
+        fireEvent.click(screen.getByRole('button', { name: 'Back to previous screen' }));
+        const nudge = await waitFor(() => {
+            const element = document.getElementById('contacts-publish-nudge');
+            expect(element).toHaveTextContent('2 contact changes are only on this device.');
+            return element;
+        });
+        await act(async () => {
+            oldStatus.resolve({ pending: true, changeCount: 9 });
+            await oldStatus.promise;
+        });
+
+        expect(nudge).not.toHaveTextContent('9 contact changes are only on this device.');
+        expect(nudge).toHaveTextContent('2 contact changes are only on this device.');
+    });
+});
+
+describe('ContactsList duplicate submission', () => {
+    it('sends one save when two submit events land in the same task', async () => {
+        const saveDone = deferred();
+        const messaging = {
+            listContacts: vi.fn(async () => []),
+            saveContact: vi.fn(() => saveDone.promise),
+            deleteContact: vi.fn(async () => {}),
+        };
+        render(contactsTree(messaging));
+        fireEvent.click(await screen.findByRole('button', { name: 'Create first contact' }));
+        fireEvent.change(screen.getByLabelText('Name'), { target: { value: 'Alice' } });
+        fireEvent.change(screen.getByLabelText('Address'), { target: { value: ADDRESS_A } });
+        const form = screen.getByRole('button', { name: 'Save' }).closest('form');
+
+        act(() => {
+            form.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
+            form.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
+        });
+
+        expect(messaging.saveContact).toHaveBeenCalledTimes(1);
+        await act(async () => {
+            saveDone.resolve();
+            await saveDone.promise;
+        });
+        await screen.findByText('No contacts yet');
     });
 });
