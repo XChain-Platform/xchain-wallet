@@ -9,11 +9,12 @@ import React from 'react';
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
 import { DividendForm } from '../../../packages/core/src/shared/routes/DividendForm.jsx';
 import { __clearTokenInfoCache } from '../../../packages/core/src/shared/hooks/useTokenInfo.js';
+import { fakeHoldersFor } from '../../../packages/web/src/devFakeBalances.js';
 
 const CHAIN = 'bitcoin-mainnet';
 const SOURCE = 'bc1qexampleexampleexampleexampleexampleex';
 
-function mountDividend(holderRead) {
+function mountDividend(holderRead, walletMode = 'full') {
     const messaging = {
         getAddressesByChain: vi.fn().mockResolvedValue({
             [CHAIN]: [{
@@ -22,7 +23,7 @@ function mountDividend(holderRead) {
             }],
         }),
         getActiveAddresses: vi.fn().mockResolvedValue({}),
-        getSettings: vi.fn().mockResolvedValue({ walletMode: 'full' }),
+        getSettings: vi.fn().mockResolvedValue({ walletMode }),
         signerReady: vi.fn().mockResolvedValue({ ready: true }),
         getSignerStatus: vi.fn().mockResolvedValue({ status: 'unlocked' }),
         getHoldersForToken: vi.fn(holderRead),
@@ -81,10 +82,20 @@ afterEach(() => {
 });
 
 describe('Dividend holder reads fail closed', () => {
-    it('does not compose after the explorer refuses the holder read', async () => {
-        const messaging = mountDividend(async () => { throw new Error('explorer 500'); });
+    it('enables Preview for the complete explorer envelope served by the dev mock', async () => {
+        mountDividend(async () => fakeHoldersFor('SHARES', CHAIN), 'watcher');
         await fillDividend();
-        fireEvent.click(screen.getByRole('button', { name: 'Pay dividend' }));
+
+        expect(screen.getByRole('button', { name: 'Preview' })).toBeEnabled();
+        expect(document.body.textContent).toMatch(/12 eligible holders/);
+    });
+
+    it('does not compose after the explorer refuses the holder read', async () => {
+        const messaging = mountDividend(async () => { throw new Error('explorer 500'); }, 'watcher');
+        await fillDividend();
+        const preview = screen.getByRole('button', { name: 'Preview' });
+        expect(preview).toBeDisabled();
+        fireEvent.click(preview);
         await flushTimers();
         expect(messaging.composeForConfirm).not.toHaveBeenCalled();
     });

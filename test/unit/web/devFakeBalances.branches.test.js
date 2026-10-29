@@ -58,8 +58,15 @@ describe('dev fake balance branches', () => {
         expect(dispensers.every((row) => row.get_coin === 'DOGE' && row.get_tick === null)).toBe(true);
         expect(orders.some((row) => row.give_tick === 'WAGMI' || row.get_tick === 'WAGMI')).toBe(true);
         expect(swaps.some((row) => row.give_tick === 'XCP' || row.get_tick === 'XCP')).toBe(true);
-        expect(holders).toHaveLength(12);
-        expect(new Set(holders.map((row) => row.address)).size).toBe(12);
+        expect(holders).toEqual(expect.objectContaining({
+            tick: 'SHIBE',
+            supply: '100000',
+            decimals: 8,
+            total: 12,
+        }));
+        expect(holders.data).toHaveLength(12);
+        expect(holders.data.every((row) => /^\d+$/.test(row.amount))).toBe(true);
+        expect(new Set(holders.data.map((row) => row.address)).size).toBe(12);
         expect(history).toHaveLength(15);
         expect(history.every((row) => row.action_index === row.tx_hash)).toBe(true);
     });

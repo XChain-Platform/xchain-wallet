@@ -31,7 +31,13 @@ describe('host bridge dev mock branches', () => {
             expect(await sdk[method]('LITEGEM', 'address')).toEqual([]);
         }
 
-        expect(await sdk.getHolders('LITEGEM')).not.toHaveLength(0);
+        expect(await sdk.getHolders('LITEGEM')).toEqual(expect.objectContaining({
+            tick: 'LITEGEM',
+            total: 12,
+            data: expect.arrayContaining([
+                expect.objectContaining({ address: expect.any(String), amount: expect.any(String) }),
+            ]),
+        }));
         expect(await sdk.getHolders('')).toEqual([]);
         expect(await sdk.getUnknownResource()).toEqual([]);
         expect(sdk.unknownResource).toBeUndefined();

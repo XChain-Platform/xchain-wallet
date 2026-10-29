@@ -394,13 +394,21 @@ export function fakeSwapsFor(tick, chainId) {
  */
 export function fakeHoldersFor(tick, chainId) {
     // 12 holders with a power-law distribution so the rendered share
-    // column has interesting variance.
+    // column has interesting variance. The envelope and display-unit amounts
+    // match the explorer response consumed by dividend payout math.
     const weights = [42, 18, 11, 7, 5, 4, 3, 3, 2, 2, 2, 1];
     const totalUnits = 100000;
-    return weights.map((w, i) => ({
+    const data = weights.map((w, i) => ({
         address: fakeAddress(chainId, tick, 300 + i),
-        quantity: String(Math.floor(totalUnits * (w / 100)) * 10 ** 8),
+        amount: String(Math.floor(totalUnits * (w / 100))),
     }));
+    return {
+        tick: String(tick).toUpperCase(),
+        supply: String(totalUnits),
+        decimals: 8,
+        total: data.length,
+        data,
+    };
 }
 
 // Tick → (rowFromTOKENS_BY_COIN, divisibility, fiatRate). Used to back
