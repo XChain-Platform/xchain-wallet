@@ -17,15 +17,14 @@
 // every mutation so a service-worker restart (extension) or a tab refresh
 // (web) doesn't lose the user's signed-but-unbroadcast txs.
 //
-// One adapter handles the shells whose host has a storage API:
+// The default adapter handles the shells whose host has a storage API:
 //   - Extension SW    → `chrome.storage.local` (no localStorage in MV3)
 //   - Web renderer    → `localStorage`
 //
-// When neither API is available (the desktop host in Electron MAIN, Node
-// tests, ad-hoc smoke harness), `createBroadcastQueueStorage` returns null
-// and the queue is in-memory only (the prior v0.292.0 behavior). Desktop
-// still shares one store across its hosts, so a lock keeps the queue; a
-// relaunch does not.
+// When neither API is available, `createBroadcastQueueStorage` returns null
+// and the queue is in-memory only. Desktop main injects a file-backed adapter
+// through `createBroadcastQueueStorageAdapter`, which shares this envelope and
+// validation while supplying its own IO.
 
 import { BROADCAST_QUEUE_STORAGE_KEY } from '@xchain-wallet/core/shared/utils/wipeWalletStorage.js';
 
@@ -117,7 +116,7 @@ export function createBroadcastQueueStorage() {
  *           remove: () => Promise<void> }} io
  * @returns {BroadcastQueueStorage}
  */
-function envelopeAdapter(io) {
+export function createBroadcastQueueStorageAdapter(io) {
     // Last successfully read state of the key. This adapter is its process's
     // only writer (a shell hands one queue store, and so one adapter, to every
     // host it builds; see broadcastQueueStore.js), so saving one half alongside
@@ -176,7 +175,7 @@ function envelopeAdapter(io) {
 }
 
 function chromeLocalAdapter() {
-    return envelopeAdapter({
+    return createBroadcastQueueStorageAdapter({
         read() {
             return new Promise((resolve) => {
                 try {
@@ -238,7 +237,7 @@ function settleChromeWrite(op, resolve, reject) {
 }
 
 function localStorageAdapter() {
-    return envelopeAdapter({
+    return createBroadcastQueueStorageAdapter({
         async read() {
             let raw;
             try {

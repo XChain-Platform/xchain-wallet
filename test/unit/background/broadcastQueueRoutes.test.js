@@ -1033,6 +1033,26 @@ describe('a reload rebuilds the queue from the durable PendingTx half', () => {
         expect(theirs.map((e) => e.signedTxHex)).toEqual([TX_HEX]);
     });
 
+    it('restores a raw broadcast record that keeps an owned sender', async () => {
+        const records = await withRecords([
+            queuedRecord('p-raw', A_ADDR, { action: 'BROADCAST_SIGNED_TX' }),
+        ]);
+        const h = makeHost({ entries: [], pendingTxs: records, broadcastTx: vi.fn(), ...tables() });
+
+        expect(await h.list()).toEqual([
+            expect.objectContaining({ pendingTxId: 'p-raw', signedTxHex: TX_HEX }),
+        ]);
+    });
+
+    it('refuses a raw broadcast record whose sender cannot be attributed', async () => {
+        const records = await withRecords([
+            queuedRecord('p-unknown', 'unknown', { action: 'BROADCAST_SIGNED_TX' }),
+        ]);
+        const h = makeHost({ entries: [], pendingTxs: records, broadcastTx: vi.fn(), ...tables() });
+
+        expect(await h.list()).toEqual([]);
+    });
+
     it('restores nothing from a vault whose address tables it cannot read', async () => {
         const records = await withRecords([queuedRecord('p1', A_ADDR)]);
         const t = tables();

@@ -62,6 +62,7 @@ import { KeychainSessionBackend, sessionKeyPathFor } from './keychain.js';
 import { FileUnlockThrottleStore, unlockThrottlePathFor } from './unlockThrottle.js';
 import { FileAutoLockStore, autoLockStatePathFor } from './autoLockState.js';
 import { FilePanicModeStore, panicModeStatePathFor } from './panicModeState.js';
+import { FileBroadcastQueueStorage, broadcastQueuePathFor } from './broadcastQueueStorage.js';
 import { applyScreenProtection, notifyWindowHidden } from './screenProtection.js';
 import {
     attachRendererCspHeaders,
@@ -528,6 +529,7 @@ function buildRuntime() {
         autoLockStore: new FileAutoLockStore(autoLockStatePathFor(userData)),
         // The panic-mode freeze main's signers read (main/panicModeState.js).
         panicModeStore: new FilePanicModeStore(panicModeStatePathFor(userData)),
+        broadcastQueueStorage: new FileBroadcastQueueStorage(broadcastQueuePathFor(userData), console),
         chainRegistry,
         sdkRegistry: new sdkLib.SDKRegistry({
             chainRegistry,

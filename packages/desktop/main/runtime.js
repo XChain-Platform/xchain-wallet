@@ -95,6 +95,9 @@ export const AUTO_LOCK_REPORT_TYPE = 'session.autolock';
  * @property {{ load: () => Promise<unknown | null>, save: (s: unknown) => Promise<void>, clear: () => Promise<void> }} [panicModeStore]
  *        Panic-mode freeze record (main/panicModeState.js). Without it main
  *        reads no freeze and signs while the renderer shows one.
+ * @property {import('@xchain-wallet/extension/src/background/broadcastQueueStorage.js').BroadcastQueueStorage | null} [broadcastQueueStorage]
+ *        Desktop supplies a file adapter under userData. Other callers retain
+ *        the shell default when this dependency is absent.
  * @property {import('@xchain-wallet/core').registry.ChainRegistry} chainRegistry
  * @property {import('@xchain-wallet/core').sdk.SDKRegistry} sdkRegistry
  * @property {() => Promise<{env?: object, build?: object}>} [getDiagnosticContext]
@@ -135,6 +138,9 @@ export function createRuntime(deps) {
     if (!deps?.metaBackend) throw new Error('createRuntime: metaBackend is required');
     if (!deps?.chainRegistry) throw new Error('createRuntime: chainRegistry is required');
     if (!deps?.sdkRegistry) throw new Error('createRuntime: sdkRegistry is required');
+    const broadcastQueueStorage = Object.prototype.hasOwnProperty.call(deps, 'broadcastQueueStorage')
+        ? deps.broadcastQueueStorage
+        : createBroadcastQueueStorage();
     return {
         storageBackend: deps.storageBackend,
         sessionBackend: deps.sessionBackend,
@@ -152,6 +158,7 @@ export function createRuntime(deps) {
         // same reason as the two stores above; `installPanicModePersistence`
         // wires it into core's freeze before the first window opens.
         panicModeStore: deps.panicModeStore || null,
+        broadcastQueueStorage,
         chainRegistry: deps.chainRegistry,
         sdkRegistry: deps.sdkRegistry,
         getDiagnosticContext: deps.getDiagnosticContext,
@@ -183,7 +190,7 @@ export function createRuntime(deps) {
         // extension and web shells hold: a lock keeps it (a broadcast still on
         // the network owes its persist and journal entry to the NEXT host),
         // and only a wipe seals and renews it.
-        broadcastQueueStore: newBroadcastQueueStore(),
+        broadcastQueueStore: newBroadcastQueueStore(broadcastQueueStorage),
     };
 }
 
@@ -200,9 +207,9 @@ export async function installPanicModePersistence(runtime) {
     await flowsLib.configurePanicModePersistence(runtime.panicModeStore);
 }
 
-/** Build a queue store over the same default storage a host would pick itself. */
-function newBroadcastQueueStore() {
-    return createBroadcastQueueStore({ storage: createBroadcastQueueStorage() });
+/** Build a queue store over the runtime's process-wide storage adapter. */
+function newBroadcastQueueStore(storage) {
+    return createBroadcastQueueStore({ storage });
 }
 
 /**
@@ -664,7 +671,9 @@ export function tearDownHost(runtime) {
  * IndexedDB, neither of which the desktop shell uses. Its stores are
  * files under `app.getPath('userData')`, reachable only from main, and
  * `targets` below is the list that decides what goes; a new per-wallet
- * store added to `createRuntime` goes there too:
+ * store added to `createRuntime` goes there too. The broadcast queue is
+ * sealed first to stop late writes, then cleared again in that list so a
+ * file refusal reaches the wipe result:
  *
  *   - storage        `vault.bin`            encrypted vault document
  *   - meta           `meta.json`            kdfParams: the "a wallet
@@ -679,6 +688,8 @@ export function tearDownHost(runtime) {
  *                                           that no longer exists, which
  *                                           would hand the next wallet
  *                                           somebody else's idle clock
+ *   - broadcastQueue `broadcast-queue.json` signed transactions waiting
+ *                                           for an explicit retry
  *
  * The throttle is cleared deliberately. It exists to slow password
  * guessing against a vault; once that vault is gone there is nothing
@@ -705,7 +716,7 @@ export async function wipeRuntimeStores(runtime) {
     } catch (err) {
         console.error('[xchain] broadcast-queue seal failed:', err);
     }
-    runtime.broadcastQueueStore = newBroadcastQueueStore();
+    runtime.broadcastQueueStore = newBroadcastQueueStore(runtime.broadcastQueueStorage);
 
     /** @type {string[]} */
     const cleared = [];
@@ -719,6 +730,7 @@ export async function wipeRuntimeStores(runtime) {
         ['meta', runtime.metaBackend],
         ['storage', runtime.storageBackend],
         ['session', runtime.sessionBackend],
+        ['broadcastQueue', runtime.broadcastQueueStorage],
         ['unlockThrottle', runtime.unlockThrottleStore],
         // The auto-lock stamp describes a session that no longer exists
         // after a wipe; carrying it into the next wallet would hand that
