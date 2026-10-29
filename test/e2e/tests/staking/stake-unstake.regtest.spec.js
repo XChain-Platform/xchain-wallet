@@ -348,17 +348,17 @@ test.describe('STAKE -> UNSTAKE lifecycle on regtest (partial unstake, re-driven
             // `confirm-error` panel - useConfirmAction's 'error' phase resolves
             // through `openConfirmScreen`'s own catch, which closes the confirm
             // screen and returns the PLAIN FORM with the failure surfaced as a
-            // StatusMessage `role="alert"`. The node's reason
-            // (bad-txns-inputs-missingorspent) is wire wording the wallet never
-            // shows; humanizeError files the bad-txns family under the one
-            // sentence that says the network refused it for good, which is the
+            // StatusMessage `role="alert"`. The injected node reason
+            // (bad-txns-inputs-missingorspent) is a spend conflict, so the wallet
+            // says a coin was already used and nothing was sent. That is the
             // permanent verdict this step injects, as opposed to the queued
             // "Signed. Not broadcast yet." a transient failure earns.
             await expect(confirm).toHaveCount(0, { timeout: 120_000 });
             const err = main.getByRole('alert');
             await expect(err).toBeVisible({ timeout: 30_000 });
-            await expect(err, 'the permanent rejection was not reported as the network refusing the '
-                + 'transaction').toContainText(/The network rejected this transaction\./);
+            await expect(err, 'the spent-input rejection was not reported as a coin conflict')
+                .toContainText('One of the coins this transaction spends was already used by another '
+                    + 'transaction. Nothing was sent.');
             await expect(page.getByText('Signed. Not broadcast yet.'),
                 'a permanent rejection was presented as a queued retry').toHaveCount(0);
             await expect(page.getByText(/Unstake broadcast\./)).toHaveCount(0);
