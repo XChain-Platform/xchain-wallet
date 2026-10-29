@@ -86,7 +86,9 @@ import {
     lockButton,
     mainButton,
     openPaletteCommand,
+    openedWalletHome,
     unlockButton,
+    unlockedAnyScreen,
     unlockedShell,
     LICENSE_ACCEPTED_AT_KEY,
     LICENSE_ACCEPTED_VERSION_KEY,
@@ -333,7 +335,7 @@ async function lockAndUnlockWithPasswordOnly(page, password) {
     await page.getByLabel('Password', { exact: true }).fill(password);
     await unlockButton(page).click();
 
-    await expect(unlockedShell(page),
+    await expect(unlockedAnyScreen(page),
         'the wallet did not open on its password alone, which is the whole claim of §15.6')
         .toBeVisible({ timeout: kdfStepTimeout() });
     await expect(page.getByText(CAPTURE_COPY),
@@ -585,7 +587,7 @@ test.describe('the BIP39 passphrase is stored at setup (§15.6)', () => {
                             + 'the schema, the migration on the way out of the envelope is missing '
                             + 'and every backup taken by a pre-spec build is unrestorable')
                             .toHaveCount(0);
-                        await expect(unlockedShell(page),
+                        await expect(openedWalletHome(page),
                             'the pre-spec envelope never reached an unlocked wallet')
                             .toBeVisible({ timeout: kdfStepTimeout() });
                     });
@@ -594,7 +596,7 @@ test.describe('the BIP39 passphrase is stored at setup (§15.6)', () => {
                     async () => {
                         await page.reload();
                         const unlock = unlockButton(page);
-                        await unlock.or(unlockedShell(page)).first()
+                        await unlock.or(unlockedAnyScreen(page)).first()
                             .waitFor({ state: 'visible', timeout: kdfStepTimeout() });
                         await expect(unlock, 'the reload did not re-lock the vault')
                             .toBeVisible({ timeout: 30_000 });
@@ -656,7 +658,7 @@ test.describe('the BIP39 passphrase is stored at setup (§15.6)', () => {
                 await test.step('the right one is accepted and the wallet opens', async () => {
                     await capturePassphraseField(page).fill(PRE_SPEC_PASSPHRASE);
                     await page.getByRole('button', { name: 'Continue', exact: true }).click();
-                    await expect(unlockedShell(page),
+                    await expect(unlockedAnyScreen(page),
                         'the correct passphrase did not finish the capture step')
                         .toBeVisible({ timeout: kdfStepTimeout() });
                 });
@@ -884,6 +886,6 @@ async function importMnemonic(page, { words, passphrase, name }) {
     await page.getByRole('button', { name: 'Import', exact: true }).click();
 
     await acknowledgeDonationNotice(page, 'off');
-    await expect(unlockedShell(page), 'the import never reached an unlocked wallet')
+    await expect(openedWalletHome(page), 'the import never reached an unlocked wallet')
         .toBeVisible({ timeout: kdfStepTimeout() });
 }
