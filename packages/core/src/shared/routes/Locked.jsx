@@ -27,6 +27,7 @@ import {
     unlockWithBiometric,
 } from '../../flows/biometricUnlock.js';
 import { tripDuressIfMatch } from '../../flows/duressPassphrase.js';
+import { isExactTypedConfirmation } from '../../flows/typedConfirmation.js';
 import {
     getDemoWalletId,
     getDemoWalletPassword,
@@ -57,17 +58,6 @@ import styles from './Locked.module.css';
 import { t } from '../../i18n/index.js';
 
 const BIOMETRIC_PASSWORD_FALLBACK = 'Biometric unlock is unavailable. Use your wallet password.';
-
-/**
- * Whether the typed confirmation reads WIPE. The field auto-capitalizes, and
- * a Turkish keyboard capitalizes a typed "i" to U+0130 (I with dot above),
- * which toUpperCase leaves as is; folding that one letter to "I" keeps the
- * gate open for the word the label asks for while look-alike and
- * full-width letters still keep it shut.
- */
-function isWipeConfirmed(text) {
-    return text.trim().toUpperCase().replace(/İ/g, 'I') === 'WIPE';
-}
 
 /**
  * Unlock screen. Reads the shell from context and picks the matching
@@ -187,7 +177,7 @@ export function Locked({ onUnlocked, lockReason = null }) {
     async function handleForgotPasswordWipe() {
         if (wipeBusy) return;
         if (!restoreLane) return;
-        if (!isWipeConfirmed(wipeConfirmText)) return;
+        if (!isExactTypedConfirmation(wipeConfirmText, 'WIPE')) return;
         setWipeBusy(true);
         setWipeError(null);
         try {
@@ -732,6 +722,7 @@ export function Locked({ onUnlocked, lockReason = null }) {
                                             <Input
                                                 type="text"
                                                 label={t('vaultUnavailable.wipeConfirm')}
+                                                hint={t('common.typedConfirmationHint', { word: 'WIPE' })}
                                                 value={wipeConfirmText}
                                                 onChange={(e) => setWipeConfirmText(e.target.value)}
                                                 autoComplete="off"
@@ -743,7 +734,7 @@ export function Locked({ onUnlocked, lockReason = null }) {
                                                 variant="danger"
                                                 onClick={handleForgotPasswordWipe}
                                                 loading={wipeBusy}
-                                                disabled={wipeBusy || !isWipeConfirmed(wipeConfirmText)}
+                                                disabled={wipeBusy || !isExactTypedConfirmation(wipeConfirmText, 'WIPE')}
                                             >
                                                 {t('locked.eraseVaultAndRestore')}
                                             </Button>

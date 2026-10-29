@@ -9,6 +9,7 @@
 // contact legal@dankest.llc.
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { t } from '../../i18n/index.js';
 import { AddressField, AddressText, Button, ChainBadge, ChainPicker, FeeSelector, FieldNote, FormNotice, FormPage, FormSection, InfoTip, Input, PageHeader, Screen, Select, StatusMessage } from '@xchain-wallet/core/ui';
 import {
     registry as registryLib,
@@ -16,6 +17,7 @@ import {
     flows as flowsLib,
 } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
+import { isExactTypedConfirmation } from '../../flows/typedConfirmation.js';
 import { useDemoGuard } from '../hooks/useDemoGuard.jsx';
 import { humanizeError } from '../utils/humanizeError.js';
 import { ResultScreen } from '../components/ResultScreen.jsx';
@@ -247,7 +249,7 @@ export function OracleForm({ walletId, onBack, initialChainId, initialFromAddres
     const deviationPct = quoteDeviationPct(priorQuote?.value, value.trim());
     const needsTypedConfirm = deviationPct != null
         && Math.abs(deviationPct) > DEVIATION_TYPED_CONFIRM_PCT;
-    const typedConfirmOk = !needsTypedConfirm || typedConfirm.trim().toUpperCase() === 'PUBLISH';
+    const typedConfirmOk = !needsTypedConfirm || isExactTypedConfirmation(typedConfirm, 'PUBLISH');
 
     // Consumers of the exact pair being republished, which is the set that
     // actually reprices. Dispensers on this address's other feeds are
@@ -863,7 +865,7 @@ function OraclePublishNotes({
             {needsTypedConfirm ? (
                 <Input
                     label="Type PUBLISH to confirm"
-                    hint={`This changes your published price by ${fmtPct(deviationPct)} and cannot be undone for 24 hours.`}
+                    hint={`This changes your published price by ${fmtPct(deviationPct)} and cannot be undone for 24 hours. ${t('common.typedConfirmationHint', { word: 'PUBLISH' })}`}
                     value={typedConfirm}
                     onChange={(e) => onTypedConfirmChange(e.target.value)}
                     autoComplete="off"

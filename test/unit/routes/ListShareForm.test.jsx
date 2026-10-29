@@ -196,15 +196,17 @@ describe('ListShareForm', () => {
         expect(messaging.composeForConfirm).not.toHaveBeenCalled();
     });
 
-    it('requires the case-sensitive SHARE confirmation before Review', async () => {
+    it('requires exact uppercase SHARE before Review', async () => {
         const messaging = mount();
         const confirm = await screen.findByLabelText('Type SHARE to confirm');
         const review = screen.getByRole('button', { name: 'Review' });
 
         expect(review.disabled).toBe(true);
-        fireEvent.change(confirm, { target: { value: 'share' } });
-        expect(review.disabled).toBe(true);
-        fireEvent.change(confirm, { target: { value: ' SHARE ' } });
+        for (const value of ['share', ' SHARE', 'SHARE ', 'Share']) {
+            fireEvent.change(confirm, { target: { value } });
+            expect(review.disabled).toBe(true);
+        }
+        fireEvent.change(confirm, { target: { value: 'SHARE' } });
         expect(review.disabled).toBe(false);
         expect(messaging.composeForConfirm).not.toHaveBeenCalled();
         expect(document.body.textContent).not.toMatch(/regtest|testnet|Not mainnet/i);

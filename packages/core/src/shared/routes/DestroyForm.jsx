@@ -52,6 +52,7 @@ import { OwnAddressPickerScreen } from '../components/OwnAddressPickerScreen.jsx
 import styles from './IssueTokenForm.module.css';
 import { submitFailureMessage } from '../utils/submitFailureMessage.js';
 import { tickerReferenceError } from '../utils/tickerGrammar.js';
+import { isExactTypedConfirmation } from '../../flows/typedConfirmation.js';
 
 const chainRegistry = registryLib.defaultRegistry();
 
@@ -123,7 +124,7 @@ export function DestroyForm({ walletId, onBack, initialChainId, initialTick, ini
     // confirmation can't carry forward from a previously-cancelled
     // review.
     const [typedConfirm, setTypedConfirm] = useState('');
-    const typedConfirmOk = typedConfirm.trim().toUpperCase() === 'DESTROY';
+    const typedConfirmOk = isExactTypedConfirmation(typedConfirm, 'DESTROY');
 
     const [ticker, setTicker] = useState(initialTick || '');
 
@@ -639,7 +640,7 @@ export function DestroyForm({ walletId, onBack, initialChainId, initialTick, ini
                 )}
                 <Input
                     label="Type DESTROY to confirm"
-                    hint="This burns the amount above and cannot be undone."
+                    hint={`This burns the amount above and cannot be undone. ${t('common.typedConfirmationHint', { word: 'DESTROY' })}`}
                     value={typedConfirm}
                     onChange={(e) => setTypedConfirm(e.target.value)}
                     autoComplete="off"
@@ -676,7 +677,7 @@ export function DestroyForm({ walletId, onBack, initialChainId, initialTick, ini
                 extraCredentials={(
                     <Input
                         label='Type "DESTROY" to confirm'
-                        hint="Destroying tokens is irreversible."
+                        hint={`Destroying tokens is irreversible. ${t('common.typedConfirmationHint', { word: 'DESTROY' })}`}
                         value={typedConfirm}
                         onChange={(e) => setTypedConfirm(e.target.value)}
                         autoComplete="off"

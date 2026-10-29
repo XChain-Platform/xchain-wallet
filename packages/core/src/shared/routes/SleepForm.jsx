@@ -9,6 +9,7 @@
 // contact legal@dankest.llc.
 
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { t } from '../../i18n/index.js';
 import { AddressField, AddressText, Button, ChainBadge, ChainPicker, FeeSelector, FormNotice, FormPage, Input, PageHeader, RadioGroup, Screen, StatusMessage } from '@xchain-wallet/core/ui';
 import {
     registry as registryLib,
@@ -16,6 +17,7 @@ import {
     flows as flowsLib,
 } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
+import { isExactTypedConfirmation } from '../../flows/typedConfirmation.js';
 import { useDemoGuard } from '../hooks/useDemoGuard.jsx';
 import { useSettings } from '../hooks/useSettings.js';
 import { useConfirmAction } from '../hooks/useConfirmAction.js';
@@ -136,7 +138,7 @@ export function SleepForm({ walletId, onBack, mode, initialChainId, initialTick,
     const [sourcePickerOpen, setSourcePickerOpen] = useState(false);
     // Address self-lock is irreversible: gate it behind a typed confirm.
     const [typedConfirm, setTypedConfirm] = useState('');
-    const typedConfirmOk = isTick || typedConfirm.trim().toUpperCase() === 'LOCK';
+    const typedConfirmOk = isTick || isExactTypedConfirmation(typedConfirm, 'LOCK');
 
     const coinTicker = descriptor ? PROTOCOL_COIN_TICKER[descriptor.coin] : '';
 
@@ -740,7 +742,7 @@ export function SleepForm({ walletId, onBack, mode, initialChainId, initialTick,
                 {!isTick ? (
                     <Input
                         label="Type LOCK to confirm"
-                        hint="This pauses XChain actions from your address and cannot be undone before the wake block."
+                        hint={`This pauses XChain actions from your address and cannot be undone before the wake block. ${t('common.typedConfirmationHint', { word: 'LOCK' })}`}
                         value={typedConfirm}
                         onChange={(e) => setTypedConfirm(e.target.value)}
                         autoComplete="off"

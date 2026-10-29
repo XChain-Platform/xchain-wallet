@@ -26,6 +26,7 @@ import { useGatedTickNotice } from '../hooks/useGatedTickNotice.js';
 import { useActionConfirmFlow, useConfirmSubmit, isUserRejection } from '../hooks/useActionConfirmFlow.js';
 import { ActionConfirmScreen } from '../components/ActionConfirmScreen.jsx';
 import { irreversibleConfirmWord } from '../utils/irreversibleActionGate.js';
+import { isExactTypedConfirmation } from '../../flows/typedConfirmation.js';
 import { SignCredentials } from '../components/SignCredentials.jsx';
 import { useSignerReady } from '../hooks/useSignerReady.js';
 import { ResultScreen } from '../components/ResultScreen.jsx';
@@ -373,7 +374,7 @@ export function AdvancedActionsForm({ walletId, onBack, hasDexSurface = true }) 
     // dedicated forms ask for, and opening the confirm page starts the typing over.
     const confirmWord = irreversibleConfirmWord(action, actionParams);
     const [typedConfirm, setTypedConfirm] = useState('');
-    const typedConfirmOk = !confirmWord || typedConfirm.trim().toUpperCase() === confirmWord;
+    const typedConfirmOk = !confirmWord || isExactTypedConfirmation(typedConfirm, confirmWord);
 
     const decoded = useMemo(() => {
         if (stage !== 'review' && stage !== 'submitting') return null;
@@ -778,7 +779,7 @@ export function AdvancedActionsForm({ walletId, onBack, hasDexSurface = true }) 
                 extraCredentials={confirmWord ? (
                     <Input
                         label={`Type "${confirmWord}" to confirm`}
-                        hint="This cannot be undone."
+                        hint={`This cannot be undone. ${t('common.typedConfirmationHint', { word: confirmWord })}`}
                         value={typedConfirm}
                         onChange={(e) => setTypedConfirm(e.target.value)}
                         autoComplete="off"

@@ -45,34 +45,34 @@ function openGate(props) {
 }
 
 describe('type-WIPE gate input', () => {
-    it('opens for WIPE typed on a Turkish keyboard with caps (U+0130)', async () => {
+    it('stays shut for a non-ASCII capital I', () => {
         const wipe = vi.fn().mockResolvedValue(undefined);
         const { field, confirm } = openGate({ wipe, onRetry: vi.fn() });
         fireEvent.change(field, { target: { value: 'WİPE' } });
-        await waitFor(() => expect(confirm.disabled).toBe(false));
-        fireEvent.click(confirm);
-        await waitFor(() => expect(wipe).toHaveBeenCalledTimes(1));
-    });
-
-    it('keeps the ASCII gate: wipe and padded WIPE open, WIPEX stays shut', async () => {
-        const wipe = vi.fn().mockResolvedValue(undefined);
-        const { field, confirm } = openGate({ wipe, onRetry: vi.fn() });
-        for (const value of ['wipe', ' WIPE ']) {
-            fireEvent.change(field, { target: { value } });
-            await waitFor(() => expect(confirm.disabled).toBe(false));
-        }
-        fireEvent.change(field, { target: { value: 'WIPEX' } });
         expect(confirm.disabled).toBe(true);
         fireEvent.click(confirm);
         expect(wipe).not.toHaveBeenCalled();
     });
 
-    it('opens for lowercase wipe whatever the document locale', async () => {
+    it('accepts only exact uppercase WIPE', async () => {
+        const wipe = vi.fn().mockResolvedValue(undefined);
+        const { field, confirm } = openGate({ wipe, onRetry: vi.fn() });
+        for (const value of ['wipe', ' WIPE', 'WIPE ', 'Wipe', 'WIPEX']) {
+            fireEvent.change(field, { target: { value } });
+            expect(confirm.disabled).toBe(true);
+        }
+        fireEvent.change(field, { target: { value: 'WIPE' } });
+        expect(confirm.disabled).toBe(false);
+        fireEvent.click(confirm);
+        await waitFor(() => expect(wipe).toHaveBeenCalledTimes(1));
+    });
+
+    it('stays shut for lowercase wipe whatever the document locale', () => {
         document.documentElement.lang = 'tr-TR';
         const wipe = vi.fn().mockResolvedValue(undefined);
         const { field, confirm } = openGate({ wipe, onRetry: vi.fn() });
         fireEvent.change(field, { target: { value: 'wipe' } });
-        await waitFor(() => expect(confirm.disabled).toBe(false));
+        expect(confirm.disabled).toBe(true);
         document.documentElement.lang = 'en';
     });
 

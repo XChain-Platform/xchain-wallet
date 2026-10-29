@@ -62,6 +62,7 @@ import { useState } from 'react';
 import { Button, FormPage, Input, Screen, StatusMessage } from '@xchain-wallet/core/ui';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { wipeWalletStorage } from '../utils/wipeWalletStorage.js';
+import { isExactTypedConfirmation } from '../../flows/typedConfirmation.js';
 import { t } from '../../i18n/index.js';
 import styles from './VaultUnavailable.module.css';
 
@@ -106,17 +107,6 @@ function incompleteCopy() {
         body: t('vaultUnavailable.incomplete.body'),
         nextStep: t('vaultUnavailable.incomplete.nextStep'),
     };
-}
-
-/**
- * Whether the typed confirmation reads WIPE. The field auto-capitalizes, and
- * a Turkish keyboard capitalizes a typed "i" to U+0130 (I with dot above),
- * which toUpperCase leaves as is; folding that one letter to "I" keeps the
- * gate open for the word the label asks for while look-alike and
- * full-width letters still keep it shut.
- */
-function isWipeConfirmed(text) {
-    return text.trim().toUpperCase().replace(/İ/g, 'I') === 'WIPE';
 }
 
 /** The kinds where the user genuinely cannot proceed without the escape. */
@@ -192,7 +182,7 @@ export function VaultUnavailable({ kind, onRetry, wipe = wipeWalletStorage }) {
 
     async function handleWipe() {
         if (busy) return;
-        if (!isWipeConfirmed(confirmText)) return;
+        if (!isExactTypedConfirmation(confirmText, 'WIPE')) return;
         setBusy(true);
         setWipeError(null);
         try {
@@ -282,6 +272,7 @@ export function VaultUnavailable({ kind, onRetry, wipe = wipeWalletStorage }) {
                                 <Input
                                     type="text"
                                     label={t('vaultUnavailable.wipeConfirm')}
+                                    hint={t('common.typedConfirmationHint', { word: 'WIPE' })}
                                     value={confirmText}
                                     onChange={(e) => setConfirmText(e.target.value)}
                                     autoComplete="off"
@@ -294,7 +285,7 @@ export function VaultUnavailable({ kind, onRetry, wipe = wipeWalletStorage }) {
                                     block
                                     onClick={handleWipe}
                                     loading={busy}
-                                    disabled={busy || !isWipeConfirmed(confirmText)}
+                                    disabled={busy || !isExactTypedConfirmation(confirmText, 'WIPE')}
                                 >
                                     {wipeCopy.button}
                                 </Button>

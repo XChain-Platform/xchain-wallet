@@ -145,14 +145,19 @@ describe('ListTransferForm', () => {
         expect(messaging.composeForConfirm).not.toHaveBeenCalled();
     });
 
-    it('requires typing TRANSFER before Review', async () => {
+    it('requires exact uppercase TRANSFER before Review', async () => {
         const messaging = mount();
         fireEvent.change(await screen.findByLabelText('Destination'), { target: { value: DESTINATION } });
 
         expect(screen.getByRole('button', { name: 'Review' }).disabled).toBe(true);
         expect(messaging.composeForConfirm).not.toHaveBeenCalled();
 
-        fireEvent.change(screen.getByLabelText('Type TRANSFER to confirm'), { target: { value: 'transfer' } });
+        const confirm = screen.getByLabelText('Type TRANSFER to confirm');
+        for (const value of ['transfer', ' TRANSFER', 'TRANSFER ', 'Transfer']) {
+            fireEvent.change(confirm, { target: { value } });
+            expect(screen.getByRole('button', { name: 'Review' }).disabled).toBe(true);
+        }
+        fireEvent.change(confirm, { target: { value: 'TRANSFER' } });
         expect(screen.getByRole('button', { name: 'Review' }).disabled).toBe(false);
         expect(document.body.textContent).not.toMatch(/regtest|testnet|Not mainnet/i);
     });

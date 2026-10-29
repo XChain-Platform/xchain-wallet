@@ -9,6 +9,7 @@
 // contact legal@dankest.llc.
 
 import { t } from '../../i18n/index.js';
+import { isExactTypedConfirmation } from '../../flows/typedConfirmation.js';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { AddressField, AddressText, Button, ChainBadge, ChainPicker, Checkbox, FeeSelector, FormErrorSummary, FormNotice, FormPage, Input, PageHeader, Screen, StatusMessage } from '@xchain-wallet/core/ui';
 import {
@@ -244,7 +245,7 @@ export function TokenAdminForm({ walletId, mode, onBack, initialChainId, initial
     // the review stage requires the user to type LOCK before the Sign
     // button enables (on top of the existing password / HW gate).
     const [typedConfirm, setTypedConfirm] = useState('');
-    const typedConfirmOk = typedConfirm.trim().toUpperCase() === 'LOCK';
+    const typedConfirmOk = isExactTypedConfirmation(typedConfirm, 'LOCK');
     const [sourcePickerOpen, setSourcePickerOpen] = useState(false);
     const [tokenPickerOpen, setTokenPickerOpen] = useState(false);
     const [contactsPickerOpen, setContactsPickerOpen] = useState(false);
@@ -1302,7 +1303,7 @@ export function TokenAdminForm({ walletId, mode, onBack, initialChainId, initial
                 {mode === 'lock' ? (
                     <Input
                         label="Type LOCK to confirm"
-                        hint="Locking is permanent. Every flag checked below can never be unlocked."
+                        hint={`Locking is permanent. Every flag checked below can never be unlocked. ${t('common.typedConfirmationHint', { word: 'LOCK' })}`}
                         value={typedConfirm}
                         onChange={(e) => setTypedConfirm(e.target.value)}
                         autoComplete="off"
@@ -1898,7 +1899,7 @@ export function TokenAdminForm({ walletId, mode, onBack, initialChainId, initial
             {mode === 'lock' && singleEncode && !allLocksSet ? (
                 <Input
                     label="Type LOCK to confirm"
-                    hint="Locking is permanent. Every flag checked above can never be unlocked."
+                    hint={`Locking is permanent. Every flag checked above can never be unlocked. ${t('common.typedConfirmationHint', { word: 'LOCK' })}`}
                     value={typedConfirm}
                     onChange={(e) => setTypedConfirm(e.target.value)}
                     autoComplete="off"

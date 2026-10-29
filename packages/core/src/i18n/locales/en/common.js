@@ -31,6 +31,7 @@ const messages = {
     'common.showPassphrase': 'Show passphrase',
     'common.hidePassphrase': 'Hide passphrase',
     'common.confirm': 'Confirm',
+    'common.typedConfirmationHint': 'Type {word} exactly in capitals with no spaces.',
     'common.settingsUnavailable': 'Settings unavailable.',
     'common.vaultConflict': 'This wallet changed in another window. Nothing was lost. Reload to see the latest, then try again.',
     'common.edit': 'Edit',

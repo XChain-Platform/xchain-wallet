@@ -9,6 +9,7 @@
 // contact legal@dankest.llc.
 
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { t } from '../../i18n/index.js';
 import {
     AddressText,
     Button,
@@ -204,7 +205,10 @@ function ListShareFormScreen({ walletId, listRef, onBack, onDone = onBack }) {
                 : 'The current owner could not be verified, so this wallet cannot share this list.');
             return false;
         }
-        if (!typedConfirmOk) { setFormError('Type SHARE exactly to confirm.'); return false; }
+        if (!typedConfirmOk) {
+            setFormError(t('common.typedConfirmationHint', { word: 'SHARE' }));
+            return false;
+        }
         if (/[|;]/.test(memo)) { setFormError('Memo cannot contain | or ; characters.'); return false; }
         const memoTooLong = memoLengthError(trimmedMemo);
         if (memoTooLong) { setFormError(memoTooLong); return false; }
@@ -275,7 +279,7 @@ function ListShareFormScreen({ walletId, listRef, onBack, onDone = onBack }) {
                 extraCredentials={(
                     <Input
                         label='Type "SHARE" to confirm'
-                        hint="Sharing is permanent and cannot be undone."
+                        hint={`Sharing is permanent and cannot be undone. ${t('common.typedConfirmationHint', { word: 'SHARE' })}`}
                         value={typedConfirm}
                         onChange={(event) => setTypedConfirm(event.target.value)}
                         autoComplete="off"
@@ -403,7 +407,7 @@ function ListShareFormScreen({ walletId, listRef, onBack, onDone = onBack }) {
 
             <Input
                 label="Type SHARE to confirm"
-                hint="Enter SHARE exactly."
+                hint={t('common.typedConfirmationHint', { word: 'SHARE' })}
                 value={typedConfirm}
                 onChange={(event) => { setTypedConfirm(event.target.value); setFormError(null); }}
                 autoComplete="off"

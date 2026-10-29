@@ -9,6 +9,7 @@
 // contact legal@dankest.llc.
 
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { t } from '../../i18n/index.js';
 import {
     AddressText,
     Button,
@@ -33,6 +34,7 @@ import { findListOwner, recheckListOwner } from '../../flows/listMembership.js';
 import { memoLengthError, MEMO_HINT } from '../utils/memoLimit.js';
 import { submitFailureMessage } from '../utils/submitFailureMessage.js';
 import { explorerReadFailure } from '../../sdk/explorerErrors.js';
+import { isExactTypedConfirmation } from '../../flows/typedConfirmation.js';
 import styles from './IssueTokenForm.module.css';
 
 const chainRegistry = registryLib.defaultRegistry();
@@ -146,7 +148,7 @@ function ListTransferFormScreen({ walletId, listRef, onBack, onDone = onBack }) 
         software: 'createList',
         hardware: 'createListHw',
     });
-    const typedConfirmOk = typedConfirm.trim().toUpperCase() === 'TRANSFER';
+    const typedConfirmOk = isExactTypedConfirmation(typedConfirm, 'TRANSFER');
     const trimmedDestination = destination.trim();
     const trimmedMemo = memo.trim();
 
@@ -169,7 +171,10 @@ function ListTransferFormScreen({ walletId, listRef, onBack, onDone = onBack }) 
             setFormError('Destination must be different from the current owner.');
             return false;
         }
-        if (!typedConfirmOk) { setFormError('Type TRANSFER to confirm.'); return false; }
+        if (!typedConfirmOk) {
+            setFormError(t('common.typedConfirmationHint', { word: 'TRANSFER' }));
+            return false;
+        }
         if (/[|;]/.test(memo)) { setFormError('Memo cannot contain | or ; characters.'); return false; }
         const memoTooLong = memoLengthError(trimmedMemo);
         if (memoTooLong) { setFormError(memoTooLong); return false; }
@@ -238,7 +243,7 @@ function ListTransferFormScreen({ walletId, listRef, onBack, onDone = onBack }) 
                 extraCredentials={(
                     <Input
                         label='Type "TRANSFER" to confirm'
-                        hint="List ownership changes permanently when this transaction confirms."
+                        hint={`List ownership changes permanently when this transaction confirms. ${t('common.typedConfirmationHint', { word: 'TRANSFER' })}`}
                         value={typedConfirm}
                         onChange={(event) => setTypedConfirm(event.target.value)}
                         autoComplete="off"
@@ -365,7 +370,7 @@ function ListTransferFormScreen({ walletId, listRef, onBack, onDone = onBack }) 
 
             <Input
                 label="Type TRANSFER to confirm"
-                hint="Ownership transfer is permanent."
+                hint={`Ownership transfer is permanent. ${t('common.typedConfirmationHint', { word: 'TRANSFER' })}`}
                 value={typedConfirm}
                 onChange={(event) => { setTypedConfirm(event.target.value); setFormError(null); }}
                 autoComplete="off"

@@ -47,6 +47,7 @@ import { customFeeReviewStop } from '../../flows/feeEstimate.js';
 import { OwnAddressPickerScreen } from '../components/OwnAddressPickerScreen.jsx';
 import styles from './IssueTokenForm.module.css';
 import { submitFailureMessage } from '../utils/submitFailureMessage.js';
+import { isExactTypedConfirmation } from '../../flows/typedConfirmation.js';
 import { APPROVE_REFUSAL_NAME, approveRefusal } from '../utils/approveRefusal.js';
 import { MAX_MEMO_LENGTH, memoLengthError, utf8ByteLength } from '../utils/memoLimit.js';
 import { isValidAddressForChain } from '../utils/addressValidation.js';
@@ -182,7 +183,7 @@ export function CallbackForm({ walletId, onBack, initialChainId, initialTick, in
     // Typed-confirmation gate (CALLBACK force-recalls everything; rides the
     // same typed-word rail as DESTROY / SWEEP).
     const [typedConfirm, setTypedConfirm] = useState('');
-    const typedConfirmOk = typedConfirm.trim().toUpperCase() === 'CALLBACK';
+    const typedConfirmOk = isExactTypedConfirmation(typedConfirm, 'CALLBACK');
 
     const coinTicker = descriptor ? PROTOCOL_COIN_TICKER[descriptor.coin] : '';
 
@@ -840,7 +841,7 @@ export function CallbackForm({ walletId, onBack, initialChainId, initialTick, in
                 )}
                 <Input
                     label="Type CALLBACK to confirm"
-                    hint="This recalls every unit of the token from all holders and pays them the amount above. It cannot be undone."
+                    hint={`This recalls every unit of the token from all holders and pays them the amount above. It cannot be undone. ${t('common.typedConfirmationHint', { word: 'CALLBACK' })}`}
                     value={typedConfirm}
                     onChange={(e) => setTypedConfirm(e.target.value)}
                     autoComplete="off"
@@ -872,7 +873,7 @@ export function CallbackForm({ walletId, onBack, initialChainId, initialTick, in
                         {dustNote}
                         <Input
                             label='Type "CALLBACK" to confirm'
-                            hint="Recalls all supply and pays holders. Irreversible."
+                            hint={`Recalls all supply and pays holders. Irreversible. ${t('common.typedConfirmationHint', { word: 'CALLBACK' })}`}
                             value={typedConfirm}
                             onChange={(e) => setTypedConfirm(e.target.value)}
                             autoComplete="off"

@@ -93,6 +93,21 @@ afterEach(() => {
 });
 
 describe('DestroyForm balance freshness', () => {
+    it('enables approval only for exact uppercase DESTROY', async () => {
+        mountDestroy({ balances: balancesWith([{ tick: 'ART', quantity: '2', divisibility: 0 }]) });
+        expect(await screen.findByText('2 ART available')).toBeInTheDocument();
+        await reviewAmount('2');
+        const field = await screen.findByLabelText('Type "DESTROY" to confirm');
+        const approve = await screen.findByTestId('confirm-approve');
+
+        for (const value of ['destroy', ' DESTROY', 'DESTROY ', 'Destroy']) {
+            fireEvent.change(field, { target: { value } });
+            expect(approve).toBeDisabled();
+        }
+        fireEvent.change(field, { target: { value: 'DESTROY' } });
+        expect(approve).toBeEnabled();
+    });
+
     it('bypasses a balance cached under two seconds old and refuses when the token is gone', async () => {
         const held = balancesWith([{ tick: 'ART', quantity: '2', divisibility: 0 }]);
         const gone = balancesWith([]);

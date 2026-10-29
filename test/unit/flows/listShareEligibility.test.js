@@ -90,7 +90,8 @@ describe('listShareEligibility', () => {
 describe('isShareConfirmed', () => {
     it.each([
         ['SHARE', true],
-        ['  SHARE\n', true],
+        [' SHARE', false],
+        ['SHARE ', false],
         ['share', false],
         ['Share', false],
         ['', false],

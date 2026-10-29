@@ -9,6 +9,7 @@
 // contact legal@dankest.llc.
 
 import { t } from '../../i18n/index.js';
+import { isExactTypedConfirmation } from '../../flows/typedConfirmation.js';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { AddressField, AddressText, Button, ChainBadge, ChainPicker, Checkbox, FeeSelector, FieldNote, FormNotice, FormPage, FormSection, Input, PageHeader, Screen, StatusMessage } from '@xchain-wallet/core/ui';
 import {
@@ -176,7 +177,7 @@ export function SweepForm({
     // Typed-confirmation gate: SWEEP moves everything at once, so it
     // rides the same typed-word rail as DESTROY.
     const [typedConfirm, setTypedConfirm] = useState('');
-    const typedConfirmOk = typedConfirm.trim().toUpperCase() === 'SWEEP';
+    const typedConfirmOk = isExactTypedConfirmation(typedConfirm, 'SWEEP');
 
     const coinTicker = descriptor ? PROTOCOL_COIN_TICKER[descriptor.coin] : '';
 
@@ -865,7 +866,7 @@ export function SweepForm({
                 )}
                 <Input
                     label="Type SWEEP to confirm"
-                    hint="Everything in the selected categories moves to the destination, including anything the preview did not list."
+                    hint={`Everything in the selected categories moves to the destination, including anything the preview did not list. ${t('common.typedConfirmationHint', { word: 'SWEEP' })}`}
                     value={typedConfirm}
                     onChange={(e) => setTypedConfirm(e.target.value)}
                     autoComplete="off"
@@ -897,7 +898,7 @@ export function SweepForm({
                         {sweepWarnings}
                         <Input
                             label='Type "SWEEP" to confirm'
-                            hint="Everything in the selected categories moves, including anything not listed in the preview."
+                            hint={`Everything in the selected categories moves, including anything not listed in the preview. ${t('common.typedConfirmationHint', { word: 'SWEEP' })}`}
                             value={typedConfirm}
                             onChange={(e) => setTypedConfirm(e.target.value)}
                             autoComplete="off"
