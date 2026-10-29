@@ -43,6 +43,8 @@ const messages = {
         "This cosigner's step 1 reply isn't a valid response for this signing session, so it doesn't count. Ask the cosigner to load this session's request again and send the new reply.",
     'multisig.reply.nonceRepeated':
         "This step 1 reply is identical to one already counted for another cosigner, so it doesn't count. One of the two replies isn't genuine. If this session can't collect a reply from every cosigner, cancel it and start a new signing session.",
+    'multisig.finalize.conflict':
+        'This signing session was already finalized with a different transaction. The saved transaction was not changed.',
 };
 
 addEnglish(messages);

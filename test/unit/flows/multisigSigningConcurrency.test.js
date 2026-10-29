@@ -102,6 +102,30 @@ describe('multisig session concurrent writes', () => {
         expect(records.get(session.id).status).toBe('cancelled');
     });
 
+    it('persists exactly one of two different finalizations sent at once', async () => {
+        const { vault, records } = slowVault();
+        const session = await start(vault);
+        records.set(session.id, { ...session, status: 'ready-to-finalize' });
+        vault.multisigSigningSessions.put.mockClear();
+
+        const results = await Promise.allSettled([
+            finalizeMultisigSigningSession({
+                vault, sessionId: session.id, finalizedTxHex: 'aabb', txid: '11'.repeat(32),
+            }),
+            finalizeMultisigSigningSession({
+                vault, sessionId: session.id, finalizedTxHex: 'ccdd', txid: '22'.repeat(32),
+            }),
+        ]);
+
+        expect(results.map((result) => result.status).sort()).toEqual(['fulfilled', 'rejected']);
+        expect(vault.multisigSigningSessions.put).toHaveBeenCalledTimes(1);
+        expect(records.get(session.id)).toMatchObject({
+            status: 'finalized',
+            finalizedTxHex: 'aabb',
+            txid: '11'.repeat(32),
+        });
+    });
+
     it('broadcasts a finalized session once when Broadcast runs twice at once', async () => {
         const { vault, records } = slowVault();
         const session = await start(vault);

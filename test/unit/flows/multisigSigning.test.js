@@ -15,6 +15,8 @@ import {
     contributeMultisigNonce,
     contributeMultisigSignature,
     finalizeMultisigSigningSession,
+    MultisigFinalizationConflictError,
+    MULTISIG_FINALIZATION_CONFLICT,
     startMultisigSigningSession,
 } from '../../../packages/core/src/flows/multisigSigning.js';
 
@@ -125,6 +127,60 @@ describe('multisig signing flow', () => {
             finalizedTxHex: 'abc',
         })).rejects.toThrow('finalizedTxHex must be hex');
         expect(put).not.toHaveBeenCalled();
+    });
+
+    it('returns an identical finalized session without writing it again', async () => {
+        const { vault, records, put } = storage('p2wsh-multisig');
+        const session = await start(vault);
+        records.set(session.id, { ...session, status: 'ready-to-finalize' });
+        put.mockClear();
+
+        const first = await finalizeMultisigSigningSession({
+            vault,
+            sessionId: session.id,
+            finalizedTxHex: 'aabb',
+            txid: '11'.repeat(32),
+        });
+        const second = await finalizeMultisigSigningSession({
+            vault,
+            sessionId: session.id,
+            finalizedTxHex: 'AABB',
+            txid: '11'.repeat(32).toUpperCase(),
+        });
+
+        expect(second).toBe(first);
+        expect(put).toHaveBeenCalledTimes(1);
+    });
+
+    it.each([
+        ['different transaction bytes', { finalizedTxHex: 'ccdd', txid: '11'.repeat(32) }],
+        ['a different transaction id', { finalizedTxHex: 'aabb', txid: '22'.repeat(32) }],
+    ])('refuses %s after finalization and preserves the stored transaction', async (_label, replay) => {
+        const { vault, records, put } = storage('p2wsh-multisig');
+        const session = await start(vault);
+        records.set(session.id, { ...session, status: 'ready-to-finalize' });
+        put.mockClear();
+        const first = await finalizeMultisigSigningSession({
+            vault,
+            sessionId: session.id,
+            finalizedTxHex: 'aabb',
+            txid: '11'.repeat(32),
+        });
+
+        const rejection = await finalizeMultisigSigningSession({
+            vault,
+            sessionId: session.id,
+            ...replay,
+        }).catch((error) => error);
+
+        expect(rejection).toBeInstanceOf(MultisigFinalizationConflictError);
+        expect(rejection.code).toBe(MULTISIG_FINALIZATION_CONFLICT);
+        expect(records.get(session.id)).toBe(first);
+        expect(records.get(session.id)).toMatchObject({
+            finalizedTxHex: 'aabb',
+            txid: '11'.repeat(32),
+        });
+        expect(put).toHaveBeenCalledTimes(1);
     });
 
     it('rejects a missing session id before reading storage', async () => {

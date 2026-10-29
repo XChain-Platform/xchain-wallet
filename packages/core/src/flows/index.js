@@ -368,6 +368,8 @@ export {
     contributeMultisigSignature,
     aggregateMultisigSession,
     finalizeMultisigSigningSession,
+    MultisigFinalizationConflictError,
+    MULTISIG_FINALIZATION_CONFLICT,
     pendingCosignerPubkeys,
 } from './multisigSigning.js';
 export { signMultisigLocally } from './multisigSignLocally.js';

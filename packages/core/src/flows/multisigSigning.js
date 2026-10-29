@@ -43,6 +43,16 @@ import '../i18n/locales/en/multisig.js';
 
 export const MULTISIG_SIGNATURE_INVALID = 'MULTISIG_SIGNATURE_INVALID';
 
+export const MULTISIG_FINALIZATION_CONFLICT = 'MULTISIG_FINALIZATION_CONFLICT';
+
+export class MultisigFinalizationConflictError extends Error {
+    constructor() {
+        super(t('multisig.finalize.conflict'));
+        this.name = 'MultisigFinalizationConflictError';
+        this.code = MULTISIG_FINALIZATION_CONFLICT;
+    }
+}
+
 // A classical reply counts toward the threshold only when it is a low-S DER
 // signature of the session's msgHash by the cosigner it names. Shape checks
 // alone let a corrupted or forged reply mark the session ready to finalize,
@@ -600,11 +610,22 @@ async function finalizeMultisigSigningSessionLocked({
             || finalizedTxHex.length % 2 !== 0 || !HEX_RE.test(finalizedTxHex.toLowerCase())) {
             throw new Error('finalizeMultisigSigningSession: finalizedTxHex must be hex');
         }
+        const normalizedTxHex = lowerHex(finalizedTxHex);
+        if (session.status === 'finalized') {
+            const suppliedTxid = typeof txid === 'string' && txid.length > 0 ? txid : undefined;
+            const sameTxid = suppliedTxid === undefined
+                || (typeof session.txid === 'string'
+                    && lowerHex(suppliedTxid) === lowerHex(session.txid));
+            if (normalizedTxHex !== lowerHex(session.finalizedTxHex) || !sameTxid) {
+                throw new MultisigFinalizationConflictError();
+            }
+            return session;
+        }
         return persist(vault, {
             ...session,
-            finalizedTxHex: lowerHex(finalizedTxHex),
+            finalizedTxHex: normalizedTxHex,
             txid: typeof txid === 'string' && txid.length > 0 ? txid : session.txid,
-            status: session.status === 'ready-to-finalize' ? 'finalized' : session.status,
+            status: 'finalized',
         });
     }
     if (session.status === 'finalized') return session;
