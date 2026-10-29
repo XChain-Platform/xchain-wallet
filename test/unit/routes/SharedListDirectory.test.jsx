@@ -252,6 +252,19 @@ describe('SharedListDirectory', () => {
         expect(messaging.getSharedLists).toHaveBeenCalledTimes(2);
     });
 
+    it('keeps valid entries when the directory response contains malformed rows', async () => {
+        mount({
+            response: {
+                lists: [undefined, ENTRIES[0], 7],
+                unavailable: [],
+            },
+        });
+
+        expect(await screen.findByRole('listitem', { name: 'Token list 12' })).toBeTruthy();
+        expect(screen.getAllByRole('listitem')).toHaveLength(1);
+        expect(screen.queryByRole('alert')).toBeNull();
+    });
+
     it('neutralizes and caps the indexer text a directory row shows', async () => {
         mount({
             response: {

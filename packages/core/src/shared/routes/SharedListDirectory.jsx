@@ -59,6 +59,10 @@ function normalizeEntry(entry) {
     };
 }
 
+function isEntryRecord(entry) {
+    return entry !== null && typeof entry === 'object' && !Array.isArray(entry);
+}
+
 function homeDescriptor(homeChain, viewingChainId) {
     const direct = chainRegistry.get(String(homeChain));
     if (direct) return direct;
@@ -105,7 +109,10 @@ export function SharedListDirectory({ walletId, chainId, mode, filterType, onSel
             .then((response) => {
                 if (cancelled) return;
                 setDirectory({
-                    lists: Array.isArray(response?.lists) ? response.lists.map(normalizeEntry) : [],
+                    // A malformed row does not discard the valid rows returned beside it.
+                    lists: Array.isArray(response?.lists)
+                        ? response.lists.filter(isEntryRecord).map(normalizeEntry)
+                        : [],
                     unavailable: Array.isArray(response?.unavailable) ? response.unavailable : [],
                 });
             })
