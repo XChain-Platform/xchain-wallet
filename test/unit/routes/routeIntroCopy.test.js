@@ -44,7 +44,9 @@ describe('route intro copy', () => {
     it('retains irreversible-action and fee safety copy', () => {
         expect(readRoute('ParallelComposer.jsx')).toContain('<strong>No rollback:</strong>');
         expect(readRoute('PublishFileForm.jsx')).toContain('Permanent: the published bytes live on-chain forever');
-        expect(readRoute('OracleForm.jsx')).toContain('cannot be undone for 24 hours');
+        expect(readRoute('OracleForm.jsx')).toContain('typedConfirmationCopy.oracle(');
+        expect(readFileSync('packages/core/src/i18n/locales/en/common.js', 'utf8'))
+            .toContain('cannot be undone for 24 hours');
         expect(readRoute('SellOwnershipForm.jsx')).toContain('label="Network fee"');
     });
 });
