@@ -25,6 +25,9 @@ import { actionDisplayLabel } from '../utils/actionDisplayLabel.js';
 import { BITCOIN_ACTIONS } from '../../registry/actions.js';
 import cardStyles from '../../ui/Card.module.css';
 
+// One year: the longest rolling-limit window the editor accepts.
+const MAX_WINDOW_HOURS = 8760;
+
 /**
  * @typedef {Object} PolicyDraft
  * @property {string} allowedActionsText
@@ -175,8 +178,14 @@ export function buildPolicyDraft(draft) {
         // Plain decimal text only: Number() also reads "0x10" and "1e1" as 16 and 10.
         const hoursText = String(draft.windowHours ?? '').trim();
         const hours = /^(?:\d+(?:\.\d+)?|\.\d+)$/.test(hoursText) ? Number(hoursText) : NaN;
-        if (!Number.isFinite(hours) || hours <= 0) {
+        if (Number.isNaN(hours) || hours <= 0) {
             return { error: 'The rolling limit needs a window length in hours greater than zero.' };
+        }
+        // A window past one year never lets old activity expire in practice,
+        // so the typed length would not describe a rolling limit. A digit string
+        // too long for a double reads as Infinity and gets the same answer.
+        if (hours > MAX_WINDOW_HOURS) {
+            return { error: `The rolling limit window can be at most ${MAX_WINDOW_HOURS} hours (one year).` };
         }
         maxPerWindow = { hours };
         const maxActions = String(draft.windowMaxActions || '').trim();
@@ -233,12 +242,21 @@ export function buildPolicyDraft(draft) {
 
     // allowedOutputs (anti-drain). Stored address-form; the schema accepts
     // either address or script and the SDK output gate resolves as needed.
+    // The co-signer matches each output to the first entry with its script, so a
+    // second entry for the same address carries a cap that is never enforced.
     const allowedOutputs = [];
+    const seenOutputs = new Set();
     for (const row of draft.allowedOutputs) {
         const address = String(row.address || '').trim();
         const mv = String(row.maxValue || '').trim();
         if (!address && !mv) continue;
         if (!address) return { error: 'An allowed-output max value is missing its address.' };
+        // Bech32 addresses are case-insensitive; base58 addresses are not.
+        const outputKey = /^(?:bc|tb|bcrt)1/i.test(address) ? address.toLowerCase() : address;
+        if (seenOutputs.has(outputKey)) {
+            return { error: `Allowed output ${address} is listed more than once. Keep one row with the max value you want.` };
+        }
+        seenOutputs.add(outputKey);
         const out = { address };
         if (mv) {
             const n = /^\d+$/.test(mv) ? Number(mv) : NaN;
