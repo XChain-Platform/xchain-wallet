@@ -19,18 +19,13 @@
 // against mounted components until now, which is assertion against the same
 // model that produced the behaviour.
 //
-// WHY A TOKEN SEND. The scenario was originally scripted as an excess-amount
-// NATIVE send, and driving it found that it never reaches the confirm page
-// at all: the form catches it first ("You don't have enough funds"), which
-// is better UX and leaves the gate unexercised. A TOKEN send is the case the
-// wallet CANNOT pre-empt - the token ledger lives in the indexer, the
-// transaction itself only moves dust plus a miner fee, so an unaffordable
-// token send composes perfectly well and only the dry-run knows better.
-// That is precisely the situation pre-flight exists for.
-//
-// Verified against the venue before this was written: an over-balance SEND
-// returns `valid:false, status:"invalid: insufficient funds"` from
-// /RBTC/api/preflight, and an affordable one returns `valid:true`.
+// WHY AN ISSUE. A token amount above its balance never reaches this page: the
+// Send form catches it first, which is better UX and leaves the gate
+// unexercised. SEND also carries no protocol gas on this venue, so even a
+// whole-balance send is valid. ISSUE is the in-form action whose 1 XCHAIN fee
+// can exceed the payer's 0.5 XCHAIN balance while the transaction itself
+// remains buildable. The real dry-run alone refuses that action, which is the
+// situation this gate exists for.
 //
 // WHAT IT COSTS TO GET THAT VERDICT, and why every walk below warms it
 // first: a COLD dry-run on this shared venue was measured between 1.2s and
@@ -41,16 +36,13 @@
 // `warmPreflight` in fixtures/regtest.js.
 
 import { readShownTxid } from '../../fixtures/pendingHistory.js';
-import { createWallet, expect, gotoSection, mainButton, test } from '../../fixtures/wallet.js';
+import { createWallet, expect, openPaletteCommand, test } from '../../fixtures/wallet.js';
 import {
     expectConfirmModal,
-    expectIntentSentence,
     fundAddress,
     mintXchain,
     readReceiveAddress,
     REGTEST_CHAIN_LABEL,
-    REGTEST_DESTINATION,
-    selectVenueSendAsset,
     switchToRegtest,
     unlockAfterReload,
     waitForTokenBalance,
@@ -60,27 +52,13 @@ import {
 
 const PASSWORD = 'regtestpassword123';
 const FUNDING_BTC = 1;
-const MINT_XCHAIN = 500;
-/**
- * The whole minted balance. The Send form's local balance check refuses only
- * amounts ABOVE the balance, so this reaches the confirm page, where the
- * venue's dry-run is the one expected to reject it. `warmSend` asserts that
- * premise at the venue before the walk relies on it.
- */
-const DRYRUN_REJECTED = String(MINT_XCHAIN);
-/** Well inside it, so the same walk can then succeed unchanged. */
-const AFFORDABLE = '25';
-
-function toField(page) {
-    return page.getByLabel('To', { exact: true });
-}
-
-function amountField(page) {
-    return page.getByRole('textbox', { name: /^Amount/ });
-}
+const XCHAIN_BALANCE = 0.5;
+const ISSUE_SUPPLY = '100';
+const ISSUE_TICK = `PFG${Date.now().toString().slice(-6)}`;
+const ISSUE_PARAMS = `0|${ISSUE_TICK}|${ISSUE_SUPPLY}||0||${ISSUE_SUPPLY}`;
 
 /**
- * Warms the indexer's dry-run for the SEND this spec is about to compose, and
+ * Warms the indexer's dry-run for the ISSUE this spec is about to compose, and
  * asserts the venue's own verdict matches what the walk assumes.
  *
  * Tier 1 is the whole point of this spec, and it is the one part of the report
@@ -95,34 +73,48 @@ function amountField(page) {
  * around, and this says so in one line at the venue instead of leaving it to
  * be inferred from missing text on a page.
  */
-async function warmSend(source, amount, expected) {
+async function warmIssue(source, expected, feeMode = 'xchain') {
     const quote = await warmPreflight({
-        action: 'SEND',
-        params: `0|XCHAIN|${amount}|${REGTEST_DESTINATION}`,
+        action: 'ISSUE',
+        params: ISSUE_PARAMS,
         source,
+        ...(feeMode === 'native' ? { feeMode } : {}),
     });
-    // The whole-balance send is refused only because the protocol fee comes on
-    // top of it. A venue whose fee schedule charges SEND nothing has no
-    // in-balance amount it can refuse, so the walk has no premise there.
-    test.skip(expected === false && quote.valid === true && Number(quote.xchainFee) === 0,
-        `this venue charges no XCHAIN fee for SEND, so no in-balance send fails pre-flight: ${JSON.stringify(quote)}`);
-    expect(quote.valid, `the venue's own dry-run for a ${amount} XCHAIN send disagrees `
+    if (feeMode === 'xchain') {
+        test.skip(Number(quote.xchainFee) === 0,
+            'this venue charges no XCHAIN fee for ISSUE, so the fee shortfall cannot be driven: '
+            + JSON.stringify(quote));
+    }
+    expect(quote.valid, `the venue's own ${feeMode}-fee dry-run for ISSUE ${ISSUE_TICK} disagrees `
         + `with this spec's premise: ${JSON.stringify(quote)}`).toBe(expected);
     return quote;
 }
 
-/** Picks XCHAIN in the Send asset picker, fills the form, opens the modal. */
-async function composeTokenSend(page, amount) {
-    await gotoSection(page, 'Send');
-    // Was three lines that searched for XCHAIN and clicked the first
-    // "Open XCHAIN details" row - CHAIN-BLIND, since every chain lists an
-    // XCHAIN, so on Litecoin it picked Bitcoin's and the dry runs below were
-    // asked about a source on a different chain than the form was spending.
-    await selectVenueSendAsset(page, 'XCHAIN');
-    await toField(page).fill(REGTEST_DESTINATION);
-    await amountField(page).fill(amount);
-    await mainButton(page, 'Send').click();
-    await expectConfirmModal(page, 'this action', 30_000);
+function feeToggle(scope) {
+    const name = /^Pay protocol fee in BTC instead of XCHAIN/;
+    return scope.getByRole('switch', { name }).or(scope.getByRole('checkbox', { name })).first();
+}
+
+async function setFeeLane(scope, nativeFee) {
+    const toggle = feeToggle(scope);
+    await expect(toggle, 'Bitcoin does not offer the fee choice this walk needs')
+        .toBeVisible({ timeout: 30_000 });
+    if (nativeFee !== (await toggle.isChecked())) await toggle.click();
+    await expect(toggle).toBeChecked({ checked: nativeFee });
+}
+
+/** Fills a fresh Issue form and opens its confirm modal in the requested fee lane. */
+async function composeIssue(page, { nativeFee, reuseForm = false }) {
+    if (!reuseForm) await openPaletteCommand(page, 'Issue token');
+    const main = page.getByRole('main');
+    await expect(main.getByLabel('Ticker')).toBeVisible({ timeout: 30_000 });
+    if (!reuseForm) {
+        await main.getByLabel('Ticker').fill(ISSUE_TICK);
+        await main.getByLabel('Supply', { exact: true }).fill(ISSUE_SUPPLY);
+    }
+    await setFeeLane(main, nativeFee);
+    await main.getByRole('button', { name: 'Issue token', exact: true }).click();
+    await expectConfirmModal(page, `the ISSUE of ${ISSUE_TICK}`, 30_000);
 }
 
 /** Creates the funded token wallet used by one pre-flight scenario. */
@@ -131,13 +123,13 @@ async function openFundedTokenWallet(page) {
     await switchToRegtest(page, PASSWORD);
 
     const own = await readReceiveAddress(page);
-    // BTC pays the miner fee; XCHAIN is what the send actually spends.
+    // BTC pays the miner fee; the small XCHAIN balance drives the ISSUE fee shortfall.
     await fundAddress(own, FUNDING_BTC);
     await page.reload();
     await unlockAfterReload(page, PASSWORD);
 
-    await mintXchain(page, MINT_XCHAIN);
-    await waitForTokenBalance(own, 'XCHAIN', MINT_XCHAIN);
+    await mintXchain(page, XCHAIN_BALANCE);
+    await waitForTokenBalance(own, 'XCHAIN', XCHAIN_BALANCE);
 
     // The mint leaves the shell on its terminal screen, so remount Home.
     await page.reload();
@@ -146,10 +138,14 @@ async function openFundedTokenWallet(page) {
 }
 
 test.describe('pre-flight gate on regtest', () => {
-    test('an unaffordable token send fails pre-flight, blocks Approve, and can be overridden', async ({ page }) => {
+    test('an unaffordable token issue fails pre-flight, blocks Approve, and can be overridden', async ({ page }) => {
         const own = await openFundedTokenWallet(page);
-        await warmSend(own, DRYRUN_REJECTED, false);
-        await composeTokenSend(page, DRYRUN_REJECTED);
+        const quote = await warmIssue(own, false);
+        expect(Number(quote.feeTokenBalance), `the venue measured a different XCHAIN balance: ${JSON.stringify(quote)}`)
+            .toBe(XCHAIN_BALANCE);
+        expect(quote.feeAffordable, `the venue considers the ISSUE fee affordable: ${JSON.stringify(quote)}`)
+            .toBe(false);
+        await composeIssue(page, { nativeFee: false });
 
         // §5.2.4: the verdict chip, from a REAL dry-run. Tier 1 was
         // unreachable on every venue until, so this had never once
@@ -166,8 +162,8 @@ test.describe('pre-flight gate on regtest', () => {
         const panel = page.getByTestId('preflight-panel');
         await expect(panel).toContainText(/would be refused because/i);
 
-        // The amount is within the balance the form read, so Tier 2's balance
-        // check stays quiet and the dry-run is the only error to acknowledge.
+        // ISSUE spends no token amount, so Tier 2's balance check stays quiet
+        // and the venue's fee refusal is the only error to acknowledge.
         const dryRunAck = page.getByTestId('ack-DRYRUN_INVALID');
         await expect(dryRunAck).toBeVisible();
         await expect(page.getByTestId('ack-BALANCE_INSUFFICIENT')).toHaveCount(0);
@@ -195,54 +191,43 @@ test.describe('pre-flight gate on regtest', () => {
         await expect(page.getByTestId('confirm-modal')).toHaveCount(0);
     });
 
-    test('fixing the amount clears the verdict and the send broadcasts', async ({ page }) => {
+    test('switching an unaffordable issue to the native fee lane clears the verdict and broadcasts', async ({ page }) => {
         const own = await openFundedTokenWallet(page);
         // The scripted §8.6 walk: fail -> fix -> approve -> broadcast. The
         // point is that a rejected pre-flight is not a dead end and leaves
         // nothing behind - the second compose has to produce a clean report,
         // not a stale one.
-        await warmSend(own, DRYRUN_REJECTED, false);
-        await composeTokenSend(page, DRYRUN_REJECTED);
+        await warmIssue(own, false);
+        await composeIssue(page, { nativeFee: false });
         await expect(page.getByTestId('preflight-chip')).toHaveText('Will likely fail');
         await page.getByTestId('confirm-reject').click();
         await expect(page.getByTestId('confirm-modal')).toHaveCount(0);
 
-        // The second dry-run is a DIFFERENT action string, so it is cold
-        // again. Warming it is also the only thing that makes "Looks good"
-        // below mean anything: a Tier-1 verdict that never arrived produces
-        // the same chip as one that came back valid, so without this the
-        // clean report could be clean by omission.
-        await warmSend(own, AFFORDABLE, true);
-
-        // Fix in place: the form kept its values (§5.1), so only the amount
-        // changes.
-        await amountField(page).fill(AFFORDABLE);
-        await mainButton(page, 'Send').click();
-        await expectConfirmModal(page, 'this action', 30_000);
+        // The action string stays byte-for-byte the same. Only its fee lane changes,
+        // which gives the venue a different dry-run cache key and makes the
+        // funded native-coin balance cover the protocol fee.
+        await warmIssue(own, true, 'native');
+        await composeIssue(page, { nativeFee: true, reuseForm: true });
 
         await expect(page.getByTestId('preflight-chip')).toHaveText('Looks good');
 
-        // §1.1 / §5.2.2: the intent describes the COMPOSED action string. This
-        // is the token path, so it goes through a real `decoder.parse()` of
-        // what the encoder built - not the native-payment shortcut, and not
-        // the raw form params.
-        // The sentence draws the recipient truncated, so it is matched by the
-        // full address in its accessible name.
-        await expectIntentSentence(page, `Send ${AFFORDABLE} XCHAIN on ${REGTEST_CHAIN_LABEL} to `,
-            REGTEST_DESTINATION);
+        // §1.1 / §5.2.2: the intent describes the COMPOSED action string, not
+        // the form fields that requested it.
+        await expect(page.getByTestId('action-intent').locator('p').first())
+            .toContainText(`Create token ${ISSUE_TICK} with max supply ${ISSUE_SUPPLY} on ${REGTEST_CHAIN_LABEL}`);
 
         // No override control at all, because there is nothing to override.
         // Its presence would mean the previous report leaked into this one.
         await expect(page.getByTestId('ack-DRYRUN_INVALID')).toHaveCount(0);
         await expect(page.getByTestId('ack-BALANCE_INSUFFICIENT')).toHaveCount(0);
 
-        // The footer action names what it signs: the verb, the amount and the token.
+        // The footer action names what it signs: the action and the new token.
         const approve = page.getByTestId('confirm-approve');
-        await expect(approve).toHaveText(`Send ${AFFORDABLE} XCHAIN`);
+        await expect(approve).toHaveText(`Create token ${ISSUE_TICK}`);
         await expect(approve).toBeEnabled();
         await approve.click();
 
-        await expect(page.getByRole('heading', { name: 'Broadcast pending' }))
+        await expect(page.getByRole('heading', { name: 'Token issued' }))
             .toBeVisible({ timeout: 120_000 });
 
         // And the chain's own verdict on the action, which is the only thing
@@ -253,6 +238,7 @@ test.describe('pre-flight gate on regtest', () => {
         const txid = await readShownTxid(page.getByRole('main'));
         expect(txid, 'success screen showed no transaction id').toBeTruthy();
         const action = await waitForValidAction(txid);
-        expect(action.action).toBe('SEND');
+        expect(action.action).toBe('ISSUE');
+        expect(action.tick).toBe(ISSUE_TICK);
     });
 });

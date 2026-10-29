@@ -31,7 +31,14 @@
 // narrow band, where the responsive shell also swaps the nav rail for a
 // bottom tab bar. A desktop-only scan cannot see it.
 
-import { createWallet, expect, gotoSection, mainButton, test } from '../../fixtures/wallet.js';
+import {
+    createWallet,
+    expect,
+    gotoSection,
+    mainButton,
+    openPaletteCommand,
+    test,
+} from '../../fixtures/wallet.js';
 import { scan } from '../../fixtures/a11y.js';
 import {
     expectConfirmModal,
@@ -48,14 +55,11 @@ import {
 
 const PASSWORD = 'a11yconfirmpassword';
 const FUNDING_BTC = 1;
-const MINT_XCHAIN = 500;
-/**
- * The whole minted balance: the local balance check allows it (it refuses only
- * amounts ABOVE the balance), and the venue's dry-run is the one that rejects
- * it. See preflight-gate.
- */
-const DRYRUN_REJECTED = String(MINT_XCHAIN);
-const AFFORDABLE = '25';
+const XCHAIN_BALANCE = 0.5;
+const AFFORDABLE_SEND = '0.25';
+const ISSUE_SUPPLY = '100';
+const ISSUE_TICK = `A11YF${Date.now().toString().slice(-6)}`;
+const ISSUE_PARAMS = `0|${ISSUE_TICK}|${ISSUE_SUPPLY}||0||${ISSUE_SUPPLY}`;
 /** The MV3 popup band; the config's desktop default is the "full" arm. */
 const POPUP = { width: 360, height: 600 };
 
@@ -73,6 +77,26 @@ async function composeTokenSend(page, amount) {
     await expectConfirmModal(page, 'this action', 30_000);
 }
 
+function feeToggle(scope) {
+    const name = /^Pay protocol fee in BTC instead of XCHAIN/;
+    return scope.getByRole('switch', { name }).or(scope.getByRole('checkbox', { name })).first();
+}
+
+/** Composes the fee-bearing action while keeping it in the XCHAIN fee lane. */
+async function composeFeeRejectedIssue(page) {
+    await openPaletteCommand(page, 'Issue token');
+    const main = page.getByRole('main');
+    await expect(main.getByLabel('Ticker')).toBeVisible({ timeout: 30_000 });
+    await main.getByLabel('Ticker').fill(ISSUE_TICK);
+    await main.getByLabel('Supply', { exact: true }).fill(ISSUE_SUPPLY);
+    const toggle = feeToggle(main);
+    await expect(toggle).toBeVisible({ timeout: 30_000 });
+    if (await toggle.isChecked()) await toggle.click();
+    await expect(toggle).not.toBeChecked();
+    await main.getByRole('button', { name: 'Issue token', exact: true }).click();
+    await expectConfirmModal(page, `the ISSUE of ${ISSUE_TICK}`, 30_000);
+}
+
 async function fundedWallet(page) {
     await createWallet(page, { password: PASSWORD });
     await switchToRegtest(page, PASSWORD);
@@ -80,15 +104,15 @@ async function fundedWallet(page) {
     await fundAddress(own, FUNDING_BTC);
     await page.reload();
     await unlockAfterReload(page, PASSWORD);
-    await mintXchain(page, MINT_XCHAIN);
-    await waitForTokenBalance(own, 'XCHAIN', MINT_XCHAIN);
+    await mintXchain(page, XCHAIN_BALANCE);
+    await waitForTokenBalance(own, 'XCHAIN', XCHAIN_BALANCE);
     await page.reload();
     await unlockAfterReload(page, PASSWORD);
     return own;
 }
 
 /**
- * Warms the dry-run for one of the two amounts this spec composes.
+ * Warms the dry-run for one of the two actions this spec composes.
  *
  * The fail arm is the scan that matters here - it is the only state that
  * renders the error list and the "Sign anyway" checkboxes - and it exists
@@ -107,28 +131,43 @@ async function warmSend(source, amount, expected) {
         + `with this spec's premise: ${JSON.stringify(quote)}`).toBe(expected);
 }
 
+async function warmFeeRejectedIssue(source) {
+    const quote = await warmPreflight({
+        action: 'ISSUE',
+        params: ISSUE_PARAMS,
+        source,
+    });
+    test.skip(Number(quote.xchainFee) === 0,
+        `this venue charges no XCHAIN fee for ISSUE, so the fee shortfall cannot be driven: ${JSON.stringify(quote)}`);
+    expect(quote.valid, `the venue's own dry-run for ISSUE ${ISSUE_TICK} disagrees `
+        + `with this spec's premise: ${JSON.stringify(quote)}`).toBe(false);
+    expect(Number(quote.feeTokenBalance), `the venue measured a different XCHAIN balance: ${JSON.stringify(quote)}`)
+        .toBe(XCHAIN_BALANCE);
+    expect(quote.feeAffordable, `the venue considers the ISSUE fee affordable: ${JSON.stringify(quote)}`)
+        .toBe(false);
+}
+
 /**
  * Scans the confirm surface in both of its §4.2 verdict states.
  *
  * One test per width rather than one per state: the expensive part is
- * funding and minting, and both states are reachable from the same wallet
- * by changing one field.
+ * funding and minting, and both states are reachable from the same wallet.
  */
 async function scanBothVerdicts(page, own, width) {
-    await warmSend(own, AFFORDABLE, true);
-    await composeTokenSend(page, AFFORDABLE);
+    await warmSend(own, AFFORDABLE_SEND, true);
+    await composeTokenSend(page, AFFORDABLE_SEND);
     await expect(page.getByTestId('preflight-chip')).toHaveText('Looks good');
     await scan(page, `Confirm surface (ready, ${width})`);
     await page.getByTestId('confirm-reject').click();
 
-    await warmSend(own, DRYRUN_REJECTED, false);
+    await warmFeeRejectedIssue(own);
 
     // The fail state is its own scan target, not a variation: it is the only
     // one that renders the error list, the per-finding "Sign anyway"
     // checkboxes and `aria-live="assertive"`, and it is the state a user is
     // most likely to be reading carefully. An unlabelled override control
     // here is a consent problem, not a lint finding.
-    await composeTokenSend(page, DRYRUN_REJECTED);
+    await composeFeeRejectedIssue(page);
     await expect(page.getByTestId('preflight-chip')).toHaveText('Will likely fail');
     await expect(page.getByTestId('ack-DRYRUN_INVALID')).toBeVisible();
     await scan(page, `Confirm surface (pre-flight fail, ${width})`);

@@ -753,14 +753,12 @@ const PREFLIGHT_WARM_MS = 750;
  *
  * That failure is worth spelling out because it reads as a wallet defect and
  * is not one: the verdict is right, the panel is right, the network was just
- * slow. It USED to be worse: `DRYRUN_UNAVAILABLE` is an `info` finding, and
- * `PreflightPanel` rendered only errors, warnings and the unverified list, so
- * nothing on the screen distinguished "the network said this is fine" from
- * "the network never answered". a later change fixed that half - the panel now reads
- * "Local checks only" with an explicit unreached notice, and carries
- * `data-dryrun="unreached"` - so a spec that hits the slow path now FAILS
- * loudly instead of asserting against a false pass. Warming is still the right
- * move: a spec that waits and hopes is a coin flip on this venue.
+ * slow. `DRYRUN_UNAVAILABLE` is an `info` finding, and the panel tells it
+ * apart from a clean verdict: it reads "Local checks only" with an explicit
+ * unreached notice and carries `data-dryrun="unreached"`, so a spec that hits
+ * the slow path FAILS loudly instead of asserting against a false pass.
+ * Warming is the right move: a spec that waits and hopes is a coin flip on
+ * this venue.
  *
  * The lever is that the indexer MEMOIZES the verdict per block height
  *, which is measurable: the same query costs seconds cold and ~10ms
@@ -780,10 +778,10 @@ const PREFLIGHT_WARM_MS = 750;
  * a block landing in between (this venue mines on demand AND on a timer)
  * puts the next call back on the cold path.
  *
- * @param {{action: string, params: string, source: string}} query
+ * @param {{action: string, params: string, source: string, feeMode?: 'xchain'|'native'}} query
  * @returns {Promise<object>} the endpoint's own response body
  */
-export async function warmPreflight({ action, params, source }, timeoutMs = 120_000) {
+export async function warmPreflight({ action, params, source, feeMode }, timeoutMs = 120_000) {
     // Built exactly as `explorer.getPreflight` builds it - a query that
     // differs from the wallet's is a different memo entry, which would warm
     // nothing and quietly restore the race this exists to remove.
@@ -791,6 +789,7 @@ export async function warmPreflight({ action, params, source }, timeoutMs = 120_
     q.set('action', action);
     q.set('params', params);
     q.set('source', source);
+    if (feeMode) q.set('feeMode', feeMode);
     const url = `${EXPLORER_URL}/${REGTEST_COIN}/api/preflight?${q.toString()}`;
 
     const deadline = Date.now() + timeoutMs;

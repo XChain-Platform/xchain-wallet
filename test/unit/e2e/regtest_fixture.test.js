@@ -14,6 +14,7 @@ import { describe, expect, it, vi } from 'vitest';
 import {
     INDEX_WAIT_TIMEOUT_MS,
     createIndexWaitProgress,
+    warmPreflight,
 } from '../../e2e/fixtures/regtest.js';
 
 describe('regtest index waits', () => {
@@ -55,5 +56,30 @@ describe('regtest index waits', () => {
         await progress();
         expect(log).toHaveBeenCalledTimes(2);
         expect(fetchStatus).toHaveBeenCalledTimes(2);
+    });
+});
+
+describe('regtest pre-flight warming', () => {
+    it('includes the composed fee lane in the dry-run cache key', async () => {
+        const fetchMock = vi.fn(async () => ({
+            json: async () => ({ valid: true, feeMode: 'native' }),
+        }));
+        vi.stubGlobal('fetch', fetchMock);
+        try {
+            await warmPreflight({
+                action: 'ISSUE',
+                params: '0|TEST|100||0||100',
+                source: 'bcrt1qsource',
+                feeMode: 'native',
+            });
+        } finally {
+            vi.unstubAllGlobals();
+        }
+
+        const request = new URL(fetchMock.mock.calls[0][0]);
+        expect(request.searchParams.get('action')).toBe('ISSUE');
+        expect(request.searchParams.get('params')).toBe('0|TEST|100||0||100');
+        expect(request.searchParams.get('source')).toBe('bcrt1qsource');
+        expect(request.searchParams.get('feeMode')).toBe('native');
     });
 });
