@@ -611,6 +611,14 @@ export function CallbackForm({ walletId, onBack, initialChainId, initialTick, in
             if (payoutComparison === 1) {
                 return `This address holds only ${formatWithThousands(payoutBalance)} ${freshInfo.callbackTick}. The current callback payout is ${formatWithThousands(freshSummary.totalPayout)} ${freshInfo.callbackTick}.`;
             }
+            // A capped holder page sums only the holders it lists, so its
+            // payout is a floor. The indexer refuses a CALLBACK whose full
+            // payout exceeds the owner's balance after the fee is spent, so a
+            // floor within balance proves nothing and Approve stops here.
+            if (freshSummary.partial !== false) {
+                setSummary(freshSummary);
+                return `The callback payout is at least ${formatWithThousands(freshSummary.totalPayout)} ${freshInfo.callbackTick}, and this wallet cannot read every holder, so it cannot confirm this address holds enough ${freshInfo.callbackTick} to cover it.`;
+            }
             setSummary(freshSummary);
             return null;
         } catch {
