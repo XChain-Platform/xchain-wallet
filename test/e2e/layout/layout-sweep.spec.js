@@ -31,6 +31,7 @@ test('layout gutter assertion contract', () => {
         contentLeft: gutter,
         contentRightGap: gutter,
         headerLeft: gutter,
+        headerRightGap: gutter,
         first: { kind, left: gutter, rightGap: gutter, topGap },
     });
     expect(layoutSweepFailures([
@@ -53,12 +54,13 @@ test('layout gutter assertion contract', () => {
         'compact gutter on rail: content left 12px, expected 16px',
         'compact gutter on rail: content right gap 12px, expected at least 16px',
         'compact gutter on rail: header left 12px, expected 16px',
+        'compact gutter on rail: header right gap 12px, expected 16px',
         'compact gutter on rail: first content left 12px, expected 16px',
         'compact gutter on rail: first content right gap 12px, expected at least 16px',
     ]);
     // A wide step that centres its column passes; one pushed off-centre does not.
     const column = (left, rightGap, gutter = 16) => ({
-        contentLeft: gutter, contentRightGap: gutter, headerLeft: null, first: { kind: 'list', left, rightGap, topGap: 12 },
+        contentLeft: gutter, contentRightGap: gutter, headerLeft: null, headerRightGap: null, first: { kind: 'list', left, rightGap, topGap: 12 },
     });
     expect(layoutSweepFailures([
         { label: 'centred', vw: 834, layout: column(177, 177) },
@@ -76,6 +78,7 @@ test('layout gutter assertion contract', () => {
                 contentLeft: 16,
                 contentRightGap: 13,
                 headerLeft: 22,
+                headerRightGap: 11,
                 first: { kind: 'list', left: 13, rightGap: 12, topGap: 12 },
             },
         },
@@ -86,12 +89,14 @@ test('layout gutter assertion contract', () => {
                 contentLeft: 16,
                 contentRightGap: 16,
                 headerLeft: 16,
+                headerRightGap: 16,
                 first: { kind: 'form', left: 104, rightGap: 104, topGap: 16 },
             },
         },
     ])).toEqual([
         'activity: content right gap 13px, expected at least 16px',
         'activity: header left 22px, expected 16px',
+        'activity: header right gap 11px, expected 16px',
         'activity: first content left 13px, expected 16px',
         'activity: first content right gap 12px, expected at least 16px',
         'form top gaps [16] do not match list top gaps [12]',
@@ -120,6 +125,7 @@ test('top gaps compare form and list only inside one shell', () => {
         contentLeft: 16,
         contentRightGap: 16,
         headerLeft: 16,
+        headerRightGap: 16,
         tier,
         first: { kind, left: 16, rightGap: 16, topGap },
     });
@@ -135,7 +141,7 @@ test('top gaps compare form and list only inside one shell', () => {
 });
 
 test('layout findings key the scrolled-away header and short content apart from the gutter contract', () => {
-    const layout = { contentLeft: 12, contentRightGap: 12, headerLeft: 12, first: { kind: 'list', left: 12, rightGap: 12, topGap: 12 } };
+    const layout = { contentLeft: 12, contentRightGap: 12, headerLeft: 12, headerRightGap: 12, first: { kind: 'list', left: 12, rightGap: 12, topGap: 12 } };
     const screens = [
         {
             label: 'history',

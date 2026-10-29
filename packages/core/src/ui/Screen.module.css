@@ -37,6 +37,9 @@
     flex: 0 0 auto;
     padding-block: var(--xc-space-3);
     padding-inline: var(--xc-page-gutter);
+    /* The sibling body owns the scrollbar. Match its usable inline-end edge
+       without clipping header menus or popovers. */
+    padding-inline-end: calc(var(--xc-page-gutter) + var(--xc-frame-scrollbar, 0rem));
     border-bottom: 1px solid var(--xc-border);
     background: var(--xc-surface-raised);
 }

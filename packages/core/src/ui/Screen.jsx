@@ -26,6 +26,16 @@ const MAIN_ID = 'xc-main';
 const FOCUS_REVEAL_MARGIN_PX = 12;
 const ScrollRestorationContext = createContext(null);
 
+/** Returns the classic scrollbar lane consumed inside a scroll frame. */
+export function frameScrollbarWidth(frame) {
+    if (!frame) return 0;
+    const view = frame.ownerDocument?.defaultView;
+    const computed = view?.getComputedStyle(frame);
+    const borderLeft = parseFloat(computed?.borderLeftWidth) || 0;
+    const borderRight = parseFloat(computed?.borderRightWidth) || 0;
+    return Math.max(0, frame.offsetWidth - frame.clientWidth - borderLeft - borderRight);
+}
+
 /**
  * Counts the empty states on one page. A page shows at most one empty state:
  * with two or more (a list per section, all empty), each is drawn as a plain
@@ -153,6 +163,24 @@ export function Screen({
         const slot = noticesSlotRef.current;
         return slot ? shellNotices.claim(slot) : undefined;
     }, [ownsNotices, shellNotices]);
+
+    useLayoutEffect(() => {
+        const root = screenRef.current;
+        const main = mainRef.current;
+        if (!root || !main) return undefined;
+
+        // The header is outside the scroll frame, so copy the frame's classic
+        // scrollbar lane to its logical end padding. Overlay scrollbars report
+        // zero and leave the shared page gutter unchanged.
+        const syncScrollbar = () => {
+            root.style.setProperty('--xc-frame-scrollbar', `${frameScrollbarWidth(main)}px`);
+        };
+        syncScrollbar();
+        if (typeof ResizeObserver !== 'function') return undefined;
+        const observer = new ResizeObserver(syncScrollbar);
+        observer.observe(main);
+        return () => observer.disconnect();
+    }, []);
 
     useLayoutEffect(() => {
         const main = mainRef.current;

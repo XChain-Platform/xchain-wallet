@@ -8,7 +8,12 @@ import { act, render, screen } from '@testing-library/react';
 import { Profiler, useContext, useState } from 'react';
 import { readFileSync } from 'node:fs';
 
-import { Screen, ScrollRestoration, WalletRouteScope } from '../../../packages/core/src/ui/Screen.jsx';
+import {
+    frameScrollbarWidth,
+    Screen,
+    ScrollRestoration,
+    WalletRouteScope,
+} from '../../../packages/core/src/ui/Screen.jsx';
 import { ShellRouteOutlet } from '../../../packages/core/src/shared/components/ShellRouteOutlet.jsx';
 import { CurrentRouteContext } from '../../../packages/core/src/shared/components/navSurface.js';
 import styles from '../../../packages/core/src/ui/Screen.module.css';
@@ -45,6 +50,7 @@ const originalVisualViewport = Object.getOwnPropertyDescriptor(window, 'visualVi
 
 afterEach(() => {
     vi.restoreAllMocks();
+    vi.unstubAllGlobals();
     if (originalVisualViewport) {
         Object.defineProperty(window, 'visualViewport', originalVisualViewport);
     } else {
@@ -83,6 +89,29 @@ describe('<Screen>', () => {
         expect(main).toHaveAttribute('tabindex', '-1');
         expect(screen.queryByRole('banner')).not.toBeInTheDocument();
         expect(screen.queryByRole('contentinfo')).not.toBeInTheDocument();
+    });
+
+    it('keeps header padding aligned with a changing classic scrollbar lane', () => {
+        let resize;
+        const disconnect = vi.fn();
+        vi.stubGlobal('ResizeObserver', class {
+            constructor(callback) { resize = callback; }
+            observe() {}
+            disconnect() { disconnect(); }
+        });
+        const view = render(<Screen header={<span>Settings</span>}>Content</Screen>);
+        const root = view.container.firstChild;
+        const main = screen.getByRole('main');
+        expect(root.style.getPropertyValue('--xc-frame-scrollbar')).toBe('0px');
+        Object.defineProperty(main, 'offsetWidth', { configurable: true, value: 320 });
+        Object.defineProperty(main, 'clientWidth', { configurable: true, value: 310 });
+
+        act(() => resize());
+
+        expect(frameScrollbarWidth(main)).toBe(10);
+        expect(root.style.getPropertyValue('--xc-frame-scrollbar')).toBe('10px');
+        view.unmount();
+        expect(disconnect).toHaveBeenCalledOnce();
     });
 
     it('fits above a resized visual viewport and reveals the focused field', () => {

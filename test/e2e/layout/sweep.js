@@ -182,19 +182,19 @@ export function measureInPage(opts = {}) {
 
     // The route contract is measured from the main scroller's inner border.
     // This keeps a left navigation rail out of page-gutter coordinates and
-    // puts the right measurement against the scrollbar's real leading edge.
+    // puts both measurements against the scroll frame's usable edges.
     function measureLayout() {
         const main = document.getElementById('xc-main');
         if (!main) return null;
         const mcs = getComputedStyle(main);
         const mr = main.getBoundingClientRect();
         const borderL = main.clientLeft;
-        const borderR = parseFloat(mcs.borderRightWidth) || 0;
         const padL = parseFloat(mcs.paddingLeft) || 0;
         const padR = parseFloat(mcs.paddingRight) || 0;
         const frameLeft = mr.left + borderL;
-        const scrollbarWidth = Math.max(0, mr.width - borderL - borderR - main.clientWidth);
-        const scrollbarLeft = mr.right - borderR - scrollbarWidth;
+        // clientLeft includes a classic left-side scrollbar in RTL Chromium,
+        // so this is the usable right edge in both writing directions.
+        const frameRight = frameLeft + main.clientWidth;
         const contentLeft = frameLeft + padL;
         const contentRight = frameLeft + main.clientWidth - padR;
         // The tiered page gutter (--xc-page-gutter): 12px below 640px, 16px
@@ -214,21 +214,25 @@ export function measureInPage(opts = {}) {
         const form = first && (first.tagName === 'FORM' || first.getAttribute('role') === 'group');
         const shell = main.parentElement;
         const header = shell ? [...shell.children].find((el) => el.tagName === 'HEADER' && visible(el)) : null;
-        const headerFirst = header ? [...header.children].find(visible) : null;
+        const headerChildren = header ? [...header.children].filter(visible) : [];
+        const headerFirst = headerChildren[0] ?? null;
+        const headerLast = headerChildren.at(-1) ?? null;
         const hr = headerFirst?.getBoundingClientRect();
+        const hlr = headerLast?.getBoundingClientRect();
         const round = (value) => Math.round(value * 100) / 100;
         return {
             expectedGutter,
             contentLeft: round(contentLeft - frameLeft),
-            contentRightGap: round(scrollbarLeft - contentRight),
+            contentRightGap: round(frameRight - contentRight),
             first: first ? {
                 el: desc(first),
                 kind: form ? 'form' : 'list',
                 left: round(fr.left - frameLeft),
-                rightGap: round(scrollbarLeft - fr.right),
+                rightGap: round(frameRight - fr.right),
                 topGap: round(fr.top - mr.top + main.scrollTop - main.clientTop),
             } : null,
             headerLeft: hr ? round(hr.left - frameLeft) : null,
+            headerRightGap: hlr ? round(frameRight - hlr.right) : null,
             tier: main.closest('[data-xc-tier]')?.getAttribute('data-xc-tier') ?? null,
         };
     }
@@ -693,6 +697,9 @@ export function layoutSweepFindings(screens) {
         }
         if (layout.headerLeft !== null && !close(layout.headerLeft, gutter)) {
             add('gutter', label, `${label}: header left ${layout.headerLeft}px, expected ${gutter}px`);
+        }
+        if (layout.headerRightGap !== null && !close(layout.headerRightGap, gutter)) {
+            add('gutter', label, `${label}: header right gap ${layout.headerRightGap}px, expected ${gutter}px`);
         }
         if (!first) {
             add('gutter', label, `${label}: missing first content block`);
