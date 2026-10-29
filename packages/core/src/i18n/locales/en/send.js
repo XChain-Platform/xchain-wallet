@@ -120,6 +120,11 @@ const messages = {
         'This address holds {balance} {tick} now, less than the {amount} {tick} this destroy burns. Nothing was signed. Review the amount and try again.',
     'send.destroy.balanceUnread':
         "Couldn't read this address's {tick} balance, so nothing was signed. Check your connection and try again.",
+    'send.dividend.retryHolders': 'Retry holder list',
+    'send.dividend.holdersIncomplete':
+        'The holder list is incomplete. Retry before paying this dividend.',
+    'send.dividend.holdersChanged':
+        'The holder list changed. Review the updated payout, then try again.',
     'send.recipient.heading': 'Recipient {number}',
     'send.recipient.removeLabel': 'Remove recipient {number}',
     'send.recipient.addressLabel': 'Recipient {number} address',

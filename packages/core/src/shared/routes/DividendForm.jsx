@@ -81,9 +81,8 @@ const PROTOCOL_COIN_TICKER = {
  *
  * Once the user fills in the "of token" ticker, the form fetches the
  * holder list via `messaging.getHoldersForToken` and renders a cost
- * preview (holder count + total distribution). The cost preview is
- * best-effort; a fetch failure falls back to a plain warning rather
- * than blocking review.
+ * preview (holder count + total distribution). The holder read must be
+ * complete before review because a partial set understates the payout.
  *
  * Spec §40.8 shows the form reachable from a Token detail page with
  * TICK pre-filled. Until the Token detail page ships, TICK is typed
@@ -140,6 +139,11 @@ export function DividendForm({ walletId, onBack, initialChainId, initialTick, in
         /** @type {{ loading: boolean, rows: any[] | null, error: string | null }} */
         ({ loading: false, rows: null, error: null }),
     );
+    const [holderRetry, setHolderRetry] = useState(0);
+    const [holderReviewPending, setHolderReviewPending] = useState(false);
+    const holderReviewPendingRef = useRef(false);
+    const holderSelectionRef = useRef('');
+    holderSelectionRef.current = `${chainId || ''}\u0000${tick.trim()}`;
 
     // The active map and the settings read are best-effort: a host without
     // `getActiveAddresses` / `getSettings`, or one whose call fails, still
@@ -227,7 +231,7 @@ export function DividendForm({ walletId, onBack, initialChainId, initialTick, in
             messaging.getHoldersForToken({ chainId, tick: trimmed, all: true })
                 .then((resp) => {
                     if (cancelled) return;
-                    setHolders({ loading: false, rows: extractRows(resp), error: null });
+                    setHolders({ loading: false, rows: completeHolderRows(resp), error: null });
                 })
                 .catch((err) => {
                     if (cancelled) return;
@@ -239,7 +243,7 @@ export function DividendForm({ walletId, onBack, initialChainId, initialTick, in
                 });
         }, 400);
         return () => { cancelled = true; clearTimeout(handle); };
-    }, [tick, chainId, messaging]);
+    }, [tick, chainId, messaging, holderRetry]);
 
     const descriptor = chainId ? chainRegistry.get(chainId) : null;
     const fromAddress = useMemo(() => {
@@ -580,7 +584,7 @@ export function DividendForm({ walletId, onBack, initialChainId, initialTick, in
                 : `~${formatWithThousands(preview.total)} ${trimmedDividendTick}`
         : null;
 
-    function handleReview(event) {
+    async function handleReview(event) {
         event.preventDefault();
         const feeStop = customFeeReviewStop({ feePick, tiers: feeTiers, estimate: feeCustomEstimate });
         if (feeStop) { setFormError(feeStop.formError); return; }
@@ -640,10 +644,9 @@ export function DividendForm({ walletId, onBack, initialChainId, initialTick, in
             setFormError(precisionError);
             return;
         }
-        // Stop a payout the balance cannot cover here, not three
-        // screens later behind a "sign anyway" tick. Only fires when both
-        // the projected total and the balance are known, so an explorer
-        // hiccup leaves the form ungated.
+        // Stop a payout the balance cannot cover here, not three screens
+        // later. This check runs when both projected total and balance are
+        // known; holder completeness is gated separately below.
         if (balanceError) {
             setFormError(balanceError);
             return;
@@ -654,9 +657,35 @@ export function DividendForm({ walletId, onBack, initialChainId, initialTick, in
         }
         const memoError = memoLengthError(memo.trim());
         if (memoError) { setFormError(memoError); return; }
-        setFormError(null);
-        if (singleEncode) { openConfirmScreen(); return; }
-        setStage('review');
+        if (!holders.rows || !preview || holderReviewPendingRef.current) return;
+
+        // Refresh at the review boundary so a holder change cannot leave the
+        // displayed payout behind the set used by the network. A changed set
+        // returns to the form for an explicit review of the new total.
+        const selectionKey = `${chainId}\u0000${tick.trim()}`;
+        holderReviewPendingRef.current = true;
+        setHolderReviewPending(true);
+        try {
+            const resp = await messaging.getHoldersForToken({ chainId, tick: tick.trim(), all: true });
+            const freshRows = completeHolderRows(resp);
+            if (holderSelectionRef.current !== selectionKey) return;
+            if (holderRowsKey(freshRows) !== holderRowsKey(holders.rows)) {
+                setHolders({ loading: false, rows: freshRows, error: null });
+                setFormError(t('send.dividend.holdersChanged'));
+                return;
+            }
+            setFormError(null);
+            if (singleEncode) { openConfirmScreen(); return; }
+            setStage('review');
+        } catch (err) {
+            if (holderSelectionRef.current !== selectionKey) return;
+            const error = readFailureMessage(err, 'load the holders');
+            setHolders({ loading: false, rows: null, error });
+            setFormError(error);
+        } finally {
+            holderReviewPendingRef.current = false;
+            setHolderReviewPending(false);
+        }
     }
 
     const isHwSource = fromAddress?.source === 'trezor' || fromAddress?.source === 'ledger';
@@ -1086,8 +1115,9 @@ export function DividendForm({ walletId, onBack, initialChainId, initialTick, in
                 <Button
                     type="submit"
                     variant="primary"
-                    loading={actionConfirm.composing}
+                    loading={actionConfirm.composing || holderReviewPending}
                     disabled={!fromAddress || !tick || !dividendTick || !amount || actionConfirm.composing
+                        || holderReviewPending || !holders.rows || !preview
                         || tickIsNativeCoin || tickCheck.verdict === 'missing'
                         || dividendTickCheck.verdict === 'missing'}
                 >
@@ -1162,15 +1192,26 @@ export function DividendForm({ walletId, onBack, initialChainId, initialTick, in
             ) : null}
 
             {tick.trim() ? (
-                <p className={styles.hint}>
-                    {holders.loading ? 'Counting holders…'
-                        : holders.error ? holders.error
-                            : holders.rows ? `${preview?.eligibleCount ?? 0} eligible holder${(preview?.eligibleCount ?? 0) === 1 ? '' : 's'}`
-                                : ''}
-                    {preview?.total
-                        ? ` · total distribution ~${formatWithThousands(preview.total)} ${dividendTick.trim() || 'tokens'}`
-                        : ''}
-                </p>
+                <>
+                    <p className={styles.hint}>
+                        {holders.loading ? 'Counting holders…'
+                            : holders.error ? holders.error
+                                : holders.rows ? `${preview?.eligibleCount ?? 0} eligible holder${(preview?.eligibleCount ?? 0) === 1 ? '' : 's'}`
+                                    : ''}
+                        {preview?.total
+                            ? ` · total distribution ~${formatWithThousands(preview.total)} ${dividendTick.trim() || 'tokens'}`
+                            : ''}
+                    </p>
+                    {holders.error ? (
+                        <Button
+                            type="button"
+                            variant="secondary"
+                            onClick={() => setHolderRetry((attempt) => attempt + 1)}
+                        >
+                            {t('send.dividend.retryHolders')}
+                        </Button>
+                    ) : null}
+                </>
             ) : null}
 
             {totalCostText ? (
@@ -1210,6 +1251,29 @@ function DetailRow({ label, value }) {
 // (utils/holderRows.js), after ManageToken shipped without an equivalent
 // and reported zero holders for every token - D-76.
 const extractRows = extractHolderRows;
+
+function completeHolderRows(resp) {
+    const hasRows = Array.isArray(resp)
+        || Array.isArray(resp?.data)
+        || Array.isArray(resp?.rows)
+        || Array.isArray(resp?.holders);
+    if (!hasRows) throw new Error(t('send.dividend.holdersIncomplete'));
+    const rows = extractRows(resp);
+    if (!Array.isArray(resp) && resp.total !== undefined) {
+        const rawTotal = String(resp.total).trim();
+        if (!/^\d+$/.test(rawTotal) || BigInt(rawTotal) !== BigInt(rows.length)) {
+            throw new Error(t('send.dividend.holdersIncomplete'));
+        }
+    }
+    return rows;
+}
+
+function holderRowsKey(rows) {
+    return rows
+        .map((row) => JSON.stringify([String(row?.address ?? ''), String(row?.amount ?? '')]))
+        .sort()
+        .join('\n');
+}
 
 function dividendActionString(params) {
     const parts = [
