@@ -3,6 +3,7 @@
 
 import { waitForShownTxid } from '../../fixtures/pendingHistory.js';
 import {
+    clickManageTokenAction,
     createWallet,
     expect,
     gotoSection,
@@ -98,15 +99,6 @@ async function openManageToken(page) {
     await expect(main.getByRole('heading', { name: TICK, exact: true }))
         .toBeVisible({ timeout: 30_000 });
     return main;
-}
-
-async function pickManageMore(main, label) {
-    const more = main.getByRole('button', { name: 'More', exact: true });
-    await expect(more).toBeVisible({ timeout: 30_000 });
-    await more.click();
-    const item = main.getByRole('menuitem', { name: label, exact: true });
-    await expect(item, `Manage Token has no ${label} action`).toBeVisible({ timeout: 15_000 });
-    await item.click();
 }
 
 async function openExecuteCallbackWhenConfigured(page, timeoutMs = 180_000) {
@@ -282,7 +274,7 @@ test.describe(`holder-payout callback on ${REGTEST_CHAIN_LABEL}`, () => {
             await waitForExactBalance(owner, TICK, SUPPLY);
 
             main = await openManageToken(ownerPage);
-            await pickManageMore(main, 'Callback settings');
+            await clickManageTokenAction(main, 'Callback settings');
             main = ownerPage.getByRole('main');
             await expect(main.getByLabel('Callback token')).toBeVisible({ timeout: 30_000 });
             callbackBlock = await callbackBlockAhead(await readCurrentHeight(main));

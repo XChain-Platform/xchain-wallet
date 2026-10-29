@@ -67,7 +67,13 @@
 //       --config=playwright.regtest.config.js tests/tokens/access-list-bind.regtest.spec.js
 
 import { waitForShownTxid } from '../../fixtures/pendingHistory.js';
-import { createWallet, expect, openPaletteCommand, test } from '../../fixtures/wallet.js';
+import {
+    clickManageTokenAction,
+    createWallet,
+    expect,
+    openPaletteCommand,
+    test,
+} from '../../fixtures/wallet.js';
 import {
     expectConfirmModal as sharedConfirmModal,
     EXPLORER_URL,
@@ -419,8 +425,7 @@ async function bindAccessList(page, tick, kind, listIndex, memberCount) {
     await expect(page.getByRole('heading', { name: 'Manage Token' })
         .or(page.getByText('Manage Token').first()))
         .toBeVisible({ timeout: 30_000 });
-    await page.getByRole('button', { name: /More/ }).last().click();
-    await page.getByRole('menuitem', { name: 'Access lists' }).click();
+    await clickManageTokenAction(main, 'Access lists');
 
     const form = page.getByRole('main');
     // The state Session 20 stopped at, asserted rather than assumed: the "after"

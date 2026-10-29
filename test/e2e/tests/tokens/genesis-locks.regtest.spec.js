@@ -42,7 +42,13 @@
 //       --config=playwright.regtest.config.js tests/tokens/genesis-locks.regtest.spec.js
 
 import { waitForShownTxid } from '../../fixtures/pendingHistory.js';
-import { createWallet, expect, openPaletteCommand, test } from '../../fixtures/wallet.js';
+import {
+    clickManageTokenAction,
+    createWallet,
+    expect,
+    openPaletteCommand,
+    test,
+} from '../../fixtures/wallet.js';
 import {
     EXPLORER_URL,
     REGTEST_ADDRESS_RE,
@@ -256,24 +262,8 @@ async function openManageToken(page, tick = TICK) {
 async function openTokenAdmin(page, item, tick = TICK) {
     await openManageToken(page, tick);
 
-    // Manage Token splits its actions between PAGE BUTTONS and the More menu,
-    // and which action sits where depends on the token's state - "Mint
-    // settings" is a button on this token and is absent from the menu
-    // entirely, while "Description" is a menu item. A helper that only knew
-    // the menu waited 30s for something that was on screen the whole time.
-    // SCOPED TO `main`, and that is not tidiness: the shell's own navigation
-    // carries a "Lock" button that locks the WALLET, so an unscoped lookup for
-    // the token action of the same name logs the session out mid-test and the
-    // failure surfaces three assertions later as a password prompt. Same trap
-    // the campaign hit on "Source" in Session 31.
-    const button = page.getByRole('main').getByRole('button', { name: item, exact: true });
-    if (await button.count() > 0) {
-        await button.first().click();
-        return;
-    }
-    await page.getByRole('button', { name: /More/ }).last().click();
-    // Exact: a substring match on "Lock" also hits "Use a shared block list".
-    await page.getByRole('menuitem', { name: item, exact: true }).click();
+    // Scope the action to main because the shell has its own wallet Lock button.
+    await clickManageTokenAction(page.getByRole('main'), item);
 }
 
 /**

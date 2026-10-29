@@ -426,6 +426,38 @@ export function mainButton(page, name) {
 }
 
 /**
+ * Clicks a named Manage Token action after its owner check has settled.
+ *
+ * Issuer actions are absent while ManageToken resolves the token owner. Once
+ * that read completes, an action can render either among the first three page
+ * buttons or in the More menu. If More appears first, the second wait still
+ * accepts a direct button that arrives when the owner read completes.
+ */
+export async function clickManageTokenAction(main, label, { timeout = 30_000 } = {}) {
+    const button = main.getByRole('button', { name: label, exact: true });
+    const more = main.getByRole('button', { name: 'More', exact: true });
+    await expect(button.or(more).first(), `Manage Token offers neither a "${label}" button nor a More menu`)
+        .toBeVisible({ timeout });
+
+    if (await button.first().isVisible().catch(() => false)) {
+        await button.first().click();
+        return;
+    }
+
+    await more.click();
+    const item = main.getByRole('menuitem', { name: label, exact: true });
+    await expect(item.or(button).first(), `Manage Token has no "${label}" action after its owner check`)
+        .toBeVisible({ timeout });
+
+    if (await button.first().isVisible().catch(() => false)) {
+        await more.click();
+        await button.first().click();
+        return;
+    }
+    await item.click();
+}
+
+/**
  * The nav rail's "Lock" button. Only the phone layout's header carries a
  * "Lock wallet" button (never beside the rail), but a substring match on
  * "Lock" would still hit it, so anchor on the exact accessible name.

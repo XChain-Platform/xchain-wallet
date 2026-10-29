@@ -29,7 +29,13 @@
 // screen, which is itself backed by a live indexer read) rather than
 // only the form's own success copy.
 
-import { createWallet, expect, openPaletteCommand, test } from '../../fixtures/wallet.js';
+import {
+    clickManageTokenAction,
+    createWallet,
+    expect,
+    openPaletteCommand,
+    test,
+} from '../../fixtures/wallet.js';
 import { waitForShownTxid } from '../../fixtures/pendingHistory.js';
 import {
     explorerJson,
@@ -115,18 +121,7 @@ async function openManageTokenAction(page, tick, label) {
     await row.click();
     await expect(page.getByText('Manage Token').first()).toBeVisible({ timeout: 30_000 });
 
-    const primary = main.getByRole('button', { name: label, exact: true });
-    if (await primary.count() > 0 && await primary.first().isVisible()) {
-        await primary.first().click();
-        return;
-    }
-    const more = main.getByRole('button', { name: /^More/ });
-    await expect(more, `Manage Token offers neither a "${label}" button nor a More menu`)
-        .toBeVisible({ timeout: 15_000 });
-    await more.first().click();
-    const item = page.getByRole('menuitem', { name: label, exact: true });
-    await expect(item, `no "${label}" action available for ${tick}`).toBeVisible({ timeout: 15_000 });
-    await item.click();
+    await clickManageTokenAction(main, label);
 }
 
 /** Issues `tick` on the venue chain from `source` and returns its ISSUE action index. */
@@ -408,6 +403,9 @@ test.describe(`content and registry flows on ${REGTEST_CHAIN_LABEL}`, () => {
             await openManageTokenAction(page, PROJECT, 'Official list');
             const rosterMain = page.getByRole('main');
             await expect(rosterMain.getByLabel('Tokens (one per line)')).toBeVisible({ timeout: 30_000 });
+            await expect(rosterMain.getByText('No list published yet. This will be the first.', { exact: true }),
+                'the wallet never finished checking the current official-token list')
+                .toBeVisible({ timeout: 60_000 });
             await rosterMain.getByLabel('Tokens (one per line)').fill(MEMBER);
             await rosterMain.getByRole('button', { name: 'Review list', exact: true }).click();
 

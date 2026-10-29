@@ -43,7 +43,13 @@
 // `decoder_health`, which reads "healthy" straight through a wedge.
 
 import { waitForShownTxid } from '../../fixtures/pendingHistory.js';
-import { createWallet, expect, openPaletteCommand, test } from '../../fixtures/wallet.js';
+import {
+    clickManageTokenAction,
+    createWallet,
+    expect,
+    openPaletteCommand,
+    test,
+} from '../../fixtures/wallet.js';
 import {
     EXPLORER_URL,
     REGTEST_ADDRESS_RE,
@@ -304,13 +310,7 @@ test.describe(`subtoken under an escrowed parent on ${REGTEST_CHAIN_LABEL}`, () 
                 .or(page.getByText('Manage Token').first()))
                 .toBeVisible({ timeout: 30_000 });
 
-            const sell = main.getByRole('button', { name: 'Sell name', exact: true });
-            if (await sell.count() === 0) {
-                await main.getByRole('button', { name: /^More/ }).first().click();
-                await page.getByRole('menuitem', { name: 'Sell name' }).click();
-            } else {
-                await sell.click();
-            }
+            await clickManageTokenAction(main, 'Sell name');
 
             await expect(page.getByRole('main').getByLabel(/^Price/))
                 .toBeVisible({ timeout: 30_000 });

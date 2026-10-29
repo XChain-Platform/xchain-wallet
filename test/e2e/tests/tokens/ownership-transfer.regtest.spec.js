@@ -13,7 +13,13 @@
 // that edit, waits for its indexed ISSUE row, and then reads the new owner from
 // the explorer token record.
 
-import { createWallet, expect, openPaletteCommand, test } from '../../fixtures/wallet.js';
+import {
+    clickManageTokenAction,
+    createWallet,
+    expect,
+    openPaletteCommand,
+    test,
+} from '../../fixtures/wallet.js';
 import {
     explorerJson,
     expectConfirmModal,
@@ -74,13 +80,7 @@ async function openTokenAdmin(page, item, tick) {
     await expect(main.getByRole('heading', { name: tick, exact: true }), 'Manage Token did not open on this ticker')
         .toBeVisible({ timeout: 30_000 });
 
-    const button = main.getByRole('button', { name: item, exact: true });
-    if (await button.count() > 0 && await button.first().isVisible()) {
-        await button.first().click();
-        return;
-    }
-    await main.getByRole('button', { name: /^More/ }).click();
-    await main.getByRole('menuitem', { name: item, exact: true }).click();
+    await clickManageTokenAction(main, item);
 }
 
 async function generateVenueAddress(page) {

@@ -15,7 +15,13 @@
 // v0 locks the signing address from Token Actions (legacy review stage with
 // a typed LOCK confirm); it runs last because a slept address cannot sign.
 
-import { createWallet, expect, openPaletteCommand, test } from '../../fixtures/wallet.js';
+import {
+    clickManageTokenAction,
+    createWallet,
+    expect,
+    openPaletteCommand,
+    test,
+} from '../../fixtures/wallet.js';
 import {
     explorerJson,
     expectConfirmModal,
@@ -62,18 +68,7 @@ async function openPauseAction(page, tick, label) {
     await row.click();
     await expect(page.getByText('Manage Token').first()).toBeVisible({ timeout: 30_000 });
 
-    const primary = main.getByRole('button', { name: label, exact: true });
-    if (await primary.count() > 0 && await primary.first().isVisible()) {
-        await primary.first().click();
-        return;
-    }
-    const more = main.getByRole('button', { name: /^More/ });
-    await expect(more, `Manage Token offers neither a "${label}" button nor a More menu`)
-        .toBeVisible({ timeout: 15_000 });
-    await more.first().click();
-    const item = page.getByRole('menuitem', { name: label, exact: true });
-    await expect(item, `no "${label}" action available for ${tick}`).toBeVisible({ timeout: 15_000 });
-    await item.click();
+    await clickManageTokenAction(main, label);
 }
 
 /** Opens the address self-lock form (SLEEP v0) off the Token Actions page. */

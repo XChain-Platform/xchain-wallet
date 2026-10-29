@@ -72,7 +72,13 @@
 //       --config=playwright.regtest.config.js tests/tokens/controller-bind.regtest.spec.js
 
 import { waitForShownTxid } from '../../fixtures/pendingHistory.js';
-import { createWallet, expect, openPaletteCommand, test } from '../../fixtures/wallet.js';
+import {
+    clickManageTokenAction,
+    createWallet,
+    expect,
+    openPaletteCommand,
+    test,
+} from '../../fixtures/wallet.js';
 import {
     expectConfirmModal as sharedConfirmModal,
     explorerJson,
@@ -556,8 +562,7 @@ async function gotoControllerForm(page, tick) {
     await expect(page.getByRole('heading', { name: 'Manage Token' })
         .or(page.getByText('Manage Token').first()))
         .toBeVisible({ timeout: 30_000 });
-    await page.getByRole('button', { name: /More/ }).last().click();
-    await page.getByRole('menuitem', { name: 'Controller' }).click();
+    await clickManageTokenAction(page.getByRole('main'), 'Controller');
 
     const form = page.getByRole('main');
     await expect(form.getByLabel('Guard contract')).toBeVisible({ timeout: 30_000 });

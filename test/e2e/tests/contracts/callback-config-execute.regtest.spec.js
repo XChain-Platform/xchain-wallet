@@ -45,7 +45,13 @@
 // mining, rather than trusting the block was reached because two blocks
 // were mined.
 
-import { createWallet, expect, openPaletteCommand, test } from '../../fixtures/wallet.js';
+import {
+    clickManageTokenAction,
+    createWallet,
+    expect,
+    openPaletteCommand,
+    test,
+} from '../../fixtures/wallet.js';
 import {
     callbackBlockAhead,
     EXPLORER_URL,
@@ -122,16 +128,6 @@ async function openManageToken(page, tick) {
     await expect(main.getByRole('heading', { name: tick, exact: true }), 'Manage Token did not open on this ticker')
         .toBeVisible({ timeout: 30_000 });
     return main;
-}
-
-/** Opens the "More" overflow menu on Manage Token and picks one entry. */
-async function pickManageMore(main, label) {
-    const more = main.getByRole('button', { name: 'More', exact: true });
-    await expect(more, 'Manage Token has no "More" overflow menu').toBeVisible({ timeout: 30_000 });
-    await more.click();
-    const item = main.getByRole('menuitem', { name: label, exact: true });
-    await expect(item, `Manage Token's overflow menu has no "${label}" entry`).toBeVisible({ timeout: 15_000 });
-    await item.click();
 }
 
 async function openExecuteCallbackWhenConfigured(page, tick, timeoutMs = 180_000) {
@@ -233,7 +229,7 @@ test.describe(`Callback config and execute on ${REGTEST_CHAIN_LABEL}`, () => {
 
         await test.step('configure the callback via Callback settings, and the chain records the config', async () => {
             let main = await openManageToken(page, TICK);
-            await pickManageMore(main, 'Callback settings');
+            await clickManageTokenAction(main, 'Callback settings');
 
             main = page.getByRole('main');
             await expect(main.getByLabel('Callback token'), 'Callback settings never rendered its fields')
