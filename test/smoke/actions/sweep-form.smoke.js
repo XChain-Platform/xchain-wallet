@@ -37,7 +37,11 @@ assert.match(form, /key: 'ownerships', label: [^,]+, defaultOn: true/, 'ownershi
 assert.match(form, /key: 'orders', label: [^,]+, defaultOn: false/, 'orders default OFF');
 assert.match(form, /key: 'swaps', label: [^,]+, defaultOn: false/, 'swaps default OFF');
 assert.match(form, /key: 'dispensers', label: [^,]+, defaultOn: false/, 'dispensers default OFF');
-assert.match(form, /toUpperCase\(\) === 'SWEEP'/, 'typed-SWEEP confirm gates signing');
+assert.match(
+    form,
+    /const typedConfirmOk = isExactTypedConfirmation\(typedConfirm, 'SWEEP'\)/,
+    'typed-SWEEP confirm uses the shared exact-match gate',
+);
 assert.match(form, /sweepPreview\(\{ chainId, address \}\)/, 'API-derived preview wired');
 assert.match(form, /including anything the preview did not list|including anything not listed/,
     'typed-confirm copy covers unlisted holdings (preview is indicative)');

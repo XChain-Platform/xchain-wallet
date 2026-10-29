@@ -105,12 +105,19 @@ assert.match(
     'the wipe panel is gated on the declared escape kinds',
 );
 const lockedSrc = read('packages', 'core', 'src', 'shared', 'routes', 'Locked.jsx');
-const WIPE_GATE = /function isWipeConfirmed\(text\) \{\s*return text\.trim\(\)\.toUpperCase\(\)\.replace\(\/İ\/g, 'I'\) === 'WIPE';\s*\}/;
-assert.match(screenSrc, WIPE_GATE, 'the wipe compares the typed word with the type-WIPE gate');
-assert.match(lockedSrc, WIPE_GATE, 'the Locked screen holds the same type-WIPE gate');
 assert.match(
     screenSrc,
-    /if \(!isWipeConfirmed\(confirmText\)\) return;/,
+    /isExactTypedConfirmation\(confirmText, 'WIPE'\)/,
+    'the wipe compares the typed word with the shared exact-match gate',
+);
+assert.match(
+    lockedSrc,
+    /isExactTypedConfirmation\(wipeConfirmText, 'WIPE'\)/,
+    'the Locked screen uses the same shared exact-match gate',
+);
+assert.match(
+    screenSrc,
+    /if \(!isExactTypedConfirmation\(confirmText, 'WIPE'\)\) return;/,
     'the wipe stays behind the same type-WIPE gate the Locked screen uses',
 );
 

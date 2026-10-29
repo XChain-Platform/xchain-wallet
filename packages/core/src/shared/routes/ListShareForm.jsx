@@ -9,7 +9,6 @@
 // contact legal@dankest.llc.
 
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { t } from '../../i18n/index.js';
 import {
     AddressText,
     Button,
@@ -40,6 +39,7 @@ import {
 import { currentListMemberCount, findListOwner, recheckListOwner } from '../../flows/listMembership.js';
 import { memoLengthError, MEMO_HINT } from '../utils/memoLimit.js';
 import { submitFailureMessage } from '../utils/submitFailureMessage.js';
+import { typedConfirmationCopy } from '../utils/typedConfirmationCopy.js';
 import { neutralizeControlText } from '../utils/textHardening.js';
 import { explorerReadFailure } from '../../sdk/explorerErrors.js';
 import styles from './IssueTokenForm.module.css';
@@ -206,7 +206,7 @@ function ListShareFormScreen({ walletId, listRef, onBack, onDone = onBack }) {
             return false;
         }
         if (!typedConfirmOk) {
-            setFormError(t('common.typedConfirmationHint', { word: 'SHARE' }));
+            setFormError(typedConfirmationCopy.hint('SHARE'));
             return false;
         }
         if (/[|;]/.test(memo)) { setFormError('Memo cannot contain | or ; characters.'); return false; }
@@ -279,7 +279,7 @@ function ListShareFormScreen({ walletId, listRef, onBack, onDone = onBack }) {
                 extraCredentials={(
                     <Input
                         label='Type "SHARE" to confirm'
-                        hint={`Sharing is permanent and cannot be undone. ${t('common.typedConfirmationHint', { word: 'SHARE' })}`}
+                        hint={typedConfirmationCopy.listShare()}
                         value={typedConfirm}
                         onChange={(event) => setTypedConfirm(event.target.value)}
                         autoComplete="off"
@@ -407,7 +407,7 @@ function ListShareFormScreen({ walletId, listRef, onBack, onDone = onBack }) {
 
             <Input
                 label="Type SHARE to confirm"
-                hint={t('common.typedConfirmationHint', { word: 'SHARE' })}
+                hint={typedConfirmationCopy.hint('SHARE')}
                 value={typedConfirm}
                 onChange={(event) => { setTypedConfirm(event.target.value); setFormError(null); }}
                 autoComplete="off"

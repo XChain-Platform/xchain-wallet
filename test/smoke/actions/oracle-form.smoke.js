@@ -35,7 +35,11 @@ const form = read('packages', 'core', 'src', 'shared', 'routes', 'OracleForm.jsx
 assert.match(form, /submitMethods: \{ hw: 'oraclePriceActionHw', software: 'oraclePriceAction' \}/, 'signer dispatch via useActionForm');
 assert.match(form, /VERSION: '1'/, 'composes PRICE v1');
 assert.match(form, /DEVIATION_TYPED_CONFIRM_PCT/, 'deviation threshold defined');
-assert.match(form, /toUpperCase\(\) === 'PUBLISH'/, 'large moves require a typed confirm');
+assert.match(
+    form,
+    /const typedConfirmOk = !needsTypedConfirm \|\| isExactTypedConfirmation\(typedConfirm, 'PUBLISH'\)/,
+    'large moves require the shared exact-match typed confirm',
+);
 assert.match(form, /takes effect in 24 hours and cannot be withdrawn/, 'update timing rail present');
 assert.match(form, /will not price anything for 24 hours/, 'first-publish timing rail present');
 assert.match(form, /pairConsumers/, 'consumers listed before signing');

@@ -9,7 +9,6 @@
 // contact legal@dankest.llc.
 
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { t } from '../../i18n/index.js';
 import { AddressField, AddressText, Button, ChainBadge, ChainPicker, FeeSelector, FormNotice, FormPage, Input, PageHeader, RadioGroup, Screen, StatusMessage } from '@xchain-wallet/core/ui';
 import {
     registry as registryLib,
@@ -18,6 +17,7 @@ import {
 } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { isExactTypedConfirmation } from '../../flows/typedConfirmation.js';
+import { typedConfirmationCopy } from '../utils/typedConfirmationCopy.js';
 import { useDemoGuard } from '../hooks/useDemoGuard.jsx';
 import { useSettings } from '../hooks/useSettings.js';
 import { useConfirmAction } from '../hooks/useConfirmAction.js';
@@ -742,7 +742,7 @@ export function SleepForm({ walletId, onBack, mode, initialChainId, initialTick,
                 {!isTick ? (
                     <Input
                         label="Type LOCK to confirm"
-                        hint={`This pauses XChain actions from your address and cannot be undone before the wake block. ${t('common.typedConfirmationHint', { word: 'LOCK' })}`}
+                        hint={typedConfirmationCopy.sleep()}
                         value={typedConfirm}
                         onChange={(e) => setTypedConfirm(e.target.value)}
                         autoComplete="off"

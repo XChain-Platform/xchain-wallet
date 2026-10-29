@@ -43,7 +43,11 @@ assert.match(admin, /if \(form\.callbackBlock\) p\.CALLBACK_BLOCK/, 'blank callb
 const form = read('packages', 'core', 'src', 'shared', 'routes', 'CallbackForm.jsx');
 assert.match(form, /submitMethods: \{ hw: 'callbackActionHw', software: 'callbackAction' \}/,
     'three-way signer dispatch via useActionForm');
-assert.match(form, /toUpperCase\(\) === 'CALLBACK'/, 'typed-CALLBACK confirm gates signing');
+assert.match(
+    form,
+    /const typedConfirmOk = isExactTypedConfirmation\(typedConfirm, 'CALLBACK'\)/,
+    'typed-CALLBACK confirm uses the shared exact-match gate',
+);
 assert.match(form, /tokenHolderSummary/, 'holder / payout preview wired');
 assert.match(form, /Total payout/, 'total payout shown');
 assert.match(form, /Holders to pay/, 'live holder count shown');

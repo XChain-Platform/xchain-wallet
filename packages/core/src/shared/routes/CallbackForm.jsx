@@ -841,7 +841,7 @@ export function CallbackForm({ walletId, onBack, initialChainId, initialTick, in
                 )}
                 <Input
                     label="Type CALLBACK to confirm"
-                    hint={`This recalls every unit of the token from all holders and pays them the amount above. It cannot be undone. ${t('common.typedConfirmationHint', { word: 'CALLBACK' })}`}
+                    hint={t('common.typedConfirmationCallbackHint')}
                     value={typedConfirm}
                     onChange={(e) => setTypedConfirm(e.target.value)}
                     autoComplete="off"
@@ -873,7 +873,7 @@ export function CallbackForm({ walletId, onBack, initialChainId, initialTick, in
                         {dustNote}
                         <Input
                             label='Type "CALLBACK" to confirm'
-                            hint={`Recalls all supply and pays holders. Irreversible. ${t('common.typedConfirmationHint', { word: 'CALLBACK' })}`}
+                            hint={t('common.typedConfirmationCallbackReviewHint')}
                             value={typedConfirm}
                             onChange={(e) => setTypedConfirm(e.target.value)}
                             autoComplete="off"

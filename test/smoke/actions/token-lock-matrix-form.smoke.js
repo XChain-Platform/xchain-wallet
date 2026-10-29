@@ -147,7 +147,10 @@ assert.ok(
 // --- 6. Typed LOCK confirmation reused unchanged ------------------------
 
 assert.ok(/mode === 'lock' \? \(\s*<Input\s*\n\s*label="Type LOCK to confirm"/.test(src), 'reuses the typed "Type LOCK to confirm" gate');
-assert.ok(/typedConfirmOk = typedConfirm\.trim\(\)\.toUpperCase\(\) === 'LOCK'/.test(src), 'typed confirm still checks for the literal word LOCK');
+assert.ok(
+    /typedConfirmOk = isExactTypedConfirmation\(typedConfirm, 'LOCK'\)/.test(src),
+    'typed confirm uses the shared exact-match gate with the literal word LOCK',
+);
 assert.ok(/\(mode === 'lock' && !typedConfirmOk\)/.test(src), 'submit stays disabled until the typed LOCK confirm matches');
 
 // --- 7. Reuses the shared signing path (no new handler) -----------------

@@ -640,7 +640,7 @@ export function DestroyForm({ walletId, onBack, initialChainId, initialTick, ini
                 )}
                 <Input
                     label="Type DESTROY to confirm"
-                    hint={`This burns the amount above and cannot be undone. ${t('common.typedConfirmationHint', { word: 'DESTROY' })}`}
+                    hint={t('common.typedConfirmationDestroyHint')}
                     value={typedConfirm}
                     onChange={(e) => setTypedConfirm(e.target.value)}
                     autoComplete="off"
@@ -677,7 +677,7 @@ export function DestroyForm({ walletId, onBack, initialChainId, initialTick, ini
                 extraCredentials={(
                     <Input
                         label='Type "DESTROY" to confirm'
-                        hint={`Destroying tokens is irreversible. ${t('common.typedConfirmationHint', { word: 'DESTROY' })}`}
+                        hint={t('common.typedConfirmationDestroyReviewHint')}
                         value={typedConfirm}
                         onChange={(e) => setTypedConfirm(e.target.value)}
                         autoComplete="off"

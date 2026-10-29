@@ -1303,7 +1303,7 @@ export function TokenAdminForm({ walletId, mode, onBack, initialChainId, initial
                 {mode === 'lock' ? (
                     <Input
                         label="Type LOCK to confirm"
-                        hint={`Locking is permanent. Every flag checked below can never be unlocked. ${t('common.typedConfirmationHint', { word: 'LOCK' })}`}
+                        hint={t('common.typedConfirmationLockBelowHint')}
                         value={typedConfirm}
                         onChange={(e) => setTypedConfirm(e.target.value)}
                         autoComplete="off"
@@ -1899,7 +1899,7 @@ export function TokenAdminForm({ walletId, mode, onBack, initialChainId, initial
             {mode === 'lock' && singleEncode && !allLocksSet ? (
                 <Input
                     label="Type LOCK to confirm"
-                    hint={`Locking is permanent. Every flag checked above can never be unlocked. ${t('common.typedConfirmationHint', { word: 'LOCK' })}`}
+                    hint={t('common.typedConfirmationLockAboveHint')}
                     value={typedConfirm}
                     onChange={(e) => setTypedConfirm(e.target.value)}
                     autoComplete="off"

@@ -866,7 +866,7 @@ export function SweepForm({
                 )}
                 <Input
                     label="Type SWEEP to confirm"
-                    hint={`Everything in the selected categories moves to the destination, including anything the preview did not list. ${t('common.typedConfirmationHint', { word: 'SWEEP' })}`}
+                    hint={t('common.typedConfirmationSweepHint')}
                     value={typedConfirm}
                     onChange={(e) => setTypedConfirm(e.target.value)}
                     autoComplete="off"
@@ -898,7 +898,7 @@ export function SweepForm({
                         {sweepWarnings}
                         <Input
                             label='Type "SWEEP" to confirm'
-                            hint={`Everything in the selected categories moves, including anything not listed in the preview. ${t('common.typedConfirmationHint', { word: 'SWEEP' })}`}
+                            hint={t('common.typedConfirmationSweepReviewHint')}
                             value={typedConfirm}
                             onChange={(e) => setTypedConfirm(e.target.value)}
                             autoComplete="off"

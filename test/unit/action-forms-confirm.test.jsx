@@ -783,6 +783,16 @@ describe('Action forms confirm via the single-encode pipeline', () => {
                 setValue(utils, 'Type "DESTROY" to confirm', 'destroy');
                 await drainMicrotasks();
             });
+            expect(approveButton(utils).disabled).toBe(true);
+            await domAct(async () => {
+                setValue(utils, 'Type "DESTROY" to confirm', ' DESTROY ');
+                await drainMicrotasks();
+            });
+            expect(approveButton(utils).disabled).toBe(true);
+            await domAct(async () => {
+                setValue(utils, 'Type "DESTROY" to confirm', 'DESTROY');
+                await drainMicrotasks();
+            });
             expect(approveButton(utils).disabled).toBe(false);
         });
 

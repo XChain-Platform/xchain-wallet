@@ -9,7 +9,6 @@
 // contact legal@dankest.llc.
 
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { t } from '../../i18n/index.js';
 import {
     AddressText,
     Button,
@@ -35,6 +34,7 @@ import { memoLengthError, MEMO_HINT } from '../utils/memoLimit.js';
 import { submitFailureMessage } from '../utils/submitFailureMessage.js';
 import { explorerReadFailure } from '../../sdk/explorerErrors.js';
 import { isExactTypedConfirmation } from '../../flows/typedConfirmation.js';
+import { typedConfirmationCopy } from '../utils/typedConfirmationCopy.js';
 import styles from './IssueTokenForm.module.css';
 
 const chainRegistry = registryLib.defaultRegistry();
@@ -172,7 +172,7 @@ function ListTransferFormScreen({ walletId, listRef, onBack, onDone = onBack }) 
             return false;
         }
         if (!typedConfirmOk) {
-            setFormError(t('common.typedConfirmationHint', { word: 'TRANSFER' }));
+            setFormError(typedConfirmationCopy.hint('TRANSFER'));
             return false;
         }
         if (/[|;]/.test(memo)) { setFormError('Memo cannot contain | or ; characters.'); return false; }
@@ -243,7 +243,7 @@ function ListTransferFormScreen({ walletId, listRef, onBack, onDone = onBack }) 
                 extraCredentials={(
                     <Input
                         label='Type "TRANSFER" to confirm'
-                        hint={`List ownership changes permanently when this transaction confirms. ${t('common.typedConfirmationHint', { word: 'TRANSFER' })}`}
+                        hint={typedConfirmationCopy.listTransfer()}
                         value={typedConfirm}
                         onChange={(event) => setTypedConfirm(event.target.value)}
                         autoComplete="off"
@@ -370,7 +370,7 @@ function ListTransferFormScreen({ walletId, listRef, onBack, onDone = onBack }) 
 
             <Input
                 label="Type TRANSFER to confirm"
-                hint={`Ownership transfer is permanent. ${t('common.typedConfirmationHint', { word: 'TRANSFER' })}`}
+                hint={typedConfirmationCopy.listTransferReview()}
                 value={typedConfirm}
                 onChange={(event) => { setTypedConfirm(event.target.value); setFormError(null); }}
                 autoComplete="off"

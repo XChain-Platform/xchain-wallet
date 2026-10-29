@@ -779,7 +779,7 @@ export function AdvancedActionsForm({ walletId, onBack, hasDexSurface = true }) 
                 extraCredentials={confirmWord ? (
                     <Input
                         label={`Type "${confirmWord}" to confirm`}
-                        hint={`This cannot be undone. ${t('common.typedConfirmationHint', { word: confirmWord })}`}
+                        hint={t('common.typedConfirmationAdvancedHint', { word: confirmWord })}
                         value={typedConfirm}
                         onChange={(e) => setTypedConfirm(e.target.value)}
                         autoComplete="off"

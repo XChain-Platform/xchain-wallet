@@ -9,7 +9,6 @@
 // contact legal@dankest.llc.
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { t } from '../../i18n/index.js';
 import { AddressField, AddressText, Button, ChainBadge, ChainPicker, FeeSelector, FieldNote, FormNotice, FormPage, FormSection, InfoTip, Input, PageHeader, Screen, Select, StatusMessage } from '@xchain-wallet/core/ui';
 import {
     registry as registryLib,
@@ -18,6 +17,7 @@ import {
 } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { isExactTypedConfirmation } from '../../flows/typedConfirmation.js';
+import { typedConfirmationCopy } from '../utils/typedConfirmationCopy.js';
 import { useDemoGuard } from '../hooks/useDemoGuard.jsx';
 import { humanizeError } from '../utils/humanizeError.js';
 import { ResultScreen } from '../components/ResultScreen.jsx';
@@ -865,7 +865,7 @@ function OraclePublishNotes({
             {needsTypedConfirm ? (
                 <Input
                     label="Type PUBLISH to confirm"
-                    hint={`This changes your published price by ${fmtPct(deviationPct)} and cannot be undone for 24 hours. ${t('common.typedConfirmationHint', { word: 'PUBLISH' })}`}
+                    hint={typedConfirmationCopy.oracle(fmtPct(deviationPct))}
                     value={typedConfirm}
                     onChange={(e) => onTypedConfirmChange(e.target.value)}
                     autoComplete="off"
