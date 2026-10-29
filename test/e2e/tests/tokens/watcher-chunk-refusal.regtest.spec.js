@@ -155,7 +155,10 @@ test.describe('the watcher lane and an action the encoder chunks', () => {
 
             // Funding is not incidental: the encoder selects real UTXOs, and an
             // empty address fails BEFORE the encoding is chosen - which would
-            // make the refusal below unattributable.
+            // make the refusal below unattributable. Give each half of the pair
+            // its own confirmed UTXO because an unsigned build reserves the input
+            // it selected even though this watcher does not broadcast it.
+            await fundAddress(source, FUNDING);
             await fundAddress(source, FUNDING);
             await page.reload();
             await unlockAfterReload(page, PASSWORD);
