@@ -32,25 +32,25 @@ const messages = {
     'common.hidePassphrase': 'Hide passphrase',
     'common.confirm': 'Confirm',
     'common.typedConfirmationHint': 'Type {word} exactly in capitals with no spaces.',
-    'common.typedConfirmationAdvancedHint': 'This cannot be undone. Type {word} exactly in capitals with no spaces.',
+    'common.typedConfirmationAdvancedHint': "This can't be undone. Type {word} exactly in capitals with no spaces.",
     'common.typedConfirmationCallbackHint':
-        'This recalls every unit of the token from all holders and pays them the amount above. It cannot be undone. Type CALLBACK exactly in capitals with no spaces.',
+        "This recalls every unit of the token from all holders and pays them the amount above. It can't be undone. Type CALLBACK exactly in capitals with no spaces.",
     'common.typedConfirmationCallbackReviewHint':
         'Recalls all supply and pays holders. Irreversible. Type CALLBACK exactly in capitals with no spaces.',
     'common.typedConfirmationDestroyHint':
-        'This burns the amount above and cannot be undone. Type DESTROY exactly in capitals with no spaces.',
+        "This burns the amount above and can't be undone. Type DESTROY exactly in capitals with no spaces.",
     'common.typedConfirmationDestroyReviewHint':
         'Destroying tokens is irreversible. Type DESTROY exactly in capitals with no spaces.',
     'common.typedConfirmationListShareHint':
-        'Sharing is permanent and cannot be undone. Type SHARE exactly in capitals with no spaces.',
+        "Sharing is permanent and can't be undone. Type SHARE exactly in capitals with no spaces.",
     'common.typedConfirmationListTransferHint':
         'List ownership changes permanently when this transaction confirms. Type TRANSFER exactly in capitals with no spaces.',
     'common.typedConfirmationListTransferReviewHint':
         'Ownership transfer is permanent. Type TRANSFER exactly in capitals with no spaces.',
     'common.typedConfirmationOracleHint':
-        'This changes your published price by {deviationPct} and cannot be undone for 24 hours. Type PUBLISH exactly in capitals with no spaces.',
+        "This changes your published price by {deviationPct} and can't be undone for 24 hours. Type PUBLISH exactly in capitals with no spaces.",
     'common.typedConfirmationSleepHint':
-        'This pauses XChain actions from your address and cannot be undone before the wake block. Type LOCK exactly in capitals with no spaces.',
+        "This pauses XChain actions from your address and can't be undone before the wake block. Type LOCK exactly in capitals with no spaces.",
     'common.typedConfirmationSweepHint':
         'Everything in the selected categories moves to the destination, including anything the preview did not list. Type SWEEP exactly in capitals with no spaces.',
     'common.typedConfirmationSweepReviewHint':
