@@ -20,6 +20,7 @@ import {
     resolveDustThreshold,
 } from '../../../packages/core/src/sdk/nativeFeePreflight.js';
 import { protocolFeeRowCopy } from '../../../packages/core/src/flows/protocolFeeRow.js';
+import { nativeFeeOutputOf } from '../../../packages/core/src/flows/nativeFeeLane.js';
 
 // Minimal SDK stub whose quoteNativeFee returns a canned quote and records its args.
 // It is a bitcoin SDK by default, so a test that pads to 546 says that it assumes Bitcoin.
@@ -179,6 +180,45 @@ describe('applyNativeFeePreflight without a resolvable dust floor', () => {
     it('reports an unknown floor as null rather than any coin\'s number', () => {
         expect(resolveDustThreshold({})).toBe(null);
         expect(resolveDustThreshold({ wallet: { getBitcoinNetwork: () => ({ dustThreshold: 100000 }) } })).toBe(100000);
+    });
+});
+
+// The fee output's address comes from the quote, and a positive fee paid to a blank or
+// non-string destination is a forfeited payment the encoder would only reject later (or
+// worse, interpret). The rule matches nativeFeeOutputOf, which the post-build output check
+// reads, so the output the pre-flight appends is the one that check expects.
+describe('applyNativeFeePreflight fee destination', () => {
+    it.each([
+        ['undefined', undefined],
+        ['an empty string', ''],
+        ['whitespace', '   '],
+        ['a number', 123],
+        ['null', null],
+    ])('refuses a positive fee whose destination is %s', async (_label, feeDestination) => {
+        const sdk = makeSdk({ feeDestination });
+        const caller = [{ address: 'extra', value: 5 }];
+        let err;
+        try {
+            await applyNativeFeePreflight({
+                sdk, actionData: ACTION, encoderOpts: { payFeeInNativeCoin: true, customOutputs: caller },
+            });
+        } catch (e) { err = e; }
+        expect(err).toBeInstanceOf(NativeFeeForfeitError);
+        expect(err.reason).toBe('invalid');
+        expect(caller).toEqual([{ address: 'extra', value: 5 }]);
+    });
+
+    it('trims surrounding whitespace to the address nativeFeeOutputOf reports', async () => {
+        const sdk = makeSdk({ feeDestination: '  feeDest\n' });
+        const out = await applyNativeFeePreflight({ sdk, actionData: ACTION, encoderOpts: { payFeeInNativeCoin: true } });
+        expect(out.encoderOpts.customOutputs).toEqual([{ address: 'feeDest', value: 2000 }]);
+        expect(out.encoderOpts.customOutputs).toEqual([nativeFeeOutputOf(out.quote)]);
+    });
+
+    it('builds no output and refuses nothing for a zero fee with a blank destination', async () => {
+        const sdk = makeSdk({ requiredFeeSats: 0, feeDestination: '' });
+        const out = await applyNativeFeePreflight({ sdk, actionData: ACTION, encoderOpts: { payFeeInNativeCoin: true } });
+        expect(out.encoderOpts.customOutputs).toEqual([]);
     });
 });
 

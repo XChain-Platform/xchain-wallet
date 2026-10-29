@@ -85,7 +85,7 @@ describe('native fee quote reply integrity', () => {
         ['a number', 12345],
         ['an object', { address: 'x' }],
     ]) {
-        it.fails(`never composes an output whose address is ${label}`, async () => {
+        it(`never composes an output whose address is ${label}`, async () => {
             const res = await nativeOutcome(goodNative({ feeDestination }));
             const bad = (res.outputs || []).filter((o) => typeof o.address !== 'string' || !o.address.trim());
             expect(bad).toEqual([]);

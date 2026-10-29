@@ -35,6 +35,7 @@
 // this single helper, so the guardrail covers every action surface.
 
 import { satsResponseAmount } from './amountValidation.js';
+import { nativeFeeOutputOf } from '../flows/nativeFeeLane.js';
 
 /**
  * Thrown to refuse a native-coin-fee transaction that would forfeit the fee on-chain.
@@ -362,7 +363,17 @@ export async function applyNativeFeePreflight({ sdk, actionData, encoderOpts = {
 
     const outs = Array.isArray(encoderOpts.customOutputs) ? encoderOpts.customOutputs.slice() : [];
     if (feeSats > 0) {
-        outs.push({ address: quote.feeDestination, value: feeSats });
+        // The output is read through nativeFeeOutputOf, the same rule the post-build output
+        // check uses, so a blank or non-string destination refuses here instead of reaching
+        // the encoder, and a padded one is trimmed to the address that check expects.
+        const feeOutput = nativeFeeOutputOf({ feeDestination: quote.feeDestination, requiredFeeSats: feeSats });
+        if (!feeOutput) {
+            throw new NativeFeeForfeitError({
+                reason: 'invalid',
+                quote: { ...quote, error: 'the fee quote names no fee destination address' },
+            });
+        }
+        outs.push(feeOutput);
     }
 
     if (typeof onProgress === 'function') onProgress('native_fee_quoted', { quote: payableQuote });
