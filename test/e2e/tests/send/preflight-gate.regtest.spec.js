@@ -23,7 +23,7 @@
 // Send form catches it first, which is better UX and leaves the gate
 // unexercised. SEND also carries no protocol gas on this venue, so even a
 // whole-balance send is valid. ISSUE is the in-form action whose 1 XCHAIN fee
-// can exceed the payer's 0.5 XCHAIN balance while the transaction itself
+// can exceed the payer's zero XCHAIN balance while the transaction itself
 // remains buildable. The real dry-run alone refuses that action, which is the
 // situation this gate exists for.
 //
@@ -40,19 +40,17 @@ import { createWallet, expect, openPaletteCommand, test } from '../../fixtures/w
 import {
     expectConfirmModal,
     fundAddress,
-    mintXchain,
     readReceiveAddress,
     REGTEST_CHAIN_LABEL,
     switchToRegtest,
     unlockAfterReload,
-    waitForTokenBalance,
     waitForValidAction,
     warmPreflight,
 } from '../../fixtures/regtest.js';
 
 const PASSWORD = 'regtestpassword123';
 const FUNDING_BTC = 1;
-const XCHAIN_BALANCE = 0.5;
+const EXPECTED_XCHAIN_BALANCE = 0;
 const ISSUE_SUPPLY = '100';
 const ISSUE_TICK = `PFG${Date.now().toString().slice(-6)}`;
 const ISSUE_PARAMS = `0|${ISSUE_TICK}|${ISSUE_SUPPLY}||0||${ISSUE_SUPPLY}`;
@@ -117,21 +115,14 @@ async function composeIssue(page, { nativeFee, reuseForm = false }) {
     await expectConfirmModal(page, `the ISSUE of ${ISSUE_TICK}`, 30_000);
 }
 
-/** Creates the funded token wallet used by one pre-flight scenario. */
-async function openFundedTokenWallet(page) {
+/** Creates a BTC-funded wallet with no XCHAIN for one pre-flight scenario. */
+async function openNativeFundedWallet(page) {
     await createWallet(page, { password: PASSWORD });
     await switchToRegtest(page, PASSWORD);
 
     const own = await readReceiveAddress(page);
-    // BTC pays the miner fee; the small XCHAIN balance drives the ISSUE fee shortfall.
+    // BTC pays the miner fee; holding no XCHAIN drives the ISSUE fee shortfall.
     await fundAddress(own, FUNDING_BTC);
-    await page.reload();
-    await unlockAfterReload(page, PASSWORD);
-
-    await mintXchain(page, XCHAIN_BALANCE);
-    await waitForTokenBalance(own, 'XCHAIN', XCHAIN_BALANCE);
-
-    // The mint leaves the shell on its terminal screen, so remount Home.
     await page.reload();
     await unlockAfterReload(page, PASSWORD);
     return own;
@@ -139,10 +130,10 @@ async function openFundedTokenWallet(page) {
 
 test.describe('pre-flight gate on regtest', () => {
     test('an unaffordable token issue fails pre-flight, blocks Approve, and can be overridden', async ({ page }) => {
-        const own = await openFundedTokenWallet(page);
+        const own = await openNativeFundedWallet(page);
         const quote = await warmIssue(own, false);
         expect(Number(quote.feeTokenBalance), `the venue measured a different XCHAIN balance: ${JSON.stringify(quote)}`)
-            .toBe(XCHAIN_BALANCE);
+            .toBe(EXPECTED_XCHAIN_BALANCE);
         expect(quote.feeAffordable, `the venue considers the ISSUE fee affordable: ${JSON.stringify(quote)}`)
             .toBe(false);
         await composeIssue(page, { nativeFee: false });
@@ -192,7 +183,7 @@ test.describe('pre-flight gate on regtest', () => {
     });
 
     test('switching an unaffordable issue to the native fee lane clears the verdict and broadcasts', async ({ page }) => {
-        const own = await openFundedTokenWallet(page);
+        const own = await openNativeFundedWallet(page);
         // The scripted §8.6 walk: fail -> fix -> approve -> broadcast. The
         // point is that a rejected pre-flight is not a dead end and leaves
         // nothing behind - the second compose has to produce a clean report,
