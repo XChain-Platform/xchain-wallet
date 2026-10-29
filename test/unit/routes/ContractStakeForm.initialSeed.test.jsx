@@ -23,7 +23,7 @@
 // rather than the callers that reach it.
 
 import { describe, it, expect, vi, afterEach } from 'vitest';
-import { render, screen, fireEvent, waitFor, cleanup } from '@testing-library/react';
+import { act, render, screen, fireEvent, waitFor, cleanup } from '@testing-library/react';
 import React from 'react';
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
 import { ContractStakeForm } from '../../../packages/core/src/shared/routes/ContractStakeForm.jsx';
@@ -176,6 +176,45 @@ describe('ContractStakeForm unstake availability', () => {
         });
 
         expect(await screen.findByText('7 PEPECASH staked')).toBeInTheDocument();
+    });
+
+    it('matches a stored lowercase signing key case-insensitively and refuses a different key', async () => {
+        const storedKey = 'abcdef0123456789'.repeat(4);
+        const mixedKey = 'AbCdEf0123456789'.repeat(4);
+        const pendingStakeLookups = [];
+        const getContractStakesForAddress = vi.fn(() => new Promise((resolve) => {
+            pendingStakeLookups.push(resolve);
+        }));
+        const row = {
+            target_contract_index: CONTRACT_INDEX,
+            tick: 'PEPECASH',
+            signing_pubkey: storedKey,
+            amount: '11',
+        };
+        mountForm({
+            initialMode: 'unstake',
+            initialTick: 'PEPECASH',
+            initialSigningPubkey: storedKey.toUpperCase(),
+            initialFromAddress: POSITION_ADDRESS,
+        }, { getContractStakesForAddress });
+
+        await waitFor(() => expect(pendingStakeLookups).toHaveLength(1));
+        await act(async () => { pendingStakeLookups[0]([row]); });
+        expect(await screen.findByText('11 PEPECASH staked')).toBeInTheDocument();
+
+        fireEvent.change(screen.getByLabelText('Signing public key'), {
+            target: { value: mixedKey },
+        });
+        await waitFor(() => expect(pendingStakeLookups).toHaveLength(2));
+        await act(async () => { pendingStakeLookups[1]([row]); });
+        expect(await screen.findByText('11 PEPECASH staked')).toBeInTheDocument();
+
+        fireEvent.change(screen.getByLabelText('Signing public key'), {
+            target: { value: 'f'.repeat(64) },
+        });
+        await waitFor(() => expect(pendingStakeLookups).toHaveLength(3));
+        await act(async () => { pendingStakeLookups[2]([row]); });
+        await waitFor(() => expect(screen.queryByText('11 PEPECASH staked')).not.toBeInTheDocument());
     });
 });
 
