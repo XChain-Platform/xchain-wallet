@@ -147,10 +147,23 @@ export async function holdersFor({ sdkRegistry, chainId, tick, opts, all = false
             sdk.getHolders(tick, { ...(opts || {}), page: index + 2, limit })
         )),
     );
+    // A short, empty or malformed later page silently drops holders, and a
+    // dividend sized from that list underpays them, so every later page must
+    // hold exactly the rows the first page's total implies.
+    const restRows = rest.map((page, index) => {
+        const pageNumber = index + 2;
+        const pageRows = Array.isArray(page) ? page : (Array.isArray(page?.data) ? page.data : null);
+        const expected = pageNumber === pages ? total - (pages - 1) * limit : limit;
+        if (!pageRows || pageRows.length !== expected) {
+            const got = pageRows ? `${pageRows.length} rows` : 'no row array';
+            throw new Error(
+                `holdersFor: partial holders list: page ${pageNumber} of ${pages} returns ${got}, expected ${expected}`,
+            );
+        }
+        return pageRows;
+    });
     return {
         ...first,
-        data: rows.concat(...rest.map((page) => (
-            Array.isArray(page) ? page : (Array.isArray(page?.data) ? page.data : [])
-        ))),
+        data: rows.concat(...restRows),
     };
 }
