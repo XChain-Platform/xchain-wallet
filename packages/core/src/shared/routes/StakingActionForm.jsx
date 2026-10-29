@@ -323,15 +323,17 @@ export function StakingActionForm({ mode, walletId, chainId: initialChainId, ini
         return heights[0] ?? null;
     }, [isUnstake, activeStakes, pendingStakes, signingPubkey]);
 
-    // Prefill with the full balance (the common case is still "take it
-    // all"), but stop overwriting once the user edits: a positions
-    // refresh or key switch must not clobber a typed partial amount.
+    // Default to the full balance (the common case is still "take it all"),
+    // but stop following it once the user edits. Deriving the untouched value
+    // during render keeps the displayed balance, input and action params
+    // atomic: a fast submit cannot land between a balance render and a later
+    // prefill effect. A positions refresh or key switch still cannot clobber a
+    // typed partial amount.
     const [amount, setAmount] = useState('');
-    const amountTouchedRef = useRef(false);
-    useEffect(() => {
-        if (amountTouchedRef.current) return;
-        setAmount(availableAmt != null ? String(availableAmt) : '');
-    }, [availableAmt]);
+    const [amountTouched, setAmountTouched] = useState(false);
+    const effectiveAmount = !amountTouched && availableAmt != null
+        ? String(availableAmt)
+        : amount;
 
     // §29.3 fiat preview + toggle, same wiring as Send. The canonical
     // `amount` stays coin-scale; fiat mode only changes the display.
@@ -353,14 +355,14 @@ export function StakingActionForm({ mode, walletId, chainId: initialChainId, ini
         if (!fiatRate) return;
         setAmountInputMode((prev) => {
             if (prev === 'coin') {
-                const value = amount ? coinToFiatExact(amount, fiatRate) : null;
+                const value = effectiveAmount ? coinToFiatExact(effectiveAmount, fiatRate) : null;
                 setFiatAmount(value != null ? roundDecimalString(value, 2) : '');
                 return 'fiat';
             }
             setFiatAmount('');
             return 'coin';
         });
-    }, [amount, fiatRate]);
+    }, [effectiveAmount, fiatRate]);
 
     // A rate can go away mid-edit (chain switched, feed went quiet), which
     // would strand the field in a mode it can no longer convert.
@@ -379,7 +381,7 @@ export function StakingActionForm({ mode, walletId, chainId: initialChainId, ini
         const stripped = String(rawValue).replace(/,/g, '');
         // Valid partial decimals only ("" / "." / "1." stay allowed).
         if (stripped !== '' && !/^\d*\.?\d*$/.test(stripped)) return;
-        amountTouchedRef.current = true;
+        setAmountTouched(true);
         // In fiat mode the typed text is fiat and the canonical `amount`
         // (what gets broadcast, and what the available-balance check reads)
         // is derived from it. Writing the typed number straight into
@@ -523,8 +525,8 @@ export function StakingActionForm({ mode, walletId, chainId: initialChainId, ini
     const {
         params: actionParams, amountValid, isWholeAmount, normalizedAmount,
     } = useMemo(
-        () => stakingActionParams({ isUnstake, signingPubkey, amount, availableAmt }),
-        [isUnstake, signingPubkey, amount, availableAmt],
+        () => stakingActionParams({ isUnstake, signingPubkey, amount: effectiveAmount, availableAmt }),
+        [isUnstake, signingPubkey, effectiveAmount, availableAmt],
     );
     function handleReview(event) {
         event.preventDefault();
@@ -919,7 +921,7 @@ export function StakingActionForm({ mode, walletId, chainId: initialChainId, ini
 
             <AmountField
                 label="Amount"
-                amount={amount}
+                amount={effectiveAmount}
                 fiatAmount={fiatAmount}
                 tick="XCHAIN"
                 fiatRate={fiatRate}
@@ -929,7 +931,7 @@ export function StakingActionForm({ mode, walletId, chainId: initialChainId, ini
                 inputRef={amountInputRef}
                 onMax={() => {
                     const max = availableAmt != null ? String(availableAmt) : '';
-                    amountTouchedRef.current = true;
+                    setAmountTouched(true);
                     setAmount(max);
                     if (amountInputMode === 'fiat') {
                         const converted = max && fiatRate ? coinToFiatExact(max, fiatRate) : null;
