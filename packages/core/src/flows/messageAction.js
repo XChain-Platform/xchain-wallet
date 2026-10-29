@@ -38,6 +38,9 @@ import { submitAction } from './submitAction.js';
 import { normalizeSource } from './sendToken.js';
 import { exportPrivateKey } from './exportPrivateKey.js';
 import { actionTextSafetyError } from '../shared/utils/actionTextSafety.js';
+import { recipientPubkeyMatchesAddress } from '../sdk/recipientPubkeyBinding.js';
+
+export { recipientPubkeyMatchesAddress } from '../sdk/recipientPubkeyBinding.js';
 
 const PROTOCOL_COIN_TICKER = {
     bitcoin: 'BTC',
@@ -99,59 +102,6 @@ export class PubkeyMismatchError extends Error {
         this.name = 'PubkeyMismatchError';
         this.address = address;
     }
-}
-
-// Single-key address types we can independently re-derive from a compressed
-// pubkey to confirm the explorer-returned key really controls `address`.
-const VERIFIABLE_ADDRESS_TYPES = ['p2pkh', 'p2wpkh', 'p2sh-p2wpkh'];
-
-/**
- * Bind an explorer-resolved recipient pubkey to the destination address the
- * user actually typed. The pubkey comes from a hostile-capable counterpart
- * (the explorer/indexer); trusting it verbatim lets a malicious indexer
- * substitute its own key so the "encrypted" message is readable by the
- * attacker. We re-derive the address from the returned key for each
- * single-key type the chain supports and require a match.
- *
- * A key whose length is not a standard compressed/uncompressed pubkey (e.g. a
- * 32-byte x-only taproot key), or a destination that is a script/multisig
- * type we cannot derive from one pubkey, cannot be verified this way; those
- * fall through to the SDK's own encrypt-time key validation. The common case
- * (p2pkh/p2wpkh/p2sh-p2wpkh recipients) is enforced.
- *
- * @param {object} sdk           chain SDK (needs sdk.wallet.deriveAddress)
- * @param {string} pubkeyHex
- * @param {string} address
- * @param {object} descriptor    chain descriptor (addressTypes)
- * @returns {boolean}            true = verified match, false = mismatch (reject)
- */
-export function recipientPubkeyMatchesAddress(sdk, pubkeyHex, address, descriptor) {
-    if (typeof pubkeyHex !== 'string' || !/^[0-9a-fA-F]+$/.test(pubkeyHex)) {
-        return false;
-    }
-    // Hex decoding drops a trailing odd nibble, so the bytes that reach
-    // encryption would be a key this check never measured.
-    if (pubkeyHex.length % 2 !== 0) return false;
-    const byteLen = pubkeyHex.length / 2;
-    // Only standard compressed (33) / uncompressed (65) keys are derivable
-    // here; anything else we cannot verify, so don't block on it.
-    if (byteLen !== 33 && byteLen !== 65) return true;
-    if (!sdk?.wallet || typeof sdk.wallet.deriveAddress !== 'function') return true;
-    const supported = Array.isArray(descriptor?.addressTypes) ? descriptor.addressTypes : [];
-    const types = VERIFIABLE_ADDRESS_TYPES.filter((t) => supported.includes(t));
-    const candidates = types.length > 0 ? types : VERIFIABLE_ADDRESS_TYPES;
-    let couldDeriveAny = false;
-    for (const type of candidates) {
-        try {
-            if (sdk.wallet.deriveAddress(pubkeyHex, { type }) === address) return true;
-            couldDeriveAny = true;
-        } catch {
-            // Type unsupported on this network (e.g. segwit off); skip it.
-        }
-    }
-    // If no candidate type could be derived at all we can't verify; don't
-    // block. Otherwise the derivable candidates all disagreed -> mismatch.
-    return !couldDeriveAny;
 }
 
 /**

@@ -16,6 +16,17 @@
 // in an SDKFactory; core just calls it.
 
 import { installSdkNetworkPolicy, sharedExplorerLimiter } from './explorerRateLimit.js';
+import { explorerPubkeyMatchesAddress } from './recipientPubkeyBinding.js';
+
+function bindMessagingPubkeyLookups(sdk, descriptor) {
+    if (!sdk?.messaging || typeof sdk.messaging.getPublicKey !== 'function') return sdk;
+    const original = sdk.messaging.getPublicKey.bind(sdk.messaging);
+    sdk.messaging.getPublicKey = async function getBoundPublicKey(address, ...args) {
+        const pubkey = await original(address, ...args);
+        return explorerPubkeyMatchesAddress(sdk, pubkey, address, descriptor) ? pubkey : null;
+    };
+    return sdk;
+}
 
 /**
  * @typedef {Object} SDKConstructorOpts
@@ -259,6 +270,7 @@ export class SDKRegistry {
             retry: this._networkOptions.retry,
             ...(this._networkOptions.pool ? { pool: this._networkOptions.pool } : {}),
         });
+        bindMessagingPubkeyLookups(sdk, d);
         // Every chain's SDK traffic shares one per-host gate for retries and pacing.
         return this._rateLimiter ? installSdkNetworkPolicy(sdk, this._rateLimiter) : sdk;
     }
