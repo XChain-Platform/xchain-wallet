@@ -177,7 +177,7 @@ describe('MultisigCreate local cosigner', () => {
             fireEvent.click(screen.getByRole('button', { name: /^Network:/i }));
         });
         await act(async () => {
-            fireEvent.click(screen.getAllByRole('option', { name: 'Bitcoin BTC' })[1]);
+            fireEvent.click(screen.getByRole('option', { name: 'Bitcoin testnet BTC' }));
         });
 
         expect(screen.getByText(/select a local address on the chosen network/i)).toBeTruthy();

@@ -222,6 +222,7 @@ export function ChainPicker({
                                     role="option"
                                     tabIndex={-1}
                                     aria-selected={value === e.id ? 'true' : 'false'}
+                                    aria-label={optionAccessibleName(e)}
                                     className={`${styles.item} ${value === e.id ? styles.itemActive : ''}`}
                                     onClick={() => { onChange(e.id); closePicker(true); }}
                                 >
@@ -243,6 +244,15 @@ export function ChainPicker({
             ) : null}
         </div>
     );
+}
+
+// Every network of a coin shows the same name and ticker, so a list that
+// offers more than one network reads as identical rows to a screen reader.
+// A non-mainnet option keeps its visible text plain and says its network in
+// its accessible name; a mainnet option names itself from its visible text.
+function optionAccessibleName(entry) {
+    if (entry.networkKind === 'mainnet') return undefined;
+    return `${entry.label} ${entry.networkKind} ${entry.ticker}`;
 }
 
 function listboxOptions(popover) {
