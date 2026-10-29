@@ -621,6 +621,7 @@ export function Send({ walletId, accountId, onBack, prefill = null, onDone, onCh
         /** @type {Record<string, any[]> | null} */ (null),
     );
     const [loadError, setLoadError] = useState(/** @type {string | null} */ (null));
+    const [addressLoadAttempt, setAddressLoadAttempt] = useState(0);
     const [networkSettingsOpen, setNetworkSettingsOpen] = useState(false);
 
     const [chainId, setChainId] = useState(/** @type {string | null} */ (
@@ -894,7 +895,7 @@ export function Send({ walletId, accountId, onBack, prefill = null, onDone, onCh
                 }
             });
         return () => { cancelled = true; };
-    }, [walletId, accountId, messaging]);
+    }, [walletId, accountId, messaging, addressLoadAttempt]);
 
     // §18.4 firmware-warning support. When the source address is HW we
     // need vendor / model / firmwareVersion to render the warning banner
@@ -3261,7 +3262,17 @@ export function Send({ walletId, accountId, onBack, prefill = null, onDone, onCh
         );
     }
     if (loadError) {
-        return wrap(<StatusMessage variant="error">{loadError}</StatusMessage>);
+        return wrap(
+            <StatusMessage
+                variant="error"
+                recovery={{
+                    label: t('common.tryAgain'),
+                    onAction: () => setAddressLoadAttempt((attempt) => attempt + 1),
+                }}
+            >
+                {loadError}
+            </StatusMessage>,
+        );
     }
     if (!addressesByChain || !chainId) {
         return wrap(<p className={styles.hint}>{t('common.loading')}</p>);
