@@ -44,6 +44,10 @@ const navItem = (page, name) => nav(page).getByRole('button', { name, exact: tru
  * healthy answers come back the moment the route is removed.
  */
 async function breakOracle(page, mode) {
+    // Replies the slow mode is still holding. Removing the route while one is
+    // held hands that request to the fixture stub, and the held fallback then
+    // reaches the same stub a second time, which throws "Route is already handled".
+    const held = new Set();
     const handler = async (route) => {
         if (mode === '500') {
             await route.fulfill({ status: 500, contentType: 'application/json', body: '{"error":"internal"}' });
@@ -58,13 +62,22 @@ async function breakOracle(page, mode) {
             return;
         }
         if (mode === 'slow') {
-            await new Promise((resolve) => { setTimeout(resolve, PAST_FETCH_TIMEOUT_MS); });
-            await route.fallback().catch(() => { /* page closed while the reply was held */ });
+            const hold = (async () => {
+                await new Promise((resolve) => { setTimeout(resolve, PAST_FETCH_TIMEOUT_MS); });
+                await route.fallback().catch(() => { /* page closed while the reply was held */ });
+            })();
+            held.add(hold);
+            try {
+                await hold;
+            } finally {
+                held.delete(hold);
+            }
         }
     };
     await page.route(PRICE_GLOB, handler);
     await page.route(REGISTRY_GLOB, handler);
     return async () => {
+        while (held.size > 0) await Promise.all([...held]);
         await page.unroute(PRICE_GLOB, handler);
         await page.unroute(REGISTRY_GLOB, handler);
     };
