@@ -31,13 +31,14 @@ afterEach(() => {
 
 const ACCOUNT_SCOPED = new Set(['addresses.byChain', 'addresses.active', 'balances.wallet', 'addresses.newest']);
 
-function boot({ accounts }) {
+function boot({ accounts, deferBalanceAccountId = null }) {
     localStorage.setItem('xc:onboardingExplainerSeenAt', '2026-10-13T00:00:00.000Z');
     localStorage.setItem('xc:licenseAcceptedAt', '2026-10-13T00:00:00.000Z');
     localStorage.setItem('xc:licenseAcceptedVersion', '2');
     const listeners = new Set();
     const state = { accounts: accounts.map((a) => ({ ...a })) };
     const sent = [];
+    const deferredBalanceCallbacks = [];
     vi.stubGlobal('chrome', {
         runtime: {
             lastError: undefined,
@@ -50,6 +51,9 @@ function boot({ accounts }) {
                     callback({ ok: true, result: [{ id: 'w1', name: 'Alpha' }] });
                 } else if (message.type === 'account.list') {
                     callback({ ok: true, result: state.accounts.map((a) => ({ ...a })) });
+                } else if (message.type === 'balances.wallet'
+                    && message.request?.accountId === deferBalanceAccountId) {
+                    deferredBalanceCallbacks.push(callback);
                 } else {
                     callback({ ok: false, error: { name: 'Error', message: 'not available' } });
                 }
@@ -72,7 +76,13 @@ function boot({ accounts }) {
         }
         await new Promise((resolve) => setTimeout(resolve, 0));
     });
-    return { state, sent, emit };
+    const releaseDeferredBalances = () => act(async () => {
+        for (const callback of deferredBalanceCallbacks.splice(0)) {
+            callback({ ok: false, error: { name: 'Error', message: 'not available' } });
+        }
+        await new Promise((resolve) => setTimeout(resolve, 0));
+    });
+    return { state, sent, emit, releaseDeferredBalances };
 }
 
 // The account id carried by account-scoped reads made after `from`.
@@ -111,11 +121,39 @@ describe('an accounts event from another surface', () => {
         localStorage.setItem('xc:activeAccount:w1', 'a2');
         render(<App />);
         await waitFor(() => expect(accountIdsAfter(sent, 0)).toContain('a2'));
+        // The first matching request does not mean the other initial Home
+        // effects have run. Drain them so the mark starts at the event boundary.
+        await act(async () => { await new Promise((resolve) => setTimeout(resolve, 0)); });
 
         state.accounts = [{ id: 'a1', walletId: 'w1', index: 0, name: 'Account 1' }];
         const mark = sent.length;
         await emit('accounts', { change: 'renamed', walletId: 'w1', accountId: 'a1' });
         await waitFor(() => expect(accountIdsAfter(sent, mark)).toContain('a1'));
+        expect(accountIdsAfter(sent, mark)).not.toContain('a2');
+    });
+
+    it('does not continue an in-flight load for the removed account', async () => {
+        const { state, sent, emit, releaseDeferredBalances } = boot({
+            accounts: [
+                { id: 'a1', walletId: 'w1', index: 0, name: 'Account 1' },
+                { id: 'a2', walletId: 'w1', index: 1, name: 'Account 2' },
+            ],
+            deferBalanceAccountId: 'a2',
+        });
+        localStorage.setItem('xchain.activeWallet', 'w1');
+        localStorage.setItem('xc:activeAccount:w1', 'a2');
+        render(<App />);
+        await waitFor(() => expect(sent).toContainEqual(expect.objectContaining({
+            type: 'balances.wallet',
+            request: expect.objectContaining({ accountId: 'a2' }),
+        })));
+
+        state.accounts = [{ id: 'a1', walletId: 'w1', index: 0, name: 'Account 1' }];
+        await emit('accounts', { change: 'removed', walletId: 'w1', accountId: 'a2' });
+        await waitFor(() => expect(accountIdsAfter(sent, 0)).toContain('a1'));
+        const mark = sent.length;
+        await releaseDeferredBalances();
+
         expect(accountIdsAfter(sent, mark)).not.toContain('a2');
     });
 });

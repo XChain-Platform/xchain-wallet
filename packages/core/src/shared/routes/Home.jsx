@@ -860,6 +860,11 @@ export function Home({ onLocked, onResumeConfirm, onSend, onReceive, onSwap, onE
             }
         }
 
+        // A wallet or account switch can cancel this load while the balance
+        // request is in flight. Stop before starting another request for the
+        // scope that is no longer active.
+        if (isCancelled()) return;
+
         if (typeof messaging.getActiveAddresses === 'function') {
             try {
                 const active = await messaging.getActiveAddresses(walletId, accountId);
@@ -869,6 +874,10 @@ export function Home({ onLocked, onResumeConfirm, onSend, onReceive, onSwap, onE
                 }
             } catch { /* fall back to aggregate when unavailable */ }
         }
+
+        // The active-address read can outlive its scope too. Its result is
+        // ignored above, and no later request should continue the stale load.
+        if (isCancelled()) return;
 
         if (!isCancelled() && freshBalances && freshBalancesCacheable) {
             writeBalanceCache(walletId, accountId, {
