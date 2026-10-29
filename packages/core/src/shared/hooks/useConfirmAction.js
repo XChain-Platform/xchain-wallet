@@ -33,6 +33,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import {
     broadcastFailureKindFromError,
     BROADCAST_FAILED_TRANSIENT_UNSAVED_NAME,
+    isAlreadyOnNetworkRejection,
 } from '../../flows/broadcastPermanence.js';
 import { reserveFromSimulation } from '../../flows/reserveFromSimulation.js';
 import { livenessMessage } from '../../flows/inputLiveness.js';
@@ -650,7 +651,19 @@ export function useConfirmAction() {
             if (kind === 'permanent') {
                 // Can never confirm as-is (inputs spent / confirmed conflict).
                 // PendingTx is already `failed` (or `broadcast` when the commit had
-                // landed); re-signing is forbidden, so the caller must re-compose. Terminal error.
+                // landed); re-signing is forbidden, so the caller must re-compose.
+                // The dead build cannot spend its held inputs, so a fresh compose
+                // gets them back immediately. A release failure does not replace
+                // the refusal because the encoder also expires the hold itself.
+                if (!isAlreadyOnNetworkRejection(err)) {
+                    try {
+                        await releaseEncoderInputs(
+                            built,
+                            releasedEncoderInputsRef.current,
+                            args.releaseEncoderInputs,
+                        );
+                    } catch { /* the reservation lapses on its own */ }
+                }
                 updateMounted(() => {
                     setPhase('error');
                     setError(err);
