@@ -392,10 +392,20 @@ jobs:
             sleep 30
           done
 
+          # The venue's forced command holds the shared venue lock for as long as
+          # this session's stdin stays open, and prints venue-lock-acquired once it
+          # has it, so every runner waits on one lock. The tunnel above cannot tell:
+          # its -L ports bind on this runner, so it never finds the venue busy.
           gateState="$RUNNER_TEMP/venue-gate-state"
-          printf '%s\n' venue-lock-acquired > "$gateState"
+          sleep 14400 | ssh -o ConnectTimeout=15 -o ServerAliveInterval=30 \
+            -i ~/.ssh/regtest_key "$XC_REGTEST_SSH_HOST" venue-lock > "$gateState" 2>&1 &
+          gatePid=$!
           until grep -qx venue-lock-acquired "$gateState"; do
-            sleep 1
+            if ! kill -0 "$gatePid" 2>/dev/null; then
+              echo "::error::The regtest venue lock was not acquired: $(cat "$gateState")"
+              exit 1
+            fi
+            sleep 5
           done
           flock --exclusive "$RUNNER_TEMP/xchain-wallet-regtest.lock" \
             pnpm test:e2e:regtest --shard=${{ steps.shard.outputs.value }}
