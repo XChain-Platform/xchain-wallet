@@ -63,7 +63,9 @@ overrides:
   #     Patched in 1.1.18 / 2.1.4 / 5.0.9.
   # Floor every line at the later of the two, not the first patch that
   # happened to clear the alert that was open at the time.
-  brace-expansion@1: ^1.1.18
+  # GHSA-q2hr-2g5m-vwhr / CVE-2026-102277 (quadratic {a},b} rewrite) is
+  # flagged on the 1.x line only and patched in 1.1.21.
+  brace-expansion@1: ^1.1.21
   brace-expansion@2: ^2.1.4
   brace-expansion@5: ^5.0.9
   vite: '>=6.4.3 <7'
@@ -92,7 +94,9 @@ overrides:
   # 4.12.33 carries CVE-2026-71848/-71849/-71850 (language-middleware DoS,
   # Connection-header passthrough in the proxy helper, memo() retaining SSR
   # output across requests). Floor at the first patched version.
-  hono: ^4.12.34
+  # 4.13.11 closes GHSA-5r4p-p66f-jhc7 (serveStatic decoding the path twice,
+  # bypassing middleware on static paths).
+  hono: ^4.13.11
   # @xmldom/xmldom arrives under plist, which app-builder-lib, native-run and
   # simple-plist all use to read and write Apple property lists while the
   # desktop and mobile apps are packaged. <=0.8.14 serialises an invalid
