@@ -702,8 +702,8 @@ export {
     nativeFeeRequoteMessage,
     satsFromNativeDecimal,
 } from './nativeFeeRequote.js';
-// The host route runs that re-quote with fresh explorer reads.
-export { explorerFreshScope } from '../sdk/explorerRateLimit.js';
+// Host routes run signature guards and retried pre-flights with fresh explorer reads.
+export { explorerFreshScope, retryRateLimitedPreflight } from '../sdk/explorerRateLimit.js';
 // Finishing a stored confirm away from the form that made it.
 export {
     RESUMABLE_DISPATCH_METHODS,

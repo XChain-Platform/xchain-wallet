@@ -3468,11 +3468,12 @@ export function createBackgroundHost(deps) {
             }
         } catch { /* best-effort; a pending-read hiccup must not fail the pre-flight */ }
         const localDeltas = [...callerDeltas, ...reserved, ...pendingDeltas];
-        const run = () => sdk.preflight(req.actionString, {
+        const run = (attempt) => sdk.preflight(req.actionString, {
             source: req.source,
             chain: chainId,
             localDeltas: localDeltas.length ? localDeltas : undefined,
-            bypassCache: req.bypassCache === true,
+            // A retry must not reuse the local-only report produced by the 429.
+            bypassCache: req.bypassCache === true || attempt > 0,
             preflight: req.mode || 'report',
             // Only 'native' and 'xchain' cross this boundary: anything else is
             // dropped rather than forwarded, so a malformed caller cannot make
@@ -3480,10 +3481,14 @@ export function createBackgroundHost(deps) {
             ...(req.feeMode === 'native' || req.feeMode === 'xchain'
                 ? { feeMode: req.feeMode } : {}),
         });
-        // The Approve-time re-check passes bypassCache, which skips only the
-        // SDK's report cache; its explorer reads go fresh too, so no read
-        // reused or served from the HTTP cache answers it.
-        return req.bypassCache === true ? flows.explorerFreshScope(sdk, run) : run();
+        // The Approve-time re-check and any 429 retry skip the SDK's report
+        // cache. Their explorer reads go fresh too, so neither an HTTP cache nor
+        // the host's short reuse window can return the local-only first result.
+        return flows.retryRateLimitedPreflight(sdk, (attempt) => (
+            req.bypassCache === true || attempt > 0
+                ? flows.explorerFreshScope(sdk, () => run(attempt))
+                : run(attempt)
+        ));
     });
 
     // §4.6 input liveness: are the coins this PSBT spends still unspent?

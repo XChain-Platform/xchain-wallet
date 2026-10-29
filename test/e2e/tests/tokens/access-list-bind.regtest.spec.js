@@ -76,7 +76,7 @@ import {
 } from '../../fixtures/wallet.js';
 import {
     expectConfirmModal as sharedConfirmModal,
-    EXPLORER_URL,
+    explorerJson,
     fundAddress,
     minerRpc,
     mintXchain,
@@ -107,13 +107,6 @@ const SUPPLY = 1000;
 const MINT_XCHAIN = 100;
 /** Moved by each permitted send, and attempted by each refused one. */
 const SEND_AMOUNT = 10;
-
-async function explorerJson(path) {
-    const res = await fetch(`${EXPLORER_URL}/${REGTEST_COIN}/api/${path}`, {
-        signal: AbortSignal.timeout(15_000),
-    });
-    return res.json();
-}
 
 /**
  * Mines only while something is actually waiting for a block (campaign §3.5,

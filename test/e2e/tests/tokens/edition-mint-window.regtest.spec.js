@@ -56,6 +56,7 @@ import { waitForShownTxid } from '../../fixtures/pendingHistory.js';
 import { createWallet, expect, openPaletteCommand, submitTokenWizard, test } from '../../fixtures/wallet.js';
 import {
     EXPLORER_URL,
+    explorerJson,
     REGTEST_ADDRESS_RE,
     REGTEST_CHAIN_LABEL,
     REGTEST_COIN,
@@ -114,12 +115,6 @@ const TICK_CLOSING = `EDC${STAMP}`;
  * each costing a block or two, and the run then mines PAST it on purpose.
  */
 const CLOSES_IN = 40;
-
-const explorerJson = async (path) => {
-    const res = await fetch(`${EXPLORER_URL}/${REGTEST_COIN}/api/${path}`);
-    if (!res.ok) throw new Error(`explorer ${path} -> ${res.status}`);
-    return res.json();
-};
 
 async function chainTip() {
     const status = await explorerJson('status');

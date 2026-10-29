@@ -26,7 +26,7 @@ import { chainRegistry, memCollection } from './_addressesByChainFixture.js';
 const T0 = 1_760_000_000_000;
 
 describe.skipIf(!sdkInstalled())('pre-flight re-check reads fresh', () => {
-    function dryRunSdk() {
+    function dryRunSdk({ rateLimitFirst = false } = {}) {
         let t = T0;
         const limiter = new HostRateLimiter({ now: () => t, sleep: async (ms) => { t += ms; }, random: () => 0.5 });
         const ExplorerClient = requireSdkDeep('explorerClient');
@@ -40,16 +40,33 @@ describe.skipIf(!sdkInstalled())('pre-flight re-check reads fresh', () => {
         explorer.client.get = async (url, config) => {
             sent.push({ url, config });
             round += 1;
+            if (rateLimitFirst && round === 1) {
+                const err = new Error('Request failed with status code 429');
+                err.response = { status: 429, headers: { 'retry-after': '4' }, data: null };
+                throw err;
+            }
             return { status: 200, data: { verdict: 'pass', findings: [], round }, headers: {} };
         };
+        const attempts = [];
         const sdk = installSdkNetworkPolicy({
             explorer,
             // The SDK's pre-flight asks the explorer's dry run for the action.
-            async preflight(actionString) {
-                return this.explorer.get('/preflight?action=' + encodeURIComponent(actionString));
+            async preflight(actionString, opts) {
+                attempts.push(opts);
+                try {
+                    return await this.explorer.get('/preflight?action=' + encodeURIComponent(actionString));
+                } catch (err) {
+                    return {
+                        verdict: 'pass',
+                        findings: [{
+                            code: 'DRYRUN_UNAVAILABLE',
+                            message: `The network dry-run was unavailable (${err.message}); relying on client checks.`,
+                        }],
+                    };
+                }
             },
         }, limiter);
-        return { sdk, sent, advance: (ms) => { t += ms; } };
+        return { sdk, sent, attempts, advance: (ms) => { t += ms; } };
     }
 
     function hostFor(sdk) {
@@ -92,5 +109,17 @@ describe.skipIf(!sdkInstalled())('pre-flight re-check reads fresh', () => {
         advance(700);
         await preflight(host, false);
         expect(sent).toHaveLength(1);
+    });
+
+    it('waits out a 429 report and retries with fresh report and HTTP reads', async () => {
+        const { sdk, sent, attempts } = dryRunSdk({ rateLimitFirst: true });
+        const host = hostFor(sdk);
+        const res = await preflight(host, false);
+
+        expect(res.ok, JSON.stringify(res.error ?? {})).toBe(true);
+        expect(res.result).toMatchObject({ verdict: 'pass', round: 2 });
+        expect(sent).toHaveLength(2);
+        expect(sent[1].config.fetchOptions).toEqual({ cache: 'no-store' });
+        expect(attempts.map((opts) => opts.bypassCache)).toEqual([false, true]);
     });
 });

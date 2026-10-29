@@ -21,6 +21,7 @@ import {
     parseRateLimitResetMs,
     parseRetryAfterMs,
     rateLimitWaitMs,
+    retryRateLimitedPreflight,
 } from '../../../packages/core/src/sdk/explorerRateLimit.js';
 import {
     explorerErrorCode,
@@ -89,6 +90,76 @@ describe('Retry-After and ratelimit-reset parsing', () => {
         expect(rateLimitWaitMs({ 'RateLimit-Reset': '40' }, T0)).toBe(40_000);
         expect(rateLimitWaitMs({ get: (n) => (n === 'retry-after' ? '5' : undefined) }, T0)).toBe(5_000);
         expect(rateLimitWaitMs({}, T0)).toBeNull();
+    });
+});
+
+describe('pre-flight rate-limit recovery', () => {
+    const unavailable = {
+        verdict: 'pass',
+        findings: [{
+            code: 'DRYRUN_UNAVAILABLE',
+            message: 'The network dry-run was unavailable (The XChain explorer is busy. Try again shortly.); relying on client checks.',
+        }],
+    };
+
+    function sdkWith(limiter) {
+        return {
+            explorer: {
+                client: {
+                    defaults: { baseURL: 'https://explorer.example' },
+                    __xcRateLimiter: limiter,
+                },
+            },
+        };
+    }
+
+    it('honors the recorded Retry-After pause before a fresh attempt', async () => {
+        const { limiter, sleeps } = fakeLimiter();
+        const sdk = sdkWith(limiter);
+        const run = vi.fn(async (attempt) => {
+            if (attempt === 0) {
+                limiter.block('explorer.example', 7_000, true);
+                return unavailable;
+            }
+            return { verdict: 'fail', findings: [] };
+        });
+
+        await expect(retryRateLimitedPreflight(sdk, run, { sleep: limiter.sleep }))
+            .resolves.toMatchObject({ verdict: 'fail' });
+        expect(run.mock.calls.map(([attempt]) => attempt)).toEqual([0, 1]);
+        expect(sleeps).toEqual([7_000]);
+    });
+
+    it('returns the local-only report when Retry-After exceeds the total bound', async () => {
+        const { limiter, sleeps } = fakeLimiter();
+        const sdk = sdkWith(limiter);
+        const run = vi.fn(async () => {
+            limiter.block('explorer.example', 61_000, true);
+            return unavailable;
+        });
+
+        await expect(retryRateLimitedPreflight(sdk, run, { sleep: limiter.sleep }))
+            .resolves.toBe(unavailable);
+        expect(run).toHaveBeenCalledOnce();
+        expect(sleeps).toEqual([]);
+    });
+
+    it('does not retry an unreached dry-run that was not rate limited', async () => {
+        const { limiter, sleeps } = fakeLimiter();
+        const sdk = sdkWith(limiter);
+        const timedOut = {
+            verdict: 'pass',
+            findings: [{
+                code: 'DRYRUN_UNAVAILABLE',
+                message: 'The network dry-run was unavailable (tier1 timeout after 4000ms); relying on client checks.',
+            }],
+        };
+        const run = vi.fn(async () => timedOut);
+
+        await expect(retryRateLimitedPreflight(sdk, run, { sleep: limiter.sleep }))
+            .resolves.toBe(timedOut);
+        expect(run).toHaveBeenCalledOnce();
+        expect(sleeps).toEqual([]);
     });
 });
 

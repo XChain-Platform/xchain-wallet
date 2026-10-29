@@ -723,6 +723,52 @@ export function explorerPausedSeconds(sdk) {
     return limiter ? limiter.pausedSeconds(hostOf(client)) : 0;
 }
 
+const PREFLIGHT_RATE_LIMIT_MAX_ATTEMPTS = 3;
+const PREFLIGHT_RATE_LIMIT_MAX_TOTAL_WAIT_MS = 60_000;
+
+/** True only for a dry-run that missed its network verdict because of HTTP 429. */
+function isRateLimitedPreflight(report) {
+    return Array.isArray(report?.findings) && report.findings.some((finding) => (
+        finding?.code === 'DRYRUN_UNAVAILABLE'
+        && /(?:XChain explorer is busy|Explorer returned HTTP 429)/i.test(String(finding?.message || ''))
+    ));
+}
+
+/**
+ * Retry a pre-flight whose network tier received HTTP 429.
+ *
+ * The SDK returns that condition as a local-only report instead of throwing.
+ * The shared host limiter still owns the server's Retry-After pause, so the
+ * retry waits for that pause and the caller can force the next report fresh.
+ * Attempts and total waiting are both bounded for an interactive confirm.
+ *
+ * @param {any} sdk SDK instance whose explorer client carries the host limiter
+ * @param {(attempt: number) => Promise<object>} run attempt 0 is ordinary;
+ *        later attempts must bypass report and HTTP caches
+ * @param {{maxAttempts?: number, maxTotalWaitMs?: number,
+ *          sleep?: (ms: number) => Promise<void>}} [opts]
+ * @returns {Promise<object>}
+ */
+export async function retryRateLimitedPreflight(sdk, run, opts = {}) {
+    const maxAttempts = Math.max(1, Math.floor(
+        opts.maxAttempts ?? PREFLIGHT_RATE_LIMIT_MAX_ATTEMPTS,
+    ));
+    const maxTotalWaitMs = Math.max(0,
+        opts.maxTotalWaitMs ?? PREFLIGHT_RATE_LIMIT_MAX_TOTAL_WAIT_MS);
+    const sleep = opts.sleep || ((ms) => new Promise((resolve) => setTimeout(resolve, ms)));
+    let waitedMs = 0;
+    let report = await run(0);
+
+    for (let attempt = 1; attempt < maxAttempts && isRateLimitedPreflight(report); attempt += 1) {
+        const waitMs = explorerPausedSeconds(sdk) * 1_000;
+        if (waitMs > maxTotalWaitMs - waitedMs) return report;
+        if (waitMs > 0) await sleep(waitMs);
+        waitedMs += waitMs;
+        report = await run(attempt);
+    }
+    return report;
+}
+
 /**
  * One single-attempt explorer GET, for reads whose SDK facade method takes no
  * options (`getStatus()`, `getAction(index)`) and so cannot carry `noRetry`.
