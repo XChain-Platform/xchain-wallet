@@ -167,6 +167,48 @@ describe('undo-send controller', () => {
 });
 
 describe('undo-send controller across a clock change', () => {
+    it('uses monotonic time when the wall clock jumps forward', () => {
+        const wall = { t: 5_000 };
+        const monotonic = { t: 1_000 };
+        let tick;
+        const onElapsed = vi.fn();
+        const c = createUndoSendController({
+            now: () => wall.t,
+            monotonicNow: () => monotonic.t,
+            setTick: (fn) => { tick = fn; return 1; },
+            clearTick: () => {},
+            onElapsed,
+        });
+        c.start(5);
+
+        wall.t += 3_600_000;
+        monotonic.t += 1_000;
+        tick();
+
+        expect(c.state()).toBe('counting');
+        expect(onElapsed).not.toHaveBeenCalled();
+    });
+
+    it('elapses once when a throttled tick resumes after the deadline', () => {
+        const monotonic = { t: 1_000 };
+        let tick;
+        const onElapsed = vi.fn();
+        const c = createUndoSendController({
+            monotonicNow: () => monotonic.t,
+            setTick: (fn) => { tick = fn; return 1; },
+            clearTick: () => {},
+            onElapsed,
+        });
+        c.start(5);
+
+        monotonic.t += 9_000;
+        tick();
+        tick();
+
+        expect(c.state()).toBe('elapsed');
+        expect(onElapsed).toHaveBeenCalledTimes(1);
+    });
+
     it('keeps counting down when the clock is set back mid-countdown', () => {
         const h = harness();
         h.controller.start(30);

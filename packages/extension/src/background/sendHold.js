@@ -93,6 +93,12 @@ export function createSendHoldRegistry({
 
 export const SEND_HOLD_SECONDS_MAX = 30
 
+function readMonotonicTime() {
+  return typeof globalThis.performance?.now === 'function'
+    ? globalThis.performance.now()
+    : Date.now()
+}
+
 // Turns the holdId and undoSeconds a send request carries into the function a
 // send awaits before broadcast. Returns undefined when there is nothing to
 // hold, so the send path stays as it is.
@@ -101,7 +107,8 @@ export function createHoldBeforeBroadcast({
   holdId,
   undoSeconds,
   maxSeconds = SEND_HOLD_SECONDS_MAX,
-  now = Date.now,
+  now,
+  monotonicNow,
 }) {
   if (holdId === undefined || holdId === null) return undefined
   if (typeof holdId !== 'string' || holdId.length === 0) {
@@ -112,11 +119,13 @@ export function createHoldBeforeBroadcast({
   }
   if (undoSeconds === 0) return undefined
   const seconds = Math.min(undoSeconds, maxSeconds)
+  const readTime = monotonicNow || now || readMonotonicTime
   // The UI starts its countdown when the host accepts the send request, so
   // signing time consumes the same window instead of creating a hidden hold.
-  const startedAt = now()
+  const startedAt = readTime()
   return function holdBeforeBroadcast() {
-    const elapsedSeconds = Math.max(0, (now() - startedAt) / 1000)
-    return sendHold.hold(holdId, Math.max(0, seconds - elapsedSeconds))
+    const elapsedMs = Math.max(0, readTime() - startedAt)
+    const remainingMs = Math.max(0, seconds * 1000 - elapsedMs)
+    return sendHold.hold(holdId, Math.ceil(remainingMs) / 1000)
   }
 }

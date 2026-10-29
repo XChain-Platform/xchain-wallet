@@ -127,6 +127,20 @@ describe('UndoSendRow', () => {
         spy.mockRestore();
     });
 
+    it('restores the persisted duration when its update is rejected', async () => {
+        withGrace({ undoSendEnabled: true, undoSendSeconds: 5 });
+        const spy = vi.spyOn(console, 'error').mockImplementation(() => {});
+        update = vi.fn(async () => { throw new Error('storage refused'); });
+        render(<UndoSendRow />);
+
+        typeAndBlur('12');
+        await new Promise((resolve) => setTimeout(resolve, 0));
+
+        expect(screen.getByLabelText(INPUT_LABEL).value).toBe('5');
+        expect(update).toHaveBeenCalledTimes(1);
+        spy.mockRestore();
+    });
+
     it('says the build cannot hold sends without sendHoldCancel', () => {
         render(<UndoSendRow />);
         expect(screen.getByText(/This build can't hold sends/)).toBeTruthy();

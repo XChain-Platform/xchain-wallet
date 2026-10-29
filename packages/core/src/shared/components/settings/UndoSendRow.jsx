@@ -74,14 +74,16 @@ export function UndoSendRow() {
                         defaultValue={seconds}
                         disabled={!enabled}
                         onBlur={(e) => {
-                            const raw = e.target.value.trim();
+                            const input = e.currentTarget;
+                            const raw = input.value.trim();
                             const n = /^\d+$/.test(raw)
                                 ? Math.min(Number(raw), UNDO_SEND_SECONDS_MAX)
                                 : UNDO_SEND_SECONDS_DEFAULT;
                             // The stored value can already equal n (99 clamps to a stored 30),
                             // which leaves the field's key unchanged, so show n here.
-                            e.target.value = String(n);
+                            input.value = String(n);
                             update({ grace: { undoSendSeconds: n } }).catch((err) => {
+                                if (input.value === String(n)) input.value = String(seconds);
                                 // eslint-disable-next-line no-console
                                 console.error('grace.undoSendSeconds update failed:', err);
                             });
