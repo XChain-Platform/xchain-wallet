@@ -17,6 +17,7 @@ import { addEnglish } from '../../store.js';
 const messages = {
     // --- rename forms -------------------------------------------
     'renameAccount.name': 'Account name',
+    'renameAccount.error': 'Failed to rename account.',
 };
 
 addEnglish(messages);

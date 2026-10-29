@@ -15,6 +15,7 @@ import '../../i18n/locales/en/accountPicker.js';
 import '../../i18n/locales/en/history.js';
 import '../../i18n/locales/en/renameAccount.js';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
+import { userFacingMessage } from '../utils/userFacingMessage.js';
 import { NAME_MAX_LENGTH, hasVisibleText, nameKey, nameLength } from '../../util/display_name.js';
 
 /**
@@ -100,7 +101,7 @@ export function RenameAccountForm({ accountId, walletId, initialName = '', onBac
             const result = await messaging.renameAccount({ accountId, name: trimmed });
             onRenamed(result?.account || result);
         } catch (err) {
-            setError(err?.message || 'Failed to rename account.');
+            setError(userFacingMessage(err, t('renameAccount.error')));
             setBusy(false);
         }
     }
