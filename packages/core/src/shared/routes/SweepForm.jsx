@@ -18,6 +18,7 @@ import {
 import '../../i18n/locales/en/send.js';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { useDemoGuard } from '../hooks/useDemoGuard.jsx';
+import { useFocusNoticeOnAttempt } from '../hooks/useFocusNoticeOnAttempt.js';
 import { useSettings } from '../hooks/useSettings.js';
 import { useConfirmAction } from '../hooks/useConfirmAction.js';
 import { prebuiltPsbtFromComposed } from '../../flows/prebuiltPsbtFromComposed.js';
@@ -208,6 +209,11 @@ export function SweepForm({
         /** @type {'form' | 'review' | 'submitting' | 'done'} */ ('form'),
     );
     const [formError, setFormError] = useState(/** @type {string | null} */ (null));
+    // The Sweep button sits below every section, so on a short popup a
+    // refusal shown in the form status at the top is out of view; each
+    // refused attempt moves focus to that status and scrolls it in.
+    const markReviewAttempt = useFocusNoticeOnAttempt();
+    const destinationRef = useRef(/** @type {HTMLInputElement | null} */ (null));
     const [submitError, setSubmitError] = useState(/** @type {string | null} */ (null));
     const [result, setResult] = useState(/** @type {any | null} */ (null));
     const passwordRef = useRef(/** @type {HTMLInputElement | null} */ (null));
@@ -529,44 +535,53 @@ export function SweepForm({
                 mandatory: nativeFee.mandatory,
                 fallback: humanizeError(err, 'sweep').message,
             }));
+            markReviewAttempt();
         }
+    }
+
+    function refuseReview(message) {
+        setFormError(message);
+        markReviewAttempt();
     }
 
     function handleReview(event) {
         event.preventDefault();
         if (!chainId || !fromAddress) {
-            setFormError('Pick a source address first.');
+            refuseReview('Pick a source address first.');
             return;
         }
         if (!destTrimmed) {
-            setFormError('Destination address is required.');
+            refuseReview('Destination address is required.');
             return;
         }
         // The destination field already shows this error; a second copy in the
-        // form status would say the same thing twice.
+        // form status would say the same thing twice, so focus moves to the
+        // field and brings its error into view instead.
         if (destFormatError) {
             setFormError(null);
+            destinationRef.current?.focus({ preventScroll: true });
+            destinationRef.current?.scrollIntoView?.({ block: 'center' });
             return;
         }
         if (destTrimmed === fromAddress.address) {
-            setFormError('Destination is the source address itself; the sweep would move nothing anywhere.');
+            refuseReview('Destination is the source address itself; the sweep would move nothing anywhere.');
             return;
         }
         if (selectedCount === 0) {
-            setFormError('Select at least one category to sweep.');
+            refuseReview('Select at least one category to sweep.');
             return;
         }
         const m = memo.trim();
         if (m.includes('|') || m.includes(';')) {
-            setFormError('Memo cannot contain "|" or ";".');
+            refuseReview('Memo cannot contain "|" or ";".');
             return;
         }
         const memoError = memoLengthError(m);
-        if (memoError) { setFormError(memoError); return; }
+        if (memoError) { refuseReview(memoError); return; }
         const feeStop = customFeeReviewStop({ feePick, tiers: feeTiers, estimate: feeCustomEstimate });
-        if (feeStop) { setFormError(feeStop.formError); return; }
+        if (feeStop) { refuseReview(feeStop.formError); return; }
         if (!gateSatisfied) {
-            setFormError(`Unlock keys for ${gateMissingTicks.join(', ')} are not in the vault yet. Recover them below, or acknowledge sweeping without them.`);
+            refuseReview(`Unlock keys for ${gateMissingTicks.join(', ')} are not in the vault yet. Recover them below, or acknowledge sweeping without them.`);
             return;
         }
         setFormError(null);
@@ -1030,6 +1045,7 @@ export function SweepForm({
                     label="Destination address"
                     hint="Where every selected holding (and released escrow) is credited."
                     icon="addresses"
+                    ref={destinationRef}
                     iconLabel="Choose destination address"
                     onIconClick={() => setDestinationPickerOpen(true)}
                     value={destination}
