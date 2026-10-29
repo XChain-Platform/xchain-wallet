@@ -43,12 +43,39 @@ const SETTINGS_CHANGED_EVENT = 'xc:settings-changed';
 const SESSION_CHANGED_EVENT = 'xc:session-changed';
 
 // The host applies writes in the order they are issued but can answer them
-// out of order (the desktop host answers a privacy write only after its
-// routing hook runs). Each answer carries the whole record as of that
-// write, so a late answer to an earlier write would roll back a newer one
-// in every instance through the broadcast. The ticket is shared across
-// instances because the newer write can come from a different section.
+// out of order. Each answer carries the whole record as of that write, so the
+// newest successful answer wins. A completed answer waits while a newer write
+// is pending because that write can still succeed and supersede it. If the
+// newer write fails, the completed answer remains the saved record and must
+// still reach every section. The coordinator is shared because writes can
+// originate from different useSettings instances.
 let latestWriteTicket = 0;
+let latestAppliedWriteTicket = 0;
+const pendingWriteTickets = new Set();
+const completedWriteAnswers = new Map();
+
+function flushWriteAnswers() {
+    let candidate = 0;
+    for (const ticket of completedWriteAnswers.keys()) {
+        if (ticket > candidate) candidate = ticket;
+    }
+    if (candidate === 0) return;
+    if (candidate <= latestAppliedWriteTicket) {
+        for (const ticket of completedWriteAnswers.keys()) {
+            if (ticket <= latestAppliedWriteTicket) completedWriteAnswers.delete(ticket);
+        }
+        return;
+    }
+    for (const ticket of pendingWriteTickets) {
+        if (ticket > candidate) return;
+    }
+    const publish = completedWriteAnswers.get(candidate);
+    latestAppliedWriteTicket = candidate;
+    for (const ticket of completedWriteAnswers.keys()) {
+        if (ticket <= candidate) completedWriteAnswers.delete(ticket);
+    }
+    publish();
+}
 
 /**
  * @returns {{
@@ -114,10 +141,13 @@ export function useSettings({ reportsOwnError = false } = {}) {
         }
         latestWriteTicket += 1;
         const ticket = latestWriteTicket;
+        pendingWriteTickets.add(ticket);
         let next;
         try {
             next = await messaging.updateSettings(patch);
         } catch (err) {
+            pendingWriteTickets.delete(ticket);
+            flushWriteAnswers();
             const message = userFacingMessage(err, t('settings.saveFailed'));
             const conflict = isVaultConflictError(err);
             if (!reportsOwnError || conflict) {
@@ -133,21 +163,22 @@ export function useSettings({ reportsOwnError = false } = {}) {
             throw err;
         }
         const effective = normalizeDisplayCurrency(next);
-        // A newer write is in flight or answered: its record supersedes this
-        // one, so only the caller hears this answer.
-        if (ticket !== latestWriteTicket) return effective.settings;
-        if (aliveRef.current) {
-            requestRef.current += 1;
-            setSettings(effective.settings);
-            setUnsupportedFiatCurrency(effective.unsupportedFiatCurrency);
-            setError(null);
-            setLoading(false);
-        }
-        if (typeof window !== 'undefined') {
-            try {
-                window.dispatchEvent(new CustomEvent(SETTINGS_CHANGED_EVENT, { detail: next }));
-            } catch { /* CustomEvent unsupported: non-fatal */ }
-        }
+        completedWriteAnswers.set(ticket, () => {
+            if (aliveRef.current) {
+                requestRef.current += 1;
+                setSettings(effective.settings);
+                setUnsupportedFiatCurrency(effective.unsupportedFiatCurrency);
+                setError(null);
+                setLoading(false);
+            }
+            if (typeof window !== 'undefined') {
+                try {
+                    window.dispatchEvent(new CustomEvent(SETTINGS_CHANGED_EVENT, { detail: next }));
+                } catch { /* CustomEvent unsupported: non-fatal */ }
+            }
+        });
+        pendingWriteTickets.delete(ticket);
+        flushWriteAnswers();
         return effective.settings;
     }, [messaging, showToast, reportsOwnError]);
 

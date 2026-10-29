@@ -32,12 +32,14 @@ function deferred() {
     return { promise, resolve };
 }
 
-function messagingHarness() {
+function messagingHarness({ rejectPatch } = {}) {
     let stored = createDefaultSettings();
     const writes = [];
     const messaging = {
         getSettings: vi.fn(async () => structuredClone(stored)),
         updateSettings: vi.fn((patch) => {
+            const rejection = rejectPatch?.(patch);
+            if (rejection) return Promise.reject(rejection);
             stored = {
                 ...stored,
                 ...patch,
@@ -141,5 +143,52 @@ describe('stale settings answers', () => {
         expect(harness.stored().theme).toBe('light');
         const broadcasts = settingsBroadcasts(dispatchEvent);
         expect(broadcasts.at(-1)?.detail.theme).toBe('light');
+    });
+
+    it('shows an older successful theme save when the newer save is offline', async () => {
+        vi.spyOn(console, 'error').mockImplementation(() => {});
+        const harness = messagingHarness({
+            rejectPatch: (patch) => (patch.theme === 'light' ? new Error('offline') : null),
+        });
+        messagingState.current = harness.messaging;
+        render(<AppearanceSection />);
+
+        const theme = await screen.findByRole('combobox', { name: 'Theme' });
+        fireEvent.change(theme, { target: { value: 'dark' } });
+        await waitFor(() => expect(harness.messaging.updateSettings).toHaveBeenCalledTimes(1));
+        fireEvent.change(theme, { target: { value: 'light' } });
+        expect(await screen.findByRole('alert')).toHaveTextContent('offline');
+
+        await resolveWrite(harness.writes[0]);
+
+        await waitFor(() => expect(theme).toHaveValue('dark'));
+        expect(harness.stored().theme).toBe('dark');
+    });
+
+    it('shows an older successful display save when a newer appearance save is offline', async () => {
+        vi.spyOn(console, 'error').mockImplementation(() => {});
+        const harness = messagingHarness({
+            rejectPatch: (patch) => (patch.theme ? new Error('offline') : null),
+        });
+        messagingState.current = harness.messaging;
+        render(
+            <>
+                <DisplaySection />
+                <AppearanceSection />
+            </>,
+        );
+
+        const privacy = await screen.findByRole('switch', { name: 'Hide small balances' });
+        fireEvent.click(privacy);
+        await waitFor(() => expect(harness.messaging.updateSettings).toHaveBeenCalledTimes(1));
+        fireEvent.change(await screen.findByRole('combobox', { name: 'Theme' }), {
+            target: { value: 'dark' },
+        });
+        expect(await screen.findByRole('alert')).toHaveTextContent('offline');
+
+        await resolveWrite(harness.writes[0]);
+
+        await waitFor(() => expect(privacy).toBeChecked());
+        expect(harness.stored().privacy.hideSmallBalances).toBe(true);
     });
 });
