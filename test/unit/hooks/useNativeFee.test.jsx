@@ -21,17 +21,23 @@ import { renderHook, act } from '@testing-library/react';
 import { useNativeFee } from '../../../packages/core/src/shared/hooks/useNativeFee.js';
 import { applyNativeFeePreflight } from '../../../packages/core/src/sdk/nativeFeePreflight.js';
 
-const FEE_DEST = 'mrFeeDestinationRegtest';
+const FEE_DESTINATIONS = Object.freeze({
+    'bitcoin-regtest': 'mfeesX6rLE6V3WPg9tsbL2fHNS7E4rDAim',
+    'litecoin-regtest': 'mfeesJdVLx23zhtsCveA8EEfmHX7qSV2Ls',
+    'dogecoin-regtest': 'mfees5pa2HwNBonk5vG23aDWkN9fuDJib4',
+});
 
 /**
  * An indexer that prices the fee, as the real `feequote` does for a quotable action,
  * on an SDK whose network carries the chain's dust floor, which the preflight pads the fee to.
  */
-function quotingSdk(dustThreshold) {
+function quotingSdk(network, dustThreshold) {
     return {
+        options: { network },
         wallet: { getBitcoinNetwork: () => ({ dustThreshold }) },
         quoteNativeFee: vi.fn(async () => ({
-            supported: true, valid: true, requiredFeeSats: 50000, feeDestination: FEE_DEST,
+            supported: true, valid: true, requiredFeeSats: 50000,
+            feeDestination: FEE_DESTINATIONS[network],
         })),
     };
 }
@@ -98,7 +104,7 @@ describe('useNativeFee', () => {
 describe('default form state through the submit preflight', () => {
     it('builds the FEE_DESTINATION output on LTC without the user touching anything', async () => {
         const { result } = renderHook(() => useNativeFee('litecoin-regtest'));
-        const sdk = quotingSdk(5460);
+        const sdk = quotingSdk('litecoin-regtest', 5460);
 
         const { encoderOpts, quote } = await applyNativeFeePreflight({
             sdk,
@@ -109,14 +115,16 @@ describe('default form state through the submit preflight', () => {
 
         expect(sdk.quoteNativeFee).toHaveBeenCalledTimes(1);
         expect(quote.requiredFeeSats).toBe(50000);
-        expect(encoderOpts.customOutputs).toEqual([{ address: FEE_DEST, value: 50000 }]);
+        expect(encoderOpts.customOutputs).toEqual([{
+            address: FEE_DESTINATIONS['litecoin-regtest'], value: 50000,
+        }]);
         // The internal flag never reaches the encoder.
         expect(encoderOpts.payFeeInNativeCoin).toBe(undefined);
     });
 
     it('still composes a Bitcoin action with no fee output, paying the fee in XCHAIN', async () => {
         const { result } = renderHook(() => useNativeFee('bitcoin-regtest'));
-        const sdk = quotingSdk(546);
+        const sdk = quotingSdk('bitcoin-regtest', 546);
 
         const { encoderOpts, quote } = await applyNativeFeePreflight({
             sdk,
@@ -134,8 +142,10 @@ describe('default form state through the submit preflight', () => {
         const { result } = renderHook(() => useNativeFee('dogecoin-regtest'));
         // What the indexer answers when the action carries no protocol fee.
         const sdk = {
+            options: { network: 'dogecoin-regtest' },
             quoteNativeFee: vi.fn(async () => ({
-                supported: true, valid: true, requiredFeeSats: 0, feeDestination: FEE_DEST,
+                supported: true, valid: true, requiredFeeSats: 0,
+                feeDestination: FEE_DESTINATIONS['dogecoin-regtest'],
             })),
         };
 

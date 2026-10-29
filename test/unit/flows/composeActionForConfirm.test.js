@@ -12,12 +12,15 @@ import { join } from 'node:path';
 import { composeActionForConfirm } from '../../../packages/core/src/flows/composeActionForConfirm.js';
 import { TamperDetectedError } from '../../../packages/core/src/flows/confirmChecks.js';
 
+const BITCOIN_REGTEST_FEE_DESTINATION = 'mfeesX6rLE6V3WPg9tsbL2fHNS7E4rDAim';
+
 // Harness: an SDK with encoder/actions (for compose) plus wallet.decomposePsbt
 // and decoder.decodeActionStringFromPsbt (the raw self-sign byte-match uses the
 // policy-free extractor, not the co-signer's decodeActionFromPsbt). `outputs`
 // and `decoded` control what the tamper check sees.
 function makeHarness({ outputs, decoded, inputs } = {}) {
     const sdk = {
+        options: { network: 'bitcoin-regtest' },
         encoder: { createTx: vi.fn(async () => ({ psbt: 'PSBTHEX', encoding: 'OP_RETURN' })) },
         actions: { createAction: vi.fn(() => ({ actionString: 'SEND|0|JDOG|1|addr', action: 'SEND', version: 0 })) },
         wallet: {
@@ -295,12 +298,14 @@ describe('composeActionForConfirm', () => {
             inputs: [{ value: 500000 }],
             outputs: [
                 { address: null, scriptPubKeyHex: '6a20deadbeef', scriptType: 'unknown', value: 0 },
-                { address: 'feedest', scriptPubKeyHex: '0014fe', scriptType: 'p2wpkh', value: 2000 },
+                { address: BITCOIN_REGTEST_FEE_DESTINATION,
+                  scriptPubKeyHex: '0014fe', scriptType: 'p2wpkh', value: 2000 },
                 { address: 'chg', scriptPubKeyHex: '0014', scriptType: 'p2wpkh', value: 497000 },
             ],
         });
         h.sdk.quoteNativeFee = vi.fn(async () => ({
-            supported: true, valid: true, requiredFeeSats: 2000, feeDestination: 'feedest',
+            supported: true, valid: true, requiredFeeSats: 2000,
+            feeDestination: BITCOIN_REGTEST_FEE_DESTINATION,
         }));
         h.sdk.decoder.parse = vi.fn(() => ({
             ok: true,
@@ -376,13 +381,14 @@ describe('composeActionForConfirm', () => {
             // second XCHAIN figure beside a coin debit reads as a second charge.
             const h = quoting({
                 supported: true, valid: true, xchainFee: '1.00000000',
-                requiredFeeSats: 1000, feeDestination: 'feedest',
+                requiredFeeSats: 1000, feeDestination: BITCOIN_REGTEST_FEE_DESTINATION,
             });
             h.sdk.wallet.decomposePsbt = vi.fn(() => ({
                 inputs: [{ value: 5000 }],
                 outputs: [
                     { address: null, scriptPubKeyHex: '6a20deadbeef', scriptType: 'unknown', value: 0 },
-                    { address: 'feedest', scriptPubKeyHex: '0014fe', scriptType: 'p2wpkh', value: 1000 },
+                    { address: BITCOIN_REGTEST_FEE_DESTINATION,
+                      scriptPubKeyHex: '0014fe', scriptType: 'p2wpkh', value: 1000 },
                     { address: 'chg', scriptPubKeyHex: '0014', scriptType: 'p2wpkh', value: 100 },
                 ],
             }));

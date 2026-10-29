@@ -32,6 +32,7 @@ function makeHarness(encoderOpts) {
         supported: true, valid: null, feeDestination: FEE_DEST, requiredFeeSats: 1000,
     }));
     const sdk = {
+        options: { network: 'litecoin-regtest' },
         encoder: {
             createTx: vi.fn(async () => ({ psbt: 'COMMIT-PSBT', encoding: 'OP_RETURN' })),
             broadcastTx: vi.fn(async () => ({})),

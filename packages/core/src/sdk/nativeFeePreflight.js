@@ -37,6 +37,33 @@
 import { satsResponseAmount } from './amountValidation.js';
 import { nativeFeeOutputOf } from '../flows/nativeFeeLane.js';
 
+// Consensus fee destinations copied from the SDK coin registry. The remote quote may
+// confirm this address, but it never chooses it. Selecting by the SDK's local chain identity
+// keeps a reply from choosing both the network and the destination it wants us to pay.
+const FEE_DESTINATION_BY_CHAIN = Object.freeze({
+    'bitcoin-mainnet': '1FeesxM9LTEjBYVTkynK6jfDBgvksuh2WL',
+    'bitcoin-testnet': 'mfees5QurRs5BHXofdGpTG5pXB6uC6R8RU',
+    'bitcoin-regtest': 'mfeesX6rLE6V3WPg9tsbL2fHNS7E4rDAim',
+    'litecoin-mainnet': 'Lfees7tszAx5Gqam2fuqf6biaX3LXafM4H',
+    'litecoin-testnet': 'mfeeskqGYw3wXYqMZFnUxBwGposEvjziRW',
+    'litecoin-regtest': 'mfeesJdVLx23zhtsCveA8EEfmHX7qSV2Ls',
+    'dogecoin-mainnet': 'DFeesjvoMoVqd9UDuwDSAxzHMF5xZFgeG9',
+    'dogecoin-testnet': 'nfeesoodkv5UTFXcDeKcUU95QHFiK2Ggo7',
+    'dogecoin-regtest': 'mfees5pa2HwNBonk5vG23aDWkN9fuDJib4',
+});
+
+const CHAIN_BY_EXPLORER_COIN = Object.freeze({
+    BTC: 'bitcoin-mainnet',
+    TBTC: 'bitcoin-testnet',
+    RBTC: 'bitcoin-regtest',
+    LTC: 'litecoin-mainnet',
+    TLTC: 'litecoin-testnet',
+    RLTC: 'litecoin-regtest',
+    DOGE: 'dogecoin-mainnet',
+    TDOGE: 'dogecoin-testnet',
+    RDOGE: 'dogecoin-regtest',
+});
+
 /**
  * Thrown to refuse a native-coin-fee transaction that would forfeit the fee on-chain.
  * `reason` is 'unsupported' (indexer can't price it), 'invalid' (stale price / bad sizing),
@@ -332,8 +359,23 @@ export async function applyNativeFeePreflight({ sdk, actionData, encoderOpts = {
     // compose-time quote can take seconds; Reject/close must be able to
     // abort it). Older SDKs ignore the extra option harmlessly.
     const quote = await sdk.quoteNativeFee(actionData, { source, signal });
+    if (signal && signal.aborted) throw new Error('aborted');
     if (!quote || quote.supported === false) throw new NativeFeeForfeitError({ reason: 'unsupported', quote });
     if (quote.valid === false) throw new NativeFeeForfeitError({ reason: 'invalid', quote });
+
+    const pinned = resolvePinnedFeeDestination(sdk);
+    if (!pinned) {
+        throw new NativeFeeForfeitError({
+            reason: 'invalid',
+            quote: { ...quote, error: 'cannot verify feeDestination because the SDK chain and network are unknown' },
+        });
+    }
+    if (typeof quote.feeDestination !== 'string' || quote.feeDestination !== pinned.destination) {
+        throw new NativeFeeForfeitError({
+            reason: 'invalid',
+            quote: { ...quote, error: `feeDestination does not match the pinned destination for ${pinned.chainId}` },
+        });
+    }
 
     // Relay policy rejects a positive output below dust, while protocol validation requires
     // only a minimum payment. Raise a small quote to the relay floor and carry both amounts so
@@ -364,9 +406,8 @@ export async function applyNativeFeePreflight({ sdk, actionData, encoderOpts = {
     const outs = Array.isArray(encoderOpts.customOutputs) ? encoderOpts.customOutputs.slice() : [];
     if (feeSats > 0) {
         // The output is read through nativeFeeOutputOf, the same rule the post-build output
-        // check uses, so a blank or non-string destination refuses here instead of reaching
-        // the encoder, and a padded one is trimmed to the address that check expects.
-        const feeOutput = nativeFeeOutputOf({ feeDestination: quote.feeDestination, requiredFeeSats: feeSats });
+        // check uses. Its address comes from the local pin after the quote proves an exact match.
+        const feeOutput = nativeFeeOutputOf({ feeDestination: pinned.destination, requiredFeeSats: feeSats });
         if (!feeOutput) {
             throw new NativeFeeForfeitError({
                 reason: 'invalid',
@@ -381,6 +422,15 @@ export async function applyNativeFeePreflight({ sdk, actionData, encoderOpts = {
     // Strip our own flag so it isn't forwarded to the encoder as an unknown param.
     const { payFeeInNativeCoin, ...rest } = encoderOpts;
     return { encoderOpts: { ...rest, customOutputs: outs }, quote: payableQuote };
+}
+
+function resolvePinnedFeeDestination(sdk) {
+    const configured = [sdk?.options?.network, sdk?.config?.network]
+        .find((value) => typeof value === 'string' && FEE_DESTINATION_BY_CHAIN[value]);
+    const routeCoin = sdk?.explorer?.coin;
+    const chainId = configured || CHAIN_BY_EXPLORER_COIN[routeCoin];
+    const destination = chainId && FEE_DESTINATION_BY_CHAIN[chainId];
+    return destination ? { chainId, destination } : null;
 }
 
 function nativeDecimalFromSats(sats) {

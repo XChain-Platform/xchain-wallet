@@ -36,6 +36,7 @@
 // helper is a no-op for them, and for every non-DISPENSER action.
 
 import { satsResponseAmount } from './amountValidation.js';
+import { resolveDustThreshold } from './nativeFeePreflight.js';
 
 /**
  * Thrown to refuse a Mode B dispenser whose oracle fee cannot be priced, because the
@@ -131,6 +132,7 @@ export async function applyOracleFeePreflight({ sdk, actionData, encoderOpts = {
         getCoin:       ctx.getCoin,
         giveEscrow:    ctx.giveEscrow,
     });
+    if (signal && signal.aborted) throw new Error('aborted');
     if (!quote || quote.valid === false) {
         throw new OracleFeeUnpayableError({ reason: 'unquotable', quote: quote || null });
     }
@@ -151,6 +153,21 @@ export async function applyOracleFeePreflight({ sdk, actionData, encoderOpts = {
         source: 'oracle fee quote',
         field: 'requiredFeeSats',
     });
+    if (quote.belowDust && sats > 0) {
+        const dustThreshold = resolveDustThreshold(sdk);
+        if (dustThreshold === null) {
+            throw new OracleFeeUnpayableError({
+                reason: 'unquotable',
+                quote: { ...quote, error: 'cannot verify belowDust because the SDK has no chain dust threshold' },
+            });
+        }
+        if (sats >= dustThreshold) {
+            throw new OracleFeeUnpayableError({
+                reason: 'unquotable',
+                quote: { ...quote, error: 'quote marks a fee at or above the chain dust threshold as belowDust' },
+            });
+        }
+    }
     if (!quote.belowDust && sats > 0) {
         outs.push({ address: ctx.oracleAddress, value: sats });
     }

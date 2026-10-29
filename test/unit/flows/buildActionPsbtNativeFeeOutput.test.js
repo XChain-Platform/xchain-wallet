@@ -50,11 +50,12 @@ const SOURCE = {
     derivationPath: "m/84'/2'/0'/0/0",
 };
 
-const FEE_DESTINATION = 'rltc1qfeedestinationfeedestinationfeedest';
+const FEE_DESTINATION = 'mfeesJdVLx23zhtsCveA8EEfmHX7qSV2Ls';
 
 function harness({ requiredFeeSats = 5_000_000, supported = true, valid = true } = {}) {
     const createTx = vi.fn(async () => ({ psbt: '70736274ff', encoding: 'OP_RETURN' }));
     const sdk = {
+        options: { network: 'litecoin-regtest' },
         actions: {
             createAction: vi.fn(() => ({
                 actionString: 'ORDER|0|LTC|XCHAIN|5|LTC|100|',

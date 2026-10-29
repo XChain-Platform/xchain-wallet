@@ -185,7 +185,7 @@ describe('composeForConfirm bare native payments', () => {
 // tamper check verifies exactly these outputs, so a fee output that appeared
 // later would either be invisible to the user or read as tampering.
 describe('composeForConfirm native-coin protocol fee (BET on LTC)', () => {
-    const FEE_DEST = 'rltc1qfeedestination';
+    const FEE_DEST = 'mfeesJdVLx23zhtsCveA8EEfmHX7qSV2Ls';
 
     function betHarness({ quote } = {}) {
         const createTx = vi.fn(async ({ data, ...opts }) => ({ psbt: 'PSBTHEX', encoding: 'OP_RETURN', _opts: opts }));
@@ -193,6 +193,7 @@ describe('composeForConfirm native-coin protocol fee (BET on LTC)', () => {
             actionString: 'BET|2|2308|0|5', action: 'BET', version: 2,
         }));
         const sdk = {
+            options: { network: 'litecoin-regtest' },
             encoder: { createTx },
             actions: { createAction },
             // A litecoin-regtest SDK, so the native fee pads to Litecoin's dust floor.
@@ -275,6 +276,7 @@ describe('composeForConfirm native-fee placement on the chunk lane', () => {
             actionString: `DEPLOY|0|${'Q'.repeat(400)}|100000`, action: 'DEPLOY', version: 0,
         }));
         const sdk = {
+            options: { network: 'litecoin-regtest' },
             encoder: { createTx },
             actions: { createAction },
             // A litecoin-regtest SDK, so the native fee pads to Litecoin's dust floor.

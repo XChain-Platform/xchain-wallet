@@ -35,7 +35,7 @@ const SOURCE = Object.freeze({
     label: 'Litecoin savings',
 });
 const DESTINATION = 'ltc1qzyg3zyg3zyg3zyg3zyg3zyg3zyg3zyg3nmndwj';
-const FEE_DESTINATION = 'ltc1qxvenxvenxvenxvenxvenxvenxvenxvenwcpknh';
+const FEE_DESTINATION = 'Lfees7tszAx5Gqam2fuqf6biaX3LXafM4H';
 
 function proxyMessaging(base) {
     return new Proxy(base, {
@@ -199,6 +199,7 @@ describe('Litecoin native protocol fee flow', () => {
             encoding: 'OP_RETURN',
         }));
         const sdk = {
+            options: { network: CHAIN },
             actions: {
                 createAction: vi.fn(() => ({
                     actionString: 'DESTROY|0|XCHAIN|1',

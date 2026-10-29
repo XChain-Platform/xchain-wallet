@@ -5,10 +5,7 @@
 
 // Fee quote replies that are malformed, wrong-chain or stale. The native and
 // oracle pre-flights compose real outputs from these replies, so each case pins
-// whether a bad reply is refused or reaches the composed outputs. A case
-// marked it.fails encodes the correct behaviour for an open defect at this
-// head; it turns red once the pre-flight refuses that reply, and the fix then
-// changes it to it.
+// whether a bad reply is refused or reaches the composed outputs.
 
 import { describe, expect, it, vi } from 'vitest';
 import { applyNativeFeePreflight } from '../../../packages/core/src/sdk/nativeFeePreflight.js';
@@ -16,9 +13,12 @@ import { applyOracleFeePreflight } from '../../../packages/core/src/sdk/oracleFe
 
 const NATIVE_ACTION = { action: 'DEPLOY', params: {} };
 const DOGE_DUST = 100000;
+const BTC_DUST = 546;
+const DOGE_REGTEST_FEE_DESTINATION = 'mfees5pa2HwNBonk5vG23aDWkN9fuDJib4';
 const USER_ORACLE = 'mUserNamedOracleAddressRegtest';
 
 const nativeSdk = (quote, dust = DOGE_DUST) => ({
+    options: { network: 'dogecoin-regtest' },
     wallet: { getBitcoinNetwork: () => ({ dustThreshold: dust }) },
     quoteNativeFee: vi.fn(async () => quote),
 });
@@ -30,7 +30,7 @@ const goodNative = (over = {}) => ({
     coin: 'DOGE',
     requiredFeeSats: 200000,
     requiredFeeNative: '0.00200000',
-    feeDestination: 'mFeeDestinationRegtest',
+    feeDestination: DOGE_REGTEST_FEE_DESTINATION,
     ...over,
 });
 
@@ -45,7 +45,8 @@ const oracleAction = (over = {}) => ({
     },
 });
 
-const oracleSdk = (quote) => ({
+const oracleSdk = (quote, dust = BTC_DUST) => ({
+    wallet: { getBitcoinNetwork: () => ({ dustThreshold: dust }) },
     explorer: { getOracleFeeQuote: vi.fn(async () => quote) },
 });
 
@@ -75,20 +76,23 @@ describe('native fee quote reply integrity', () => {
     it('composes the fee output to the quoted destination for a well-formed reply', async () => {
         const res = await nativeOutcome(goodNative());
         expect(res.error).toBeUndefined();
-        expect(res.outputs).toEqual([{ address: 'mFeeDestinationRegtest', value: 200000 }]);
+        expect(res.outputs).toEqual([{ address: DOGE_REGTEST_FEE_DESTINATION, value: 200000 }]);
     });
 
     for (const [label, feeDestination] of [
         ['missing', undefined],
         ['empty', ''],
         ['whitespace', '   '],
+        ['null', null],
         ['a number', 12345],
         ['an object', { address: 'x' }],
+        ['a wrong-network address', 'nfeesoodkv5UTFXcDeKcUU95QHFiK2Ggo7'],
     ]) {
-        it(`never composes an output whose address is ${label}`, async () => {
+        it(`refuses a feeDestination that is ${label}`, async () => {
             const res = await nativeOutcome(goodNative({ feeDestination }));
-            const bad = (res.outputs || []).filter((o) => typeof o.address !== 'string' || !o.address.trim());
-            expect(bad).toEqual([]);
+            expect(res.error?.name).toBe('NativeFeeForfeitError');
+            expect(res.error?.reason).toBe('invalid');
+            expect(res.outputs).toBeUndefined();
         });
     }
 
@@ -109,7 +113,7 @@ describe('native fee quote reply integrity', () => {
 
     it('raises a below-dust native quote to the chain floor of the sdk network', async () => {
         const res = await nativeOutcome(goodNative({ requiredFeeSats: 600 }));
-        expect(res.outputs).toEqual([{ address: 'mFeeDestinationRegtest', value: DOGE_DUST }]);
+        expect(res.outputs).toEqual([{ address: DOGE_REGTEST_FEE_DESTINATION, value: DOGE_DUST }]);
     });
 
     it('carries a wrong-chain reply identity unchanged so the requote identity check compares it', async () => {
@@ -153,13 +157,17 @@ describe('oracle fee quote reply integrity', () => {
         expect(res.error?.reason).toBe('unquotable');
     });
 
-    it.fails('never drops a fee far above the dust floor because the reply says belowDust', async () => {
-        const res = await oracleOutcome(goodOracle({ belowDust: true, requiredFeeSats: 50000000 }));
-        // Either refuse the reply or pay the fee; composing no output is a
-        // create the indexer rejects as unpaid.
-        if (!res.error) {
-            expect(res.outputs).toEqual([{ address: USER_ORACLE, value: 50000000 }]);
-        }
+    it('refuses 50,000 sats marked belowDust when it clears the chain floor', async () => {
+        const res = await oracleOutcome(goodOracle({ belowDust: true, requiredFeeSats: 50000 }));
+        expect(res.error?.name).toBe('OracleFeeUnpayableError');
+        expect(res.error?.reason).toBe('unquotable');
+        expect(res.outputs).toBeUndefined();
+    });
+
+    it('keeps omitting a fee that is genuinely below the chain floor', async () => {
+        const res = await oracleOutcome(goodOracle({ belowDust: true, requiredFeeSats: 500 }));
+        expect(res.error).toBeUndefined();
+        expect(res.outputs).toEqual([]);
     });
 
     it('drops a zero fee that the reply marks belowDust', async () => {
@@ -194,9 +202,10 @@ describe('fee quote replies that resolve after an abort', () => {
         expect(sdk.quoteNativeFee.mock.calls[0][1].signal).toBe(controller.signal);
     });
 
-    it.fails('refuses a native quote that resolves after the signal aborts', async () => {
+    it('refuses a native quote that resolves after the signal aborts', async () => {
         const controller = new AbortController();
         const sdk = {
+            options: { network: 'dogecoin-regtest' },
             wallet: { getBitcoinNetwork: () => ({ dustThreshold: DOGE_DUST }) },
             quoteNativeFee: vi.fn(async () => { controller.abort(); return goodNative(); }),
         };
@@ -206,9 +215,10 @@ describe('fee quote replies that resolve after an abort', () => {
         })).rejects.toThrow();
     });
 
-    it.fails('refuses an oracle quote that resolves after the signal aborts', async () => {
+    it('refuses an oracle quote that resolves after the signal aborts', async () => {
         const controller = new AbortController();
         const sdk = {
+            wallet: { getBitcoinNetwork: () => ({ dustThreshold: BTC_DUST }) },
             explorer: { getOracleFeeQuote: vi.fn(async () => { controller.abort(); return goodOracle(); }) },
         };
         await expect(applyOracleFeePreflight({
