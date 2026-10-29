@@ -50,6 +50,19 @@ function headSignature(rows) {
  *          `snapshot` is null when the list was not paged (no usable total)
  */
 export async function readAllListPages(read, previous = null) {
+    try {
+        return await readListOnce(read, previous);
+    } catch (err) {
+        // A row that lands mid-read moves the list under the pages already
+        // read; one fresh read from page 1 sees the list after the move.
+        if (!(err instanceof ListMovedError)) throw err;
+        return readListOnce(read, null);
+    }
+}
+
+class ListMovedError extends Error {}
+
+async function readListOnce(read, previous) {
     const first = await read(null);
     const firstRows = rowsOf(first);
     const total = Number(first?.total);
@@ -105,8 +118,12 @@ export async function readAllListPages(read, previous = null) {
             if (added === 0 && pageRows.length > 0) throw shortPage();
         }
     }
-    // Each duplicate a shift explains pushes one row past the last page, so
-    // the list may fall short by at most the duplicates removed.
+    // Each duplicate a shift explains pushes one older row past the last
+    // page, so the read holds fewer unique rows than the stated total. That
+    // list is missing rows and never passes as complete.
     if (unique.length < expected - duplicates) throw shortPage();
+    if (unique.length < expected) {
+        throw new ListMovedError(`The explorer list of ${total} rows moved while it was read; ${unique.length} rows arrived.`);
+    }
     return { rows: unique, snapshot: { total, head, rows: unique } };
 }
