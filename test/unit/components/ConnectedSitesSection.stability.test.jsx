@@ -103,6 +103,16 @@ describe('ConnectedSitesSection settings controls', () => {
         expect(screen.getByRole('button', { name: 'Block' }).className).toMatch(/(?:^|\s)_?md_/);
     });
 
+    it('names the manual block form apart from its origin field', async () => {
+        render(<ConnectedSitesSection />);
+        const origin = await screen.findByRole('textbox', { name: 'Origin or wildcard to block' });
+
+        // One label, one control: the form carries its own name, so a label
+        // lookup for the field never also finds the form around it.
+        expect(screen.getAllByLabelText('Origin or wildcard to block')).toEqual([origin]);
+        expect(screen.getByRole('form', { name: 'Block site' })).toBe(origin.closest('form'));
+    });
+
     it('keeps section descriptions compact and non-repetitive', async () => {
         render(<ConnectedSitesSection />);
 

@@ -634,7 +634,7 @@ function BlockedOriginsPanel({ blocked, manualBlock, setManualBlock, onSubmit, o
                 <FormPage
                     onSubmit={onSubmit}
                     submitFromAnyField
-                    label={t('settings.connectedSites.originOrWildcardToBlock')}
+                    label={t('settings.connectedSites.blockSite')}
                 >
                     <div className={`${local.controlRow} ${local.blockRow}`}>
                     <Input
