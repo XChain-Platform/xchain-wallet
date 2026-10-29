@@ -103,6 +103,14 @@ const OWNED_JDOG = Object.freeze({
     getTokenInfo: ({ tick } = {}) => Promise.resolve({ chainId: CHAIN, tick, creator: HD_ADDRESS.address, locks: {} }),
 });
 
+// Dividend Review needs a complete holder list, so the dividend cases answer
+// the holder read with a whole set and let it land; the token lookups settle
+// in the same wait, so they answer with real tokens.
+const JDOG_HOLDERS = Object.freeze({
+    getHoldersForToken: () => Promise.resolve({ data: [{ address: 'bc1qholderjdog', amount: '10' }], total: 1 }),
+    getTokenInfo: ({ tick } = {}) => Promise.resolve({ chainId: CHAIN, tick, divisibility: 8, totalSupply: '1000000', locks: {} }),
+});
+
 // Recording messaging mock. Real shapes for the calls the confirm pipeline
 // makes; every other host call resolves to a permissive generic so the
 // route's loaded branch still settles.
@@ -401,9 +409,9 @@ describe('Action forms confirm via the single-encode pipeline', () => {
     it('DividendForm composes DIVIDEND and signs the prebuilt PSBT', async () => {
         const { calls } = await driveThroughConfirm({
             Form: DividendForm,
-            props: { initialChainId: CHAIN, initialTick: 'JDOG' },
+            props: { initialChainId: CHAIN, initialTick: 'JDOG', messagingOverrides: JDOG_HOLDERS },
             actionLabel: 'Pay dividend',
-            steps: [openTokenField('Dividend token'), pickToken('XCHAIN')],
+            steps: [openTokenField('Dividend token'), pickToken('XCHAIN'), () => vi.advanceTimersByTime(450)],
             fill: (utils) => setValue(utils, /^Per-unit amount/, '0.5'),
         });
         expectSingleEncode(calls, {
@@ -1273,9 +1281,9 @@ describe('Hardware signers confirm on the single-encode surface', () => {
         {
             name: 'DividendForm',
             Form: DividendForm,
-            props: { initialChainId: CHAIN, initialTick: 'JDOG' },
+            props: { initialChainId: CHAIN, initialTick: 'JDOG', messagingOverrides: JDOG_HOLDERS },
             actionLabel: 'Pay dividend',
-            steps: [openTokenField('Dividend token'), pickToken('XCHAIN')],
+            steps: [openTokenField('Dividend token'), pickToken('XCHAIN'), () => vi.advanceTimersByTime(450)],
             fill: (utils) => setValue(utils, /^Per-unit amount/, '0.5'),
             software: 'dividendAction',
             hardware: 'dividendActionHw',
