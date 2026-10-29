@@ -30,7 +30,9 @@ import { decimalToBaseUnits, roundDecimalString } from '../shared/utils/amountFo
 import { importedAddressIdsFor } from './_importedAddressIds.js';
 import { synthesizeDemoBalances } from './demoFixtures.js';
 import { UNCONFIRMED_COMMITTED_STATUSES } from './pendingDeltas.js';
-import { explorerReadFresh } from '../sdk/explorerRateLimit.js';
+import { explorerFreshScope, explorerReadFresh } from '../sdk/explorerRateLimit.js';
+import { probeTxInclusion } from './txInclusionProbe.js';
+import { markPendingTxIndexed } from '../notifications/pendingTxBridge.js';
 
 const LIVE_PENDING_STATUSES = new Set(UNCONFIRMED_COMMITTED_STATUSES);
 
@@ -254,6 +256,104 @@ function subtractAtomic(quantity, debit) {
     } catch {
         return String(quantity);
     }
+}
+
+function pendingBalanceTxKey(chainId, txid) {
+    return `${chainId}/${String(txid || '').trim().toLowerCase()}`;
+}
+
+function hasPendingBalanceDebit(pending) {
+    return /^\d+$/.test(String(pending?.nativeDebitSats ?? ''))
+        || (Array.isArray(pending?.balanceDebits) && pending.balanceDebits.length > 0)
+        || Boolean(pending?.tick && pending.amount != null);
+}
+
+// Home re-reads balances every 20 seconds, and an unconfirmed send can stay
+// unconfirmed for many minutes. A hash with no block answer is not asked
+// again for a minute, so a waiting send does not spend the explorer's shared
+// per-IP budget on every poll. Kept in memory per SDK, so a reload probes at once.
+const NEGATIVE_INCLUSION_TTL_MS = 60_000;
+const negativeInclusionBySdk = new WeakMap();
+
+function negativeInclusionCache(sdk) {
+    if (!sdk || (typeof sdk !== 'object' && typeof sdk !== 'function')) return null;
+    let cache = negativeInclusionBySdk.get(sdk);
+    if (!cache) {
+        cache = new Map();
+        negativeInclusionBySdk.set(sdk, cache);
+    }
+    return cache;
+}
+
+/**
+ * Prove which live balance debits have reached a block before reading balances.
+ *
+ * The WebSocket confirmation is opportunistic and can be missed while the page
+ * is reloading. A positive hash lookup closes that gap. Silence, malformed
+ * hashes and request failures leave the record live, so an unconfirmed send
+ * keeps netting. The returned keys also protect this read when the durable
+ * status write fails after the inclusion proof succeeds.
+ */
+async function reconcileIndexedPendingBalanceTxs({
+    vault, pendingTxs, byChain, chainRegistry, sdkRegistry,
+}) {
+    const indexed = new Set();
+    const txidsByChain = new Map();
+    const originalsByKey = new Map();
+    for (const pending of Array.isArray(pendingTxs) ? pendingTxs : []) {
+        if (!pending || !LIVE_PENDING_STATUSES.has(pending.status) || !hasPendingBalanceDebit(pending)) continue;
+        const txid = String(pending.txid || '').trim();
+        if (!/^[0-9a-f]{64}$/i.test(txid)) continue;
+        const chainId = chainRegistry.chainIdFor(pending.chain, pending.network);
+        const entries = chainId && Array.isArray(byChain[chainId]) ? byChain[chainId] : [];
+        if (!entries.some((entry) => entry?.address === pending.fromAddress)) continue;
+        if (!txidsByChain.has(chainId)) txidsByChain.set(chainId, new Set());
+        txidsByChain.get(chainId).add(txid);
+        const key = pendingBalanceTxKey(chainId, txid);
+        if (!originalsByKey.has(key)) originalsByKey.set(key, txid);
+    }
+
+    await Promise.all([...txidsByChain].map(async ([chainId, txids]) => {
+        const sdk = sdkRegistry.get(chainId);
+        const negatives = negativeInclusionCache(sdk);
+        const now = Date.now();
+        const toProbe = [...txids].filter((txid) => {
+            const until = negatives?.get(txid.toLowerCase());
+            return until === undefined || until <= now;
+        });
+        if (toProbe.length === 0) return;
+        let found;
+        try {
+            found = await probeTxInclusion({ sdk, txids: toProbe });
+        } catch {
+            return;
+        }
+        for (const txid of toProbe) {
+            const lowered = txid.toLowerCase();
+            if (found.has(lowered)) negatives?.delete(lowered);
+            else negatives?.set(lowered, now + NEGATIVE_INCLUSION_TTL_MS);
+        }
+        for (const txid of found.keys()) {
+            const key = pendingBalanceTxKey(chainId, txid);
+            indexed.add(key);
+            try {
+                await markPendingTxIndexed(vault, originalsByKey.get(key) || txid);
+            } catch {
+                // The positive inclusion still settles this read; a later read retries persistence.
+            }
+        }
+    }));
+    return indexed;
+}
+
+function withIndexedPendingStatuses(pendingTxs, indexed, chainRegistry) {
+    if (!(indexed instanceof Set) || indexed.size === 0) return pendingTxs;
+    return pendingTxs.map((pending) => {
+        const chainId = pending && chainRegistry.chainIdFor(pending.chain, pending.network);
+        return chainId && indexed.has(pendingBalanceTxKey(chainId, pending.txid))
+            ? { ...pending, status: 'indexed' }
+            : pending;
+    });
 }
 
 /**
@@ -517,7 +617,26 @@ export async function addressBalances({ sdkRegistry, chainRegistry, chainId, add
     const sdk = sdkRegistry.get(chainId);
     const descriptor = chainRegistry ? chainRegistry.descriptorFor(chainId) : null;
     const nativeTicker = tickerForCoin(descriptor && descriptor.coin);
-    const shape = await fetchAddressShape({ sdk, address, nativeTicker, opts });
+    let pendingBeforeRead = [];
+    try {
+        pendingBeforeRead = vault ? await vault.pendingTxs.list() : [];
+    } catch {
+        pendingBeforeRead = [];
+    }
+    const indexed = vault && chainRegistry
+        ? await reconcileIndexedPendingBalanceTxs({
+            vault,
+            pendingTxs: pendingBeforeRead,
+            byChain: { [chainId]: [{ address }] },
+            chainRegistry,
+            sdkRegistry,
+        })
+        : new Set();
+    const readOpts = indexed.size > 0 ? { ...(opts || {}), fresh: true } : opts;
+    const readShape = () => fetchAddressShape({ sdk, address, nativeTicker, opts: readOpts });
+    const shape = indexed.size > 0
+        ? await explorerFreshScope(sdk, readShape)
+        : await readShape();
     if (!vault || !chainRegistry || !shape || typeof shape !== 'object') return shape;
     // Net this address's unconfirmed sends the way Home does, so the Send form's
     // available amount and Max never offer coins an earlier send already spent.
@@ -525,8 +644,9 @@ export async function addressBalances({ sdkRegistry, chainRegistry, chainId, add
     try {
         pendingTxs = await vault.pendingTxs.list();
     } catch {
-        pendingTxs = [];
+        pendingTxs = pendingBeforeRead;
     }
+    pendingTxs = withIndexedPendingStatuses(pendingTxs, indexed, chainRegistry);
     const netted = applyPendingBalanceDeltas(
         { [chainId]: [{ address, balances: shape }] }, pendingTxs, chainRegistry,
     );
@@ -968,6 +1088,20 @@ export async function walletBalances({
         return synthesizeDemoBalances(byChain);
     }
 
+    let pendingBeforeRead = [];
+    try {
+        pendingBeforeRead = await vault.pendingTxs.list();
+    } catch {
+        pendingBeforeRead = [];
+    }
+    const indexed = await reconcileIndexedPendingBalanceTxs({
+        vault,
+        pendingTxs: pendingBeforeRead,
+        byChain,
+        chainRegistry,
+        sdkRegistry,
+    });
+
     // 3. Fetch balances per chain. Per-address failures are captured as entries
     //    with `error` set, whichever path served them.
     //
@@ -986,31 +1120,38 @@ export async function walletBalances({
             const sdk = sdkRegistry.get(cid);
             const descriptor = chainRegistry.descriptorFor(cid);
             const nativeTicker = tickerForCoin(descriptor && descriptor.coin);
-            const canBatch = sdk && typeof sdk.getBalancesBatch === 'function'
-                && !isBatchUnsupported(sdk, BATCH_FEATURE_BALANCES);
-            if (!canBatch) {
-                result[cid] = await Promise.all(
-                    addrs.map((addr) => perAddressEntry({ sdk, addr, nativeTicker, opts })),
+            const hasIndexed = [...indexed].some((key) => key.startsWith(`${cid}/`));
+            const readOpts = hasIndexed ? { ...(opts || {}), fresh: true } : opts;
+            const readChain = async () => {
+                const canBatch = sdk && typeof sdk.getBalancesBatch === 'function'
+                    && !isBatchUnsupported(sdk, BATCH_FEATURE_BALANCES);
+                if (!canBatch) {
+                    result[cid] = await Promise.all(
+                        addrs.map((addr) => perAddressEntry({ sdk, addr, nativeTicker, opts: readOpts })),
+                    );
+                    return;
+                }
+                const chunks = [];
+                for (let i = 0; i < addrs.length; i += BALANCES_BATCH_MAX_ADDRESSES) {
+                    chunks.push(addrs.slice(i, i + BALANCES_BATCH_MAX_ADDRESSES));
+                }
+                const perChunk = await Promise.all(
+                    chunks.map((chunk) => batchChunkEntries({ sdk, chunk, nativeTicker, opts: readOpts })),
                 );
-                return;
-            }
-            const chunks = [];
-            for (let i = 0; i < addrs.length; i += BALANCES_BATCH_MAX_ADDRESSES) {
-                chunks.push(addrs.slice(i, i + BALANCES_BATCH_MAX_ADDRESSES));
-            }
-            const perChunk = await Promise.all(
-                chunks.map((chunk) => batchChunkEntries({ sdk, chunk, nativeTicker, opts })),
-            );
-            // Flattened in chunk order, so the entries come back in the address
-            // order the caller passed however many requests it took.
-            result[cid] = perChunk.flat();
+                // Flattened in chunk order, so the entries come back in the address
+                // order the caller passed however many requests it took.
+                result[cid] = perChunk.flat();
+            };
+            if (hasIndexed) await explorerFreshScope(sdk, readChain);
+            else await readChain();
         }),
     );
     let pendingTxs = [];
     try {
         pendingTxs = await vault.pendingTxs.list();
     } catch {
-        pendingTxs = [];
+        pendingTxs = pendingBeforeRead;
     }
+    pendingTxs = withIndexedPendingStatuses(pendingTxs, indexed, chainRegistry);
     return applyPendingBalanceDeltas(result, pendingTxs, chainRegistry);
 }
