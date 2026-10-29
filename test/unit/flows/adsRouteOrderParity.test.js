@@ -8,7 +8,9 @@ import { submitAction } from '../../../packages/core/src/flows/submitAction.js';
 const CHAIN_ID = 'bitcoin-regtest';
 const SOURCE = 'bcrt1qsource';
 const EXISTING = { address: 'bcrt1qrecipient', value: 7000 };
-const NATIVE_FEE = { address: 'bcrt1qprotocolfee', value: 6000 };
+// The native fee pre-flight pays only the destination pinned for the SDK's own
+// chain and network, so the regtest double carries both.
+const NATIVE_FEE = { address: 'mfeesX6rLE6V3WPg9tsbL2fHNS7E4rDAim', value: 6000 };
 const ORACLE_FEE = { address: 'bcrt1qoracle', value: 3000 };
 const DONATION = { address: 'bcrt1qdonation', value: 5000 };
 const ACTION_DATA = {
@@ -39,6 +41,7 @@ function harness({ encoding = 'OP_RETURN' } = {}) {
     const createTx = vi.fn(async () => ({ psbt: 'COMMIT-PSBT', encoding }));
     const spendP2sh = vi.fn(async () => ({ psbt: 'REVEAL-PSBT' }));
     const sdk = {
+        options: { network: 'bitcoin-regtest' },
         actions: {
             createAction: vi.fn(() => ({
                 actionString: 'DISPENSER|0|10|BTC|BTC|bcrt1qoracle',
