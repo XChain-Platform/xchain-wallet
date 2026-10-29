@@ -251,6 +251,7 @@ describe('AddressPreferencesForm races', () => {
         const review = await screen.findByRole('button', { name: 'Review' });
         fireEvent.click(review);
         fireEvent.click(review);
+        expect(target.getAddressPreferences).toHaveBeenCalledTimes(2);
         await screen.findByRole('form', { name: 'Review preferences' });
         const button = screen.getByRole('button', { name: /Continue to confirmation/ });
         fireEvent.click(button);

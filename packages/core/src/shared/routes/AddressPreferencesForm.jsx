@@ -109,6 +109,9 @@ export function AddressPreferencesForm({ walletId, chainId: initialChainId, addr
     const [current, setCurrent] = useState(/** @type {any} */ (null));
     const [currentError, setCurrentError] = useState(/** @type {string | null} */ (null));
     const [reviewBaseline, setReviewBaseline] = useState(/** @type {any} */ (null));
+    // A ref closes the same-tick gap before React renders a new stage. Only one
+    // baseline read may decide the values and comparison shown by Review.
+    const reviewPending = useRef(false);
     const touched = useRef({ fee: false, requireMemo: false, dispenser: false });
     const initialPrefillOpen = useRef(true);
     // Each choice is independent: a slow read may still prefill untouched
@@ -208,10 +211,12 @@ export function AddressPreferencesForm({ walletId, chainId: initialChainId, addr
 
     async function handleReview(event) {
         event.preventDefault();
+        if (reviewPending.current) return;
         const feeStop = customFeeReviewStop({ feePick, tiers: feeTiers, estimate: feeCustomEstimate });
         if (feeStop) { setFormError(feeStop.formError); return; }
         setFormError(null);
         if (refuseMemo(memo)) return;
+        reviewPending.current = true;
         initialPrefillOpen.current = false;
         try {
             const fresh = await messaging.getAddressPreferences({ chainId, address });
@@ -235,6 +240,8 @@ export function AddressPreferencesForm({ walletId, chainId: initialChainId, addr
             setFormError('Could not re-check the current on-chain values: '
                 + (err?.message || 'unknown error')
                 + '. Review needs a live read, because every write resets all three preferences.');
+        } finally {
+            reviewPending.current = false;
         }
     }
 
