@@ -40,8 +40,30 @@ import { t } from '../../i18n/index.js';
 import '../../i18n/locales/en/signerSelect.js';
 import { useMessaging } from '../useMessaging.js';
 import { useWalletMode } from '../hooks/useWalletMode.js';
+import { userFacingMessage } from '../utils/userFacingMessage.js';
 
 const NOOP = () => {};
+
+// A signer list read that never reached the wallet service: a failed fetch, a
+// timeout, or a background whose message port closed or does not answer. Such
+// faults say nothing about the user's signers, so the form names the outage
+// and the software fallback instead of a generic failure or the raw text.
+const TRANSPORT_FAULT_NAMES = new Set(['TimeoutError', 'NetworkTimeoutError', 'NetworkError', 'AbortError']);
+const TRANSPORT_FAULT_TEXT = /failed to fetch|fetch failed|network ?error|network request failed|load failed|timed out|timeout|message port closed|could not establish connection|receiving end does not exist|extension context invalidated|you are offline|\b(?:ECONNREFUSED|ECONNRESET|ENOTFOUND|ETIMEDOUT|EAI_AGAIN|EHOSTUNREACH|ERR_NETWORK)\b/i;
+
+function isTransportFault(err) {
+    if (!err) return false;
+    const name = typeof err === 'object' ? String(/** @type {any} */ (err).name || '') : '';
+    if (TRANSPORT_FAULT_NAMES.has(name)) return true;
+    const code = typeof err === 'object' ? String(/** @type {any} */ (err).code || '') : '';
+    const text = typeof err === 'string' ? err : String(/** @type {any} */ (err).message || '');
+    return TRANSPORT_FAULT_TEXT.test(`${code} ${text}`);
+}
+
+function signerListError(err) {
+    if (isTransportFault(err)) return t('signerSelect.loadUnreachable');
+    return userFacingMessage(err, t('signerSelect.loadFailed'));
+}
 
 /**
  * @param {object} props
@@ -82,13 +104,13 @@ export function SignerSelectForm({ walletId, value, onChange, disabled = false }
             .catch((err) => {
                 if (cancelled) return;
                 // Loading the registry failed; fall back to software so
-                // the parent flow stays usable. Surface the error inline
-                // for diagnostic visibility.
+                // the parent flow stays usable. The inline note says whether
+                // the wallet service was out of reach or the read failed.
                 setRegistry({
                     walletId,
                     messaging,
                     signers: [],
-                    error: err?.message || 'Failed to load signers.',
+                    error: signerListError(err),
                 });
             });
         return () => { cancelled = true; };
