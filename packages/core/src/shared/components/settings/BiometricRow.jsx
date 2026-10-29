@@ -73,13 +73,18 @@ export function BiometricRow() {
     // biometrics are gone offers an unlock that cannot work.
     useEffect(() => {
         let cancelled = false;
+        let probeGeneration = 0;
         const probe = () => {
+            const generation = ++probeGeneration;
             describeBiometric().then((described) => {
-                if (cancelled) return;
+                // A resumed app can finish its fresh device check before a
+                // throttled hidden-tab check. Only the latest request owns the
+                // row so an older answer cannot restore stale availability.
+                if (cancelled || generation !== probeGeneration) return;
                 setDescription(described);
                 setRegistered(isBiometricRegistered());
             }).catch(() => {
-                if (!cancelled) {
+                if (!cancelled && generation === probeGeneration) {
                     setDescription({
                         supported: false,
                         reason: 'Could not check biometric unlock on this device.',

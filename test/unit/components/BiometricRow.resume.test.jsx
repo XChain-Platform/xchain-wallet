@@ -10,7 +10,7 @@
 // once they can.
 
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { act, cleanup, render, screen } from '@testing-library/react';
+import { act, cleanup, render, screen, waitFor } from '@testing-library/react';
 import { BiometricRow } from '../../../packages/core/src/shared/components/settings/BiometricRow.jsx';
 import { MessagingContext } from '../../../packages/core/src/shared/MessagingContext.js';
 import { setBiometricProvider } from '../../../packages/core/src/flows/biometricUnlock.js';
@@ -45,6 +45,14 @@ function mount() {
 
 function setVisibility(value) {
     Object.defineProperty(document, 'visibilityState', { configurable: true, get: () => value });
+}
+
+function deferred() {
+    let resolve;
+    const promise = new Promise((resolvePromise) => {
+        resolve = resolvePromise;
+    });
+    return { promise, resolve };
 }
 
 afterEach(() => {
@@ -91,5 +99,57 @@ describe('BiometricRow on returning to the app', () => {
         unmount();
         await act(async () => { window.dispatchEvent(new Event('focus')); });
         expect(provider.describe.mock.calls.length).toBe(calls);
+    });
+
+    it('keeps the newest focus result when the initial probe resolves late', async () => {
+        const { provider } = fakeProvider();
+        const initial = deferred();
+        const resumed = deferred();
+        provider.describe
+            .mockReturnValueOnce(initial.promise)
+            .mockReturnValueOnce(resumed.promise);
+        mount();
+        await waitFor(() => expect(provider.describe).toHaveBeenCalledTimes(1));
+
+        window.dispatchEvent(new Event('focus'));
+        await waitFor(() => expect(provider.describe).toHaveBeenCalledTimes(2));
+        await act(async () => {
+            resumed.resolve({ supported: false, reason: NONE_ENROLLED, mechanism: 'Face ID' });
+        });
+        expect(await screen.findByText(/Not available\./)).toBeTruthy();
+
+        await act(async () => {
+            initial.resolve({ supported: true, mechanism: 'Face ID' });
+        });
+        expect(screen.getByText(/Not available\./)).toBeTruthy();
+        expect(screen.queryByText(/^Enabled\. Use/)).toBeNull();
+    });
+
+    it('keeps the newest visible result when a hidden-tab probe resolves late', async () => {
+        const { provider } = fakeProvider();
+        const throttled = deferred();
+        const resumed = deferred();
+        provider.describe
+            .mockReturnValueOnce(throttled.promise)
+            .mockReturnValueOnce(resumed.promise);
+        mount();
+        await waitFor(() => expect(provider.describe).toHaveBeenCalledTimes(1));
+
+        setVisibility('hidden');
+        document.dispatchEvent(new Event('visibilitychange'));
+        expect(provider.describe).toHaveBeenCalledTimes(1);
+        setVisibility('visible');
+        document.dispatchEvent(new Event('visibilitychange'));
+        await waitFor(() => expect(provider.describe).toHaveBeenCalledTimes(2));
+        await act(async () => {
+            resumed.resolve({ supported: false, reason: NONE_ENROLLED, mechanism: 'Face ID' });
+        });
+        expect(await screen.findByText(/Not available\./)).toBeTruthy();
+
+        await act(async () => {
+            throttled.resolve({ supported: true, mechanism: 'Face ID' });
+        });
+        expect(screen.getByText(/Not available\./)).toBeTruthy();
+        expect(screen.queryByText(/^Enabled\. Use/)).toBeNull();
     });
 });
