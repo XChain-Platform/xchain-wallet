@@ -388,7 +388,7 @@ test.describe('backup-pointer restore (§15.4)', () => {
                 // 180_000 this replaced was the CI value transcribed by hand:
                 // right on CI by luck, and unable to follow the budget the
                 // day the budget moves.
-                await expect(unlockedShell(two), 'the restore never returned to an unlocked wallet')
+                await expect(openedWalletHome(two), 'the restore never returned to an unlocked wallet')
                     .toBeVisible({ timeout: kdfStepTimeout() });
             });
 

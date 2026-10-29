@@ -51,7 +51,7 @@
 //       --config=playwright.regtest.config.js tests/onboarding/scan-qr-import.regtest.spec.js
 
 import {
-    acknowledgeImportNotice, expect, test, dismissIntroCarousel, unlockedShell,
+    acknowledgeImportNotice, expect, test, dismissIntroCarousel, openedWalletHome,
     LICENSE_ACCEPTED_AT_KEY, LICENSE_ACCEPTED_VERSION_KEY,
 } from '../../fixtures/wallet.js';
 import { launchWithQrCamera } from '../../fixtures/qrCamera.js';
@@ -188,7 +188,7 @@ test.describe('QR scan on the import screen (§15.4)', () => {
                 // bet on how fast this venue derives, and the 120_000 that
                 // used to sit on this line was BELOW what the budget computes
                 // on a loaded box or on CI.
-                await expect(unlockedShell(page),
+                await expect(openedWalletHome(page),
                     'the scanned phrase never became an unlocked wallet')
                     .toBeVisible({ timeout: kdfStepTimeout() });
             } finally {
@@ -265,7 +265,7 @@ test.describe('QR scan on the import screen (§15.4)', () => {
                     'a backup-pointer URI scanned into the recovery-phrase box was accepted as a '
                     + 'recovery phrase')
                     .toContainText(/Expected 12, 15, 18, 21, or 24 words/i, { timeout: 30_000 });
-                await expect(unlockedShell(page), 'a non-phrase QR produced a wallet')
+                await expect(openedWalletHome(page), 'a non-phrase QR produced a wallet')
                     .toHaveCount(0);
             } finally {
                 await close();
