@@ -47,7 +47,7 @@ import {
     mainButton,
     openPaletteCommand,
     test,
-    unlockedShell,
+    openedWalletHome,
 } from '../../fixtures/wallet.js';
 import {
     approveConfirm,
@@ -102,7 +102,7 @@ async function importFromPhrase(page, words, name) {
     await page.getByLabel(/^Confirm( password)?$/).fill(PASSWORD);
     await page.getByRole('button', { name: 'Import', exact: true }).click();
     await acknowledgeDonationNotice(page, 'off');
-    await expect(unlockedShell(page), 'the import never reached an unlocked wallet')
+    await expect(openedWalletHome(page), 'the import never reached an unlocked wallet')
         .toBeVisible({ timeout: kdfStepTimeout() });
 }
 

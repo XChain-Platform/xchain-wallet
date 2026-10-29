@@ -71,6 +71,7 @@ import {
     dismissIntroCarousel,
     gotoSection,
     mainButton,
+    openedWalletHome,
     unlockedShell,
     LICENSE_ACCEPTED_AT_KEY,
     LICENSE_ACCEPTED_VERSION_KEY,
@@ -147,6 +148,9 @@ async function exportEnvelope(page, { walletName, words }) {
         page.getByRole('button', { name: 'Export', exact: true }).click(),
     ]);
     const envelope = await readFile(await download.path(), 'utf8');
+    // A browser download is not proof the file was kept, so the wallet asks
+    // before it marks the backup done; answer it the way a user would.
+    await page.getByRole('button', { name: 'I saved the file', exact: true }).click();
 
     const parsed = JSON.parse(envelope);
     expect(parsed?.magic, 'the exported file is not a §19.4 backup envelope')
@@ -720,7 +724,7 @@ test.describe('backup-pointer restore (§15.4)', () => {
                 });
                 await two.getByRole('button', { name: 'Restore', exact: true }).click();
                 await acknowledgeImportNotice(two);
-                await expect(unlockedShell(two),
+                await expect(openedWalletHome(two),
                     'the second attempt with the right password did not restore, so the first attempt '
                     + 'left the install in a state it cannot recover from')
                     .toBeVisible({ timeout: kdfStepTimeout() });

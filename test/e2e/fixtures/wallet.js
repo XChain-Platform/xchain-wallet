@@ -40,6 +40,9 @@ import { guardOutbound, stubOutboundHosts } from './outboundGuard.js';
 // See test/e2e/timeout-budget.js.
 const KDF_STEP_MS = kdfStepTimeout();
 
+/** Home's message when it is offline with no balances read yet (home.offline.empty). */
+const OFFLINE_HOME_EMPTY = 'You are offline. Connect to load balances and use network actions.';
+
 export const LICENSE_ACCEPTED_AT_KEY = 'xc:licenseAcceptedAt';
 export const LICENSE_ACCEPTED_VERSION_KEY = 'xc:licenseAcceptedVersion';
 
@@ -576,8 +579,22 @@ export async function createWallet(page, options = {}) {
     return words;
 }
 
+/**
+ * A new wallet opens on the default network. The regtest venue blocks those
+ * hosts until a spec switches chains, so Home settles on its offline message
+ * with no balance hero; Home no longer shows an unknown balance as zero. That
+ * screen is still the ready wallet, and the balance wait belongs after the
+ * switch. Once one wallet in a page has seen the offline verdict, a second one
+ * created there opens straight onto it, so this cannot be left to a race.
+ */
+export function openedWalletHome(page) {
+    return unlockedShell(page)
+        .or(page.getByRole('main').getByText(OFFLINE_HOME_EMPTY, { exact: true }))
+        .first();
+}
+
 function createdWalletShell(page, waitForBalances) {
-    return waitForBalances ? unlockedShell(page) : unlockedAnyScreen(page);
+    return waitForBalances ? openedWalletHome(page) : unlockedAnyScreen(page);
 }
 
 /**

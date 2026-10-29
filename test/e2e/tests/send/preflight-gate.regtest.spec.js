@@ -101,6 +101,11 @@ async function warmSend(source, amount, expected) {
         params: `0|XCHAIN|${amount}|${REGTEST_DESTINATION}`,
         source,
     });
+    // The whole-balance send is refused only because the protocol fee comes on
+    // top of it. A venue whose fee schedule charges SEND nothing has no
+    // in-balance amount it can refuse, so the walk has no premise there.
+    test.skip(expected === false && quote.valid === true && Number(quote.xchainFee) === 0,
+        `this venue charges no XCHAIN fee for SEND, so no in-balance send fails pre-flight: ${JSON.stringify(quote)}`);
     expect(quote.valid, `the venue's own dry-run for a ${amount} XCHAIN send disagrees `
         + `with this spec's premise: ${JSON.stringify(quote)}`).toBe(expected);
     return quote;
