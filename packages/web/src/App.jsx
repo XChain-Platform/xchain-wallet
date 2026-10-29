@@ -585,6 +585,11 @@ function AppInner() {
     // entity family out of the results.
     const [paletteTokenRows, setPaletteTokenRows] = useState(/** @type {any[]} */ ([]));
     const [paletteSites, setPaletteSites] = useState(/** @type {any[]} */ ([]));
+    useLayoutEffect(() => {
+        setPaletteContacts([]);
+        setPaletteTokenRows([]);
+        setPaletteSites([]);
+    }, [palette.open, status.state, activeWalletId, activeAccountId, palette.onlineRetryKey]);
     useEffect(() => {
         if (!palette.open || status.state !== 'unlocked' || !activeWalletId) return undefined;
         let cancelled = false;
@@ -603,7 +608,7 @@ function AppInner() {
             .then((sites) => { if (!cancelled) setPaletteSites(Array.isArray(sites) ? sites : []); })
             .catch(() => { /* palette still works without sites */ });
         return () => { cancelled = true; };
-    }, [palette.open, status.state, activeWalletId, activeAccountId]);
+    }, [palette.open, status.state, activeWalletId, activeAccountId, palette.onlineRetryKey]);
     // §34 keyboard shortcuts: global core set + `g`-leader nav + the `?`
     // help modal. Disabled while locked, while the palette owns the keys, and
     // while the help modal itself is open.

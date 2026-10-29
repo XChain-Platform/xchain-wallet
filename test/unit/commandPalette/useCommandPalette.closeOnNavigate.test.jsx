@@ -92,4 +92,18 @@ describe('useCommandPalette closes on navigation', () => {
         rerender({ view: 'home' });
         expect(result.current.open).toBe(true);
     });
+
+    it('requests one in-place data retry when connectivity returns', () => {
+        const { result } = renderHook(() => useCommandPalette());
+        act(() => window.dispatchEvent(new Event('online')));
+        expect(result.current.onlineRetryKey).toBe(0);
+
+        act(() => result.current.openPalette());
+        act(() => window.dispatchEvent(new Event('online')));
+        expect(result.current.onlineRetryKey).toBe(1);
+
+        act(() => result.current.closePalette());
+        act(() => window.dispatchEvent(new Event('online')));
+        expect(result.current.onlineRetryKey).toBe(1);
+    });
 });

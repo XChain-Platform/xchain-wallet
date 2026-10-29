@@ -30,7 +30,7 @@
 // handlers onto `session.defaultSession`. Without them, Electron
 // returns an empty device list under `contextIsolation: true`.
 
-import { Fragment, lazy, useCallback, useEffect, useRef, useState } from 'react';
+import { Fragment, lazy, useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { RouteErrorBoundary } from '@xchain-wallet/core/shared/components/RouteErrorBoundary.jsx';
 import { ShellRouteOutlet } from '@xchain-wallet/core/shared/components/ShellRouteOutlet.jsx';
 import {
@@ -430,6 +430,11 @@ function AppInner() {
     // stays empty.)
     const [paletteTokenRows, setPaletteTokenRows] = useState(/** @type {any[]} */ ([]));
     const [paletteSites, setPaletteSites] = useState(/** @type {any[]} */ ([]));
+    useLayoutEffect(() => {
+        setPaletteContacts([]);
+        setPaletteTokenRows([]);
+        setPaletteSites([]);
+    }, [palette.open, status.state, activeWalletId, activeAccountId, palette.onlineRetryKey]);
     useEffect(() => {
         if (!palette.open || status.state !== 'unlocked' || !activeWalletId) return undefined;
         let cancelled = false;
@@ -450,7 +455,7 @@ function AppInner() {
                 .catch(() => { /* palette still works without sites */ });
         }
         return () => { cancelled = true; };
-    }, [palette.open, status.state, activeWalletId, activeAccountId]);
+    }, [palette.open, status.state, activeWalletId, activeAccountId, palette.onlineRetryKey]);
     // Which Settings section a palette deep-link should open.
     // Cleared when the user backs out of Settings.
     const [settingsInitialSection, setSettingsInitialSection] = useState(

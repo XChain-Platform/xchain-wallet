@@ -23,6 +23,26 @@ import { canHandleGlobalShortcut } from '../keyboard/useKeyboardShortcuts.js';
 import { isValidBinding } from '../keyboard/shortcuts.js';
 
 /**
+ * Advances whenever connectivity returns while palette data is active. Shell
+ * data effects include the returned key so a refused read retries in place.
+ *
+ * @param {boolean} active
+ * @returns {number}
+ */
+export function useCommandPaletteOnlineRetry(active) {
+    const [retryKey, setRetryKey] = useState(0);
+
+    useEffect(() => {
+        if (!active || typeof window === 'undefined') return undefined;
+        const retry = () => setRetryKey((key) => key + 1);
+        window.addEventListener('online', retry);
+        return () => window.removeEventListener('online', retry);
+    }, [active]);
+
+    return retryKey;
+}
+
+/**
  * @param {object} [opts]
  * @param {boolean} [opts.enabled=true]  install the global shortcut listener
  * @param {string} [opts.binding='mod+k']  §34.1: the (rebindable) combo that
@@ -31,13 +51,14 @@ import { isValidBinding } from '../keyboard/shortcuts.js';
  * @param {(view: string) => void} [opts.navigate]  shell route setter
  * @param {string} [opts.currentView]  the view the shell shows now; when it
  *        changes the palette closes
- * @returns {{ open: boolean, openPalette: () => void, closePalette: () => void, togglePalette: () => void, navigate: (view: string) => void, navigationKey: number }}
+ * @returns {{ open: boolean, openPalette: () => void, closePalette: () => void, togglePalette: () => void, navigate: (view: string) => void, navigationKey: number, onlineRetryKey: number }}
  */
 export function useCommandPalette(opts = {}) {
     const { enabled = true, binding = 'mod+k', navigate: setRoute, currentView } = opts;
     const comboKey = isValidBinding(binding, 'combo') ? binding.slice(4).toLowerCase() : 'k';
     const [open, setOpen] = useState(false);
     const [navigationKey, setNavigationKey] = useState(0);
+    const onlineRetryKey = useCommandPaletteOnlineRetry(open && enabled);
 
     const openPalette = useCallback(() => setOpen(true), []);
     const closePalette = useCallback(() => setOpen(false), []);
@@ -79,5 +100,5 @@ export function useCommandPalette(opts = {}) {
         return () => window.removeEventListener('keydown', onKey);
     }, [enabled, comboKey]);
 
-    return { open, openPalette, closePalette, togglePalette, navigate, navigationKey };
+    return { open, openPalette, closePalette, togglePalette, navigate, navigationKey, onlineRetryKey };
 }

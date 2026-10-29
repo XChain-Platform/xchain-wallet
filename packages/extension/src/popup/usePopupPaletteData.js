@@ -3,9 +3,10 @@
 //
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-import { useEffect, useState } from 'react';
+import { useEffect, useLayoutEffect, useState } from 'react';
 import { buildBalanceRows } from '@xchain-wallet/core/shared/components/BalanceList.jsx';
 import { loadDisplayBalances } from '@xchain-wallet/core/shared/utils/displayBalances.js';
+import { useCommandPaletteOnlineRetry } from '@xchain-wallet/core/shared/commandPalette/useCommandPalette.js';
 
 export function usePopupPaletteData({
     open,
@@ -19,11 +20,17 @@ export function usePopupPaletteData({
     const [contacts, setContacts] = useState(/** @type {any[]} */ ([]));
     const [tokenRows, setTokenRows] = useState(/** @type {any[]} */ ([]));
     const [sites, setSites] = useState(/** @type {any[]} */ ([]));
+    const onlineRetryKey = useCommandPaletteOnlineRetry(
+        open && sessionState === 'unlocked' && Boolean(walletId),
+    );
 
-    useEffect(() => {
+    useLayoutEffect(() => {
         setContacts([]);
         setTokenRows([]);
         setSites([]);
+    }, [open, sessionState, walletId, accountId, onlineRetryKey]);
+
+    useEffect(() => {
         if (!open || sessionState !== 'unlocked' || !walletId) return undefined;
 
         let cancelled = false;
@@ -40,7 +47,7 @@ export function usePopupPaletteData({
             .catch(() => { /* The palette remains usable without connected sites. */ });
 
         return () => { cancelled = true; };
-    }, [open, sessionState, walletId, accountId, messaging, chainRegistry, loadSites]);
+    }, [open, sessionState, walletId, accountId, messaging, chainRegistry, loadSites, onlineRetryKey]);
 
     return { contacts, tokenRows, sites };
 }
