@@ -10,6 +10,13 @@
 
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { act, cleanup, fireEvent, render, screen } from '@testing-library/react';
+
+const { showToast } = vi.hoisted(() => ({ showToast: vi.fn() }));
+
+vi.mock('../../../packages/core/src/shared/components/ToastHost.jsx', () => ({
+    useToast: () => ({ showToast }),
+}));
+
 import { LayoutModeToggle } from '../../../packages/core/src/shared/components/LayoutModeToggle.jsx';
 
 const STORAGE_KEY = 'xchain.layoutMode';
@@ -37,6 +44,7 @@ function extensionChrome(storedMode = undefined) {
 
 afterEach(() => {
     cleanup();
+    showToast.mockReset();
     vi.unstubAllGlobals();
 });
 
@@ -59,13 +67,15 @@ describe('LayoutModeToggle', () => {
         expect(screen.getByRole('radio', { name: 'Sidebar' })).toHaveAttribute('aria-checked', 'true');
     });
 
-    it('persists a new choice without rewriting the selected choice', () => {
+    it('keeps a new choice after a successful write without rewriting it', async () => {
         const { chrome } = extensionChrome('popup');
+        chrome.storage.local.set.mockResolvedValueOnce(undefined);
         render(<LayoutModeToggle />);
 
         const popup = screen.getByRole('radio', { name: 'Popup' });
         const sidebar = screen.getByRole('radio', { name: 'Sidebar' });
         fireEvent.click(sidebar);
+        await act(async () => Promise.resolve());
 
         expect(sidebar).toHaveAttribute('aria-checked', 'true');
         expect(popup).toHaveAttribute('aria-checked', 'false');
@@ -122,7 +132,7 @@ describe('LayoutModeToggle', () => {
         expect(() => finishRead(staleItems)).not.toThrow();
     });
 
-    it('handles rejected storage writes', async () => {
+    it('restores the persisted mode and shows an error when a storage write rejects', async () => {
         const { chrome } = extensionChrome('popup');
         chrome.storage.local.set.mockReturnValueOnce(Promise.reject(new Error('storage unavailable')));
         render(<LayoutModeToggle />);
@@ -130,6 +140,30 @@ describe('LayoutModeToggle', () => {
         fireEvent.click(screen.getByRole('radio', { name: 'Sidebar' }));
         await act(async () => Promise.resolve());
 
+        expect(screen.getByRole('radio', { name: 'Popup' })).toHaveAttribute('aria-checked', 'true');
+        expect(screen.getByRole('radio', { name: 'Sidebar' })).toHaveAttribute('aria-checked', 'false');
+        expect(showToast).toHaveBeenCalledWith({
+            id: 'layout-mode-save-failed',
+            variant: 'error',
+            message: "Couldn't save the layout setting. Try again.",
+        });
+    });
+
+    it('restores the persisted mode and shows an error when a storage write throws', () => {
+        const { chrome } = extensionChrome('sidepanel');
+        chrome.storage.local.set.mockImplementationOnce(() => {
+            throw new Error('extension context invalidated');
+        });
+        render(<LayoutModeToggle />);
+
+        fireEvent.click(screen.getByRole('radio', { name: 'Popup' }));
+
+        expect(screen.getByRole('radio', { name: 'Popup' })).toHaveAttribute('aria-checked', 'false');
         expect(screen.getByRole('radio', { name: 'Sidebar' })).toHaveAttribute('aria-checked', 'true');
+        expect(showToast).toHaveBeenCalledWith({
+            id: 'layout-mode-save-failed',
+            variant: 'error',
+            message: "Couldn't save the layout setting. Try again.",
+        });
     });
 });

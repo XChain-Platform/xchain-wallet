@@ -8,9 +8,10 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-import { useEffect, useId, useState } from 'react';
+import { useEffect, useId, useRef, useState } from 'react';
 import { Icon } from '@xchain-wallet/core/ui';
 import styles from './LayoutModeToggle.module.css';
+import { useToast } from './ToastHost.jsx';
 import { t } from '../../i18n/index.js';
 import '../../i18n/locales/en/components.js';
 import { LAYOUT_MODE_STORAGE_KEY } from '../utils/layoutModeStorageKey.js';
@@ -45,6 +46,9 @@ function isExtensionContext() {
 export function LayoutModeToggle() {
     const [mode, setMode] = useState(/** @type {'popup' | 'sidepanel'} */ ('popup'));
     const [available, setAvailable] = useState(false);
+    const persistedModeRef = useRef(/** @type {'popup' | 'sidepanel'} */ ('popup'));
+    const writeVersionRef = useRef(0);
+    const { showToast } = useToast();
     const groupId = useId();
     const labelId = `${groupId}-label`;
     const descriptionId = `${groupId}-description`;
@@ -59,13 +63,20 @@ export function LayoutModeToggle() {
             if (!Object.prototype.hasOwnProperty.call(changes, LAYOUT_MODE_STORAGE_KEY)) return;
             storageChanged = true;
             const next = changes[LAYOUT_MODE_STORAGE_KEY]?.newValue;
-            if (active && (next === 'popup' || next === 'sidepanel')) setMode(next);
+            if (active && (next === 'popup' || next === 'sidepanel')) {
+                writeVersionRef.current += 1;
+                persistedModeRef.current = next;
+                setMode(next);
+            }
         };
         chrome.storage.onChanged.addListener(onChanged);
         chrome.storage.local.get(LAYOUT_MODE_STORAGE_KEY, (items) => {
             if (!active || storageChanged) return;
             const v = items?.[LAYOUT_MODE_STORAGE_KEY];
-            if (v === 'popup' || v === 'sidepanel') setMode(v);
+            if (v === 'popup' || v === 'sidepanel') {
+                persistedModeRef.current = v;
+                setMode(v);
+            }
         });
         return () => {
             active = false;
@@ -77,12 +88,31 @@ export function LayoutModeToggle() {
 
     function pick(next) {
         if (next === mode) return;
+        const writeVersion = writeVersionRef.current + 1;
+        writeVersionRef.current = writeVersion;
         setMode(next);
+
+        const failWrite = () => {
+            if (writeVersionRef.current === writeVersion) setMode(persistedModeRef.current);
+            showToast({
+                id: 'layout-mode-save-failed',
+                variant: 'error',
+                message: t('components.layoutModeToggle.saveFailed'),
+            });
+        };
+
         try {
             const pending = chrome.storage.local.set({ [LAYOUT_MODE_STORAGE_KEY]: next });
-            if (typeof pending?.catch === 'function') void pending.catch(() => {});
+            if (typeof pending?.then === 'function') {
+                void Promise.resolve(pending).then(() => {
+                    if (writeVersionRef.current === writeVersion) persistedModeRef.current = next;
+                }, failWrite);
+            } else {
+                persistedModeRef.current = next;
+            }
         } catch {
             // Extension reloads can invalidate the storage context between render and click.
+            failWrite();
         }
     }
 

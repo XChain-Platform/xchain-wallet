@@ -380,6 +380,7 @@ const messages = {
         'Choose how the wallet opens from the extension toolbar.',
     'components.layoutModeToggle.popup': 'Popup',
     'components.layoutModeToggle.sidebar': 'Sidebar',
+    'components.layoutModeToggle.saveFailed': "Couldn't save the layout setting. Try again.",
     'components.marketLifecycleTimeline.loadingTimeline': 'Loading timeline…',
     'components.marketLifecycleTimeline.noLifecycleEventsYet': 'No lifecycle events yet.',
     'components.marketLifecycleTimeline.tradeLifecycle': 'Trade lifecycle',
