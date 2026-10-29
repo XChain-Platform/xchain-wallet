@@ -4194,6 +4194,25 @@ export function createBackgroundHost(deps) {
                     `broadcast.queue: entry "${id}" is no longer queued in the vault, so its bytes were not sent; compose a fresh transaction`,
                 );
             }
+            // The freeze is checked again once the claim is written, the last
+            // moment before the bytes leave: a freeze armed during that write
+            // (another tab, the popup, a duress entry) stops the send. The
+            // record goes back to 'queued', the status reload recovery reads as
+            // "signed, never sent", so the entry stays offered and unsent.
+            try {
+                flows.assertSigningAllowed();
+            } catch (freezeErr) {
+                const unclaimPatch = { status: 'queued', error: null };
+                if (await settleQueuedPendingTx(vault, entry, unclaimPatch) === 'unreachable') {
+                    recordOwedSettlement(walletId, entry.pendingTxId, 'patch', unclaimPatch);
+                }
+                throw freezeErr;
+            }
+            // A freeze armed after the commit is out still holds the reveal.
+            // The refusal leaves the pair advanced to its reveal and marked
+            // commit-landed, so the next attempt sends the reveal alone, and it
+            // skips the failure settlement below: nothing was rejected.
+            let revealFrozen = null;
             // `q` is the live array the queue Map holds and every renderer context
             // mutates it through this one host, so a discard of a lower entry or
             // another broadcast can shift it while this handler waits on the
@@ -4216,9 +4235,16 @@ export function createBackgroundHost(deps) {
                         if (!saysAlreadyOnNetwork(commitErr)) throw commitErr;
                     }
                     entry = await advanceToReveal(vault, walletId, q, entry, reveal);
+                    try {
+                        flows.assertSigningAllowed();
+                    } catch (freezeErr) {
+                        revealFrozen = freezeErr;
+                        throw freezeErr;
+                    }
                 }
                 result = await sdk.encoder.broadcastTx(entry.signedTxHex);
             } catch (err) {
+                if (revealFrozen !== null && err === revealFrozen) throw err;
                 // The same permanence split the core queue applies,
                 // applied here too - this queue retries on demand and had no way to
                 // stop. A signed transaction whose inputs are gone can never
