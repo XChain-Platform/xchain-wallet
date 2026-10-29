@@ -1259,6 +1259,11 @@ function completeHolderRows(resp) {
         || Array.isArray(resp?.holders);
     if (!hasRows) throw new Error(t('send.dividend.holdersIncomplete'));
     const rows = extractRows(resp);
+    // A page overlap repeats a holder; counted twice it overstates the payout,
+    // and dropped it leaves the list one short of its total, so either way the
+    // snapshot is incomplete.
+    const addresses = new Set(rows.map((row) => String(row?.address ?? '')));
+    if (addresses.size !== rows.length) throw new Error(t('send.dividend.holdersIncomplete'));
     if (!Array.isArray(resp) && resp.total !== undefined) {
         const rawTotal = String(resp.total).trim();
         if (!/^\d+$/.test(rawTotal) || BigInt(rawTotal) !== BigInt(rows.length)) {
