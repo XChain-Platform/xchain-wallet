@@ -828,6 +828,16 @@ export function TokenWizard({ walletId, onBack }) {
             return;
         }
         setFormError(null);
+        // The parent can change hands while Review sits open, and the chain
+        // refuses the child after the fee, so the lookup runs again here.
+        if (template === 'subtoken') {
+            const parentError = await parentOwnershipError();
+            if (parentError) {
+                setFormError(parentError);
+                submitPendingRef.current = false;
+                return;
+            }
+        }
         try {
             if (isWatcherMode) {
                 const res = await messaging.buildActionPsbtRequest({
