@@ -195,7 +195,13 @@ export function registerBridgeHandlers(host, opts = {}) {
         });
     };
 
-    register('bridge.connect', async (req, deps) => {
+    // Same-origin connects that are waiting on an approval, keyed by origin.
+    // The broker joins every same-origin connect onto one prompt, so without
+    // this map each waiting tab writes its own grant once that prompt
+    // settles, and one disconnect then leaves a grant that still answers reads.
+    const connectsInFlight = new Map();
+
+    const connectHandler = async (req, deps) => {
         assertOrigin(req);
         await assertNotBlocked(req, deps);
         // Read the option names bridge-spec's ConnectOpts actually publishes.
@@ -242,104 +248,131 @@ export function registerBridgeHandlers(host, opts = {}) {
             }
         }
 
-        // §48.6 / G151: Developer-Mode auto-approve for localhost. Skips the
-        // connect approval prompt when settings allow + origin is localhost.
-        // Sign auto-approval is a SEPARATE opt-in (settings.autoSignLocalhostMs
-        // / shouldAutoApproveSign, Cluster Q FOLLOWUP 3): a sign request may
-        // reuse a password captured by a prior approval, held only in
-        // service-worker memory. Connect auto-approve here never grants signing
-        // permissions (canSignMessage:false, canSignAction:{} below); the two
-        // gates are independent.
-        //
-        // The granted scope is resolved from the wallet's own state and only
-        // narrowed by the request (resolveAutoApproveScope), because an empty
-        // chains/accounts list is a WILDCARD in this permission model, not an
-        // empty grant. Falls back to the prompt when no concrete scope resolves.
-        let decision = null;
-        if (autoConnect) {
-            const activeChainIds = filterChainIdsByActiveNetwork(
-                Object.keys(settings?.fees ?? {}),
-                settings,
-                deps.chainRegistry,
-            );
-            const accountIds = (await deps.vault.accounts.list()).map((a) => a.id);
-            const scope = resolveAutoApproveScope({
-                requestedChains,
-                activeChainIds,
-                accountIds,
-            });
-            if (scope) {
-                decision = {
-                    approved: true,
-                    chains: scope.chains,
-                    accounts: scope.accounts,
-                    canSignMessage: false,
-                    canSignAction: {},
-                };
+        // A second tab of this origin waits on the first connect and then
+        // re-reads the stored grant instead of writing its own. A rejected
+        // prompt rejects the waiting tab as well, as the shared prompt does.
+        const inFlight = connectsInFlight.get(origin);
+        if (inFlight) {
+            await inFlight;
+            return connectHandler(req, deps);
+        }
+        const pending = (async () => {
+            // §48.6 / G151: Developer-Mode auto-approve for localhost. Skips the
+            // connect approval prompt when settings allow + origin is localhost.
+            // Sign auto-approval is a SEPARATE opt-in (settings.autoSignLocalhostMs
+            // / shouldAutoApproveSign, Cluster Q FOLLOWUP 3): a sign request may
+            // reuse a password captured by a prior approval, held only in
+            // service-worker memory. Connect auto-approve here never grants signing
+            // permissions (canSignMessage:false, canSignAction:{} below); the two
+            // gates are independent.
+            //
+            // The granted scope is resolved from the wallet's own state and only
+            // narrowed by the request (resolveAutoApproveScope), because an empty
+            // chains/accounts list is a WILDCARD in this permission model, not an
+            // empty grant. Falls back to the prompt when no concrete scope resolves.
+            let decision = null;
+            if (autoConnect) {
+                const activeChainIds = filterChainIdsByActiveNetwork(
+                    Object.keys(settings?.fees ?? {}),
+                    settings,
+                    deps.chainRegistry,
+                );
+                const accountIds = (await deps.vault.accounts.list()).map((a) => a.id);
+                const scope = resolveAutoApproveScope({
+                    requestedChains,
+                    activeChainIds,
+                    accountIds,
+                });
+                if (scope) {
+                    decision = {
+                        approved: true,
+                        chains: scope.chains,
+                        accounts: scope.accounts,
+                        canSignMessage: false,
+                        canSignAction: {},
+                    };
+                }
             }
-        }
-        const autoApproved = decision !== null;
-        if (!decision) {
-            // ConnectOpts has no account field, so the page never names
-            // accounts. The prompt offers the wallet's own list, primary
-            // first, and the user ticks what this site may see. A read failure
-            // offers nothing and the grant below narrows to the primary account.
-            const accountOptions = await deps.vault.accounts.list()
-                .then((list) => list.map((a) => ({ id: a.id, name: a.name })))
-                .catch(() => []);
-            decision = await approvals.connect({
-                origin,
-                appName,
-                appIcon,
-                requestedChains,
-                accountOptions,
-                ...approvalRequester(req),
+            const autoApproved = decision !== null;
+            if (!decision) {
+                // ConnectOpts has no account field, so the page never names
+                // accounts. The prompt offers the wallet's own list, primary
+                // first, and the user ticks what this site may see. A read failure
+                // offers nothing and the grant below narrows to the primary account.
+                const accountOptions = await deps.vault.accounts.list()
+                    .then((list) => list.map((a) => ({ id: a.id, name: a.name })))
+                    .catch(() => []);
+                decision = await approvals.connect({
+                    origin,
+                    appName,
+                    appIcon,
+                    requestedChains,
+                    accountOptions,
+                    ...approvalRequester(req),
+                });
+            }
+            if (!decision || !decision.approved) {
+                throw new UserRejectedError('connect');
+            }
+            // `decision.accounts` is the user's selection from the prompt, but it
+            // crosses a message boundary, so drop any id that is not a real vault
+            // account before it can become a grant: a foreign or made-up id stored
+            // in site.permissions.accounts would be handed back unchanged by every
+            // reader that trusts that list.
+            const vaultAccounts = await deps.vault.accounts.list();
+            const knownAccountIds = new Set(vaultAccounts.map((a) => a.id));
+            const permissions = {
+                chains: Array.isArray(decision.chains) ? decision.chains : [],
+                accounts: Array.isArray(decision.accounts)
+                    ? decision.accounts.filter((id) => knownAccountIds.has(id))
+                    : [],
+                canSignMessage: decision.canSignMessage === true,
+                canSignAction: decision.canSignAction ?? {},
+            };
+            // §43.3 reads an empty account list as a WILDCARD: getAccounts and
+            // getAddresses fall back to every account, and assertAddressPermitted
+            // returns "all permitted". A prompt that offered no accounts (the
+            // account read failed) answers `accounts: []`, which stored as-is
+            // would hand the site every account and address with no account
+            // review. Narrow an
+            // empty grant (also reached when every selected id above was
+            // dropped as unknown) to the primary account, which is exactly what
+            // resolveAutoApproveScope already does on the auto-approve path and for
+            // the same reason. Left empty when the vault has no accounts: there is
+            // nothing to grant, and the read handlers return empty sets anyway.
+            if (permissions.accounts.length === 0) {
+                const [primaryAccount] = vaultAccounts;
+                if (primaryAccount) permissions.accounts = [primaryAccount.id];
+            }
+            // A grant another connect stores for this origin while the prompt
+            // is open wins, so the origin keeps exactly one record.
+            const stored = await findConnectedSite(deps.vault, origin);
+            if (stored) {
+                await touchLastUsed(deps.vault, stored);
+                return connectSuccess(
+                    await accountRecordsFor(deps.vault, stored.permissions.accounts),
+                    stored.permissions,
+                );
+            }
+            const site = schemas.createConnectedSite({
+                origin, appName, appIcon,
+                permissions,
+                autoApproved,
             });
+            await deps.vault.connectedSites.put(site);
+            return connectSuccess(
+                await accountRecordsFor(deps.vault, permissions.accounts),
+                permissions,
+            );
+        })();
+        connectsInFlight.set(origin, pending);
+        try {
+            return await pending;
+        } finally {
+            if (connectsInFlight.get(origin) === pending) connectsInFlight.delete(origin);
         }
-        if (!decision || !decision.approved) {
-            throw new UserRejectedError('connect');
-        }
-        // `decision.accounts` is the user's selection from the prompt, but it
-        // crosses a message boundary, so drop any id that is not a real vault
-        // account before it can become a grant: a foreign or made-up id stored
-        // in site.permissions.accounts would be handed back unchanged by every
-        // reader that trusts that list.
-        const vaultAccounts = await deps.vault.accounts.list();
-        const knownAccountIds = new Set(vaultAccounts.map((a) => a.id));
-        const permissions = {
-            chains: Array.isArray(decision.chains) ? decision.chains : [],
-            accounts: Array.isArray(decision.accounts)
-                ? decision.accounts.filter((id) => knownAccountIds.has(id))
-                : [],
-            canSignMessage: decision.canSignMessage === true,
-            canSignAction: decision.canSignAction ?? {},
-        };
-        // §43.3 reads an empty account list as a WILDCARD: getAccounts and
-        // getAddresses fall back to every account, and assertAddressPermitted
-        // returns "all permitted". A prompt that offered no accounts (the
-        // account read failed) answers `accounts: []`, which stored as-is
-        // would hand the site every account and address with no account
-        // review. Narrow an
-        // empty grant (also reached when every selected id above was
-        // dropped as unknown) to the primary account, which is exactly what
-        // resolveAutoApproveScope already does on the auto-approve path and for
-        // the same reason. Left empty when the vault has no accounts: there is
-        // nothing to grant, and the read handlers return empty sets anyway.
-        if (permissions.accounts.length === 0) {
-            const [primaryAccount] = vaultAccounts;
-            if (primaryAccount) permissions.accounts = [primaryAccount.id];
-        }
-        const site = schemas.createConnectedSite({
-            origin, appName, appIcon,
-            permissions,
-            autoApproved,
-        });
-        await deps.vault.connectedSites.put(site);
-        return connectSuccess(
-            await accountRecordsFor(deps.vault, permissions.accounts),
-            permissions,
-        );
-    });
+    };
+    register('bridge.connect', connectHandler);
 
     // bridge-spec declares `disconnect(): Promise<void>`, so this is the one
     // bridge method with no result to shape. The `{ disconnected }` flag is
