@@ -162,11 +162,14 @@ function addressUsageKey(chainId, address) {
     return `${chainId}:${String(address || '').toLowerCase()}`;
 }
 
+// Rows of a history answer, or null when the answer is not a history list
+// (an error body, an HTML page, an empty object). An unreadable answer says
+// nothing about use, so it never marks an address unused.
 function historyRows(response) {
     if (Array.isArray(response)) return response;
     if (Array.isArray(response?.data)) return response.data;
     if (Array.isArray(response?.rows)) return response.rows;
-    return [];
+    return null;
 }
 
 function preferredAddressOfType(addresses, addressType, chainId, usageByKey) {
@@ -449,14 +452,18 @@ export function Receive({ walletId, accountId, prefill = null, onBack, onChangeA
                 chainId: activeChainId,
                 address: candidate.address,
             });
+            const rows = historyRows(response);
+            if (rows === null) throw new Error('Address history is unreadable.');
             return [
                 addressUsageKey(activeChainId, candidate.address),
-                historyRows(response).length > 0,
+                rows.length > 0,
             ];
         })).then((results) => {
             if (cancelled || receiveContextRef.current !== contextKey) return;
             const next = {};
             for (const result of results) {
+                // A failed or unreadable lookup leaves the address's use
+                // unknown, so it is neither offered as unused nor marked used.
                 if (result.status === 'fulfilled') {
                     const [key, used] = result.value;
                     next[key] = used;
@@ -573,6 +580,7 @@ export function Receive({ walletId, accountId, prefill = null, onBack, onChangeA
         const request = ++verifyRequestRef.current;
         const contextKey = receiveContextKey;
         const addressId = address.id;
+        const shownAddress = address.address;
         const isCurrentRequest = () => (
             verifyRequestRef.current === request
             && receiveContextRef.current === contextKey
@@ -587,7 +595,12 @@ export function Receive({ walletId, accountId, prefill = null, onBack, onChangeA
                 signerId: address.signerId,
             });
             if (!isCurrentRequest()) return;
-            if (res?.confirmed) {
+            // The device's own address must be the one on screen: a reply
+            // that says confirmed for any other address (or none) is a
+            // substituted or broken answer, never a verification.
+            const deviceMatches = typeof res?.deviceAddress === 'string'
+                && res.deviceAddress === shownAddress;
+            if (res?.confirmed === true && deviceMatches) {
                 setHwVerify({ status: 'confirmed', message: '' });
             } else {
                 setHwVerify({ status: 'mismatch', message: '' });

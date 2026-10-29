@@ -60,7 +60,9 @@ async function addressEverFunded(sdk, address) {
         if (typeof history.count === 'number') return history.count > 0;
     }
     if (typeof history === 'number') return history > 0;
-    return false;
+    // Any other answer (an error body, an HTML page) is unreadable: the
+    // address's funding stays unknown, never "unfunded".
+    return null;
 }
 
 /**

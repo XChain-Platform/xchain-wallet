@@ -251,6 +251,22 @@ describe('receiveAddress fills the lowest unfunded external index', () => {
         expect(rec.derivationPath).toBe(`m/84'/0'/0'/0/${expected}`);
     });
 
+    it.each([
+        ['a body that does not parse', '<html>502 Bad Gateway</html>'],
+        ['an error body', { status: 500, error: 'Internal Server Error' }],
+        ['an empty object', {}],
+    ])('never reissues a deleted interior index whose history is %s', async (_label, body) => {
+        const vault = makeVault({ accounts: [ACCOUNT_A], addresses: hdAt([0, 2]) });
+        const unreadableSdkRegistry = {
+            get: () => ({ explorer: { getHistory: async () => body } }),
+        };
+
+        const rec = await receiveAddress(base(vault, makeSigner('software'), {
+            sdkRegistry: unreadableSdkRegistry,
+        }));
+        expect(rec.derivationPath).toBe("m/84'/0'/0'/0/3");
+    });
+
     it('ignores the change branch: an internal index 0 does not fill external 0', async () => {
         const vault = makeVault({
             accounts: [ACCOUNT_A],
