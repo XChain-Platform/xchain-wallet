@@ -6,6 +6,7 @@ import {
     clickManageTokenAction,
     createWallet,
     expect,
+    expectMyTokensRow,
     gotoSection,
     LICENSE_ACCEPTED_AT_KEY,
     LICENSE_ACCEPTED_VERSION_KEY,
@@ -94,7 +95,7 @@ async function openManageToken(page) {
     await expect(search, 'My Tokens did not render').toBeVisible({ timeout: 30_000 });
     await search.fill(TICK);
     const row = main.getByRole('button', { name: `Open ${TICK} token details`, exact: true }).first();
-    await expect(row, `${TICK} is missing from My Tokens`).toBeVisible({ timeout: 60_000 });
+    await expectMyTokensRow(main, row, `${TICK} is missing from My Tokens`);
     await row.click();
     await expect(main.getByRole('heading', { name: TICK, exact: true }))
         .toBeVisible({ timeout: 30_000 });

@@ -78,6 +78,10 @@ const MINT_XCHAIN = 300;
 
 const STAKE_AMOUNT = '100';
 const UNSTAKE_PARTIAL = '30';
+// The faked-failure attempt unstakes a different amount. The encoder refuses a
+// byte-identical rebuild for five minutes, and after a faked rejection the
+// inputs are still unspent, so the real attempt has to be a different transaction.
+const UNSTAKE_FAKED = '25';
 const TOPUP_AMOUNT = '20';
 
 /** A fresh, syntactically-valid 64-hex signing key. The indexer regexes the
@@ -330,7 +334,7 @@ test.describe('STAKE -> UNSTAKE lifecycle on regtest (partial unstake, re-driven
             // still real, exactly as `failBroadcast`'s own contract promises.
             await failBroadcast(page, 'permanent');
 
-            await amountField(main).fill(UNSTAKE_PARTIAL);
+            await amountField(main).fill(UNSTAKE_FAKED);
             await main.getByRole('button', { name: 'Unstake', exact: true }).click();
 
             const confirm = await expectConfirmModal(page, 'the (faked-failure) partial UNSTAKE');
@@ -364,18 +368,17 @@ test.describe('STAKE -> UNSTAKE lifecycle on regtest (partial unstake, re-driven
             await expect(page.getByText(/Unstake broadcast\./)).toHaveCount(0);
 
             // Restore: drop the fake encoder answer. The plain form's own state
-            // (amount, pubkey) survives the round trip untouched, so the next
-            // step re-drives the SAME inputs for real with no re-fill needed.
+            // (amount, pubkey) survives the round trip untouched.
             await page.unroute(`${ENCODER_URL}/**`);
         });
 
         await test.step('the real partial UNSTAKE broadcasts and indexes valid', async () => {
             const main = page.getByRole('main');
-            // Reject returned to the plain form with state intact (proven for
-            // Send in confirm-broadcast.regtest.spec.js); re-assert rather than
-            // trust it, since a regression here would silently unstake the
-            // wrong amount.
-            await expect(amountField(main)).toHaveValue(UNSTAKE_PARTIAL);
+            // The refusal returned to the plain form with state intact; re-assert
+            // rather than trust it, since a regression here would silently
+            // unstake the wrong amount. Then set the real amount.
+            await expect(amountField(main)).toHaveValue(UNSTAKE_FAKED);
+            await amountField(main).fill(UNSTAKE_PARTIAL);
             await main.getByRole('button', { name: 'Unstake', exact: true }).click();
             await expectConfirmModal(page, 'the real partial UNSTAKE');
             const realPassword = page.getByLabel('Password', { exact: true });

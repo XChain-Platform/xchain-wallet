@@ -458,6 +458,24 @@ export async function clickManageTokenAction(main, label, { timeout = 30_000 } =
 }
 
 /**
+ * Waits for a My Tokens row, pressing the screen's own Try again while its
+ * owned-tokens read has failed.
+ *
+ * The regtest explorer limits requests per IP, and a spec's own chain polling
+ * spends the same budget, so a load can be refused for a few seconds. The
+ * screen reports that as a notice with Try again instead of retrying itself.
+ */
+export async function expectMyTokensRow(main, row, message, { timeout = 60_000 } = {}) {
+    const loadFailed = main.getByRole('alert').filter({ hasText: 'Could not load your owned tokens' });
+    await expect(async () => {
+        if (await loadFailed.isVisible().catch(() => false)) {
+            await loadFailed.getByRole('button', { name: 'Try again', exact: true }).click();
+        }
+        await expect(row, message).toBeVisible({ timeout: 2_000 });
+    }, message).toPass({ timeout, intervals: [3_000, 5_000, 10_000] });
+}
+
+/**
  * Submits the token wizard's Details step and advances through Review when the
  * details are accepted. A refused submission stays on Details with an alert,
  * so callers that exercise a refusal can assert that verdict without waiting

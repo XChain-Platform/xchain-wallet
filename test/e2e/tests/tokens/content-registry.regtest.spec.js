@@ -33,6 +33,7 @@ import {
     clickManageTokenAction,
     createWallet,
     expect,
+    expectMyTokensRow,
     openPaletteCommand,
     test,
 } from '../../fixtures/wallet.js';
@@ -116,8 +117,7 @@ async function openManageTokenAction(page, tick, label) {
     await openPaletteCommand(page, 'My tokens');
     const main = page.getByRole('main');
     const row = main.getByRole('button').filter({ hasText: tick }).first();
-    await expect(row, `${tick} is on chain but My Tokens does not list it`)
-        .toBeVisible({ timeout: 60_000 });
+    await expectMyTokensRow(main, row, `${tick} is on chain but My Tokens does not list it`);
     await row.click();
     await expect(page.getByText('Manage Token').first()).toBeVisible({ timeout: 30_000 });
 
