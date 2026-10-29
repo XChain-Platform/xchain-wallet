@@ -63,6 +63,15 @@ function isEntryRecord(entry) {
     return entry !== null && typeof entry === 'object' && !Array.isArray(entry);
 }
 
+// A row the directory can show names a list type, a home chain and a list
+// index; anything less renders as a phantom row nobody can open. The index
+// text itself is shown neutralized, so its content is not checked here.
+function isDirectoryRow(entry) {
+    return (entry.type === 'token' || entry.type === 'address')
+        && entry.homeChain != null && String(entry.homeChain).length > 0
+        && entry.homeListIndex != null && String(entry.homeListIndex).length > 0;
+}
+
 function homeDescriptor(homeChain, viewingChainId) {
     const direct = chainRegistry.get(String(homeChain));
     if (direct) return direct;
@@ -111,7 +120,7 @@ export function SharedListDirectory({ walletId, chainId, mode, filterType, onSel
                 setDirectory({
                     // A malformed row does not discard the valid rows returned beside it.
                     lists: Array.isArray(response?.lists)
-                        ? response.lists.filter(isEntryRecord).map(normalizeEntry)
+                        ? response.lists.filter(isEntryRecord).map(normalizeEntry).filter(isDirectoryRow)
                         : [],
                     unavailable: Array.isArray(response?.unavailable) ? response.unavailable : [],
                 });
