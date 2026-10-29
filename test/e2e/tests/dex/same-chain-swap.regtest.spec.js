@@ -109,6 +109,12 @@ test.describe(`same-chain SWAP on ${REGTEST_CHAIN_LABEL}`, () => {
                 chainId: REGTEST_CHAIN_ID,
                 chainLabel: REGTEST_CHAIN_LABEL,
                 tick: GIVE_TICK,
+                // The explorer balance is indexed above, but the picker starts
+                // its own wallet-balance read. On a loaded shared venue that
+                // read can remain pending after the picker's eight-second slow
+                // warning, so wait for the answer rather than treating the
+                // warning as an empty token list.
+                timeoutMs: 180_000,
             });
             await selectNamedToken(page, 'Get token', {
                 chainId: REGTEST_CHAIN_ID,
