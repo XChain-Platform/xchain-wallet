@@ -146,7 +146,13 @@ async function readCandidates({ messaging, chainId, addresses }) {
  * @param {() => void} props.onBack
  * @param {() => void} [props.onDone]
  */
-export function UnionListForm({ walletId, chainId: initialChainId, activeAccountId, onBack, onDone = onBack }) {
+export function UnionListForm(props) {
+    const { walletId, chainId, activeAccountId } = props;
+    const formKey = `${walletId}:${chainId || ''}:${activeAccountId || ''}`;
+    return <UnionListFormScreen key={formKey} {...props} />;
+}
+
+function UnionListFormScreen({ walletId, chainId: initialChainId, activeAccountId, onBack, onDone = onBack }) {
     const { messaging, shell } = useMessaging();
     const demoGuard = useDemoGuard(walletId, { onBack });
     const variant = screenVariantFor(shell);
