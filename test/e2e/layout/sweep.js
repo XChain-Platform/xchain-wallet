@@ -1266,7 +1266,19 @@ export function measureRulings() {
 
     // One title and one copy of each help line per screen. An open modal is
     // the screen: the page behind it is inert, so its title is not read as a
-    // repeat of a row in the modal.
+    // repeat of a row in the modal. Values in separate rows of one list are
+    // row data, not another copy of a title or help line.
+    // A row is the nearest list item, grid or list row, or element whose class
+    // names a row (ListRow and the activity rows), above the text itself.
+    const ROW = 'li, [role="listitem"], [role="option"], [role="row"], [class*="row" i]';
+    const isRepeatedRowData = (els) => {
+        const rows = els.map((el) => {
+            if (el.closest('h1, h2, h3, h4, [role="heading"]')) return null;
+            if (!el.closest('[class*="value" i], [class*="subtitle" i]')) return null;
+            return el.parentElement?.closest(ROW) ?? null;
+        });
+        return rows.every(Boolean) && new Set(rows).size === rows.length;
+    };
     const seen = new Map();
     const modal = [...document.querySelectorAll('[aria-modal="true"]')].filter(visible).pop();
     for (const el of (modal || document).querySelectorAll('h1, h2, h3, h4, p, [class*="title" i], [class*="help" i], [class*="hint" i]')) {
@@ -1279,7 +1291,9 @@ export function measureRulings() {
         if (!seen.get(key).includes(el)) seen.get(key).push(el);
     }
     for (const [t, els] of seen) {
-        if (els.length > 1 && !els.some((a, i) => els.some((b, j) => i !== j && (a.contains(b) || b.contains(a))))) {
+        if (els.length > 1
+            && !isRepeatedRowData(els)
+            && !els.some((a, i) => els.some((b, j) => i !== j && (a.contains(b) || b.contains(a))))) {
             cap(out.repeatedText, { text: t.slice(0, 60), count: els.length, els: els.slice(0, 3).map(desc) });
         }
     }

@@ -112,4 +112,42 @@ describe('UI rulings meter', () => {
         // The second is drawn as a section line, not a page message.
         expect(marked[1].hasAttribute('data-empty-state')).toBe(false);
     });
+
+    it('exempts repeated row data but keeps repeated help and headings', () => {
+        document.body.innerHTML = `
+            <main>
+                <div class="activityList">
+                    <div class="activityRow"><span class="rowTitle">Sale one</span><span class="rowSubtitle">1 day ago</span></div>
+                    <div class="activityRow"><span class="rowTitle">Sale two</span><span class="rowSubtitle">1 day ago</span></div>
+                    <div class="activityRow"><span class="rowSubtitle">Same row value</span><span class="rowSubtitle">Same row value</span></div>
+                </div>
+                <div role="list">
+                    <div role="listitem"><span class="rowSubtitle">Shared address</span></div>
+                    <div role="listitem"><span class="rowSubtitle">Shared address</span></div>
+                </div>
+                <section>
+                    <p>Keep this recovery phrase somewhere private.</p>
+                    <p>Keep this recovery phrase somewhere private.</p>
+                </section>
+                <section>
+                    <h2>Recovery help</h2>
+                    <h2>Recovery help</h2>
+                </section>
+            </main>
+        `;
+        const box = { left: 0, top: 0, width: 180, height: 40, right: 180, bottom: 40 };
+        for (const element of document.querySelectorAll('body *')) {
+            element.style.opacity = '1';
+            Object.defineProperty(element, 'innerText', { value: element.textContent });
+            element.getBoundingClientRect = () => box;
+        }
+
+        const repeated = measureRulings().repeatedText || [];
+
+        expect(repeated.map(({ text, count }) => `${text} x${count}`)).toEqual([
+            'same row value x2',
+            'keep this recovery phrase somewhere private. x2',
+            'recovery help x2',
+        ]);
+    });
 });
