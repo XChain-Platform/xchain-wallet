@@ -7,6 +7,56 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.342.0] - 2026-10-30
+
+### Added
+- The desktop wallet hides its windows from screen capture while key material is on screen.
+- Every wallet covers key material when its window blurs or goes to the background.
+- Every password field in the lock and safety flows has a show and hide button.
+- PSBT signing warns when the network fee takes a large share of what the transaction sends.
+- The automatic donation recipient can be picked per network.
+- Mobile wallets keep the open screen and the Send draft across a pause and resume.
+- Token details show the age of kept prices and open the market view.
+- A progress status shows while a network switch is under way.
+- Testnet is offered without Developer mode, and only Regtest stays behind it.
+
+### Changed
+- Every screen shows its notices and errors as one shared status message at the top of the page content.
+- Cards, buttons, fields, dropdowns and dividers share one set of components and tokens across the app.
+- Phone controls have a 44px tap area, and long names, balances and tickers stay whole or end in an ellipsis.
+- Right-to-left pages mirror the navigation and keep amount digits readable.
+- Rare screens, overlays, the command palette and the chain registry sync load on demand, so the wallet starts faster.
+- Form drafts are kept per network and keep saving as they are filled.
+- Approve stays inert for 700 ms after a review appears, so a repeated tap cannot sign it.
+- Fields rely on native paste instead of in-field Paste buttons.
+- Electron moves to 44.9.3, and patched undici, body-parser, zod, fast-uri and qs releases are pinned.
+
+### Fixed
+- Multisig transactions are checked signature by signature before broadcast, and a cosigner reply counts only when it verifies.
+- Hardware wallet signatures are verified before broadcast, and device sessions end on lock.
+- Queued transactions are verified before they are stored or broadcast, and the panic freeze is checked at every broadcast.
+- A send can no longer spend coins another send or window is already spending, and held coins stay out of Max.
+- Custom fee rates outside the chain's bounds are refused on every compose form and in Settings.
+- Token, dispenser, name and callback actions read their state again at Approve and refuse when it changed.
+- Messages to sign are refused when they carry hidden characters or controls.
+- Pasted and scanned payment links are checked for secrets, the wrong coin and bad tokens before review.
+- Explorer answers for another address, malformed balances and untrustworthy price timestamps are refused.
+- A balance that fails to load shows as unavailable instead of zero, and pending sends are netted into the Send balance.
+- Explorer balances round down to the asset's decimals.
+- History reads every page of a large feed and refuses a short or stale page.
+- The duress passphrase can no longer be set as the wallet password, and panic mode stays on when its store refuses a write.
+- Auto-lock holds while a signing request runs, up to ten minutes, and locks when the clock is set back.
+- Undo send times its window on a monotonic clock, so a clock change cannot shorten it.
+- Backups are validated before the first restore write and are marked done only after a real save.
+- A new, imported or restored wallet is saved in one vault write, and a half-written wallet is discarded on failure.
+- Seed imports and restores find the addresses the wallet used before.
+- Desktop queued broadcasts survive a relaunch, and quit waits only for sends that sign and broadcast.
+- Closing a desktop window during its load no longer crashes the app.
+- Extension approvals expire when messaging disconnects, and the extension fails safely across worker restarts.
+- A wallet switch or rename in another window no longer disturbs an open review.
+- Tor routing buffers proxy replies and routes the Trezor Connect session through the proxy.
+- iOS asks for a Face ID match before it stores the biometric unlock.
+
 ## [0.341.4] - 2026-10-14
 
 ### Added
