@@ -228,3 +228,37 @@ describe('History threads a cross-chain LINK onto both sides (issue #50)', () =>
         expect(dogeEntry.link.linkActionIndex).toBe('999');
     });
 });
+
+describe('History keeps same-chain links out of the cross-chain view', () => {
+    it('drops a same-chain linked pair from Cross-chain only and keeps a real crossing', async () => {
+        const { view } = mountHistoryMultiChain([BTC_CHAIN, DOGE_CHAIN], {
+            [BTC_CHAIN]: {
+                address: BTC_ADDR,
+                history: [stakeRow(320, BTC_ADDR, 60), stakeRow(330, BTC_ADDR, 70), stakeRow(340, BTC_ADDR, 80)],
+                links: [
+                    linkRow({ actionIndex: 326, coin1: 'BTC', coin1ActionIndex: 320, coin2: 'DOGE', coin2ActionIndex: 1793, source: BTC_ADDR }),
+                    linkRow({ actionIndex: 345, coin1: 'BTC', coin1ActionIndex: 330, coin2: 'BTC', coin2ActionIndex: 340, source: BTC_ADDR }),
+                ],
+            },
+            [DOGE_CHAIN]: { address: DOGE_ADDR, history: [stakeRow(1793, DOGE_ADDR, 90)], links: [] },
+        });
+        await switchToFlatMode();
+        await waitFor(() => expect(rowKeys(view)).toEqual(expect.arrayContaining([
+            `${BTC_CHAIN}:330:${BTC_ADDR}`,
+            `${BTC_CHAIN}:340:${BTC_ADDR}`,
+        ])));
+
+        fireEvent.click(screen.getByRole('button', { name: 'More filters' }));
+        const trigger = screen.getByRole('button', { name: /^No special filters$/ });
+        fireEvent.click(trigger);
+        fireEvent.click(screen.getByRole('option', { name: 'Cross-chain only' }));
+        if (trigger.getAttribute('aria-expanded') === 'true') fireEvent.click(trigger);
+
+        await waitFor(() => expect(rowKeys(view)).not.toContain(`${BTC_CHAIN}:330:${BTC_ADDR}`));
+        expect(rowKeys(view)).not.toContain(`${BTC_CHAIN}:340:${BTC_ADDR}`);
+        expect(rowKeys(view)).toEqual(expect.arrayContaining([
+            `${BTC_CHAIN}:320:${BTC_ADDR}`,
+            `${DOGE_CHAIN}:1793:${DOGE_ADDR}`,
+        ]));
+    });
+});

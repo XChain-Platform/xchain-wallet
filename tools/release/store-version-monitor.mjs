@@ -521,8 +521,9 @@ export async function checkPlay({
 // WHAT THIS CHECKS: presence and IDENTITY.
 //   - the feed answers and parses under the same strict rule the app applies
 //   - the manifest for the version the feed names answers
-//   - the APK the CDN actually serves hashes to the digest that manifest
-//     claims for it
+//   - each APK the CDN actually serves hashes to the digest that manifest
+//     claims for it: the store APK always, plus every suffixed APK the
+//     manifest lists for that version (such as `-full.apk`)
 // That last one is the point. Rows 93/94/97/102/103 of are all the
 // same failure - a published surface saying something false, found only
 // by looking - and the digest is the only one of these that a silent
@@ -667,7 +668,7 @@ export function judgeDirect(m) {
     if (actual !== expected) {
         return {
             state: 'alert',
-            detail: `the APK served for ${version} hashes to ${actual} but its signed manifest `
+            detail: `the APK served for ${version} (${m.apkName}) hashes to ${actual} but its signed manifest `
                 + `claims ${expected}. The published binary is NOT the one that was signed`,
             version,
         };
@@ -681,8 +682,9 @@ export function judgeDirect(m) {
 }
 
 /**
- * Fetch and score the direct lane.
- * @returns {Promise<{key: string, itemId: string, state: string, version: string|null, detail: string}>}
+ * Fetch and score the direct lane: the store APK first, then every other APK
+ * the manifest lists for the feed's version, one result per APK.
+ * @returns {Promise<Array<{key: string, itemId: string, state: string, version: string|null, detail: string}>>}
  */
 export async function checkDirect({
     base = DEFAULT_DIRECT_BASE, fetchImpl = globalThis.fetch, timeoutMs = DEFAULT_TIMEOUT_MS,
@@ -700,14 +702,13 @@ export async function checkDirect({
     };
 
     let feedText = null; let manifestText = null; let apkBytes = null;
-    let apkName = ''; let transport = null;
+    let apkName = ''; let transport = null; let version = null;
     try {
         feedText = await get(`${root}/android/latest.json`);
         if (feedText !== null) {
             // Read the version the same way the app does before using it to
             // build any further URL: a malformed feed must not send this
             // monitor fetching an attacker-shaped path.
-            let version = null;
             try { version = parseDirectFeedVersion(JSON.parse(feedText)); } catch { /* judged below */ }
             if (version) {
                 apkName = `xchain-wallet-v${version}.apk`;
@@ -719,11 +720,46 @@ export async function checkDirect({
         transport = e.message;
     }
 
+    const itemId = `${root}/android`;
     const judged = judgeDirect({ feedText, manifestText, apkBytes, apkName, transport });
-    return {
-        key: 'direct', itemId: `${root}/android`, state: judged.state,
-        version: judged.version, detail: judged.detail,
-    };
+    const results = [{ key: 'direct', itemId, state: judged.state, version: judged.version, detail: judged.detail }];
+
+    // Hash the other APKs the manifest lists only once the feed, the manifest and their tags agree.
+    if (transport || !version || manifestText === null) return results;
+    const { tag, digests } = parseReleaseManifest(manifestText);
+    if (tag && releaseTagOf(tag) !== `v${version}`) return results;
+    for (const name of extraDirectApkNames(digests, version)) {
+        let bytes = null;
+        try {
+            bytes = await get(`${root}/android/${name}`, true);
+        } catch (e) {
+            results.push({
+                key: 'direct', itemId, state: 'inconclusive', version,
+                detail: `could not fetch ${name} to check it against the signed manifest: ${e.message}`,
+            });
+            continue;
+        }
+        const extra = judgeDirect({ feedText, manifestText, apkBytes: bytes, apkName: name });
+        results.push({ key: 'direct', itemId, state: extra.state, version: extra.version, detail: extra.detail });
+    }
+    return results;
+}
+
+/**
+ * The suffixed APKs a release manifest lists beside the store APK, such as
+ * `xchain-wallet-v<version>-full.apk`. Only names of exactly that shape are
+ * returned, because the manifest comes from the host being audited and each
+ * name becomes a URL.
+ *
+ * @param {Record<string, string>} digests  parseReleaseManifest().digests
+ * @param {string} version                  the feed's validated version
+ * @returns {string[]}
+ */
+export function extraDirectApkNames(digests, version) {
+    const prefix = `xchain-wallet-v${version}-`;
+    return Object.keys(digests).filter((name) => name.startsWith(prefix)
+        && name.endsWith('.apk')
+        && /^[a-z0-9]+$/.test(name.slice(prefix.length, -'.apk'.length))).sort();
 }
 
 // ------------------------------------------------------------------ CLI
@@ -758,8 +794,10 @@ production promote.
 DIRECT lane (row 130): the direct-APK download feed, which is the
 only artifact this project has actually shipped to the public. Fetches
 the update pointer, the signed manifest for the version it names, and
-the APK itself, then hashes the served bytes and ALERTS if they do not
-match the digest that manifest claims. It keeps NO state and needs no
+the store APK plus every suffixed APK that manifest lists for the
+version (such as -full.apk), then hashes the served bytes and ALERTS if
+they do not match the digest that manifest claims, or if a listed APK
+is not served. It keeps NO state and needs no
 latch: this lane is published now, so an absent feed is always an
 outage rather than a "not published yet". It does NOT verify the
 manifest's GPG signature - that needs a keyring and a trust decision,
@@ -919,7 +957,7 @@ export async function run({ argv = [], env = process.env, fetchImpl, timeoutMs, 
 
     if (directEnabled) {
         const directBase = flags.directBase || env.DIRECT_FEED_BASE || DEFAULT_DIRECT_BASE;
-        results.push(await checkDirect({ base: directBase, fetchImpl, timeoutMs }));
+        results.push(...await checkDirect({ base: directBase, fetchImpl, timeoutMs }));
     }
 
     const alerts = results.filter((r) => r.state === 'alert');

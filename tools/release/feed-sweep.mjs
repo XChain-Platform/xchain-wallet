@@ -79,6 +79,7 @@ export const FINDINGS = {
     'POINTER-UNREADABLE': 'a JSON pointer the shipped client discards (oversized, or a version it will not parse)',
     'POINTER-DANGLING': 'a pointer naming a file that is not on the feed',
     'POINTER-HASH': "a pointer's sha512 does not match the bytes it names",
+    'POINTER-NO-HASH': "a yml pointer names a file with no sha512 the desktop client can read, which every desktop client refuses",
     'POINTER-UNCOVERED': "a pointer names a file its own version's signed manifest does not cover",
     'POINTER-NO-MANIFEST': "no manifest is published for a live pointer's version",
     'POINTER-UNGATED': "a live pointer's own manifest records a dev-mock gate other than enforced, which every desktop client refuses",
@@ -94,6 +95,17 @@ export function sha256File(path) {
 /** sha512 of a file, base64 - the encoding electron-updater writes. */
 export function sha512File(path) {
     return hashFile(path, 'sha512', 'base64');
+}
+
+/** A pointer sha512 as hex, or '' when absent or malformed (port of updateVerify.js normalizeSha512). */
+export function normalizeSha512(value) {
+    const raw = String(value ?? '').trim();
+    if (!raw) return '';
+    if (/^[0-9a-f]{128}$/.test(raw.toLowerCase())) return raw.toLowerCase();
+    if (!/^[A-Za-z0-9+/]+={0,2}$/.test(raw)) return '';
+    const decoded = Buffer.from(raw, 'base64');
+    if (decoded.length !== 64) return '';
+    return decoded.toString('hex');
 }
 
 function hashFile(path, algorithm, encoding) {
@@ -628,7 +640,13 @@ export function sweep(root, options = {}) {
                 add('POINTER-DANGLING', rel, `names ${dir}/${entry.url}, which is absent`);
                 continue;
             }
-            if (entry.sha512 && sha512File(target) !== entry.sha512) {
+            // Read the claim as the client does (verifyChannelPointer): hex or
+            // base64 alike, and a missing one refuses the install rather than passing.
+            const claimed = normalizeSha512(entry.sha512);
+            if (!claimed) {
+                add('POINTER-NO-HASH', rel,
+                    `names ${dir}/${entry.url} with no sha512 the desktop client can read, so it refuses the install`);
+            } else if (Buffer.from(sha512File(target), 'base64').toString('hex') !== claimed) {
                 add('POINTER-HASH', rel, `sha512 does not match ${dir}/${entry.url}`);
             }
             // Judged against the pointer's OWN release, as the client does

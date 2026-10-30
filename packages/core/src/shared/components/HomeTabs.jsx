@@ -920,6 +920,7 @@ const ACTION_ICON = {
     dividend:   (k) => <Icon.DollarIcon key={k} />,
     broadcast:  (k) => <Icon.BroadcastIcon key={k} />,
     message:    (k) => <Icon.MessageIcon key={k} />,
+    link:       (k) => <Icon.LinkIcon key={k} />,
     crosschain: (k) => <Icon.LinkIcon key={k} />,
     stake:      (k) => <Icon.StakeIcon key={k} />,
     contract:   (k) => <Icon.ContractIcon key={k} />,

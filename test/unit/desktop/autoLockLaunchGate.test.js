@@ -358,6 +358,55 @@ describe('a cached key the lock could not delete is never used again', { timeout
         expect(existsSync(sessionFile())).toBe(false);
     });
 
+    /** A runtime on the same files, as the next process launch builds it. */
+    function relaunchRuntime() {
+        return createRuntime({
+            storageBackend: { load: async () => null, save: async () => {}, clear: async () => {} },
+            metaBackend: { load: async () => null, save: async () => {}, clear: async () => {} },
+            sessionBackend: new KeychainSessionBackend({ safeStorage: fakeSafeStorage, filePath: sessionFile() }),
+            autoLockStore: new FileAutoLockStore(autoLockStatePathFor(dir)),
+            chainRegistry: {},
+            sdkRegistry: {},
+        });
+    }
+
+    it.each([
+        ['a locked-screen disarm report', { armed: false }],
+        ['an armed report', { armed: true, idleMs: 15 * MINUTE }],
+    ])('%s after the failed clear does not reopen the key on relaunch', async (_label, request) => {
+        const runtime = await runtimeWithCachedKey();
+        const now = Date.now();
+        await runtime.autoLockStore.save({ armed: true, idleMs: 15 * MINUTE, lastActivity: now - 60 * MINUTE });
+        const spy = refuseUnlinkOf(sessionFile());
+        expect((await enforceLaunchAutoLock(runtime, now)).locked).toBe(true);
+        expect(runtime.autoLockCleanupPending).toBe(true);
+
+        const res = await handleIpcMessage(runtime, { type: AUTO_LOCK_REPORT_TYPE, request });
+        expect(res.ok).toBe(true);
+        expect(existsSync(autoLockStatePathFor(dir))).toBe(false);
+
+        const relaunched = relaunchRuntime();
+        expect(await enforceLaunchAutoLock(relaunched, Date.now())).toEqual({ locked: true, reason: 'no-record' });
+        expect(await ensureHost(relaunched)).toBe(null);
+        spy.mockRestore();
+    });
+
+    it.each([
+        ['a disarm', { armed: false }],
+        ['an activity stamp', { armed: true, idleMs: 15 * MINUTE, activity: true }],
+    ])('%s while cleanup is pending keeps the expired record the next check retries from', async (_label, request) => {
+        const runtime = await runtimeWithCachedKey();
+        const expired = { armed: true, idleMs: 15 * MINUTE, lastActivity: Date.now() - 60 * MINUTE };
+        await runtime.autoLockStore.save(expired);
+        runtime.autoLockCleanupPending = true;
+
+        await handleIpcMessage(runtime, { type: AUTO_LOCK_REPORT_TYPE, request });
+
+        const state = await runtime.autoLockStore.load();
+        expect(state.armed).toBe(true);
+        expect(state.lastActivity).toBe(expired.lastActivity);
+    });
+
     it('a fresh save after the failed clear is a fresh session again', async () => {
         const backend = new KeychainSessionBackend({ safeStorage: fakeSafeStorage, filePath: sessionFile() });
         await backend.save(new Uint8Array([9, 9]));

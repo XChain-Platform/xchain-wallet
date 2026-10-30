@@ -27,6 +27,7 @@
 import { WalletNotFoundError } from './unlockWallet.js';
 import { clearGatedContentCaches } from './gatedContent.js';
 import { clearPendingGeneratedKeysForWallet } from './gatedPublishAction.js';
+import { withAccountLock } from '../cosigner/accountLock.js';
 
 /**
  * @param {{ vault: import('../storage/Vault.js').Vault, walletId: string }} opts
@@ -105,12 +106,15 @@ export async function removeWallet({ vault, walletId }) {
     await deleteRecords(vault.pendingAirdrops, pendingAirdrops);
     await deleteRecords(vault.pendingDeploys, pendingDeploys);
     await deleteRecords(vault.multisigSigningSessions, multisigSessions);
-    await deleteRecords(vault.coSignerAccounts, coSignerAccounts);
+    await deleteCoSignerAccounts(vault, coSignerAccounts);
     await deleteRecords(vault.watchlistEntries, watchlistEntries);
     await deleteRecords(vault.priceAlerts, priceAlerts);
     await deleteRecords(vault.gatedKeys, gatedKeys);
     await deleteRecords(vault.autopayOrders, autopayOrders);
     await vault.wallets.delete(walletId);
+    // Sweep again for agent accounts added for this wallet while it was being removed.
+    const lateCoSignerAccounts = await vault.coSignerAccounts.findBy('walletId', walletId);
+    await deleteCoSignerAccounts(vault, lateCoSignerAccounts);
     clearGatedContentCaches();
     clearPendingGeneratedKeysForWallet(walletId);
 
@@ -124,7 +128,7 @@ export async function removeWallet({ vault, walletId }) {
             pendingAirdrops: pendingAirdrops.length,
             pendingDeploys: pendingDeploys.length,
             multisigSigningSessions: multisigSessions.length,
-            coSignerAccounts: coSignerAccounts.length,
+            coSignerAccounts: coSignerAccounts.length + lateCoSignerAccounts.length,
             watchlistEntries: watchlistEntries.length,
             priceAlerts: priceAlerts.length,
             gatedKeys: gatedKeys.length,
@@ -136,6 +140,14 @@ export async function removeWallet({ vault, walletId }) {
 
 async function deleteRecords(collection, records) {
     for (const record of records) await collection.delete(record.id);
+}
+
+// Delete under the account lock (a window write or policy edit puts the whole
+// record back, so it must finish before the delete or see it saved).
+async function deleteCoSignerAccounts(vault, records) {
+    for (const record of records) {
+        await withAccountLock(record.id, () => vault.coSignerAccounts.delete(record.id));
+    }
 }
 
 function pendingScopeForAddress(address) {

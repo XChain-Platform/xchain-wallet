@@ -149,6 +149,8 @@ const messages = {
     'history.summary.batch': '{count, plural, one {Batch: # action} other {Batch: # actions}}',
     'history.summary.link': 'Cross-chain link: {peer} ↔ {leader}',
     'history.summary.linkSolo': 'Cross-chain link: {leader}',
+    'history.summary.linkSameChain': 'Link: {peer} ↔ {leader}',
+    'history.summary.linkSameChainSolo': 'Link: {leader}',
 };
 
 addEnglish(messages);

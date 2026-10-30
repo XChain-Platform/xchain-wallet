@@ -16,6 +16,7 @@ import { probeTxInclusion } from '@xchain-wallet/core/flows/txInclusionProbe.js'
 import { rawTxid } from '@xchain-wallet/core/signers/verifySignedTx.js';
 import {
     OWED_SETTLEMENT_LIMIT,
+    foldOwedSettlement,
     owedRecordKey,
     sealBroadcastQueueStore,
 } from './broadcastQueueStore.js';
@@ -62,6 +63,8 @@ function queuedRevealFields(source) {
 export function createBroadcastQueueEngine({ store: queueStore, importedAddressIdsFor, discardQueuedBroadcast }) {
     /** @type {Map<string, import('./broadcastQueueStorage.js').QueueEntry[]>} */
     const queuedBroadcasts = queueStore.queues;
+    // Wallets removed in this process; an in-flight send dies with the process and ids are random UUIDs, so it never clears.
+    const removedWallets = new Set();
     // Fold a persisted snapshot into the live map instead of replacing it. A
     // retried rehydrate can land after this process already queued entries of
     // its own, and `getQueue` hands the routes the live array they splice, so
@@ -129,8 +132,8 @@ export function createBroadcastQueueEngine({ store: queueStore, importedAddressI
         }
     }
     // Copy the blob copy's ADS verdict and fee-bump link onto a vault-rebuilt
-    // twin of the same bytes; a rebuild carries neither, and losing the link
-    // leaves the evicted original live after the replacement lands.
+    // twin of the same bytes; a rebuild carries no verdict, and carries the link
+    // only from a record that names it, so the blob copy fills it for the rest.
     function adoptSnapshotVerdict(live, persisted) {
         if (live.signedTxHex !== persisted.signedTxHex) return;
         const link = persisted.rbfReplacesPendingTxId;
@@ -285,19 +288,29 @@ export function createBroadcastQueueEngine({ store: queueStore, importedAddressI
             queueStore.owed = queueStore.owed.filter((s) => !known.has(owedRecordKey(s)) || stored.has(owedRecordKey(s)));
         }
         if (persisted.length === 0) return;
-        const held = new Set(queueStore.owed.map((s) => s.pendingTxId));
+        const liveByTx = new Map(queueStore.owed.map((s) => [s.pendingTxId, s]));
+        const held = new Set(liveByTx.keys());
+        const replaced = new Map();
         const restored = [];
         for (const owed of persisted) {
             if (!owed || typeof owed !== 'object') continue;
             if (typeof owed.pendingTxId !== 'string' || !owed.pendingTxId) continue;
-            if (held.has(owed.pendingTxId)) continue;
             if (owed.walletId && queueStore.prunedWallets?.has(owed.walletId)) continue;
+            // A live record for the same PendingTx is the later write: fold it
+            // onto the persisted one so the persisted structural fields survive.
+            const live = liveByTx.get(owed.pendingTxId);
+            if (live && !replaced.has(live) && owedRecordKey(live) !== owedRecordKey(owed)) {
+                const folded = foldOwedSettlement({ ...owed }, live);
+                if (folded !== live) replaced.set(live, folded);
+                continue;
+            }
+            if (held.has(owed.pendingTxId)) continue;
             held.add(owed.pendingTxId);
             restored.push({ ...owed });
         }
         // Persisted records go in front: persistOwedSettlements refuses while
         // `queueStore.loaded` is false, so the blob predates everything this process holds.
-        queueStore.owed = [...restored, ...queueStore.owed];
+        queueStore.owed = [...restored, ...queueStore.owed.map((s) => replaced.get(s) ?? s)];
         capOwedSettlements();
     }
     // Write the journal to the queue's own storage key. The wallet wipe clears
@@ -318,16 +331,20 @@ export function createBroadcastQueueEngine({ store: queueStore, importedAddressI
     // `queuedBroadcasts`, so no route can list or broadcast one.
     function recordOwedSettlement(walletId, pendingTxId, op, patch) {
         if (typeof pendingTxId !== 'string' || !pendingTxId) return;
-        // One record per PendingTx, holding the latest write owed to it.
-        queueStore.owed = queueStore.owed.filter((s) => s.pendingTxId !== pendingTxId);
-        queueStore.owed.push({
+        const record = {
             id: `s-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
             ...(typeof walletId === 'string' && walletId ? { walletId } : {}),
             pendingTxId,
             op,
             ...(patch ? { patch } : {}),
             recordedAt: Date.now(),
-        });
+        };
+        // One record per PendingTx, folding this write onto the one already owed.
+        const prior = queueStore.owed.find((s) => s.pendingTxId === pendingTxId);
+        const folded = foldOwedSettlement(prior, record);
+        if (folded === prior) return;
+        queueStore.owed = queueStore.owed.filter((s) => s.pendingTxId !== pendingTxId);
+        queueStore.owed.push(folded);
         capOwedSettlements();
         void persistOwedSettlements();
     }
@@ -350,11 +367,16 @@ export function createBroadcastQueueEngine({ store: queueStore, importedAddressI
             for (const owed of [...queueStore.owed]) {
                 let verdict;
                 if (owed.op === 'discard') {
-                    try {
-                        await discardQueuedBroadcast({ vault, pendingTxId: owed.pendingTxId });
-                        verdict = 'settled';
-                    } catch (_e) {
-                        verdict = 'unreachable';
+                    // Apply the patch a folded discard carries first, so the
+                    // discard reads the commit-landed state it recorded.
+                    if (owed.patch) verdict = await applyPendingTxPatch(vault, owed.pendingTxId, owed.patch);
+                    if (verdict !== 'unreachable') {
+                        try {
+                            await discardQueuedBroadcast({ vault, pendingTxId: owed.pendingTxId });
+                            verdict = 'settled';
+                        } catch (_e) {
+                            verdict = 'unreachable';
+                        }
                     }
                 } else {
                     verdict = await applyPendingTxPatch(vault, owed.pendingTxId, owed.patch);
@@ -427,6 +449,8 @@ export function createBroadcastQueueEngine({ store: queueStore, importedAddressI
      */
     async function pruneWalletFromQueue(walletId) {
         if (typeof walletId !== 'string' || !walletId) return;
+        // Close the enqueue gate before any await, so a send still broadcasting cannot add an entry behind the prune.
+        removedWallets.add(walletId);
         // Read first: the persist rewrites the whole blob from the live map, so
         // a prune over a map that never loaded would drop this wallet on disk
         // and leave every other wallet's entries to the fail-closed gate.
@@ -620,6 +644,10 @@ export function createBroadcastQueueEngine({ store: queueStore, importedAddressI
                 // A two-phase record checkpointed before its commit went out
                 // comes back with its reveal, so the resume sends both.
                 ...queuedRevealFields(record),
+                // A fee-bump replacement names the original it evicts on its record.
+                ...(typeof record.rbfReplacesPendingTxId === 'string' && record.rbfReplacesPendingTxId
+                    ? { rbfReplacesPendingTxId: record.rbfReplacesPendingTxId }
+                    : {}),
                 // No ADS verdict: it rode the entry, never the record, so the
                 // donation this transaction may carry is not re-derivable here.
                 // Booking nothing under-counts the accumulator; booking a guess
@@ -797,9 +825,11 @@ export function createBroadcastQueueEngine({ store: queueStore, importedAddressI
      *
      * @param {string} walletId
      * @param {any} entry
-     * @returns {Promise<{ entry: import('./broadcastQueueStorage.js').QueueEntry, persisted: boolean }>}
+     * @returns {Promise<{ entry: import('./broadcastQueueStorage.js').QueueEntry | null, persisted: boolean }>}
      */
     async function enqueueSignedBroadcast(walletId, entry) {
+        // Refuse a removed wallet: no route lists its queue, so the entry would never be sent or discarded.
+        if (removedWallets.has(walletId)) return { entry: null, persisted: false };
         await ensureQueueLoaded();
         // A first list in the gap after the 'queued' stamp may have rebuilt
         // these bytes already; give that entry the verdict instead of a twin.

@@ -41,6 +41,7 @@ import {
 import { recordPendingCommit, clearPendingCommit } from '../shared/utils/envelopeRecoveryMemory.js';
 import { isAlreadyOnNetworkRejection } from '../flows/broadcastPermanence.js';
 import { assertRevealSpendsCommitLegs } from './p2shRevealInputs.js';
+import { assertRevealPaysApprovedOutputs } from './p2shRevealOutputs.js';
 import { compiledPayloadByteLen, envelopeEncoderOpts } from '../flows/envelopeSelection.js';
 import { chunkLaneOpener, signerSubject } from '../shared/utils/chunkLaneCopy.js';
 import { assertBuiltActionMatchesIntent } from '../flows/verifyBuiltAction.js';
@@ -259,7 +260,7 @@ export function assertCompleteEnvelope(built, action) {
  * @property {(txid: string, opts?: { timeout?: number, pollInterval?: number, requireValid?: boolean }) => Promise<unknown>} [waitForTxid]
  * @property {{ timeout?: number, pollInterval?: number, requireValid?: boolean }} [waitOpts]
  * @property {(phase: SubmitPhase, data: object) => void} [onProgress]
- * @property {(transactions: { signed: { signedPsbtHex: string, txHex: string, txid: string }, revealSigned: { signedPsbtHex: string, txHex: string, txid: string } | null }) => void | Promise<void>} [beforeBroadcast] called after the commit and any reveal (the TAPROOT envelope reveal or the P2SH/P2WSH phase-2 spend) are signed and before anything is broadcast
+ * @property {(transactions: { signed: { signedPsbtHex: string, txHex: string, txid: string }, revealSigned: { signedPsbtHex: string, txHex: string, txid: string } | null, psbtHex: string }) => void | Promise<void>} [beforeBroadcast] called after the commit and any reveal (the TAPROOT envelope reveal or the P2SH/P2WSH phase-2 spend) are signed and before anything is broadcast
  * @property {boolean} [verifyBuiltTx]   atomic path only: run the confirm pipeline's tamper checks on the
  *                                       PSBT the encoder returns before the signer sees it (flows/verifyBuiltAction.js).
  *                                       Set by callers whose approval came before the build, such as a dApp signAction.
@@ -647,6 +648,8 @@ export async function submitWithSigner({
     // coin in a script with no reveal, while the form reported nothing sent.
     let phase2Signed = null;
     if (needsPhase2) {
+        // One value for the encoder's sweep address and the output check below.
+        const revealChange = revealOpts?.change ?? effectiveEncoderOpts.change;
         const spendResult = await encoder.spendP2sh({
             pubkey: effectiveEncoderOpts.pubkey,
             // Phase 2 spends the P2SH/P2WSH output created by phase 1. The encoder
@@ -672,7 +675,7 @@ export async function submitWithSigner({
             // every other field of this envelope: it names no address the same
             // envelope's `psbtHex` could not already name (§5.3's unbound
             // prebuilt-submit seam is its own item).
-            change: revealOpts?.change ?? effectiveEncoderOpts.change,
+            change: revealChange,
             fee: effectiveEncoderOpts.fee,
             feePerKb: effectiveEncoderOpts.feePerKb,
             // The protocol fee rides the REVEAL, the transaction that
@@ -687,6 +690,18 @@ export async function submitWithSigner({
             decomposePsbt: (hex) => sdk.wallet.decomposePsbt(hex),
             revealPsbtHex: spendResult.psbt,
             phase1Outputs,
+            phase1Txid: signed.txid,
+            phase1TxHex: signed.txHex,
+            chainId,
+            encoding: encoded.encoding,
+        });
+        // The reveal pays every deferred output the user approved, and nothing
+        // else but wallet change and its marker; the commit pays none of them.
+        assertRevealPaysApprovedOutputs({
+            decomposePsbt: (hex) => sdk.wallet.decomposePsbt(hex),
+            revealPsbtHex: spendResult.psbt,
+            deferredOutputs,
+            ownAddresses: [revealChange, effectiveEncoderOpts.sourceAddress, effectiveEncoderOpts.change],
             phase1Txid: signed.txid,
             phase1TxHex: signed.txHex,
             chainId,
@@ -708,7 +723,8 @@ export async function submitWithSigner({
     // P2SH/P2WSH phase-2 spend, both signed above before anything goes out.
     const revealSigned = envelopeRevealSigned ?? phase2Signed;
     if (typeof beforeBroadcast === 'function') {
-        await beforeBroadcast({ signed, revealSigned });
+        // Pass the commit PSBT too (a hardware signer returns signedPsbtHex '').
+        await beforeBroadcast({ signed, revealSigned, psbtHex: encoded.psbt });
     }
     // The freeze is checked again at the last moment before the bytes leave:
     // an Undo hold or a hardware signer can keep a signed send waiting here,

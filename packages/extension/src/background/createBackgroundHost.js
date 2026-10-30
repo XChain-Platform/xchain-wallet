@@ -3879,8 +3879,12 @@ export function createBackgroundHost(deps) {
         if (req?.preview === true) return feeQuote;
         // Refuse to sign a second replacement while one waits in the queue: re-signing beside a queued signed copy is forbidden.
         // The refusal is a plain sentence because the History card shows it as written.
+        // The vault is checked too: a queue not yet rebuilt from it (a desktop relaunch) lists nothing.
         await ensureQueueLoaded();
-        if (getQueue(walletId).some((e) => e?.rbfReplacesPendingTxId === conflictRecord.id)) {
+        const replacementWaits = getQueue(walletId).some((e) => e?.rbfReplacesPendingTxId === conflictRecord.id)
+            || records.some((record) => record?.rbfReplacesPendingTxId === conflictRecord.id
+                && (record.status === 'queued' || record.status === 'broadcasting'));
+        if (replacementWaits) {
             throw new Error('A replacement for this transaction is already waiting in the queued-transactions banner. '
                 + 'Send it or remove it there before you speed up or cancel again.');
         }
@@ -3963,11 +3967,14 @@ export function createBackgroundHost(deps) {
             psbtHex: encoded.psbt,
             rbf: true,
         });
+        // Name the original on the record from the first write, so a queue rebuilt
+        // from the vault alone can still retire it when this replacement lands.
         pending = {
             ...pending,
             status: 'broadcasting',
             txid: signed.txid,
             txHex: signed.txHex,
+            rbfReplacesPendingTxId: conflictRecord.id,
         };
         await vault.pendingTxs.put(pending);
 
@@ -4063,10 +4070,15 @@ export function createBackgroundHost(deps) {
     // Retire the original a queued fee-bump replacement evicted, the write tx.replace makes when its own send lands.
     // Best effort: a refused write leaves the original live, which nets its spend but never re-sends it.
     async function settleReplacedOriginal(vault, entry, replacementTxHash) {
-        const originalId = entry?.rbfReplacesPendingTxId;
-        if (typeof originalId !== 'string' || !originalId) return;
         if (typeof replacementTxHash !== 'string' || !replacementTxHash) return;
         try {
+            // Fall back to the replacement's own record when the entry lost the link.
+            let originalId = entry?.rbfReplacesPendingTxId;
+            if ((typeof originalId !== 'string' || !originalId)
+                && typeof entry?.pendingTxId === 'string' && entry.pendingTxId) {
+                originalId = (await vault?.pendingTxs?.get(entry.pendingTxId))?.rbfReplacesPendingTxId;
+            }
+            if (typeof originalId !== 'string' || !originalId) return;
             const original = await vault?.pendingTxs?.get(originalId);
             if (!original || original.chainConfirmed === true) return;
             if (original.status !== 'broadcast' && original.status !== 'broadcasting') return;
@@ -4412,6 +4424,9 @@ export function createBackgroundHost(deps) {
             // an interrupted claim left at 'broadcasting'), so the record is gone or
             // journaled before the entry leaves the queue.
             if (typeof entry?.pendingTxId === 'string' && entry.pendingTxId) {
+                // Replay owed writes first, so the delete reads the commit-landed
+                // state an owed advance patch carries rather than the stale record.
+                await flushOwedSettlements(vault);
                 try {
                     await flows.discardQueuedBroadcast({ vault, pendingTxId: entry.pendingTxId });
                 } catch (_e) {
@@ -4573,7 +4588,7 @@ export function createBackgroundHost(deps) {
             return {
                 queued: true,
                 broadcast: 'queued',
-                queueId: queued.entry.id,
+                queueId: queued.entry?.id ?? null,
                 pendingTxId: pending.id,
                 persisted: queued.persisted,
             };
@@ -4601,7 +4616,7 @@ export function createBackgroundHost(deps) {
             return {
                 queued: true,
                 broadcast: 'queued',
-                queueId: queued.entry.id,
+                queueId: queued.entry?.id ?? null,
                 pendingTxId: pending.id,
                 persisted: queued.persisted,
                 uncertain: true,

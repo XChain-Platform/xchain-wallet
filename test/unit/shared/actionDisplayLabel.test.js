@@ -30,7 +30,8 @@ describe('shared/actionDisplayLabel', () => {
 
     it('resolves lower-case UI kinds through the same map', () => {
         expect(actionDisplayLabel('issue')).toBe('Issue');
-        expect(actionDisplayLabel('crosschain')).toBe('Cross-chain');
+        expect(actionDisplayLabel('crosschain')).toBe('Cross-chain link');
+        expect(actionDisplayLabel('link')).toBe('Link');
     });
 
     it('names SLEEP by what it does to the address or token, never as a delay', () => {
@@ -103,9 +104,9 @@ describe('shared/actionDisplayLabel', () => {
         ).toEqual([]);
     });
 
-    it('maps both LINK and CROSSCHAIN to the same cross-chain label', () => {
-        expect(actionDisplayLabel('LINK')).toBe('Cross-chain');
-        expect(actionDisplayLabel('CROSSCHAIN')).toBe('Cross-chain');
+    it('labels LINK neutrally and keeps cross-chain wording for the CROSSCHAIN kind', () => {
+        expect(actionDisplayLabel('LINK')).toBe('Link');
+        expect(actionDisplayLabel('CROSSCHAIN')).toBe('Cross-chain link');
     });
 
     it('trims surrounding whitespace before lookup', () => {

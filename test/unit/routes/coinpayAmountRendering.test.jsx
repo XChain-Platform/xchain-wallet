@@ -145,7 +145,7 @@ describe('CoinpayForm: confirm and review stages show the debt in coins', () => 
             React.createElement(CoinpayForm, { walletId: WALLET_ID, chainId: CHAIN, onBack: vi.fn() }),
             makeMessaging([obligation('10.500000', '900')]),
         );
-        await screen.findByText(/Pending obligations/);
+        await screen.findByText(/Payments due/);
         await screen.findByText(/\b10\.5 DOGE\b/);
         expect(screen.queryByText(/10\.500000/)).toBeNull();
     });

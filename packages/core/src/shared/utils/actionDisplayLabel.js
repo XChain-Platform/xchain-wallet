@@ -17,7 +17,8 @@
 // Title Case noun phrase before rendering. Keys are upper-cased so both
 // protocol names (entry.action = "ISSUE") and the UI's lower-case
 // classify-kinds (kind = "issue", "crosschain") resolve through the same
-// map. CROSSCHAIN is the UI kind for the on-chain LINK action.
+// map. LINK is the neutral label, true on one chain or across two;
+// CROSSCHAIN is the UI kind for a LINK whose two sides sit on different chains.
 
 const DISPLAY_MAP = /** @type {Record<string, string>} */ ({
     SEND: 'Send',
@@ -40,8 +41,8 @@ const DISPLAY_MAP = /** @type {Record<string, string>} */ ({
     CALLBACK: 'Callback',
     COINPAY: 'Coin payment',
     FILE: 'File',
-    LINK: 'Cross-chain',
-    CROSSCHAIN: 'Cross-chain',
+    LINK: 'Link',
+    CROSSCHAIN: 'Cross-chain link',
     LIST: 'Recipient list',
     PRICE: 'Price',
     // Name SLEEP by all three things it does (lock an address, pause a token,

@@ -395,7 +395,9 @@ const check = (over, releaseArtifacts) => assertRecord({
     // now exists. The gate ranges over what the release contains.
     const desktopOnly = [`xchain-wallet-setup-${VERSION}-x64.exe`, `xchain-wallet_${VERSION}_amd64.deb`];
     assert.deepEqual(lanesInRelease(desktopOnly), { desktop: true, direct: false, directLanes: [] });
-    assert.ok(check({ 'direct-lanes': [] }, desktopOnly).ok);
+    // The swap sits on an OS this release ships, since a mac swap cannot answer for a win+Linux release.
+    const shippedSwap = [{ lane: 'linux-x64-deb', device: 'bench', from: '0.336.0' }];
+    assert.ok(check({ 'direct-lanes': [], swaps: shippedSwap }, desktopOnly).ok);
 }
 
 {
@@ -436,7 +438,7 @@ const check = (over, releaseArtifacts) => assertRecord({
     // the other.
     const both = [APK, `xchain-wallet-setup-${VERSION}-x64.exe`];
     assert.deepEqual(lanesInRelease(both), { desktop: true, direct: true, directLanes: ['android-direct'] });
-    assert.ok(check({}, both).ok);
+    assert.ok(check({ swaps: [{ lane: 'win-x64', device: 'bench', from: '0.336.0' }] }, both).ok);
     assert.match(check({ 'direct-lanes': [] }, both).problems.join(' '),
         /no result for lane android-direct/);
     assert.match(check({ lanes: [] }, both).problems.join(' '), /no result for lane\(s\)/);

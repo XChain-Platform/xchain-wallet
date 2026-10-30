@@ -435,6 +435,23 @@ const noPin = classifyVersionRecord(healthyRecord(), SHIPS_BOTH, null);
 assert.equal(noPin.exit, EXIT.INCONCLUSIVE, 'no capture pin must be INCONCLUSIVE, never READY');
 assert.deepEqual(state(noPin, 'screenshots-pinned'), ['inconclusive']);
 
+// A pin that covers one display type and not the other is the same unanswered
+// question for the uncovered type: one idiom re-shot and the other forgotten.
+const partialPin = classifyVersionRecord(
+    healthyRecord(), SHIPS_BOTH,
+    pinFor({ APP_IPHONE_67: pinFor().byType.APP_IPHONE_67 }),
+);
+assert.equal(partialPin.exit, EXIT.INCONCLUSIVE, 'a pin that leaves out a display type must be INCONCLUSIVE, never READY');
+assert.deepEqual(state(partialPin, 'screenshots-pinned'), ['ok', 'inconclusive']);
+assert.match(find(partialPin, 'screenshots-pinned')[1].detail, /APP_IPAD_PRO_3GEN_129/);
+const partialPinAndFailure = classifyVersionRecord(
+    healthyRecord({
+        version: { id: 'v1', versionString: '0.336.0', state: 'PREPARE_FOR_SUBMISSION', releaseType: 'AFTER_APPROVAL' },
+    }), SHIPS_BOTH,
+    pinFor({ APP_IPHONE_67: pinFor().byType.APP_IPHONE_67 }),
+);
+assert.equal(partialPinAndFailure.exit, EXIT.FAILURE, 'a real failure must outrank the uncovered display type');
+
 // Apple withholding a checksum is the same unanswered question, per set.
 const noChecksum = classifyVersionRecord(healthyRecord({
     screenshotSets: REQUIRED_SCREENSHOT_TYPES.map((displayType) => ({

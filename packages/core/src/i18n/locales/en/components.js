@@ -21,7 +21,7 @@ const messages = {
     'components.placeOrderPanel.orderPlaced': 'Order placed',
     'components.placeOrderPanel.placeAnother': 'Place another',
     'components.placeOrderPanel.coinpayAutoPayIsArmed':
-        'CoinPay auto-pay is armed for this order. You can turn it off any time from the open-orders list.',
+        'Auto-pay is armed for this order. You can turn it off any time from the open-orders list.',
     'components.placeOrderPanel.theOrderWasPlacedBut': "The order was placed, but auto-pay couldn't be armed",
     'components.placeOrderPanel.matchesWillNeedManualPayment':
         '. Matches will need manual payment from Payments due.',
@@ -50,10 +50,10 @@ const messages = {
     'components.placeOrderPanel.custom': 'Custom…',
     'components.placeOrderPanel.customExpiration': 'Custom expiration',
     'components.placeOrderPanel.thisOrderGives': 'This order gives',
-    'components.placeOrderPanel.soEachMatchSettlesVia': ', so each match settles via CoinPay: the',
+    'components.placeOrderPanel.soEachMatchSettlesVia': ', so each match is settled by a coin payment: the',
     'components.placeOrderPanel.paymentMustBeSentWithin':
         'payment must be sent within the payment window (about 2 hours) or the match expires.',
-    'components.placeOrderPanel.enableCoinpayAutoPay': 'Enable CoinPay auto-pay',
+    'components.placeOrderPanel.enableCoinpayAutoPay': 'Enable auto-pay',
     'components.placeOrderPanel.outstandingAutoPayExposureOn': 'Outstanding auto-pay exposure on this network:',
     'components.placeOrderPanel.fromThisOrder': ' (+ {thisOrderGive} {coinTicker} from this order)',
     'components.placeOrderPanel.evenIfTheServiceThat':
@@ -120,7 +120,7 @@ const messages = {
     'components.openOrdersPanel.filled2': '••••• filled',
     'components.openOrdersPanel.filled3': '{filled}/{size} filled',
     'components.openOrdersPanel.open': 'open',
-    'components.openOrdersPanel.coinpayAutoPay': 'CoinPay auto-pay {value}',
+    'components.openOrdersPanel.coinpayAutoPay': 'Auto-pay {value}',
     'components.openOrdersPanel.cancelOrder': 'Cancel order #',
     'components.openOrdersPanel.from': 'from',
     'components.openOrdersPanel.thisSubmitsACancellationTransaction':

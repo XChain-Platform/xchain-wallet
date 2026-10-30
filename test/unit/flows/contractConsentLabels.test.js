@@ -41,6 +41,7 @@ describe('permissionsToVerbs', () => {
         expect(permissionsToVerbs(['ISSUE'])).toEqual(['issue tokens']);
         expect(permissionsToVerbs(['DISPENSER'])).toEqual(['run dispensers']);
         expect(permissionsToVerbs(['EXECUTE'])).toEqual(['call other contracts']);
+        expect(permissionsToVerbs(['DEPLOY'])).toEqual(['publish contracts']);
     });
 
     it('words a SLEEP grant as the lock or pause it allows', () => {

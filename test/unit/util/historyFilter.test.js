@@ -15,6 +15,7 @@ import {
     applyHistoryFilters,
     classifyEntryAction,
     classifyEntryStatus,
+    isCrossChainLink,
 } from '../../../packages/core/src/shared/utils/historyFilter.js';
 
 const BTC = 'bitcoin-mainnet';
@@ -89,11 +90,39 @@ describe('shared/utils/historyFilter', () => {
         });
 
         it('maps LINK to crosschain', () => {
-            expect(classifyEntryAction(entry({ action: 'LINK' }), wallet)).toBe('crosschain');
+            const raw = { coin1: 'BTC', coin2: 'LTC' };
+            expect(classifyEntryAction(entry({ action: 'LINK', raw }), wallet)).toBe('crosschain');
+        });
+
+        it('maps a same-chain LINK to the neutral link bucket', () => {
+            const raw = { COIN1: 'BTC', COIN2: 'btc' };
+            expect(classifyEntryAction(entry({ action: 'LINK', raw }), wallet)).toBe('link');
+        });
+
+        it('lets the link peer decide a LINK whose tickers are missing', () => {
+            const across = { peerChainId: 'litecoin-mainnet', peerCoinTicker: 'LTC', peerActionIndex: '9', linkActionIndex: 'L1' };
+            const same = { ...across, peerChainId: BTC, peerCoinTicker: 'BTC' };
+            expect(classifyEntryAction(entry({ action: 'LINK', link: across }), wallet)).toBe('crosschain');
+            expect(classifyEntryAction(entry({ action: 'LINK', link: same }), wallet)).toBe('link');
+            expect(classifyEntryAction(entry({ action: 'LINK' }), wallet)).toBe('link');
         });
 
         it('falls back to other for unknown actions', () => {
             expect(classifyEntryAction(entry({ action: 'WHATEVER' }), wallet)).toBe('other');
+        });
+    });
+
+    describe('isCrossChainLink', () => {
+        it('reads the LINK row tickers before the linked peer', () => {
+            const sameLink = { peerChainId: BTC, peerCoinTicker: 'BTC', peerActionIndex: '1', linkActionIndex: 'L1' };
+            expect(isCrossChainLink(entry({ action: 'LINK', raw: { coin1: 'BTC', coin2: 'LTC' }, link: sameLink }))).toBe(true);
+            expect(isCrossChainLink(entry({ action: 'LINK', raw: { coin1: 'BTC', coin2: 'BTC' } }))).toBe(false);
+        });
+
+        it('treats a linked row whose peer coin is unknown as another chain', () => {
+            const unknownPeer = { peerChainId: null, peerCoinTicker: 'ZZZ', peerActionIndex: '1', linkActionIndex: 'L1' };
+            expect(isCrossChainLink(entry({ action: 'FILE', link: unknownPeer }))).toBe(true);
+            expect(isCrossChainLink(entry({ action: 'FILE' }))).toBe(false);
         });
     });
 

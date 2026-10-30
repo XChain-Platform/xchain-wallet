@@ -336,6 +336,30 @@ describe('shared/utils/historyGrouping', () => {
         expect(linkGroup.summary).toBe('Cross-chain link: LINK ↔ ISSUE');
     });
 
+    it('summarizes a same-chain link pair without claiming a crossing', () => {
+        const entries = [
+            entry({
+                chainId: BTC, actionIndex: 100, action: 'FILE',
+                link: {
+                    peerChainId: BTC, peerCoinTicker: 'BTC',
+                    peerActionIndex: '200', linkActionIndex: 'L44',
+                },
+            }),
+            entry({
+                chainId: BTC, actionIndex: 200, action: 'ISSUE',
+                raw: { tick: 'XYZ', source: 'src9' },
+                link: {
+                    peerChainId: BTC, peerCoinTicker: 'BTC',
+                    peerActionIndex: '100', linkActionIndex: 'L44',
+                },
+            }),
+        ];
+        const out = groupHistoryEntries(entries, 'grouped');
+        const linkGroup = out.find((it) => it.kind === 'group' && it.subkind === 'link-pair');
+        expect(linkGroup).toBeTruthy();
+        expect(linkGroup.summary).toMatch(/^Link: (FILE ↔ ISSUE|ISSUE ↔ FILE)$/);
+    });
+
     it('does not collapse a LINK whose peer is not in the visible window', () => {
         // Single side present (e.g. peer chain disabled in filter); no
         // collapse, the row stays a normal entry so its 🔗 badge still

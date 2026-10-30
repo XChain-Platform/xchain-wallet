@@ -1407,8 +1407,9 @@ export function assertRecord({ record, tag, prodManifestSha256, releaseArtifacts
             + `${laneById(swap.lane).arch}, so it is not counted as ${swap.lane} evidence.`,
         );
     }
+    // Desktop lanes only: a direct lane's swap says nothing about the desktop OS tally.
     const swappedOs = new Set(
-        swaps.filter(swapExercisesLane).map((s) => laneById(s.lane)?.os).filter(Boolean),
+        swaps.filter(swapExercisesLane).map((s) => LANES.find((l) => l.id === s.lane)?.os).filter(Boolean),
     );
     const requirement = record['swap-requirement'];
     // Checked whatever the release contains: this is the record's SHAPE,
@@ -1451,7 +1452,8 @@ export function assertRecord({ record, tag, prodManifestSha256, releaseArtifacts
         // time rather than a release that skipped its rehearsal.
         const demandable = [...lanesByOs().keys()]
             .filter((os) => (releaseOses === null || releaseOses.has(os)) && !bootstrapOses.has(os));
-        if (demandable.length > 0 && swappedOs.size === 0) {
+        // The swap has to land on a demanded OS, not merely somewhere, as the all-os branch requires.
+        if (demandable.length > 0 && !demandable.some((os) => swappedOs.has(os))) {
             problems.push('no observed swap on any OS; §7.5 requires at least one per release');
         }
     }

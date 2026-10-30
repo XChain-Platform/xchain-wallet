@@ -919,7 +919,7 @@ export function SignApproval({ id, kind, payload, onReject }) {
                         : null}
                     decodeError={psbtIntent.error || psbtIntent.actionDecodeReason}
                     unavailableMessage={psbtPayloadMissing
-                        ? 'This request is missing the transaction to sign'
+                        ? t('extension.sign.psbtMissing')
                         : null}
                 />
             ) : null}

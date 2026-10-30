@@ -60,6 +60,7 @@ const messages = {
     'extension.sign.warningNoun.message': 'message',
     'extension.sign.signingPaths': 'Signing paths',
     'extension.sign.action.reading': 'Reading this action…',
+    'extension.sign.psbtMissing': 'This request is missing the transaction to sign',
     'extension.sign.action.unavailable':
         "This action couldn't be described. Approve only if you know exactly what it does.",
     'extension.sign.signInTo': 'Sign in to',

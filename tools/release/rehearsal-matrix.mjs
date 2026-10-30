@@ -503,9 +503,9 @@ Usage:
   node tools/release/rehearsal-matrix.mjs --help
 
 A DATA MODULE, not a command. It runs nothing and changes nothing; it is
-imported by rehearse.mjs, by drills/deb-update-swap.mjs and by the smokes
-that hold the table to what electron-updater actually exports. Printing is
-the only thing it does when run.
+imported by rehearse.mjs and by the smokes that hold the table to what
+electron-updater actually exports, and publish.sh runs it with
+--direct-lanes-for. Printing is the only thing it does when run.
 
 Two kinds of lane, and they are rehearsed by different probes:
 

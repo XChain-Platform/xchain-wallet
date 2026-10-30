@@ -474,7 +474,7 @@ export function MyOrdersView({ walletId, accountId, onBack, onCreateOrder }) {
                     </div>
                     {consent && isNativeGive(it.row) ? (
                         <Switch
-                            label={`CoinPay auto-pay ${consent.autopay === true ? 'on' : 'off (notify-only)'}`}
+                            label={`Auto-pay ${consent.autopay === true ? 'on' : 'off (notify-only)'}`}
                             checked={consent.autopay === true}
                             onChange={() => handleAutopayToggle(consent)}
                         />
@@ -792,8 +792,8 @@ function OrderActionPanel({
             {isCancel ? (
                 <p className={F.hint}>
                     Cancelling closes the order and returns the escrowed
-                    {isNativeGive(row) ? ' side' : ` ${row.give_tick}`} to you. If it has pending
-                    CoinPay obligations, it stays &quot;cancelling&quot; until those settle.
+                    {isNativeGive(row) ? ' side' : ` ${row.give_tick}`} to you. If it has coin
+                    payments still due, it stays &quot;cancelling&quot; until those settle.
                 </p>
             ) : (
                 <>

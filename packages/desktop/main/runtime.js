@@ -786,6 +786,12 @@ export async function handleIpcMessage(runtime, message) {
         // because a DISARM has to land while the vault is closed, which
         // the host lane cannot serve.
         if (message.type === AUTO_LOCK_REPORT_TYPE) {
+            // Drop every report while an undeletable cached key is on disk: a
+            // disarm or activity stamp written now would let the next launch
+            // reopen that key with no password. A password unlock ends this.
+            if (runtime.autoLockCleanupPending) {
+                return { ok: true, result: { armed: false } };
+            }
             await applyAutoLockReport(runtime.autoLockStore, message.request, Date.now());
             return { ok: true, result: { armed: message.request?.armed === true } };
         }

@@ -35,11 +35,11 @@
 //     iconLabel, aria, headline, statusLabel, allLabel, summaryNoun,
 //     menuHeader, emptyTitle, emptyBody, confirmLabel, cancelLabel,
 //     copyLabel, balanceText, submitLabel, what, prefix, noun, summary,
-//     error, recovery, feeText, emptyActionLabel, warningNoun, message,
-//     description, lead, legend, closeLabel, searchLabel, subtitle,
-//     chainLabel, accessibleLabel, visibleLabel, labelPrefix (the
-//     USER_FACING_ATTRS set below is the authority; keep this list in step
-//     with it). The last forty-one are component
+//     error, recovery, feeText, totalText, emptyActionLabel, warningNoun,
+//     message, description, lead, legend, closeLabel, searchLabel, subtitle,
+//     chainLabel, accessibleLabel, visibleLabel, labelPrefix,
+//     unavailableMessage (the USER_FACING_ATTRS set below is the authority;
+//     keep this list in step with it). The last forty-three are component
 //     props rather than DOM attributes: shipping components
 //     render copy through them, so a DOM-only set left that copy out of the
 //     translator index.
@@ -267,6 +267,9 @@ const USER_FACING_ATTRS = new Set([
     // forms write it as a `Network fee: …` template; no prop default or
     // attribute uses the name technically (the same-named locals are plain consts).
     'feeText',
+    // ConfirmActionModal renders `totalText` verbatim as the total line under the
+    // fee line, and callers write it as a `Total: …` template.
+    'totalText',
     // BalanceList forwards `emptyActionLabel` to EmptyState's button text,
     // the one-hop-earlier shape of `emptyBody`.
     'emptyActionLabel',
@@ -318,6 +321,9 @@ const USER_FACING_ATTRS = new Set([
     // ParallelComposer's StatusPill prefixes its aria-label with `labelPrefix`, as a
     // prop default and from its row call site; both are copy.
     'labelPrefix',
+    // PsbtIntentPanel renders `unavailableMessage` verbatim in place of the
+    // transaction view; its call site writes the reason as a ternary literal.
+    'unavailableMessage',
 ]);
 
 // There is deliberately no technical-attribute deny-list here. Both

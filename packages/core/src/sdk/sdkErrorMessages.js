@@ -120,6 +120,7 @@ const LOCAL_CODE_MESSAGES = Object.freeze({
     INVALID_SATS_AMOUNT: 'A wallet service returned an invalid amount. Try again, and report it if it continues.',
     DEV_MOCK_SIGNING_UNAVAILABLE: 'This development build cannot sign. Nothing was signed or sent. Run a build with the wallet SDK to try it.',
     REVEAL_INPUTS_REFUSED: 'The follow-up transaction did not match the first transaction, so nothing was signed or sent. Try again, and report it if it continues.',
+    REVEAL_OUTPUTS_REFUSED: 'The follow-up transaction did not pay what you approved, so nothing was signed or sent. Try again, and report it if it continues.',
 });
 
 const NAME_ONLY_MESSAGES = Object.freeze({

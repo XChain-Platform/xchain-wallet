@@ -159,7 +159,7 @@ test.describe(`PC-16 auto-pay arming on ${REGTEST_CHAIN_LABEL}`, () => {
 
             // Auto-pay is offered ON by default, and only on this shape: a
             // token GIVE escrows instead, and there is nothing to pay later.
-            const autopay = main.getByRole('switch', { name: /Enable CoinPay auto-pay/ });
+            const autopay = main.getByRole('switch', { name: /Enable auto-pay/ });
             await expect(autopay, 'a native-coin GIVE offers no auto-pay control, so PC-16 never arms')
                 .toBeVisible();
             await expect(autopay, 'auto-pay is not the default on the shape that can use it')
@@ -219,7 +219,7 @@ test.describe(`PC-16 auto-pay arming on ${REGTEST_CHAIN_LABEL}`, () => {
             // The consent record is keyed by txid at broadcast and only gains its
             // orderActionIndex when a later pass resolves it, so this toggle
             // appearing at all is the backfill working end to end.
-            const toggle = row.getByRole('switch', { name: /CoinPay auto-pay/ });
+            const toggle = row.getByRole('switch', { name: /^Auto-pay (on|off)/ });
             await expect(toggle,
                 'the armed order carries no auto-pay control in My orders, so the consent cannot be '
                 + 'seen or withdrawn from the surface that lists it')

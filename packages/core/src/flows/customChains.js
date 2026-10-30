@@ -56,6 +56,7 @@
 // is the single source of truth for "is this descriptor usable?".
 
 import { customChainReservedIdError, validateChainDescriptor } from '../registry/validate.js';
+import { serializeSettingsWrites } from './settings.js';
 
 // A pasted descriptor is stored in the vault settings and read on every boot,
 // so its serialized size is capped well above any real descriptor.
@@ -119,6 +120,17 @@ export async function addCustomChain({ vault, chainRegistry, descriptor, sdkRegi
     if (reserved) {
         throw new Error(`This network can't be added. ${reserved}`);
     }
+    if (chainRegistry?.has?.(descriptor.id)) {
+        throw new Error(`The network "${descriptor.id}" is already registered.`);
+    }
+    // Queued with every other Settings read-modify-write, so a concurrent save
+    // can neither drop this chain nor be erased by it (rollback included).
+    return serializeSettingsWrites(vault, () => addCustomChainNow({ vault, chainRegistry, descriptor, sdkRegistry }));
+}
+
+/** @param {{ vault: any, chainRegistry: any, descriptor: object, sdkRegistry?: any }} args */
+async function addCustomChainNow({ vault, chainRegistry, descriptor, sdkRegistry }) {
+    // Re-checked in the queue: a same-id add queued ahead may have registered it.
     if (chainRegistry?.has?.(descriptor.id)) {
         throw new Error(`The network "${descriptor.id}" is already registered.`);
     }
@@ -252,6 +264,13 @@ export async function removeCustomChain({ vault, chainRegistry, chainId, sdkRegi
     if (typeof chainId !== 'string' || !chainId) {
         throw new Error('removeCustomChain: chainId is required');
     }
+    // Queued for the same reason as addCustomChain: an endpoint save that read
+    // before this write would otherwise restore the pruned override.
+    return serializeSettingsWrites(vault, () => removeCustomChainNow({ vault, chainRegistry, chainId, sdkRegistry }));
+}
+
+/** @param {{ vault: any, chainRegistry: any, chainId: string, sdkRegistry?: any }} args */
+async function removeCustomChainNow({ vault, chainRegistry, chainId, sdkRegistry }) {
     const settings = await readSettings(vault);
     if (!settings) {
         throw new Error('removeCustomChain: settings store unavailable');

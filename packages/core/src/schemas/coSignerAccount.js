@@ -52,7 +52,9 @@ function isWindowEntry(e) {
     return true;
 }
 
-// The embedded window state, or null when the account has no maxPerWindow cap.
+// The embedded window state, or null before the first approval is recorded.
+// A policy edit keeps it, even one that drops maxPerWindow or changes its hours,
+// and the window store re-reads the kept entries against the current hours.
 function isWindowState(w) {
     if (w === null || w === undefined) return true;
     if (!isPlainObject(w)) return false;
