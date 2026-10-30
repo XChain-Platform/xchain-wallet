@@ -21,10 +21,10 @@ describe('deriveExtensionVersion', () => {
     });
 
     it('maps a beta below its stable release', () => {
-        const beta = deriveExtensionVersion('0.342.0-beta.1');
-        const stable = deriveExtensionVersion('0.342.0');
+        const beta = deriveExtensionVersion('0.298.0-beta.1');
+        const stable = deriveExtensionVersion('0.298.0');
 
-        expect(beta).toBe('0.0.342.1');
+        expect(beta).toBe('0.0.298.1');
         expect(compareChromeVersions(beta, stable)).toBeLessThan(0);
     });
 
