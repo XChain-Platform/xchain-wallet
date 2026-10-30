@@ -268,16 +268,19 @@ test.describe(`the PRICE v1 deviation gate on ${REGTEST_CHAIN_LABEL}`, () => {
                     'the typed confirm is decorative: Publish is enabled with the box empty')
                     .toBeDisabled();
 
-                // A near miss must not pass. "publish" lowercase is the case the
-                // form deliberately accepts (it upper-cases before comparing), so
-                // the wrong word here is a DIFFERENT word.
+                // A near miss must not pass: neither a different word nor the
+                // right word in another case, since every typed confirmation
+                // matches its word exactly.
                 await box.fill('PUBLICH');
                 await expect(publish, 'a wrong word unlocked the publish')
                     .toBeDisabled();
-
                 await box.fill('publish');
+                await expect(publish, 'a lower-case word unlocked the publish')
+                    .toBeDisabled();
+
+                await box.fill('PUBLISH');
                 await expect(publish,
-                    'the form rejects its own documented case-insensitive match')
+                    'the form rejects the exact word it asks for')
                     .toBeEnabled({ timeout: 15_000 });
 
                 const published = await signPublish(page, review);
