@@ -583,6 +583,23 @@ export function decimalToBaseUnits(value, decimals = 8) {
     return parsed.units * (10n ** BigInt(scale - parsed.scale));
 }
 
+/**
+ * Convert a non-negative decimal amount to base units, dropping (`down`) or
+ * carrying (`up`) digits past `decimals` instead of refusing them.
+ */
+export function decimalToBaseUnitsRounded(value, decimals, direction) {
+    const scale = Number(decimals);
+    const parsed = parseDecimal(value);
+    if (!parsed || parsed.units < 0n || !Number.isInteger(scale) || scale < 0 || scale > 100) {
+        return null;
+    }
+    if (direction !== 'down' && direction !== 'up') return null;
+    if (parsed.scale <= scale) return parsed.units * (10n ** BigInt(scale - parsed.scale));
+    const divisor = 10n ** BigInt(parsed.scale - scale);
+    const whole = parsed.units / divisor;
+    return direction === 'up' && parsed.units % divisor !== 0n ? whole + 1n : whole;
+}
+
 /** Convert an integer quantity and divisibility into a decimal amount. */
 export function decimalFromBaseUnits(value, decimals = 8) {
     const scale = Number(decimals);

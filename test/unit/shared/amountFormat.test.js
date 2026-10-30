@@ -18,6 +18,7 @@ import {
     normalizeLocalizedDecimal,
     countNonCommaBefore,
     decimalToBaseUnits,
+    decimalToBaseUnitsRounded,
     decimalFromBaseUnits,
     formatDisplayAmount,
     formatHistoryAmount,
@@ -301,6 +302,19 @@ describe('shared/amountFormat exact rendering', () => {
 
     it.each([-1, 1.5, Number.NaN, 101])('rejects invalid divisibility %s without throwing', (divisibility) => {
         expect(decimalToBaseUnits('1', divisibility)).toBeNull();
+    });
+
+    it('drops or carries digits past the asset scale only in the direction asked', () => {
+        expect(decimalToBaseUnitsRounded('40.949', 0, 'down')).toBe(40n);
+        expect(decimalToBaseUnitsRounded('40.949', 0, 'up')).toBe(41n);
+        expect(decimalToBaseUnitsRounded('41', 0, 'up')).toBe(41n);
+        expect(decimalToBaseUnitsRounded('1.2349', 3, 'down')).toBe(1234n);
+        expect(decimalToBaseUnitsRounded('1.2341', 3, 'up')).toBe(1235n);
+        expect(decimalToBaseUnitsRounded('1.230', 3, 'up')).toBe(1230n);
+        expect(decimalToBaseUnitsRounded('1.5', 8, 'down')).toBe(150000000n);
+        expect(decimalToBaseUnitsRounded('-1', 0, 'down')).toBeNull();
+        expect(decimalToBaseUnitsRounded('1', 101, 'down')).toBeNull();
+        expect(decimalToBaseUnitsRounded('1.5', 0, 'nearest')).toBeNull();
     });
 
     it.each([

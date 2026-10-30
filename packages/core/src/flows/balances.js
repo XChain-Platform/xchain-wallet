@@ -26,7 +26,7 @@
 // not survive. Both are plain JSON values, so they do.
 
 import { tickerForCoin } from '../registry/coinTicker.js';
-import { decimalToBaseUnits, roundDecimalString } from '../shared/utils/amountFormat.js';
+import { decimalToBaseUnitsRounded } from '../shared/utils/amountFormat.js';
 import { importedAddressIdsFor } from './_importedAddressIds.js';
 import { synthesizeDemoBalances } from './demoFixtures.js';
 import { UNCONFIRMED_COMMITTED_STATUSES } from './pendingDeltas.js';
@@ -238,14 +238,12 @@ function isExactNonnegativeDecimal(value) {
 }
 
 // Human-scale decimal string -> atomic-unit integer string, BigInt-exact.
-// Explorer aggregates can carry more fractional places than the asset allows,
-// so the boundary rounds half away from zero before applying the atomic scale.
-function atomicFromHumanAmount(amount, decimals) {
-    const scale = Number(decimals);
-    if (!Number.isInteger(scale) || scale < 0 || scale > 100) return null;
-    const rounded = roundDecimalString(amount, scale);
-    if (rounded === null) return null;
-    const atomic = decimalToBaseUnits(rounded, scale);
+// Explorer aggregates can carry more fractional places than the asset allows
+// (gas leaves a 0-decimal XCHAIN balance at 40.949). A held amount rounds
+// down and a pending debit rounds up, so Home never shows more than can be
+// spent: 40.949 reads 40, not 41.
+function atomicFromHumanAmount(amount, decimals, direction = 'down') {
+    const atomic = decimalToBaseUnitsRounded(amount, decimals, direction);
     return atomic === null ? null : atomic.toString();
 }
 
@@ -400,14 +398,14 @@ export function applyPendingBalanceDeltas(byChain, pendingTxs, chainRegistry) {
                 if (!tick) continue;
                 if (native && tick === nativeTick) {
                     if (!appliedExactNativeDebit) {
-                        const atomic = atomicFromHumanAmount(debit.amount, native.divisibility ?? 8);
+                        const atomic = atomicFromHumanAmount(debit.amount, native.divisibility ?? 8, 'up');
                         if (atomic !== null) native.quantity = subtractAtomic(native.quantity, atomic);
                     }
                     continue;
                 }
                 for (const token of Array.isArray(entry.balances.tokens) ? entry.balances.tokens : []) {
                     if (String(token?.tick || '').toUpperCase() !== tick) continue;
-                    const atomic = atomicFromHumanAmount(debit.amount, token.divisibility ?? 0);
+                    const atomic = atomicFromHumanAmount(debit.amount, token.divisibility ?? 0, 'up');
                     if (atomic !== null) token.quantity = subtractAtomic(token.quantity, atomic);
                 }
             }

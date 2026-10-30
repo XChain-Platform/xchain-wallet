@@ -70,15 +70,16 @@ describe('tokensFromBalances (D-14 decimals mapping)', () => {
         expect(row.quantity).toBe('50000000');
     });
 
-    it('rounds excess explorer precision half away from zero at the atomic boundary', () => {
+    it('rounds excess explorer precision down, so a balance never reads more than is held', () => {
         const out = tokensFromBalances({
             data: [
                 { tick: 'DOWN', amount: '1.2344', decimals: 3 },
                 { tick: 'HALF', amount: '1.2345', decimals: 3 },
                 { tick: 'INDIVISIBLE', amount: '41.5', decimals: 0 },
+                { tick: 'XCHAIN', amount: '40.949', decimals: 0 },
             ],
         });
-        expect(out.map((row) => row.quantity)).toEqual(['1234', '1235', '42']);
+        expect(out.map((row) => row.quantity)).toEqual(['1234', '1234', '41', '40']);
     });
 
     it('keeps very large supplies exact at every divisibility', () => {
