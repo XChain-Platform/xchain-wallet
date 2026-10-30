@@ -254,13 +254,15 @@ describe('SignApproval signPsbt intent', () => {
             />,
         );
 
+        // The panel renders its checking state before the preflight call goes
+        // out, so the call is awaited rather than read on first paint.
         await screen.findByTestId('preflight-panel');
-        expect(messaging.preflight).toHaveBeenCalledWith({
+        await waitFor(() => expect(messaging.preflight).toHaveBeenCalledWith({
             chainId: 'bitcoin-regtest',
             actionString: 'MINT|1|JDOG|1',
             source: 'bcrt1qownaddressownaddress',
             mode: 'report',
-        });
+        }));
     });
 
     it('blocks approval when PSBT action preflight has a hard failure', async () => {
@@ -316,12 +318,12 @@ describe('SignApproval signPsbt intent', () => {
         );
 
         await screen.findByTestId('preflight-panel');
-        expect(messaging.preflight).toHaveBeenCalledWith({
+        await waitFor(() => expect(messaging.preflight).toHaveBeenCalledWith({
             chainId: 'bitcoin-regtest',
             actionString: 'MINT|1|JDOG|1',
             source: 'bcrt1qotherparty',
             mode: 'report',
-        });
+        }));
     });
 
     it('preflights a PSBT with a native fee output in native mode', async () => {
@@ -349,13 +351,13 @@ describe('SignApproval signPsbt intent', () => {
         );
 
         await screen.findByTestId('preflight-panel');
-        expect(messaging.preflight).toHaveBeenCalledWith({
+        await waitFor(() => expect(messaging.preflight).toHaveBeenCalledWith({
             chainId: 'bitcoin-regtest',
             actionString: 'MINT|1|JDOG|1',
             source: 'bcrt1qownaddressownaddress',
             feeMode: 'native',
             mode: 'report',
-        });
+        }));
     });
 
     it('makes a dry-run failure overridable when input zero has no address', async () => {
